@@ -73,13 +73,17 @@ jobs:
         include:
           - name: backend
             dockerfile: backend/Dockerfile
-            image: ghcr.io/${{ github.repository_owner }}/six-sevens-backend
+            image_name: six-sevens-backend
           - name: frontend
             dockerfile: frontend/Dockerfile
-            image: ghcr.io/${{ github.repository_owner }}/six-sevens-frontend
+            image_name: six-sevens-frontend
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+
+      - name: Set image repository
+        id: set-image-repo
+        run: echo "image_repo=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.image_name }}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -95,5 +99,5 @@ jobs:
           file: ${{ matrix.dockerfile }}
           push: true
           tags: |
-            ${{ matrix.image }}:latest
-            ${{ matrix.image }}:${{ github.sha }}
+            ${{ steps.set-image-repo.outputs.image_repo }}:latest
+            ${{ steps.set-image-repo.outputs.image_repo }}:${{ github.sha }}
