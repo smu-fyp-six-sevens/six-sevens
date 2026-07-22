@@ -6,9 +6,9 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 COPY backend/pyproject.toml ./pyproject.toml
-RUN pip install --no-cache-dir fastapi uvicorn[standard]
-
 COPY backend/app ./app
+COPY backend/database.py ./database.py
+RUN pip install --no-cache-dir .
 
 EXPOSE 8000
 
