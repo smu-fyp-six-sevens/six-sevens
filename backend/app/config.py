@@ -1,5 +1,10 @@
 import os
 
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
 
 class Settings:
     """
@@ -7,8 +12,10 @@ class Settings:
     nothing sensitive (API keys, service role key) is hardcoded.
     """
 
+    DATABASE_URL: str = os.environ.get("DATABASE_URL", "")
+
     SUPABASE_URL: str = os.environ.get("SUPABASE_URL", "")
-    SUPABASE_SERVICE_ROLE_KEY: str = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+    SUPABASE_PUBLISHABLE_KEY: str = os.environ.get("SUPABASE_PUBLISHABLE_KEY", "")
     SUPABASE_STORAGE_BUCKET: str = os.environ.get("SUPABASE_STORAGE_BUCKET", "documents")
 
     DIFY_BASE_URL: str = os.environ.get("DIFY_BASE_URL", "https://api.dify.ai/v1")

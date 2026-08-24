@@ -7,7 +7,6 @@ ENV PYTHONUNBUFFERED=1
 
 COPY backend/pyproject.toml ./pyproject.toml
 COPY backend/app ./app
-COPY backend/database.py ./database.py
 RUN pip install --no-cache-dir .
 
 EXPOSE 8000
