@@ -25,6 +25,14 @@ npm install
 npm run dev
 ```
 
+## Docker Setup
+
+From root:
+
+```bash
+docker compose up
+```
+
 ## Tests
 
 - Backend: `pytest`
