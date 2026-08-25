@@ -15,6 +15,22 @@ class DocumentStatus(str, Enum):
     FAILED = "failed"           # AC3: retries exhausted, needs manual review
 
 
+class DocumentType(str, Enum):
+    """The document categories the Classifier Agent recognises."""
+
+    BANK_STATEMENT = "bank_statement"
+    CERTIFICATE_OF_INCORPORATION = "certificate_of_incorporation"
+    PAYSLIP = "payslip"
+    ID_DOCUMENT = "id_document"  # NRIC / passport of directors, shareholders, UBO
+    FATCA_CRS_DECLARATION = "fatca_crs_declaration"
+    CERTIFICATE_OF_INCUMBENCY = "certificate_of_incumbency"
+    COMPANY_CONSTITUTION = "company_constitution"
+    PROOF_OF_ADDRESS = "proof_of_address"
+    SOURCE_OF_WEALTH = "source_of_wealth"
+    CREDIT_REPORT = "credit_report"
+    LIST_OF_LOANS = "list_of_loans"
+
+
 class DocumentRecord(BaseModel):
     id: str
     case_id: Optional[str] = None

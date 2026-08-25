@@ -30,6 +30,10 @@ class Settings:
     # AC4: a document idle in queued/processing longer than this is "stuck"
     STUCK_THRESHOLD_SECONDS: int = 10
 
+    # Classification: filename-rule matches scoring below this are treated
+    # as unrecognised/low-confidence and flagged for manual review.
+    CLASSIFICATION_CONFIDENCE_THRESHOLD: float = 0.6
+
     ALLOWED_CONTENT_TYPES: set[str] = {
         "application/pdf",
         "image/png",
