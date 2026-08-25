@@ -8,6 +8,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from supabase import Client, create_client
 
+__test__ = False  # Prevent pytest from trying to run this file as a test
 
 def build_client() -> Client:
     load_dotenv()
