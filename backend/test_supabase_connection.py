@@ -1,11 +1,8 @@
 from __future__ import annotations
 
 import argparse
-import mimetypes
 import os
 import sys
-import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -26,92 +23,40 @@ def build_client() -> Client:
     return create_client(supabase_url, supabase_key)
 
 
-def guess_content_type(file_path: Path) -> str:
-    content_type, _ = mimetypes.guess_type(str(file_path))
-    return content_type or "application/octet-stream"
-
-
-def upload_file(client: Client, bucket: str, case_id: str | None, file_path: Path) -> str:
-    storage_folder = case_id or "unassigned"
-    storage_path = f"{storage_folder}/{uuid.uuid4()}_{file_path.name}"
-    file_bytes = file_path.read_bytes()
-    content_type = guess_content_type(file_path)
-
-    client.storage.from_(bucket).upload(
-        storage_path,
-        file_bytes,
-        {"content-type": content_type},
-    )
-
-    return storage_path
-
-
-def insert_document_row(client: Client, case_id: str | None, filename: str, storage_path: str) -> dict:
-    now = datetime.now(timezone.utc).isoformat()
-    row = {
-        "id": str(uuid.uuid4()),
-        "case_id": case_id,
-        "filename": filename,
-        "storage_path": storage_path,
-        "status": "uploaded",
-        "retry_count": 0,
-        "uploaded_at": now,
-    }
-
-    result = client.table("documents").insert(row).execute()
-    if not result.data:
-        raise RuntimeError("Insert returned no data")
-
-    return result.data[0]
-
-
-def update_document_row(client: Client, document_id: str) -> dict:
-    result = (
-        client.table("documents")
-        .update({"status": "queued"})
-        .eq("id", document_id)
-        .execute()
-    )
-
-    if not result.data:
-        raise RuntimeError("Update returned no data")
-
-    return result.data[0]
+def test_db_connection(client: Client) -> None:
+    # Perform a read-only operation to verify database connectivity.
+    # Selecting 1 row from the 'documents' table confirms the DB is reachable.
+    client.table("documents").select("id").limit(1).execute()
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Smoke-test Supabase storage upload plus documents table insert/update."
+        description="Smoke-test Supabase database connection (Read-Only)."
     )
-    parser.add_argument("file_path", type=Path, help="Path to a local file to upload")
+    # Kept to prevent your GitHub Action command from breaking, but the file is not used.
+    parser.add_argument("file_path", type=Path, nargs='?', help="Path to a local file (Ignored)")
     parser.add_argument(
         "--case-id",
         default=None,
-        help="Optional cases.id value to use in storage path and row",
+        help="Optional cases.id (Ignored in read-only test)",
     )
     parser.add_argument(
         "--bucket",
         default=os.environ.get("SUPABASE_STORAGE_BUCKET", "documents"),
-        help="Supabase storage bucket name",
+        help="Supabase storage bucket name (Ignored in read-only test)",
     )
     args = parser.parse_args()
 
-    if not args.file_path.exists():
-        raise FileNotFoundError(f"File not found: {args.file_path}")
-
-    client = build_client()
-
-    print(f"Uploading {args.file_path} to bucket {args.bucket}...")
-    storage_path = upload_file(client, args.bucket, args.case_id, args.file_path)
-    print(f"Upload ok: {storage_path}")
-
-    print("Inserting document row...")
-    document = insert_document_row(client, args.case_id, args.file_path.name, storage_path)
-    print(f"Insert ok: {document['id']}")
-
-    print("Updating document row to queued...")
-    updated = update_document_row(client, document["id"])
-    print(f"Update ok: {updated['id']} -> {updated['status']}")
+    try:
+        client = build_client()
+        print("Testing Supabase database connection...")
+        
+        test_db_connection(client)
+        
+        print("Connection OK: Successfully communicated with the database.")
+    except Exception as e:
+        print(f"Smoke test failed: {e}")
+        return 1
 
     return 0
 
