@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from . import document_repository
 from .config import settings
 from .models import DocumentStatus, StuckDocument
-from .supabase_client import supabase_client
 
 
 def get_stuck_documents() -> list[StuckDocument]:
@@ -13,7 +13,7 @@ def get_stuck_documents() -> list[StuckDocument]:
     STUCK_THRESHOLD_SECONDS with no status update is queryable here —
     so no accepted document can become invisible to monitoring.
     """
-    candidates = supabase_client.get_documents_in_status(
+    candidates = document_repository.get_documents_in_status(
         [DocumentStatus.QUEUED, DocumentStatus.PROCESSING]
     )
 

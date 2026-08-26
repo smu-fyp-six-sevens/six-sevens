@@ -5,10 +5,10 @@ import logging
 import time
 from datetime import datetime, timezone
 
+from . import document_repository
 from .config import settings
 from .dify_client import dify_client, DifyInvocationError
 from .models import DocumentStatus
-from .supabase_client import supabase_client
 
 logger = logging.getLogger("classifier_pipeline.queue")
 
@@ -37,7 +37,7 @@ class DocumentQueue:
     async def enqueue(self, document_id: str) -> None:
         """AC1: mark the document queued and place it on the queue."""
         now = datetime.now(timezone.utc)
-        supabase_client.update_status(
+        document_repository.update_status(
             document_id, DocumentStatus.QUEUED, queued_at=now
         )
         await self._queue.put(document_id)
@@ -54,7 +54,7 @@ class DocumentQueue:
                 self._queue.task_done()
 
     async def _process_document(self, document_id: str, dequeued_at: float) -> None:
-        document = supabase_client.get_document(document_id)
+        document = document_repository.get_document(document_id)
         if document is None:
             logger.error("Document %s not found when dequeued", document_id)
             return
@@ -69,7 +69,7 @@ class DocumentQueue:
         # invoke_time_seconds is logged so "within 1 second of dequeue" is
         # measurable in tests/monitoring, independent of Dify's own latency.
         processing_started_at = datetime.now(timezone.utc)
-        supabase_client.update_status(
+        document_repository.update_status(
             document_id,
             DocumentStatus.PROCESSING,
             processing_started_at=processing_started_at,
@@ -93,14 +93,14 @@ class DocumentQueue:
                     "Document %s: invocation attempt %d/%d failed: %s",
                     document_id, attempt, settings.MAX_INVOCATION_RETRIES, exc,
                 )
-                supabase_client.update_status(
+                document_repository.update_status(
                     document_id, DocumentStatus.PROCESSING, retry_count=attempt
                 )
                 if attempt < settings.MAX_INVOCATION_RETRIES:
                     await asyncio.sleep(settings.RETRY_BACKOFF_SECONDS * attempt)
 
         # AC3: retries exhausted — fail and flag for manual review.
-        supabase_client.update_status(
+        document_repository.update_status(
             document_id,
             DocumentStatus.FAILED,
             failure_reason=f"Classifier invocation failed after "
