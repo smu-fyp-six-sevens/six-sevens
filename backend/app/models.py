@@ -15,12 +15,22 @@ class DocumentStatus(str, Enum):
     FAILED = "failed"           # AC3: retries exhausted, needs manual review
 
 
+class CaseRecord(BaseModel):
+    id: str
+    status: str = "open"
+    submission_finalized: bool = False
+    finalized_at: Optional[datetime] = None
+    recommended_additional_documents: list = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
 class DocumentRecord(BaseModel):
     id: str
     case_id: Optional[str] = None
     filename: str
     document_type: Optional[str] = None
-    storage_path: str
+    storage_path: Optional[str] = None
     status: DocumentStatus
     retry_count: int = 0
     uploaded_at: datetime
@@ -32,6 +42,24 @@ class DocumentRecord(BaseModel):
 class UploadResponse(BaseModel):
     document_id: str
     status: DocumentStatus
+
+
+class BulkUploadItemResult(BaseModel):
+    filename: str
+    success: bool
+    document_id: Optional[str] = None
+    status: Optional[DocumentStatus] = None
+    error: Optional[str] = None
+
+
+class BulkUploadResponse(BaseModel):
+    results: list[BulkUploadItemResult]
+
+
+class DocumentDownloadResponse(BaseModel):
+    document_id: str
+    signed_url: str
+    expires_in: int
 
 
 class StuckDocument(BaseModel):
