@@ -887,10 +887,33 @@ def _normalize_font(font_name: str | None) -> str:
 def _get_ocr_engine():
     global _ocr_engine
     if _ocr_engine is None:
-        from rapidocr_onnxruntime import RapidOCR
+        from rapidocr import RapidOCR
 
         _ocr_engine = RapidOCR()
     return _ocr_engine
+
+
+def _iter_ocr_lines(result):
+    if result is None:
+        return
+
+    if hasattr(result, "txts") and hasattr(result, "boxes"):
+        boxes = result.boxes
+        txts = result.txts
+        if boxes is None or txts is None:
+            return
+        scores = result.scores or ()
+        for index, (box, text) in enumerate(zip(boxes, txts)):
+            score = float(scores[index]) if index < len(scores) else 1.0
+            yield box, text, score
+        return
+
+    rows = result[0] if isinstance(result, tuple) else result
+    for row in rows or []:
+        if not row or len(row) < 2:
+            continue
+        score = float(row[2]) if len(row) > 2 else 1.0
+        yield row[0], row[1], score
 
 
 def _placeholder_image_field(metadata: dict[str, str], width: int = 220) -> FieldValue:
@@ -927,16 +950,13 @@ def discover_fields_from_image(
         meta = read_document_metadata(image_path)
 
     ocr = _get_ocr_engine()
-    result, _ = ocr(str(image_path))
+    result = ocr(str(image_path))
     fields: dict[str, FieldValue] = {}
 
-    for row in result or []:
-        if not row or len(row) < 2:
+    for box, raw_text, score in _iter_ocr_lines(result):
+        text = (raw_text or "").strip()
+        if not text or box is None:
             continue
-        box, text = row[0], (row[1] or "").strip()
-        if not text or not box:
-            continue
-        score = float(row[2]) if len(row) > 2 else 1.0
         if score < 0.45:
             continue
 
