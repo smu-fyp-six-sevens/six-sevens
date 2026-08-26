@@ -5,6 +5,16 @@ services:
       dockerfile: backend/Dockerfile
     ports:
       - "8000:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:-}
+      SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET:-documents}
+      DIFY_BASE_URL: ${DIFY_BASE_URL:-https://api.dify.ai/v1}
+      DIFY_API_KEY: ${DIFY_API_KEY:-}
+      DIFY_CLASSIFIER_WORKFLOW_ID: ${DIFY_CLASSIFIER_WORKFLOW_ID:-}
 
   frontend:
     build:
