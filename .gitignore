@@ -9,3 +9,5 @@ dist/
 .DS_Store
 .env
 .env.local
+backend/data/templates/
+backend/data/working/

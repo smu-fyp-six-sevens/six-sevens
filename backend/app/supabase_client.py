@@ -18,14 +18,19 @@ class SupabaseClient:
     """
 
     def __init__(self) -> None:
-        if not settings.SUPABASE_URL:
-            raise RuntimeError("SUPABASE_URL is not set")
-        if not settings.SUPABASE_PUBLISHABLE_KEY:
-            raise RuntimeError("SUPABASE_PUBLISHABLE_KEY is not set")
+        self._client: Client | None = None
 
-        self._client: Client = create_client(
-            settings.SUPABASE_URL, settings.SUPABASE_PUBLISHABLE_KEY
-        )
+    @property
+    def client(self) -> Client:
+        if self._client is None:
+            if not settings.SUPABASE_URL:
+                raise RuntimeError("SUPABASE_URL is not set")
+            if not settings.SUPABASE_PUBLISHABLE_KEY:
+                raise RuntimeError("SUPABASE_PUBLISHABLE_KEY is not set")
+            self._client = create_client(
+                settings.SUPABASE_URL, settings.SUPABASE_PUBLISHABLE_KEY
+            )
+        return self._client
 
     # ---- Storage -----------------------------------------------------
 
@@ -35,7 +40,7 @@ class SupabaseClient:
         """Uploads the file and returns its storage path."""
         storage_folder = case_id or "unassigned"
         storage_path = f"{storage_folder}/{uuid.uuid4()}_{filename}"
-        self._client.storage.from_(settings.SUPABASE_STORAGE_BUCKET).upload(
+        self.client.storage.from_(settings.SUPABASE_STORAGE_BUCKET).upload(
             storage_path, file_bytes, {"content-type": content_type}
         )
         return storage_path
@@ -55,7 +60,7 @@ class SupabaseClient:
             "retry_count": 0,
             "uploaded_at": now.isoformat(),
         }
-        result = self._client.table("documents").insert(row).execute()
+        result = self.client.table("documents").insert(row).execute()
         return DocumentRecord(**result.data[0])
 
     def update_status(
@@ -80,17 +85,17 @@ class SupabaseClient:
         if failure_reason is not None:
             update["failure_reason"] = failure_reason
 
-        self._client.table("documents").update(update).eq("id", document_id).execute()
+        self.client.table("documents").update(update).eq("id", document_id).execute()
 
     def get_document(self, document_id: str) -> Optional[DocumentRecord]:
-        result = self._client.table("documents").select("*").eq("id", document_id).execute()
+        result = self.client.table("documents").select("*").eq("id", document_id).execute()
         if not result.data:
             return None
         return DocumentRecord(**result.data[0])
 
     def get_documents_in_status(self, statuses: list[DocumentStatus]) -> list[DocumentRecord]:
         result = (
-            self._client.table("documents")
+            self.client.table("documents")
             .select("*")
             .in_("status", [s.value for s in statuses])
             .execute()
