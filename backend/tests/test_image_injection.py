@@ -3,7 +3,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app.injection.pdf import TEMPLATES_DIR, discover_fields_from_image, read_document_metadata
+from app.injection import pdf as injection_pdf
+from app.injection.pdf import discover_fields_from_image, read_document_metadata
 from app.injection.schemas import DefectType
 from app.injection.store import get_document, get_document_file_path, reset_sample_documents
 from app.main import app
@@ -12,7 +13,7 @@ client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
-def _reset_documents() -> None:
+def _reset_documents(isolated_injection_templates) -> None:
     reset_sample_documents()
 
 
@@ -46,7 +47,7 @@ def test_image_document_id_accepts_extension() -> None:
 
 
 def test_ocr_discovers_text_on_png() -> None:
-    fields = discover_fields_from_image(TEMPLATES_DIR / "ocbc_sample.png")
+    fields = discover_fields_from_image(injection_pdf.TEMPLATES_DIR / "ocbc_sample.png")
     assert len(fields) > 5
     joined = " ".join(field.text for field in fields.values()).upper()
     assert "OCBC" in joined
