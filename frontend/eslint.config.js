@@ -15,7 +15,12 @@ export default [
         window: 'readonly',
         document: 'readonly',
         HTMLElement: 'readonly',
+        HTMLInputElement: 'readonly',
         fetch: 'readonly',
+        File: 'readonly',
+        FormData: 'readonly',
+        crypto: 'readonly',
+        localStorage: 'readonly',
       },
     },
     plugins: {

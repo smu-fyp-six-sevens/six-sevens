@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from postgrest.exceptions import APIError
 
 from app.main import app
-from app.models import DocumentRecord, DocumentStatus
+from app.models import CaseRecord, DocumentRecord, DocumentStatus
 
 
 client = TestClient(app)
@@ -24,12 +24,25 @@ def _make_document(document_id: str = "doc-1") -> DocumentRecord:
     )
 
 
+def _make_case(case_id: str = "case-1") -> CaseRecord:
+    return CaseRecord(
+        id=case_id,
+        status="open",
+        submission_finalized=False,
+        recommended_additional_documents=[],
+        created_at="2026-08-26T00:00:00Z",
+        updated_at="2026-08-26T00:00:00Z",
+    )
+
+
 def test_upload_batch_partial_failure() -> None:
     with (
+        patch("app.routers.upload.case_repository") as mock_case_repo,
         patch("app.routers.upload.storage_service") as mock_storage,
         patch("app.routers.upload.document_repository") as mock_repo,
         patch("app.routers.upload.document_queue") as mock_queue,
     ):
+        mock_case_repo.get_case.return_value = _make_case("case-1")
         mock_storage.upload_file.return_value = "case-1/uuid_good.pdf"
         mock_repo.create_document.return_value = _make_document("doc-good")
         mock_queue.enqueue = AsyncMock()
@@ -56,12 +69,64 @@ def test_upload_batch_partial_failure() -> None:
     mock_queue.enqueue.assert_awaited_once_with("doc-good")
 
 
-def test_upload_rejects_unknown_case_id() -> None:
+def test_upload_rejects_unknown_case_id_before_touching_storage() -> None:
+    """
+    The case-existence check must run before any storage write, so an
+    invalid case_id never gets a Storage object/folder created under it.
+    """
     with (
+        patch("app.routers.upload.case_repository") as mock_case_repo,
         patch("app.routers.upload.storage_service") as mock_storage,
         patch("app.routers.upload.document_repository") as mock_repo,
     ):
-        mock_storage.upload_file.return_value = "does-not-exist/uuid_good.pdf"
+        mock_case_repo.get_case.return_value = None
+
+        response = client.post(
+            "/documents/upload",
+            data={"case_id": "does-not-exist"},
+            files={"file": ("good.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
+        )
+
+    assert response.status_code == 400
+    assert "does-not-exist" in response.json()["detail"]
+    mock_storage.upload_file.assert_not_called()
+    mock_repo.create_document.assert_not_called()
+
+
+def test_upload_allows_missing_case_id_unassigned_folder() -> None:
+    """No case_id at all is still allowed (goes to the 'unassigned' folder) —
+    the existence check only applies when a case_id is actually provided."""
+    with (
+        patch("app.routers.upload.case_repository") as mock_case_repo,
+        patch("app.routers.upload.storage_service") as mock_storage,
+        patch("app.routers.upload.document_repository") as mock_repo,
+        patch("app.routers.upload.document_queue") as mock_queue,
+    ):
+        mock_storage.upload_file.return_value = "unassigned/uuid_good.pdf"
+        mock_repo.create_document.return_value = _make_document("doc-good")
+        mock_queue.enqueue = AsyncMock()
+
+        response = client.post(
+            "/documents/upload",
+            files={"file": ("good.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
+        )
+
+    assert response.status_code == 202
+    mock_case_repo.get_case.assert_not_called()
+
+
+def test_upload_cleans_up_storage_on_fk_violation_race() -> None:
+    """
+    Defense-in-depth: even if the case existed at check time but is gone by
+    the time the document row insert runs (a race), cleanup still fires.
+    """
+    with (
+        patch("app.routers.upload.case_repository") as mock_case_repo,
+        patch("app.routers.upload.storage_service") as mock_storage,
+        patch("app.routers.upload.document_repository") as mock_repo,
+    ):
+        mock_case_repo.get_case.return_value = _make_case("case-1")
+        mock_storage.upload_file.return_value = "case-1/uuid_good.pdf"
         mock_repo.create_document.side_effect = APIError(
             {
                 "message": 'insert or update on table "documents" violates foreign key '
@@ -74,20 +139,22 @@ def test_upload_rejects_unknown_case_id() -> None:
 
         response = client.post(
             "/documents/upload",
-            data={"case_id": "does-not-exist"},
+            data={"case_id": "case-1"},
             files={"file": ("good.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
         )
 
     assert response.status_code == 400
-    assert "does-not-exist" in response.json()["detail"]
-    mock_storage.delete_file.assert_called_once_with("does-not-exist/uuid_good.pdf")
+    assert "case-1" in response.json()["detail"]
+    mock_storage.delete_file.assert_called_once_with("case-1/uuid_good.pdf")
 
 
 def test_upload_cleans_up_storage_on_generic_db_failure() -> None:
     with (
+        patch("app.routers.upload.case_repository") as mock_case_repo,
         patch("app.routers.upload.storage_service") as mock_storage,
         patch("app.routers.upload.document_repository") as mock_repo,
     ):
+        mock_case_repo.get_case.return_value = _make_case("case-1")
         mock_storage.upload_file.return_value = "case-1/uuid_good.pdf"
         mock_repo.create_document.side_effect = RuntimeError("transient DB error")
 
@@ -103,10 +170,12 @@ def test_upload_cleans_up_storage_on_generic_db_failure() -> None:
 
 def test_upload_does_not_clean_up_storage_when_enqueue_fails() -> None:
     with (
+        patch("app.routers.upload.case_repository") as mock_case_repo,
         patch("app.routers.upload.storage_service") as mock_storage,
         patch("app.routers.upload.document_repository") as mock_repo,
         patch("app.routers.upload.document_queue") as mock_queue,
     ):
+        mock_case_repo.get_case.return_value = _make_case("case-1")
         mock_storage.upload_file.return_value = "case-1/uuid_good.pdf"
         mock_repo.create_document.return_value = _make_document("doc-good")
         mock_queue.enqueue = AsyncMock(side_effect=RuntimeError("queue full"))

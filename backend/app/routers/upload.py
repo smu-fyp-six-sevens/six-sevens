@@ -6,7 +6,7 @@ import logging
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from postgrest.exceptions import APIError
 
-from .. import document_repository, storage_service
+from .. import case_repository, document_repository, storage_service
 from ..config import settings
 from ..models import BulkUploadItemResult, BulkUploadResponse, DocumentRecord, UploadResponse
 from ..queue_service import document_queue
@@ -42,6 +42,14 @@ async def _ingest_one(case_id: str | None, file: UploadFile) -> DocumentRecord:
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=f"File exceeds {settings.MAX_FILE_SIZE_BYTES} byte limit",
         )
+
+    if case_id is not None:
+        case = await asyncio.to_thread(case_repository.get_case, case_id)
+        if case is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"case_id '{case_id}' does not exist",
+            )
 
     try:
         storage_path = await asyncio.to_thread(
