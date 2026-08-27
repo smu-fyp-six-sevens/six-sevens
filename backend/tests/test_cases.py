@@ -39,3 +39,21 @@ def test_get_case_not_found() -> None:
         response = client.get("/cases/missing-id")
 
     assert response.status_code == 404
+
+
+def test_create_case_db_failure_returns_502() -> None:
+    with patch("app.routers.cases.case_repository") as mock_repo:
+        mock_repo.create_case.side_effect = RuntimeError("connection refused")
+
+        response = client.post("/cases")
+
+    assert response.status_code == 502
+
+
+def test_get_case_db_failure_returns_502() -> None:
+    with patch("app.routers.cases.case_repository") as mock_repo:
+        mock_repo.get_case.side_effect = RuntimeError("connection refused")
+
+        response = client.get("/cases/case-1")
+
+    assert response.status_code == 502

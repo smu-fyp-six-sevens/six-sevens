@@ -80,6 +80,45 @@ def test_upload_rejects_unknown_case_id() -> None:
 
     assert response.status_code == 400
     assert "does-not-exist" in response.json()["detail"]
+    mock_storage.delete_file.assert_called_once_with("does-not-exist/uuid_good.pdf")
+
+
+def test_upload_cleans_up_storage_on_generic_db_failure() -> None:
+    with (
+        patch("app.routers.upload.storage_service") as mock_storage,
+        patch("app.routers.upload.document_repository") as mock_repo,
+    ):
+        mock_storage.upload_file.return_value = "case-1/uuid_good.pdf"
+        mock_repo.create_document.side_effect = RuntimeError("transient DB error")
+
+        response = client.post(
+            "/documents/upload",
+            data={"case_id": "case-1"},
+            files={"file": ("good.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
+        )
+
+    assert response.status_code == 502
+    mock_storage.delete_file.assert_called_once_with("case-1/uuid_good.pdf")
+
+
+def test_upload_does_not_clean_up_storage_when_enqueue_fails() -> None:
+    with (
+        patch("app.routers.upload.storage_service") as mock_storage,
+        patch("app.routers.upload.document_repository") as mock_repo,
+        patch("app.routers.upload.document_queue") as mock_queue,
+    ):
+        mock_storage.upload_file.return_value = "case-1/uuid_good.pdf"
+        mock_repo.create_document.return_value = _make_document("doc-good")
+        mock_queue.enqueue = AsyncMock(side_effect=RuntimeError("queue full"))
+
+        response = client.post(
+            "/documents/upload",
+            data={"case_id": "case-1"},
+            files={"file": ("good.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
+        )
+
+    assert response.status_code == 502
+    mock_storage.delete_file.assert_not_called()
 
 
 def test_get_document_not_found() -> None:
@@ -89,6 +128,33 @@ def test_get_document_not_found() -> None:
         response = client.get("/documents/missing-id")
 
     assert response.status_code == 404
+
+
+def test_list_documents_db_failure_returns_502() -> None:
+    with patch("app.routers.documents.document_repository") as mock_repo:
+        mock_repo.list_documents.side_effect = RuntimeError("connection refused")
+
+        response = client.get("/documents")
+
+    assert response.status_code == 502
+
+
+def test_get_document_db_failure_returns_502() -> None:
+    with patch("app.routers.documents.document_repository") as mock_repo:
+        mock_repo.get_document.side_effect = RuntimeError("connection refused")
+
+        response = client.get("/documents/doc-1")
+
+    assert response.status_code == 502
+
+
+def test_get_document_download_url_db_failure_returns_502() -> None:
+    with patch("app.routers.documents.document_repository") as mock_repo:
+        mock_repo.get_document.side_effect = RuntimeError("connection refused")
+
+        response = client.get("/documents/doc-1/download")
+
+    assert response.status_code == 502
 
 
 def test_get_document_download_url() -> None:

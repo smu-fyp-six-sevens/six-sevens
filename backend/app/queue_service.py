@@ -3,12 +3,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections import deque
 from datetime import datetime, timezone
 
 from . import document_repository
 from .config import settings
 from .dify_client import dify_client, DifyInvocationError
-from .models import DocumentStatus
+from .models import DocumentStatus, ProcessingErrorEntry
 
 logger = logging.getLogger("classifier_pipeline.queue")
 
@@ -28,16 +29,33 @@ class DocumentQueue:
     def __init__(self) -> None:
         self._queue: asyncio.Queue[str] = asyncio.Queue()
         self._worker_task: asyncio.Task | None = None
+        # Bounded in-memory log for failures that have no document row to
+        # write to (or that are worth surfacing outside per-document status).
+        # Same durability trade-off as the queue itself — lost on restart.
+        self._recent_errors: deque[ProcessingErrorEntry] = deque(maxlen=100)
 
     def start(self) -> None:
         if self._worker_task is None:
             self._worker_task = asyncio.create_task(self._worker_loop())
             logger.info("Document queue worker started")
 
+    def _record_error(self, document_id: str, error: str) -> None:
+        self._recent_errors.append(
+            ProcessingErrorEntry(
+                document_id=document_id,
+                error=error,
+                occurred_at=datetime.now(timezone.utc),
+            )
+        )
+
+    def get_recent_errors(self) -> list[ProcessingErrorEntry]:
+        return list(self._recent_errors)
+
     async def enqueue(self, document_id: str) -> None:
         """AC1: mark the document queued and place it on the queue."""
         now = datetime.now(timezone.utc)
-        document_repository.update_status(
+        await asyncio.to_thread(
+            document_repository.update_status,
             document_id, DocumentStatus.QUEUED, queued_at=now
         )
         await self._queue.put(document_id)
@@ -54,9 +72,11 @@ class DocumentQueue:
                 self._queue.task_done()
 
     async def _process_document(self, document_id: str, dequeued_at: float) -> None:
-        document = document_repository.get_document(document_id)
+        document = await asyncio.to_thread(document_repository.get_document, document_id)
         if document is None:
-            logger.error("Document %s not found when dequeued", document_id)
+            message = f"Document {document_id} not found when dequeued (row may have been deleted)"
+            logger.error(message)
+            self._record_error(document_id, message)
             return
 
         document_info = {
@@ -69,7 +89,8 @@ class DocumentQueue:
         # invoke_time_seconds is logged so "within 1 second of dequeue" is
         # measurable in tests/monitoring, independent of Dify's own latency.
         processing_started_at = datetime.now(timezone.utc)
-        document_repository.update_status(
+        await asyncio.to_thread(
+            document_repository.update_status,
             document_id,
             DocumentStatus.PROCESSING,
             processing_started_at=processing_started_at,
@@ -93,14 +114,16 @@ class DocumentQueue:
                     "Document %s: invocation attempt %d/%d failed: %s",
                     document_id, attempt, settings.MAX_INVOCATION_RETRIES, exc,
                 )
-                document_repository.update_status(
+                await asyncio.to_thread(
+                    document_repository.update_status,
                     document_id, DocumentStatus.PROCESSING, retry_count=attempt
                 )
                 if attempt < settings.MAX_INVOCATION_RETRIES:
                     await asyncio.sleep(settings.RETRY_BACKOFF_SECONDS * attempt)
 
         # AC3: retries exhausted — fail and flag for manual review.
-        document_repository.update_status(
+        await asyncio.to_thread(
+            document_repository.update_status,
             document_id,
             DocumentStatus.FAILED,
             failure_reason=f"Classifier invocation failed after "

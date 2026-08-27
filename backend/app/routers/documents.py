@@ -17,12 +17,27 @@ logger = logging.getLogger(__name__)
 async def list_documents(
     case_id: str | None = None, doc_status: DocumentStatus | None = None
 ) -> list[DocumentRecord]:
-    return await asyncio.to_thread(document_repository.list_documents, case_id, doc_status)
+    try:
+        return await asyncio.to_thread(document_repository.list_documents, case_id, doc_status)
+    except Exception as exc:
+        logger.exception("Failed to list documents")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to list documents. Check Supabase table access.",
+        ) from exc
 
 
 @router.get("/{document_id}", response_model=DocumentRecord)
 async def get_document(document_id: str) -> DocumentRecord:
-    document = await asyncio.to_thread(document_repository.get_document, document_id)
+    try:
+        document = await asyncio.to_thread(document_repository.get_document, document_id)
+    except Exception as exc:
+        logger.exception("Failed to fetch document %s", document_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch the document. Check Supabase table access.",
+        ) from exc
+
     if document is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
@@ -36,7 +51,15 @@ async def get_document_download_url(document_id: str) -> DocumentDownloadRespons
     Returns a short-lived signed URL for the document's file in Supabase
     Storage rather than proxying the bytes through this service.
     """
-    document = await asyncio.to_thread(document_repository.get_document, document_id)
+    try:
+        document = await asyncio.to_thread(document_repository.get_document, document_id)
+    except Exception as exc:
+        logger.exception("Failed to fetch document %s", document_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch the document. Check Supabase table access.",
+        ) from exc
+
     if document is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"

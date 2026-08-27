@@ -69,3 +69,15 @@ class StuckDocument(BaseModel):
     seconds_in_current_status: float = Field(
         ..., description="How long the document has sat in its current status"
     )
+
+
+class ProcessingErrorEntry(BaseModel):
+    document_id: str
+    error: str
+    occurred_at: datetime
+
+
+class MonitoringIssues(BaseModel):
+    stuck: list[StuckDocument]
+    failed: list[DocumentRecord]
+    recent_errors: list[ProcessingErrorEntry]

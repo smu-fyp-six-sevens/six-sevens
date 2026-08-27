@@ -21,6 +21,10 @@ def upload_file(
     return storage_path
 
 
+def delete_file(storage_path: str) -> None:
+    supabase_client.storage.from_(settings.SUPABASE_STORAGE_BUCKET).remove([storage_path])
+
+
 def create_signed_url(
     storage_path: str,
     expires_in: int,

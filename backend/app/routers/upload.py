@@ -51,33 +51,61 @@ async def _ingest_one(case_id: str | None, file: UploadFile) -> DocumentRecord:
             file_bytes,
             file.content_type,
         )
+    except Exception as exc:
+        logger.exception("Failed to store uploaded file in Supabase Storage")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to store the uploaded file. Check Supabase bucket access.",
+        ) from exc
+
+    try:
         document = await asyncio.to_thread(
             document_repository.create_document, case_id, filename, storage_path
         )
-
-        # AC1: enters the background task queue for async processing.
-        await document_queue.enqueue(document.id)
-    except HTTPException:
-        raise
     except APIError as exc:
+        await _cleanup_storage_object(storage_path)
         if exc.code == "23503":  # foreign key violation
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"case_id '{case_id}' does not exist",
             ) from exc
-        logger.exception("Supabase error while storing uploaded document")
+        logger.exception("Supabase error while creating document row")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to store or queue the uploaded document. Check Supabase bucket/table access.",
+            detail="Failed to store the uploaded document record. Check Supabase table access.",
         ) from exc
     except Exception as exc:
-        logger.exception("Failed to store or queue uploaded document")
+        await _cleanup_storage_object(storage_path)
+        logger.exception("Failed to create document row after storing file")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to store or queue the uploaded document. Check Supabase bucket/table access.",
+            detail="Failed to store the uploaded document record. Check Supabase table access.",
+        ) from exc
+
+    try:
+        # AC1: enters the background task queue for async processing.
+        await document_queue.enqueue(document.id)
+    except Exception as exc:
+        logger.exception(
+            "Document %s stored but failed to enqueue for processing", document.id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Document was stored but could not be queued for processing.",
         ) from exc
 
     return document
+
+
+async def _cleanup_storage_object(storage_path: str) -> None:
+    """Best-effort delete of a just-uploaded file when the document row failed to save."""
+    try:
+        await asyncio.to_thread(storage_service.delete_file, storage_path)
+    except Exception:
+        logger.exception(
+            "Failed to clean up orphaned storage object %s after a failed document insert",
+            storage_path,
+        )
 
 
 @router.post("/upload", response_model=UploadResponse, status_code=status.HTTP_202_ACCEPTED)

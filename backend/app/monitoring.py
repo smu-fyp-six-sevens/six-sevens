@@ -9,12 +9,14 @@ from .models import DocumentStatus, StuckDocument
 
 def get_stuck_documents() -> list[StuckDocument]:
     """
-    AC4: any document in QUEUED or PROCESSING longer than
+    AC4: any document in UPLOADED, QUEUED, or PROCESSING longer than
     STUCK_THRESHOLD_SECONDS with no status update is queryable here —
-    so no accepted document can become invisible to monitoring.
+    so no accepted document can become invisible to monitoring. UPLOADED is
+    included because a document can be stored but fail to enqueue, leaving
+    it stuck there indefinitely otherwise.
     """
     candidates = document_repository.get_documents_in_status(
-        [DocumentStatus.QUEUED, DocumentStatus.PROCESSING]
+        [DocumentStatus.UPLOADED, DocumentStatus.QUEUED, DocumentStatus.PROCESSING]
     )
 
     now = datetime.now(timezone.utc)
