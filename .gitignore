@@ -11,5 +11,4 @@ dist/
 .env.local
 .vscode/
 CLAUDE.md
-backend/data/templates/
-backend/data/working/
+backend/data/
