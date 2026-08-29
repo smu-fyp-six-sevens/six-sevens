@@ -1,7 +1,12 @@
+import httpx
 import pytest
 
+from app.classification import classification as classification_module
 from app.classification.classification import (
+    ClassificationResult,
+    DeepSeekClassificationError,
     classify_by_filename,
+    classify_by_llm,
     classify_by_text,
     classify_document,
 )
@@ -185,28 +190,39 @@ def test_classify_by_text_bare_weak_word_is_not_enough() -> None:
 # --- classify_document: merging filename + text -----------------------------
 
 
-def test_classify_document_without_text_matches_filename_layer_only() -> None:
-    result = classify_document("Bank_Statement.pdf")
+async def test_classify_document_without_text_matches_filename_layer_only() -> None:
+    result = await classify_document("Bank_Statement.pdf")
     filename_only = classify_by_filename("Bank_Statement.pdf")
 
     assert result.document_type == filename_only.document_type
     assert result.confidence == filename_only.confidence
 
 
-def test_classify_document_ignores_empty_text() -> None:
-    result = classify_document("Bank_Statement.pdf", extracted_text="")
+async def test_classify_document_ignores_empty_text() -> None:
+    result = await classify_document("Bank_Statement.pdf", extracted_text="")
     filename_only = classify_by_filename("Bank_Statement.pdf")
 
     assert result.document_type == filename_only.document_type
     assert result.confidence == filename_only.confidence
 
 
-def test_classify_document_text_boosts_agreeing_filename() -> None:
+async def test_classify_document_text_boosts_agreeing_filename(monkeypatch) -> None:
     # "statement.pdf" alone is a weak filename signal (0.4); agreeing body
-    # text should push the combined confidence up significantly.
+    # text should push the combined confidence up significantly. LLM layer
+    # is stubbed to agree too, so this also covers the full three-layer
+    # agreement chain.
+    async def fake_llm(extracted_text, *, confidence_threshold=None):
+        return ClassificationResult(
+            document_type=DocumentType.BANK_STATEMENT,
+            confidence=0.9,
+            matched_keywords=["mentions opening and closing balances"],
+        )
+
+    monkeypatch.setattr(classification_module, "classify_by_llm", fake_llm)
+
     filename_only_confidence = classify_by_filename("statement.pdf").confidence
 
-    result = classify_document(
+    result = await classify_document(
         "statement.pdf",
         extracted_text="BANK STATEMENT\nOpening balance: 100.00\nClosing balance: 200.00",
     )
@@ -216,10 +232,15 @@ def test_classify_document_text_boosts_agreeing_filename() -> None:
     assert result.needs_manual_review is False
 
 
-def test_classify_document_text_overrides_wrong_filename_guess() -> None:
+async def test_classify_document_text_overrides_wrong_filename_guess(monkeypatch) -> None:
     # filename weakly suggests a bank statement, but the extracted body is
     # unambiguously a payslip — content should win over the filename.
-    result = classify_document(
+    async def fake_llm(extracted_text, *, confidence_threshold=None):
+        return ClassificationResult(document_type=None, confidence=0.0)
+
+    monkeypatch.setattr(classification_module, "classify_by_llm", fake_llm)
+
+    result = await classify_document(
         "statement.pdf",
         extracted_text="PAYSLIP\nBasic Salary: 3000\nNet Pay: 2500\nGross Pay: 3200",
     )
@@ -227,8 +248,114 @@ def test_classify_document_text_overrides_wrong_filename_guess() -> None:
     assert result.document_type == DocumentType.PAYSLIP
 
 
-def test_classify_document_unrecognised_filename_and_text_needs_manual_review() -> None:
-    result = classify_document("scan001.pdf", extracted_text="Thank you for your business.")
+async def test_classify_document_unrecognised_filename_and_text_needs_manual_review(monkeypatch) -> None:
+    async def fake_llm(extracted_text, *, confidence_threshold=None):
+        return ClassificationResult(document_type=None, confidence=0.0)
+
+    monkeypatch.setattr(classification_module, "classify_by_llm", fake_llm)
+
+    result = await classify_document("scan001.pdf", extracted_text="Thank you for your business.")
 
     assert result.document_type is None
     assert result.needs_manual_review is True
+
+
+async def test_classify_document_llm_overrides_agreeing_regex_layers(monkeypatch) -> None:
+    # Filename + text-regex both weakly/wrongly suggest bank statement, but
+    # the LLM confidently reads it as a payslip — the strongest layer wins.
+    async def fake_llm(extracted_text, *, confidence_threshold=None):
+        return ClassificationResult(
+            document_type=DocumentType.PAYSLIP,
+            confidence=0.95,
+            matched_keywords=["describes monthly salary breakdown"],
+        )
+
+    monkeypatch.setattr(classification_module, "classify_by_llm", fake_llm)
+
+    result = await classify_document(
+        "statement.pdf",
+        extracted_text="This is your statement of earnings for the month.",
+    )
+
+    assert result.document_type == DocumentType.PAYSLIP
+    assert "describes monthly salary breakdown" in result.matched_keywords
+
+
+async def test_classify_document_falls_back_when_llm_layer_unavailable(monkeypatch) -> None:
+    # If the LLM call fails outright, classification should degrade to the
+    # filename+text-regex result rather than failing the whole document.
+    async def failing_llm(extracted_text, *, confidence_threshold=None):
+        raise DeepSeekClassificationError("simulated outage")
+
+    monkeypatch.setattr(classification_module, "classify_by_llm", failing_llm)
+
+    text_and_filename_only = await classify_document(
+        "statement.pdf",
+        extracted_text="BANK STATEMENT\nOpening balance: 100.00\nClosing balance: 200.00",
+    )
+    text_result = classify_by_text(
+        "BANK STATEMENT\nOpening balance: 100.00\nClosing balance: 200.00"
+    )
+
+    assert text_and_filename_only.document_type == text_result.document_type
+    assert text_and_filename_only.document_type == DocumentType.BANK_STATEMENT
+
+
+# --- Layer 3: classify_by_llm (using DeepSeek right now) ------------------------------------
+
+
+def _fake_deepseek_response(content: str) -> httpx.Response:
+    return httpx.Response(
+        200,
+        json={"choices": [{"message": {"content": content}}]},
+        request=httpx.Request("POST", "https://api.deepseek.com/chat/completions"),
+    )
+
+
+async def test_classify_by_llm_parses_valid_response(monkeypatch) -> None:
+    async def fake_post(self, url, *, headers=None, json=None):
+        return _fake_deepseek_response(
+            '{"document_type": "payslip", "confidence": 0.88, "evidence": ["mentions net pay"]}'
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+
+    result = await classify_by_llm("PAYSLIP\nNet Pay: 2500")
+
+    assert result.document_type == DocumentType.PAYSLIP
+    assert result.confidence == 0.88
+    assert result.matched_keywords == ["mentions net pay"]
+    assert result.needs_manual_review is False
+
+
+async def test_classify_by_llm_handles_no_match(monkeypatch) -> None:
+    async def fake_post(self, url, *, headers=None, json=None):
+        return _fake_deepseek_response('{"document_type": null, "confidence": 0.0, "evidence": []}')
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+
+    result = await classify_by_llm("Dear Sir/Madam, please find attached.")
+
+    assert result.document_type is None
+    assert result.confidence == 0.0
+    assert result.needs_manual_review is True
+
+
+async def test_classify_by_llm_raises_on_malformed_response(monkeypatch) -> None:
+    async def fake_post(self, url, *, headers=None, json=None):
+        return _fake_deepseek_response("not valid json")
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+
+    with pytest.raises(DeepSeekClassificationError):
+        await classify_by_llm("some document text")
+
+
+async def test_classify_by_llm_raises_on_request_failure(monkeypatch) -> None:
+    async def fake_post(self, url, *, headers=None, json=None):
+        raise httpx.ConnectError("connection refused", request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+
+    with pytest.raises(DeepSeekClassificationError):
+        await classify_by_llm("some document text")

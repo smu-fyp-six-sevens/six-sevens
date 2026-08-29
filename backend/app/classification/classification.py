@@ -1,24 +1,38 @@
 from __future__ import annotations
 
+import json
+import logging
 import re
 from dataclasses import dataclass
 
+import httpx
 from pydantic import BaseModel
 
 from ..config import settings
 from ..models import DocumentType
 
+logger = logging.getLogger("classifier_pipeline.classification")
+
 # ---------------------------------------------------------------------------
-# Two-layer classification so far:
+# Three-layer classification:
 #
 #   1. classify_by_filename — cheap regex match against the filename.
 #   2. classify_by_text     — regex match against extracted document text;
 #                              body text is stronger evidence than a
 #                              filename, so a hit here outweighs/boosts
 #                              layer 1's guess.
+#   3. classify_by_llm      — DeepSeek reads the extracted text and
+#                              classifies by understanding content rather
+#                              than keyword matching; the strongest
+#                              evidence of the three, so it outweighs/
+#                              boosts layers 1+2's combined guess. Unlike
+#                              the other two layers this one does network
+#                              I/O, so it's async and its failure doesn't
+#                              take down the rest of classify_document().
 #
-# classify_document() runs both and merges them. Layer 2 is skipped when no
-# extracted text is supplied, falling back to the filename-only result.
+# classify_document() runs all three and merges them. Layers 2+3 are
+# skipped when no extracted text is supplied, falling back to the
+# filename-only result.
 # ---------------------------------------------------------------------------
 
 
@@ -61,6 +75,9 @@ class ClassificationResult(BaseModel):
     confidence: float
     matched_keywords: list[str] = []
     needs_manual_review: bool = True
+    # Only ever populated by classify_by_llm — the regex layers have no
+    # reasoning to report, just matched patterns.
+    reasoning: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -244,7 +261,7 @@ _TEXT_RULES: dict[DocumentType, list[tuple[str, float]]] = {
 
 _COMPILED_TEXT_RULES = _compile_rules(_TEXT_RULES)
 
-# How much of the text layer's own confidence gets added on top of a
+# How much of the text-regex layer's own confidence gets added on top of a
 # filename guess when both layers agree on the same document type.
 _TEXT_AGREEMENT_BOOST = 0.5
 
@@ -275,52 +292,150 @@ def classify_by_text(
     )
 
 
-def _merge_filename_and_text(
-    filename_result: ClassificationResult, text_result: ClassificationResult
+def _merge_layer(
+    base: ClassificationResult, other: ClassificationResult, agreement_boost: float
 ) -> ClassificationResult:
     """
-    Combine layers 1 and 2. Extracted text outranks a filename guess:
-    agreement on the same type boosts confidence significantly; a
-    confident text match for a *different* type than the filename wins
-    outright, since actual document content is more reliable than a
-    filename. `needs_manual_review` is left for the caller to recompute
-    against its threshold.
+    Fold `other` (stronger evidence) into `base` (weaker/prior evidence).
+    Agreement on the same type boosts confidence significantly; a
+    confident match from `other` for a *different* type wins outright,
+    since `other` is assumed more reliable than `base`. `needs_manual_review`
+    is left for the caller to recompute against its threshold.
     """
-    if text_result.document_type is None:
-        return filename_result
+    if other.document_type is None:
+        return base
 
-    if text_result.document_type == filename_result.document_type:
-        boosted_confidence = min(
-            1.0, filename_result.confidence + text_result.confidence * _TEXT_AGREEMENT_BOOST
-        )
-        merged_keywords = list(
-            dict.fromkeys(filename_result.matched_keywords + text_result.matched_keywords)
-        )
+    if other.document_type == base.document_type:
+        boosted_confidence = min(1.0, base.confidence + other.confidence * agreement_boost)
+        merged_keywords = list(dict.fromkeys(base.matched_keywords + other.matched_keywords))
         return ClassificationResult(
-            document_type=text_result.document_type,
+            document_type=other.document_type,
             confidence=boosted_confidence,
             matched_keywords=merged_keywords,
         )
 
-    if text_result.confidence >= filename_result.confidence:
-        return text_result
-    return filename_result
+    if other.confidence >= base.confidence:
+        return other
+    return base
 
 
-def classify_document(
+# ---------------------------------------------------------------------------
+# Layer 3: LLM classification (DeepSeek)
+# ---------------------------------------------------------------------------
+
+# How much of the LLM layer's own confidence gets added on top of the
+# filename+text-regex guess when they agree on the same document type.
+# Weighted higher than the text-regex boost — the LLM reads for meaning
+# rather than matching fixed phrases, so its agreement is stronger evidence.
+_LLM_AGREEMENT_BOOST = 0.6
+
+_DEEPSEEK_SYSTEM_PROMPT = (
+    "You are a document classifier for a KYC/onboarding pipeline. Given the "
+    "extracted text of a document, decide which single category it belongs "
+    "to. Judge by meaning, not just keyword matches — the text may come "
+    "from noisy OCR or use different phrasing than the category name. "
+    "A document that merely mentions or lists other document types (e.g. a "
+    "cover letter or email saying documents are attached) is NOT itself one "
+    "of those types — classify what the text actually is, not what it "
+    "refers to.\n\n"
+    "Categories:\n" + "\n".join(f"- {doc_type.value}" for doc_type in DocumentType) + "\n\n"
+    "Respond with ONLY a JSON object (no other text) of this shape:\n"
+    '{"document_type": "<one of the category values above, or null if none '
+    'clearly match>", "confidence": <float 0.0-1.0>, "evidence": ["short '
+    'phrase or reason", ...], "reasoning": "<one short sentence explaining '
+    'the decision>"}'
+)
+
+
+class DeepSeekClassificationError(Exception):
+    """Raised when the DeepSeek classification call fails or returns unusable output."""
+
+
+async def classify_by_llm(
+    extracted_text: str, *, confidence_threshold: float | None = None
+) -> ClassificationResult:
+    """
+    Layer 3: LLM-based classifier over extracted document text.
+
+    Sends the text to DeepSeek and asks it to classify by understanding
+    content, catching cases layers 1+2's regex matching misses (OCR noise,
+    paraphrasing, non-English documents, etc). Same ClassificationResult
+    contract as the other layers so classify_document() can merge it the
+    same way. Raises DeepSeekClassificationError on any request failure or
+    unparseable response — callers should treat that as "layer unavailable"
+    rather than "no match", since it says nothing about the document itself.
+    """
+    threshold = (
+        confidence_threshold
+        if confidence_threshold is not None
+        else settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
+    )
+
+    payload = {
+        "model": settings.DEEPSEEK_MODEL,
+        "messages": [
+            {"role": "system", "content": _DEEPSEEK_SYSTEM_PROMPT},
+            {"role": "user", "content": extracted_text},
+        ],
+        "temperature": 0,
+        "response_format": {"type": "json_object"},
+    }
+    headers = {
+        "Authorization": f"Bearer {settings.DEEPSEEK_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.post(
+                f"{settings.DEEPSEEK_BASE_URL}/chat/completions",
+                headers=headers,
+                json=payload,
+            )
+            response.raise_for_status()
+        except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+            raise DeepSeekClassificationError(f"DeepSeek request failed: {exc}") from exc
+
+    try:
+        content = response.json()["choices"][0]["message"]["content"]
+        parsed = json.loads(content)
+        raw_type = parsed.get("document_type")
+        document_type = DocumentType(raw_type) if raw_type else None
+        confidence = max(0.0, min(1.0, float(parsed.get("confidence", 0.0))))
+        evidence = [str(item) for item in parsed.get("evidence", [])]
+        reasoning = str(parsed.get("reasoning", ""))
+    except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise DeepSeekClassificationError(f"DeepSeek returned unusable output: {exc}") from exc
+
+    if document_type is None:
+        confidence = 0.0
+        evidence = []
+
+    return ClassificationResult(
+        document_type=document_type,
+        confidence=confidence,
+        matched_keywords=evidence,
+        needs_manual_review=document_type is None or confidence < threshold,
+        reasoning=reasoning,
+    )
+
+
+async def classify_document(
     filename: str,
     extracted_text: str | None = None,
     *,
     confidence_threshold: float | None = None,
 ) -> ClassificationResult:
     """
-    Runs the filename and text-identifier layers and merges them.
+    Runs all three layers and merges them.
 
-    extracted_text is optional — when it isn't supplied (or carries no
-    recognisable identifiers), this falls back to the filename-only
-    result. When it is supplied, a matching text identifier boosts
-    confidence in the filename's guess, or overrides it outright if the
-    text points to a different, more strongly-evidenced type.
+    extracted_text is optional — when it isn't supplied, this falls back to
+    the filename-only result (layers 2+3 both need it). When it is
+    supplied, the text-regex layer boosts/overrides the filename guess,
+    then the LLM layer boosts/overrides that combined guess the same way —
+    each layer trusted more than the one before it. If the LLM call fails,
+    classification falls back to the filename+text-regex result rather than
+    failing the whole document.
     """
     threshold = (
         confidence_threshold
@@ -333,7 +448,14 @@ def classify_document(
         return filename_result
 
     text_result = classify_by_text(extracted_text, confidence_threshold=threshold)
-    combined = _merge_filename_and_text(filename_result, text_result)
+    combined = _merge_layer(filename_result, text_result, _TEXT_AGREEMENT_BOOST)
+
+    try:
+        llm_result = await classify_by_llm(extracted_text, confidence_threshold=threshold)
+    except DeepSeekClassificationError:
+        logger.warning("LLM classification layer unavailable; using filename+text result only", exc_info=True)
+    else:
+        combined = _merge_layer(combined, llm_result, _LLM_AGREEMENT_BOOST)
 
     return ClassificationResult(
         document_type=combined.document_type,
