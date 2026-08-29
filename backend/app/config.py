@@ -22,6 +22,10 @@ class Settings:
     DIFY_API_KEY: str = os.environ.get("DIFY_API_KEY", "")
     DIFY_CLASSIFIER_WORKFLOW_ID: str = os.environ.get("DIFY_CLASSIFIER_WORKFLOW_ID", "")
 
+    DEEPSEEK_BASE_URL: str = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+    DEEPSEEK_API_KEY: str = os.environ.get("DEEPSEEK_API_KEY", "")
+    DEEPSEEK_MODEL: str = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
+
     # AC2: invocation should be attempted within this window of being dequeued
     DEQUEUE_TO_INVOKE_TARGET_SECONDS: float = 1.0
     # AC3: retry policy for a failed workflow invocation
@@ -29,6 +33,10 @@ class Settings:
     RETRY_BACKOFF_SECONDS: float = 1.5
     # AC4: a document idle in queued/processing longer than this is "stuck"
     STUCK_THRESHOLD_SECONDS: int = 10
+
+    # Classification: filename-rule matches scoring below this are treated
+    # as unrecognised/low-confidence and flagged for manual review.
+    CLASSIFICATION_CONFIDENCE_THRESHOLD: float = 0.6
 
     ALLOWED_CONTENT_TYPES: set[str] = {
         "application/pdf",
