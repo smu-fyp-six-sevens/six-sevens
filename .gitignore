@@ -12,3 +12,4 @@ dist/
 .vscode/
 CLAUDE.md
 backend/data/
+postman/

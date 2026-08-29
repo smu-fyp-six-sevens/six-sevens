@@ -1,8 +1,13 @@
 export type FileIssue =
   | { type: 'empty' }
+  | { type: 'too-large' }
   | { type: 'invalid-signature' }
   | { type: 'invalid-filename' }
   | { type: 'duplicate' };
+
+// Mirrors settings.MAX_FILE_SIZE_BYTES / MAX_BULK_FILES in backend/app/config.py
+export const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
+export const MAX_BULK_FILES = 20;
 
 export interface ValidatedFile {
   uploadFile: File;
@@ -98,6 +103,13 @@ export function recordUploadedHash(caseId: string, hash: string): void {
   }
 }
 
+export function checkFileCount(files: File[]): string | null {
+  if (files.length > MAX_BULK_FILES) {
+    return `Too many files selected (${files.length}). Maximum is ${MAX_BULK_FILES} per upload.`;
+  }
+  return null;
+}
+
 export async function validateFiles(files: File[], caseId: string): Promise<ValidationResult> {
   const ok: ValidatedFile[] = [];
   const rejected: { file: File; issue: FileIssue }[] = [];
@@ -108,6 +120,11 @@ export async function validateFiles(files: File[], caseId: string): Promise<Vali
   for (const file of files) {
     if (file.size === 0) {
       rejected.push({ file, issue: { type: 'empty' } });
+      continue;
+    }
+
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      rejected.push({ file, issue: { type: 'too-large' } });
       continue;
     }
 

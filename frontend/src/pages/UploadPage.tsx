@@ -3,13 +3,23 @@ import type { ChangeEvent, FormEvent } from 'react';
 
 import { uploadDocuments } from '../services/uploadService';
 import type { BulkUploadItemResult } from '../services/uploadService';
-import { recordUploadedHash, validateFiles } from '../utils/fileValidation';
+import {
+  MAX_BULK_FILES,
+  MAX_FILE_SIZE_BYTES,
+  checkFileCount,
+  recordUploadedHash,
+  validateFiles,
+} from '../utils/fileValidation';
 import type { FileIssue } from '../utils/fileValidation';
+
+const MAX_FILE_SIZE_MB = Math.floor(MAX_FILE_SIZE_BYTES / (1024 * 1024));
 
 function describeIssue(issue: FileIssue): string {
   switch (issue.type) {
     case 'empty':
       return 'File is empty (0 bytes).';
+    case 'too-large':
+      return `File exceeds the ${MAX_FILE_SIZE_MB} MB limit.`;
     case 'invalid-signature':
       return 'File content does not match a supported type (PDF, PNG, or JPEG).';
     case 'invalid-filename':
@@ -22,13 +32,16 @@ function describeIssue(issue: FileIssue): string {
 export default function UploadPage() {
   const [caseId, setCaseId] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [countError, setCountError] = useState<string | null>(null);
   const [rejections, setRejections] = useState<{ file: File; issue: FileIssue }[]>([]);
   const [results, setResults] = useState<BulkUploadItemResult[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    setSelectedFiles(Array.from(event.target.files ?? []));
+    const files = Array.from(event.target.files ?? []);
+    setSelectedFiles(files);
+    setCountError(checkFileCount(files));
     setResults([]);
     setRejections([]);
     setError(null);
@@ -38,6 +51,12 @@ export default function UploadPage() {
     event.preventDefault();
     const trimmedCaseId = caseId.trim();
     if (!trimmedCaseId || selectedFiles.length === 0) {
+      return;
+    }
+
+    const batchCountError = checkFileCount(selectedFiles);
+    if (batchCountError) {
+      setCountError(batchCountError);
       return;
     }
 
@@ -96,15 +115,19 @@ export default function UploadPage() {
         </label>
 
         <label className="field">
-          <span>Files</span>
+          <span>Files (max {MAX_BULK_FILES}, {MAX_FILE_SIZE_MB} MB each)</span>
           <input type="file" multiple onChange={handleFileChange} accept=".pdf,.png,.jpg,.jpeg" />
         </label>
 
-        <button type="submit" disabled={isSubmitting || selectedFiles.length === 0 || !caseId.trim()}>
+        <button
+          type="submit"
+          disabled={isSubmitting || selectedFiles.length === 0 || !caseId.trim() || !!countError}
+        >
           {isSubmitting ? 'Uploading...' : 'Upload'}
         </button>
       </form>
 
+      {countError && <p className="error-banner">{countError}</p>}
       {error && <p className="error-banner">{error}</p>}
 
       {rejections.length > 0 && (

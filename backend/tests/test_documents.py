@@ -69,6 +69,19 @@ def test_upload_batch_partial_failure() -> None:
     mock_queue.enqueue.assert_awaited_once_with("doc-good")
 
 
+def test_upload_batch_rejects_no_files() -> None:
+    """
+    files uses File(default_factory=list) rather than File(...) specifically
+    so this reaches our own `if not files` check (a clean 400) instead of
+    FastAPI's generic 422 required-field validation error, which fires
+    before the function body ever runs when the field is required.
+    """
+    response = client.post("/documents/upload-batch", data={"case_id": "case-1"})
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "At least one file is required"
+
+
 def test_upload_rejects_unknown_case_id_before_touching_storage() -> None:
     """
     The case-existence check must run before any storage write, so an

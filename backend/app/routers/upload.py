@@ -130,7 +130,8 @@ async def upload_document(case_id: str | None = Form(None), file: UploadFile = F
     "/upload-batch", response_model=BulkUploadResponse, status_code=status.HTTP_202_ACCEPTED
 )
 async def upload_documents_batch(
-    case_id: str | None = Form(None), files: list[UploadFile] = File(...)
+    case_id: str | None = Form(None),
+    files: list[UploadFile] = File(default_factory=list),
 ) -> BulkUploadResponse:
     """
     Same as /upload, but for multiple files under one case_id in a single
