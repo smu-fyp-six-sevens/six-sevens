@@ -9,3 +9,6 @@ dist/
 .DS_Store
 .env
 .env.local
+.vscode/
+CLAUDE.md
+backend/data/

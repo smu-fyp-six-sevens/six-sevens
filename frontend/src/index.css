@@ -83,3 +83,70 @@ select {
 .card h2 {
   margin-top: 0;
 }
+
+.upload-form {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.95rem;
+  color: #344054;
+}
+
+.field input {
+  padding: 0.65rem 0.85rem;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.upload-form button {
+  justify-self: start;
+  padding: 0.65rem 1.5rem;
+  border: none;
+  border-radius: 999px;
+  background: #4338ca;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.upload-form button:disabled {
+  background: rgba(67, 56, 202, 0.4);
+  cursor: not-allowed;
+}
+
+.error-banner {
+  padding: 0.85rem 1.1rem;
+  border-radius: 0.75rem;
+  background: rgba(220, 38, 38, 0.1);
+  color: #991b1b;
+  border: 1px solid rgba(220, 38, 38, 0.25);
+}
+
+.result-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.result-item {
+  padding: 0.6rem 0.85rem;
+  border-radius: 0.65rem;
+  font-size: 0.9rem;
+}
+
+.result-item--ok {
+  background: rgba(22, 163, 74, 0.1);
+  color: #166534;
+}
+
+.result-item--error {
+  background: rgba(220, 38, 38, 0.1);
+  color: #991b1b;
+}

@@ -31,12 +31,22 @@ class DocumentType(str, Enum):
     LIST_OF_LOANS = "list_of_loans"
 
 
+class CaseRecord(BaseModel):
+    id: str
+    status: str = "open"
+    submission_finalized: bool = False
+    finalized_at: Optional[datetime] = None
+    recommended_additional_documents: list = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
 class DocumentRecord(BaseModel):
     id: str
     case_id: Optional[str] = None
     filename: str
     document_type: Optional[str] = None
-    storage_path: str
+    storage_path: Optional[str] = None
     status: DocumentStatus
     retry_count: int = 0
     uploaded_at: datetime
@@ -50,6 +60,24 @@ class UploadResponse(BaseModel):
     status: DocumentStatus
 
 
+class BulkUploadItemResult(BaseModel):
+    filename: str
+    success: bool
+    document_id: Optional[str] = None
+    status: Optional[DocumentStatus] = None
+    error: Optional[str] = None
+
+
+class BulkUploadResponse(BaseModel):
+    results: list[BulkUploadItemResult]
+
+
+class DocumentDownloadResponse(BaseModel):
+    document_id: str
+    signed_url: str
+    expires_in: int
+
+
 class StuckDocument(BaseModel):
     id: str
     case_id: Optional[str] = None
@@ -57,3 +85,15 @@ class StuckDocument(BaseModel):
     seconds_in_current_status: float = Field(
         ..., description="How long the document has sat in its current status"
     )
+
+
+class ProcessingErrorEntry(BaseModel):
+    document_id: str
+    error: str
+    occurred_at: datetime
+
+
+class MonitoringIssues(BaseModel):
+    stuck: list[StuckDocument]
+    failed: list[DocumentRecord]
+    recent_errors: list[ProcessingErrorEntry]

@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .queue_service import document_queue
-from .routers import monitoring, upload
+from .routers import injection, cases, documents, monitoring, upload
 
 
 @asynccontextmanager
@@ -23,8 +23,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(cases.router)
 app.include_router(upload.router)
+app.include_router(documents.router)
 app.include_router(monitoring.router)
+app.include_router(injection.router)
 
 
 @app.get("/health")

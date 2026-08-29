@@ -1,25 +1,26 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from postgrest.exceptions import APIError
 
+from .. import case_repository, document_repository, storage_service
 from ..config import settings
-from ..models import UploadResponse
+from ..models import BulkUploadItemResult, BulkUploadResponse, DocumentRecord, UploadResponse
 from ..queue_service import document_queue
-from ..supabase_client import supabase_client
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 logger = logging.getLogger(__name__)
 
 
-@router.post("/upload", response_model=UploadResponse, status_code=status.HTTP_202_ACCEPTED)
-async def upload_document(case_id: str | None = Form(None), file: UploadFile = File(...)) -> UploadResponse:
+async def _ingest_one(case_id: str | None, file: UploadFile) -> DocumentRecord:
     """
     Validate -> store -> queue -> (async) hand off to the Classifier Agent.
 
-    Returns as soon as the document is queued (AC1) — it does not wait for
-    classification to complete.
+    Shared by the single- and bulk-upload endpoints. Raises HTTPException on
+    any validation or storage/queue failure.
     """
     if file.content_type not in settings.ALLOWED_CONTENT_TYPES:
         raise HTTPException(
@@ -42,24 +43,124 @@ async def upload_document(case_id: str | None = Form(None), file: UploadFile = F
             detail=f"File exceeds {settings.MAX_FILE_SIZE_BYTES} byte limit",
         )
 
-    try:
-        storage_path = supabase_client.upload_file(
-            case_id=case_id,
-            filename=filename,
-            file_bytes=file_bytes,
-            content_type=file.content_type,
-        )
-        document = supabase_client.create_document(
-            case_id=case_id, filename=filename, storage_path=storage_path
-        )
+    if case_id is not None:
+        case = await asyncio.to_thread(case_repository.get_case, case_id)
+        if case is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"case_id '{case_id}' does not exist",
+            )
 
+    try:
+        storage_path = await asyncio.to_thread(
+            storage_service.upload_file,
+            case_id,
+            filename,
+            file_bytes,
+            file.content_type,
+        )
+    except Exception as exc:
+        logger.exception("Failed to store uploaded file in Supabase Storage")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to store the uploaded file. Check Supabase bucket access.",
+        ) from exc
+
+    try:
+        document = await asyncio.to_thread(
+            document_repository.create_document, case_id, filename, storage_path
+        )
+    except APIError as exc:
+        await _cleanup_storage_object(storage_path)
+        if exc.code == "23503":  # foreign key violation
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"case_id '{case_id}' does not exist",
+            ) from exc
+        logger.exception("Supabase error while creating document row")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to store the uploaded document record. Check Supabase table access.",
+        ) from exc
+    except Exception as exc:
+        await _cleanup_storage_object(storage_path)
+        logger.exception("Failed to create document row after storing file")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to store the uploaded document record. Check Supabase table access.",
+        ) from exc
+
+    try:
         # AC1: enters the background task queue for async processing.
         await document_queue.enqueue(document.id)
     except Exception as exc:
-        logger.exception("Failed to store or queue uploaded document")
+        logger.exception(
+            "Document %s stored but failed to enqueue for processing", document.id
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to store or queue the uploaded document. Check Supabase bucket/table access.",
+            detail="Document was stored but could not be queued for processing.",
         ) from exc
 
+    return document
+
+
+async def _cleanup_storage_object(storage_path: str) -> None:
+    """Best-effort delete of a just-uploaded file when the document row failed to save."""
+    try:
+        await asyncio.to_thread(storage_service.delete_file, storage_path)
+    except Exception:
+        logger.exception(
+            "Failed to clean up orphaned storage object %s after a failed document insert",
+            storage_path,
+        )
+
+
+@router.post("/upload", response_model=UploadResponse, status_code=status.HTTP_202_ACCEPTED)
+async def upload_document(case_id: str | None = Form(None), file: UploadFile = File(...)) -> UploadResponse:
+    """
+    Returns as soon as the document is queued (AC1) — it does not wait for
+    classification to complete.
+    """
+    document = await _ingest_one(case_id, file)
     return UploadResponse(document_id=document.id, status=document.status)
+
+
+@router.post(
+    "/upload-batch", response_model=BulkUploadResponse, status_code=status.HTTP_202_ACCEPTED
+)
+async def upload_documents_batch(
+    case_id: str | None = Form(None), files: list[UploadFile] = File(...)
+) -> BulkUploadResponse:
+    """
+    Same as /upload, but for multiple files under one case_id in a single
+    request. Each file is validated/stored/queued independently — one bad
+    file does not fail the rest of the batch.
+    """
+    if not files:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one file is required",
+        )
+
+    if len(files) > settings.MAX_BULK_FILES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Batch exceeds {settings.MAX_BULK_FILES} file limit",
+        )
+
+    async def _handle(file: UploadFile) -> BulkUploadItemResult:
+        filename = file.filename or ""
+        try:
+            document = await _ingest_one(case_id, file)
+            return BulkUploadItemResult(
+                filename=filename,
+                success=True,
+                document_id=document.id,
+                status=document.status,
+            )
+        except HTTPException as exc:
+            return BulkUploadItemResult(filename=filename, success=False, error=str(exc.detail))
+
+    results = await asyncio.gather(*(_handle(file) for file in files))
+    return BulkUploadResponse(results=list(results))

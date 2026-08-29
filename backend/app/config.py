@@ -44,6 +44,9 @@ class Settings:
         "image/jpeg",
     }
     MAX_FILE_SIZE_BYTES: int = 25 * 1024 * 1024  # 25 MB
+    MAX_BULK_FILES: int = 20
+
+    SIGNED_URL_EXPIRY_SECONDS: int = 300
 
 
 settings = Settings()
