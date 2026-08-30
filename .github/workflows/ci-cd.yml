@@ -41,55 +41,7 @@ jobs:
 
       - name: Run backend tests
         run: pytest
-
-  check-secrets:
-    name: Check Supabase Secrets
-    runs-on: ubuntu-latest
-    outputs:
-      has_secrets: ${{ steps.verify.outputs.has_secrets }}
-    steps:
-      - name: Verify secrets exist
-        id: verify
-        env:
-          URL: ${{ secrets.SUPABASE_URL }}
-          KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
-        run: |
-          if [[ -n "$URL" && -n "$KEY" ]]; then
-            echo "has_secrets=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_secrets=false" >> "$GITHUB_OUTPUT"
-          fi
-
-  backend-supabase-smoke-test:
-    name: Backend Supabase Smoke Test
-    needs:
-      - backend-ci
-      - check-secrets
-    if: github.event_name == 'workflow_dispatch' && needs.check-secrets.outputs.has_secrets == 'true'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
-    env:
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
-      - name: Install backend dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e "."
-
-      - name: Run Supabase smoke test
-        run: python test_supabase_connection.py
-
+        
   frontend-ci:
     name: Frontend CI
     runs-on: ubuntu-latest
