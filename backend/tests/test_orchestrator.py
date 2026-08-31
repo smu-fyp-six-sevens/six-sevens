@@ -36,7 +36,7 @@ async def test_document_not_found_returns_without_updating_status() -> None:
         await orchestrator.process_document("missing-doc")
 
         mock_repo.update_status.assert_not_called()
-        mock_dify.run_workflow.assert_not_called()
+        mock_dify.run_workflow_with_retry.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -46,7 +46,7 @@ async def test_no_escalation_marks_analyzed() -> None:
         patch("app.orchestrator.dify_client") as mock_dify,
     ):
         mock_repo.get_document.return_value = _make_document()
-        mock_dify.run_workflow = AsyncMock(
+        mock_dify.run_workflow_with_retry = AsyncMock(
             side_effect=[
                 _output(document_type="payslip", confidence=0.9, needs_manual_review=False),
                 _output(document_type="payslip"),  # no "escalation" key
@@ -55,7 +55,7 @@ async def test_no_escalation_marks_analyzed() -> None:
 
         await orchestrator.process_document("doc-1")
 
-        assert mock_dify.run_workflow.await_count == 2
+        assert mock_dify.run_workflow_with_retry.await_count == 2
         mock_repo.update_status.assert_called_once_with(
             "doc-1", DocumentStatus.ANALYZED, document_type="payslip"
         )
@@ -68,7 +68,7 @@ async def test_low_confidence_classification_fails_before_extraction() -> None:
         patch("app.orchestrator.dify_client") as mock_dify,
     ):
         mock_repo.get_document.return_value = _make_document()
-        mock_dify.run_workflow = AsyncMock(
+        mock_dify.run_workflow_with_retry = AsyncMock(
             return_value=_output(document_type=None, confidence=0.2, needs_manual_review=True)
         )
 
@@ -76,7 +76,7 @@ async def test_low_confidence_classification_fails_before_extraction() -> None:
 
         # Only the Intake Coordinator ran — Extraction never gets called on
         # a classification that already needs manual review.
-        assert mock_dify.run_workflow.await_count == 1
+        assert mock_dify.run_workflow_with_retry.await_count == 1
         args, kwargs = mock_repo.update_status.call_args
         assert args[0] == "doc-1"
         assert args[1] == DocumentStatus.FAILED
@@ -92,7 +92,7 @@ async def test_escalation_resolves_on_reclassification() -> None:
         patch("app.orchestrator.dify_client") as mock_dify,
     ):
         mock_repo.get_document.return_value = _make_document()
-        mock_dify.run_workflow = AsyncMock(
+        mock_dify.run_workflow_with_retry = AsyncMock(
             side_effect=[
                 # 1st Intake Coordinator call
                 _output(document_type="payslip", confidence=0.9, needs_manual_review=False),
@@ -112,7 +112,7 @@ async def test_escalation_resolves_on_reclassification() -> None:
 
         await orchestrator.process_document("doc-1")
 
-        assert mock_dify.run_workflow.await_count == 4
+        assert mock_dify.run_workflow_with_retry.await_count == 4
         # document_type reflects the FINAL (post-escalation) classification,
         # not the original "payslip" guess that got escalated away.
         mock_repo.update_status.assert_called_once_with(
@@ -139,7 +139,7 @@ async def test_escalation_cap_routes_to_manual_review() -> None:
         )
         # Intake -> Extraction(escalate) -> Intake -> Extraction(escalate)
         # -> Intake -> Extraction(escalate) : cap of 2 attempts exhausted
-        mock_dify.run_workflow = AsyncMock(
+        mock_dify.run_workflow_with_retry = AsyncMock(
             side_effect=[classifying, escalating, classifying, escalating, classifying, escalating]
         )
 
@@ -159,7 +159,7 @@ async def test_intake_coordinator_invocation_failure_marks_failed() -> None:
         patch("app.orchestrator.dify_client") as mock_dify,
     ):
         mock_repo.get_document.return_value = _make_document()
-        mock_dify.run_workflow = AsyncMock(side_effect=DifyInvocationError("network blip"))
+        mock_dify.run_workflow_with_retry = AsyncMock(side_effect=DifyInvocationError("network blip"))
 
         await orchestrator.process_document("doc-1")
 
@@ -178,7 +178,7 @@ async def test_extraction_invocation_failure_marks_failed() -> None:
         patch("app.orchestrator.dify_client") as mock_dify,
     ):
         mock_repo.get_document.return_value = _make_document()
-        mock_dify.run_workflow = AsyncMock(
+        mock_dify.run_workflow_with_retry = AsyncMock(
             side_effect=[
                 _output(document_type="payslip", confidence=0.9, needs_manual_review=False),
                 DifyInvocationError("network blip"),

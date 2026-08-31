@@ -143,13 +143,17 @@ async def _run_intake_coordinator(
         inputs["escalation_reason"] = escalation_reason
         inputs["prior_classification"] = None  # filled in by caller if tracking is needed
 
-    result = await dify_client.run_workflow(settings.DIFY_INTAKE_COORDINATOR_WORKFLOW_ID, inputs)
+    result = await dify_client.run_workflow_with_retry(
+        settings.DIFY_INTAKE_COORDINATOR_WORKFLOW_ID, inputs
+    )
     return _unwrap_workflow_output(result)
 
 
 async def _run_extraction(document_id: str, document_type: str) -> dict:
     inputs = {"document_id": document_id, "document_type": document_type}
-    result = await dify_client.run_workflow(settings.DIFY_EXTRACTION_WORKFLOW_ID, inputs)
+    result = await dify_client.run_workflow_with_retry(
+        settings.DIFY_EXTRACTION_WORKFLOW_ID, inputs
+    )
     return _unwrap_workflow_output(result)
 
 

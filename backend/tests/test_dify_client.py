@@ -1,0 +1,158 @@
+from __future__ import annotations
+
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import httpx
+import pytest
+
+from app.dify_client import DifyClient, DifyInvocationError
+
+
+def _mock_async_client(post_return=None, post_side_effect=None) -> MagicMock:
+    mock_client = MagicMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    if post_side_effect is not None:
+        mock_client.post = AsyncMock(side_effect=post_side_effect)
+    else:
+        mock_client.post = AsyncMock(return_value=post_return)
+    return mock_client
+
+
+@pytest.mark.asyncio
+async def test_run_workflow_success_returns_json_body() -> None:
+    client = DifyClient()
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()
+    mock_response.json.return_value = {"data": {"outputs": {"ok": True}}}
+
+    with patch("app.dify_client.httpx.AsyncClient") as mock_async_client_cls:
+        mock_async_client_cls.return_value = _mock_async_client(post_return=mock_response)
+
+        result = await client.run_workflow("wf-1", {"a": 1})
+
+        assert result == {"data": {"outputs": {"ok": True}}}
+        posted_kwargs = mock_async_client_cls.return_value.post.call_args
+        assert posted_kwargs.args[0].endswith("/workflows/run")
+        assert posted_kwargs.kwargs["json"]["workflow_id"] == "wf-1"
+        assert posted_kwargs.kwargs["json"]["inputs"] == {"a": 1}
+        assert posted_kwargs.kwargs["json"]["response_mode"] == "blocking"
+
+
+@pytest.mark.asyncio
+async def test_run_workflow_raises_dify_error_on_http_status_error() -> None:
+    client = DifyClient()
+    mock_response = MagicMock()
+    mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+        "bad status", request=MagicMock(), response=MagicMock()
+    )
+
+    with patch("app.dify_client.httpx.AsyncClient") as mock_async_client_cls:
+        mock_async_client_cls.return_value = _mock_async_client(post_return=mock_response)
+
+        with pytest.raises(DifyInvocationError):
+            await client.run_workflow("wf-1", {"a": 1})
+
+
+@pytest.mark.asyncio
+async def test_run_workflow_raises_dify_error_on_request_error() -> None:
+    client = DifyClient()
+
+    with patch("app.dify_client.httpx.AsyncClient") as mock_async_client_cls:
+        mock_async_client_cls.return_value = _mock_async_client(
+            post_side_effect=httpx.ConnectError("connection refused")
+        )
+
+        with pytest.raises(DifyInvocationError):
+            await client.run_workflow("wf-1", {"a": 1})
+
+
+@pytest.mark.asyncio
+async def test_run_workflow_with_retry_succeeds_first_try() -> None:
+    client = DifyClient()
+    with (
+        patch.object(client, "run_workflow", new=AsyncMock(return_value={"ok": True})) as mock_run,
+        patch("app.dify_client.asyncio.sleep", new=AsyncMock()) as mock_sleep,
+    ):
+        result = await client.run_workflow_with_retry("wf-1", {"a": 1})
+
+        assert result == {"ok": True}
+        assert mock_run.await_count == 1
+        mock_sleep.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_run_workflow_with_retry_succeeds_after_transient_failures() -> None:
+    client = DifyClient()
+    with (
+        patch.object(
+            client,
+            "run_workflow",
+            new=AsyncMock(
+                side_effect=[
+                    DifyInvocationError("blip 1"),
+                    DifyInvocationError("blip 2"),
+                    {"ok": True},
+                ]
+            ),
+        ) as mock_run,
+        patch("app.dify_client.asyncio.sleep", new=AsyncMock()) as mock_sleep,
+    ):
+        result = await client.run_workflow_with_retry("wf-1", {"a": 1})
+
+        assert result == {"ok": True}
+        assert mock_run.await_count == 3
+        # backoff happens between attempts, not after the final success
+        assert mock_sleep.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_run_workflow_with_retry_raises_after_exhausting_all_attempts() -> None:
+    client = DifyClient()
+    with (
+        patch.object(
+            client,
+            "run_workflow",
+            new=AsyncMock(side_effect=DifyInvocationError("persistent failure")),
+        ) as mock_run,
+        patch("app.dify_client.asyncio.sleep", new=AsyncMock()) as mock_sleep,
+    ):
+        with pytest.raises(DifyInvocationError) as exc_info:
+            await client.run_workflow_with_retry("wf-1", {"a": 1})
+
+        assert mock_run.await_count == 3
+        # backoff happens between attempts 1->2 and 2->3, not after the last one
+        assert mock_sleep.await_count == 2
+        assert "after 3 attempts" in str(exc_info.value)
+        assert "persistent failure" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_invoke_classifier_workflow_rejects_empty_document_id() -> None:
+    client = DifyClient()
+    with pytest.raises(ValueError):
+        await client.invoke_classifier_workflow("", {"filename": "a.pdf"})
+
+
+@pytest.mark.asyncio
+async def test_invoke_classifier_workflow_rejects_empty_document_info() -> None:
+    client = DifyClient()
+    with pytest.raises(ValueError):
+        await client.invoke_classifier_workflow("doc-1", {})
+
+
+@pytest.mark.asyncio
+async def test_invoke_classifier_workflow_delegates_to_run_workflow() -> None:
+    client = DifyClient()
+    with patch.object(
+        client, "run_workflow", new=AsyncMock(return_value={"ok": True})
+    ) as mock_run:
+        result = await client.invoke_classifier_workflow("doc-1", {"filename": "a.pdf"})
+
+        assert result == {"ok": True}
+        mock_run.assert_awaited_once()
+        called_workflow_id, called_inputs = mock_run.call_args[0]
+        assert called_inputs == {
+            "document_id": "doc-1",
+            "document_info": {"filename": "a.pdf"},
+        }

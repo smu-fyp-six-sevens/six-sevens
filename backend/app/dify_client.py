@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import asyncio
+import logging
+
 import httpx
 
 from .config import settings
+
+logger = logging.getLogger("classifier_pipeline.dify_client")
 
 
 class DifyInvocationError(Exception):
@@ -42,6 +47,37 @@ class DifyClient:
                 raise DifyInvocationError(
                     f"Workflow {workflow_id} invocation failed: {exc}"
                 ) from exc
+
+    async def run_workflow_with_retry(self, workflow_id: str, inputs: dict) -> dict:
+        """
+        AC3: same as run_workflow, but retries up to
+        settings.MAX_INVOCATION_RETRIES times (linear backoff) before giving
+        up. This is the one place invocation retry lives — every caller that
+        needs AC3 behavior (orchestrator's Intake Coordinator and Extraction
+        calls, both the initial attempt and every escalation-loop
+        re-attempt) should call this instead of run_workflow directly, so
+        the retry policy can't drift out of sync between call sites.
+
+        Raises DifyInvocationError, with the message noting the attempt
+        count, once retries are exhausted.
+        """
+        last_error: DifyInvocationError | None = None
+        for attempt in range(1, settings.MAX_INVOCATION_RETRIES + 1):
+            try:
+                return await self.run_workflow(workflow_id, inputs)
+            except DifyInvocationError as exc:
+                last_error = exc
+                logger.warning(
+                    "Workflow %s invocation attempt %d/%d failed: %s",
+                    workflow_id, attempt, settings.MAX_INVOCATION_RETRIES, exc,
+                )
+                if attempt < settings.MAX_INVOCATION_RETRIES:
+                    await asyncio.sleep(settings.RETRY_BACKOFF_SECONDS * attempt)
+
+        raise DifyInvocationError(
+            f"Workflow {workflow_id} invocation failed after "
+            f"{settings.MAX_INVOCATION_RETRIES} attempts: {last_error}"
+        ) from last_error
 
     async def invoke_classifier_workflow(self, document_id: str, document_info: dict) -> dict:
         """

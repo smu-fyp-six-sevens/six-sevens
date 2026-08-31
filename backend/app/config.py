@@ -30,6 +30,10 @@ class Settings:
 
     # AC2: invocation should be attempted within this window of being dequeued
     DEQUEUE_TO_INVOKE_TARGET_SECONDS: float = 1.0
+    # AC3: retry policy for a failed Dify workflow invocation (any workflow —
+    # applies uniformly via DifyClient.run_workflow_with_retry)
+    MAX_INVOCATION_RETRIES: int = 3
+    RETRY_BACKOFF_SECONDS: float = 1.5
     # AC4: a document idle in queued/processing longer than this is "stuck"
     STUCK_THRESHOLD_SECONDS: int = 10
 
