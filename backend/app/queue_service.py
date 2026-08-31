@@ -6,9 +6,8 @@ import time
 from collections import deque
 from datetime import datetime, timezone
 
-from . import document_repository
+from . import document_repository, orchestrator
 from .config import settings
-from .dify_client import dify_client, DifyInvocationError
 from .models import DocumentStatus, ProcessingErrorEntry
 
 logger = logging.getLogger("classifier_pipeline.queue")
@@ -19,11 +18,13 @@ class DocumentQueue:
     In-memory async queue + single worker loop.
 
     This satisfies AC1 (document enters a queue for async processing) and
-    AC2/AC3 (dequeue -> invoke Classifier -> retry on failure) for a
-    single-instance deployment. For multi-instance/production use, swap
-    this for a durable queue (e.g. Cloud Pub/Sub, as scoped for the
-    Cloud Native award) so queued items survive a process restart —
-    the in-memory queue does not.
+    AC2 (dequeue -> hand off within a target window) for a single-instance
+    deployment. Once handed off, orchestrator.process_document owns
+    classification/extraction/retry/terminal-status — this layer no longer
+    retries invocations itself (see orchestrator.py for why). For
+    multi-instance/production use, swap this for a durable queue (e.g.
+    Cloud Pub/Sub, as scoped for the Cloud Native award) so queued items
+    survive a process restart — the in-memory queue does not.
     """
 
     def __init__(self) -> None:
@@ -79,13 +80,7 @@ class DocumentQueue:
             self._record_error(document_id, message)
             return
 
-        document_info = {
-            "filename": document.filename,
-            "storage_path": document.storage_path,
-            "case_id": document.case_id,
-        }
-
-        # AC2: mark processing and invoke the Classifier workflow.
+        # AC2: mark processing before handing off to the orchestrator.
         # invoke_time_seconds is logged so "within 1 second of dequeue" is
         # measurable in tests/monitoring, independent of Dify's own latency.
         processing_started_at = datetime.now(timezone.utc)
@@ -102,34 +97,11 @@ class DocumentQueue:
                 document_id, invoke_time_seconds, settings.DEQUEUE_TO_INVOKE_TARGET_SECONDS,
             )
 
-        # AC3: retry on invocation failure, up to MAX_INVOCATION_RETRIES.
-        last_error: Exception | None = None
-        for attempt in range(1, settings.MAX_INVOCATION_RETRIES + 1):
-            try:
-                await dify_client.invoke_classifier_workflow(document_id, document_info)
-                return  # success — downstream Classifier workflow now owns status updates
-            except DifyInvocationError as exc:
-                last_error = exc
-                logger.warning(
-                    "Document %s: invocation attempt %d/%d failed: %s",
-                    document_id, attempt, settings.MAX_INVOCATION_RETRIES, exc,
-                )
-                await asyncio.to_thread(
-                    document_repository.update_status,
-                    document_id, DocumentStatus.PROCESSING, retry_count=attempt
-                )
-                if attempt < settings.MAX_INVOCATION_RETRIES:
-                    await asyncio.sleep(settings.RETRY_BACKOFF_SECONDS * attempt)
-
-        # AC3: retries exhausted — fail and flag for manual review.
-        await asyncio.to_thread(
-            document_repository.update_status,
-            document_id,
-            DocumentStatus.FAILED,
-            failure_reason=f"Classifier invocation failed after "
-            f"{settings.MAX_INVOCATION_RETRIES} attempts: {last_error}",
-        )
-        logger.error("Document %s marked FAILED — manual review required", document_id)
+        # orchestrator.process_document owns classify -> extract -> escalate
+        # -> terminal status (ANALYZED/FAILED) from here. It catches its own
+        # DifyInvocationErrors and translates them into a FAILED status
+        # rather than raising, so no retry loop is needed at this layer.
+        await orchestrator.process_document(document_id)
 
 
 document_queue = DocumentQueue()

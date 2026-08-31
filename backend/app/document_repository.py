@@ -33,6 +33,7 @@ def update_status(
     processing_started_at: Optional[datetime] = None,
     retry_count: Optional[int] = None,
     failure_reason: Optional[str] = None,
+    document_type: Optional[str] = None,
 ) -> None:
     update: dict = {
         "status": status.value,
@@ -45,6 +46,8 @@ def update_status(
         update["retry_count"] = retry_count
     if failure_reason is not None:
         update["failure_reason"] = failure_reason
+    if document_type is not None:
+        update["document_type"] = document_type
 
     supabase_client.table("documents").update(update).eq("id", document_id).execute()
 

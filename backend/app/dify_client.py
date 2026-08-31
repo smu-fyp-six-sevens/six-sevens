@@ -17,22 +17,15 @@ class DifyClient:
             "Content-Type": "application/json",
         }
 
-    async def invoke_classifier_workflow(self, document_id: str, document_info: dict) -> dict:
+    async def run_workflow(self, workflow_id: str, inputs: dict) -> dict:
         """
-        AC2: invokes the Classifier Agent's workflow with document_id and
-        document_info as mandatory inputs. Raises DifyInvocationError on any
-        non-2xx response or network failure so the caller's retry logic
-        (AC3) can handle it.
+        Generic Dify workflow invocation — any workflow_id/inputs shape.
+        Raises DifyInvocationError on any non-2xx response or network
+        failure; callers decide how to handle that (retry, fail, etc).
         """
-        if not document_id or not document_info:
-            raise ValueError("document_id and document_info are mandatory inputs")
-
         payload = {
-            "workflow_id": settings.DIFY_CLASSIFIER_WORKFLOW_ID,
-            "inputs": {
-                "document_id": document_id,
-                "document_info": document_info,
-            },
+            "workflow_id": workflow_id,
+            "inputs": inputs,
             "response_mode": "blocking",
         }
 
@@ -47,8 +40,23 @@ class DifyClient:
                 return response.json()
             except (httpx.HTTPStatusError, httpx.RequestError) as exc:
                 raise DifyInvocationError(
-                    f"Classifier workflow invocation failed for document {document_id}: {exc}"
+                    f"Workflow {workflow_id} invocation failed: {exc}"
                 ) from exc
+
+    async def invoke_classifier_workflow(self, document_id: str, document_info: dict) -> dict:
+        """
+        Invokes the Classifier Agent's workflow with document_id and
+        document_info as mandatory inputs. Superseded by orchestrator.py's
+        use of run_workflow() for the Intake Coordinator/Extraction flow —
+        kept here for any caller still using the single-workflow shape.
+        """
+        if not document_id or not document_info:
+            raise ValueError("document_id and document_info are mandatory inputs")
+
+        return await self.run_workflow(
+            settings.DIFY_CLASSIFIER_WORKFLOW_ID,
+            {"document_id": document_id, "document_info": document_info},
+        )
 
 
 dify_client = DifyClient()

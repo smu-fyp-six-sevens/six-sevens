@@ -21,6 +21,8 @@ class Settings:
     DIFY_BASE_URL: str = os.environ.get("DIFY_BASE_URL", "https://api.dify.ai/v1")
     DIFY_API_KEY: str = os.environ.get("DIFY_API_KEY", "")
     DIFY_CLASSIFIER_WORKFLOW_ID: str = os.environ.get("DIFY_CLASSIFIER_WORKFLOW_ID", "")
+    DIFY_INTAKE_COORDINATOR_WORKFLOW_ID: str = os.environ.get("DIFY_INTAKE_COORDINATOR_WORKFLOW_ID", "")
+    DIFY_EXTRACTION_WORKFLOW_ID: str = os.environ.get("DIFY_EXTRACTION_WORKFLOW_ID", "")
 
     DEEPSEEK_BASE_URL: str = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
     DEEPSEEK_API_KEY: str = os.environ.get("DEEPSEEK_API_KEY", "")
@@ -28,11 +30,11 @@ class Settings:
 
     # AC2: invocation should be attempted within this window of being dequeued
     DEQUEUE_TO_INVOKE_TARGET_SECONDS: float = 1.0
-    # AC3: retry policy for a failed workflow invocation
-    MAX_INVOCATION_RETRIES: int = 3
-    RETRY_BACKOFF_SECONDS: float = 1.5
     # AC4: a document idle in queued/processing longer than this is "stuck"
     STUCK_THRESHOLD_SECONDS: int = 10
+
+    # Bounded classification<->extraction escalation loop (see orchestrator.py)
+    MAX_RECLASSIFICATION_ATTEMPTS: int = 2
 
     # Classification: filename-rule matches scoring below this are treated
     # as unrecognised/low-confidence and flagged for manual review.

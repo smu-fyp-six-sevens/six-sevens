@@ -33,12 +33,33 @@ class DocumentType(str, Enum):
 
 class CaseRecord(BaseModel):
     id: str
+    company_name: Optional[str] = None
     status: str = "open"
     submission_finalized: bool = False
     finalized_at: Optional[datetime] = None
     recommended_additional_documents: list = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
+
+
+class CaseDocumentsStatus(str, Enum):
+    """
+    Rollup of every document under a case, worst-first: a single stuck
+    document outranks nine analyzed ones. Computed live from the documents
+    table on every read — never stored — since "stuck" is itself a
+    time-elapsed condition with no event that would keep a stored column
+    honest (see case_status.py).
+    """
+
+    NO_DOCUMENTS = "no_documents"
+    STUCK = "stuck"
+    FAILED = "failed"
+    IN_PROGRESS = "in_progress"
+    ANALYZED = "analyzed"
+
+
+class CaseSummary(CaseRecord):
+    documents_status: CaseDocumentsStatus
 
 
 class DocumentRecord(BaseModel):
