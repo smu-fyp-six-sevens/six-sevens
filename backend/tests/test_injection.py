@@ -5,7 +5,18 @@ import pymupdf
 import pytest
 from fastapi.testclient import TestClient
 
-from app.injection.pdf import extract_pdf_text, read_pdf_metadata
+from app.injection.pdf import (
+    BUILTIN_FONT_HELVETICA,
+    BUILTIN_FONT_TIMES,
+    _builtin_fallback_font,
+    _normalize_font,
+    apply_text_emphasis,
+    discover_fields_from_pdf,
+    extract_pdf_text,
+    read_pdf_metadata,
+    replace_field_text,
+    resolve_emphasis_font_file,
+)
 from app.injection.schemas import DefectType
 from app.injection.store import get_document, get_document_file_path, reset_sample_documents
 from app.main import app
@@ -16,11 +27,31 @@ client = TestClient(app)
 DOC_ID = "C001_CertIncumbency"
 TEXT_FIELD = "golden_harvest_trading_pte_ltd"
 NUMERIC_FIELD = "100_000"
+MIXED_FIELD = "account_no_12345678"
+LABEL_FIELD = "opening_balance"
 
 
 @pytest.fixture(autouse=True)
 def _reset_documents(isolated_injection_templates) -> None:
     reset_sample_documents()
+
+
+def test_unknown_serif_fonts_are_not_forced_to_helvetica() -> None:
+    assert _normalize_font("LiberationSerif") == "LiberationSerif"
+    assert _normalize_font("AAAAAA+LiberationSerif-Bold") == "LiberationSerif-Bold"
+    assert _builtin_fallback_font("LiberationSerif") == BUILTIN_FONT_TIMES
+    assert _builtin_fallback_font("Helvetica") == BUILTIN_FONT_HELVETICA
+    assert _builtin_fallback_font("LiberationSans") == BUILTIN_FONT_HELVETICA
+    bold_serif = resolve_emphasis_font_file("bold", "LiberationSerif")
+    italic_serif = resolve_emphasis_font_file("italic", "LiberationSerif")
+    if bold_serif:
+        assert "arial" not in bold_serif.lower()
+        assert "sans" not in Path(bold_serif).name.lower()
+    if italic_serif:
+        assert "arial" not in italic_serif.lower()
+        assert "sans" not in Path(italic_serif).name.lower()
+    assert resolve_emphasis_font_file("bold", "Helvetica") is None
+    assert resolve_emphasis_font_file("italic", "helv") is None
 
 
 def _inject(document_id: str, field_name: str | None, defect_type: DefectType):
@@ -98,6 +129,147 @@ def test_spelling_injection_updates_pdf_bytes() -> None:
     assert original not in text
 
 
+def _serif_ttf() -> Path | None:
+    for candidate in (
+        Path("/System/Library/Fonts/Supplemental/Times New Roman.ttf"),
+        Path("/Library/Fonts/Times New Roman.ttf"),
+        Path("/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf"),
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf"),
+    ):
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def test_spelling_injection_keeps_embedded_serif_font(
+    isolated_injection_templates: Path,
+) -> None:
+    fontfile = _serif_ttf()
+    if fontfile is None:
+        pytest.skip("no serif TTF available to embed")
+
+    doc_id = "serif_id_sample"
+    pdf_path = isolated_injection_templates / f"{doc_id}.pdf"
+    doc = pymupdf.open()
+    page = doc.new_page(width=400, height=200)
+    page.insert_text(
+        (72, 100),
+        "S8000000A",
+        fontsize=12,
+        fontname="serifbody",
+        fontfile=str(fontfile),
+    )
+    doc.save(pdf_path)
+    doc.close()
+    reset_sample_documents()
+
+    before = get_document(doc_id)
+    assert before is not None
+    field_name = next(name for name, field in before.fields.items() if "S8000000A" in field.text)
+    original_font = before.fields[field_name].font
+    assert "helv" not in original_font.lower()
+    assert "helvetica" not in original_font.lower()
+
+    response = _inject(doc_id, field_name, DefectType.SPELLING)
+    assert response.status_code == 200
+    after_text = response.json()["after_text"]
+
+    working = Path(get_document_file_path(doc_id) or "")
+    after_doc = pymupdf.open(working)
+    fonts = []
+    for block in after_doc[0].get_text("dict").get("blocks", []):
+        if block.get("type") != 0:
+            continue
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                if after_text in (span.get("text") or ""):
+                    fonts.append(span.get("font") or "")
+    after_doc.close()
+    assert fonts, f"rewritten text {after_text!r} not found in PDF"
+    rewritten = fonts[0].lower()
+    assert "helv" not in rewritten
+    assert "helvetica" not in rewritten
+
+
+def test_emphasis_bold_keeps_serif_family(isolated_injection_templates: Path) -> None:
+    fontfile = _serif_ttf()
+    if fontfile is None:
+        pytest.skip("no serif TTF available to embed")
+
+    doc_id = "serif_emphasis_sample"
+    pdf_path = isolated_injection_templates / f"{doc_id}.pdf"
+    doc = pymupdf.open()
+    page = doc.new_page(width=400, height=200)
+    page.insert_text(
+        (72, 100),
+        "S8000000A",
+        fontsize=12,
+        fontname="serifbody",
+        fontfile=str(fontfile),
+    )
+    doc.save(pdf_path)
+    doc.close()
+    reset_sample_documents()
+
+    document = get_document(doc_id)
+    assert document is not None
+    field_name = next(name for name, field in document.fields.items() if "S8000000A" in field.text)
+    apply_text_emphasis(Path(get_document_file_path(doc_id) or ""), document.fields[field_name], "bold")
+
+    working = Path(get_document_file_path(doc_id) or "")
+    after_doc = pymupdf.open(working)
+    fonts = []
+    for block in after_doc[0].get_text("dict").get("blocks", []):
+        if block.get("type") != 0:
+            continue
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                if "S8000000A" in (span.get("text") or ""):
+                    fonts.append((span.get("font") or "", span.get("flags")))
+    after_doc.close()
+    assert fonts
+    rewritten = fonts[0][0].lower()
+    assert "helv" not in rewritten
+    assert "helvetica" not in rewritten
+    assert "arial" not in rewritten
+    assert "sans" not in rewritten
+    assert fonts[0][1] & 16, "expected bold flag on rewritten span"
+
+
+def test_pdf_rewrite_keeps_colored_background(tmp_path: Path) -> None:
+    path = tmp_path / "tinted.pdf"
+    fill = (0.82, 0.90, 0.96)
+    doc = pymupdf.open()
+    page = doc.new_page(width=400, height=200)
+    page.draw_rect(page.rect, color=fill, fill=fill)
+    page.insert_text((72, 100), "S8000000A", fontsize=14, fontname="helv")
+    doc.save(path)
+    doc.close()
+
+    fields = discover_fields_from_pdf(path)
+    field = next(value for value in fields.values() if "S8000000A" in value.text)
+    replace_field_text(path, field, "SS8000000A")
+
+    after = pymupdf.open(path)
+    page = after[0]
+    box = pymupdf.Rect(field.rect) & page.rect
+    pix = page.get_pixmap(matrix=pymupdf.Matrix(2, 2), clip=box, alpha=False)
+    samples = pix.samples
+    n = pix.n
+    lights = []
+    for i in range(0, len(samples) - 2, n):
+        pixel = (samples[i], samples[i + 1], samples[i + 2])
+        if 0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2] >= 140:
+            lights.append(pixel)
+    after.close()
+
+    assert lights
+    median = sorted(lights, key=lambda p: p[0] + p[1] + p[2])[len(lights) // 2]
+    expected = tuple(int(channel * 255) for channel in fill)
+    assert all(abs(median[i] - expected[i]) < 40 for i in range(3)), (median, expected)
+    assert median != (255, 255, 255)
+
+
 def test_metadata_injection_updates_pdf_metadata() -> None:
     before_meta = read_pdf_metadata(Path(get_document_file_path(DOC_ID) or ""))
     response = _inject(DOC_ID, TEXT_FIELD, DefectType.METADATA)
@@ -170,7 +342,51 @@ def test_fields_endpoint() -> None:
     names = {item["field_name"] for item in payload}
     assert TEXT_FIELD in names
     assert NUMERIC_FIELD in names
+    assert MIXED_FIELD in names
+    assert LABEL_FIELD in names
     assert all(item["source"] == "pdf_text" for item in payload)
+
+
+def test_spelling_keeps_variable_name_and_changes_value() -> None:
+    response = _inject(DOC_ID, MIXED_FIELD, DefectType.SPELLING)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["before_text"].startswith("Account No. ")
+    assert payload["after_text"].startswith("Account No. ")
+    assert payload["after_text"] != payload["before_text"]
+    assert payload["after_text"].removeprefix("Account No. ") != payload["before_text"].removeprefix(
+        "Account No. "
+    )
+
+
+def test_numerical_keeps_variable_name_and_changes_value() -> None:
+    response = _inject(DOC_ID, MIXED_FIELD, DefectType.NUMERICAL)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["before_text"].startswith("Account No. ")
+    assert payload["after_text"].startswith("Account No. ")
+    assert payload["after_text"] != payload["before_text"]
+    text = extract_pdf_text(Path(get_document_file_path(DOC_ID) or ""))
+    assert "Account No." in text
+    assert payload["after_text"] in text
+
+
+def test_rejects_spelling_on_label_only_field() -> None:
+    response = _inject(DOC_ID, LABEL_FIELD, DefectType.SPELLING)
+
+    assert response.status_code == 400
+    assert "label" in response.json()["detail"].lower()
+
+
+def test_random_spelling_does_not_pick_a_label() -> None:
+    for _ in range(8):
+        reset_sample_documents()
+        response = _inject(DOC_ID, None, DefectType.SPELLING)
+        assert response.status_code == 200
+        assert response.json()["field_name"] != LABEL_FIELD
+        assert not response.json()["before_text"].startswith("Opening Balance")
 
 
 def _make_custom_pdf(path: Path) -> None:

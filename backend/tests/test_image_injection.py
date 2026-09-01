@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.injection import pdf as injection_pdf
+from app.injection.field_text import is_label_only
 from app.injection.pdf import discover_fields_from_image, read_document_metadata
 from app.injection.schemas import DefectType
 from app.injection.store import get_document, get_document_file_path, reset_sample_documents
@@ -119,3 +120,40 @@ def test_png_fields_include_recognised_names_and_text() -> None:
     assert "OCBC" in by_name["ocbc"].upper()
     joined = " ".join(by_name.values()).upper()
     assert "STATEMENT" in joined or "OCBC" in joined
+
+
+def test_png_spelling_keeps_combined_label_prefix() -> None:
+    document = get_document("ocbc_sample")
+    assert document is not None
+    mixed = next(
+        (
+            name
+            for name, field in document.fields.items()
+            if field.text.startswith("Account No.")
+        ),
+        None,
+    )
+    assert mixed is not None
+
+    response = _inject("ocbc_sample.png", mixed, DefectType.SPELLING)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["before_text"].startswith("Account No.")
+    assert payload["after_text"].startswith("Account No.")
+    assert payload["after_text"] != payload["before_text"]
+
+
+def test_png_rejects_label_only_spelling() -> None:
+    document = get_document("ocbc_sample")
+    assert document is not None
+    label = next(
+        (name for name, field in document.fields.items() if is_label_only(field.text)),
+        None,
+    )
+    assert label is not None
+
+    response = _inject("ocbc_sample.png", label, DefectType.SPELLING)
+
+    assert response.status_code == 400
+    assert "label" in response.json()["detail"].lower()

@@ -5,6 +5,7 @@ import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+from .field_text import replace_value, require_value
 from .pdf import (
     BUILTIN_FONT_HELVETICA,
     BUILTIN_FONT_TIMES,
@@ -91,10 +92,16 @@ def _rng() -> random.Random:
     return random.Random()
 
 
+def _require_injectable_value(document: SampleDocument, field_name: str) -> str:
+    field = document.fields[field_name]
+    return require_value(field_name, field.text)
+
+
 class FontInjector(DefectInjector):
     defect_type = DefectType.FONT
 
     def inject(self, document: SampleDocument, field_name: str) -> InjectedDefect:
+        _require_injectable_value(document, field_name)
         field = document.fields[field_name]
         before = _snapshot(field)
         current = (field.font or BUILTIN_FONT_HELVETICA).lower()
@@ -122,6 +129,7 @@ class FontSizeInjector(DefectInjector):
     defect_type = DefectType.FONT_SIZE
 
     def inject(self, document: SampleDocument, field_name: str) -> InjectedDefect:
+        _require_injectable_value(document, field_name)
         field = document.fields[field_name]
         before = _snapshot(field)
         # Mix of subtle and obvious size drifts (pt).
@@ -199,9 +207,10 @@ class NumericalInjector(DefectInjector):
     defect_type = DefectType.NUMERICAL
 
     def inject(self, document: SampleDocument, field_name: str) -> InjectedDefect:
+        value = _require_injectable_value(document, field_name)
         field = document.fields[field_name]
         before = _snapshot(field)
-        match = re.search(r"\d+(?:\.\d+)?", field.text)
+        match = re.search(r"\d+(?:\.\d+)?", value)
         if not match:
             raise ValueError(f"Field '{field_name}' does not contain a numeric value")
 
@@ -218,7 +227,8 @@ class NumericalInjector(DefectInjector):
             else:
                 tampered = str(int(original) + 1)
 
-        new_text = field.text[: match.start()] + tampered + field.text[match.end() :]
+        new_value = value[: match.start()] + tampered + value[match.end() :]
+        new_text = replace_value(field.text, new_value)
         replace_field_text(_working_path(document), field, new_text)
         field.text = new_text
         return InjectedDefect(
@@ -328,14 +338,15 @@ class SpellingInjector(DefectInjector):
     defect_type = DefectType.SPELLING
 
     def inject(self, document: SampleDocument, field_name: str) -> InjectedDefect:
+        value = _require_injectable_value(document, field_name)
         field = document.fields[field_name]
         before = _snapshot(field)
-        words = field.text.split()
+        words = value.split()
         if not words:
             raise ValueError(f"Field '{field_name}' has no text to tamper")
 
         rng = _rng()
-        # Prefer longer alpha words when available.
+        # Prefer longer alpha words when available — never the leading label.
         alpha_idxs = [
             i
             for i, w in enumerate(words)
@@ -349,7 +360,7 @@ class SpellingInjector(DefectInjector):
         if words[idx] == original and len(original) > 1:
             words[idx] = original[0] + original[1] + original[1] + original[2:]
 
-        new_text = " ".join(words)
+        new_text = replace_value(field.text, " ".join(words))
         replace_field_text(_working_path(document), field, new_text)
         field.text = new_text
         return InjectedDefect(
@@ -365,6 +376,7 @@ class MisalignmentInjector(DefectInjector):
     defect_type = DefectType.MISALIGNMENT
 
     def inject(self, document: SampleDocument, field_name: str) -> InjectedDefect:
+        _require_injectable_value(document, field_name)
         field = document.fields[field_name]
         before = _snapshot(field)
         rng = _rng()
@@ -406,6 +418,7 @@ class EmphasisInjector(DefectInjector):
     defect_type = DefectType.EMPHASIS
 
     def inject(self, document: SampleDocument, field_name: str) -> InjectedDefect:
+        _require_injectable_value(document, field_name)
         field = document.fields[field_name]
         before = _snapshot(field)
         style = _rng().choice(["bold", "italic", "underline"])

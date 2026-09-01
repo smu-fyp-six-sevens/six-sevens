@@ -12,6 +12,8 @@ def _write_sample_pdf(path: Path) -> None:
     page = doc.new_page(width=400, height=300)
     page.insert_text((72, 100), "Golden Harvest Trading Pte Ltd", fontsize=12, fontname="helv")
     page.insert_text((72, 140), "100 000", fontsize=12, fontname="helv")
+    page.insert_text((72, 180), "Account No. 12345678", fontsize=12, fontname="helv")
+    page.insert_text((72, 220), "Opening Balance", fontsize=12, fontname="helv")
     doc.set_metadata(
         {
             "title": "Certificate of Incumbency",
@@ -32,10 +34,12 @@ def _write_sample_png(path: Path) -> None:
         "STATEMENT",
         "Account Number",
         "12345678",
+        "Account No. 87654321",
         "Available Balance",
         "1000.00",
         "Customer Name",
         "Jane Citizen",
+        "Opening Balance",
         "Branch Code",
         "001",
     )

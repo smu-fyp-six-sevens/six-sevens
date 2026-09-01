@@ -6,6 +6,7 @@ from pathlib import Path
 import pymupdf
 from PIL import Image, ImageDraw, ImageFont, PngImagePlugin
 
+from .field_text import split_label_and_value
 from .schemas import FieldValue
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
@@ -28,26 +29,54 @@ _CUSTOM_FONT_CANDIDATES: dict[str, tuple[str, ...]] = {
     ),
 }
 
-_EMPHASIS_FONT_CANDIDATES: dict[str, tuple[str, ...]] = {
-    "bold": (
-        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
-        "/Library/Fonts/Arial Bold.ttf",
-        "/Library/Fonts/Microsoft/Arial Bold.ttf",
-        "C:/Windows/Fonts/arialbd.ttf",
-        "/usr/share/fonts/truetype/msttcorefonts/Arial_Bold.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-    ),
-    "italic": (
-        "/System/Library/Fonts/Supplemental/Arial Italic.ttf",
-        "/Library/Fonts/Arial Italic.ttf",
-        "/Library/Fonts/Microsoft/Arial Italic.ttf",
-        "C:/Windows/Fonts/ariali.ttf",
-        "/usr/share/fonts/truetype/msttcorefonts/Arial_Italic.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Italic.ttf",
-    ),
-}
+_SERIF_REGULAR_CANDIDATES = (
+    "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
+    "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
+    "/Library/Fonts/Times New Roman.ttf",
+    "/System/Library/Fonts/Supplemental/Georgia.ttf",
+    "C:/Windows/Fonts/times.ttf",
+    "C:/Windows/Fonts/georgia.ttf",
+)
+_SERIF_BOLD_CANDIDATES = (
+    "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
+    "/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf",
+    "/Library/Fonts/Times New Roman Bold.ttf",
+    "/System/Library/Fonts/Supplemental/Georgia Bold.ttf",
+    "C:/Windows/Fonts/timesbd.ttf",
+)
+_SANS_REGULAR_CANDIDATES = (
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/System/Library/Fonts/Supplemental/Arial.ttf",
+    "/Library/Fonts/Arial.ttf",
+    "/Library/Fonts/Microsoft/Arial.ttf",
+    "C:/Windows/Fonts/arial.ttf",
+)
+_SANS_BOLD_CANDIDATES = (
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    "/Library/Fonts/Arial Bold.ttf",
+    "C:/Windows/Fonts/arialbd.ttf",
+)
+_SERIF_ITALIC_CANDIDATES = (
+    "/usr/share/fonts/truetype/liberation/LiberationSerif-Italic.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Italic.ttf",
+    "/System/Library/Fonts/Supplemental/Times New Roman Italic.ttf",
+    "/Library/Fonts/Times New Roman Italic.ttf",
+    "/System/Library/Fonts/Supplemental/Georgia Italic.ttf",
+    "C:/Windows/Fonts/timesi.ttf",
+)
+_SANS_ITALIC_CANDIDATES = (
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Italic.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Italic.ttf",
+    "/Library/Fonts/Arial Italic.ttf",
+    "/Library/Fonts/Microsoft/Arial Italic.ttf",
+    "C:/Windows/Fonts/ariali.ttf",
+)
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"}
 
 _MEDIA_TYPES = {
@@ -232,12 +261,35 @@ def resolve_font_file(font_name: str | None) -> str | None:
     return None
 
 
-def resolve_emphasis_font_file(style: str) -> str | None:
-    """Return a bold/italic TTF path for emphasis redraws."""
+def _is_builtin_pdf_font(font_name: str | None) -> bool:
+    lowered = (font_name or "").lower()
+    return lowered in _BUILTIN_FONTS or lowered in {"helvetica", "times-roman", "times", "courier"}
+
+
+def resolve_emphasis_font_file(style: str, font_name: str | None = None) -> str | None:
+    """Bold/italic TTF in the same family as the original span font.
+
+    Base-14 faces (Helvetica/Times/Courier) return None so the caller can use
+    the matching built-in (hebo/tibo/etc.) instead of swapping to Arial.
+    """
     key = style.strip().lower()
-    for candidate in _EMPHASIS_FONT_CANDIDATES.get(key, ()):
-        if Path(candidate).exists():
-            return candidate
+    if key not in {"bold", "italic"}:
+        return None
+    if _is_builtin_pdf_font(font_name):
+        return None
+    if _is_serif_font_name(font_name or ""):
+        return _first_existing_font(
+            _SERIF_BOLD_CANDIDATES if key == "bold" else _SERIF_ITALIC_CANDIDATES
+        )
+    lowered = (font_name or "").lower()
+    if "sans" in lowered or "arial" in lowered or "calibri" in lowered:
+        return _first_existing_font(
+            _SANS_BOLD_CANDIDATES if key == "bold" else _SANS_ITALIC_CANDIDATES
+        )
+    if _builtin_fallback_font(font_name) == BUILTIN_FONT_TIMES:
+        return _first_existing_font(
+            _SERIF_BOLD_CANDIDATES if key == "bold" else _SERIF_ITALIC_CANDIDATES
+        )
     return None
 
 
@@ -471,32 +523,92 @@ def _fit_font_path_to_width(
     return _pil_font(BUILTIN_FONT_HELVETICA, min_size, bold=False)
 
 
-def _sample_ink_color(image: Image.Image, rect: list[float]) -> tuple[int, int, int]:
-    """Pick a dark ink color from the OCR box (fallback black)."""
+def _luminance(rgb: tuple[int, int, int]) -> float:
+    return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
+
+
+def _median_rgb(pixels: list[tuple[int, int, int]]) -> tuple[int, int, int]:
+    ordered = sorted(pixels, key=_luminance)
+    return ordered[len(ordered) // 2]
+
+
+def _ink_and_bg_from_pixels(
+    pixels: list[tuple[int, int, int]],
+) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
+    """Split a crop into dark ink and light paper/fill colours."""
+    if not pixels:
+        return (0, 0, 0), (255, 255, 255)
+    lights = [p for p in pixels if _luminance(p) >= 140]
+    darks = [p for p in pixels if _luminance(p) <= 110]
+    if lights and darks:
+        return _median_rgb(darks), _median_rgb(lights)
+    ordered = sorted(pixels, key=_luminance)
+    if lights:
+        return (0, 0, 0), _median_rgb(lights)
+    if darks:
+        bright = ordered[int(len(ordered) * 0.85) :]
+        return _median_rgb(bright or ordered[-1:]), _median_rgb(darks)
+    return ordered[len(ordered) // 8], ordered[(len(ordered) * 3) // 4]
+
+
+def _crop_rgb_pixels(image: Image.Image, rect: list[float]) -> list[tuple[int, int, int]]:
     if len(rect) != 4:
-        return (0, 0, 0)
+        return []
     x0, y0, x1, y1 = [int(round(v)) for v in rect]
     x0, y0 = max(0, x0), max(0, y0)
     x1, y1 = min(image.width, max(x0 + 1, x1)), min(image.height, max(y0 + 1, y1))
     crop = image.crop((x0, y0, x1, y1)).convert("RGB")
-    pixels = list(crop.getdata())
-    dark = [px for px in pixels if (px[0] + px[1] + px[2]) < 500]
-    if not dark:
-        return (0, 0, 0)
-    dark.sort(key=lambda px: px[0] + px[1] + px[2])
-    return dark[len(dark) // 4]
+    return list(crop.getdata())
+
+
+def _sample_ink_color(image: Image.Image, rect: list[float]) -> tuple[int, int, int]:
+    """Pick a dark ink color from the OCR box (fallback black)."""
+    return _ink_and_bg_from_pixels(_crop_rgb_pixels(image, rect))[0]
 
 
 def _sample_bg_color(image: Image.Image, rect: list[float]) -> tuple[int, int, int]:
-    x0 = max(0, int(rect[0]) - 2) if len(rect) == 4 else 0
-    y0 = max(0, int(rect[1]) - 2) if len(rect) == 4 else 0
-    bg = image.getpixel((x0, y0))
-    if isinstance(bg, int):
-        return (bg, bg, bg)
-    return (int(bg[0]), int(bg[1]), int(bg[2]))
+    """Pick the paper/cell fill from the box, not a single corner pixel."""
+    return _ink_and_bg_from_pixels(_crop_rgb_pixels(image, rect))[1]
+
+
+def _rgb01(color: tuple[int, int, int]) -> tuple[float, float, float]:
+    return (color[0] / 255.0, color[1] / 255.0, color[2] / 255.0)
+
+
+def _pixmap_rgb_pixels(pix: pymupdf.Pixmap) -> list[tuple[int, int, int]]:
+    n = pix.n
+    samples = pix.samples
+    pixels: list[tuple[int, int, int]] = []
+    if n == 1:
+        for value in samples:
+            pixels.append((value, value, value))
+        return pixels
+    step = n
+    for i in range(0, len(samples) - 2, step):
+        pixels.append((int(samples[i]), int(samples[i + 1]), int(samples[i + 2])))
+    return pixels
+
+
+def _sample_pdf_field_colors(
+    page: pymupdf.Page, rect: list[float]
+) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
+    """Rasterise the field box and return (ink, background) as 0–255 RGB."""
+    if len(rect) != 4:
+        return (0, 0, 0), (255, 255, 255)
+    box = pymupdf.Rect(rect) & page.rect
+    if box.is_empty or box.width < 0.5 or box.height < 0.5:
+        return (0, 0, 0), (255, 255, 255)
+    pix = page.get_pixmap(matrix=pymupdf.Matrix(2, 2), clip=box, alpha=False)
+    if pix.n not in {1, 3, 4}:
+        pix = pymupdf.Pixmap(pymupdf.csRGB, pix)
+    return _ink_and_bg_from_pixels(_pixmap_rgb_pixels(pix))
 
 
 def _shared_prefix_len(left: str, right: str) -> int:
+    label, value = split_label_and_value(left)
+    if label and value and right.startswith(label):
+        return len(label)
+
     limit = min(len(left), len(right))
     index = 0
     while index < limit and left[index] == right[index]:
@@ -544,6 +656,35 @@ def _changed_middle(old: str, new: str) -> tuple[int, int, int, int] | None:
     return prefix, old_i, prefix, new_i
 
 
+def _value_redraw_span(old: str, new: str) -> tuple[int, int, int, int] | None:
+    """Character span to wipe/redraw, never including a leading label."""
+    label, value = split_label_and_value(old)
+    label_len = len(label) if label and value else 0
+
+    if old != new:
+        span = _changed_middle(old, new)
+        if span is not None:
+            old_start, old_end, new_start, new_end = span
+            if label_len and old_start < label_len and new.startswith(label):
+                old_start = label_len
+                new_start = label_len
+            return old_start, old_end, new_start, new_end
+
+    if not (label and value):
+        return None
+    if new.startswith(label):
+        return label_len, len(old), label_len, len(new)
+    new_label, new_value = split_label_and_value(new)
+    if new_label == label and new_value:
+        return (
+            label_len,
+            label_len + len(value),
+            len(new_label),
+            len(new_label) + len(new_value),
+        )
+    return None
+
+
 def _value_subrect(
     field: FieldValue,
     old_text: str,
@@ -583,11 +724,13 @@ def _replace_field_text_on_image(
     font_name = font or field.font
     requested_size = float(font_size or field.font_size)
     intentional_style = font is not None or font_size is not None or x is not None or y is not None
+    dx = 0.0 if x is None else (x - field.x)
+    dy = 0.0 if y is None else (y - field.y)
 
     if len(field.rect) != 4:
         pil_font = _pil_font(font_name, requested_size, bold=not intentional_style)
-        text_x = field.x if x is None else x
-        text_y = field.y if y is None else y
+        text_x = field.x + dx
+        text_y = field.y + dy
         try:
             draw.text((text_x, text_y), new_text, fill=(0, 0, 0), font=pil_font, anchor="ls")
         except TypeError:
@@ -601,7 +744,7 @@ def _replace_field_text_on_image(
     ink = _sample_ink_color(image, field.rect)
     bg = _sample_bg_color(image, field.rect)
 
-    span = None if intentional_style else _changed_middle(field.text, new_text)
+    span = _value_redraw_span(field.text, new_text)
     probe = _pil_font(font_name, min(requested_size, box_h * 0.95), bold=False)
 
     if span is not None:
@@ -625,14 +768,17 @@ def _replace_field_text_on_image(
             [vx0 - 1, max(0, vy0 - 1), vx1 + 1, vy1 + 1],
             fill=bg,
         )
-        pil_font = _fit_font_path_to_width(
-            draw_text,
-            template_font=matched,
-            max_width=max(4.0, vx1 - vx0),
-            max_size=min(requested_size, box_h * 0.95),
-        )
-        text_x = vx0
-        text_y = vy1 - 1.0
+        if intentional_style:
+            pil_font = _pil_font(font_name, requested_size, bold=False)
+        else:
+            pil_font = _fit_font_path_to_width(
+                draw_text,
+                template_font=matched,
+                max_width=max(4.0, vx1 - vx0),
+                max_size=min(requested_size, box_h * 0.95),
+            )
+        text_x = vx0 + dx
+        text_y = vy1 - 1.0 + dy
     else:
         draw_text = new_text
         if intentional_style:
@@ -656,8 +802,8 @@ def _replace_field_text_on_image(
             [max(0, x0 - 1), max(0, y0 - 1), x1 + 1, y1 + 1],
             fill=bg,
         )
-        text_x = field.x if x is None else x
-        text_y = field.y if y is None else y
+        text_x = field.x + dx
+        text_y = field.y + dy
 
     try:
         draw.text((text_x, text_y), draw_text, fill=ink, font=pil_font, anchor="ls")
@@ -673,6 +819,101 @@ def _replace_field_text_on_image(
     image.save(image_path, **save_kwargs)
 
 
+def _first_existing_font(candidates: tuple[str, ...]) -> str | None:
+    for candidate in candidates:
+        if Path(candidate).exists():
+            return candidate
+    return None
+
+
+def _is_serif_font_name(font_name: str) -> bool:
+    lowered = font_name.lower()
+    if "sans" in lowered:
+        return False
+    return any(
+        token in lowered
+        for token in (
+            "times",
+            "roman",
+            "serif",
+            "georgia",
+            "cambria",
+            "garamond",
+            "palatino",
+        )
+    )
+
+
+def resolve_family_font_file(font_name: str | None) -> str | None:
+    """A full system TTF in the same family (serif/sans, bold/regular).
+
+    Embedded PDF subset fonts cannot be reused for new glyphs, so spelling
+    and numerical redraws use a lookalike installed on the machine.
+    """
+    if not font_name:
+        return None
+    exact = resolve_font_file(font_name)
+    if exact:
+        return exact
+    lowered = font_name.lower()
+    bold = "bold" in lowered
+    if _is_serif_font_name(font_name):
+        return _first_existing_font(_SERIF_BOLD_CANDIDATES if bold else _SERIF_REGULAR_CANDIDATES)
+    if "courier" in lowered or "mono" in lowered:
+        return None
+    if "sans" in lowered or "arial" in lowered or "calibri" in lowered:
+        return _first_existing_font(_SANS_BOLD_CANDIDATES if bold else _SANS_REGULAR_CANDIDATES)
+    return None
+
+
+def _font_key(font_name: str | None) -> str:
+    """Comparable font id: strip subset prefix and non-alphanumerics."""
+    base = (font_name or "").split("+")[-1]
+    return re.sub(r"[^a-z0-9]", "", base.lower())
+
+
+def _builtin_fallback_font(font_name: str | None) -> str:
+    """Map a PDF/system font name onto a Base-14 font when no TTF is available."""
+    if not font_name:
+        return BUILTIN_FONT_HELVETICA
+    lowered = font_name.lower()
+    if lowered in _BUILTIN_FONTS:
+        return lowered
+    if _is_serif_font_name(font_name):
+        return BUILTIN_FONT_TIMES
+    if "courier" in lowered or "mono" in lowered:
+        return "cour"
+    return BUILTIN_FONT_HELVETICA
+
+
+def _font_insert_kwargs(font_name: str | None, *, preserve_face: bool) -> dict:
+    """Build insert_text font args.
+
+    When preserving the original face (spelling/numerical/etc.), use a full
+    system TTF in the same family. Subset fonts embedded in the PDF cannot
+    be reused for new glyphs.
+    """
+    if preserve_face and _is_builtin_pdf_font(font_name):
+        return {"fontname": _builtin_fallback_font(font_name)}
+
+    if preserve_face:
+        family_file = resolve_family_font_file(font_name)
+        if family_file:
+            return {
+                "fontname": "keep_" + (_font_key(font_name) or "orig")[:32],
+                "fontfile": family_file,
+            }
+        return {"fontname": _builtin_fallback_font(font_name)}
+
+    font_file = resolve_font_file(font_name)
+    if font_file:
+        return {
+            "fontname": (font_name or "custom").lower(),
+            "fontfile": font_file,
+        }
+    return {"fontname": _builtin_fallback_font(font_name)}
+
+
 def _replace_field_text_on_pdf(
     pdf_path: Path,
     field: FieldValue,
@@ -685,20 +926,13 @@ def _replace_field_text_on_pdf(
 ) -> None:
     doc = pymupdf.open(pdf_path)
     page = doc[field.page]
-    page.add_redact_annot(pymupdf.Rect(field.rect), fill=(1, 1, 1))
-    page.apply_redactions()
+    insert_kwargs = _font_insert_kwargs(font or field.font, preserve_face=font is None)
+    insert_kwargs["fontsize"] = font_size or field.font_size
+    ink, bg = _sample_pdf_field_colors(page, field.rect)
+    insert_kwargs["color"] = _rgb01(ink)
 
-    font_name = font or field.font
-    font_file = resolve_font_file(font_name)
-    insert_kwargs: dict = {
-        "fontsize": font_size or field.font_size,
-    }
-    if font_file:
-        # Embed the TTF under a stable alias (Base-14 names can't carry Arial/Calibri).
-        insert_kwargs["fontname"] = (font_name or "custom").lower()
-        insert_kwargs["fontfile"] = font_file
-    else:
-        insert_kwargs["fontname"] = font_name or BUILTIN_FONT_HELVETICA
+    page.add_redact_annot(pymupdf.Rect(field.rect), fill=_rgb01(bg))
+    page.apply_redactions()
 
     page.insert_text(
         (field.x if x is None else x, field.y if y is None else y),
@@ -766,42 +1000,44 @@ def apply_text_emphasis(file_path: Path, field: FieldValue, style: str) -> None:
 def _apply_emphasis_on_pdf(pdf_path: Path, field: FieldValue, style: str) -> None:
     doc = pymupdf.open(pdf_path)
     page = doc[field.page]
-    page.add_redact_annot(pymupdf.Rect(field.rect), fill=(1, 1, 1))
-    page.apply_redactions()
-
-    point = (field.x, field.y)
+    point = pymupdf.Point(field.x, field.y)
     size = field.font_size
-    base = (field.font or BUILTIN_FONT_HELVETICA).lower()
+    base = field.font or BUILTIN_FONT_HELVETICA
 
     insert_kwargs: dict = {"fontsize": size}
     if style in {"bold", "italic"}:
-        font_file = resolve_emphasis_font_file(style)
+        font_file = resolve_emphasis_font_file(style, base)
         if font_file:
-            insert_kwargs["fontname"] = f"{base}-{style}"
+            insert_kwargs["fontname"] = f"{_font_key(base) or 'orig'}-{style}"
             insert_kwargs["fontfile"] = font_file
+            # WinAnsi TrueType renders in Preview; Type0/Identity-H often looks blank.
+            insert_kwargs["set_simple"] = True
         else:
+            builtin = _builtin_fallback_font(base)
             insert_kwargs["fontname"] = _PDF_EMPHASIS_BUILTIN.get(
-                (base if base in {"helv", "tiro", "cour"} else "helv", style),
+                (builtin if builtin in {"helv", "tiro", "cour"} else "helv", style),
                 "hebo" if style == "bold" else "heit",
             )
     else:
-        font_file = resolve_font_file(base)
-        if font_file:
-            insert_kwargs["fontname"] = base
-            insert_kwargs["fontfile"] = font_file
-        else:
-            insert_kwargs["fontname"] = base if base in _BUILTIN_FONTS else BUILTIN_FONT_HELVETICA
+        insert_kwargs.update(_font_insert_kwargs(base, preserve_face=True))
+        if insert_kwargs.get("fontfile"):
+            insert_kwargs["set_simple"] = True
+
+    ink, bg = _sample_pdf_field_colors(page, field.rect)
+    insert_kwargs["color"] = _rgb01(ink)
+
+    page.add_redact_annot(pymupdf.Rect(field.rect), fill=_rgb01(bg))
+    page.apply_redactions()
 
     page.insert_text(point, field.text, **insert_kwargs)
 
     if style == "underline":
-        # Approximate underline just below the baseline across the field width.
         x0, _, x1, y1 = field.rect
         y_line = min(field.y + 1.5, y1)
         page.draw_line(
             pymupdf.Point(x0, y_line),
             pymupdf.Point(x1, y_line),
-            color=(0, 0, 0),
+            color=_rgb01(ink),
             width=max(0.6, size * 0.06),
         )
 
@@ -821,25 +1057,43 @@ def _apply_emphasis_on_image(image_path: Path, field: FieldValue, style: str) ->
     box_h = max(1.0, y1 - y0)
     ink = _sample_ink_color(image, field.rect)
     bg = _sample_bg_color(image, field.rect)
-    draw.rectangle([max(0, x0 - 1), max(0, y0 - 1), x1 + 1, y1 + 1], fill=bg)
+    probe = _pil_font(field.font, min(field.font_size, box_h * 0.95), bold=False)
+    span = _value_redraw_span(field.text, field.text)
+    if span is not None:
+        old_start, old_end, _, _ = span
+        wipe_rect = _value_subrect(field, field.text, old_start, old_end, probe)
+        draw_text = field.text[old_start:old_end]
+        text_x, text_y = wipe_rect[0], wipe_rect[3] - 1.0
+        line_x0, line_x1 = wipe_rect[0], wipe_rect[2]
+    else:
+        wipe_rect = [x0, y0, x1, y1]
+        draw_text = field.text
+        text_x, text_y = field.x, field.y
+        line_x0, line_x1 = x0, x1
+
+    wx0, wy0, wx1, wy1 = wipe_rect
+    draw.rectangle(
+        [max(0, wx0 - 1), max(0, wy0 - 1), wx1 + 1, wy1 + 1],
+        fill=bg,
+    )
 
     size = min(field.font_size, box_h * 0.95)
     font_file = None
     if style in {"bold", "italic"}:
-        font_file = resolve_emphasis_font_file(style)
+        font_file = resolve_emphasis_font_file(style, field.font)
     if font_file:
         pil_font = _pil_font(field.font, size, bold=False, font_path=font_file)
     else:
         pil_font = _pil_font(field.font, size, bold=(style == "bold"))
 
     try:
-        draw.text((field.x, field.y), field.text, fill=ink, font=pil_font, anchor="ls")
+        draw.text((text_x, text_y), draw_text, fill=ink, font=pil_font, anchor="ls")
     except TypeError:
-        draw.text((field.x, field.y - size), field.text, fill=ink, font=pil_font)
+        draw.text((text_x, text_y - size), draw_text, fill=ink, font=pil_font)
 
     if style == "underline":
-        y_line = min(field.y + 2, y1)
-        draw.line([(x0, y_line), (x1, y_line)], fill=ink, width=max(1, int(size * 0.08)))
+        y_line = min(text_y + 2, wy1)
+        draw.line([(line_x0, y_line), (line_x1, y_line)], fill=ink, width=max(1, int(size * 0.08)))
 
     suffix = image_path.suffix.lower()
     save_kwargs: dict = {}
@@ -872,16 +1126,10 @@ def _unique_field_name(base: str, existing: dict[str, FieldValue]) -> str:
 
 
 def _normalize_font(font_name: str | None) -> str:
+    """Keep the PDF's real font name so redraws can reuse the embedded face."""
     if not font_name:
         return BUILTIN_FONT_HELVETICA
-    lowered = font_name.lower()
-    if "times" in lowered or "roman" in lowered:
-        return BUILTIN_FONT_TIMES
-    if "courier" in lowered:
-        return "cour"
-    if lowered in _BUILTIN_FONTS:
-        return lowered
-    return BUILTIN_FONT_HELVETICA
+    return font_name.split("+")[-1]
 
 
 def _get_ocr_engine():

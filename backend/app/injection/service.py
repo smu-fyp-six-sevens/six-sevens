@@ -6,6 +6,7 @@ from copy import deepcopy
 
 from fastapi import HTTPException, status
 
+from .field_text import field_value_text, is_preferred_value
 from .injectors import get_injector
 from .schemas import (
     DefectType,
@@ -80,36 +81,51 @@ class InjectionService:
 
 
 def _pick_random_field(document: InjectableDocument, defect_type: DefectType) -> str:
-    """Choose a random suitable text span for the requested defect type."""
+    """Choose a random value field; never a label-only 'variable name' span."""
     if not document.fields:
         raise ValueError(f"Document '{document.id}' has no injectable fields")
 
+    # Metadata is document-level and does not rewrite visible labels.
+    if defect_type == DefectType.METADATA:
+        return random.choice(list(document.fields.keys()))
+
+    valued = [
+        (name, field_value_text(field.text))
+        for name, field in document.fields.items()
+        if field_value_text(field.text).strip()
+    ]
+
     candidates: list[str]
     if defect_type == DefectType.NUMERICAL:
-        candidates = [
-            name
-            for name, field in document.fields.items()
-            if re.search(r"\d+(?:\.\d+)?", field.text)
-        ]
+        candidates = [name for name, value in valued if re.search(r"\d+(?:\.\d+)?", value)]
         if not candidates:
             raise ValueError(
-                f"Document '{document.id}' has no numeric text to inject a numerical defect into"
+                f"Document '{document.id}' has no numeric value to inject a numerical defect into"
             )
     elif defect_type == DefectType.SPELLING:
         candidates = [
             name
-            for name, field in document.fields.items()
-            if re.search(r"[A-Za-z]", field.text) and len(field.text.strip()) > 1
+            for name, value in valued
+            if re.search(r"[A-Za-z]", value) and len(value.strip()) > 1
         ]
         if not candidates:
             raise ValueError(
-                f"Document '{document.id}' has no word-like text to inject a spelling defect into"
+                f"Document '{document.id}' has no word-like value to inject a spelling defect into"
             )
     else:
-        # font / font_size / metadata / misalignment / emphasis can target any text span
-        candidates = list(document.fields.keys())
+        # font / font_size / misalignment / emphasis: restyle values only
+        candidates = [name for name, _value in valued]
+        if not candidates:
+            raise ValueError(
+                f"Document '{document.id}' has no value fields to inject a {defect_type.value} defect into"
+            )
 
-    return random.choice(candidates)
+    preferred = [
+        name
+        for name in candidates
+        if is_preferred_value(document.fields[name].text)
+    ]
+    return random.choice(preferred or candidates)
 
 
 def _assert_single_defect(injected_defect: InjectedDefect, defect_type: DefectType) -> None:
