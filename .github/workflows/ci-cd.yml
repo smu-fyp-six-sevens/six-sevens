@@ -105,6 +105,9 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           push: true
+          # GHCR often fails BuildKit attestation blobs with "unknown blob".
+          provenance: false
+          sbom: false
           tags: |
             ${{ steps.set-image-repo.outputs.image_repo }}:latest
             ${{ steps.set-image-repo.outputs.image_repo }}:${{ github.sha }}
