@@ -1,5 +1,6 @@
 import js from '@eslint/js';
 import tsParser from '@typescript-eslint/parser';
+import tsPlugin from '@typescript-eslint/eslint-plugin';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 
@@ -24,6 +25,7 @@ export default [
       },
     },
     plugins: {
+      '@typescript-eslint': tsPlugin,
       'react-hooks': reactHooks,
       'react-refresh': reactRefresh,
     },
@@ -31,6 +33,14 @@ export default [
       ...js.configs.recommended.rules,
       ...reactHooks.configs.recommended.rules,
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+      // TypeScript (via `tsc --noEmit`) already checks these accurately —
+      // base ESLint doesn't see ambient/global .d.ts types (DOM globals,
+      // the `React` namespace) or TS-only syntax (interface method params),
+      // so it false-positives on both. Use the TS-aware unused-vars rule
+      // instead of turning the check off entirely.
+      'no-undef': 'off',
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': 'error',
     },
   },
 ];
