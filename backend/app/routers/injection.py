@@ -6,10 +6,19 @@ from ..injection.schemas import (
     InjectDefectResponse,
 )
 from ..injection.service import InjectionService
-from ..injection.store import get_document
+from ..injection.store import get_document, list_documents
 
 router = APIRouter(prefix="/api/dev", tags=["dev-test-dataset"])
 injection_service = InjectionService()
+
+
+@router.get("/documents")
+def list_injection_documents() -> list[dict]:
+    """Template ids accepted by /inject (slugs, not original filenames)."""
+    return [
+        {"document_id": doc.id, "filename": doc.filename, "field_count": len(doc.fields)}
+        for doc in list_documents()
+    ]
 
 
 @router.get("/documents/{document_id}/fields", response_model=list[DocumentFieldInfo])

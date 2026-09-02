@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -9,9 +10,23 @@ from PIL import Image, ImageDraw, ImageFont, PngImagePlugin
 from .field_text import split_label_and_value
 from .schemas import FieldValue
 
-DATA_DIR = Path(__file__).resolve().parents[2] / "data"
-TEMPLATES_DIR = DATA_DIR / "templates"
-WORKING_DIR = DATA_DIR / "working"
+
+def _project_root() -> Path:
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "docker-compose.yml").exists():
+            return parent
+    return Path("/app")
+
+
+def _dir_from_env(name: str, default: str) -> Path:
+    env = os.environ.get(name, "").strip()
+    if env:
+        return Path(env)
+    return _project_root() / default
+
+
+TEMPLATES_DIR = _dir_from_env("INJECTION_DOCUMENTS_DIR", "document_templates")
+DOCUMENTS_GENERATED_DIR = _dir_from_env("INJECTION_GENERATED_DIR", "documents_generated")
 
 BUILTIN_FONT_HELVETICA = "helv"
 BUILTIN_FONT_TIMES = "tiro"
@@ -95,21 +110,7 @@ _ocr_cache: dict[tuple[str, float, int], dict[str, FieldValue]] = {}
 
 def ensure_data_dirs() -> None:
     TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
-    WORKING_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def template_pdf_path(document_id: str) -> Path:
-    return TEMPLATES_DIR / f"{document_id}.pdf"
-
-
-def working_file_path(filename: str) -> Path:
-    """Path to the working copy; filename keeps the original extension."""
-    return WORKING_DIR / filename
-
-
-def working_pdf_path(document_id: str) -> Path:
-    """Backwards-compatible helper for PDF-only callers."""
-    return working_file_path(f"{document_id}.pdf")
+    DOCUMENTS_GENERATED_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def media_type_for(path: Path) -> str:
@@ -410,6 +411,11 @@ def _pil_font(
                 return ImageFont.truetype(candidate, size_i)
             except OSError:
                 continue
+    for path, index in _iter_system_font_faces():
+        try:
+            return _load_truetype(path, size_i, index)
+        except OSError:
+            continue
     return ImageFont.load_default()
 
 
@@ -455,7 +461,14 @@ def _iter_system_font_faces() -> list[tuple[str, int]]:
     """Installed (path, index) faces used to approximate an OCR crop's typeface."""
     faces: list[tuple[str, int]] = []
     seen: set[tuple[str, int]] = set()
-    for path, indices in _FONT_FACE_CANDIDATES:
+    candidates = list(_FONT_FACE_CANDIDATES)
+    fonts_root = Path("/usr/share/fonts")
+    if fonts_root.exists():
+        extra: list[tuple[str, tuple[int, ...]]] = []
+        for path in sorted(fonts_root.rglob("*.ttf")):
+            extra.append((str(path), (0,)))
+        candidates.extend(extra)
+    for path, indices in candidates:
         if not Path(path).exists():
             continue
         for index in indices:
@@ -467,7 +480,9 @@ def _iter_system_font_faces() -> list[tuple[str, int]]:
             except OSError:
                 continue
             style = (getattr(getattr(probe, "font", None), "style", "") or "").lower()
-            if any(token in style for token in _SKIP_FACE_STYLE_TOKENS):
+            name = Path(path).name.lower()
+            blob = f"{style} {name}"
+            if any(token in blob for token in _SKIP_FACE_STYLE_TOKENS):
                 continue
             seen.add(key)
             faces.append(key)
@@ -643,38 +658,6 @@ def _match_font_to_crop(
                 best_score = score
                 best_font = font
     return best_font
-
-
-def _fit_font_path_to_width(
-    text: str,
-    *,
-    template_font: ImageFont.ImageFont,
-    max_width: float,
-    max_size: float,
-    min_size: float = 7.0,
-    preferred_size: float | None = None,
-) -> ImageFont.ImageFont:
-    """Reuse the matched typeface file (and TTC index), only adjusting size to fit."""
-    path, index = _font_path_index(template_font)
-    size = preferred_size if preferred_size is not None else max(min_size, max_size)
-    size = max(min_size, size)
-    while size > min_size:
-        if path:
-            try:
-                font = _load_truetype(path, size, index)
-            except OSError:
-                font = _pil_font(BUILTIN_FONT_HELVETICA, size, bold=False)
-        else:
-            font = _pil_font(BUILTIN_FONT_HELVETICA, size, bold=False)
-        if _text_width(font, text) <= max_width or max_width <= 0:
-            return font
-        size -= 0.5
-    if path:
-        try:
-            return _load_truetype(path, min_size, index)
-        except OSError:
-            pass
-    return _pil_font(BUILTIN_FONT_HELVETICA, min_size, bold=False)
 
 
 def _luminance(rgb: tuple[int, int, int]) -> float:
@@ -946,38 +929,49 @@ def _origin_for_ink_box(
 
 def _image_rewrite_font(
     matched: ImageFont.ImageFont,
-    draw_text: str,
     *,
     font_name: str | None,
-    max_width: float,
     requested_size: float,
     original_size: float,
-    box_h: float,
     preserve_face: bool,
     size_changed: bool,
 ) -> ImageFont.ImageFont:
     if not preserve_face:
         return _pil_font(font_name, requested_size, bold=False)
+    if not size_changed:
+        # Spelling/numerical/etc: keep the matched face and size; do not squeeze.
+        return matched
     matched_size = float(getattr(matched, "size", original_size) or original_size)
-    if size_changed:
-        # Apply the injector's delta to the *matched* size. OCR font_size is
-        # only ~0.85 of the box, so requested_size often equals the original
-        # visual size — fitting that into the ink box just looks bolder.
-        draw_size = max(6.0, matched_size + (requested_size - original_size))
-        path, index = _font_path_index(matched)
-        if path:
-            try:
-                return _load_truetype(path, draw_size, index)
-            except OSError:
-                pass
-        return _pil_font(font_name, draw_size, bold=False)
-    return _fit_font_path_to_width(
-        draw_text,
-        template_font=matched,
-        max_width=max_width,
-        max_size=max(matched_size, min(requested_size, box_h * 1.15)),
-        preferred_size=matched_size,
-    )
+    draw_size = max(6.0, matched_size + (requested_size - original_size))
+    path, index = _font_path_index(matched)
+    if path:
+        try:
+            return _load_truetype(path, draw_size, index)
+        except OSError:
+            pass
+    return _pil_font(font_name, draw_size, bold=False)
+
+
+def _glyph_box(
+    font: ImageFont.ImageFont,
+    text: str,
+    origin: tuple[float, float],
+) -> list[float]:
+    try:
+        left, top, right, bottom = font.getbbox(text, anchor="ls")
+    except TypeError:
+        left, top, right, bottom = font.getbbox(text)
+    ox, oy = origin
+    return [ox + float(left), oy + float(top), ox + float(right), oy + float(bottom)]
+
+
+def _union_wipe_rect(original: list[float], glyphs: list[float], pad: float = 2.0) -> list[float]:
+    return [
+        min(original[0], glyphs[0]) - pad,
+        min(original[1], glyphs[1]) - pad,
+        max(original[2], glyphs[2]) + pad,
+        max(original[3], glyphs[3]) + pad,
+    ]
 
 
 def _replace_field_text_on_image(
@@ -1020,6 +1014,7 @@ def _replace_field_text_on_image(
 
     span = _image_redraw_span(field.text, new_text)
     probe = _pil_font(font_name, match_size, bold=False)
+    original_wipe = [x0, y0, x1, y1]
 
     if span is not None:
         old_start, old_end, new_start, new_end = span
@@ -1036,30 +1031,15 @@ def _replace_field_text_on_image(
             max_size=match_size,
         )
         value_rect = _value_subrect(field, field.text, old_start, old_end, matched)
-        vx0, vy0, vx1, vy1 = value_rect
-        draw.rectangle(
-            [vx0 - 1, max(0, vy0 - 1), vx1 + 1, vy1 + 1],
-            fill=bg,
-        )
+        original_wipe = list(value_rect)
         pil_font = _image_rewrite_font(
             matched,
-            draw_text,
             font_name=font_name,
-            max_width=max(4.0, ink_box[2] - ink_box[0]),
             requested_size=requested_size,
             original_size=float(field.font_size),
-            box_h=box_h,
             preserve_face=preserve_face,
             size_changed=font_size is not None,
         )
-        if font_size is not None:
-            text_x, text_y = _origin_for_ink_box(
-                pil_font, draw_text, ink_box, baseline=field.y
-            )
-        else:
-            text_x, text_y = _origin_for_ink_box(pil_font, draw_text, ink_box)
-        text_x += dx
-        text_y += dy
     else:
         draw_text = new_text
         ink_box = _ink_rect_in_image(image, field.rect, ink, bg)
@@ -1073,27 +1053,34 @@ def _replace_field_text_on_image(
         )
         pil_font = _image_rewrite_font(
             matched,
-            draw_text,
             font_name=font_name,
-            max_width=max(4.0, ink_box[2] - ink_box[0]),
             requested_size=requested_size,
             original_size=float(field.font_size),
-            box_h=box_h,
             preserve_face=preserve_face,
             size_changed=font_size is not None,
         )
-        draw.rectangle(
-            [max(0, x0 - 1), max(0, y0 - 1), x1 + 1, y1 + 1],
-            fill=bg,
+
+    if font_size is not None:
+        text_x, text_y = _origin_for_ink_box(
+            pil_font, draw_text, ink_box, baseline=field.y
         )
-        if font_size is not None:
-            text_x, text_y = _origin_for_ink_box(
-                pil_font, draw_text, ink_box, baseline=field.y
-            )
-        else:
-            text_x, text_y = _origin_for_ink_box(pil_font, draw_text, ink_box)
-        text_x += dx
-        text_y += dy
+    else:
+        text_x, text_y = _origin_for_ink_box(pil_font, draw_text, ink_box)
+    text_x += dx
+    text_y += dy
+    wipe = _union_wipe_rect(
+        original_wipe,
+        _glyph_box(pil_font, draw_text, (text_x, text_y)),
+    )
+    draw.rectangle(
+        [
+            max(0, wipe[0]),
+            max(0, wipe[1]),
+            min(image.width, wipe[2]),
+            min(image.height, wipe[3]),
+        ],
+        fill=bg,
+    )
 
     try:
         draw.text((text_x, text_y), draw_text, fill=ink, font=pil_font, anchor="ls")

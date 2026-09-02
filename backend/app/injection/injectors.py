@@ -5,7 +5,7 @@ import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from .field_text import replace_value, require_value
+from .field_text import replace_value, require_value, split_label_and_value
 from .pdf import (
     BUILTIN_FONT_HELVETICA,
     BUILTIN_FONT_TIMES,
@@ -14,9 +14,8 @@ from .pdf import (
     replace_field_text,
     read_document_metadata,
     set_document_metadata,
-    working_file_path,
 )
-from .schemas import DefectType, FieldValue, InjectedDefect, SampleDocument
+from .schemas import DefectType, FieldValue, InjectedDefect, InjectOverrides, InjectableDocument
 
 _BUILTIN_ALT_FONTS = (
     BUILTIN_FONT_TIMES,  # Times Roman
@@ -76,7 +75,12 @@ class DefectInjector(ABC):
     defect_type: DefectType
 
     @abstractmethod
-    def inject(self, document: SampleDocument, field_name: str) -> InjectedDefect:
+    def inject(
+        self,
+        document: InjectableDocument,
+        field_name: str,
+        overrides: InjectOverrides | None = None,
+    ) -> InjectedDefect:
         raise NotImplementedError
 
 
@@ -84,15 +88,31 @@ def _snapshot(field: FieldValue) -> dict:
     return field.model_dump()
 
 
-def _working_path(document: SampleDocument) -> Path:
-    return working_file_path(document.filename)
+def _working_path(document: InjectableDocument) -> Path:
+    if not document.inject_path:
+        raise ValueError("inject_path is not set")
+    return Path(document.inject_path)
 
 
 def _rng() -> random.Random:
     return random.Random()
 
 
-def _require_injectable_value(document: SampleDocument, field_name: str) -> str:
+def _opts(overrides: InjectOverrides | None) -> InjectOverrides:
+    return overrides or InjectOverrides()
+
+
+def _replacement_text(field: FieldValue, new_text: str) -> str:
+    """Use `new_text` as the value, keeping a leading label if one exists."""
+    if not new_text.strip():
+        raise ValueError("new_text must not be empty")
+    label, value = split_label_and_value(field.text)
+    if label and value and not new_text.startswith(label):
+        return replace_value(field.text, new_text)
+    return new_text
+
+
+def _require_injectable_value(document: InjectableDocument, field_name: str) -> str:
     field = document.fields[field_name]
     return require_value(field_name, field.text)
 
@@ -100,19 +120,30 @@ def _require_injectable_value(document: SampleDocument, field_name: str) -> str:
 class FontInjector(DefectInjector):
     defect_type = DefectType.FONT
 
-    def inject(self, document: SampleDocument, field_name: str) -> InjectedDefect:
+    def inject(
+        self,
+        document: InjectableDocument,
+        field_name: str,
+        overrides: InjectOverrides | None = None,
+    ) -> InjectedDefect:
         _require_injectable_value(document, field_name)
         field = document.fields[field_name]
         before = _snapshot(field)
+        opts = _opts(overrides)
         current = (field.font or BUILTIN_FONT_HELVETICA).lower()
-        choices = [
-            name
-            for name in (*_BUILTIN_ALT_FONTS, *available_custom_fonts())
-            if name != current
-        ]
-        if not choices:
-            choices = list(_BUILTIN_ALT_FONTS) or ["arial"]
-        new_font = _rng().choice(choices)
+        if opts.font:
+            new_font = opts.font
+        else:
+            choices = [
+                name
+                for name in (*_BUILTIN_ALT_FONTS, *available_custom_fonts())
+                if name != current
+            ]
+            if not choices:
+                choices = list(_BUILTIN_ALT_FONTS) or ["arial"]
+            new_font = _rng().choice(choices)
+        if new_font.lower() == (field.font or "").lower():
+            raise ValueError(f"font replacement {new_font!r} matches the current font")
         replace_field_text(_working_path(document), field, field.text, font=new_font)
         field.font = new_font
         label = _FONT_LABELS.get(new_font, new_font)
@@ -128,15 +159,27 @@ class FontInjector(DefectInjector):
 class FontSizeInjector(DefectInjector):
     defect_type = DefectType.FONT_SIZE
 
-    def inject(self, document: SampleDocument, field_name: str) -> InjectedDefect:
+    def inject(
+        self,
+        document: InjectableDocument,
+        field_name: str,
+        overrides: InjectOverrides | None = None,
+    ) -> InjectedDefect:
         _require_injectable_value(document, field_name)
         field = document.fields[field_name]
         before = _snapshot(field)
-        # Mix of subtle and obvious size drifts (pt).
-        delta = _rng().choice([-3.0, -2.0, -1.0, 1.0, 1.5, 2.0, 3.0, 4.0])
-        new_size = max(6.0, round(field.font_size + delta, 1))
+        opts = _opts(overrides)
+        if opts.font_size is not None:
+            new_size = max(6.0, round(float(opts.font_size), 1))
+        else:
+            delta = _rng().choice([-3.0, -2.0, -1.0, 1.0, 1.5, 2.0, 3.0, 4.0])
+            new_size = max(6.0, round(field.font_size + delta, 1))
+            if new_size == field.font_size:
+                new_size = field.font_size + 2.0
         if new_size == field.font_size:
-            new_size = field.font_size + 2.0
+            raise ValueError(
+                f"font_size replacement {new_size} matches the current size"
+            )
         replace_field_text(_working_path(document), field, field.text, font_size=new_size)
         field.font_size = new_size
         return InjectedDefect(
@@ -206,29 +249,40 @@ def _tamper_number(original: str, rng: random.Random) -> str:
 class NumericalInjector(DefectInjector):
     defect_type = DefectType.NUMERICAL
 
-    def inject(self, document: SampleDocument, field_name: str) -> InjectedDefect:
+    def inject(
+        self,
+        document: InjectableDocument,
+        field_name: str,
+        overrides: InjectOverrides | None = None,
+    ) -> InjectedDefect:
         value = _require_injectable_value(document, field_name)
         field = document.fields[field_name]
         before = _snapshot(field)
+        opts = _opts(overrides)
         match = re.search(r"\d+(?:\.\d+)?", value)
         if not match:
             raise ValueError(f"Field '{field_name}' does not contain a numeric value")
 
         original = match.group()
-        rng = _rng()
-        tampered = _tamper_number(original, rng)
-        if tampered == original:
-            tampered = _tamper_number(original, random.Random(rng.randint(1, 10_000)))
-        if tampered == original:
-            # Last resort: force +1 on integer part.
-            if "." in original:
-                whole, fraction = original.split(".", 1)
-                tampered = f"{whole}.{int(fraction) + 1:0{len(fraction)}d}"
-            else:
-                tampered = str(int(original) + 1)
-
-        new_value = value[: match.start()] + tampered + value[match.end() :]
-        new_text = replace_value(field.text, new_value)
+        if opts.new_text is not None:
+            new_text = _replacement_text(field, opts.new_text)
+            tampered = new_text
+        else:
+            rng = _rng()
+            tampered = _tamper_number(original, rng)
+            if tampered == original:
+                tampered = _tamper_number(original, random.Random(rng.randint(1, 10_000)))
+            if tampered == original:
+                # Last resort: force +1 on integer part.
+                if "." in original:
+                    whole, fraction = original.split(".", 1)
+                    tampered = f"{whole}.{int(fraction) + 1:0{len(fraction)}d}"
+                else:
+                    tampered = str(int(original) + 1)
+            new_value = value[: match.start()] + tampered + value[match.end() :]
+            new_text = replace_value(field.text, new_value)
+        if new_text == field.text:
+            raise ValueError("new_text matches the current field text")
         replace_field_text(_working_path(document), field, new_text)
         field.text = new_text
         return InjectedDefect(
@@ -243,36 +297,50 @@ class NumericalInjector(DefectInjector):
 class MetadataInjector(DefectInjector):
     defect_type = DefectType.METADATA
 
-    def inject(self, document: SampleDocument, field_name: str) -> InjectedDefect:
+    def inject(
+        self,
+        document: InjectableDocument,
+        field_name: str,
+        overrides: InjectOverrides | None = None,
+    ) -> InjectedDefect:
         field = document.fields[field_name]
         before = _snapshot(field)
         path = _working_path(document)
         metadata = dict(read_document_metadata(path))
-        rng = _rng()
-
-        # Apply 1–2 metadata anomalies so each inject isn't identical.
-        ops = rng.sample(
-            ["author", "creator", "title", "subject"],
-            k=rng.choice([1, 2]),
-        )
+        opts = _opts(overrides)
         notes: list[str] = []
-        if "author" in ops:
-            metadata["author"] = rng.choice(
-                [a for a in _FAKE_AUTHORS if a != metadata.get("author")] or list(_FAKE_AUTHORS)
-            )
-            notes.append(f"author={metadata['author']!r}")
-        if "creator" in ops:
-            metadata["creator"] = rng.choice(_FAKE_CREATORS)
-            notes.append(f"creator={metadata['creator']!r}")
-        if "title" in ops:
-            metadata["title"] = rng.choice(_FAKE_TITLES)
-            notes.append(f"title={metadata['title']!r}")
-        if "subject" in ops:
-            metadata["subject"] = rng.choice(
-                ["Edited copy", "Resaved", "Exported scan", ""]
-            )
-            notes.append(f"subject={metadata['subject']!r}")
 
+        if opts.metadata:
+            for key, value in opts.metadata.items():
+                metadata[key] = value
+                notes.append(f"{key}={value!r}")
+        else:
+            rng = _rng()
+            # Apply 1–2 metadata anomalies so each inject isn't identical.
+            ops = rng.sample(
+                ["author", "creator", "title", "subject"],
+                k=rng.choice([1, 2]),
+            )
+            if "author" in ops:
+                metadata["author"] = rng.choice(
+                    [a for a in _FAKE_AUTHORS if a != metadata.get("author")]
+                    or list(_FAKE_AUTHORS)
+                )
+                notes.append(f"author={metadata['author']!r}")
+            if "creator" in ops:
+                metadata["creator"] = rng.choice(_FAKE_CREATORS)
+                notes.append(f"creator={metadata['creator']!r}")
+            if "title" in ops:
+                metadata["title"] = rng.choice(_FAKE_TITLES)
+                notes.append(f"title={metadata['title']!r}")
+            if "subject" in ops:
+                metadata["subject"] = rng.choice(
+                    ["Edited copy", "Resaved", "Exported scan", ""]
+                )
+                notes.append(f"subject={metadata['subject']!r}")
+
+        if metadata == before.get("metadata"):
+            raise ValueError("metadata replacement matches the current metadata")
         set_document_metadata(path, metadata)
         field.metadata = metadata
         return InjectedDefect(
@@ -337,36 +405,49 @@ def _tamper_word(word: str, rng: random.Random) -> str:
 class SpellingInjector(DefectInjector):
     defect_type = DefectType.SPELLING
 
-    def inject(self, document: SampleDocument, field_name: str) -> InjectedDefect:
+    def inject(
+        self,
+        document: InjectableDocument,
+        field_name: str,
+        overrides: InjectOverrides | None = None,
+    ) -> InjectedDefect:
         value = _require_injectable_value(document, field_name)
         field = document.fields[field_name]
         before = _snapshot(field)
-        words = value.split()
-        if not words:
-            raise ValueError(f"Field '{field_name}' has no text to tamper")
+        opts = _opts(overrides)
+        if opts.new_text is not None:
+            new_text = _replacement_text(field, opts.new_text)
+            original = value
+            replacement = new_text
+        else:
+            words = value.split()
+            if not words:
+                raise ValueError(f"Field '{field_name}' has no text to tamper")
 
-        rng = _rng()
-        # Prefer longer alpha words when available — never the leading label.
-        alpha_idxs = [
-            i
-            for i, w in enumerate(words)
-            if re.search(r"[A-Za-z]", w) and len(re.sub(r"[^A-Za-z]", "", w)) >= 2
-        ]
-        idx = rng.choice(alpha_idxs) if alpha_idxs else 0
-        original = words[idx]
-        words[idx] = _tamper_word(original, rng)
-        if words[idx] == original:
-            words[idx] = _tamper_word(original, random.Random(rng.randint(1, 10_000)))
-        if words[idx] == original and len(original) > 1:
-            words[idx] = original[0] + original[1] + original[1] + original[2:]
-
-        new_text = replace_value(field.text, " ".join(words))
+            rng = _rng()
+            # Prefer longer alpha words when available — never the leading label.
+            alpha_idxs = [
+                i
+                for i, w in enumerate(words)
+                if re.search(r"[A-Za-z]", w) and len(re.sub(r"[^A-Za-z]", "", w)) >= 2
+            ]
+            idx = rng.choice(alpha_idxs) if alpha_idxs else 0
+            original = words[idx]
+            words[idx] = _tamper_word(original, rng)
+            if words[idx] == original:
+                words[idx] = _tamper_word(original, random.Random(rng.randint(1, 10_000)))
+            if words[idx] == original and len(original) > 1:
+                words[idx] = original[0] + original[1] + original[1] + original[2:]
+            replacement = words[idx]
+            new_text = replace_value(field.text, " ".join(words))
+        if new_text == field.text:
+            raise ValueError("new_text matches the current field text")
         replace_field_text(_working_path(document), field, new_text)
         field.text = new_text
         return InjectedDefect(
             defect_type=self.defect_type,
             field_name=field_name,
-            description=f"Introduced spelling anomaly: {original!r} → {words[idx]!r}",
+            description=f"Introduced spelling anomaly: {original!r} → {replacement!r}",
             before=before,
             after=_snapshot(field),
         )
@@ -375,27 +456,43 @@ class SpellingInjector(DefectInjector):
 class MisalignmentInjector(DefectInjector):
     defect_type = DefectType.MISALIGNMENT
 
-    def inject(self, document: SampleDocument, field_name: str) -> InjectedDefect:
+    def inject(
+        self,
+        document: InjectableDocument,
+        field_name: str,
+        overrides: InjectOverrides | None = None,
+    ) -> InjectedDefect:
         _require_injectable_value(document, field_name)
         field = document.fields[field_name]
         before = _snapshot(field)
-        rng = _rng()
-        axis = rng.choice(["x", "y", "both"])
-        magnitude = rng.choice([8.0, 12.0, 15.0, 18.0, 22.0, 28.0])
-        sign = rng.choice([-1.0, 1.0])
-
-        new_x = field.x
-        new_y = field.y
+        opts = _opts(overrides)
         notes: list[str] = []
-        if axis in {"x", "both"}:
-            new_x = field.x + sign * magnitude
-            notes.append(f"x {before['x']}→{new_x}")
-        if axis in {"y", "both"}:
-            y_sign = rng.choice([-1.0, 1.0]) if axis == "both" else sign
-            y_mag = magnitude if axis != "both" else rng.choice([6.0, 10.0, 14.0])
-            new_y = field.y + y_sign * y_mag
-            notes.append(f"y {before['y']}→{new_y}")
+        if opts.x is not None or opts.y is not None:
+            new_x = field.x if opts.x is None else float(opts.x)
+            new_y = field.y if opts.y is None else float(opts.y)
+            if new_x != field.x:
+                notes.append(f"x {before['x']}→{new_x}")
+            if new_y != field.y:
+                notes.append(f"y {before['y']}→{new_y}")
+        else:
+            rng = _rng()
+            axis = rng.choice(["x", "y", "both"])
+            magnitude = rng.choice([8.0, 12.0, 15.0, 18.0, 22.0, 28.0])
+            sign = rng.choice([-1.0, 1.0])
 
+            new_x = field.x
+            new_y = field.y
+            if axis in {"x", "both"}:
+                new_x = field.x + sign * magnitude
+                notes.append(f"x {before['x']}→{new_x}")
+            if axis in {"y", "both"}:
+                y_sign = rng.choice([-1.0, 1.0]) if axis == "both" else sign
+                y_mag = magnitude if axis != "both" else rng.choice([6.0, 10.0, 14.0])
+                new_y = field.y + y_sign * y_mag
+                notes.append(f"y {before['y']}→{new_y}")
+
+        if new_x == field.x and new_y == field.y:
+            raise ValueError("misalignment replacement matches the current position")
         replace_field_text(
             _working_path(document),
             field,
@@ -417,11 +514,24 @@ class MisalignmentInjector(DefectInjector):
 class EmphasisInjector(DefectInjector):
     defect_type = DefectType.EMPHASIS
 
-    def inject(self, document: SampleDocument, field_name: str) -> InjectedDefect:
+    def inject(
+        self,
+        document: InjectableDocument,
+        field_name: str,
+        overrides: InjectOverrides | None = None,
+    ) -> InjectedDefect:
         _require_injectable_value(document, field_name)
         field = document.fields[field_name]
         before = _snapshot(field)
-        style = _rng().choice(["bold", "italic", "underline"])
+        opts = _opts(overrides)
+        if opts.style:
+            style = opts.style.strip().lower()
+            if style not in {"bold", "italic", "underline"}:
+                raise ValueError("style must be 'bold', 'italic', or 'underline'")
+        else:
+            style = _rng().choice(["bold", "italic", "underline"])
+        if style == field.style:
+            raise ValueError(f"style replacement {style!r} matches the current style")
         apply_text_emphasis(_working_path(document), field, style)
         field.style = style
         return InjectedDefect(

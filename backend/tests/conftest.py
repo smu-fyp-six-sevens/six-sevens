@@ -54,17 +54,17 @@ def _write_sample_png(path: Path) -> None:
 
 @pytest.fixture
 def isolated_injection_templates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Use generated PDF/PNG fixtures instead of backend/data/templates."""
-    templates = tmp_path / "templates"
-    working = tmp_path / "working"
+    """Use generated PDF/PNG fixtures instead of document_templates/."""
+    templates = tmp_path / "document_templates"
+    generated = tmp_path / "documents_generated"
     templates.mkdir()
-    working.mkdir()
+    generated.mkdir()
 
     _write_sample_pdf(templates / f"{PDF_DOC_ID}.pdf")
     _write_sample_png(templates / f"{IMAGE_DOC_ID}.png")
 
     monkeypatch.setattr("app.injection.pdf.TEMPLATES_DIR", templates)
-    monkeypatch.setattr("app.injection.pdf.WORKING_DIR", working)
+    monkeypatch.setattr("app.injection.pdf.DOCUMENTS_GENERATED_DIR", generated)
     monkeypatch.setattr("app.injection.store.TEMPLATES_DIR", templates)
-    monkeypatch.setattr("app.injection.store.WORKING_DIR", working)
+    monkeypatch.setattr("app.injection.store.DOCUMENTS_GENERATED_DIR", generated)
     return templates

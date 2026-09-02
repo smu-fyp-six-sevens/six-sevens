@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import logging
 import shutil
 from copy import deepcopy
 from pathlib import Path
 
 from .pdf import (
     IMAGE_SUFFIXES,
+    DOCUMENTS_GENERATED_DIR,
     TEMPLATES_DIR,
-    WORKING_DIR,
     discover_fields_from_image,
     discover_fields_from_pdf,
     ensure_data_dirs,
@@ -15,11 +16,13 @@ from .pdf import (
     is_image_template,
     read_document_metadata,
     slugify_document_id,
-    working_file_path,
 )
 from .schemas import InjectableDocument
 
+logger = logging.getLogger(__name__)
+
 DOCUMENTS: dict[str, InjectableDocument] = {}
+TEMPLATES: dict[str, InjectableDocument] = {}
 
 _IMAGE_EXTS = tuple(IMAGE_SUFFIXES) + (".pdf",)
 
@@ -39,15 +42,14 @@ def _build_document(
     *,
     document_type: str,
     filename: str,
-    field_source: str = "pdf_text",
+    source: Path,
 ) -> InjectableDocument:
-    working_path = working_file_path(filename)
-    if is_image_template(working_path):
-        metadata = read_document_metadata(working_path)
-        fields = discover_fields_from_image(working_path, metadata=metadata)
+    if is_image_template(source):
+        metadata = read_document_metadata(source)
+        fields = discover_fields_from_image(source, metadata=metadata)
         field_source = "ocr"
     else:
-        fields = discover_fields_from_pdf(working_path)
+        fields = discover_fields_from_pdf(source)
         field_source = "pdf_text"
 
     return InjectableDocument(
@@ -60,17 +62,6 @@ def _build_document(
     )
 
 
-def _clear_stale_working_files(document_id: str, keep_filename: str) -> None:
-    keep_path = working_file_path(keep_filename).resolve()
-    for path in WORKING_DIR.glob(f"{document_id}.*"):
-        if path.resolve() == keep_path:
-            continue
-        if path.suffix.lower() in IMAGE_SUFFIXES or path.suffix.lower() == ".pdf":
-            path.unlink(missing_ok=True)
-        if path.name.endswith(".meta.json"):
-            path.unlink(missing_ok=True)
-
-
 def _register_file(
     path: Path,
     *,
@@ -79,24 +70,22 @@ def _register_file(
 ) -> InjectableDocument:
     document_id = document_id or slugify_document_id(path.stem)
     filename = f"{document_id}{path.suffix.lower()}"
-
-    _clear_stale_working_files(document_id, filename)
-    dest = working_file_path(filename)
-    if path.resolve() != dest.resolve():
-        shutil.copy2(path, dest)
-
-    DOCUMENTS[document_id] = _build_document(
+    document = _build_document(
         document_id,
         document_type=document_type,
         filename=filename,
+        source=path,
     )
-    return DOCUMENTS[document_id]
+    DOCUMENTS[document_id] = document
+    TEMPLATES[document_id] = deepcopy(document)
+    return document
 
 
 def reset_sample_documents() -> None:
-    """Load files from data/templates/ for fraud injection."""
+    """Load files from document_templates/ for fraud injection."""
     ensure_data_dirs()
     DOCUMENTS.clear()
+    TEMPLATES.clear()
 
     for path in sorted(TEMPLATES_DIR.iterdir()):
         if not path.is_file():
@@ -108,9 +97,14 @@ def reset_sample_documents() -> None:
         try:
             _register_file(path, document_type="custom")
         except Exception:
-            for leftover in WORKING_DIR.glob(f"{path.stem}.*"):
-                leftover.unlink(missing_ok=True)
+            logger.exception("Failed to register injection template %s", path.name)
             continue
+
+
+def list_documents() -> list[InjectableDocument]:
+    """Registered templates (ids are slugs, e.g. Bank_Statement-1)."""
+    _ensure_loaded()
+    return [deepcopy(doc) for doc in DOCUMENTS.values()]
 
 
 def _ensure_loaded() -> None:
@@ -138,6 +132,28 @@ def get_document(document_id: str) -> InjectableDocument | None:
     return deepcopy(document) if document else None
 
 
+def get_template_document(document_id: str) -> InjectableDocument | None:
+    """Clean template fields (ignores previous injects in this process)."""
+    document = get_document(document_id)
+    if document is None:
+        return None
+    template = TEMPLATES.get(document.id)
+    return deepcopy(template) if template else document
+
+
+def stage_generated_document(document: InjectableDocument, defect_type: str) -> Path:
+    """Copy the clean template into documents_generated/ for this inject."""
+    ensure_data_dirs()
+    template = find_template_path(document.id) or find_template_path(document.filename)
+    if template is None or not template.exists():
+        raise FileNotFoundError(f"Template for '{document.id}' not found")
+    suffix = Path(document.filename).suffix
+    dest = DOCUMENTS_GENERATED_DIR / f"{document.id}__{defect_type}{suffix}"
+    shutil.copy2(template, dest)
+    document.inject_path = str(dest)
+    return dest
+
+
 def save_document(document: InjectableDocument) -> InjectableDocument:
     DOCUMENTS[document.id] = deepcopy(document)
     return deepcopy(document)
@@ -151,11 +167,11 @@ def get_document_file_path(document_id: str) -> str | None:
         document = get_document(normalized)
         if document is None:
             return None
-    path = working_file_path(document.filename)
-    if not path.exists():
-        return None
-    return str(path)
-
-
-get_document_pdf_path = get_document_file_path
-SAMPLE_DOCUMENTS = DOCUMENTS
+    if document.inject_path:
+        path = Path(document.inject_path)
+        if path.exists():
+            return str(path)
+    template = find_template_path(document.id) or find_template_path(document.filename)
+    if template is not None and template.exists():
+        return str(template)
+    return None

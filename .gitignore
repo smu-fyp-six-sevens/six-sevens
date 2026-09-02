@@ -13,3 +13,6 @@ dist/
 CLAUDE.md
 backend/data/
 postman/
+*.ses
+document_templates/
+documents_generated/

@@ -1,6 +1,6 @@
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class DefectType(str, Enum):
@@ -41,22 +41,18 @@ class InjectableDocument(BaseModel):
 
     id: str
     document_type: str
-    filename: str = Field(description="Working copy filename, preserving original extension")
+    filename: str = Field(description="Original template filename, preserving extension")
     fields: dict[str, FieldValue]
     defects: list[InjectedDefect] = Field(default_factory=list)
     field_source: str = Field(
         default="pdf_text",
         description="How fields were recognised: 'pdf_text' or 'ocr'",
     )
-
-    @property
-    def pdf_filename(self) -> str:
-        """Alias kept for older callers."""
-        return self.filename
-
-
-# Backwards-compatible alias used by older imports/tests
-SampleDocument = InjectableDocument
+    inject_path: str | None = Field(
+        default=None,
+        exclude=True,
+        description="Path of the generated file currently being written.",
+    )
 
 
 class DocumentFieldInfo(BaseModel):
@@ -70,13 +66,88 @@ class DocumentFieldInfo(BaseModel):
     )
 
 
+class InjectOverrides(BaseModel):
+    """Per-request replacement; omitted fields keep the injector's random behaviour."""
+
+    new_text: str | None = None
+    font: str | None = None
+    font_size: float | None = None
+    x: float | None = None
+    y: float | None = None
+    style: str | None = None
+    metadata: dict[str, str] | None = None
+
+
 class InjectDefectRequest(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "document_id": "Bank_Statement-1",
+                    "defect_type": "spelling",
+                    "field_name": "tan_wei_ming",
+                    "new_text": "TAN WEI NING",
+                },
+                {
+                    "document_id": "Bank_Statement-1",
+                    "defect_type": "numerical",
+                    "field_name": "3_250_00",
+                    "new_text": "4,250.00",
+                },
+                {
+                    "document_id": "Bank_Statement-1",
+                    "defect_type": "font",
+                    "field_name": "atm_withdrawal",
+                    "font": "cour",
+                },
+            ]
+        }
+    )
     document_id: str
     defect_type: DefectType
     field_name: str | None = Field(
         default=None,
         description="Optional. If omitted, a suitable word/number in the document is chosen at random.",
     )
+    new_text: str | None = Field(
+        default=None,
+        description="Optional replacement text for spelling/numerical. Label prefixes are kept if you pass only the value.",
+    )
+    font: str | None = Field(
+        default=None,
+        description="Optional typeface for font defects (e.g. 'cour', 'tiro', 'arial', 'helv').",
+    )
+    font_size: float | None = Field(
+        default=None,
+        description="Optional point size for font_size defects.",
+    )
+    x: float | None = Field(
+        default=None,
+        description="Optional absolute x for misalignment defects.",
+    )
+    y: float | None = Field(
+        default=None,
+        description="Optional absolute y for misalignment defects.",
+    )
+    style: str | None = Field(
+        default=None,
+        description="Optional emphasis: 'bold', 'italic', or 'underline'.",
+    )
+    metadata: dict[str, str] | None = Field(
+        default=None,
+        description="Optional metadata keys to set (author, creator, title, subject).",
+    )
+
+    def overrides(self) -> InjectOverrides:
+        return InjectOverrides(
+            new_text=self.new_text,
+            font=self.font,
+            font_size=self.font_size,
+            x=self.x,
+            y=self.y,
+            style=self.style,
+            metadata=self.metadata,
+        )
 
 
 class InjectDefectResponse(BaseModel):
@@ -90,4 +161,8 @@ class InjectDefectResponse(BaseModel):
     after_text: str
     defect_count: int = Field(
         description="Total defects injected into this working document so far"
+    )
+    generated_filename: str | None = Field(
+        default=None,
+        description="Output file in documents_generated/, safe to delete after you copy it out.",
     )

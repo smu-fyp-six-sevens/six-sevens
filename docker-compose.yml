@@ -15,6 +15,11 @@ services:
       DIFY_BASE_URL: ${DIFY_BASE_URL:-https://api.dify.ai/v1}
       DIFY_API_KEY: ${DIFY_API_KEY:-}
       DIFY_CLASSIFIER_WORKFLOW_ID: ${DIFY_CLASSIFIER_WORKFLOW_ID:-}
+      INJECTION_DOCUMENTS_DIR: /app/document_templates
+      INJECTION_GENERATED_DIR: /app/documents_generated
+    volumes:
+      - ./document_templates:/app/document_templates
+      - ./documents_generated:/app/documents_generated
 
   frontend:
     build:

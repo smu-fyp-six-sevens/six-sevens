@@ -28,13 +28,14 @@ def _reset_documents(isolated_injection_templates) -> None:
     reset_sample_documents()
 
 
-def _inject(document_id: str, field_name: str | None, defect_type: DefectType):
+def _inject(document_id: str, field_name: str | None, defect_type: DefectType, **extra):
     payload: dict = {
         "document_id": document_id,
         "defect_type": defect_type.value,
     }
     if field_name is not None:
         payload["field_name"] = field_name
+    payload.update(extra)
     return client.post("/api/dev/inject", json=payload)
 
 
@@ -152,6 +153,31 @@ def test_png_spelling_keeps_combined_label_prefix() -> None:
     assert payload["before_text"].startswith("Account No.")
     assert payload["after_text"].startswith("Account No.")
     assert payload["after_text"] != payload["before_text"]
+
+
+def test_png_spelling_accepts_explicit_replacement() -> None:
+    document = get_document("ocbc_sample")
+    assert document is not None
+    mixed = next(
+        (
+            name
+            for name, field in document.fields.items()
+            if field.text.startswith("Account No.")
+        ),
+        None,
+    )
+    assert mixed is not None
+
+    response = _inject(
+        "ocbc_sample.png",
+        mixed,
+        DefectType.SPELLING,
+        new_text="XXYX-0472",
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["after_text"].startswith("Account No.")
+    assert payload["after_text"].endswith("XXYX-0472")
 
 
 def test_png_rejects_label_only_spelling() -> None:
@@ -419,6 +445,67 @@ def test_png_spelling_middle_letter_keeps_one_sans_face(tmp_path: Path) -> None:
     assert "serif" not in name
 
 
+def test_png_spelling_same_length_keeps_glyph_size(tmp_path: Path) -> None:
+    sans = _first_existing_ttf(
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    )
+    if sans is None:
+        pytest.skip("no sans TTF available")
+
+    before_text = "TAN WEI MING"
+    after_text = "TAN WEI NING"
+    path = tmp_path / "name_spelling.png"
+    font = ImageFont.truetype(sans, 22)
+    image = Image.new("RGB", (420, 90), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    origin = (24, 62)
+    draw.text(origin, before_text, fill=(18, 18, 18), font=font, anchor="ls")
+    try:
+        bbox = font.getbbox(before_text, anchor="ls")
+    except TypeError:
+        bbox = font.getbbox(before_text)
+    rect = [
+        float(origin[0] + bbox[0] - 2),
+        float(origin[1] + bbox[1] - 2),
+        float(origin[0] + bbox[2] + 2),
+        float(origin[1] + bbox[3] + 2),
+    ]
+    image.save(path)
+    before = Image.open(path).convert("L")
+    bx0, by0, bx1, by1 = [int(round(v)) for v in rect]
+    before_h = _ink_height(before.crop((bx0, by0, bx1, by1)))
+    before_w = _ink_width(before.crop((bx0, by0, bx1, by1)))
+
+    field = FieldValue(
+        text=before_text,
+        font="helv",
+        font_size=22.0,
+        x=rect[0],
+        y=rect[3] - 1.0,
+        page=0,
+        rect=rect,
+    )
+    replace_field_text(path, field, after_text)
+
+    after = Image.open(path).convert("L")
+    pad = 16
+    crop = after.crop(
+        (
+            max(0, bx0 - pad),
+            max(0, by0 - pad),
+            min(after.width, bx1 + pad + 40),
+            min(after.height, by1 + pad),
+        )
+    )
+    after_h = _ink_height(crop)
+    after_w = _ink_width(crop)
+    assert after_h >= before_h * 0.85, (before_h, after_h)
+    assert after_w >= before_w * 0.85, (before_w, after_w)
+
+
 def test_png_font_size_increase_makes_glyphs_taller(tmp_path: Path) -> None:
     sans = _first_existing_ttf(
         "/System/Library/Fonts/Supplemental/Arial.ttf",
@@ -513,3 +600,12 @@ def _ink_height(gray: Image.Image) -> int:
     if not ys:
         return 0
     return max(ys) - min(ys) + 1
+
+
+def _ink_width(gray: Image.Image) -> int:
+    pixels = list(gray.getdata())
+    width, _height = gray.size
+    xs = [i % width for i, value in enumerate(pixels) if value < 80]
+    if not xs:
+        return 0
+    return max(xs) - min(xs) + 1

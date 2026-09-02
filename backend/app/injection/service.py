@@ -3,6 +3,7 @@ from __future__ import annotations
 import random
 import re
 from copy import deepcopy
+from pathlib import Path
 
 from fastapi import HTTPException, status
 
@@ -15,7 +16,13 @@ from .schemas import (
     InjectedDefect,
     InjectableDocument,
 )
-from .store import get_document, save_document
+from .store import (
+    get_document,
+    get_template_document,
+    list_documents,
+    save_document,
+    stage_generated_document,
+)
 
 CHANGED_KEYS: dict[DefectType, set[str]] = {
     DefectType.FONT: {"font"},
@@ -30,11 +37,15 @@ CHANGED_KEYS: dict[DefectType, set[str]] = {
 
 class InjectionService:
     def inject_defect(self, request: InjectDefectRequest) -> InjectDefectResponse:
-        document = get_document(request.document_id)
+        document = get_template_document(request.document_id)
         if document is None:
+            available = ", ".join(sorted(doc.id for doc in list_documents())) or "none"
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Document '{request.document_id}' not found",
+                detail=(
+                    f"Document '{request.document_id}' not found. "
+                    f"Use a template id such as Bank_Statement-1. Available: {available}"
+                ),
             )
 
         field_name = request.field_name
@@ -58,10 +69,18 @@ class InjectionService:
 
         working_copy = deepcopy(document)
         try:
+            generated = stage_generated_document(working_copy, request.defect_type.value)
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+        try:
             injected_defect = get_injector(request.defect_type).inject(
-                working_copy, field_name
+                working_copy, field_name, overrides=request.overrides()
             )
         except ValueError as exc:
+            Path(generated).unlink(missing_ok=True)
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
         _assert_single_defect(injected_defect, request.defect_type)
@@ -77,6 +96,7 @@ class InjectionService:
             before_text=str(injected_defect.before.get("text", "")),
             after_text=str(injected_defect.after.get("text", "")),
             defect_count=len(saved.defects),
+            generated_filename=generated.name,
         )
 
 

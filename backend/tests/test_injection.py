@@ -54,13 +54,19 @@ def test_unknown_serif_fonts_are_not_forced_to_helvetica() -> None:
     assert resolve_emphasis_font_file("italic", "helv") is None
 
 
-def _inject(document_id: str, field_name: str | None, defect_type: DefectType):
+def _inject(
+    document_id: str,
+    field_name: str | None,
+    defect_type: DefectType,
+    **extra,
+):
     payload: dict = {
         "document_id": document_id,
         "defect_type": defect_type.value,
     }
     if field_name is not None:
         payload["field_name"] = field_name
+    payload.update(extra)
     return client.post("/api/dev/inject", json=payload)
 
 
@@ -330,7 +336,9 @@ def test_templates_folder_pdf_is_auto_registered() -> None:
         assert len(with_suffix.json()) >= 1
     finally:
         custom.unlink(missing_ok=True)
-        Path(get_document_file_path("C001_CertIncumbency_test") or "").unlink(missing_ok=True)
+        leftover = get_document_file_path("C001_CertIncumbency_test")
+        if leftover:
+            Path(leftover).unlink(missing_ok=True)
         reset_sample_documents()
 
 
@@ -387,6 +395,80 @@ def test_random_spelling_does_not_pick_a_label() -> None:
         assert response.status_code == 200
         assert response.json()["field_name"] != LABEL_FIELD
         assert not response.json()["before_text"].startswith("Opening Balance")
+
+
+def test_spelling_accepts_explicit_replacement() -> None:
+    response = _inject(
+        DOC_ID,
+        TEXT_FIELD,
+        DefectType.SPELLING,
+        new_text="GOLDEN HARVEST TRADING PTE LTDX",
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["after_text"] == "GOLDEN HARVEST TRADING PTE LTDX"
+    assert payload["before_text"] != payload["after_text"]
+
+
+def test_numerical_accepts_explicit_replacement_and_keeps_label() -> None:
+    response = _inject(
+        DOC_ID,
+        MIXED_FIELD,
+        DefectType.NUMERICAL,
+        new_text="87654321",
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["after_text"] == "Account No. 87654321"
+    assert payload["before_text"].startswith("Account No. ")
+
+
+def test_font_size_accepts_explicit_size() -> None:
+    before = get_document(DOC_ID)
+    assert before is not None
+    original = before.fields[TEXT_FIELD].font_size
+    response = _inject(
+        DOC_ID,
+        TEXT_FIELD,
+        DefectType.FONT_SIZE,
+        font_size=18.0,
+    )
+    assert response.status_code == 200
+    assert "18" in response.json()["description"]
+    after = get_document(DOC_ID)
+    assert after is not None
+    assert after.fields[TEXT_FIELD].font_size == 18.0
+    assert after.fields[TEXT_FIELD].font_size != original
+
+
+def test_emphasis_accepts_explicit_style() -> None:
+    response = _inject(DOC_ID, TEXT_FIELD, DefectType.EMPHASIS, style="bold")
+    assert response.status_code == 200
+    assert response.json()["description"] == "Applied text emphasis: bold"
+    after = get_document(DOC_ID)
+    assert after is not None
+    assert after.fields[TEXT_FIELD].style == "bold"
+
+
+def test_emphasis_can_be_injected_again_from_clean_template() -> None:
+    first = _inject(DOC_ID, TEXT_FIELD, DefectType.EMPHASIS, style="bold")
+    assert first.status_code == 200
+    second = _inject(DOC_ID, TEXT_FIELD, DefectType.EMPHASIS, style="bold")
+    assert second.status_code == 200
+    assert second.json()["description"] == "Applied text emphasis: bold"
+
+
+def test_metadata_accepts_explicit_keys() -> None:
+    response = _inject(
+        DOC_ID,
+        TEXT_FIELD,
+        DefectType.METADATA,
+        metadata={"author": "Reviewer", "creator": "Preview"},
+    )
+    assert response.status_code == 200
+    meta = read_pdf_metadata(Path(get_document_file_path(DOC_ID) or ""))
+    assert meta.get("author") == "Reviewer"
+    assert meta.get("creator") == "Preview"
 
 
 def _make_custom_pdf(path: Path) -> None:
