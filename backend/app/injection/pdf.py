@@ -120,6 +120,14 @@ def is_image_template(path: Path) -> bool:
     return path.suffix.lower() in IMAGE_SUFFIXES
 
 
+def slugify_document_id(name: str) -> str:
+    """Turn a template stem into an id that is safe in URLs and globs."""
+    stem = Path(name).stem
+    slug = re.sub(r"[^\w.\-]+", "_", stem)
+    slug = re.sub(r"_+", "_", slug).replace("_-", "-").strip("._-")
+    return slug or "document"
+
+
 def find_template_path(document_id: str) -> Path | None:
     """Resolve a template by id for PDF or common image extensions."""
     stem = document_id
@@ -127,6 +135,16 @@ def find_template_path(document_id: str) -> Path | None:
         candidate = TEMPLATES_DIR / f"{stem}{suffix}"
         if candidate.exists():
             return candidate
+    if not TEMPLATES_DIR.exists():
+        return None
+    wanted = slugify_document_id(document_id)
+    for path in TEMPLATES_DIR.iterdir():
+        if not path.is_file() or path.name.startswith("."):
+            continue
+        if not (is_image_template(path) or path.suffix.lower() == ".pdf"):
+            continue
+        if path.stem == document_id or slugify_document_id(path.stem) == wanted:
+            return path
     return None
 
 
@@ -266,23 +284,35 @@ def _is_builtin_pdf_font(font_name: str | None) -> bool:
     return lowered in _BUILTIN_FONTS or lowered in {"helvetica", "times-roman", "times", "courier"}
 
 
-def resolve_emphasis_font_file(style: str, font_name: str | None = None) -> str | None:
+def resolve_emphasis_font_file(
+    style: str,
+    font_name: str | None = None,
+    *,
+    prefer_ttf: bool = False,
+) -> str | None:
     """Bold/italic TTF in the same family as the original span font.
 
-    Base-14 faces (Helvetica/Times/Courier) return None so the caller can use
-    the matching built-in (hebo/tibo/etc.) instead of swapping to Arial.
+    Base-14 faces return None so PDF can use hebo/tibo, unless prefer_ttf
+    (image OCR stores 'helv' and has no Base-14 glyphs to reuse).
     """
     key = style.strip().lower()
     if key not in {"bold", "italic"}:
         return None
-    if _is_builtin_pdf_font(font_name):
+    if not prefer_ttf and _is_builtin_pdf_font(font_name):
         return None
-    if _is_serif_font_name(font_name or ""):
+    if _is_serif_font_name(font_name or "") or (
+        prefer_ttf and _builtin_fallback_font(font_name) == BUILTIN_FONT_TIMES
+    ):
         return _first_existing_font(
             _SERIF_BOLD_CANDIDATES if key == "bold" else _SERIF_ITALIC_CANDIDATES
         )
     lowered = (font_name or "").lower()
-    if "sans" in lowered or "arial" in lowered or "calibri" in lowered:
+    if (
+        "sans" in lowered
+        or "arial" in lowered
+        or "calibri" in lowered
+        or (prefer_ttf and _is_builtin_pdf_font(font_name))
+    ):
         return _first_existing_font(
             _SANS_BOLD_CANDIDATES if key == "bold" else _SANS_ITALIC_CANDIDATES
         )
@@ -298,18 +328,39 @@ def available_custom_fonts() -> list[str]:
     return [name for name in _CUSTOM_FONT_CANDIDATES if resolve_font_file(name)]
 
 
+def _load_truetype(path: str, size: float, index: int = 0) -> ImageFont.ImageFont:
+    size_i = max(8, int(round(size)))
+    try:
+        return ImageFont.truetype(path, size_i, index=index)
+    except OSError:
+        if index:
+            raise
+        return ImageFont.truetype(path, size_i)
+
+
+def _font_path_index(font: ImageFont.ImageFont) -> tuple[str | None, int]:
+    path = getattr(font, "path", None)
+    if not isinstance(path, str) or not Path(path).exists():
+        return None, 0
+    try:
+        return path, int(getattr(font, "index", 0) or 0)
+    except (TypeError, ValueError):
+        return path, 0
+
+
 def _pil_font(
     font_name: str | None,
     size: float,
     *,
-    bold: bool = True,
+    bold: bool = False,
     font_path: str | None = None,
+    index: int = 0,
 ) -> ImageFont.ImageFont:
     """Load a system TTF close to the requested PDF built-in / custom font."""
     size_i = max(8, int(round(size)))
     if font_path and Path(font_path).exists():
         try:
-            return ImageFont.truetype(font_path, size_i)
+            return _load_truetype(font_path, size_i, index)
         except OSError:
             pass
 
@@ -362,34 +413,65 @@ def _pil_font(
     return ImageFont.load_default()
 
 
-def _system_font_paths() -> list[str]:
-    """Candidate typefaces to match against an OCR crop (regular + bold)."""
-    paths = [
-        "/System/Library/Fonts/Supplemental/Arial.ttf",
-        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
-        "/System/Library/Fonts/Supplemental/Arial Narrow.ttf",
-        "/System/Library/Fonts/Supplemental/Arial Narrow Bold.ttf",
-        "/System/Library/Fonts/Supplemental/Helvetica Neue.ttc",
-        "/System/Library/Fonts/Helvetica.ttc",
-        "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
-        "/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf",
-        "/System/Library/Fonts/Supplemental/Courier New.ttf",
-        "/System/Library/Fonts/Supplemental/Courier New Bold.ttf",
-        "/Library/Fonts/Arial.ttf",
-        "/Library/Fonts/Arial Bold.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-    ]
-    seen: set[str] = set()
-    existing: list[str] = []
-    for path in paths:
-        if path in seen or not Path(path).exists():
+# (path, TTC face indices). Skip light/thin/condensed; those win noisy MAE races.
+_FONT_FACE_CANDIDATES: tuple[tuple[str, tuple[int, ...]], ...] = (
+    ("/System/Library/Fonts/Supplemental/Arial.ttf", (0,)),
+    ("/System/Library/Fonts/Supplemental/Arial Bold.ttf", (0,)),
+    ("/System/Library/Fonts/Supplemental/Verdana.ttf", (0,)),
+    ("/System/Library/Fonts/Supplemental/Verdana Bold.ttf", (0,)),
+    ("/System/Library/Fonts/Supplemental/Tahoma.ttf", (0,)),
+    ("/System/Library/Fonts/Supplemental/Tahoma Bold.ttf", (0,)),
+    ("/System/Library/Fonts/Helvetica.ttc", (0, 1)),
+    ("/System/Library/Fonts/HelveticaNeue.ttc", (0, 1, 10)),
+    ("/Library/Fonts/Arial.ttf", (0,)),
+    ("/Library/Fonts/Arial Bold.ttf", (0,)),
+    ("/System/Library/Fonts/Supplemental/Times New Roman.ttf", (0,)),
+    ("/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf", (0,)),
+    ("/System/Library/Fonts/Supplemental/Courier New.ttf", (0,)),
+    ("/System/Library/Fonts/Supplemental/Courier New Bold.ttf", (0,)),
+    ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", (0,)),
+    ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", (0,)),
+    ("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", (0,)),
+    ("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", (0,)),
+    ("/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf", (0,)),
+    ("/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf", (0,)),
+    ("/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf", (0,)),
+    ("/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf", (0,)),
+    ("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", (0,)),
+    ("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", (0,)),
+)
+_SKIP_FACE_STYLE_TOKENS = (
+    "italic",
+    "oblique",
+    "light",
+    "thin",
+    "ultra",
+    "condensed",
+    "black",
+)
+
+
+def _iter_system_font_faces() -> list[tuple[str, int]]:
+    """Installed (path, index) faces used to approximate an OCR crop's typeface."""
+    faces: list[tuple[str, int]] = []
+    seen: set[tuple[str, int]] = set()
+    for path, indices in _FONT_FACE_CANDIDATES:
+        if not Path(path).exists():
             continue
-        seen.add(path)
-        existing.append(path)
-    return existing
+        for index in indices:
+            key = (path, index)
+            if key in seen:
+                continue
+            try:
+                probe = _load_truetype(path, 12, index)
+            except OSError:
+                continue
+            style = (getattr(getattr(probe, "font", None), "style", "") or "").lower()
+            if any(token in style for token in _SKIP_FACE_STYLE_TOKENS):
+                continue
+            seen.add(key)
+            faces.append(key)
+    return faces
 
 
 def _text_width(pil_font: ImageFont.ImageFont, text: str) -> float:
@@ -430,6 +512,65 @@ def _render_text_on_bg(
     return canvas
 
 
+def _gray_ink_metrics(
+    image: Image.Image, threshold: int
+) -> tuple[tuple[int, int, int, int], float, float] | None:
+    """Return (bbox, fill_ratio, aspect) of pixels darker than threshold."""
+    gray = image.convert("L")
+    pixels = list(gray.getdata())
+    width, height = gray.size
+    xs: list[int] = []
+    ys: list[int] = []
+    for index, value in enumerate(pixels):
+        if value < threshold:
+            xs.append(index % width)
+            ys.append(index // width)
+    if not xs:
+        return None
+    x0, y0, x1, y1 = min(xs), min(ys), max(xs) + 1, max(ys) + 1
+    area = max(1, (x1 - x0) * (y1 - y0))
+    fill = sum(1 for x, y in zip(xs, ys) if x0 <= x < x1 and y0 <= y < y1)
+    return (x0, y0, x1, y1), fill / area, (x1 - x0) / max(1, y1 - y0)
+
+
+def _ink_threshold(ink: tuple[int, int, int], bg: tuple[int, int, int]) -> int:
+    mid = int((_luminance(ink) + _luminance(bg)) / 2)
+    return max(8, min(248, mid))
+
+
+def _size_for_ink_width(
+    path: str,
+    index: int,
+    text: str,
+    target_width: float,
+    min_size: float,
+    max_size: float,
+) -> float:
+    try:
+        probe = _load_truetype(path, 24, index)
+    except OSError:
+        return min(max_size, max(min_size, 12.0))
+    probe_w = _text_width(probe, text)
+    if probe_w <= 1:
+        return min(max_size, max(min_size, 12.0))
+    size = 24.0 * target_width / probe_w
+    return max(min_size, min(max_size, size))
+
+
+def _aligned_crop_mae(
+    target: Image.Image,
+    rendered: Image.Image,
+    target_bbox: tuple[int, int, int, int],
+    render_bbox: tuple[int, int, int, int],
+    bg: tuple[int, int, int],
+) -> float:
+    """Compare crops after lining up ink boxes — do not stretch glyphs to fit."""
+    canvas = Image.new("RGB", target.size, bg)
+    piece = rendered.crop(render_bbox)
+    canvas.paste(piece, (target_bbox[0], target_bbox[1]))
+    return _mean_abs_diff(_to_gray_bytes(target), _to_gray_bytes(canvas))
+
+
 def _match_font_to_crop(
     image: Image.Image,
     rect: list[float],
@@ -443,53 +584,64 @@ def _match_font_to_crop(
     Pick the system font/size whose rendering of sample_text best matches the crop.
 
     OCR cannot read the real typeface; this approximates it from pixels.
+    Compares ink-box *shape* (not unaligned full-crop MAE) so Courier cannot
+    win just by filling the OCR width.
     """
+    fallback = _pil_font(BUILTIN_FONT_HELVETICA, max_size, bold=False)
     if not sample_text.strip() or len(rect) != 4:
-        return _pil_font(BUILTIN_FONT_HELVETICA, max_size, bold=False)
+        return fallback
 
     x0, y0, x1, y1 = [int(round(v)) for v in rect]
     x0, y0 = max(0, x0), max(0, y0)
     x1, y1 = min(image.width, max(x0 + 1, x1)), min(image.height, max(y0 + 1, y1))
     width, height = x1 - x0, y1 - y0
     crop = image.crop((x0, y0, x1, y1)).convert("RGB")
-    target = _to_gray_bytes(crop)
+    bg3 = bg if len(bg) == 3 else (255, 255, 255)
+    threshold = _ink_threshold(ink, bg3)
+    target_metrics = _gray_ink_metrics(crop, threshold)
+    if target_metrics is None:
+        return fallback
 
-    best_font = _pil_font(BUILTIN_FONT_HELVETICA, max_size, bold=False)
+    target_bbox, target_fill, target_aspect = target_metrics
+    ink_w = float(target_bbox[2] - target_bbox[0])
+    min_size = max(7.0, height * 0.4)
+    size_cap = max(min_size, min(max(max_size, height * 1.35), height * 1.8))
+
+    best_font = fallback
     best_score = 1e9
-    min_size = max(7.0, height * 0.45)
-    size_cap = max(min_size, min(max_size, height * 1.15))
-
-    for path in _system_font_paths():
-        size = size_cap
-        while size >= min_size:
+    for path, index in _iter_system_font_faces():
+        base_size = _size_for_ink_width(
+            path, index, sample_text, ink_w, min_size, size_cap
+        )
+        for size in (base_size, base_size * 0.92, base_size * 1.08):
+            if size < min_size or size > size_cap * 1.05:
+                continue
             try:
-                font = ImageFont.truetype(path, max(8, int(round(size))))
+                font = _load_truetype(path, size, index)
             except OSError:
                 break
-            # Prefer sizes that roughly fill the crop width.
-            text_w = _text_width(font, sample_text)
-            if text_w > width * 1.15:
-                size -= 0.75
-                continue
-            if text_w < width * 0.55 and size > min_size + 1:
-                size -= 0.75
-                continue
             rendered = _render_text_on_bg(
                 sample_text,
                 font=font,
                 width=width,
                 height=height,
-                bg=bg if len(bg) == 3 else (255, 255, 255),
+                bg=bg3,
                 ink=ink,
             )
-            score = _mean_abs_diff(target, _to_gray_bytes(rendered))
-            # Small bonus when width is close to the OCR box.
-            width_penalty = abs(text_w - width) / max(1.0, width) * 12.0
-            score += width_penalty
+            render_metrics = _gray_ink_metrics(rendered, threshold)
+            if render_metrics is None:
+                continue
+            render_bbox, render_fill, render_aspect = render_metrics
+            score = _aligned_crop_mae(crop, rendered, target_bbox, render_bbox, bg3)
+            score += abs(render_aspect - target_aspect) * 18.0
+            score += abs(render_fill - target_fill) * 90.0
+            style = (getattr(getattr(font, "font", None), "style", "") or "").lower()
+            is_bold = style == "bold"
+            if (target_fill >= 0.36) != is_bold:
+                score += 16.0
             if score < best_score:
                 best_score = score
                 best_font = font
-            size -= 0.75
     return best_font
 
 
@@ -500,14 +652,16 @@ def _fit_font_path_to_width(
     max_width: float,
     max_size: float,
     min_size: float = 7.0,
+    preferred_size: float | None = None,
 ) -> ImageFont.ImageFont:
-    """Reuse the matched typeface file, only adjusting size to fit."""
-    path = getattr(template_font, "path", None)
-    size = max(min_size, max_size)
+    """Reuse the matched typeface file (and TTC index), only adjusting size to fit."""
+    path, index = _font_path_index(template_font)
+    size = preferred_size if preferred_size is not None else max(min_size, max_size)
+    size = max(min_size, size)
     while size > min_size:
         if path:
             try:
-                font = ImageFont.truetype(path, max(8, int(round(size))))
+                font = _load_truetype(path, size, index)
             except OSError:
                 font = _pil_font(BUILTIN_FONT_HELVETICA, size, bold=False)
         else:
@@ -517,7 +671,7 @@ def _fit_font_path_to_width(
         size -= 0.5
     if path:
         try:
-            return ImageFont.truetype(path, max(8, int(round(min_size))))
+            return _load_truetype(path, min_size, index)
         except OSError:
             pass
     return _pil_font(BUILTIN_FONT_HELVETICA, min_size, bold=False)
@@ -539,9 +693,14 @@ def _ink_and_bg_from_pixels(
     if not pixels:
         return (0, 0, 0), (255, 255, 255)
     lights = [p for p in pixels if _luminance(p) >= 140]
-    darks = [p for p in pixels if _luminance(p) <= 110]
+    # Glyph interiors only; anti-aliased edges (~80–130) look grey if included.
+    darks = [p for p in pixels if _luminance(p) <= 70]
+    if not darks:
+        darks = [p for p in pixels if _luminance(p) <= 110]
     if lights and darks:
-        return _median_rgb(darks), _median_rgb(lights)
+        darks_sorted = sorted(darks, key=_luminance)
+        ink = darks_sorted[max(0, len(darks_sorted) // 5)]
+        return ink, _median_rgb(lights)
     ordered = sorted(pixels, key=_luminance)
     if lights:
         return (0, 0, 0), _median_rgb(lights)
@@ -561,13 +720,39 @@ def _crop_rgb_pixels(image: Image.Image, rect: list[float]) -> list[tuple[int, i
     return list(crop.getdata())
 
 
+def _halo_pixels(
+    image: Image.Image, rect: list[float], pad: int = 4
+) -> list[tuple[int, int, int]]:
+    """Pixels in a ring around the OCR box — local paper/cell fill, not glyph ink."""
+    if len(rect) != 4:
+        return []
+    x0, y0, x1, y1 = [int(round(v)) for v in rect]
+    ox0, oy0 = max(0, x0 - pad), max(0, y0 - pad)
+    ox1, oy1 = min(image.width, x1 + pad), min(image.height, y1 + pad)
+    rgb = image.convert("RGB")
+    pixels: list[tuple[int, int, int]] = []
+    for y in range(oy0, oy1):
+        for x in range(ox0, ox1):
+            if x0 <= x < x1 and y0 <= y < y1:
+                continue
+            pixels.append(rgb.getpixel((x, y)))
+    return pixels
+
+
 def _sample_ink_color(image: Image.Image, rect: list[float]) -> tuple[int, int, int]:
     """Pick a dark ink color from the OCR box (fallback black)."""
     return _ink_and_bg_from_pixels(_crop_rgb_pixels(image, rect))[0]
 
 
 def _sample_bg_color(image: Image.Image, rect: list[float]) -> tuple[int, int, int]:
-    """Pick the paper/cell fill from the box, not a single corner pixel."""
+    """Local fill from a halo around the glyphs so tinted headers stay tinted."""
+    halo = [
+        pixel
+        for pixel in _halo_pixels(image, rect)
+        if _luminance(pixel) >= 80
+    ]
+    if halo:
+        return _median_rgb(halo)
     return _ink_and_bg_from_pixels(_crop_rgb_pixels(image, rect))[1]
 
 
@@ -685,6 +870,21 @@ def _value_redraw_span(old: str, new: str) -> tuple[int, int, int, int] | None:
     return None
 
 
+def _image_redraw_span(old: str, new: str) -> tuple[int, int, int, int] | None:
+    """Image wipe/redraw span: the whole value, never a two-letter hole.
+
+    Partial middle spans cannot be font-matched from a few glyphs, so the new
+    letters land in the wrong face and sit on leftover original pixels.
+    """
+    if old == new:
+        return _value_redraw_span(old, new)
+    label, value = split_label_and_value(old)
+    if label and value and new.startswith(label):
+        label_len = len(label)
+        return label_len, len(old), label_len, len(new)
+    return None
+
+
 def _value_subrect(
     field: FieldValue,
     old_text: str,
@@ -706,6 +906,80 @@ def _value_subrect(
     ]
 
 
+def _ink_rect_in_image(
+    image: Image.Image,
+    rect: list[float],
+    ink: tuple[int, int, int],
+    bg: tuple[int, int, int],
+) -> list[float]:
+    """Pixel box of dark glyphs inside `rect`, in image coordinates."""
+    if len(rect) != 4:
+        return list(rect)
+    x0, y0, x1, y1 = [int(round(v)) for v in rect]
+    x0, y0 = max(0, x0), max(0, y0)
+    x1, y1 = min(image.width, max(x0 + 1, x1)), min(image.height, max(y0 + 1, y1))
+    crop = image.crop((x0, y0, x1, y1)).convert("RGB")
+    metrics = _gray_ink_metrics(crop, _ink_threshold(ink, bg))
+    if metrics is None:
+        return [float(x0), float(y0), float(x1), float(y1)]
+    bx0, by0, bx1, by1 = metrics[0]
+    return [float(x0 + bx0), float(y0 + by0), float(x0 + bx1), float(y0 + by1)]
+
+
+def _origin_for_ink_box(
+    font: ImageFont.ImageFont,
+    text: str,
+    ink_rect: list[float],
+    *,
+    baseline: float | None = None,
+) -> tuple[float, float]:
+    """Baseline-left origin so the drawn glyphs sit on the original ink box."""
+    try:
+        left, top, _, _ = font.getbbox(text, anchor="ls")
+    except TypeError:
+        left, top, _, _ = font.getbbox(text)
+    text_x = ink_rect[0] - float(left)
+    if baseline is not None:
+        return text_x, baseline
+    return text_x, ink_rect[1] - float(top)
+
+
+def _image_rewrite_font(
+    matched: ImageFont.ImageFont,
+    draw_text: str,
+    *,
+    font_name: str | None,
+    max_width: float,
+    requested_size: float,
+    original_size: float,
+    box_h: float,
+    preserve_face: bool,
+    size_changed: bool,
+) -> ImageFont.ImageFont:
+    if not preserve_face:
+        return _pil_font(font_name, requested_size, bold=False)
+    matched_size = float(getattr(matched, "size", original_size) or original_size)
+    if size_changed:
+        # Apply the injector's delta to the *matched* size. OCR font_size is
+        # only ~0.85 of the box, so requested_size often equals the original
+        # visual size — fitting that into the ink box just looks bolder.
+        draw_size = max(6.0, matched_size + (requested_size - original_size))
+        path, index = _font_path_index(matched)
+        if path:
+            try:
+                return _load_truetype(path, draw_size, index)
+            except OSError:
+                pass
+        return _pil_font(font_name, draw_size, bold=False)
+    return _fit_font_path_to_width(
+        draw_text,
+        template_font=matched,
+        max_width=max_width,
+        max_size=max(matched_size, min(requested_size, box_h * 1.15)),
+        preferred_size=matched_size,
+    )
+
+
 def _replace_field_text_on_image(
     image_path: Path,
     field: FieldValue,
@@ -723,12 +997,12 @@ def _replace_field_text_on_image(
 
     font_name = font or field.font
     requested_size = float(font_size or field.font_size)
-    intentional_style = font is not None or font_size is not None or x is not None or y is not None
+    preserve_face = font is None
     dx = 0.0 if x is None else (x - field.x)
     dy = 0.0 if y is None else (y - field.y)
 
     if len(field.rect) != 4:
-        pil_font = _pil_font(font_name, requested_size, bold=not intentional_style)
+        pil_font = _pil_font(font_name, requested_size, bold=False)
         text_x = field.x + dx
         text_y = field.y + dy
         try:
@@ -739,71 +1013,87 @@ def _replace_field_text_on_image(
         return
 
     x0, y0, x1, y1 = field.rect
-    box_w = max(1.0, x1 - x0)
     box_h = max(1.0, y1 - y0)
     ink = _sample_ink_color(image, field.rect)
     bg = _sample_bg_color(image, field.rect)
+    match_size = min(float(field.font_size), box_h * 0.95)
 
-    span = _value_redraw_span(field.text, new_text)
-    probe = _pil_font(font_name, min(requested_size, box_h * 0.95), bold=False)
+    span = _image_redraw_span(field.text, new_text)
+    probe = _pil_font(font_name, match_size, bold=False)
 
     if span is not None:
         old_start, old_end, new_start, new_end = span
         old_value = field.text[old_start:old_end]
         draw_text = new_text[new_start:new_end]
         value_rect = _value_subrect(field, field.text, old_start, old_end, probe)
-        # Match typeface to the original VALUE pixels only (leave label untouched).
+        ink_box = _ink_rect_in_image(image, value_rect, ink, bg)
         matched = _match_font_to_crop(
             image,
             value_rect,
             old_value,
             ink=ink,
             bg=bg,
-            max_size=min(requested_size, box_h * 0.95),
+            max_size=match_size,
         )
-        # Recompute subrect with the matched metrics, then wipe + redraw value only.
         value_rect = _value_subrect(field, field.text, old_start, old_end, matched)
         vx0, vy0, vx1, vy1 = value_rect
         draw.rectangle(
             [vx0 - 1, max(0, vy0 - 1), vx1 + 1, vy1 + 1],
             fill=bg,
         )
-        if intentional_style:
-            pil_font = _pil_font(font_name, requested_size, bold=False)
-        else:
-            pil_font = _fit_font_path_to_width(
-                draw_text,
-                template_font=matched,
-                max_width=max(4.0, vx1 - vx0),
-                max_size=min(requested_size, box_h * 0.95),
+        pil_font = _image_rewrite_font(
+            matched,
+            draw_text,
+            font_name=font_name,
+            max_width=max(4.0, ink_box[2] - ink_box[0]),
+            requested_size=requested_size,
+            original_size=float(field.font_size),
+            box_h=box_h,
+            preserve_face=preserve_face,
+            size_changed=font_size is not None,
+        )
+        if font_size is not None:
+            text_x, text_y = _origin_for_ink_box(
+                pil_font, draw_text, ink_box, baseline=field.y
             )
-        text_x = vx0 + dx
-        text_y = vy1 - 1.0 + dy
+        else:
+            text_x, text_y = _origin_for_ink_box(pil_font, draw_text, ink_box)
+        text_x += dx
+        text_y += dy
     else:
         draw_text = new_text
-        if intentional_style:
-            pil_font = _pil_font(font_name, requested_size, bold=False)
-        else:
-            matched = _match_font_to_crop(
-                image,
-                field.rect,
-                field.text,
-                ink=ink,
-                bg=bg,
-                max_size=min(requested_size, box_h * 0.95),
-            )
-            pil_font = _fit_font_path_to_width(
-                draw_text,
-                template_font=matched,
-                max_width=box_w,
-                max_size=min(requested_size, box_h * 0.95),
-            )
+        ink_box = _ink_rect_in_image(image, field.rect, ink, bg)
+        matched = _match_font_to_crop(
+            image,
+            field.rect,
+            field.text,
+            ink=ink,
+            bg=bg,
+            max_size=match_size,
+        )
+        pil_font = _image_rewrite_font(
+            matched,
+            draw_text,
+            font_name=font_name,
+            max_width=max(4.0, ink_box[2] - ink_box[0]),
+            requested_size=requested_size,
+            original_size=float(field.font_size),
+            box_h=box_h,
+            preserve_face=preserve_face,
+            size_changed=font_size is not None,
+        )
         draw.rectangle(
             [max(0, x0 - 1), max(0, y0 - 1), x1 + 1, y1 + 1],
             fill=bg,
         )
-        text_x = field.x + dx
-        text_y = field.y + dy
+        if font_size is not None:
+            text_x, text_y = _origin_for_ink_box(
+                pil_font, draw_text, ink_box, baseline=field.y
+            )
+        else:
+            text_x, text_y = _origin_for_ink_box(pil_font, draw_text, ink_box)
+        text_x += dx
+        text_y += dy
 
     try:
         draw.text((text_x, text_y), draw_text, fill=ink, font=pil_font, anchor="ls")
@@ -823,6 +1113,71 @@ def _first_existing_font(candidates: tuple[str, ...]) -> str | None:
     for candidate in candidates:
         if Path(candidate).exists():
             return candidate
+    return None
+
+
+def _styled_font_path(font_path: str | None, style: str) -> str | None:
+    """Sibling bold/italic file next to a matched regular TTF."""
+    if not font_path or style not in {"bold", "italic"}:
+        return None
+    path = Path(font_path)
+    name = path.name
+    if style == "bold":
+        replacements = (
+            ("Regular", "Bold"),
+            (".ttf", " Bold.ttf"),
+            (".ttf", "-Bold.ttf"),
+            (".otf", " Bold.otf"),
+        )
+    else:
+        replacements = (
+            ("Regular", "Italic"),
+            (".ttf", " Italic.ttf"),
+            (".ttf", "-Italic.ttf"),
+            (".ttf", "-Oblique.ttf"),
+            (".otf", " Italic.otf"),
+        )
+    tried: set[str] = set()
+    for old, new in replacements:
+        if old not in name:
+            continue
+        candidate = path.with_name(name.replace(old, new, 1))
+        key = str(candidate)
+        if key in tried or candidate == path:
+            continue
+        tried.add(key)
+        if candidate.exists():
+            return key
+    return None
+
+
+def _styled_face(font: ImageFont.ImageFont, style: str) -> tuple[str, int] | None:
+    """Bold/italic face in the same family as a matched crop font (TTF sibling or TTC index)."""
+    if style not in {"bold", "italic"}:
+        return None
+    path, index = _font_path_index(font)
+    if not path:
+        return None
+    sibling = _styled_font_path(path, style)
+    if sibling and sibling != path:
+        return sibling, 0
+    try:
+        family = _load_truetype(path, 12, index).font.family
+    except (OSError, AttributeError):
+        family = None
+    for face_index in range(24):
+        try:
+            probe = _load_truetype(path, 12, face_index)
+        except OSError:
+            break
+        face_style = (getattr(getattr(probe, "font", None), "style", "") or "").lower()
+        face_family = getattr(getattr(probe, "font", None), "family", None)
+        if family and face_family and face_family != family:
+            continue
+        if style == "bold" and face_style == "bold":
+            return path, face_index
+        if style == "italic" and face_style in {"italic", "oblique"}:
+            return path, face_index
     return None
 
 
@@ -1057,34 +1412,56 @@ def _apply_emphasis_on_image(image_path: Path, field: FieldValue, style: str) ->
     box_h = max(1.0, y1 - y0)
     ink = _sample_ink_color(image, field.rect)
     bg = _sample_bg_color(image, field.rect)
-    probe = _pil_font(field.font, min(field.font_size, box_h * 0.95), bold=False)
+    match_size = min(field.font_size, box_h * 0.95)
+    probe = _pil_font(field.font, match_size, bold=False)
     span = _value_redraw_span(field.text, field.text)
     if span is not None:
         old_start, old_end, _, _ = span
         wipe_rect = _value_subrect(field, field.text, old_start, old_end, probe)
         draw_text = field.text[old_start:old_end]
-        text_x, text_y = wipe_rect[0], wipe_rect[3] - 1.0
-        line_x0, line_x1 = wipe_rect[0], wipe_rect[2]
+        match_rect = wipe_rect
     else:
         wipe_rect = [x0, y0, x1, y1]
         draw_text = field.text
-        text_x, text_y = field.x, field.y
-        line_x0, line_x1 = x0, x1
+        match_rect = field.rect
+    ink_box = _ink_rect_in_image(image, match_rect, ink, bg)
+    line_x0, line_x1 = ink_box[0], ink_box[2]
+
+    matched = _match_font_to_crop(
+        image,
+        match_rect,
+        draw_text,
+        ink=ink,
+        bg=bg,
+        max_size=match_size,
+    )
+    size = float(getattr(matched, "size", None) or min(field.font_size, box_h * 0.95))
+    styled = _styled_face(matched, style) if style in {"bold", "italic"} else None
+    if styled:
+        pil_font = _load_truetype(styled[0], size, styled[1])
+    else:
+        fallback_file = None
+        if style in {"bold", "italic"}:
+            fallback_file = resolve_emphasis_font_file(
+                style, field.font, prefer_ttf=True
+            )
+        path, index = _font_path_index(matched)
+        if fallback_file:
+            pil_font = _pil_font(field.font, size, bold=False, font_path=fallback_file)
+        elif path:
+            pil_font = _pil_font(
+                field.font, size, bold=(style == "bold"), font_path=path, index=index
+            )
+        else:
+            pil_font = _pil_font(field.font, size, bold=(style == "bold"))
+
+    text_x, text_y = _origin_for_ink_box(pil_font, draw_text, ink_box)
 
     wx0, wy0, wx1, wy1 = wipe_rect
     draw.rectangle(
         [max(0, wx0 - 1), max(0, wy0 - 1), wx1 + 1, wy1 + 1],
         fill=bg,
     )
-
-    size = min(field.font_size, box_h * 0.95)
-    font_file = None
-    if style in {"bold", "italic"}:
-        font_file = resolve_emphasis_font_file(style, field.font)
-    if font_file:
-        pil_font = _pil_font(field.font, size, bold=False, font_path=font_file)
-    else:
-        pil_font = _pil_font(field.font, size, bold=(style == "bold"))
 
     try:
         draw.text((text_x, text_y), draw_text, fill=ink, font=pil_font, anchor="ls")

@@ -14,6 +14,7 @@ from .pdf import (
     find_template_path,
     is_image_template,
     read_document_metadata,
+    slugify_document_id,
     working_file_path,
 )
 from .schemas import InjectableDocument
@@ -76,10 +77,8 @@ def _register_file(
     document_id: str | None = None,
     document_type: str = "custom",
 ) -> InjectableDocument:
-    document_id = document_id or path.stem
-    filename = path.name if path.stem == document_id else f"{document_id}{path.suffix.lower()}"
-    if path.stem == document_id:
-        filename = path.name
+    document_id = document_id or slugify_document_id(path.stem)
+    filename = f"{document_id}{path.suffix.lower()}"
 
     _clear_stale_working_files(document_id, filename)
     dest = working_file_path(filename)
@@ -121,18 +120,19 @@ def _ensure_loaded() -> None:
 
 def get_document(document_id: str) -> InjectableDocument | None:
     _ensure_loaded()
-    normalized = _normalize_document_id(document_id)
+    normalized = slugify_document_id(_normalize_document_id(document_id))
     document = DOCUMENTS.get(normalized)
     if document is None:
-        template = find_template_path(normalized)
-        if template is None:
-            matches = list(TEMPLATES_DIR.glob(f"{normalized}.*"))
-            template = matches[0] if matches else None
+        template = find_template_path(normalized) or find_template_path(
+            _normalize_document_id(document_id)
+        )
         if template is None:
             return None
         try:
             _register_file(template, document_type="custom")
-            document = DOCUMENTS.get(normalized)
+            document = DOCUMENTS.get(normalized) or DOCUMENTS.get(
+                slugify_document_id(template.stem)
+            )
         except ValueError:
             return None
     return deepcopy(document) if document else None
@@ -145,7 +145,7 @@ def save_document(document: InjectableDocument) -> InjectableDocument:
 
 def get_document_file_path(document_id: str) -> str | None:
     _ensure_loaded()
-    normalized = _normalize_document_id(document_id)
+    normalized = slugify_document_id(_normalize_document_id(document_id))
     document = DOCUMENTS.get(normalized)
     if document is None:
         document = get_document(normalized)
