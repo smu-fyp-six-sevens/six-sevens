@@ -6,7 +6,7 @@ comprehensive income with blue line items and black totals.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from pypdf import PdfReader, PdfWriter
@@ -32,7 +32,8 @@ def _save_pdf(output_path: str, draw_fn) -> None:
     writer = PdfWriter()
     for page in reader.pages:
         writer.add_page(page)
-    writer.add_metadata({"/Producer": "DocuSuite Enterprise 4.2", "/Creator": "DocuSuite Enterprise 4.2", "/CreationDate": "D:20260315090000"})
+    creation = datetime.now().strftime("D:%Y%m%d%H%M%S")
+    writer.add_metadata({"/Producer": "DocuSuite Enterprise 4.2", "/Creator": "DocuSuite Enterprise 4.2", "/CreationDate": creation})
     with open(output_path, "wb") as f:
         writer.write(f)
     tmp_path.unlink(missing_ok=True)
@@ -268,11 +269,10 @@ def generate_income_statement(
 
 
 if __name__ == "__main__":
-    import os
-
-    os.makedirs("/home/claude/loan_letters/output", exist_ok=True)
+    out_dir = Path.cwd() / "output"
+    out_dir.mkdir(parents=True, exist_ok=True)
     print(generate_income_statement(
-        "/home/claude/loan_letters/output/income_statement_template.pdf",
+        str(out_dir / "income_statement_template.pdf"),
         company_name="GOLDEN HARVEST TRADING PTE LTD",
         company_uen="201812345A",
         period_end=date(2025, 12, 31),

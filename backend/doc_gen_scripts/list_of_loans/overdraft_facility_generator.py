@@ -94,11 +94,11 @@ def generate_overdraft_letter(
 
 
 if __name__ == "__main__":
-    import os
-    os.makedirs("/home/claude/loan_letters/output", exist_ok=True)
+    out_dir = Path.cwd() / "output"
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     result = generate_overdraft_letter(
-        "/home/claude/loan_letters/output/C004_Overdraft_LoanFacility.pdf",
+        str(out_dir / "C004_Overdraft_LoanFacility.pdf"),
         bank_name="Meridian Bank",
         bank_address_lines=["25 Central Road, Meridian Centre", "Singapore 099123"],
         company_name="BlueWave Marine Services Pte Ltd",

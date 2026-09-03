@@ -105,11 +105,11 @@ def generate_term_loan_letter(
 
 
 if __name__ == "__main__":
-    import os
-    os.makedirs("/home/claude/loan_letters/output", exist_ok=True)
+    out_dir = Path.cwd() / "output"
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     result = generate_term_loan_letter(
-        "/home/claude/loan_letters/output/C009_TermLoan_LoanFacility.pdf",
+        str(out_dir / "C009_TermLoan_LoanFacility.pdf"),
         bank_name="Meridian Bank",
         bank_address_lines=["25 Central Road, Meridian Centre", "Singapore 099123"],
         company_name="Titan Steel Works Pte Ltd",

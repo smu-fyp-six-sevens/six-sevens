@@ -6,7 +6,7 @@ photo placeholder, barcode area, and address block.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from pypdf import PdfReader, PdfWriter
@@ -31,7 +31,8 @@ def _save_pdf(output_path: str, draw_fn) -> None:
     writer = PdfWriter()
     for page in reader.pages:
         writer.add_page(page)
-    writer.add_metadata({"/Producer": "DocuSuite Enterprise 4.2", "/Creator": "DocuSuite Enterprise 4.2", "/CreationDate": "D:20260315090000"})
+    creation = datetime.now().strftime("D:%Y%m%d%H%M%S")
+    writer.add_metadata({"/Producer": "DocuSuite Enterprise 4.2", "/Creator": "DocuSuite Enterprise 4.2", "/CreationDate": creation})
     with open(output_path, "wb") as f:
         writer.write(f)
     tmp_path.unlink(missing_ok=True)
@@ -204,11 +205,10 @@ def generate_nric_card(
 
 
 if __name__ == "__main__":
-    import os
-
-    os.makedirs("/home/claude/loan_letters/output", exist_ok=True)
+    out_dir = Path.cwd() / "output"
+    out_dir.mkdir(parents=True, exist_ok=True)
     print(generate_nric_card(
-        "/home/claude/loan_letters/output/nric_template.pdf",
+        str(out_dir / "nric_template.pdf"),
         name="LONG JING EN",
         nric_no="T0424580J",
         date_of_birth=date(2004, 1, 6),

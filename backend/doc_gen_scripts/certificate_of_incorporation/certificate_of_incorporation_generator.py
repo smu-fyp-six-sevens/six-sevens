@@ -5,7 +5,7 @@ for later value injection.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from pypdf import PdfReader, PdfWriter
@@ -48,7 +48,8 @@ def _build_pdf(output_path: str, story: list, *, producer: str = "DocuSuite Ente
     writer = PdfWriter()
     for page in reader.pages:
         writer.add_page(page)
-    writer.add_metadata({"/Producer": producer, "/Creator": producer, "/CreationDate": "D:20260315090000"})
+    creation = datetime.now().strftime("D:%Y%m%d%H%M%S")
+    writer.add_metadata({"/Producer": producer, "/Creator": producer, "/CreationDate": creation})
     with open(output_path, "wb") as f:
         writer.write(f)
     tmp_path.unlink(missing_ok=True)
@@ -124,11 +125,10 @@ def generate_certificate_of_incorporation(
 
 
 if __name__ == "__main__":
-    import os
-
-    os.makedirs("/home/claude/loan_letters/output", exist_ok=True)
+    out_dir = Path.cwd() / "output"
+    out_dir.mkdir(parents=True, exist_ok=True)
     print(generate_certificate_of_incorporation(
-        "/home/claude/loan_letters/output/certificate_of_incorporation_template.pdf",
+        str(out_dir / "certificate_of_incorporation_template.pdf"),
         company_name="Greenlink Digital Bank Pte Ltd",
         company_number="202612345W",
         incorporation_date=date(2026, 1, 12),

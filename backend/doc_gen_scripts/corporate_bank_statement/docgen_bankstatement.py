@@ -102,6 +102,8 @@ class BankProfile:
     # Company chop printed in the footer of the UOB export. JPEGs have no alpha, so
     # load_stamp() keys out the white background before drawing.
     stamp_path: str | None = None
+    bic_code: str = ""
+    bic_name: str = ""
 
 
 BANK_PROFILES: dict[str, BankProfile] = {
@@ -157,12 +159,13 @@ def load_logo(path: str, reverse: bool = False) -> ImageReader | None:
     img = Image.open(path).convert("RGBA")
     if reverse:
         pixels = img.load()
-        w, h = img.size
-        for y in range(h):
-            for x in range(w):
-                r, g, b, a = pixels[x, y]
-                if a > 0 and max(r, g, b) < 110:      # near-black wordmark only
-                    pixels[x, y] = (255, 255, 255, a)
+        if pixels: 
+            w, h = img.size
+            for y in range(h):
+                for x in range(w):
+                    r, g, b, a = pixels[x, y]
+                    if a > 0 and max(r, g, b) < 110:      # near-black wordmark only
+                        pixels[x, y] = (255, 255, 255, a)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
@@ -191,11 +194,12 @@ def load_stamp(path: str, white_cutoff: int = 232) -> ImageReader | None:
     img = Image.open(path).convert("RGBA")
     pixels = img.load()
     w, h = img.size
-    for y in range(h):
-        for x in range(w):
-            r, g, b, _ = pixels[x, y]
-            if r >= white_cutoff and g >= white_cutoff and b >= white_cutoff:
-                pixels[x, y] = (r, g, b, 0)
+    if pixels:
+        for y in range(h):
+            for x in range(w):
+                r, g, b, _ = pixels[x, y]
+                if r >= white_cutoff and g >= white_cutoff and b >= white_cutoff:
+                    pixels[x, y] = (r, g, b, 0)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
@@ -251,7 +255,7 @@ def load_case(xlsx: str | Path, case_id: str, bank_override: str | None = None) 
         "address": str(case["Registered Address"]).upper(),
         "account_no": str(stmt.get("Account No. (auto)") or case.get("Bank Account No.")),
         "bank": BANK_PROFILES[bank_name],
-        "months": parse_period(stmt.get("Statement Month")),
+        "months": parse_period(stmt.get("Statement Month", "")),
         "director": people[0] if people else None,
         "fraud_flag": str(stmt.get("Fraud Injected? (Y/N)") or "N").strip().upper() == "Y",
         "dimension": stmt.get("Detection Dimension"),

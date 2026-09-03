@@ -6,7 +6,7 @@ from duplicating letterhead/signature/metadata logic.
 """
 
 import io
-from datetime import date
+from datetime import date, datetime
 
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib import colors
@@ -116,7 +116,7 @@ def signature_block(bank_name: str, signatory_name: str, signatory_title: str,
 
 
 def build_pdf(output_path: str, story: list, *, producer: str = "DocuSuite Enterprise 4.2",
-              creation_date: str = "D:20260315090000"):
+              creation_date: str | None = None):
     """
     Assembles the PDF and applies the mandatory metadata override (never
     leave a PDF library's default Producer/Creator signature in place —
@@ -134,6 +134,8 @@ def build_pdf(output_path: str, story: list, *, producer: str = "DocuSuite Enter
     writer = PdfWriter()
     for page in reader.pages:
         writer.add_page(page)
+    if creation_date is None:
+        creation_date = datetime.now().strftime("D:%Y%m%d%H%M%S")
     writer.add_metadata({"/Producer": producer, "/Creator": producer, "/CreationDate": creation_date})
     with open(output_path, "wb") as f:
         writer.write(f)

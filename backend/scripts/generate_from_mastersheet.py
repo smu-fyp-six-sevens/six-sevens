@@ -15,14 +15,18 @@ from pathlib import Path
 from datetime import datetime
 import pandas as pd
 
-# generators we added earlier
 from doc_gen_scripts.nric_passport.nric_generator import generate_nric_card
-from backend.doc_gen_scripts.nric_passport.passport_generator import generate_passport_page
-from doc_gen_scripts.payslips.payslip_generator import generate_payslip
-from doc_gen_scripts.corporate_bank_statement.bank_statement_generator import generate_bank_statement
+from doc_gen_scripts.nric_passport.passport_generator import generate_passport_page
+from doc_gen_scripts.payslips.generate_payslips import build_payslip_1
+from doc_gen_scripts.corporate_bank_statement.docgen_bankstatement import generate as generate_bank_statement
 from doc_gen_scripts.income_statement.income_statement_generator import generate_income_statement
 from doc_gen_scripts.certificate_of_incorporation.certificate_of_incorporation_generator import generate_certificate_of_incorporation
-from doc_gen_scripts.telecom_bill.utility_bill_generator import generate_utility_bill
+from doc_gen_scripts.personal_proof_of_residence.utility_bill_generator import generate_utility_bill
+from doc_gen_scripts.balance_sheet.balance_sheet_generator import generate_balance_sheet
+from doc_gen_scripts.credit_reports.credit_bureau_report_generator import generate_credit_bureau_report
+from doc_gen_scripts.company_constitution.docgen_constitution import generate as generate_constitution
+from doc_gen_scripts.certificate_of_incumbency.docgen_acra_profile import generate as generate_cert_incumbency
+# list_of_loans generators are imported lazily inside generate_for_case
 
 BASE = Path(__file__).resolve().parents[1]
 MASTERSHEET = BASE / "v9_document_mastersheet.xlsx"
@@ -64,112 +68,215 @@ def _get_row_by_case(df: pd.DataFrame, case_id: str) -> dict:
 def generate_for_case(case_id: str) -> None:
     out = _ensure_out(case_id)
 
-    # 1) Credit report tab -> use for credit reports (credit_reports generator not present here)
-    credit_df = _read_sheet("credit_report") if (MASTERSHEET.exists()) else pd.DataFrame()
-    credit_row = _get_row_by_case(credit_df, case_id)
-    if credit_row:
-        # not implemented: credit report generator; save a placeholder PDF
-        path = out / f"credit_report_{case_id}.pdf"
-        path.write_text("Credit report generation placeholder\n" + str(credit_row))
-        print("Wrote", path)
+    # 1) Credit report tab
+    credit_df = _read_sheet("Credit Reports") if (MASTERSHEET.exists()) else pd.DataFrame()
+    if not credit_df.empty:
+        for _, r in credit_df.iterrows():
+            if str(r.get("Case ID")).strip() != str(case_id):
+                continue
+            credit_row = r.to_dict()
+            try:
+                cr_path = out / f"credit_report_{case_id}.pdf"
+                generate_credit_bureau_report(
+                    str(cr_path),
+                    enquiry_number=str(credit_row.get("Filename") or f"CR-{case_id}"),
+                    enquiry_date=credit_row.get("Incorporation Date (auto)") or datetime.now().date(),
+                    reference=str(credit_row.get("Filename") or case_id),
+                    consumer_name=str(credit_row.get("Company Name (auto)") or credit_row.get("Company Name") or "Consumer"),
+                    id_type="NRIC",
+                    id_number="",
+                    date_of_birth=datetime.now().date(),
+                    postal_code="",
+                    enquiry_type="New Application",
+                    product_type="",
+                    applicant_type="",
+                    earliest_credit_account_date=datetime.now().date(),
+                    secured_credit_limit=float(credit_row.get("Overdraft Amount (SGD)") or 0),
+                    unsecured_credit_limit=0,
+                    exempted_credit_limit=0,
+                    debt_management_programme="N",
+                    id_theft="N",
+                    surname="",
+                    first_name="",
+                    nationality="",
+                    marital_status="",
+                    address="",
+                )
+                print("Wrote", cr_path)
+            except Exception as e:
+                print("Credit report generation failed:", e)
 
     # 2) Source of wealth docs - balance sheet & income statement
-    sow_df = _read_sheet("source_of_wealth") if (MASTERSHEET.exists()) else pd.DataFrame()
-    sow_row = _get_row_by_case(sow_df, case_id)
-    if sow_row:
-        # map columns - the mastersheet should have columns like `company_name`, `company_uen`, `period_end`, `revenue`, etc.
-        try:
-            bs_path = out / f"balance_sheet_{case_id}.pdf"
-            is_path = out / f"income_statement_{case_id}.pdf"
-            # attempt to extract relevant fields with fallbacks
-            company_name = sow_row.get("company_name") or sow_row.get("Company Name") or "Company"
-            company_uen = sow_row.get("company_uen") or sow_row.get("Company UEN") or "00000000A"
-            period_end = sow_row.get("period_end") or sow_row.get("Period End") or sow_row.get("statement_date")
-            if isinstance(period_end, str):
-                period_end = datetime.fromisoformat(period_end).date()
-            elif pd.isna(period_end):
-                period_end = datetime.now().date()
-            revenue = float(sow_row.get("revenue") or 0)
-            cost_of_sales = float(sow_row.get("cost_of_sales") or 0)
-            operating_expenses = float(sow_row.get("operating_expenses") or 0)
-
-            generate_income_statement(str(is_path), company_name=company_name, company_uen=company_uen, period_end=period_end, revenue=revenue, cost_of_sales=cost_of_sales, operating_expenses=operating_expenses)
-            print("Wrote", is_path)
-        except Exception as e:
-            print("Income statement generation failed:", e)
+    sow_df = _read_sheet("Source of Wealth Docs") if (MASTERSHEET.exists()) else pd.DataFrame()
+    if not sow_df.empty:
+        for _, r in sow_df.iterrows():
+            if str(r.get("Case ID")).strip() != str(case_id):
+                continue
+            doc_type = str(r.get("Document Type") or "").lower()
+            try:
+                if "income" in doc_type:
+                    is_path = out / f"income_statement_{case_id}.pdf"
+                    company_name = r.get("Company Name (auto)") or r.get("Company Name") or "Company"
+                    company_uen = r.get("UEN (auto)") or r.get("UEN") or r.get("Company UEN") or "00000000A"
+                    period_end = datetime.now().date()
+                    generate_income_statement(str(is_path), company_name=company_name, company_uen=company_uen, period_end=period_end, revenue=0, cost_of_sales=0, operating_expenses=0)
+                    print("Wrote", is_path)
+                if "balance" in doc_type:
+                    bs_path = out / f"balance_sheet_{case_id}.pdf"
+                    company_name = r.get("Company Name (auto)") or r.get("Company Name") or "Company"
+                    company_uen = r.get("UEN (auto)") or r.get("UEN") or r.get("Company UEN") or "00000000A"
+                    generate_balance_sheet(str(bs_path), company_name=company_name, company_uen=company_uen, statement_date=datetime.now().date(), director_name="Director", fy2026_profit=0, fy2025_profit=0)
+                    print("Wrote", bs_path)
+            except Exception as e:
+                print("Income/Balance generation failed:", e)
 
     # 3) Bank statement tab
-    bank_df = _read_sheet("bank_statement") if (MASTERSHEET.exists()) else pd.DataFrame()
-    bank_row = _get_row_by_case(bank_df, case_id)
-    if bank_row:
+    bank_df = _read_sheet("Bank Statements") if (MASTERSHEET.exists()) else pd.DataFrame()
+    if not bank_df.empty:
+        for _, r in bank_df.iterrows():
+            if str(r.get("Case ID")).strip() != str(case_id):
+                continue
+            try:
+                bank_name = r.get("Bank Name (auto)") or r.get("Bank Name") or r.get("Bank Name (auto)") or "OCBC"
+                out_pdf = generate_bank_statement(MASTERSHEET, case_id, out, bank=bank_name)
+                print("Wrote", out_pdf)
+            except Exception as e:
+                print("Bank statement generation failed:", e)
+
+    # Company Constitution (master-driven generator)
+    const_df = _read_sheet("Company Constitution") if (MASTERSHEET.exists()) else pd.DataFrame()
+    if not const_df.empty:
+        # generate_constitution reads the mastersheet and emits files for the case
         try:
-            bank_path = out / f"bank_statement_{case_id}.pdf"
-            bank_name = bank_row.get("bank_name") or "OCBC"
-            account_holder = bank_row.get("account_holder") or "Customer"
-            account_number = bank_row.get("account_number") or "XXXX-0000"
-            statement_number = bank_row.get("statement_number") or "2026-0001"
-            start = bank_row.get("period_start") or datetime.now().date()
-            end = bank_row.get("period_end") or datetime.now().date()
-            opening = float(bank_row.get("opening_balance") or 0)
-            closing = float(bank_row.get("closing_balance") or 0)
-            avail = float(bank_row.get("available_balance") or closing)
-            generate_bank_statement(str(bank_path), bank_name=bank_name, account_holder=account_holder, account_number=account_number, statement_number=statement_number, statement_period_start=start, statement_period_end=end, opening_balance=opening, closing_balance=closing, available_balance=avail, branch_code=str(bank_row.get("branch_code") or "001"))
-            print("Wrote", bank_path)
+            paths = generate_constitution(MASTERSHEET, out, cases=[case_id])
+            for p in paths:
+                print("Wrote", p)
         except Exception as e:
-            print("Bank statement generation failed:", e)
+            print("Company constitution generation failed:", e)
+
+    # Certificate of Incumbency / ACRA profile (master-driven)
+    coi_df = _read_sheet("Cert of Incumbency") if (MASTERSHEET.exists()) else pd.DataFrame()
+    if not coi_df.empty:
+        try:
+            paths = generate_cert_incumbency(MASTERSHEET, out, cases=[case_id])
+            for p in paths:
+                print("Wrote", p)
+        except Exception as e:
+            print("Certificate of incumbency generation failed:", e)
+
+    # List of loans (facility letters)
+    loans_df = _read_sheet("List of Loans") if (MASTERSHEET.exists()) else pd.DataFrame()
+    if not loans_df.empty:
+        # list_of_loans generators import loan_letter_common from their directory;
+        # make that directory importable then import generators lazily
+        loans_pkg_path = BASE / "doc_gen_scripts" / "list_of_loans"
+        import sys
+        sys.path.insert(0, str(loans_pkg_path))
+        try:
+            from doc_gen_scripts.list_of_loans.efs_facility_generator import generate_efs_letter
+            from doc_gen_scripts.list_of_loans.overdraft_facility_generator import generate_overdraft_letter
+            from doc_gen_scripts.list_of_loans.term_loan_facility_generator import generate_term_loan_letter
+        except Exception:
+            generate_efs_letter = generate_overdraft_letter = generate_term_loan_letter = None
+        for _, r in loans_df.iterrows():
+            if str(r.get("Case ID")).strip() != str(case_id):
+                continue
+            try:
+                facility_type = str(r.get("Loan Type") or "").lower()
+                if ("efs" in facility_type or "enterprise" in facility_type) and generate_efs_letter:
+                    outp = out / f"{r.get('Filename') or f'C010_EFS_LoanFacility_{case_id}.pdf'}"
+                    generate_efs_letter(str(outp), bank_name=str(r.get("Company Name (auto)") or "Meridian Bank"), bank_address_lines=["Address"], company_name=str(r.get("Company Name (auto)") or "Company"), company_address_lines=["Address"], company_uen=str(r.get("UEN (auto)") or "00000000A"), director_name="Director", ref_no=str(r.get("Filename") or f"EFS/{case_id}"), offer_date=datetime.now().date(), facility_amount=float(r.get("Loan Amount (SGD)") or 0))
+                    print("Wrote", outp)
+                elif "overdraft" in facility_type and generate_overdraft_letter:
+                    outp = out / f"{r.get('Filename') or f'C004_Overdraft_LoanFacility_{case_id}.pdf'}"
+                    generate_overdraft_letter(str(outp), bank_name=str(r.get("Company Name (auto)") or "Meridian Bank"), bank_address_lines=["Address"], company_name=str(r.get("Company Name (auto)") or "Company"), company_address_lines=["Address"], company_uen=str(r.get("UEN (auto)") or "00000000A"), director_name="Director", ref_no=str(r.get("Filename") or f"OD/{case_id}"), offer_date=datetime.now().date(), facility_limit=float(r.get("Loan Amount (SGD)") or 0), review_date=datetime.now().date())
+                    print("Wrote", outp)
+                elif "term" in facility_type and generate_term_loan_letter:
+                    outp = out / f"{r.get('Filename') or f'C009_TermLoan_LoanFacility_{case_id}.pdf'}"
+                    generate_term_loan_letter(str(outp), bank_name=str(r.get("Company Name (auto)") or "Meridian Bank"), bank_address_lines=["Address"], company_name=str(r.get("Company Name (auto)") or "Company"), company_address_lines=["Address"], company_uen=str(r.get("UEN (auto)") or "00000000A"), director_name="Director", ref_no=str(r.get("Filename") or f"TL/{case_id}"), offer_date=datetime.now().date(), principal_amount=float(r.get("Loan Amount (SGD)") or 0), tenure_months=36, interest_rate_pa=float(r.get("Interest Rate (% p.a.)") or 6.0))
+                    print("Wrote", outp)
+            except Exception as e:
+                print("Loan facility generation failed:", e)
+        try:
+            sys.path.remove(str(loans_pkg_path))
+        except Exception:
+            pass
 
     # 4) NRIC/Passport/ID documents
-    id_df = _read_sheet("id_documents") if (MASTERSHEET.exists()) else pd.DataFrame()
-    id_row = _get_row_by_case(id_df, case_id)
-    if id_row:
-        try:
-            nric_path = out / f"id_nric_{case_id}.pdf"
-            generate_nric_card(str(nric_path), name=id_row.get("name") or "", nric_no=id_row.get("nric_no") or "", date_of_birth=id_row.get("dob") or datetime.now().date(), nationality=id_row.get("nationality") or "Singaporean", gender=id_row.get("gender") or "M", race=id_row.get("race") or "", address_lines=[id_row.get("address") or ""], issue_date=id_row.get("issue_date") or datetime.now().date(), expiry_date=id_row.get("expiry_date") or datetime.now().date(), serial_no=id_row.get("serial_no") or "")
-            print("Wrote", nric_path)
-        except Exception as e:
-            print("ID generation failed:", e)
-
-    # 5) Passport
-    if id_row:
-        try:
-            pp_path = out / f"passport_{case_id}.pdf"
-            generate_passport_page(str(pp_path), passport_no=id_row.get("passport_no") or "", surname=id_row.get("surname") or "", given_names=id_row.get("given_names") or "", nationality=id_row.get("nationality") or "", date_of_birth=id_row.get("dob") or datetime.now().date(), place_of_birth=id_row.get("place_of_birth") or "", sex=id_row.get("gender") or "M", date_of_issue=id_row.get("issue_date") or datetime.now().date(), date_of_expiry=id_row.get("expiry_date") or datetime.now().date())
-            print("Wrote", pp_path)
-        except Exception as e:
-            print("Passport generation failed:", e)
+    id_df = _read_sheet("NRIC-Passport") if (MASTERSHEET.exists()) else pd.DataFrame()
+    if not id_df.empty:
+        for _, r in id_df.iterrows():
+            if str(r.get("Case ID (auto)")).strip() != str(case_id):
+                continue
+            try:
+                template = str(r.get("Template") or "").lower()
+                individual = str(r.get("Individual ID") or r.get("Filename") or f"{case_id}-id")
+                if "nric" in template:
+                    nric_path = out / f"{individual}_NRIC.pdf"
+                    generate_nric_card(str(nric_path), name=r.get("Individual Name (auto)") or r.get("Individual Name") or "", nric_no=str(r.get("NRIC/Passport No. (auto)") or r.get("NRIC/Passport No.") or ""), date_of_birth=r.get("Date of Birth (auto)") or datetime.now().date(), nationality=r.get("Nationality (Auto)") or "Singaporean", gender="", race="", address_lines=[r.get("Residential Address") or ""], issue_date=datetime.now().date(), expiry_date=datetime.now().date(), serial_no="")
+                    print("Wrote", nric_path)
+                if "passport" in template:
+                    pp_path = out / f"{individual}_Passport.pdf"
+                    generate_passport_page(str(pp_path), passport_no=str(r.get("NRIC/Passport No. (auto)") or ""), surname="", given_names=r.get("Individual Name (auto)") or "", nationality=r.get("Nationality (Auto)") or "", date_of_birth=r.get("Date of Birth (auto)") or datetime.now().date(), place_of_birth="", sex="", date_of_issue=datetime.now().date(), date_of_expiry=datetime.now().date())
+                    print("Wrote", pp_path)
+            except Exception as e:
+                print("ID generation failed:", e)
 
     # 6) Payslip
-    payslip_df = _read_sheet("payslips") if (MASTERSHEET.exists()) else pd.DataFrame()
-    payslip_row = _get_row_by_case(payslip_df, case_id)
-    if payslip_row:
-        try:
-            ps_path = out / f"payslip_{case_id}.pdf"
-            generate_payslip(str(ps_path), employer_name=payslip_row.get("employer_name") or "Employer", employee_name=payslip_row.get("employee_name") or "Employee", employee_id=payslip_row.get("employee_id") or "", pay_period=payslip_row.get("pay_period") or "", payment_date=payslip_row.get("payment_date") or datetime.now().date(), basic_salary=float(payslip_row.get("basic_salary") or 0))
-            print("Wrote", ps_path)
-        except Exception as e:
-            print("Payslip generation failed:", e)
+    payslip_df = _read_sheet("Payslips") if (MASTERSHEET.exists()) else pd.DataFrame()
+    if not payslip_df.empty:
+        for _, r in payslip_df.iterrows():
+            if str(r.get("Case ID (auto)")).strip() != str(case_id):
+                continue
+            try:
+                individual = str(r.get("Individual ID") or r.get("Filename") or f"{case_id}-payslip")
+                ps_path = out / f"{individual}_Payslip.pdf"
+                data = {
+                    "company_name": r.get("Employer Name") or "Employer",
+                    "company_address": "",
+                    "employee_name": r.get("Individual Name (auto)") or "Employee",
+                    "employee_id": r.get("Individual ID") or "",
+                    "pay_period": "",
+                    "payment_date": datetime.now().date(),
+                    "currency": "SGD",
+                    "basic_salary": float(r.get("Net Pay") or 0),
+                    "allowances": 0,
+                    "overtime": 0,
+                    "cpf_employee": 0,
+                    "other_deductions": 0,
+                }
+                build_payslip_1(ps_path, data)
+                print("Wrote", ps_path)
+            except Exception as e:
+                print("Payslip generation failed:", e)
 
     # 7) Certificate of Incorporation
-    coi_df = _read_sheet("certificate_of_incorporation") if (MASTERSHEET.exists()) else pd.DataFrame()
-    coi_row = _get_row_by_case(coi_df, case_id)
-    if coi_row:
-        try:
-            coi_path = out / f"certificate_of_incorporation_{case_id}.pdf"
-            generate_certificate_of_incorporation(str(coi_path), company_name=coi_row.get("company_name") or "", company_number=coi_row.get("company_number") or "", incorporation_date=coi_row.get("incorporation_date") or datetime.now().date())
-            print("Wrote", coi_path)
-        except Exception as e:
-            print("COI generation failed:", e)
+    coi_df = _read_sheet("Cert of Incorporation") if (MASTERSHEET.exists()) else pd.DataFrame()
+    if not coi_df.empty:
+        for _, r in coi_df.iterrows():
+            if str(r.get("Case ID")).strip() != str(case_id):
+                continue
+            try:
+                coi_path = out / str(r.get("Filename") or f"certificate_of_incorporation_{case_id}.pdf")
+                generate_certificate_of_incorporation(str(coi_path), company_name=r.get("Company Name (auto)") or "", company_number=str(r.get("UEN (auto)") or ""), incorporation_date=r.get("Incorporation Date (auto)") or datetime.now().date())
+                print("Wrote", coi_path)
+            except Exception as e:
+                print("COI generation failed:", e)
 
-    # 8) Utility bill example (telecom/utility)
-    util_df = _read_sheet("utility_bills") if (MASTERSHEET.exists()) else pd.DataFrame()
-    util_row = _get_row_by_case(util_df, case_id)
-    if util_row:
-        try:
-            util_path = out / f"utility_bill_{case_id}.pdf"
-            generate_utility_bill(str(util_path), provider_name=util_row.get("provider_name") or "PacificLight", bill_date=util_row.get("bill_date") or datetime.now().date(), ple_account_no=util_row.get("ple_account_no") or "", statement_no=util_row.get("statement_no") or "", customer_name=util_row.get("customer_name") or "", address_lines=[util_row.get("address") or ""], total_amount_payable=float(util_row.get("total_amount_payable") or 0), payment_due=util_row.get("payment_due") or datetime.now().date(), invoice_address_lines=[util_row.get("invoice_address") or ""], mssl_account_no=util_row.get("mssl_account_no") or "", billing_period_start=util_row.get("billing_period_start") or datetime.now().date(), billing_period_end=util_row.get("billing_period_end") or datetime.now().date())
-            print("Wrote", util_path)
-        except Exception as e:
-            print("Utility bill generation failed:", e)
+    # 8) Utility bill / Proof of Address
+    util_df = _read_sheet("Proof of Address") if (MASTERSHEET.exists()) else pd.DataFrame()
+    if not util_df.empty:
+        for _, r in util_df.iterrows():
+            if str(r.get("Case ID (auto)")).strip() != str(case_id):
+                continue
+            template = str(r.get("Template") or "").lower()
+            if "utility" in template:
+                try:
+                    util_path = out / str(r.get("Filename") or f"utility_bill_{case_id}.pdf")
+                    generate_utility_bill(str(util_path), provider_name=r.get("Provider Name") or r.get("Employer Name") or "PacificLight", bill_date=r.get("Date") or datetime.now().date(), ple_account_no=r.get("Account No") or "", statement_no=r.get("Filename") or "", customer_name=r.get("Individual Name (auto)") or r.get("Company Name (auto)") or "", address_lines=[r.get("Residential Address") or r.get("Registered Address") or ""], total_amount_payable=float(r.get("Amount") or 0), payment_due=datetime.now().date(), invoice_address_lines=[r.get("Residential Address") or ""], mssl_account_no="", billing_period_start=datetime.now().date(), billing_period_end=datetime.now().date())
+                    print("Wrote", util_path)
+                except Exception as e:
+                    print("Utility bill generation failed:", e)
 
     print("Generation completed for", case_id)
 
