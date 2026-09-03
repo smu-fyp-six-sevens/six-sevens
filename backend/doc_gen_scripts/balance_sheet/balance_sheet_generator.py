@@ -36,8 +36,8 @@ FONT = "Helvetica"
 class BalanceSheetLine:
     label: str
     note: str = ""
-    fy2025: str = ""
-    fy2024: str = ""
+    fy2026: str | float | int = ""
+    fy2025: str | float | int = ""
     section: bool = False
 
 
@@ -100,12 +100,12 @@ def _build_pdf(output_path: str, story: list, *, producer: str = "DocuSuite Ente
 
 
 def _statement_rows(lines: list[BalanceSheetLine]) -> list[list[str]]:
-    rows: list[list[str]] = [["Note", "FY2025", "FY2024"]]
+    rows: list[list[str]] = [["Note", "fy2026", "fy2025"]]
     for line in lines:
         if line.section:
             rows.append([line.label, "", ""])
         else:
-            rows.append([line.note, _money(line.fy2025), _money(line.fy2024)])
+            rows.append([line.note, _money(line.fy2026), _money(line.fy2025)])
     return rows
 
 
@@ -116,8 +116,8 @@ def generate_balance_sheet(
     company_uen: str,
     statement_date: date,
     director_name: str,
+    fy2026_profit: float,
     fy2025_profit: float,
-    fy2024_profit: float,
     asset_lines: list[BalanceSheetLine] | None = None,
     liability_lines: list[BalanceSheetLine] | None = None,
     note_texts: dict[str, str] | None = None,
@@ -149,7 +149,7 @@ def generate_balance_sheet(
         BalanceSheetLine("EQUITY", section=True),
         BalanceSheetLine("Share capital", "14", 100000, 100000),
         BalanceSheetLine("Retained earnings, beginning of year", "", 674550, ""),
-        BalanceSheetLine("Add: Profit for the year (per Income Statement)", "", fy2025_profit, fy2024_profit),
+        BalanceSheetLine("Add: Profit for the year (per Income Statement)", "", fy2026_profit, fy2025_profit),
         BalanceSheetLine("Retained earnings, end of year", "", 719630, 674550),
         BalanceSheetLine("Total equity", "", 819630, 774550),
         BalanceSheetLine("TOTAL EQUITY AND LIABILITIES", "", 1503030, 1452650),
@@ -180,12 +180,12 @@ def generate_balance_sheet(
             table_rows.append([
                 Paragraph(line.label, s["body"]),
                 Paragraph(line.note, s["body"]),
+                Paragraph(_money(line.fy2026), s["body"]),
                 Paragraph(_money(line.fy2025), s["body"]),
-                Paragraph(_money(line.fy2024), s["body"]),
             ])
     # Add liability rows after the first table to better mirror the original flow.
     story.append(Table(
-        [[Paragraph("Description", s["section"]), Paragraph("Note", s["section"]), Paragraph("FY2025", s["section"]), Paragraph("FY2024", s["section"])]],
+        [[Paragraph("Description", s["section"]), Paragraph("Note", s["section"]), Paragraph("fy2026", s["section"]), Paragraph("fy2025", s["section"])]],
         colWidths=[83 * mm, 14 * mm, 30 * mm, 30 * mm],
         style=TableStyle([
             ("LINEBELOW", (0, 0), (-1, 0), 0.75, colors.black),
@@ -214,8 +214,8 @@ def generate_balance_sheet(
             liabilities_table_rows.append([
                 Paragraph(line.label, s["body"]),
                 Paragraph(line.note, s["body"]),
+                Paragraph(_money(line.fy2026), s["body"]),
                 Paragraph(_money(line.fy2025), s["body"]),
-                Paragraph(_money(line.fy2024), s["body"]),
             ])
     story.append(Table(
         liabilities_table_rows,
@@ -275,7 +275,7 @@ if __name__ == "__main__":
         company_uen="201812345A",
         statement_date=date(2025, 12, 31),
         director_name="Tan Wei Ming",
-        fy2025_profit=45080,
-        fy2024_profit=41360,
+        fy2026_profit=45080,
+        fy2025_profit=41360,
     )
     print("Balance sheet:", result)

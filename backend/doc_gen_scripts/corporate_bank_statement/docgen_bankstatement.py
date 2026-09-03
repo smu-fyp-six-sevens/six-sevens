@@ -30,7 +30,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, cast
 
 import openpyxl
 from reportlab.lib import colors
@@ -151,6 +151,7 @@ def load_logo(path: str, reverse: bool = False) -> ImageReader | None:
     img = Image.open(path).convert("RGBA")
     if reverse:
         pixels = img.load()
+        assert pixels is not None
         w, h = img.size
         for y in range(h):
             for x in range(w):
@@ -184,6 +185,7 @@ def load_stamp(path: str, white_cutoff: int = 232) -> ImageReader | None:
 
     img = Image.open(path).convert("RGBA")
     pixels = img.load()
+    assert pixels is not None
     w, h = img.size
     for y in range(h):
         for x in range(w):
@@ -211,7 +213,7 @@ def _rows(ws) -> list[dict[str, Any]]:
     return [dict(zip(header, r)) for r in ws.iter_rows(min_row=2, values_only=True) if any(r)]
 
 
-def parse_period(text: str) -> list[date]:
+def parse_period(text: str | None) -> list[date]:
     """'2026-06 to 2026-08' -> [2026-06-01, 2026-07-01, 2026-08-01]"""
     found = re.findall(r"(\d{4})-(\d{2})", str(text or ""))
     if not found:
@@ -782,6 +784,15 @@ class UobRow:
     balance: float
 
 
+@dataclass
+class UobSummaryGeometry:
+    half: float
+    inner_w: float
+    account_line: str
+    card_h: float
+    end_y: float
+
+
 def to_uob_rows(blocks: list[Block], rng: random.Random) -> list[UobRow]:
     """Flatten the shared transaction model into the UOB export's row shape."""
     rows: list[UobRow] = []
@@ -911,7 +922,7 @@ def _uob_field(c: pdfcanvas.Canvas, x: float, y: float, label: str, value: str,
     return cursor + 11
 
 
-def uob_summary_geometry(ctx: dict[str, Any], y: float) -> dict[str, float]:
+def uob_summary_geometry(ctx: dict[str, Any], y: float) -> UobSummaryGeometry:
     """Measure the summary block without drawing it, so paginate and render agree."""
     w_full = PAGE_W - U_M_L - U_M_R
     half = (w_full - 12) / 2
@@ -923,21 +934,23 @@ def uob_summary_geometry(ctx: dict[str, Any], y: float) -> dict[str, float]:
     card_h = 60 + name_lines * 11 + 24 + acct_lines * 11 + 12
     # card block + details card + "Account Transactions" heading and filter lines
     end_y = y - card_h - 12 - 126 - 76
-    return {
-        "half": half,
-        "inner_w": inner_w,
-        "account_line": account_line,
-        "card_h": card_h,
-        "end_y": end_y,
-    }
+    return UobSummaryGeometry(
+        half=half,
+        inner_w=inner_w,
+        account_line=account_line,
+        card_h=card_h,
+        end_y=end_y,
+    )
 
 
 def uob_draw_summary(c: pdfcanvas.Canvas, ctx: dict[str, Any], y: float,
                      record_count: int) -> float:
     w_full = PAGE_W - U_M_L - U_M_R
     geo = uob_summary_geometry(ctx, y)
-    half, inner_w = geo["half"], geo["inner_w"]
-    card_h, account_line = geo["card_h"], geo["account_line"]
+    half = cast(float, geo.half)
+    inner_w = cast(float, geo.inner_w)
+    card_h = cast(float, geo.card_h)
+    account_line = cast(str, geo.account_line)
 
     # Company / Account and Account Balance cards, sized from their wrapped content.
     _uob_card(c, U_M_L, y, half, card_h)
@@ -1094,7 +1107,7 @@ def render_uob(ctx: dict[str, Any], blocks: list[Block], out_pdf: Path) -> Path:
     # Pagination pass. Two limits apply: a hard row cap per page, and the real
     # vertical space left once the header, summary block and table head are placed.
     header_end = U_TOP - 34 - 58
-    first_avail = uob_summary_geometry(ctx, header_end)["end_y"] - 26 - U_BOTTOM
+    first_avail = cast(float, uob_summary_geometry(ctx, header_end).end_y) - 26 - U_BOTTOM
     rest_avail = header_end - 26 - U_BOTTOM
 
     pages: list[list[UobRow]] = []
