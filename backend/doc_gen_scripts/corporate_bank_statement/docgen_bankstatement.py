@@ -38,7 +38,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, TypedDict
 
 import openpyxl
 from reportlab.lib import colors
@@ -113,7 +113,7 @@ BANK_PROFILES: dict[str, BankProfile] = {
         address="12 Marina Boulevard, Marina Bay Financial Centre Tower 3, Singapore 018982",
         website="www.dbs.com",
         footer_reg="Co. Reg. No. 196800306E   GST Reg No: MR-8500180-3",
-        product="Details Of Your DBS Corporate Multi-Currency Account",
+        product="Details of your DBS Corporate Multi-Currency Account",
         tagline=("Live more,", "Bank less"),
         logo_path=str(Path(__file__).with_name("assets") / "dbs_logo.png"),
         logo_style="panel",
@@ -921,7 +921,15 @@ def _uob_field(c: pdfcanvas.Canvas, x: float, y: float, label: str, value: str,
     return cursor + 11
 
 
-def uob_summary_geometry(ctx: dict[str, Any], y: float) -> dict[str, float]:
+class UobSummaryGeometry(TypedDict):
+    half: float
+    inner_w: float
+    account_line: str
+    card_h: float
+    end_y: float
+
+
+def uob_summary_geometry(ctx: dict[str, Any], y: float) -> UobSummaryGeometry:
     """Measure the summary block without drawing it, so paginate and render agree."""
     w_full = PAGE_W - U_M_L - U_M_R
     half = (w_full - 12) / 2
