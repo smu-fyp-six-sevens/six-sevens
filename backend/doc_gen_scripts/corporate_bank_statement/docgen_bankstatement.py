@@ -19,7 +19,11 @@ generate() picks a renderer from RENDERERS by the bank profile's `template` fiel
 adding another bank means adding a BankProfile plus a matching RENDERERS entry — either
 reusing an existing renderer or writing a new section like 8.
 
-    python docgen_bankstatement.py v9_document_mastersheet.xlsx --case C001 --outdir out/
+To generate (a specific case):
+
+cd backend/doc_gen_scripts/corporate_bank_statement
+python docgen_bankstatement.py ../v9_document_mastersheet.xlsx --case C001 --outdir out/
+
 
 Everything is seeded from SHA-256(case_id + month) so reruns are byte-comparable.
 """
