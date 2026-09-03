@@ -17,7 +17,7 @@ import pandas as pd
 
 # generators we added earlier
 from doc_gen_scripts.nric_passport.nric_generator import generate_nric_card
-from doc_gen_scripts.passport.passport_generator import generate_passport_page
+from backend.doc_gen_scripts.nric_passport.passport_generator import generate_passport_page
 from doc_gen_scripts.payslips.payslip_generator import generate_payslip
 from doc_gen_scripts.corporate_bank_statement.bank_statement_generator import generate_bank_statement
 from doc_gen_scripts.income_statement.income_statement_generator import generate_income_statement
