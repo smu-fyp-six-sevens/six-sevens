@@ -1,19 +1,23 @@
 """
-docgen_bankstatement.py — generate DBS-style corporate account statements.
+docgen_bankstatement.py — generate DBS-style + UOB-style corporate account statements.
 
 Structure of this module
 ------------------------
-  1. Layout constants          page geometry, column x-positions, brand colours
-  2. BANK_PROFILES             per-bank letterhead details (DBS implemented)
+  1. Layout constants          page geometry, column x-positions, brand colours (DBS)
+  2. BANK_PROFILES             per-bank letterhead details (DBS, UOB)
   3. Mastersheet loading       load_case() reads Case Registry + Bank Statements tabs
-  4. Transaction engine        month_transactions() invents a month of activity
-  5. Pagination                paginate() splits rows into pages before drawing
-  6. Rendering                 draw_page() paints one page with canvas primitives
-  7. CLI                       generate() / main()
+  4. Transaction engine        month_transactions() invents a month of activity, shared
+                                by both templates
+  5. Pagination                paginate() splits rows into pages before drawing (DBS)
+  6. Rendering                 render() paints the DBS printed-statement pages
+  7. CLI                       build_blocks() / generate() / main()
+  8. UOB template              render_uob() — a second, self-contained renderer for the
+                                UOB iBanking "Account Activities" export, with its own
+                                layout constants, pagination and drawing helpers
 
-One PDF covers the whole period on the Bank Statements tab ("2026-06 to 2026-08"),
-with a separate statement block per month, continuous page numbering, and a closing
-"Messages For You" page — matching the DBS sample.
+generate() picks a renderer from RENDERERS by the bank profile's `template` field, so
+adding another bank means adding a BankProfile plus a matching RENDERERS entry — either
+reusing an existing renderer or writing a new section like 8.
 
     python docgen_bankstatement.py v9_document_mastersheet.xlsx --case C001 --outdir out/
 
@@ -30,7 +34,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterable, cast
+from typing import Any, Iterable
 
 import openpyxl
 from reportlab.lib import colors
@@ -94,8 +98,6 @@ class BankProfile:
     # Company chop printed in the footer of the UOB export. JPEGs have no alpha, so
     # load_stamp() keys out the white background before drawing.
     stamp_path: str | None = None
-    bic_code: str = ""
-    bic_name: str = ""
 
 
 BANK_PROFILES: dict[str, BankProfile] = {
@@ -151,7 +153,6 @@ def load_logo(path: str, reverse: bool = False) -> ImageReader | None:
     img = Image.open(path).convert("RGBA")
     if reverse:
         pixels = img.load()
-        assert pixels is not None
         w, h = img.size
         for y in range(h):
             for x in range(w):
@@ -185,7 +186,6 @@ def load_stamp(path: str, white_cutoff: int = 232) -> ImageReader | None:
 
     img = Image.open(path).convert("RGBA")
     pixels = img.load()
-    assert pixels is not None
     w, h = img.size
     for y in range(h):
         for x in range(w):
@@ -213,7 +213,7 @@ def _rows(ws) -> list[dict[str, Any]]:
     return [dict(zip(header, r)) for r in ws.iter_rows(min_row=2, values_only=True) if any(r)]
 
 
-def parse_period(text: str | None) -> list[date]:
+def parse_period(text: str) -> list[date]:
     """'2026-06 to 2026-08' -> [2026-06-01, 2026-07-01, 2026-08-01]"""
     found = re.findall(r"(\d{4})-(\d{2})", str(text or ""))
     if not found:
@@ -784,15 +784,6 @@ class UobRow:
     balance: float
 
 
-@dataclass
-class UobSummaryGeometry:
-    half: float
-    inner_w: float
-    account_line: str
-    card_h: float
-    end_y: float
-
-
 def to_uob_rows(blocks: list[Block], rng: random.Random) -> list[UobRow]:
     """Flatten the shared transaction model into the UOB export's row shape."""
     rows: list[UobRow] = []
@@ -922,7 +913,7 @@ def _uob_field(c: pdfcanvas.Canvas, x: float, y: float, label: str, value: str,
     return cursor + 11
 
 
-def uob_summary_geometry(ctx: dict[str, Any], y: float) -> UobSummaryGeometry:
+def uob_summary_geometry(ctx: dict[str, Any], y: float) -> dict[str, float]:
     """Measure the summary block without drawing it, so paginate and render agree."""
     w_full = PAGE_W - U_M_L - U_M_R
     half = (w_full - 12) / 2
@@ -934,23 +925,21 @@ def uob_summary_geometry(ctx: dict[str, Any], y: float) -> UobSummaryGeometry:
     card_h = 60 + name_lines * 11 + 24 + acct_lines * 11 + 12
     # card block + details card + "Account Transactions" heading and filter lines
     end_y = y - card_h - 12 - 126 - 76
-    return UobSummaryGeometry(
-        half=half,
-        inner_w=inner_w,
-        account_line=account_line,
-        card_h=card_h,
-        end_y=end_y,
-    )
+    return {
+        "half": half,
+        "inner_w": inner_w,
+        "account_line": account_line,
+        "card_h": card_h,
+        "end_y": end_y,
+    }
 
 
 def uob_draw_summary(c: pdfcanvas.Canvas, ctx: dict[str, Any], y: float,
                      record_count: int) -> float:
     w_full = PAGE_W - U_M_L - U_M_R
     geo = uob_summary_geometry(ctx, y)
-    half = cast(float, geo.half)
-    inner_w = cast(float, geo.inner_w)
-    card_h = cast(float, geo.card_h)
-    account_line = cast(str, geo.account_line)
+    half, inner_w = geo["half"], geo["inner_w"]
+    card_h, account_line = geo["card_h"], geo["account_line"]
 
     # Company / Account and Account Balance cards, sized from their wrapped content.
     _uob_card(c, U_M_L, y, half, card_h)
@@ -1107,7 +1096,7 @@ def render_uob(ctx: dict[str, Any], blocks: list[Block], out_pdf: Path) -> Path:
     # Pagination pass. Two limits apply: a hard row cap per page, and the real
     # vertical space left once the header, summary block and table head are placed.
     header_end = U_TOP - 34 - 58
-    first_avail = cast(float, uob_summary_geometry(ctx, header_end).end_y) - 26 - U_BOTTOM
+    first_avail = uob_summary_geometry(ctx, header_end)["end_y"] - 26 - U_BOTTOM
     rest_avail = header_end - 26 - U_BOTTOM
 
     pages: list[list[UobRow]] = []
