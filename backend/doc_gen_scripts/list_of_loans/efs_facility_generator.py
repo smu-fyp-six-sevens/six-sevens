@@ -5,7 +5,11 @@ Financial Institution. Real-world fields: scheme name, government risk-share
 percentage, facility amount, tenure, interest rate, security.
 """
 
+import sys
 from datetime import date
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from loan_letter_common import (
     letterhead, addressee_block, terms_table, terms_and_conditions,

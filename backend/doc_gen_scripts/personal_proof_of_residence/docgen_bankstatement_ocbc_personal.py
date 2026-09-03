@@ -37,10 +37,13 @@ from __future__ import annotations
 
 import random
 import re
+import sys
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4

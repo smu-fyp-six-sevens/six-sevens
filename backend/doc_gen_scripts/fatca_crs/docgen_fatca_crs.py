@@ -698,23 +698,24 @@ def pick_template(case_id: str) -> str:
     return templates[rng.randrange(len(templates))]
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("xlsx")
-    ap.add_argument("--outdir", default="filled")
-    ap.add_argument("--cases", nargs="*", help="case IDs to include; default is all")
-    ap.add_argument("--no-strict", action="store_true", help="warn instead of failing on unmapped fields")
-    args = ap.parse_args()
+def generate(xlsx: str | Path, outdir: str | Path, cases: list[str] | None = None,
+             strict: bool = True) -> list[Path]:
+    """Fill one self-cert per case and write a manifest CSV alongside them."""
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+    personas = build_personas(xlsx, cases)
 
-    outdir = Path(args.outdir)
-    personas = build_personas(args.xlsx, args.cases)
-
+    written: list[Path] = []
     manifest = []
     for p in personas:
         case_id = p["case_id"]
         template = pick_template(case_id)
+        # Resolve relative to this file, not the caller's cwd, so this works
+        # whether invoked via the CLI below or imported from elsewhere.
+        blank_pdf = Path(__file__).with_name(BLANK_PDFS[template])
         out = outdir / f"{case_id}_{template}_selfcert.pdf"
-        fill_form(p, template, BLANK_PDFS[template], out, strict=not args.no_strict)
+        fill_form(p, template, blank_pdf, out, strict=strict)
+        written.append(out)
         manifest.append({"case_id": case_id, "entity_name": p["entity_name"], "template": template, "file": out.name})
         print(f"{case_id}: {template} -> {out}")
 
@@ -723,7 +724,18 @@ def main() -> None:
         writer = csv.DictWriter(fh, fieldnames=["case_id", "entity_name", "template", "file"])
         writer.writeheader()
         writer.writerows(manifest)
-    print(f"wrote {len(manifest)} self-cert(s); manifest -> {manifest_path}")
+    print(f"wrote {len(written)} self-cert(s); manifest -> {manifest_path}")
+    return written
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("xlsx")
+    ap.add_argument("--outdir", default="filled")
+    ap.add_argument("--cases", nargs="*", help="case IDs to include; default is all")
+    ap.add_argument("--no-strict", action="store_true", help="warn instead of failing on unmapped fields")
+    args = ap.parse_args()
+    generate(args.xlsx, args.outdir, args.cases, strict=not args.no_strict)
 
 
 if __name__ == "__main__":

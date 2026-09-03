@@ -7,7 +7,11 @@ case's Bank Statement generator, so the two documents reconcile by
 construction rather than by coincidence.
 """
 
+import sys
 from datetime import date
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from loan_letter_common import (
     letterhead, addressee_block, terms_table, terms_and_conditions,

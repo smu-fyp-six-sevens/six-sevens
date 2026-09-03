@@ -15,9 +15,13 @@ Requires only reportlab and pypdf (pip install reportlab pypdf).
 from __future__ import annotations
 
 import argparse
-from datetime import datetime
+import sys
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from case_facts import seeded_rng
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -31,6 +35,69 @@ BASE_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR = BASE_DIR / "generated"
 
 SYNTHETIC_TAG = "SYNTHETIC-TEST-DATA"
+
+DEPARTMENTS = ["Operations", "Finance", "Sales & Marketing", "Administration",
+               "Business Development", "Human Resources"]
+EMPLOYER_STREETS = ["1 Marina Boulevard", "8 Shenton Way", "80 Robinson Road",
+                     "6 Battery Road", "50 Raffles Place", "3 Church Street"]
+
+
+def synthesize_payslip_data(individual_id: str, *, employee_name: str, employee_id: str,
+                             employer_name: str, role: str = "", application_date: date | None = None,
+                             currency: str = "SGD") -> dict:
+    """Invent a plausible month of pay for one employee, seeded on their individual
+    ID so re-runs are reproducible. The mastersheet's Payslips tab only carries
+    identity fields (name, NRIC, role, employer) — no salary figures — so every
+    monetary field a payslip template needs is synthesized here.
+
+    Returns a superset of the fields build_payslip_1/2/3 each read, so callers
+    don't need to branch on which template they're about to build.
+    """
+    rng = seeded_rng(f"{individual_id}|payslip")
+
+    application_date = application_date or datetime.now().date()
+    period_month = application_date.month - 1 or 12
+    period_year = application_date.year - (application_date.month == 1)
+    period_start = date(period_year, period_month, 1)
+    next_month_start = date(period_year + (period_month == 12), (period_month % 12) + 1, 1)
+    period_end = next_month_start - timedelta(days=1)
+
+    basic_salary = round(rng.uniform(3200, 9500), -1)
+    cpf_employee = round(basic_salary * 0.20, 2)  # SG employee CPF rate, age < 55
+    tax_withholding = round(basic_salary * rng.uniform(0.05, 0.12), 2)
+    other_deductions = round(rng.uniform(20, 120), 2)
+
+    street = EMPLOYER_STREETS[rng.randrange(len(EMPLOYER_STREETS))]
+    postal = rng.randint(18900, 68999)
+
+    return {
+        "company_name": employer_name,
+        "company_address": f"{street}, Singapore {postal:06d}",
+        "employee_name": employee_name,
+        "employee_id": employee_id,
+        "pay_period": period_start.strftime("%B %Y"),
+        "payment_date": period_end.strftime("%Y-%m-%d"),
+        "currency": currency,
+        # Payslip 1
+        "basic_salary": basic_salary,
+        "allowances": round(rng.uniform(150, 700), -1),
+        "overtime": round(rng.uniform(0, 300), -1),
+        "cpf_employee": cpf_employee,
+        "other_deductions": other_deductions,
+        # Payslip 2
+        "variable_pay": round(rng.uniform(100, 600), -1),
+        "benefits": round(rng.uniform(50, 300), -1),
+        "tax_withholding": tax_withholding,
+        # Payslip 3
+        "department": DEPARTMENTS[rng.randrange(len(DEPARTMENTS))],
+        "job_title": role or "Employee",
+        "housing_allowance": round(rng.uniform(300, 900), -1),
+        "transport_allowance": round(rng.uniform(100, 300), -1),
+        "other_allowance": round(rng.uniform(0, 200), -1),
+        "retirement_contribution": cpf_employee,
+        "tax_deduction": tax_withholding,
+        "other_deduction": other_deductions,
+    }
 
 
 def money(value: float) -> str:

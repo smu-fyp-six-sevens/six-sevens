@@ -1,7 +1,12 @@
 """
-Generates a utility bill / proof-of-residence PDF template based on the
-attached PacificLight sample. The script keeps the document structure
-fixed so the same fields can later be replaced with live sample values.
+Generates a utility bill / proof-of-residence PDF matching the attached
+PacificLight sample layout: logo + bill meta header, customer block beside a
+large amount-due panel, an invoice-address callout, a 5-column account info
+strip, a boxed consumption-trend panel, and a boxed summary-of-charges panel.
+
+Drawn directly with a canvas (rather than flowables) since the layout is a
+fixed one-page invoice with panel positions that need to match the reference
+pixel-for-pixel more than they need to reflow.
 """
 
 from __future__ import annotations
@@ -12,24 +17,21 @@ from pathlib import Path
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.lib.units import mm
-from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.utils import simpleSplit
+from reportlab.pdfgen import canvas as pdfcanvas
 
-
-styles = getSampleStyleSheet()
+PAGE_W, PAGE_H = A4
+MARGIN = 40
+CONTENT_W = PAGE_W - 2 * MARGIN
 FONT = "Helvetica"
+FONT_B = "Helvetica-Bold"
 
-
-def _styles():
-    return {
-        "title": ParagraphStyle("title", fontName=f"{FONT}-Bold", fontSize=18, leading=20),
-        "heading": ParagraphStyle("heading", fontName=f"{FONT}-Bold", fontSize=10, leading=12),
-        "body": ParagraphStyle("body", fontName=FONT, fontSize=9, leading=11),
-        "body_bold": ParagraphStyle("body_bold", fontName=f"{FONT}-Bold", fontSize=9, leading=11),
-        "small": ParagraphStyle("small", fontName=FONT, fontSize=8, leading=10),
-        "tiny": ParagraphStyle("tiny", fontName=FONT, fontSize=7.3, leading=9),
-    }
+ORANGE = colors.HexColor("#c0592c")
+ORANGE_LIGHT = colors.HexColor("#eb9a5c")
+ORANGE_PALE = colors.HexColor("#f2b183")
+GREY_LABEL = colors.HexColor("#6b7280")
+GREY_BORDER = colors.HexColor("#d8dbe0")
+BLACK = colors.black
 
 
 def _money(amount: float | str) -> str:
@@ -38,19 +40,11 @@ def _money(amount: float | str) -> str:
     return f"${amount:,.2f}"
 
 
-def _build_pdf(output_path: str, story: list, *, producer: str = "DocuSuite Enterprise 4.2") -> None:
+def _build_pdf(output_path: str, draw_fn, *, producer: str = "DocuSuite Enterprise 4.2") -> None:
     tmp_path = Path(output_path).with_suffix(".tmp.pdf")
-    doc = BaseDocTemplate(
-        str(tmp_path),
-        pagesize=A4,
-        leftMargin=16 * mm,
-        rightMargin=16 * mm,
-        topMargin=14 * mm,
-        bottomMargin=14 * mm,
-    )
-    frame = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="normal")
-    doc.addPageTemplates([PageTemplate(id="template", frames=[frame])])
-    doc.build(story)
+    c = pdfcanvas.Canvas(str(tmp_path), pagesize=A4)
+    draw_fn(c)
+    c.save()
 
     reader = PdfReader(str(tmp_path))
     writer = PdfWriter()
@@ -61,6 +55,50 @@ def _build_pdf(output_path: str, story: list, *, producer: str = "DocuSuite Ente
     with open(output_path, "wb") as f:
         writer.write(f)
     tmp_path.unlink(missing_ok=True)
+
+
+def _text(c: pdfcanvas.Canvas, text: str, x: float, y: float, *, font=FONT, size=9,
+          color=BLACK, align: str = "left") -> None:
+    c.setFillColor(color)
+    c.setFont(font, size)
+    if align == "right":
+        c.drawRightString(x, y, text)
+    elif align == "center":
+        c.drawCentredString(x, y, text)
+    else:
+        c.drawString(x, y, text)
+
+
+def _wrapped(c: pdfcanvas.Canvas, text: str, x: float, top: float, width: float, *,
+             font=FONT, size=9, leading=None, color=BLACK, align: str = "left") -> float:
+    leading = leading or size * 1.3
+    c.setFillColor(color)
+    c.setFont(font, size)
+    y = top
+    for line in simpleSplit(text, font, size, width):
+        if align == "right":
+            c.drawRightString(x + width, y, line)
+        else:
+            c.drawString(x, y, line)
+        y -= leading
+    return y
+
+
+def _rounded_box(c: pdfcanvas.Canvas, x: float, y: float, w: float, h: float, radius: float = 8) -> None:
+    c.setStrokeColor(GREY_BORDER)
+    c.setLineWidth(0.8)
+    c.roundRect(x, y, w, h, radius, stroke=1, fill=0)
+
+
+def _draw_logo(c: pdfcanvas.Canvas, x: float, y: float) -> None:
+    """Small flower-of-circles mark, since there's no PacificLight logo asset."""
+    c.setFillColor(ORANGE_PALE)
+    c.circle(x, y + 6, 5.5, stroke=0, fill=1)
+    c.circle(x + 9, y + 3, 5.5, stroke=0, fill=1)
+    c.setFillColor(ORANGE_LIGHT)
+    c.circle(x + 4, y - 4, 5.5, stroke=0, fill=1)
+    c.setFillColor(ORANGE)
+    c.circle(x + 3, y + 1, 4, stroke=0, fill=1)
 
 
 def generate_utility_bill(
@@ -90,120 +128,148 @@ def generate_utility_bill(
     usage_kwh: int = 689,
     consumption_trend: list[tuple[str, int]] | None = None,
 ) -> dict:
-    s = _styles()
-    story: list = []
     contract_end_date = contract_end_date or date(2032, 3, 10)
+    payment_received_date = payment_received_date or date(billing_period_end.year, billing_period_end.month, 19)
     payment_received_amount = payment_received_amount if payment_received_amount is not None else previous_balance
     current_charges = current_charges if current_charges is not None else total_amount_payable
-    consumption_trend = consumption_trend or [("MAR", 638), ("APR", 702), ("MAY", 688), ("JUN", 716), ("JUL", 774), ("AUG", 689)]
-
-    top = Table(
-        [[
-            Paragraph(provider_name, s["title"]),
-            Paragraph(
-                f"Bill Date: {bill_date.strftime('%d %b %Y').upper()}<br/>"
-                f"PLE Account No.: {ple_account_no}<br/>"
-                f"Statement No.: {statement_no}",
-                s["body"],
-            ),
-        ]],
-        colWidths=[100 * mm, 70 * mm],
-        style=TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]),
-    )
-    story.append(top)
-    story.append(Spacer(1, 6 * mm))
-    story.append(Paragraph(customer_name, s["body_bold"]))
-    for line in address_lines:
-        story.append(Paragraph(line, s["body"]))
-    story.append(Spacer(1, 4 * mm))
-
-    summary_table = Table(
-        [[
-            Paragraph(_money(total_amount_payable), s["title"]),
-            Paragraph("Total Amount Payable", s["heading"]),
-            Paragraph(payment_due.strftime('%d %b %Y').upper(), s["title"]),
-            Paragraph("Payment Due", s["heading"]),
-        ]],
-        colWidths=[35 * mm, 42 * mm, 35 * mm, 36 * mm],
-        style=TableStyle([
-            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ]),
-    )
-    story.append(summary_table)
-    story.append(Spacer(1, 6 * mm))
-
-    story.append(Paragraph("THIS IS YOUR TAX INVOICE FOR:", s["heading"]))
-    for line in invoice_address_lines:
-        story.append(Paragraph(line, s["body_bold"]))
-    story.append(Spacer(1, 2 * mm))
-
-    info_rows = [
-        ["MSSL ACCOUNT NO.", mssl_account_no],
-        ["BILLING PERIOD", f"{billing_period_start.strftime('%d %b %Y')} – {billing_period_end.strftime('%d %b %Y')}"] ,
-        ["BILL DATE", bill_date.strftime('%d %b %Y')],
-        ["ACCOUNT TYPE", account_type],
-        ["DEPOSIT", _money(deposit)],
-        ["CONTRACT END DATE", contract_end_date.strftime('%d %b %Y')],
+    consumption_trend = consumption_trend or [
+        ("MAR", 638), ("APR", 702), ("MAY", 688), ("JUN", 716), ("JUL", 774), ("AUG", 689),
     ]
-    info_table = Table(
-        [[Paragraph(k, s["body_bold"]), Paragraph(v, s["body"])] for k, v in info_rows],
-        colWidths=[48 * mm, 98 * mm],
-        style=TableStyle([
-            ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#CCCCCC")),
-            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#F2F4F7")),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("TOPPADDING", (0, 0), (-1, -1), 3),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-            ("LEFTPADDING", (0, 0), (-1, -1), 5),
-        ]),
-    )
-    story.append(info_table)
-    story.append(Spacer(1, 4 * mm))
 
-    story.append(Paragraph("CONSUMPTION TREND", s["heading"]))
-    trend_table = Table(
-        [[Paragraph("ELECTRICITY", s["body_bold"])] + [Paragraph(month, s["tiny"]) for month, _ in consumption_trend],
-         [Paragraph("kWh", s["body"])] + [Paragraph(str(value), s["body_bold"]) for _, value in consumption_trend]],
-        colWidths=[28 * mm] + [20 * mm] * len(consumption_trend),
-        style=TableStyle([
-            ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#CCCCCC")),
-            ("ALIGN", (1, 0), (-1, -1), "CENTER"),
-        ]),
-    )
-    story.append(trend_table)
-    story.append(Spacer(1, 4 * mm))
-    story.append(Paragraph(f"USAGE {usage_kwh} kWh (Rounded to whole number)", s["body_bold"]))
-    story.append(Spacer(1, 2 * mm))
+    def draw(c: pdfcanvas.Canvas) -> None:
+        left = MARGIN
+        right = PAGE_W - MARGIN
 
-    story.append(Paragraph("SUMMARY OF CHARGES", s["heading"]))
-    charges_rows = [
-        ["Balance Brought Forward from Previous Bill", _money(previous_balance)],
-        [f"Payment Received on/before {payment_received_date.strftime('%d %b %Y') if payment_received_date else '19 Aug 2026'} - Thank You", f"-{_money(payment_received_amount)}"],
-        ["Outstanding Balance", _money(0.00)],
-        ["Current Charges", _money(current_charges)],
-    ]
-    charges_table = Table(
-        [[Paragraph(k, s["body"]), Paragraph(v, s["body_bold"])] for k, v in charges_rows],
-        colWidths=[110 * mm, 36 * mm],
-        style=TableStyle([
-            ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#CCCCCC")),
-            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#F2F4F7")),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("TOPPADDING", (0, 0), (-1, -1), 4),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-            ("LEFTPADDING", (0, 0), (-1, -1), 5),
-        ]),
-    )
-    story.append(charges_table)
-    story.append(Spacer(1, 5 * mm))
-    story.append(Paragraph(
-        f"Total Amount Payable will be deducted from your {deduction_bank_name} bank account ending with {deduction_bank_account_last4} on {payment_due.strftime('%d %b %Y')}",
-        s["small"],
-    ))
-    story.append(Paragraph(_money(total_amount_payable), s["title"]))
+        # --- Header: logo/wordmark (left), bill meta (right) ---
+        y = PAGE_H - MARGIN - 6
+        _draw_logo(c, left + 7, y - 8)
+        _text(c, provider_name, left + 22, y - 14, font=FONT_B, size=19, color=ORANGE)
 
-    _build_pdf(output_path, story)
+        my = y
+        _text(c, f"Bill Date: {bill_date.strftime('%d %b %Y')}", right, my, size=9.5, align="right")
+        my -= 13
+        _text(c, f"PLE Account No.: {ple_account_no}", right, my, size=9, color=GREY_LABEL, align="right")
+        my -= 12
+        _text(c, f"Statement No.: {statement_no}", right, my, size=9, color=GREY_LABEL, align="right")
+
+        y -= 44
+
+        # --- Customer block (left) / Amount + Due + Invoice-for (right) ---
+        left_y = y
+        _text(c, customer_name, left, left_y, font=FONT_B, size=10.5)
+        left_y -= 14
+        for line in address_lines:
+            _text(c, line, left, left_y, size=9.5)
+            left_y -= 12
+
+        col_x = left + 330
+        col_w = right - col_x
+        right_y = y
+        _text(c, _money(total_amount_payable), right, right_y, font=FONT_B, size=25, align="right")
+        right_y -= 15
+        _text(c, "Total Amount Payable", right, right_y, size=8.5, color=GREY_LABEL, align="right")
+        right_y -= 20
+        _text(c, payment_due.strftime("%d %b %Y"), right, right_y, font=FONT_B, size=14, align="right")
+        right_y -= 12
+        _text(c, "Payment Due", right, right_y, size=8.5, color=GREY_LABEL, align="right")
+        right_y -= 18
+        _text(c, "THIS IS YOUR TAX INVOICE FOR:", right, right_y, font=FONT_B, size=8, align="right")
+        right_y -= 12
+        for line in invoice_address_lines:
+            _text(c, line, right, right_y, font=FONT_B, size=9, align="right")
+            right_y -= 12
+
+        y = min(left_y, right_y) - 12
+
+        # --- MSSL account + 5-column info strip ---
+        _text(c, f"MSSL ACCOUNT NO.: {mssl_account_no}", left, y, font=FONT_B, size=9.5)
+        y -= 22
+
+        info_cols = [
+            ("BILLING PERIOD",
+             f"{billing_period_start.strftime('%d %b %Y')} – {billing_period_end.strftime('%d %b %Y')}"),
+            ("BILL DATE", bill_date.strftime("%d %b %Y")),
+            ("ACCOUNT TYPE", account_type),
+            ("DEPOSIT", _money(deposit)),
+            ("CONTRACT END DATE", contract_end_date.strftime("%d %b %Y")),
+        ]
+        col_w5 = CONTENT_W / len(info_cols)
+        for i, (label, value) in enumerate(info_cols):
+            cx = left + i * col_w5
+            _text(c, label, cx, y, font=FONT, size=7, color=GREY_LABEL)
+            _wrapped(c, value, cx, y - 12, col_w5 - 6, font=FONT_B, size=9.3, leading=11)
+        y -= 40
+
+        # --- Consumption trend box ---
+        box_h = 130
+        box_y = y - box_h
+        _rounded_box(c, left, box_y, CONTENT_W, box_h)
+        _text(c, "CONSUMPTION TREND", left + CONTENT_W / 2, y - 18, font=FONT_B, size=10, align="center")
+
+        chart_left = left + 20
+        chart_right = left + CONTENT_W - 150
+        axis_y = box_y + 40
+        _text(c, "ELECTRICITY", left + 14, y - 42, font=FONT_B, size=8.5)
+        _text(c, "kWh", chart_left, axis_y + 4, size=7, color=GREY_LABEL)
+
+        c.setStrokeColor(GREY_BORDER)
+        c.setLineWidth(0.8)
+        c.line(chart_left, axis_y, chart_right, axis_y)
+
+        n = len(consumption_trend)
+        step = (chart_right - chart_left - 32) / max(n - 1, 1)
+        for i, (month, value) in enumerate(consumption_trend):
+            cx = chart_left + 32 + i * step
+            _text(c, str(value), cx, axis_y + 8, font=FONT_B, size=8, align="center")
+            _text(c, month, cx, axis_y - 12, size=7.5, color=GREY_LABEL, align="center")
+        _text(c, "*Estimated month", chart_left, box_y + 10, size=6, color=GREY_LABEL)
+
+        usage_x = right - 14
+        _text(c, "USAGE", usage_x, y - 42, size=8.5, color=GREY_LABEL, align="right")
+        _text(c, f"{usage_kwh} kWh", usage_x, y - 62, font=FONT_B, size=19, align="right")
+        _text(c, "(Rounded to whole number)", usage_x, y - 74, size=6.5, color=GREY_LABEL, align="right")
+
+        y = box_y - 16
+
+        # --- Summary of charges box ---
+        final_label = (
+            f"Total Amount Payable will be deducted from your {deduction_bank_name} "
+            f"bank account ending with {deduction_bank_account_last4} on {payment_due.strftime('%d %b %Y')}"
+        )
+        final_label_w = CONTENT_W - 20 - 90
+        final_lines = simpleSplit(final_label, FONT_B, 8.5, final_label_w)
+        rows_h = 4 * 20
+        final_h = max(len(final_lines) * 11, 22) + 16
+        box2_h = 34 + rows_h + final_h
+        box2_y = y - box2_h
+        _rounded_box(c, left, box2_y, CONTENT_W, box2_h)
+
+        ry = y - 20
+        _text(c, "SUMMARY OF CHARGES", left + 14, ry, font=FONT_B, size=10)
+        ry -= 20
+
+        charges_rows = [
+            ("Balance Brought Forward from Previous Bill", _money(previous_balance)),
+            (f"Payment Received on/before {payment_received_date.strftime('%d %b %Y')} - Thank You",
+             f"-{_money(payment_received_amount)}"),
+            ("Outstanding Balance", _money(0.00)),
+            ("Current Charges", _money(current_charges)),
+        ]
+        for label, value in charges_rows:
+            _text(c, label, left + 14, ry, size=9.3)
+            _text(c, value, right - 14, ry, size=9.3, align="right")
+            ry -= 20
+
+        c.setStrokeColor(GREY_BORDER)
+        c.setLineWidth(0.6)
+        c.line(left + 14, ry + 6, right - 14, ry + 6)
+        ry -= 12
+
+        amount_x = right - 14
+        _wrapped(c, final_label, left + 14, ry, final_label_w, font=FONT_B, size=8.5, leading=11)
+        _text(c, _money(total_amount_payable), amount_x, ry - (final_h - 22) / 2, font=FONT_B, size=17, align="right")
+
+    _build_pdf(output_path, draw)
     return {
         "output_path": output_path,
         "provider_name": provider_name,
