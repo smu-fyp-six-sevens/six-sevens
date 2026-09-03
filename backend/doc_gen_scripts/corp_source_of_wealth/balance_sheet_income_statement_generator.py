@@ -49,6 +49,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import openpyxl
 from case_facts import as_date, company_facts, seeded_rng
+from synthetic_signature import signature_paragraph_style
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -505,7 +506,11 @@ def _render_balance_sheet(story: list, s, registry: NoteRegistry, *, company_nam
     story.append(Paragraph("The accompanying notes form an integral part of these financial statements.", s["small"]))
     story.append(Spacer(1, 6 * mm))
     story.append(Paragraph("ON BEHALF OF THE BOARD OF DIRECTORS", s["section"]))
-    story.append(Spacer(1, 10 * mm))
+    story.append(Spacer(1, 8 * mm))
+    story.append(Paragraph(
+        director_name,
+        signature_paragraph_style(f"{company_uen}|director-signature", size=17),
+    ))
     story.append(Paragraph("_________________________", s["body"]))
     story.append(Paragraph(director_name, s["body_bold"]))
     story.append(Paragraph("Director", s["small"]))
@@ -652,13 +657,17 @@ def load_cases(xlsx: str | Path, cases: list[str] | None = None) -> list[dict[st
         if not case.get("Company Name"):
             continue
         docs = doc_rows.get(case_id, {})
-        if "Balance Sheet" not in docs and "Income Statement" not in docs:
+        # The mastersheet has since collapsed the old two-row-per-case shape
+        # ("Balance Sheet" + "Income Statement") into one row per case with
+        # Document Type "Financial Statements" -- accept either shape.
+        if not ({"Balance Sheet", "Income Statement", "Financial Statements"} & docs.keys()):
             continue
         out.append({
             "case_id": case_id,
             "case": case,
             "bs_row": docs.get("Balance Sheet", {}),
             "is_row": docs.get("Income Statement", {}),
+            "fs_row": docs.get("Financial Statements", {}),
             "people": sorted(people.get(case_id, []), key=lambda r: r.get("Person Seq") or 0),
         })
     return out
@@ -678,6 +687,7 @@ def generate(xlsx: str | Path, outdir: str | Path, cases: list[str] | None = Non
         filenames = {
             record["bs_row"].get("Filename"),
             record["is_row"].get("Filename"),
+            record["fs_row"].get("Filename"),
         } - {None}
         if not filenames:
             filenames = {f"{case_id}_SourceWealth_Financials.pdf"}

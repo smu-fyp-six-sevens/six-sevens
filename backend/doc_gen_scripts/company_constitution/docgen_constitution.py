@@ -39,6 +39,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import openpyxl
 from case_facts import company_facts
+from synthetic_signature import pick_signature_font, signature_paragraph_style
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
 from reportlab.lib.pagesizes import A4
@@ -595,9 +596,15 @@ def render(content: dict[str, Any], out_pdf: str | Path, synthetic_tag: bool = T
         ]
     ]
     for s in content["subscribers"]:
+        sig_font = pick_signature_font(f"{content['case_id']}|subscriber-signature|{s['id']}")
         rows.append(
             [
-                Paragraph(f"<b>{s['name']}</b><br/>{s['address']}", st["cell"]),
+                Paragraph(
+                    f"<b>{s['name']}</b><br/>{s['address']}<br/>"
+                    f"<font name='{sig_font}' size='15'>{s['name']}</font> "
+                    "<font size='7' color='#666666'>(Signature)</font>",
+                    st["cell"],
+                ),
                 Paragraph(str(s["id"]), st["cell"]),
                 Paragraph(f"{s['shares']:,}", st["cell"]),
             ]
@@ -635,7 +642,11 @@ def render(content: dict[str, Any], out_pdf: str | Path, synthetic_tag: bool = T
     story.append(
         Paragraph("Witness to the above signatures:", st["sign"])
     )
-    story.append(Spacer(1, 22))
+    story.append(Spacer(1, 14))
+    story.append(Paragraph(
+        content["witness"],
+        signature_paragraph_style(f"{content['case_id']}|witness-signature", size=16),
+    ))
     story.append(Paragraph("_____________________________________", st["sign"]))
     story.append(Paragraph(f"<b>{content['witness']}</b>", st["sign"]))
     story.append(Paragraph(f"for and on behalf of {content['firm']}", st["sign"]))

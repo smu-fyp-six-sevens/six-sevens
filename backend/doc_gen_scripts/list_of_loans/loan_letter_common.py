@@ -6,7 +6,9 @@ from duplicating letterhead/signature/metadata logic.
 """
 
 import io
+import sys
 from datetime import date, datetime
+from pathlib import Path
 
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib import colors
@@ -16,6 +18,9 @@ from reportlab.lib.units import mm
 from reportlab.platypus import (
     SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable,
 )
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from synthetic_signature import signature_paragraph_style
 
 styles = getSampleStyleSheet()
 FONT = "Helvetica"
@@ -92,13 +97,16 @@ def terms_and_conditions(bullets: list):
 
 
 def signature_block(bank_name: str, signatory_name: str, signatory_title: str,
-                     borrower_director_name: str):
+                     borrower_director_name: str, seed: str, offer_date: date):
     s = build_styles()
+    bank_sig_style = signature_paragraph_style(f"{seed}|bank-signatory", size=16)
+    borrower_sig_style = signature_paragraph_style(f"{seed}|borrower-director", size=16)
     return [
         Spacer(1, 6 * mm),
         Paragraph("Yours faithfully,", s["sig"]),
         Paragraph(f"For and on behalf of<br/><b>{bank_name}</b>", s["sig"]),
-        Spacer(1, 10 * mm),
+        Spacer(1, 6 * mm),
+        Paragraph(signatory_name, bank_sig_style),
         Paragraph("_________________________", s["sig"]),
         Paragraph(f"{signatory_name}<br/>{signatory_title}", s["sig"]),
         Spacer(1, 10 * mm),
@@ -109,9 +117,10 @@ def signature_block(bank_name: str, signatory_name: str, signatory_title: str,
             "We, the undersigned, being duly authorised, accept the above terms and conditions "
             "on behalf of the Borrower.", s["body"],
         ),
-        Spacer(1, 8 * mm),
+        Spacer(1, 6 * mm),
+        Paragraph(borrower_director_name, borrower_sig_style),
         Paragraph("_________________________", s["sig"]),
-        Paragraph(f"{borrower_director_name}<br/>Director<br/>Date: _______________", s["sig"]),
+        Paragraph(f"{borrower_director_name}<br/>Director<br/>Date: {offer_date.strftime('%d %B %Y')}", s["sig"]),
     ]
 
 

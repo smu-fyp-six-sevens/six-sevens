@@ -131,12 +131,17 @@ def write_pdf_reportlab(context: dict[str, Any], output_path: Path) -> None:
     1123px = 842.25pt), so every position/size below is copied straight from the
     template's CSS and multiplied by 0.75 (96 -> 72 dpi) to land in the same place.
     """
+    import sys
+
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.utils import simpleSplit
     from reportlab.platypus import Paragraph
     from reportlab.pdfgen import canvas as pdfcanvas
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from synthetic_signature import draw_signature
 
     PAGE_W, PAGE_H = A4
 
@@ -322,12 +327,23 @@ def write_pdf_reportlab(context: dict[str, Any], output_path: Path) -> None:
         c.setLineWidth(px(4))
         c.rect(fx, fy, finder, finder, stroke=1, fill=0)
 
-    # Signature block: ACRA seal stamp, then registrar info (name, receipt no, date)
+    # Signature block: ACRA seal stamp, cursive "signature", then registrar info
+    # (typed name, receipt no, date) — the cursive mark sits directly above the
+    # typed name, same convention as the FATCA/CRS self-cert's signatory stamps.
     receipt_no = context.get("receipt_no") or _generate_receipt_no(inc_date_obj)
     sig_info_lines = 5  # registrar name + 2 org lines + receipt no + date
     info_h = px(9) * 1.35 * sig_info_lines
-    info_top = bottom_y + info_h
+    sig_line_h = px(9) * 1.9
+    info_top = bottom_y + info_h + sig_line_h
     iy = info_top
+
+    c.setFillColor(BLACK)
+    draw_signature(
+        c, REGISTRAR_NAME.title(), sig_x, iy - sig_line_h + px(6),
+        seed=f"{context.get('uen', '')}|registrar-signature", size=px(16),
+    )
+    iy -= sig_line_h
+
     c.setFont(f"{FONT}-Bold", px(9))
     c.setFillColor(BLACK)
     c.drawString(sig_x, iy - px(9), REGISTRAR_NAME)

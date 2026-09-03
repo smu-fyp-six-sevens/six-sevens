@@ -59,11 +59,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import openpyxl
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import NameObject, NumberObject
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas as pdfcanvas
 
-from case_facts import company_facts, seeded_rng
+from case_facts import company_facts
+from synthetic_signature import pick_signature_font
 
 GLDB_BLANK_PDF = Path(__file__).resolve().parent / "GLDB FATCA and CRS self-certification for entity_5 Nov 25.pdf"
 
@@ -167,14 +166,10 @@ CP_TYPE_BOX = {
 # The two "Signature of Authorised Signatory" boxes are /Sig widgets, not /Tx fields,
 # so there's no AcroForm value to set -- a name is stamped onto the page instead (see
 # _stamp_signatures below), one field per signatory in persona["signatories"][:2].
+# Font registration/pick lives in synthetic_signature.py, shared with every other
+# generator that stamps a cursive-name signature (COI, loan letters, constitution,
+# source-of-wealth statements, passport).
 SIGNATURE_SIG_FIELDS = ["Signature76", "Signature77"]
-_FONT_DIR = Path(__file__).resolve().parent / "assets" / "fonts"
-# Caveat and Dancing Script, both SIL Open Font License (OFL.txt alongside each .ttf
-# here) -- redistribution-safe, and bundled rather than referencing an OS-installed
-# font so the same signature renders identically on Windows/Linux/Mac alike.
-SIGNATURE_FONTS = ["Caveat", "DancingScript"]
-for _name in SIGNATURE_FONTS:
-    pdfmetrics.registerFont(TTFont(_name, str(_FONT_DIR / f"{_name}.ttf")))
 
 
 def _split_giin(giin: str) -> tuple[str, str, str]:
@@ -272,8 +267,7 @@ def _stamp_signatures(page: Any, page_annots: dict[str, Any], persona: dict[str,
         if not text or field not in page_annots:
             continue
         rect = [float(x) for x in page_annots[field]["/Rect"]]
-        rng = seeded_rng(f"{case_id}|signature-font|{i}")
-        font_name = SIGNATURE_FONTS[rng.randrange(len(SIGNATURE_FONTS))]
+        font_name = pick_signature_font(f"{case_id}|signature-font|{i}")
         stamps.append((rect, str(text), font_name))
     if not stamps:
         return

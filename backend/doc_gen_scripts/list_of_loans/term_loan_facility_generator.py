@@ -97,7 +97,7 @@ def generate_term_loan_letter(
         "This offer is governed by the laws of the Republic of Singapore.",
     ]))
 
-    story += signature_block(bank_name, "David Ng", "Senior Relationship Manager, Business Banking", director_name)
+    story += signature_block(bank_name, "David Ng", "Senior Relationship Manager, Business Banking", director_name, seed=ref_no, offer_date=offer_date)
 
     build_pdf(output_path, story)
     return {
