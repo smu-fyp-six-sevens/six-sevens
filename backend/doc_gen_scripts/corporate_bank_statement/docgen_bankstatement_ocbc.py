@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import random
 import re
+import sys
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -47,11 +48,28 @@ from reportlab.pdfgen import canvas as pdfcanvas
 
 # Reuse everything from your existing generator: layout base, bank profiles,
 # the mastersheet loader, the seeded transaction engine, and the CLI plumbing.
-from docgen_bankstatement import (
-    PAGE_W, PAGE_H, FONT, FONT_B,
-    BankProfile, BANK_PROFILES, RENDERERS,
-    Block, Txn, seeded_rng, load_logo,
-)
+#
+# Prefer the dotted package import so this shares the exact same BANK_PROFILES/
+# RENDERERS dict objects as whatever else already imported docgen_bankstatement.py
+# that way (e.g. scripts/generate_from_mastersheet.py) -- registering "OCBC" and
+# "ocbc" into a second, separately-imported copy of those module-level dicts would
+# leave them invisible to callers using the first copy, silently undoing this
+# module's whole purpose. Falls back to the bare import for standalone script use
+# (`python docgen_bankstatement_ocbc.py ...` from this directory), where the dotted
+# package path isn't importable.
+try:
+    from doc_gen_scripts.corporate_bank_statement.docgen_bankstatement import (
+        PAGE_W, PAGE_H, FONT, FONT_B,
+        BankProfile, BANK_PROFILES, RENDERERS,
+        Block, Txn, seeded_rng, load_logo,
+    )
+except ImportError:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from docgen_bankstatement import (
+        PAGE_W, PAGE_H, FONT, FONT_B,
+        BankProfile, BANK_PROFILES, RENDERERS,
+        Block, Txn, seeded_rng, load_logo,
+    )
 
 # --------------------------------------------------------------------------
 # Bank profile

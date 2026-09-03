@@ -6,7 +6,6 @@ import json
 import random
 from datetime import date, datetime
 from pathlib import Path
-from string import Template
 from typing import Any
 
 FONT = "Helvetica"
@@ -55,32 +54,7 @@ def _generate_receipt_no(inc_date: date) -> str:
     return f"ACRA{prefix}{suffix}"
 
 
-TEMPLATE_FILE = "coi_template.html"
 OUTPUT_FILE = "coi_certificate.pdf"
-
-
-def escape_text(value: Any) -> str:
-    return html.escape(str(value), quote=True)
-
-
-def render_former_names_rows(former_names: list[dict[str, Any]]) -> str:
-    if not former_names:
-        return (
-            "<tr>"
-            "<td>—</td>"
-            "<td>—</td>"
-            "</tr>"
-        )
-
-    rows: list[str] = []
-    for item in former_names:
-        rows.append(
-            "<tr>"
-            f"<td>{escape_text(item.get('name', ''))}</td>"
-            f"<td>{escape_text(item.get('effective_from', ''))}</td>"
-            "</tr>"
-        )
-    return "\n                ".join(rows)
 
 
 def load_context(json_path: Path | None) -> dict[str, Any]:
@@ -96,37 +70,6 @@ def load_context(json_path: Path | None) -> dict[str, Any]:
 
     context.update(user_context)
     return context
-
-
-def render_template(template_path: Path, context: dict[str, Any]) -> str:
-    raw_template = template_path.read_text(encoding="utf-8")
-    template = Template(raw_template)
-
-    former_names = context.get("former_names", [])
-    if not isinstance(former_names, list):
-        raise ValueError("former_names must be a list of objects.")
-
-    name_change_note = context.get("name_change_note")
-    name_change_note_html = (
-        f'<div class="small-note">({escape_text(name_change_note)})</div>' if name_change_note else ""
-    )
-
-    inc_date = _parse_date(context.get("incorporation_date", ""))
-    receipt_no = context.get("receipt_no") or _generate_receipt_no(inc_date)
-
-    safe_context = {
-        "company_name": escape_text(context.get("company_name", "")),
-        "name_change_note_html": name_change_note_html,
-        "uen": escape_text(context.get("uen", "")),
-        "incorporation_date": escape_text(inc_date.strftime("%d %b %Y")),
-        "company_status": escape_text(context.get("company_status", "")),
-        "former_names_rows": render_former_names_rows(former_names),
-        "registrar_name": escape_text(REGISTRAR_NAME),
-        "receipt_no": escape_text(receipt_no),
-        "verification_url": escape_text(context.get("verification_url", "")),
-    }
-
-    return template.substitute(safe_context)
 
 
 ASSETS_DIR = Path(__file__).with_name("assets")
@@ -426,13 +369,7 @@ def write_pdf_reportlab(context: dict[str, Any], output_path: Path) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Render the ACRA certificate template to PDF."
-    )
-    parser.add_argument(
-        "--template",
-        type=Path,
-        default=Path(__file__).with_name(TEMPLATE_FILE),
-        help="Path to the HTML template file.",
+        description="Render the ACRA certificate of incorporation to PDF."
     )
     parser.add_argument(
         "--data",
@@ -445,11 +382,6 @@ def parse_args() -> argparse.Namespace:
         default=Path(__file__).with_name(OUTPUT_FILE),
         help="Output PDF file path.",
     )
-    parser.add_argument(
-        "--html-out",
-        type=Path,
-        help="Optional path to save the rendered HTML for preview/debugging.",
-    )
     return parser.parse_args()
 
 
@@ -457,13 +389,7 @@ def main() -> None:
     args = parse_args()
     context = load_context(args.data)
     if not context.get("receipt_no"):
-        # Fix the receipt no. once so the optional HTML dump and the PDF agree.
         context["receipt_no"] = _generate_receipt_no(_parse_date(context.get("incorporation_date", "")))
-    rendered_html = render_template(args.template, context)
-
-    if args.html_out is not None:
-        args.html_out.write_text(rendered_html, encoding="utf-8")
-
     write_pdf_reportlab(context, args.output)
     print(f"PDF written to: {args.output}")
 

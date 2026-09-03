@@ -36,7 +36,6 @@ so every page's "Page X of Y" is exact — never a placeholder.
 from __future__ import annotations
 
 import random
-import re
 import sys
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -72,7 +71,7 @@ CJK_FONT = "STSong-Light"
 
 BANK_PROFILES["OCBC Personal"] = BankProfile(
     name="OCBC",
-    legal_name="Oversea-Chinese Banking Corporation Limited",
+    legal_name="Overseas-Chinese Banking Corporation Limited",
     address="65 Chulia Street, OCBC Centre, Singapore 049513",
     website="www.ocbc.com",
     footer_reg="Co. Reg. No. 193200032W",
@@ -182,13 +181,24 @@ def personal_month_transactions(month: date, opening: float, rng: random.Random)
     return txns
 
 
+def _holder_seed_key(ctx: dict[str, Any]) -> str:
+    """Per-account-holder seed base. case_id alone isn't enough once a case has more
+    than one individual with their own "Bank Statement" Proof of Address row -- two
+    different people's statements would otherwise come out byte-identical (same
+    balances, same transaction days/amounts) apart from the name printed on them."""
+    director = ctx.get("director") or {}
+    holder_id = director.get("Individual ID") or ctx["case_id"]
+    return f"{ctx['case_id']}|{holder_id}"
+
+
 def build_personal_blocks(ctx: dict[str, Any], opening: float | None = None) -> list[Block]:
     blocks: list[Block] = []
-    rng_open = seeded_rng(ctx["case_id"] + "|personal-opening")
+    seed_base = _holder_seed_key(ctx)
+    rng_open = seeded_rng(seed_base + "|personal-opening")
     balance = opening if opening is not None else round(rng_open.uniform(1_500, 8_000), 2)
 
     for month in ctx["months"]:
-        rng = seeded_rng(f"{ctx['case_id']}|personal|{month:%Y-%m}")
+        rng = seeded_rng(f"{seed_base}|personal|{month:%Y-%m}")
         txns = personal_month_transactions(month, balance, rng)
         blocks.append(Block(
             month=month, opening=balance, txns=txns,
@@ -257,7 +267,7 @@ def personal_draw_letterhead(c: pdfcanvas.Canvas, ctx: dict[str, Any]) -> float:
         c.setFont(FONT_B, 15)
         c.drawString(P_M_L, y - 24, bank.name)
 
-    addr_lines = [bank.legal_name.split(" ")[0] + " Bank"]
+    addr_lines = [bank.legal_name]
     if ", Singapore " in bank.address:
         head, tail = bank.address.rsplit(", Singapore ", 1)
         addr_lines += [head, f"Singapore {tail}"]
@@ -532,14 +542,24 @@ def personal_draw_footer(c: pdfcanvas.Canvas, ctx: dict[str, Any]) -> None:
 # Renderer entry point
 # --------------------------------------------------------------------------
 
+def _generate_personal_account_no(seed: str) -> str:
+    """A personal savings account number is its own identity, not the company's
+    account from the Bank Statements tab -- generate one in the bank's XXX-XXXXXX-XXX
+    format, seeded on the account holder (case + individual) so it's stable across
+    re-runs but distinct between two individuals in the same case."""
+    rng = seeded_rng(f"{seed}|personal-account-no")
+    return f"{rng.randint(0, 999):03d}-{rng.randint(0, 999999):06d}-{rng.randint(0, 999):03d}"
+
+
 def render_ocbc_personal(ctx: dict[str, Any], blocks: list[Block], out_pdf: Path) -> Path:
     all_txns = [t for b in blocks for t in b.txns]
-    digits = re.sub(r"\D", "", ctx["account_no"])
-    ctx["ref_number"] = f"XXXX-{digits[-4:]}" if len(digits) >= 4 else ctx["account_no"]
+    seed_base = _holder_seed_key(ctx)
+    ctx["account_no"] = _generate_personal_account_no(seed_base)
+    ctx["ref_number"] = ctx["account_no"]
 
     director = ctx.get("director")
     ctx["account_holder"] = director["Name (auto/fill)"].upper() if director else "ACCOUNT HOLDER"
-    holder_address = (director or {}).get("Address") if director else None
+    holder_address = (director or {}).get("Residential Address") if director else None
     ctx["holder_address"] = (
         [p.strip().upper() for p in str(holder_address).split(",")] if holder_address
         else [p.strip() for p in ctx["address"].split(",")]
@@ -559,7 +579,7 @@ def render_ocbc_personal(ctx: dict[str, Any], blocks: list[Block], out_pdf: Path
         t.deposit or 0 for b in blocks if b.month.year == last_month.year
         for t in b.txns if t.lines[0] == "INTEREST CREDIT"
     )
-    rng_ytd = seeded_rng(ctx["case_id"] + "|personal-interest-ytd")
+    rng_ytd = seeded_rng(seed_base + "|personal-interest-ytd")
     prior_months = max(0, first_month.month - 1) if first_month.year == last_month.year else 0
     prior_interest = round(rng_ytd.uniform(5, 15) * prior_months, 2)
     ctx["interest_ytd"] = round(prior_interest + generated_interest, 2)

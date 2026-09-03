@@ -65,7 +65,7 @@ from reportlab.pdfgen import canvas as pdfcanvas
 
 from case_facts import company_facts, seeded_rng
 
-GLDB_BLANK_PDF = "GLDB FATCA and CRS self-certification for entity_5 Nov 25.pdf"
+GLDB_BLANK_PDF = Path(__file__).resolve().parent / "GLDB FATCA and CRS self-certification for entity_5 Nov 25.pdf"
 
 
 # --------------------------------------------------------------------------

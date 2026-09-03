@@ -229,6 +229,23 @@ def _styles():
     }
 
 
+# Every full-width table in the report (section bars and the grids/pair-tables under
+# them alike) is pinned to this width, so a table's own column widths never have to
+# add up exactly right by hand -- see _scale_widths below.
+FULL_WIDTH = 163 * mm
+
+
+def _scale_widths(widths: list[float], target: float = FULL_WIDTH) -> list[float]:
+    """Scale a list of column widths (mm) to sum exactly to `target`, preserving
+    their relative proportions. Several of the sample template's tables were hand-
+    tuned to widths that summed a few mm short of, or over, FULL_WIDTH, so they
+    visually bulged in or out from the navy section bar above them; routing every
+    table's colWidths through this keeps them pinned to the bar's width regardless
+    of how the individual column widths get tweaked later."""
+    total = sum(widths)
+    return [w * target / total for w in widths]
+
+
 def _section_bar(text: str | list[str], col_widths: list[float] | None = None) -> Table:
     """Full-width navy header bar with white bold text -- the CBS template's section
     heading style (Enquiry Details, Personal Details, Account Status History, ...).
@@ -236,7 +253,7 @@ def _section_bar(text: str | list[str], col_widths: list[float] | None = None) -
     the "Data Provided" / "Summary" two-up header)."""
     s = _styles()
     cells = [text] if isinstance(text, str) else text
-    widths = col_widths or [163 * mm / len(cells)] * len(cells)
+    widths = col_widths or [FULL_WIDTH / len(cells)] * len(cells)
     return Table(
         [[Paragraph(c, s["section_bar"]) for c in cells]],
         colWidths=widths,
@@ -313,9 +330,9 @@ def _draw_page_chrome(canvas, doc):
 
 def _pair_table(pairs: list[tuple[str, str]], col_widths=(55 * mm, 80 * mm)) -> Table:
     s = _styles()
-    return Table(
+    t = Table(
         [[Paragraph(k, s["body_bold"]), Paragraph(v, s["body"])] for k, v in pairs],
-        colWidths=list(col_widths),
+        colWidths=_scale_widths(list(col_widths)),
         style=TableStyle([
             ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")),
             ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#F2F4F7")),
@@ -326,6 +343,63 @@ def _pair_table(pairs: list[tuple[str, str]], col_widths=(55 * mm, 80 * mm)) -> 
             ("RIGHTPADDING", (0, 0), (-1, -1), 4),
         ]),
     )
+    # Platypus centers a Table that's narrower than the frame by default, which pulls
+    # every _pair_table section (Enquiry/Personal Details, Additional *) out of
+    # alignment with the full-width section bar above it. Left-align to match.
+    t.hAlign = "LEFT"
+    return t
+
+
+# Worst-to-best risk-grade scale for the Bureau Score page's colour bar, matching the
+# CBS sample template. Not all of these appear in SCORE_BANDS (which only samples a
+# few bands per case) -- the bar always shows the full reference scale with whichever
+# grade this case landed on picked out in a larger, bordered cell.
+GRADE_ORDER = ["HH", "GG", "FF", "EE", "DD", "CC", "BB", "AA"]
+GRADE_COLORS = {
+    "HH": colors.HexColor("#f4901e"),
+    "GG": colors.HexColor("#f7a934"),
+    "FF": colors.HexColor("#fbe27a"),
+    "EE": colors.HexColor("#eef0b0"),
+    "DD": colors.HexColor("#cbe6b0"),
+    "CC": colors.HexColor("#8fcf7c"),
+    "BB": colors.HexColor("#a9c8e8"),
+    "AA": colors.HexColor("#5b8bc4"),
+}
+
+
+def _grade_bar(current_grade: str, width: float = 163 * mm, height: float = 11 * mm) -> Table:
+    cell_w = width / len(GRADE_ORDER)
+    cells = []
+    for g in GRADE_ORDER:
+        size = 15 if g == current_grade else 10.5
+        style = ParagraphStyle(
+            f"grade_{g}", fontName=f"{FONT}-Bold", fontSize=size, alignment=TA_CENTER,
+        )
+        cells.append(Paragraph(g, style))
+    style_cmds = [
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.white),
+    ]
+    for i, g in enumerate(GRADE_ORDER):
+        style_cmds.append(("BACKGROUND", (i, 0), (i, 0), GRADE_COLORS[g]))
+        if g == current_grade:
+            style_cmds.append(("BOX", (i, 0), (i, 0), 1.2, colors.black))
+    t = Table([cells], colWidths=[cell_w] * len(GRADE_ORDER), rowHeights=[height])
+    t.setStyle(TableStyle(style_cmds))
+    t.hAlign = "LEFT"
+    return t
+
+
+def _hx_box(width: float = 40 * mm, height: float = 9 * mm) -> Table:
+    style = ParagraphStyle("hx", fontName=f"{FONT}-Bold", fontSize=12, alignment=TA_CENTER)
+    t = Table([[Paragraph("HX", style)]], colWidths=[width], rowHeights=[height])
+    t.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 1, colors.black),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ]))
+    t.hAlign = "LEFT"
+    return t
 
 
 def generate_credit_bureau_report(
@@ -460,7 +534,7 @@ def generate_credit_bureau_report(
         story.append(Table(
             [[Paragraph("Date Loaded", s["body_bold"]), Paragraph("ID Type", s["body_bold"]), Paragraph("ID Code", s["body_bold"])] ,
              [Paragraph(additional_id[2].strftime("%d/%m/%Y"), s["body"]), Paragraph(additional_id[0], s["body"]), Paragraph(additional_id[1], s["body"])]] ,
-            colWidths=[34 * mm, 35 * mm, 40 * mm],
+            colWidths=_scale_widths([34 * mm, 35 * mm, 40 * mm]),
             style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2F4F7"))]),
         ))
         story.append(Spacer(1, 2 * mm))
@@ -468,13 +542,13 @@ def generate_credit_bureau_report(
     story.append(_section_bar("Additional Names"))
     names_table_data = [[Paragraph("Date Loaded", s["body_bold"]), Paragraph("Name", s["body_bold"])] ]
     names_table_data.extend([[Paragraph(dt.strftime("%d/%m/%Y"), s["body"]), Paragraph(name, s["body"])] for dt, name in additional_names])
-    story.append(Table(names_table_data, colWidths=[34 * mm, 80 * mm], style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2F4F7"))])))
+    story.append(Table(names_table_data, colWidths=_scale_widths([34 * mm, 80 * mm]), style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2F4F7"))])))
     story.append(Spacer(1, 2 * mm))
 
     story.append(_section_bar("Additional Addresses"))
     addr_table_data = [[Paragraph("Date Loaded", s["body_bold"]), Paragraph("Addresses", s["body_bold"])] ]
     addr_table_data.extend([[Paragraph(dt.strftime("%d/%m/%Y"), s["body"]), Paragraph(addr, s["body"])] for dt, addr in additional_addresses])
-    story.append(Table(addr_table_data, colWidths=[34 * mm, 80 * mm], style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2F4F7"))])))
+    story.append(Table(addr_table_data, colWidths=_scale_widths([34 * mm, 80 * mm]), style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2F4F7"))])))
     story.append(PageBreak())
 
     # Page 2
@@ -492,7 +566,7 @@ def generate_credit_bureau_report(
             Paragraph(row.cycles, s["body"]),
             Paragraph(row.cash_advance, s["body"]),
         ])
-    story.append(Table(account_header + account_rows, colWidths=[30 * mm, 18 * mm, 18 * mm, 18 * mm, 26 * mm, 20 * mm, 28 * mm, 30 * mm], style=TableStyle([
+    story.append(Table(account_header + account_rows, colWidths=_scale_widths([30 * mm, 18 * mm, 18 * mm, 18 * mm, 26 * mm, 20 * mm, 28 * mm, 30 * mm]), style=TableStyle([
         ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")),
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2F4F7")),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -505,20 +579,20 @@ def generate_credit_bureau_report(
     story.append(_section_bar("Previous Enquiries"))
     prev_table = [[Paragraph(x, s["body_bold"]) for x in ["Date", "Grantor Bank", "Enquiry Type", "Product Type", "Account Type"]]]
     prev_table.extend([[Paragraph(a, s["body"]), Paragraph(b, s["body"]), Paragraph(c, s["body"]), Paragraph(d, s["body"]), Paragraph(e, s["body"])] for a, b, c, d, e in previous_enquiries])
-    story.append(Table(prev_table, colWidths=[24 * mm, 28 * mm, 28 * mm, 48 * mm, 20 * mm], style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2F4F7")), ("FONTSIZE", (0, 0), (-1, -1), 7.2)])))
+    story.append(Table(prev_table, colWidths=_scale_widths([24 * mm, 28 * mm, 28 * mm, 48 * mm, 20 * mm]), style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2F4F7")), ("FONTSIZE", (0, 0), (-1, -1), 7.2)])))
     story.append(Spacer(1, 2 * mm))
 
     story.append(_section_bar("Default Records"))
     default_table = [[Paragraph(x, s["body_bold"]) for x in ["Product", "Client", "Date Loaded", "Original Amt at load Date", "Balance", "Status"]]]
     default_table.extend([[Paragraph(a, s["body"]), Paragraph(b, s["body"]), Paragraph(c, s["body"]), Paragraph(d, s["body"]), Paragraph(e, s["body"]), Paragraph(f, s["body"])] for a, b, c, d, e, f in default_records])
-    story.append(Table(default_table, colWidths=[28 * mm, 25 * mm, 24 * mm, 30 * mm, 18 * mm, 36 * mm], style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2F4F7")), ("FONTSIZE", (0, 0), (-1, -1), 7.2)])))
+    story.append(Table(default_table, colWidths=_scale_widths([28 * mm, 25 * mm, 24 * mm, 30 * mm, 18 * mm, 36 * mm]), style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2F4F7")), ("FONTSIZE", (0, 0), (-1, -1), 7.2)])))
     story.append(Spacer(1, 2 * mm))
 
     story.append(_section_bar("Bankruptcy Proceedings"))
     story.append(Paragraph("Bankruptcy data is match to the input of ID type and number.", s["body_small"]))
     bk_table = [[Paragraph(x, s["body_bold"]) for x in ["Bankruptcy Number", "Order Date", "Petition Date", "Original Order Date", "Gazette Date"]]]
     bk_table.extend([[Paragraph(a, s["body"]), Paragraph(b, s["body"]), Paragraph(c, s["body"]), Paragraph(d, s["body"]), Paragraph(e, s["body"])] for a, b, c, d, e in bankruptcy_rows])
-    story.append(Table(bk_table, colWidths=[28 * mm, 25 * mm, 25 * mm, 30 * mm, 24 * mm], style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2F4F7")), ("FONTSIZE", (0, 0), (-1, -1), 7.2)])))
+    story.append(Table(bk_table, colWidths=_scale_widths([28 * mm, 25 * mm, 25 * mm, 30 * mm, 24 * mm]), style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2F4F7")), ("FONTSIZE", (0, 0), (-1, -1), 7.2)])))
     story.append(Spacer(1, 2 * mm))
     story.append(Paragraph("For status on defaults which are related/ linked to bankruptcy, please refer to Bankruptcy Proceedings on the latest update.", s["body_small"]))
     story.append(PageBreak())
@@ -534,14 +608,23 @@ def generate_credit_bureau_report(
         s["body"],
     ))
     story.append(Spacer(1, 2 * mm))
-    story.append(Paragraph(f"Example 1: Scored >> Score. ........................ {score}   Risk Grade .................... {risk_grade}", s["body_bold"]))
-    story.append(Paragraph(f"Risk Grade Description ...... : Score 1000 - 1723: Prob of Default between >= 3.48%   Probability of Default… ... {probability_of_default}", s["body"]))
-    story.append(Spacer(1, 2 * mm))
+    story.append(Paragraph("Example 1: Scored >>", s["body_bold"]))
+    story.append(Paragraph(f"Score......................... {score}", s["body"]))
+    story.append(Paragraph(f"Risk Grade ....................{risk_grade}", s["body"]))
+    story.append(Spacer(1, 1.5 * mm))
+    story.append(_grade_bar(risk_grade))
+    story.append(Spacer(1, 1.5 * mm))
+    story.append(Paragraph("Risk Grade Description ......: Score 1000 - 1723: Prob of Default between &gt;= 3.48%", s["body"]))
+    story.append(Paragraph(f"Probability of Default… ...{probability_of_default}", s["body"]))
+    story.append(Spacer(1, 3 * mm))
     story.append(Paragraph("Example 2: Non-Scored >>", s["body_bold"]))
-    story.append(Paragraph("Score. ........................ Not Applicable", s["body"]))
-    story.append(Paragraph("Risk Grade .................... HX", s["body"]))
-    story.append(Paragraph("Risk Grade Description ........ Public records (with or without inquiry/with or without trade)", s["body"]))
-    story.append(Paragraph("Probability of Default ........ Not Applicable", s["body"]))
+    story.append(Paragraph("Score......................... Not Applicable", s["body"]))
+    story.append(Paragraph("Risk Grade ....................HX", s["body"]))
+    story.append(Spacer(1, 1.5 * mm))
+    story.append(_hx_box())
+    story.append(Spacer(1, 1.5 * mm))
+    story.append(Paragraph("Risk Grade Description ........Public records (with or without inquiry/with or without trade)", s["body"]))
+    story.append(Paragraph("Probability of Default........ Not Applicable", s["body"]))
     story.append(Spacer(1, 2 * mm))
     story.append(Paragraph("For more details on the description of various risk grades, please refer to the \"Credit Report Explanation\" section below.", s["body_small"]))
     story.append(Spacer(1, 2 * mm))
@@ -561,7 +644,7 @@ def generate_credit_bureau_report(
     story.append(_section_bar("Narratives"))
     nar_table = [[Paragraph(x, s["body_bold"]) for x in ["Date Loaded", "Type", "Narrative"]]]
     nar_table.extend([[Paragraph(dt.strftime("%d/%m/%Y"), s["body"]), Paragraph(t, s["body"]), Paragraph(text, s["body"])] for dt, t, text in narratives])
-    story.append(Table(nar_table, colWidths=[24 * mm, 34 * mm, 118 * mm], style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2F4F7")), ("FONTSIZE", (0, 0), (-1, -1), 7.2), ("VALIGN", (0, 0), (-1, -1), "TOP")])) )
+    story.append(Table(nar_table, colWidths=_scale_widths([24 * mm, 34 * mm, 118 * mm]), style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2F4F7")), ("FONTSIZE", (0, 0), (-1, -1), 7.2), ("VALIGN", (0, 0), (-1, -1), "TOP")])) )
     story.append(Spacer(1, 4 * mm))
     story.append(Paragraph("OTHER INFORMATION", s["section"]))
     story.append(_section_bar("Aggregated Outstanding Balances"))
@@ -574,7 +657,7 @@ def generate_credit_bureau_report(
         ["", "Mortgage Restructured Loan", "Bank C", "75,000.00", "0.00", "0.00", "0.00"],
         ["Total", "", "", "1,932,250.00", "7,000.00", "2,500.00", "0.00"],
     ]
-    story.append(Table([[Paragraph(cell, s["tiny"]) for cell in row] for row in outstanding], colWidths=[20 * mm, 34 * mm, 22 * mm, 25 * mm, 25 * mm, 30 * mm, 30 * mm], style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2F4F7")), ("FONTSIZE", (0, 0), (-1, -1), 6.5)])))
+    story.append(Table([[Paragraph(cell, s["tiny"]) for cell in row] for row in outstanding], colWidths=_scale_widths([20 * mm, 34 * mm, 22 * mm, 25 * mm, 25 * mm, 30 * mm, 30 * mm]), style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2F4F7")), ("FONTSIZE", (0, 0), (-1, -1), 6.5)])))
     story.append(Spacer(1, 3 * mm))
     story.append(Paragraph("Aggregated Outstanding Balances for Preceding 5 Months", s["body_bold"]))
     story.append(Table(
@@ -583,7 +666,7 @@ def generate_credit_bureau_report(
          [Paragraph(c, s["tiny"]) for c in ["February 2025", "All", "All", "1,951,150.00", "7,900.00", "2,400.00", "0.00"]],
          [Paragraph(c, s["tiny"]) for c in ["January 2025", "All", "All", "1,957,450.00", "8,200.00", "1,100.00", "0.00"]],
          [Paragraph(c, s["tiny"]) for c in ["December 2024", "All", "All", "1,963,750.00", "8,500.00", "700.00", "0.00"]]],
-        colWidths=[22 * mm, 22 * mm, 22 * mm, 28 * mm, 22 * mm, 24 * mm, 24 * mm],
+        colWidths=_scale_widths([22 * mm, 22 * mm, 22 * mm, 28 * mm, 22 * mm, 24 * mm, 24 * mm]),
         style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC"))]),
     ))
     story.append(Spacer(1, 2 * mm))
@@ -597,7 +680,7 @@ def generate_credit_bureau_report(
         ["", "Mortgage Restructured Loan", "Bank C", "Single", "1,000.00", "0.00", "0.00", "0.00"],
         ["Total", "", "", "", "6,300.00", "0.00", "400.00", "0.00"],
     ]
-    story.append(Table([[Paragraph(cell, s["tiny"]) for cell in row] for row in monthly], colWidths=[18 * mm, 33 * mm, 18 * mm, 17 * mm, 22 * mm, 18 * mm, 18 * mm, 20 * mm], style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2F4F7")), ("FONTSIZE", (0, 0), (-1, -1), 6.3)])))
+    story.append(Table([[Paragraph(cell, s["tiny"]) for cell in row] for row in monthly], colWidths=_scale_widths([18 * mm, 33 * mm, 18 * mm, 17 * mm, 22 * mm, 18 * mm, 18 * mm, 20 * mm]), style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2F4F7")), ("FONTSIZE", (0, 0), (-1, -1), 6.3)])))
     story.append(Spacer(1, 2 * mm))
     story.append(Paragraph("Aggregated Monthly Instalments for Preceding 5 Months", s["body_bold"]))
     story.append(Table(
@@ -606,7 +689,7 @@ def generate_credit_bureau_report(
          [Paragraph(c, s["tiny"]) for c in ["February 2025", "All", "All", "-", "6,300.00", "0.00", "476.00", "0.00"]],
          [Paragraph(c, s["tiny"]) for c in ["January 2025", "All", "All", "-", "6,300.00", "0.00", "350.00", "0.00"]],
          [Paragraph(c, s["tiny"]) for c in ["December 2024", "All", "All", "-", "6,300.00", "0.00", "350.00", "0.00"]]],
-        colWidths=[22 * mm, 22 * mm, 22 * mm, 18 * mm, 23 * mm, 18 * mm, 18 * mm, 18 * mm],
+        colWidths=_scale_widths([22 * mm, 22 * mm, 22 * mm, 18 * mm, 23 * mm, 18 * mm, 18 * mm, 18 * mm]),
         style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC"))]),
     ))
     story.append(Spacer(1, 3 * mm))
@@ -617,6 +700,15 @@ def generate_credit_bureau_report(
     story.append(Paragraph("Disclaimer & Indemnity", s["section"]))
     story.append(Paragraph("The information contained in this Report has been collated from and/or provided to Credit Bureau (Singapore) Pte Ltd by various third parties and does not represent the opinion of Credit Bureau (Singapore) Pte Ltd in any way. No liability (in tort contract or otherwise howsoever) attaches to us with respect to the collation or supplying of the information, the Bureau Score or any use made of it whether in relation to its accuracy or completeness or any other matter whatsoever. The information is supplied on a confidential basis to you and not for the use of any other party save for any person on whose behalf you have sought the information. We are entitled to indemnity from you against any claims or loss made or sustained by us in consequence of the provision of the information sought to you.", s["tiny"]))
     story.append(Paragraph("END OF REPORT", s["body_bold"]))
+
+    # Platypus centers any Table narrower than the frame by default, which pulls
+    # several of the sample template's tables (Previous Enquiries, Bankruptcy
+    # Proceedings, the "Preceding 5 Months" mini-tables, ...) out of alignment with
+    # the full-width section bars above them. Left-align every table in one pass
+    # rather than remembering hAlign="LEFT" at each of the many call sites above.
+    for flowable in story:
+        if isinstance(flowable, Table):
+            flowable.hAlign = "LEFT"
 
     _build_pdf(output_path, story)
     return {

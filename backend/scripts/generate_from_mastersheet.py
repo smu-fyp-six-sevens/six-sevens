@@ -25,17 +25,21 @@ from doc_gen_scripts.corp_source_of_wealth.balance_sheet_income_statement_genera
 from doc_gen_scripts.corporate_bank_statement.docgen_bankstatement import (
     generate as generate_bank_statement,
     load_case as load_bank_case,
-    build_blocks as build_bank_blocks,
     BankProfile,
     BANK_PROFILES,
 )
+# Import solely for its module-level side effect: registers BANK_PROFILES["OCBC"]
+# and RENDERERS["ocbc"] into the dicts imported above (same module object, so the
+# registration is visible here) -- docgen_bankstatement.py ships with only DBS and
+# UOB profiles built in.
+from doc_gen_scripts.corporate_bank_statement import docgen_bankstatement_ocbc  # noqa: F401
 from doc_gen_scripts.certificate_of_incorporation.coi_generator import generate_certificate_of_incorporation
 from doc_gen_scripts.personal_proof_of_residence.utility_bill_generator import generate_utility_bill
-from doc_gen_scripts.personal_proof_of_residence.docgen_bankstatement_ocbc_personal import render_ocbc_personal
-from doc_gen_scripts.credit_reports.credit_bureau_report_generator import generate_credit_bureau_report
+from doc_gen_scripts.personal_proof_of_residence.docgen_bankstatement_ocbc_personal import render_ocbc_personal, build_personal_blocks
+from doc_gen_scripts.credit_reports.credit_bureau_report_generator import generate_credit_bureau_report, build_persona as build_credit_persona
 from doc_gen_scripts.company_constitution.docgen_constitution import generate as generate_constitution
 from doc_gen_scripts.certificate_of_incumbency.docgen_acra_profile import generate as generate_cert_incumbency
-from doc_gen_scripts.fatca_crs.docgen_fatca_crs import generate as generate_fatca_crs
+from doc_gen_scripts.fatca_crs.docgen_fatca_crs import build_personas as build_fatca_personas, fill_form as fill_fatca_form
 from doc_gen_scripts.case_facts import company_facts, as_date
 from doc_gen_scripts.list_of_loans.term_loan_facility_generator import generate_term_loan_letter
 from doc_gen_scripts.list_of_loans.efs_facility_generator import generate_efs_letter
@@ -73,6 +77,12 @@ LOAN_BANK_ADDRESSES: dict[str, list[str]] = {
     "OCBC": ["65 Chulia Street, OCBC Centre", "Singapore 049513"],
 }
 DEFAULT_BANK_ADDRESS = ["1 Marina Boulevard", "Singapore 018989"]
+
+# The mastersheet spells this bank "OCBC Bank"; every profile/lookup keyed off a
+# bank name in this file (BANK_PROFILES via docgen_bankstatement_ocbc.py,
+# LOAN_BANK_ADDRESSES above) uses the shorter "OCBC", matching that module's own
+# --bank OCBC CLI convention. Centralised here so both lookups normalize the same way.
+BANK_NAME_ALIASES: dict[str, str] = {"OCBC Bank": "OCBC"}
 
 
 @functools.lru_cache(maxsize=None)
@@ -160,40 +170,21 @@ def _parse_date(v):
 def generate_for_case(case_id: str) -> None:
     out = _ensure_out(case_id)
 
-    # 1) Credit report tab
+    # 1) Credit report tab — one combined bureau report per case, identity/enquiry
+    # fields derived from Case Registry + Individuals (Director & UBO convention),
+    # the credit-history content itself has no mastersheet source (see build_persona's
+    # own docstring in credit_bureau_report_generator.py).
     credit_df = _read_sheet("Credit Reports") if (MASTERSHEET.exists()) else pd.DataFrame()
     if not credit_df.empty:
         for _, r in credit_df.iterrows():
             if str(r.get("Case ID")).strip() != str(case_id):
                 continue
-            credit_row = r.to_dict()
             try:
-                cr_path = out / f"credit_report_{case_id}.pdf"
-                generate_credit_bureau_report(
-                    str(cr_path),
-                    enquiry_number=str(credit_row.get("Filename") or f"CR-{case_id}"),
-                    enquiry_date=credit_row.get("Incorporation Date (auto)") or datetime.now().date(),
-                    reference=str(credit_row.get("Filename") or case_id),
-                    consumer_name=str(credit_row.get("Company Name (auto)") or credit_row.get("Company Name") or "Consumer"),
-                    id_type="NRIC",
-                    id_number="",
-                    date_of_birth=datetime.now().date(),
-                    postal_code="",
-                    enquiry_type="New Application",
-                    product_type="",
-                    applicant_type="",
-                    earliest_credit_account_date=datetime.now().date(),
-                    secured_credit_limit=float(credit_row.get("Overdraft Amount (SGD)") or 0),
-                    unsecured_credit_limit=0,
-                    exempted_credit_limit=0,
-                    debt_management_programme="N",
-                    id_theft="N",
-                    surname="",
-                    first_name="",
-                    nationality="",
-                    marital_status="",
-                    address="",
-                )
+                case_row = _openpyxl_case_row("Case Registry", case_id)
+                people_rows = _openpyxl_case_rows("Individuals", case_id)
+                persona = build_credit_persona(case_row, people_rows)
+                cr_path = out / str(r.get("Filename") or f"{case_id}_CreditReport.pdf")
+                generate_credit_bureau_report(str(cr_path), **persona)
                 print("Wrote", cr_path)
             except Exception as e:
                 print("Credit report generation failed:", e)
@@ -216,7 +207,11 @@ def generate_for_case(case_id: str) -> None:
             if str(r.get("Case ID")).strip() != str(case_id):
                 continue
             try:
-                bank_name = r.get("Bank Name (auto)") or r.get("Bank Name") or r.get("Bank Name (auto)") or "OCBC"
+                bank_name = r.get("Bank Name (auto)") or r.get("Bank Name") or "OCBC"
+                # The mastersheet spells this bank "OCBC Bank"; the registered
+                # profile (from docgen_bankstatement_ocbc.py) is keyed "OCBC", to
+                # match that module's own --bank OCBC CLI convention.
+                bank_name = BANK_NAME_ALIASES.get(bank_name, bank_name)
                 out_pdf = generate_bank_statement(MASTERSHEET, case_id, out, bank=bank_name)
                 print("Wrote", out_pdf)
             except Exception as e:
@@ -315,17 +310,25 @@ def generate_for_case(case_id: str) -> None:
                     print("Utility bill generation failed:", e)
 
             elif "bank statement" in template:
-                # Renders the case's own registered bank account in the OCBC personal
-                # "Statement of Account" template, with the case's primary director as
-                # account holder. Note: load_bank_case() always picks the first person
-                # on the Individuals tab as director, so if a case has more than one
-                # "Bank Statement" Proof of Address row (one per individual), they will
-                # currently all come out identical apart from filename — fine for a
-                # single-director case, but not yet individual-specific.
+                # Renders a personal OCBC "Statement of Account" for whichever
+                # individual THIS row names — load_bank_case() always defaults
+                # "director" to the first person on the Individuals tab, so a case
+                # with a "Bank Statement" Proof of Address row for a non-first
+                # individual needs that overridden here, or the statement would show
+                # the wrong person's name/address (and, since build_personal_blocks/
+                # render_ocbc_personal seed on ctx["director"], the wrong person's
+                # transaction history and account number too).
                 try:
                     pa_path = out / str(r.get("Filename") or f"{individual}_ProofAddress.pdf")
                     ctx = load_bank_case(MASTERSHEET, case_id, bank_override="OCBC Personal")
-                    blocks = build_bank_blocks(ctx)
+                    person = next(
+                        (p for p in _openpyxl_case_rows("Individuals", case_id)
+                         if str(p.get("Individual ID")) == individual),
+                        None,
+                    )
+                    if person:
+                        ctx["director"] = person
+                    blocks = build_personal_blocks(ctx)
                     render_ocbc_personal(ctx, blocks, pa_path)
                     print("Wrote", pa_path)
                 except Exception as e:
@@ -352,12 +355,16 @@ def generate_for_case(case_id: str) -> None:
         except Exception as e:
             print("Company Constitution generation failed:", e)
 
-    # 11) FATCA / CRS Self-Declaration (one combined self-cert form per case)
+    # 11) FATCA / CRS Self-Declaration — one combined entity self-cert per case (the
+    # mastersheet tab has a row per individual/signatory, but the GLDB form itself is
+    # one company-level form, so a single PDF per case is correct here).
     fatca_df = _read_sheet("FATCA Self-Declaration") if (MASTERSHEET.exists()) else pd.DataFrame()
     if not fatca_df.empty:
         try:
-            for p in generate_fatca_crs(MASTERSHEET, out, cases=[case_id]):
-                print("Wrote", p)
+            for persona in build_fatca_personas(str(MASTERSHEET), cases=[case_id]):
+                fatca_path = out / f"{case_id}_selfcert.pdf"
+                fill_fatca_form(persona, out_pdf=fatca_path)
+                print("Wrote", fatca_path)
         except Exception as e:
             print("FATCA/CRS generation failed:", e)
 
@@ -368,7 +375,13 @@ def generate_for_case(case_id: str) -> None:
         for _, r in loans_df.iterrows():
             if str(r.get("Case ID")).strip() != str(case_id):
                 continue
-            loan_type = str(r.get("Loan Type") or "").strip()
+            # pandas' default NA-string list includes the literal text "None", so a
+            # "no loan" row's Loan Type cell (which the mastersheet spells "None")
+            # reads back as NaN here, not the string "None" -- `pd.isna()` catches
+            # that case; a plain `str(...).strip()` would turn NaN into "nan" and
+            # miss it, mis-reporting a clean no-loan case as an unrecognised type.
+            raw_loan_type = r.get("Loan Type")
+            loan_type = "" if pd.isna(raw_loan_type) else str(raw_loan_type).strip()
             if not loan_type or loan_type.lower() == "none":
                 continue
             try:
@@ -377,7 +390,9 @@ def generate_for_case(case_id: str) -> None:
                 facts = company_facts(case_row, people_rows)
                 director_name = facts["holders"][0]["name"] if facts["holders"] else "Director"
                 bank_name = str(case_row.get("Bank Name") or "DBS Bank")
-                bank_address_lines = LOAN_BANK_ADDRESSES.get(bank_name, DEFAULT_BANK_ADDRESS)
+                bank_address_lines = LOAN_BANK_ADDRESSES.get(
+                    BANK_NAME_ALIASES.get(bank_name, bank_name), DEFAULT_BANK_ADDRESS
+                )
                 company_address_lines = [p.strip() for p in str(facts["registered_address"]).split(",") if p.strip()]
                 offer_date = facts["application_date"]
                 amount = float(r.get("Loan Amount (SGD)") or 0)
