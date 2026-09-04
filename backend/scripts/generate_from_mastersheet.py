@@ -18,8 +18,8 @@ from datetime import datetime, timedelta
 import openpyxl
 import pandas as pd
 
-from doc_gen_scripts.nric_passport.nric_generator import generate_nric_card
-from doc_gen_scripts.nric_passport.passport_generator import generate_passport_page
+from doc_gen_scripts.nric_passport.nric_generator import generate_nric_card, build_persona as build_nric_persona
+from doc_gen_scripts.nric_passport.passport_generator import generate_passport_page, build_persona as build_passport_persona
 from doc_gen_scripts.payslips.generate_payslips import build_payslip_1, build_payslip_2, build_payslip_3, synthesize_payslip_data
 from doc_gen_scripts.corp_source_of_wealth.balance_sheet_income_statement_generator import generate as generate_sow
 from doc_gen_scripts.corporate_bank_statement.docgen_bankstatement import (
@@ -220,25 +220,31 @@ def generate_for_case(case_id: str) -> None:
     # 4) NRIC/Passport/ID documents
     id_df = _read_sheet("NRIC-Passport") if (MASTERSHEET.exists()) else pd.DataFrame()
     if not id_df.empty:
-        for _, r in id_df.iterrows():
-            if str(r.get("Case ID (auto)")).strip() != str(case_id):
-                continue
+        people_rows = _openpyxl_case_rows("Individuals", case_id)
+        for r in _openpyxl_case_rows("NRIC-Passport", case_id, key="Case ID (auto)"):
             try:
                 template = str(r.get("Template") or "").lower()
                 individual = str(r.get("Individual ID") or r.get("Filename") or f"{case_id}-id")
                 if "nric" in template:
                     nric_path = out / f"{individual}_NRIC.pdf"
-                    dob = _parse_date(r.get("Date of Birth (auto)")) or datetime.now().date()
-                    issue = _parse_date(r.get("Issue Date")) or datetime.now().date()
-                    expiry = _parse_date(r.get("Expiry Date")) or datetime.now().date()
-                    generate_nric_card(str(nric_path), name=r.get("Individual Name (auto)") or r.get("Individual Name") or "", nric_no=str(r.get("NRIC/Passport No. (auto)") or r.get("NRIC/Passport No.") or ""), date_of_birth=dob, nationality=r.get("Nationality (Auto)") or "Singaporean", gender="", race="", address_lines=[r.get("Residential Address") or ""], issue_date=issue, expiry_date=expiry, serial_no="")
+                    # NRIC-Passport itself carries no Residential Address, Sex or
+                    # Race column -- build_nric_persona() is the single source of
+                    # truth for deriving/inventing them (race from the name's CMIO
+                    # signal, gender seeded per individual), same as its own CLI
+                    # uses; joined here to the individual's address from Individuals.
+                    person = next((p for p in people_rows if str(p.get("Individual ID")) == individual), {})
+                    address = str(person.get("Residential Address") or "")
+                    persona = build_nric_persona(r, address)
+                    generate_nric_card(str(nric_path), **persona)
                     print("Wrote", nric_path)
                 if "passport" in template:
                     pp_path = out / f"{individual}_Passport.pdf"
-                    dob = _parse_date(r.get("Date of Birth (auto)")) or datetime.now().date()
-                    doi = _parse_date(r.get("Date of Issue")) or datetime.now().date()
-                    doe = _parse_date(r.get("Date of Expiry")) or datetime.now().date()
-                    generate_passport_page(str(pp_path), passport_no=str(r.get("NRIC/Passport No. (auto)") or ""), surname="", given_names=r.get("Individual Name (auto)") or "", nationality=r.get("Nationality (Auto)") or "", date_of_birth=dob, place_of_birth="", sex="", date_of_issue=doi, date_of_expiry=doe)
+                    # NRIC-Passport carries no Sex, Place of Birth or National ID
+                    # No column, and no surname/given-names split of its single
+                    # Name field -- build_passport_persona() derives/invents all
+                    # of these the same way build_nric_persona() does.
+                    persona = build_passport_persona(r)
+                    generate_passport_page(str(pp_path), **persona)
                     print("Wrote", pp_path)
             except Exception as e:
                 print("ID generation failed:", e)
