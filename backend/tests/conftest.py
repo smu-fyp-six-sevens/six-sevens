@@ -14,6 +14,14 @@ def _write_sample_pdf(path: Path) -> None:
     page.insert_text((72, 140), "100 000", fontsize=12, fontname="helv")
     page.insert_text((72, 180), "Account No. 12345678", fontsize=12, fontname="helv")
     page.insert_text((72, 220), "Opening Balance", fontsize=12, fontname="helv")
+    logo = pymupdf.open()
+    logo_page = logo.new_page(width=64, height=32)
+    logo_page.draw_rect(
+        logo_page.rect, color=(0.8, 0.1, 0.1), fill=(0.8, 0.1, 0.1)
+    )
+    pixmap = logo_page.get_pixmap()
+    logo.close()
+    page.insert_image(pymupdf.Rect(24, 18, 88, 50), pixmap=pixmap)
     doc.set_metadata(
         {
             "title": "Certificate of Incumbency",

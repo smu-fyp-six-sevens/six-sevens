@@ -4,10 +4,12 @@ import re
 import pymupdf
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image, ImageDraw
 
 from app.injection.pdf import (
     BUILTIN_FONT_HELVETICA,
     BUILTIN_FONT_TIMES,
+    _apply_manipulation,
     _builtin_fallback_font,
     _font_insert_kwargs,
     _normalize_font,
@@ -85,7 +87,15 @@ def _inject(
 
 
 def _field_for(defect_type: DefectType) -> str:
-    return NUMERIC_FIELD if defect_type == DefectType.NUMERICAL else TEXT_FIELD
+    if defect_type == DefectType.NUMERICAL:
+        return NUMERIC_FIELD
+    if defect_type == DefectType.IMAGE_MANIPULATION:
+        document = get_document(DOC_ID)
+        assert document is not None
+        return next(
+            name for name, field in document.fields.items() if field.kind == "image"
+        )
+    return TEXT_FIELD
 
 
 @pytest.mark.parametrize("defect_type", list(DefectType))
@@ -640,6 +650,39 @@ def test_image_manipulation_rejects_unknown_indicator() -> None:
     assert "indicator" in response.json()["detail"].lower()
 
 
+def test_image_manipulation_rejects_text_fields() -> None:
+    response = _inject(
+        DOC_ID,
+        TEXT_FIELD,
+        DefectType.IMAGE_MANIPULATION,
+        indicator="compression_mismatch",
+    )
+    assert response.status_code == 400
+    detail = response.json()["detail"].lower()
+    assert "image" in detail
+
+
+def test_pdf_discovers_embedded_image_fields(tmp_path: Path) -> None:
+    path = tmp_path / "logo.pdf"
+    doc = pymupdf.open()
+    page = doc.new_page(width=400, height=200)
+    page.insert_text((72, 120), "Heading", fontsize=12, fontname="helv")
+    logo = pymupdf.open()
+    logo_page = logo.new_page(width=40, height=20)
+    logo_page.draw_rect(logo_page.rect, color=(0, 0, 1), fill=(0, 0, 1))
+    pixmap = logo_page.get_pixmap()
+    logo.close()
+    page.insert_image(pymupdf.Rect(20, 20, 80, 50), pixmap=pixmap)
+    doc.save(path)
+    doc.close()
+
+    fields = discover_fields_from_pdf(path)
+    images = [field for field in fields.values() if field.kind == "image"]
+    assert len(images) == 1
+    assert images[0].rect[0] < 25
+    assert images[0].text.startswith("[image ")
+
+
 @pytest.mark.parametrize(
     "indicator",
     [
@@ -648,15 +691,19 @@ def test_image_manipulation_rejects_unknown_indicator() -> None:
         "visible_boundary",
         "scaling_anomaly",
         "image_overlay",
-        "duplicate_image",
         "quality_mismatch",
     ],
 )
 def test_image_manipulation_indicators_rewrite_the_field_region(indicator: str) -> None:
+    document = get_document(DOC_ID)
+    assert document is not None
+    field_name = next(
+        name for name, field in document.fields.items() if field.kind == "image"
+    )
     before_bytes = Path(get_document_file_path(DOC_ID) or "").read_bytes()
     response = _inject(
         DOC_ID,
-        TEXT_FIELD,
+        field_name,
         DefectType.IMAGE_MANIPULATION,
         indicator=indicator,
     )
@@ -667,3 +714,52 @@ def test_image_manipulation_indicators_rewrite_the_field_region(indicator: str) 
     after = Path(get_document_file_path(DOC_ID) or "")
     assert after.read_bytes() != before_bytes
     assert after.read_bytes().startswith(b"%PDF")
+
+
+def test_scaling_anomaly_keeps_the_full_mark_but_changes_aspect() -> None:
+    image = Image.new("RGB", (100, 40), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle([0, 0, 18, 39], fill=(220, 20, 20))
+    draw.rectangle([82, 0, 99, 39], fill=(20, 20, 220))
+    out = _apply_manipulation(image, "scaling_anomaly")
+    assert out.size == (155, 24)
+    assert out.tobytes() != image.tobytes()
+    pixels = list(out.getdata())
+    assert any(pixel[0] > 180 and pixel[2] < 80 for pixel in pixels)
+    assert any(pixel[2] > 180 and pixel[0] < 80 for pixel in pixels)
+
+
+def test_scaling_anomaly_inserts_the_image_stretched() -> None:
+    document = get_document(DOC_ID)
+    assert document is not None
+    field_name = next(
+        name for name, field in document.fields.items() if field.kind == "image"
+    )
+    field = document.fields[field_name]
+    orig_w = field.rect[2] - field.rect[0]
+    orig_h = field.rect[3] - field.rect[1]
+    response = _inject(
+        DOC_ID,
+        field_name,
+        DefectType.IMAGE_MANIPULATION,
+        indicator="scaling_anomaly",
+    )
+    assert response.status_code == 200, response.json()
+    doc = pymupdf.open(get_document_file_path(DOC_ID) or "")
+    infos = doc[field.page].get_image_info()
+    doc.close()
+    stretched = max(infos, key=lambda info: info["bbox"][2] - info["bbox"][0])
+    x0, y0, x1, y1 = stretched["bbox"]
+    assert (x1 - x0) > orig_w * 1.3
+    assert (y1 - y0) < orig_h * 0.8
+
+
+def test_image_overlay_covers_the_original_pixels() -> None:
+    image = Image.new("RGB", (40, 24), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle([0, 0, 3, 23], fill=(0, 200, 0))
+    draw.ellipse([8, 4, 32, 20], fill=(200, 20, 20))
+    out = _apply_manipulation(image, "image_overlay")
+    assert out.size == image.size
+    assert out.tobytes() != image.tobytes()
+    assert out.getpixel((1, 12)) != (0, 200, 0)

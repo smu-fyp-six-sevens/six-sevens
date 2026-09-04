@@ -34,6 +34,7 @@ def get_document_fields(document_id: str) -> list[DocumentFieldInfo]:
             text=field.text,
             page=field.page,
             source=document.field_source,
+            kind=field.kind,
         )
         for name, field in sorted(document.fields.items())
     ]

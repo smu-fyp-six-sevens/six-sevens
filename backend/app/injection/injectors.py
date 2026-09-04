@@ -121,7 +121,6 @@ _INDICATOR_LABELS = {
     "visible_boundary": "Visible Boundary",
     "scaling_anomaly": "Scaling Anomaly",
     "image_overlay": "Image Overlay",
-    "duplicate_image": "Duplicate Image",
     "quality_mismatch": "Quality Mismatch",
 }
 
@@ -610,9 +609,10 @@ class ImageManipulationInjector(DefectInjector):
         field_name: str,
         overrides: InjectOverrides | None = None,
     ) -> InjectedDefect:
-        _require_injectable_value(document, field_name)
         field = document.fields[field_name]
         before = _snapshot(field)
+        if is_image_template(_working_path(document)):
+            raise ValueError("image_manipulation currently supports PDF templates only")
         opts = _opts(overrides)
         requested = _clean_text(opts.indicator)
         if requested:
@@ -624,6 +624,18 @@ class ImageManipulationInjector(DefectInjector):
                 )
         else:
             indicator = _rng().choice(MANIPULATION_INDICATORS)
+        if field.kind != "image":
+            image_names = [
+                name for name, item in document.fields.items() if item.kind == "image"
+            ]
+            if image_names:
+                raise ValueError(
+                    f"Field '{field_name}' is not an embedded PDF image. "
+                    f"Use one of: {', '.join(sorted(image_names))}"
+                )
+            raise ValueError(
+                f"Document '{document.id}' has no embedded PDF images to manipulate"
+            )
         manipulate_field_region(_working_path(document), field, indicator)
         field.manipulation = indicator
         label = _INDICATOR_LABELS.get(indicator, indicator)

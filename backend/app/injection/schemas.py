@@ -21,7 +21,6 @@ class ManipulationIndicator(str, Enum):
     VISIBLE_BOUNDARY = "visible_boundary"
     SCALING_ANOMALY = "scaling_anomaly"
     IMAGE_OVERLAY = "image_overlay"
-    DUPLICATE_IMAGE = "duplicate_image"
     QUALITY_MISMATCH = "quality_mismatch"
 
 
@@ -45,6 +44,10 @@ class FieldValue(BaseModel):
     manipulation: str = Field(
         default="",
         description="Image-manipulation indicator applied to this field's region.",
+    )
+    kind: str = Field(
+        default="text",
+        description="How this field was found: 'text' (PDF span / OCR) or 'image' (embedded PDF image).",
     )
 
 
@@ -76,13 +79,17 @@ class InjectableDocument(BaseModel):
 
 
 class DocumentFieldInfo(BaseModel):
-    """A recognised injectable field (PDF text span or OCR text on an image)."""
+    """A recognised injectable field (PDF text span, OCR text, or embedded image)."""
 
     field_name: str
     text: str
     page: int = 0
     source: str = Field(
         description="How the field was recognised: 'pdf_text' or 'ocr'",
+    )
+    kind: str = Field(
+        default="text",
+        description="'text' or 'image'. image_manipulation only applies to image fields.",
     )
 
 
@@ -128,9 +135,9 @@ class InjectDefectRequest(BaseModel):
                     "new_text": "CERT COPY",
                 },
                 {
-                    "document_id": "Bank_Statement-1",
+                    "document_id": "Bank_Statement",
                     "defect_type": "image_manipulation",
-                    "field_name": "ocbc_bank",
+                    "field_name": "image_0_50_35",
                     "indicator": "compression_mismatch",
                 },
             ]
@@ -175,7 +182,7 @@ class InjectDefectRequest(BaseModel):
         description=(
             "Optional image_manipulation indicator: resolution_mismatch, "
             "compression_mismatch, visible_boundary, scaling_anomaly, "
-            "image_overlay, duplicate_image, quality_mismatch."
+            "image_overlay, quality_mismatch."
         ),
     )
 

@@ -1658,15 +1658,67 @@ def _discover_native_pdf_fields(
                         y=y,
                         page=page_index,
                         rect=[float(v) for v in bbox],
+                        kind="text",
                     )
     return fields
 
 
+_MIN_IMAGE_PT = 8.0
+_MIN_IMAGE_PX = 8
+
+
+def _discover_pdf_image_fields(
+    doc: pymupdf.Document,
+    metadata: dict[str, str],
+    existing: dict[str, FieldValue],
+) -> dict[str, FieldValue]:
+    """Register embedded bitmap placements from PyMuPDF (not vector drawings)."""
+    fields = dict(existing)
+    seen: set[tuple] = set()
+    for page_index, page in enumerate(doc):
+        for info in page.get_image_info() or []:
+            bbox = info.get("bbox")
+            if not bbox or len(bbox) != 4:
+                continue
+            rect = pymupdf.Rect(bbox) & page.rect
+            if rect.is_empty or rect.width < _MIN_IMAGE_PT or rect.height < _MIN_IMAGE_PT:
+                continue
+            pixel_w = int(info.get("width") or 0)
+            pixel_h = int(info.get("height") or 0)
+            if pixel_w < _MIN_IMAGE_PX or pixel_h < _MIN_IMAGE_PX:
+                continue
+            key = (
+                page_index,
+                round(rect.x0, 1),
+                round(rect.y0, 1),
+                round(rect.x1, 1),
+                round(rect.y1, 1),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            base = f"image_{page_index}_{int(round(rect.x0))}_{int(round(rect.y0))}"
+            name = _unique_field_name(base, fields)
+            fields[name] = FieldValue(
+                text=f"[image {pixel_w}x{pixel_h}]",
+                font=BUILTIN_FONT_HELVETICA,
+                font_size=1.0,
+                metadata=dict(metadata),
+                x=float(rect.x0),
+                y=float(rect.y0),
+                page=page_index,
+                rect=[float(rect.x0), float(rect.y0), float(rect.x1), float(rect.y1)],
+                kind="image",
+            )
+    return fields
+
+
 def discover_fields_from_pdf(pdf_path: Path) -> dict[str, FieldValue]:
-    """Extract injectable fields from a native PDF text layer."""
+    """Extract injectable text spans and embedded image boxes from a PDF."""
     doc = pymupdf.open(pdf_path)
     metadata = {key: value for key, value in (doc.metadata or {}).items() if value}
     fields = _discover_native_pdf_fields(doc, metadata)
+    fields = _discover_pdf_image_fields(doc, metadata, fields)
     if not fields:
         page = doc[0]
         fields["document_image"] = FieldValue(
@@ -1678,6 +1730,7 @@ def discover_fields_from_pdf(pdf_path: Path) -> dict[str, FieldValue]:
             y=24.0,
             page=0,
             rect=[10.0, 10.0, min(page.rect.width - 10.0, 220.0), 28.0],
+            kind="text",
         )
     doc.close()
     return fields
@@ -1689,7 +1742,6 @@ MANIPULATION_INDICATORS = (
     "visible_boundary",
     "scaling_anomaly",
     "image_overlay",
-    "duplicate_image",
     "quality_mismatch",
 )
 
@@ -1718,11 +1770,10 @@ def manipulate_field_region(file_path: Path, field: FieldValue, indicator: str) 
             f"Unknown image-manipulation indicator {indicator!r}. "
             f"Use one of: {', '.join(MANIPULATION_INDICATORS)}"
         )
+    if is_image_template(file_path):
+        raise ValueError("image_manipulation currently supports PDF templates only")
     if len(field.rect) != 4:
         raise ValueError("image_manipulation requires a field bounding box")
-    if is_image_template(file_path):
-        _manipulate_region_on_image(file_path, field, indicator)
-        return
     _manipulate_region_on_pdf(file_path, field, indicator)
 
 
@@ -1912,16 +1963,6 @@ def _overlay_field_text_on_pdf(
     _save_pdf(doc, pdf_path)
 
 
-def _region_from_image(image: Image.Image, rect: list[float], pad: int = 1) -> tuple[Image.Image, tuple[int, int, int, int]]:
-    x0, y0, x1, y1 = [int(round(v)) for v in rect]
-    x0 = max(0, x0 - pad)
-    y0 = max(0, y0 - pad)
-    x1 = min(image.width, max(x0 + 1, x1 + pad))
-    y1 = min(image.height, max(y0 + 1, y1 + pad))
-    box = (x0, y0, x1, y1)
-    return image.crop(box).convert("RGB"), box
-
-
 def _apply_manipulation(crop: Image.Image, indicator: str) -> Image.Image:
     crop = crop.convert("RGB")
     width, height = crop.size
@@ -1942,36 +1983,38 @@ def _apply_manipulation(crop: Image.Image, indicator: str) -> Image.Image:
         return Image.open(buffer).convert("RGB")
 
     if indicator == "visible_boundary":
-        out = crop.copy()
-        draw = ImageDraw.Draw(out)
+        out = crop.convert("RGB")
         paper = crop.getpixel((0, 0))
-        halo = tuple(min(255, channel + 28) for channel in paper)
-        edge = tuple(max(0, channel - 40) for channel in paper)
-        draw.rectangle([0, 0, width - 1, height - 1], outline=halo)
-        if width > 4 and height > 4:
-            draw.rectangle([1, 1, width - 2, height - 2], outline=edge)
-        return out
+        halo = tuple(max(0, min(255, channel - 22)) for channel in paper)
+        thickness = max(3, min(width, height) // 16)
+        ring = Image.new("L", (width, height), 0)
+        draw = ImageDraw.Draw(ring)
+        draw.rectangle([0, 0, width - 1, height - 1], outline=170, width=thickness)
+        if width > thickness * 2 + 2 and height > thickness * 2 + 2:
+            draw.rectangle(
+                [thickness, thickness, width - 1 - thickness, height - 1 - thickness],
+                outline=70,
+                width=max(1, thickness // 3),
+            )
+        ring = ring.filter(ImageFilter.GaussianBlur(radius=max(1.6, thickness * 0.45)))
+        wash = Image.new("RGB", (width, height), halo)
+        return Image.composite(wash, out, ring)
 
     if indicator == "scaling_anomaly":
-        stretched = crop.resize(
-            (max(1, int(width * 1.28)), max(1, int(height * 0.78))),
+        # Leave the wrong aspect in place; the caller inserts this at a matching rect.
+        return crop.resize(
+            (max(1, int(width * 1.55)), max(1, int(height * 0.62))),
             Image.Resampling.BICUBIC,
         )
-        canvas = Image.new("RGB", (width, height), crop.getpixel((0, 0)))
-        sample = stretched.crop((0, 0, min(width, stretched.width), min(height, stretched.height)))
-        offset_y = max(0, (height - sample.height) // 2)
-        canvas.paste(sample, (0, offset_y))
-        return canvas
 
     if indicator == "image_overlay":
-        ghost = ImageEnhance.Brightness(crop).enhance(1.1)
-        ghost = ImageEnhance.Contrast(ghost).enhance(0.92)
-        base = crop.copy()
-        base.paste(ghost, (3, 2))
-        return base
-
-    if indicator == "duplicate_image":
-        return crop.copy()
+        ghost = ImageEnhance.Brightness(crop).enhance(1.06)
+        ghost = ImageEnhance.Contrast(ghost).enhance(0.94)
+        enlarged = ghost.resize(
+            (max(width + 1, int(round(width * 1.08))), max(height + 1, int(round(height * 1.08)))),
+            Image.Resampling.BICUBIC,
+        )
+        return enlarged.resize((width, height), Image.Resampling.BICUBIC)
 
     # quality_mismatch: brightness / contrast / colour / sharpness / noise
     out = ImageEnhance.Brightness(crop).enhance(1.18)
@@ -1981,36 +2024,6 @@ def _apply_manipulation(crop: Image.Image, indicator: str) -> Image.Image:
     out = out.filter(ImageFilter.UnsharpMask(radius=1, percent=140, threshold=2))
     noise = Image.effect_noise(out.size, 22).convert("RGB")
     return Image.blend(out, noise, 0.12)
-
-
-def _duplicate_box(
-    box: tuple[int, int, int, int],
-    *,
-    width: int,
-    height: int,
-) -> tuple[int, int, int, int]:
-    x0, y0, x1, y1 = box
-    span_x = x1 - x0
-    span_y = y1 - y0
-    right = x1 + max(4, span_x // 8)
-    if right + span_x <= width:
-        return (right, y0, right + span_x, y1)
-    below = y1 + max(4, span_y // 8)
-    if below + span_y <= height:
-        return (x0, below, x1, below + span_y)
-    left = max(0, x0 - span_x - 4)
-    return (left, y0, left + span_x, y1)
-
-
-def _manipulate_region_on_image(image_path: Path, field: FieldValue, indicator: str) -> None:
-    image = Image.open(image_path).convert("RGB")
-    crop, box = _region_from_image(image, field.rect, pad=1)
-    treated = _apply_manipulation(crop, indicator)
-    image.paste(treated, box[:2])
-    if indicator == "duplicate_image":
-        dest = _duplicate_box(box, width=image.width, height=image.height)
-        image.paste(treated.resize((dest[2] - dest[0], dest[3] - dest[1]), Image.Resampling.BILINEAR), dest[:2])
-    image.save(image_path)
 
 
 def _pdf_clip_to_pil(page: pymupdf.Page, box: pymupdf.Rect) -> Image.Image:
@@ -2036,7 +2049,23 @@ def _insert_pil_on_page(
         image.save(buffer, format="JPEG", quality=16)
     else:
         image.save(buffer, format="PNG")
-    page.insert_image(box, stream=buffer.getvalue())
+    page.insert_image(box, stream=buffer.getvalue(), keep_proportion=False)
+
+
+def _insert_rect_for_treated(
+    cover: pymupdf.Rect,
+    crop: Image.Image,
+    treated: Image.Image,
+) -> pymupdf.Rect:
+    """Place a resized crop at its new aspect, from the original top-left."""
+    if crop.size == treated.size or crop.width < 1 or crop.height < 1:
+        return cover
+    return pymupdf.Rect(
+        cover.x0,
+        cover.y0,
+        cover.x0 + cover.width * (treated.width / crop.width),
+        cover.y0 + cover.height * (treated.height / crop.height),
+    )
 
 
 def _manipulate_region_on_pdf(pdf_path: Path, field: FieldValue, indicator: str) -> None:
@@ -2046,20 +2075,16 @@ def _manipulate_region_on_pdf(pdf_path: Path, field: FieldValue, indicator: str)
     if box.is_empty or box.width < 0.5 or box.height < 0.5:
         doc.close()
         raise ValueError("image_manipulation field box is empty")
-    crop = _pdf_clip_to_pil(page, box)
+    pad = 0.8
+    cover = pymupdf.Rect(box.x0 - pad, box.y0 - pad, box.x1 + pad, box.y1 + pad) & page.rect
+    crop = _pdf_clip_to_pil(page, cover)
     treated = _apply_manipulation(crop, indicator)
+    paper = _rgb01(crop.getpixel((0, 0)))
+    page.draw_rect(cover, color=None, fill=paper, width=0, overlay=True)
     _insert_pil_on_page(
         page,
         treated,
-        box,
+        _insert_rect_for_treated(cover, crop, treated),
         jpeg=indicator == "compression_mismatch",
     )
-    if indicator == "duplicate_image":
-        shift = box.width + max(4.0, box.width * 0.08)
-        dest = pymupdf.Rect(box.x0 + shift, box.y0, box.x1 + shift, box.y1)
-        if dest.x1 > page.rect.x1 - 2:
-            dest = pymupdf.Rect(box.x0, box.y1 + 4, box.x1, box.y1 + 4 + box.height)
-        dest = dest & page.rect
-        if not dest.is_empty:
-            _insert_pil_on_page(page, treated, dest, jpeg=False)
     _save_pdf(doc, pdf_path)

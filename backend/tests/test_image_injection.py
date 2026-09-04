@@ -625,19 +625,7 @@ def test_png_text_overlay_is_not_supported() -> None:
     assert "pdf" in response.json()["detail"].lower()
 
 
-@pytest.mark.parametrize(
-    "indicator",
-    [
-        "resolution_mismatch",
-        "compression_mismatch",
-        "visible_boundary",
-        "scaling_anomaly",
-        "image_overlay",
-        "duplicate_image",
-        "quality_mismatch",
-    ],
-)
-def test_png_image_manipulation_changes_only_nearby_pixels(indicator: str) -> None:
+def test_png_image_manipulation_is_not_supported() -> None:
     document = get_document("ocbc_sample")
     assert document is not None
     field_name = next(
@@ -645,22 +633,11 @@ def test_png_image_manipulation_changes_only_nearby_pixels(indicator: str) -> No
         for name, field in document.fields.items()
         if any(ch.isdigit() for ch in field.text) and len(field.rect) == 4
     )
-    field = document.fields[field_name]
-    path = Path(get_document_file_path("ocbc_sample") or "")
-    before = Image.open(path).convert("RGB")
-    response = _inject("ocbc_sample", field_name, DefectType.IMAGE_MANIPULATION, indicator=indicator)
-    assert response.status_code == 200, response.json()
-    after = Image.open(Path(get_document_file_path("ocbc_sample") or "")).convert("RGB")
-    assert after.tobytes() != before.tobytes()
-    assert after.size == before.size
-
-    bx0, by0, bx1, by1 = [int(round(v)) for v in field.rect]
-    pad = 80
-    far_box = (
-        min(before.width - 20, bx1 + pad),
-        min(before.height - 20, by1 + pad),
-        min(before.width, bx1 + pad + 20),
-        min(before.height, by1 + pad + 20),
+    response = _inject(
+        "ocbc_sample",
+        field_name,
+        DefectType.IMAGE_MANIPULATION,
+        indicator="compression_mismatch",
     )
-    if far_box[0] < far_box[2] and far_box[1] < far_box[3] and indicator != "duplicate_image":
-        assert list(before.crop(far_box).getdata()) == list(after.crop(far_box).getdata())
+    assert response.status_code == 400
+    assert "pdf" in response.json()["detail"].lower()
