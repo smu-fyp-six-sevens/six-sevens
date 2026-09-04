@@ -108,6 +108,12 @@ class AccountRow:
     overdue_balance: str
     cycles: str
     cash_advance: str = ""
+    # Outstanding principal / minimum monthly payment while the account is still
+    # open -- blank for closed accounts. Feeds the "Aggregated Outstanding
+    # Balances"/"Aggregated Monthly Instalment" tables so those actually reconcile
+    # with whichever accounts this case ended up with, instead of being hardcoded.
+    current_balance: str = ""
+    monthly_instalment: str = ""
 
 
 # Template rows for the credit-history blocks (Account Status History, Previous
@@ -128,14 +134,16 @@ def _pick_grantor_banks(rng) -> dict[str, str]:
     return {"Bank A": a, "Bank B": b, "Bank C": c}
 
 
+# The pool a case's account history is drawn from -- not every case gets all 7 (see
+# _pick_accounts()), so not every case has the same set of loans/cards.
 SAMPLE_ACCOUNTS = [
     AccountRow("Unsecured Credit Card", "Bank A", "Single", "22/03/2004", "05/03/2024", "6,500.00", "WHHHDDDDCBA*", "NNNNNNNNNNN-"),
-    AccountRow("HDB Loan", "Bank A", "Joint", "10/10/2014", "", "", "AAAAAABAAAAA"),
-    AccountRow("Executive Condominium Purchase", "Bank B", "Single", "01/01/2021", "", "", "ABBBBBBBAAAA"),
-    AccountRow("Unsecured Personal Loan", "Bank B", "Single", "01/09/2010", "", "", "AAAAAAAAAAAB"),
-    AccountRow("Unsecured Credit Card", "Bank B", "Single", "22/03/2004", "", "", "AAAAAAAAAAA*", "NNNNNNNNNNN-",),
+    AccountRow("HDB Loan", "Bank A", "Joint", "10/10/2014", "", "", "AAAAAABAAAAA", current_balance="157,000.00", monthly_instalment="2,800.00"),
+    AccountRow("Executive Condominium Purchase", "Bank B", "Single", "01/01/2021", "", "", "ABBBBBBBAAAA", current_balance="1,700,250.00", monthly_instalment="2,500.00"),
+    AccountRow("Unsecured Personal Loan", "Bank B", "Single", "01/09/2010", "", "", "AAAAAAAAAAAB", current_balance="7,000.00", monthly_instalment="300.00"),
+    AccountRow("Unsecured Credit Card", "Bank B", "Single", "22/03/2004", "", "", "AAAAAAAAAAA*", "NNNNNNNNNNN-", current_balance="2,500.00", monthly_instalment="100.00"),
     AccountRow("Private Residential Purchase", "Bank C", "Single", "30/11/2004", "20/07/2024", "90,000.00", "RHDDDCBAACBA"),
-    AccountRow("Mortgage Restructured Loan", "Bank C", "Single", "20/07/2024", "", "", "AAAAAAAAAAAA"),
+    AccountRow("Mortgage Restructured Loan", "Bank C", "Single", "20/07/2024", "", "", "AAAAAAAAAAAA", current_balance="75,000.00", monthly_instalment="1,000.00"),
 ]
 SAMPLE_PREVIOUS_ENQUIRIES = [
     ("01/01/2025", "Bank B", "New Application", "Executive Condominium Purchase", "Single"),
@@ -199,8 +207,19 @@ def _jitter_accounts(accounts: list[AccountRow], rng, bank_map: dict[str, str]) 
             overdue_balance=_jitter_amount(row.overdue_balance, rng),
             cycles=row.cycles,
             cash_advance=row.cash_advance,
+            current_balance=_jitter_amount(row.current_balance, rng),
+            monthly_instalment=_jitter_amount(row.monthly_instalment, rng, pct=0.05),
         ))
     return jittered
+
+
+def _pick_accounts(rng, pool: list[AccountRow] = SAMPLE_ACCOUNTS) -> list[AccountRow]:
+    """Not every applicant has the same set of loans/cards -- pick a random-sized
+    subset of the pool (at least 1, up to all of it), keeping the pool's original
+    relative order."""
+    k = rng.randint(1, len(pool))
+    indices = sorted(rng.sample(range(len(pool)), k))
+    return [pool[i] for i in indices]
 
 
 def _jitter_enquiries(rows: list[tuple], rng, bank_map: dict[str, str]) -> list[tuple]:
@@ -229,6 +248,85 @@ def _jitter_narratives(rows: list[tuple], rng, bank_map: dict[str, str], max_day
             text = text.replace(placeholder, real)
         return text
     return [(dt + timedelta(days=rng.randint(-max_days, max_days)), t, sub(text)) for dt, t, text in rows]
+
+
+# Classifies an open account's product type into the balance/instalment buckets the
+# "Aggregated Outstanding Balances"/"Aggregated Monthly Instalment" tables report --
+# feeds _bucket_balances/_bucket_instalments below, which build those tables from
+# whichever accounts a case actually has instead of a hardcoded, unrelated set of
+# numbers.
+PROPERTY_PRODUCTS = {
+    "HDB Loan", "Executive Condominium Purchase", "Private Residential Purchase", "Mortgage Restructured Loan",
+}
+INTEREST_UNSECURED_PRODUCTS = {"Unsecured Credit Card"}
+# Anything else still open (e.g. "Unsecured Personal Loan") is plain unsecured.
+
+
+def _amt(value: str) -> float:
+    if not value:
+        return 0.0
+    try:
+        return float(value.replace(",", ""))
+    except ValueError:
+        return 0.0
+
+
+def _money0(value: float) -> str:
+    return f"{value:,.2f}"
+
+
+def _month_label(base: date, months_back: int = 0) -> str:
+    y, m = base.year, base.month
+    for _ in range(months_back):
+        m -= 1
+        if m == 0:
+            m, y = 12, y - 1
+    return date(y, m, 1).strftime("%B %Y")
+
+
+def _bucket_balances(accounts: list[AccountRow]) -> tuple[list[list[str]], dict[str, float]]:
+    """(per-account rows, column totals) for still-open accounts with a current
+    balance -- only these contribute to outstanding balances, same as a real
+    aggregated-balances table excludes accounts that have been closed/paid off."""
+    rows: list[list[str]] = []
+    totals = {"secured": 0.0, "unsecured": 0.0, "interest": 0.0, "exempted": 0.0}
+    for a in accounts:
+        if a.date_closed or not a.current_balance:
+            continue
+        bal = _amt(a.current_balance)
+        secured = unsecured = interest = exempted = 0.0
+        if a.product_type in PROPERTY_PRODUCTS:
+            secured = bal
+        elif a.product_type in INTEREST_UNSECURED_PRODUCTS:
+            interest = bal
+        else:
+            unsecured = bal
+        totals["secured"] += secured
+        totals["unsecured"] += unsecured
+        totals["interest"] += interest
+        totals["exempted"] += exempted
+        rows.append([a.product_type, a.grantor, _money0(secured), _money0(unsecured), _money0(interest), _money0(exempted)])
+    return rows, totals
+
+
+def _bucket_instalments(accounts: list[AccountRow]) -> tuple[list[list[str]], dict[str, float]]:
+    rows: list[list[str]] = []
+    totals = {"property": 0.0, "non_property": 0.0, "unsecured": 0.0, "exempted": 0.0}
+    for a in accounts:
+        if a.date_closed or not a.monthly_instalment:
+            continue
+        inst = _amt(a.monthly_instalment)
+        property_amt = non_property = unsecured_amt = exempted_amt = 0.0
+        if a.product_type in PROPERTY_PRODUCTS:
+            property_amt = inst
+        else:
+            unsecured_amt = inst
+        totals["property"] += property_amt
+        totals["non_property"] += non_property
+        totals["unsecured"] += unsecured_amt
+        totals["exempted"] += exempted_amt
+        rows.append([a.product_type, a.grantor, a.account_type, _money0(property_amt), _money0(non_property), _money0(unsecured_amt), _money0(exempted_amt)])
+    return rows, totals
 
 
 def _styles():
@@ -456,15 +554,9 @@ def generate_credit_bureau_report(
     risk_grade: str = "HH",
     probability_of_default: str = "3.56%",
     narratives: list[tuple[date, str, str]] | None = None,
-    bank_map: dict[str, str] | None = None,
 ) -> dict:
     s = _styles()
     story: list = []
-    # Two "Aggregated ..." tables further down are static template rows (no
-    # mastersheet source), so they still reference the "Bank A"/"Bank B"/"Bank C"
-    # placeholders directly -- substitute the same per-case bank names used for
-    # `accounts` so they agree with the rest of the report.
-    bank_map = bank_map or {}
 
     # `is None` rather than falsy-`or`: a caller (build_persona, for a real mastersheet
     # identity) needs to be able to pass [] to suppress these sample aliases -- showing
@@ -489,9 +581,14 @@ def generate_credit_bureau_report(
         ]
     accounts = accounts or SAMPLE_ACCOUNTS
     previous_enquiries = previous_enquiries or SAMPLE_PREVIOUS_ENQUIRIES
-    default_records = default_records or SAMPLE_DEFAULT_RECORDS
-    bankruptcy_rows = bankruptcy_rows or SAMPLE_BANKRUPTCY_ROWS
-    narratives = narratives or SAMPLE_NARRATIVES
+    # `is None` rather than falsy-`or`, same reasoning as additional_id/names/
+    # addresses above: build_persona() needs to be able to pass [] to suppress the
+    # sample default/bankruptcy rows -- most applicants have neither on record.
+    default_records = SAMPLE_DEFAULT_RECORDS if default_records is None else default_records
+    bankruptcy_rows = SAMPLE_BANKRUPTCY_ROWS if bankruptcy_rows is None else bankruptcy_rows
+    # `is None` rather than falsy-`or`, same reasoning as additional_id/names/
+    # addresses/default_records/bankruptcy_rows above.
+    narratives = SAMPLE_NARRATIVES if narratives is None else narratives
 
     # Page 1
     story.append(Spacer(1, 4 * mm))
@@ -508,10 +605,10 @@ def generate_credit_bureau_report(
     story.append(Table(
         [
             [Paragraph("Name", s["body_bold"]), Paragraph(consumer_name, s["body"]), Paragraph("Date of Earliest known Credit Account", s["body_bold"]), Paragraph(earliest_credit_account_date.strftime("%d/%m/%Y"), s["body"])],
-            [Paragraph("ID Type", s["body_bold"]), Paragraph(id_type, s["body"]), Paragraph("Previous Enquiries", s["body_bold"]), Paragraph("3", s["body"])],
+            [Paragraph("ID Type", s["body_bold"]), Paragraph(id_type, s["body"]), Paragraph("Previous Enquiries", s["body_bold"]), Paragraph(str(len(previous_enquiries)), s["body"])],
             [Paragraph("ID Number", s["body_bold"]), Paragraph(id_number, s["body"]), Paragraph("Accounts", s["body_bold"]), Paragraph(str(len(accounts)), s["body"])],
             [Paragraph("Date of Birth", s["body_bold"]), Paragraph(date_of_birth.strftime("%d/%m/%Y"), s["body"]), Paragraph("Defaults", s["body_bold"]), Paragraph(str(len(default_records)), s["body"])],
-            [Paragraph("Postal Code", s["body_bold"]), Paragraph(postal_code, s["body"]), Paragraph("Bankruptcy Proceedings", s["body_bold"]), Paragraph("2", s["body"])],
+            [Paragraph("Postal Code", s["body_bold"]), Paragraph(postal_code, s["body"]), Paragraph("Bankruptcy Proceedings", s["body_bold"]), Paragraph(str(len(bankruptcy_rows)), s["body"])],
             [Paragraph("Enquiry Type", s["body_bold"]), Paragraph(enquiry_type, s["body"]), Paragraph("Secured Credit Limit", s["body_bold"]), Paragraph(f"{secured_credit_limit:,.0f}", s["body"])],
             [Paragraph("Product Type", s["body_bold"]), Paragraph(product_type, s["body"]), Paragraph("Unsecured Credit Limit", s["body_bold"]), Paragraph(f"{unsecured_credit_limit:,.0f}", s["body"])],
             [Paragraph("Applicant Type", s["body_bold"]), Paragraph(applicant_type, s["body"]), Paragraph("Exempted Credit Limit", s["body_bold"]), Paragraph(f"{exempted_credit_limit:,.2f}", s["body"])],
@@ -671,47 +768,60 @@ def generate_credit_bureau_report(
     story.append(Spacer(1, 4 * mm))
     story.append(Paragraph("OTHER INFORMATION", s["section"]))
     story.append(_section_bar("Aggregated Outstanding Balances"))
-    outstanding = [
-        ["Month", "Product Type", "Grantor Bank", "Secured Balances", "Unsecured Balances", "Interest Bearing Unsecured Balances", "Non-Interest Bearing Exempted Unsecured Balances"],
-        ["May 2025", "HDB Loan", bank_map.get("Bank A", "Bank A"), "157,000.00", "0.00", "0.00", "0.00"],
-        ["", "Executive Condominium Purchase", bank_map.get("Bank B", "Bank B"), "1,700,250.00", "0.00", "0.00", "0.00"],
-        ["", "Unsecured Personal Loan", bank_map.get("Bank B", "Bank B"), "0.00", "7,000.00", "0.00", "0.00"],
-        ["", "Unsecured Credit Card", bank_map.get("Bank B", "Bank B"), "0.00", "0.00", "2,500.00", "0.00"],
-        ["", "Mortgage Restructured Loan", bank_map.get("Bank C", "Bank C"), "75,000.00", "0.00", "0.00", "0.00"],
-        ["Total", "", "", "1,932,250.00", "7,000.00", "2,500.00", "0.00"],
-    ]
+    bal_rows, bal_totals = _bucket_balances(accounts)
+    current_month = _month_label(enquiry_date)
+    outstanding = [["Month", "Product Type", "Grantor Bank", "Secured Balances", "Unsecured Balances", "Interest Bearing Unsecured Balances", "Non-Interest Bearing Exempted Unsecured Balances"]]
+    for i, row in enumerate(bal_rows):
+        outstanding.append([current_month if i == 0 else "", *row])
+    outstanding.append([
+        "Total", "", "",
+        _money0(bal_totals["secured"]), _money0(bal_totals["unsecured"]),
+        _money0(bal_totals["interest"]), _money0(bal_totals["exempted"]),
+    ])
     story.append(Table([[Paragraph(cell, s["tiny"]) for cell in row] for row in outstanding], colWidths=_scale_widths([20 * mm, 34 * mm, 22 * mm, 25 * mm, 25 * mm, 30 * mm, 30 * mm]), style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2F4F7")), ("FONTSIZE", (0, 0), (-1, -1), 6.5)])))
     story.append(Spacer(1, 3 * mm))
     story.append(Paragraph("Aggregated Outstanding Balances for Preceding 5 Months", s["body_bold"]))
+    # No real month-by-month history is simulated, so the preceding months are a
+    # small deterministic decline off the current totals (balances trend down as
+    # they're paid off) -- derived from this case's own totals, not hardcoded.
+    bal_trend_rows = []
+    for i in range(1, 5):
+        factor = 1 + 0.006 * i
+        bal_trend_rows.append([Paragraph(c, s["tiny"]) for c in [
+            _month_label(enquiry_date, i), "All", "All",
+            _money0(bal_totals["secured"] * factor), _money0(bal_totals["unsecured"] * factor),
+            _money0(bal_totals["interest"] * factor), _money0(bal_totals["exempted"] * factor),
+        ]])
     story.append(Table(
-        [[Paragraph(c, s["tiny"]) for c in ["April 2025", "All", "All", "1,938,550.00", "7,300.00", "1,680.00", "0.00"]],
-         [Paragraph(c, s["tiny"]) for c in ["March 2025", "All", "All", "1,944,850.00", "7,600.00", "1,700.00", "0.00"]],
-         [Paragraph(c, s["tiny"]) for c in ["February 2025", "All", "All", "1,951,150.00", "7,900.00", "2,400.00", "0.00"]],
-         [Paragraph(c, s["tiny"]) for c in ["January 2025", "All", "All", "1,957,450.00", "8,200.00", "1,100.00", "0.00"]],
-         [Paragraph(c, s["tiny"]) for c in ["December 2024", "All", "All", "1,963,750.00", "8,500.00", "700.00", "0.00"]]],
+        bal_trend_rows,
         colWidths=_scale_widths([22 * mm, 22 * mm, 22 * mm, 28 * mm, 22 * mm, 24 * mm, 24 * mm]),
         style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC"))]),
     ))
     story.append(Spacer(1, 2 * mm))
     story.append(_section_bar("Aggregated Monthly Instalment"))
-    monthly = [
-        ["Month", "Product Type", "Grantor Bank", "Account Type**", "Property***", "Non-Property", "Unsecured", "Exempted Unsecured"],
-        ["May 2025*", "HDB Loan", bank_map.get("Bank A", "Bank A"), "Joint", "2,800.00", "0.00", "0.00", "0.00"],
-        ["", "Executive Condominium Purchase", bank_map.get("Bank B", "Bank B"), "Single", "2,500.00", "0.00", "0.00", "0.00"],
-        ["", "Unsecured Personal Loan", bank_map.get("Bank B", "Bank B"), "Single", "0.00", "0.00", "300.00", "0.00"],
-        ["", "Unsecured Credit Card", bank_map.get("Bank B", "Bank B"), "Single", "0.00", "0.00", "100.00", "0.00"],
-        ["", "Mortgage Restructured Loan", bank_map.get("Bank C", "Bank C"), "Single", "1,000.00", "0.00", "0.00", "0.00"],
-        ["Total", "", "", "", "6,300.00", "0.00", "400.00", "0.00"],
-    ]
+    inst_rows, inst_totals = _bucket_instalments(accounts)
+    monthly = [["Month", "Product Type", "Grantor Bank", "Account Type**", "Property***", "Non-Property", "Unsecured", "Exempted Unsecured"]]
+    for i, row in enumerate(inst_rows):
+        monthly.append([f"{current_month}*" if i == 0 else "", *row])
+    monthly.append([
+        "Total", "", "", "",
+        _money0(inst_totals["property"]), _money0(inst_totals["non_property"]),
+        _money0(inst_totals["unsecured"]), _money0(inst_totals["exempted"]),
+    ])
     story.append(Table([[Paragraph(cell, s["tiny"]) for cell in row] for row in monthly], colWidths=_scale_widths([18 * mm, 33 * mm, 18 * mm, 17 * mm, 22 * mm, 18 * mm, 18 * mm, 20 * mm]), style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2F4F7")), ("FONTSIZE", (0, 0), (-1, -1), 6.3)])))
     story.append(Spacer(1, 2 * mm))
     story.append(Paragraph("Aggregated Monthly Instalments for Preceding 5 Months", s["body_bold"]))
+    # Instalments don't really change month to month absent a new/closed account or
+    # a rate change, so the preceding months are held flat at the current totals.
+    inst_trend_rows = []
+    for i in range(1, 5):
+        inst_trend_rows.append([Paragraph(c, s["tiny"]) for c in [
+            _month_label(enquiry_date, i), "All", "All", "-",
+            _money0(inst_totals["property"]), _money0(inst_totals["non_property"]),
+            _money0(inst_totals["unsecured"]), _money0(inst_totals["exempted"]),
+        ]])
     story.append(Table(
-        [[Paragraph(c, s["tiny"]) for c in ["April 2025", "All", "All", "-", "6,300.00", "0.00", "380.00", "0.00"]],
-         [Paragraph(c, s["tiny"]) for c in ["March 2025", "All", "All", "-", "6,300.00", "0.00", "415.00", "0.00"]],
-         [Paragraph(c, s["tiny"]) for c in ["February 2025", "All", "All", "-", "6,300.00", "0.00", "476.00", "0.00"]],
-         [Paragraph(c, s["tiny"]) for c in ["January 2025", "All", "All", "-", "6,300.00", "0.00", "350.00", "0.00"]],
-         [Paragraph(c, s["tiny"]) for c in ["December 2024", "All", "All", "-", "6,300.00", "0.00", "350.00", "0.00"]]],
+        inst_trend_rows,
         colWidths=_scale_widths([22 * mm, 22 * mm, 22 * mm, 18 * mm, 23 * mm, 18 * mm, 18 * mm, 18 * mm]),
         style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC"))]),
     ))
@@ -863,12 +973,22 @@ def build_persona(case: dict, people: list[dict]) -> dict:
         # vary them from), but the amounts/dates get a small per-case jitter and the
         # "Bank A"/"Bank B"/"Bank C" placeholders are swapped for 3 real bank names
         # (also seeded) so 36 cases don't all show byte-identical credit histories.
-        accounts=_jitter_accounts(SAMPLE_ACCOUNTS, rng, bank_map),
+        accounts=_jitter_accounts(_pick_accounts(rng), rng, bank_map),
         previous_enquiries=_jitter_enquiries(SAMPLE_PREVIOUS_ENQUIRIES, rng, bank_map),
-        default_records=_jitter_defaults(SAMPLE_DEFAULT_RECORDS, rng, bank_map),
-        bankruptcy_rows=_jitter_bankruptcy(SAMPLE_BANKRUPTCY_ROWS, rng),
-        narratives=_jitter_narratives(SAMPLE_NARRATIVES, rng, bank_map),
-        bank_map=bank_map,
+        # No mastersheet source for a default/bankruptcy/narrative history, and most
+        # applicants have none of these -- each is only included for a small, seeded
+        # per-case chance (independent rolls, so a case could show any subset of the
+        # three) rather than showing the same "Negotiated Settlement" / bankruptcy
+        # order / distress narratives on every single case.
+        default_records=(
+            _jitter_defaults(SAMPLE_DEFAULT_RECORDS, rng, bank_map) if rng.random() < 0.15 else []
+        ),
+        bankruptcy_rows=(
+            _jitter_bankruptcy(SAMPLE_BANKRUPTCY_ROWS, rng) if rng.random() < 0.08 else []
+        ),
+        narratives=(
+            _jitter_narratives(SAMPLE_NARRATIVES, rng, bank_map) if rng.random() < 0.15 else []
+        ),
     )
 
 
