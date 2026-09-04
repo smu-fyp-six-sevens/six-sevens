@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Awaitable, Callable
 
 import httpx
 
@@ -61,38 +62,88 @@ class DifyClient:
         Raises DifyInvocationError, with the message noting the attempt
         count, once retries are exhausted.
         """
+        return await self._with_retry(
+            f"Workflow {workflow_id}", lambda: self.run_workflow(workflow_id, inputs)
+        )
+
+    async def run_chatflow(
+        self,
+        api_key: str,
+        inputs: dict,
+        query: str,
+        user: str,
+        *,
+        files: list[dict] | None = None,
+    ) -> dict:
+        """
+        Invokes a Dify Chatflow app (e.g. the Classifier/Intake Coordinator,
+        which — unlike Extraction — is a chat app, not a workflow app).
+        Chat apps are identified purely by their own API key (there's no
+        workflow_id in the request body), and require `query`/`user` fields
+        that workflow apps don't. `files` follows Dify's file-object shape,
+        e.g. {"type": "document", "transfer_method": "remote_url", "url": ...}.
+
+        Raises DifyInvocationError on any non-2xx response or network
+        failure, same contract as run_workflow.
+        """
+        payload: dict = {
+            "inputs": inputs,
+            "query": query,
+            "response_mode": "blocking",
+            "user": user,
+        }
+        if files:
+            payload["files"] = files
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                response = await client.post(
+                    f"{self._base_url}/chat-messages",
+                    headers=headers,
+                    json=payload,
+                )
+                response.raise_for_status()
+                return response.json()
+            except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+                raise DifyInvocationError(f"Chatflow invocation failed: {exc}") from exc
+
+    async def run_chatflow_with_retry(
+        self,
+        api_key: str,
+        inputs: dict,
+        query: str,
+        user: str,
+        *,
+        files: list[dict] | None = None,
+    ) -> dict:
+        """AC3 retry, same policy as run_workflow_with_retry — see there."""
+        return await self._with_retry(
+            "Chatflow", lambda: self.run_chatflow(api_key, inputs, query, user, files=files)
+        )
+
+    async def _with_retry(self, label: str, call: Callable[[], Awaitable[dict]]) -> dict:
         last_error: DifyInvocationError | None = None
         for attempt in range(1, settings.MAX_INVOCATION_RETRIES + 1):
             try:
-                return await self.run_workflow(workflow_id, inputs)
+                return await call()
             except DifyInvocationError as exc:
                 last_error = exc
                 logger.warning(
-                    "Workflow %s invocation attempt %d/%d failed: %s",
-                    workflow_id, attempt, settings.MAX_INVOCATION_RETRIES, exc,
+                    "%s invocation attempt %d/%d failed: %s",
+                    label, attempt, settings.MAX_INVOCATION_RETRIES, exc,
                 )
                 if attempt < settings.MAX_INVOCATION_RETRIES:
                     await asyncio.sleep(settings.RETRY_BACKOFF_SECONDS * attempt)
 
         raise DifyInvocationError(
-            f"Workflow {workflow_id} invocation failed after "
+            f"{label} invocation failed after "
             f"{settings.MAX_INVOCATION_RETRIES} attempts: {last_error}"
         ) from last_error
-
-    async def invoke_classifier_workflow(self, document_id: str, document_info: dict) -> dict:
-        """
-        Invokes the Classifier Agent's workflow with document_id and
-        document_info as mandatory inputs. Superseded by orchestrator.py's
-        use of run_workflow() for the Intake Coordinator/Extraction flow —
-        kept here for any caller still using the single-workflow shape.
-        """
-        if not document_id or not document_info:
-            raise ValueError("document_id and document_info are mandatory inputs")
-
-        return await self.run_workflow(
-            settings.DIFY_CLASSIFIER_WORKFLOW_ID,
-            {"document_id": document_id, "document_info": document_info},
-        )
 
 
 dify_client = DifyClient()

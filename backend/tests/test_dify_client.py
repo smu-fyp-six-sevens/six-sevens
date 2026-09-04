@@ -128,31 +128,111 @@ async def test_run_workflow_with_retry_raises_after_exhausting_all_attempts() ->
 
 
 @pytest.mark.asyncio
-async def test_invoke_classifier_workflow_rejects_empty_document_id() -> None:
+async def test_run_chatflow_success_returns_json_body() -> None:
     client = DifyClient()
-    with pytest.raises(ValueError):
-        await client.invoke_classifier_workflow("", {"filename": "a.pdf"})
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()
+    mock_response.json.return_value = {"answer": '{"document_type": "payslip"}'}
+
+    with patch("app.dify_client.httpx.AsyncClient") as mock_async_client_cls:
+        mock_async_client_cls.return_value = _mock_async_client(post_return=mock_response)
+
+        result = await client.run_chatflow(
+            "chat-api-key",
+            {"document_id": "doc-1"},
+            "Classify this document",
+            "doc-1",
+            files=[{"type": "document", "transfer_method": "remote_url", "url": "https://x/doc.pdf"}],
+        )
+
+        assert result == {"answer": '{"document_type": "payslip"}'}
+        posted_kwargs = mock_async_client_cls.return_value.post.call_args
+        assert posted_kwargs.args[0].endswith("/chat-messages")
+        assert posted_kwargs.kwargs["headers"]["Authorization"] == "Bearer chat-api-key"
+        assert posted_kwargs.kwargs["json"]["inputs"] == {"document_id": "doc-1"}
+        assert posted_kwargs.kwargs["json"]["query"] == "Classify this document"
+        assert posted_kwargs.kwargs["json"]["user"] == "doc-1"
+        assert posted_kwargs.kwargs["json"]["response_mode"] == "blocking"
+        assert posted_kwargs.kwargs["json"]["files"] == [
+            {"type": "document", "transfer_method": "remote_url", "url": "https://x/doc.pdf"}
+        ]
 
 
 @pytest.mark.asyncio
-async def test_invoke_classifier_workflow_rejects_empty_document_info() -> None:
+async def test_run_chatflow_omits_files_key_when_none_given() -> None:
     client = DifyClient()
-    with pytest.raises(ValueError):
-        await client.invoke_classifier_workflow("doc-1", {})
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()
+    mock_response.json.return_value = {"answer": "{}"}
+
+    with patch("app.dify_client.httpx.AsyncClient") as mock_async_client_cls:
+        mock_async_client_cls.return_value = _mock_async_client(post_return=mock_response)
+
+        await client.run_chatflow("chat-api-key", {}, "Classify this document", "doc-1")
+
+        posted_kwargs = mock_async_client_cls.return_value.post.call_args
+        assert "files" not in posted_kwargs.kwargs["json"]
 
 
 @pytest.mark.asyncio
-async def test_invoke_classifier_workflow_delegates_to_run_workflow() -> None:
+async def test_run_chatflow_raises_dify_error_on_http_status_error() -> None:
     client = DifyClient()
-    with patch.object(
-        client, "run_workflow", new=AsyncMock(return_value={"ok": True})
-    ) as mock_run:
-        result = await client.invoke_classifier_workflow("doc-1", {"filename": "a.pdf"})
+    mock_response = MagicMock()
+    mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+        "bad status", request=MagicMock(), response=MagicMock()
+    )
 
-        assert result == {"ok": True}
-        mock_run.assert_awaited_once()
-        called_workflow_id, called_inputs = mock_run.call_args[0]
-        assert called_inputs == {
-            "document_id": "doc-1",
-            "document_info": {"filename": "a.pdf"},
-        }
+    with patch("app.dify_client.httpx.AsyncClient") as mock_async_client_cls:
+        mock_async_client_cls.return_value = _mock_async_client(post_return=mock_response)
+
+        with pytest.raises(DifyInvocationError):
+            await client.run_chatflow("chat-api-key", {}, "Classify this document", "doc-1")
+
+
+@pytest.mark.asyncio
+async def test_run_chatflow_raises_dify_error_on_request_error() -> None:
+    client = DifyClient()
+
+    with patch("app.dify_client.httpx.AsyncClient") as mock_async_client_cls:
+        mock_async_client_cls.return_value = _mock_async_client(
+            post_side_effect=httpx.ConnectError("connection refused")
+        )
+
+        with pytest.raises(DifyInvocationError):
+            await client.run_chatflow("chat-api-key", {}, "Classify this document", "doc-1")
+
+
+@pytest.mark.asyncio
+async def test_run_chatflow_with_retry_succeeds_first_try() -> None:
+    client = DifyClient()
+    with (
+        patch.object(client, "run_chatflow", new=AsyncMock(return_value={"answer": "{}"})) as mock_run,
+        patch("app.dify_client.asyncio.sleep", new=AsyncMock()) as mock_sleep,
+    ):
+        result = await client.run_chatflow_with_retry(
+            "chat-api-key", {}, "Classify this document", "doc-1"
+        )
+
+        assert result == {"answer": "{}"}
+        assert mock_run.await_count == 1
+        mock_sleep.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_run_chatflow_with_retry_raises_after_exhausting_all_attempts() -> None:
+    client = DifyClient()
+    with (
+        patch.object(
+            client,
+            "run_chatflow",
+            new=AsyncMock(side_effect=DifyInvocationError("persistent failure")),
+        ) as mock_run,
+        patch("app.dify_client.asyncio.sleep", new=AsyncMock()) as mock_sleep,
+    ):
+        with pytest.raises(DifyInvocationError) as exc_info:
+            await client.run_chatflow_with_retry("chat-api-key", {}, "Classify this document", "doc-1")
+
+        assert mock_run.await_count == 3
+        assert mock_sleep.await_count == 2
+        assert "after 3 attempts" in str(exc_info.value)
+        assert "persistent failure" in str(exc_info.value)

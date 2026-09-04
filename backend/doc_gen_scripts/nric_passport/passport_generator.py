@@ -358,8 +358,14 @@ def build_persona(row: dict) -> dict:
     issue_date = date(rng.randint(2019, 2025), rng.randint(1, 12), rng.randint(1, 28))
     expiry_date = date(issue_date.year + 10, issue_date.month, issue_date.day)
 
+    # Despite the column name, "NRIC/Passport No. (auto)" always holds the person's
+    # NRIC (every case's sample data uses the S/T-prefixed NRIC format here, even on
+    # Passport-template rows) -- that's the right value for "National ID No" on the
+    # passport page, not "Passport No", which needs its own distinct number.
+    national_id_no = str(row.get("NRIC/Passport No. (auto)") or "")
+
     return dict(
-        passport_no=str(row.get("NRIC/Passport No. (auto)") or ""),
+        passport_no=f"{rng.choice('EK')}{rng.randint(1000000, 9999999)}{rng.choice('ABCDEFGHIZJ')}",
         surname=surname,
         given_names=given_names,
         nationality=str(row.get("Nationality (Auto)") or "Singaporean"),
@@ -368,7 +374,7 @@ def build_persona(row: dict) -> dict:
         sex=rng.choice(["M", "F"]),
         date_of_issue=issue_date,
         date_of_expiry=expiry_date,
-        national_id_no=f"{rng.choice('ST')}{rng.randint(1000000, 9999999)}{rng.choice('ABCDEFGHIZJ')}",
+        national_id_no=national_id_no,
     )
 
 

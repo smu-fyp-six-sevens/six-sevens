@@ -20,8 +20,13 @@ class Settings:
 
     DIFY_BASE_URL: str = os.environ.get("DIFY_BASE_URL", "https://api.dify.ai/v1")
     DIFY_API_KEY: str = os.environ.get("DIFY_API_KEY", "")
+    # Classifier (Intake Coordinator) is a Dify Chatflow app, not a Workflow
+    # app — Dify identifies a chat app purely by its own API key (sent as
+    # the Authorization header on /chat-messages), so there's no workflow_id
+    # to pass in the request body. DIFY_CLASSIFIER_WORKFLOW_ID is kept only
+    # for reference/documentation of which Dify app this is.
+    DIFY_CLASSIFIER_API_KEY: str = os.environ.get("DIFY_CLASSIFIER_API_KEY", "")
     DIFY_CLASSIFIER_WORKFLOW_ID: str = os.environ.get("DIFY_CLASSIFIER_WORKFLOW_ID", "")
-    DIFY_INTAKE_COORDINATOR_WORKFLOW_ID: str = os.environ.get("DIFY_INTAKE_COORDINATOR_WORKFLOW_ID", "")
     DIFY_EXTRACTION_WORKFLOW_ID: str = os.environ.get("DIFY_EXTRACTION_WORKFLOW_ID", "")
 
     DEEPSEEK_BASE_URL: str = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
