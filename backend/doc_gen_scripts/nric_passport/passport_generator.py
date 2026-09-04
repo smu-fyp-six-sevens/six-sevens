@@ -194,6 +194,7 @@ def generate_passport_page(
     crest_asset: str | Path | None = DEFAULT_CREST_ASSET,
     watermark_asset: str | Path | None = DEFAULT_FRONT_GHOST_ASSET,
     synthetic_tag: bool = True,
+    redact_photo: bool = False,
 ) -> dict:
     crest_art = _load_ghost_image(crest_asset, greyscale=False, knockout_white=True) if crest_asset else None
     watermark_art = (
@@ -233,13 +234,23 @@ def generate_passport_page(
         photo_w, photo_h = 140.0, 175.0
         photo_x = hx
         photo_y = top - 46 - photo_h
-        _placeholder_box(c, photo_x, photo_y, photo_w, photo_h, "PHOTO\nPLACEHOLDER")
+        if not redact_photo:
+            _placeholder_box(c, photo_x, photo_y, photo_w, photo_h, "PHOTO\nPLACEHOLDER")
 
         # emblem badge in the photo's bottom-right corner -- same ghost-image
         # mechanism as nric_generator.py's front ghost mark, but here it's a
-        # corner accent on the photo rather than a full-page watermark.
+        # corner accent on the photo rather than a full-page watermark. Drawn
+        # before the redaction fill below, so half of it (the half over the
+        # photo itself) ends up covered, and only the half straddling outside
+        # the photo box still peeks out.
         if watermark_art is not None:
             _draw_fitted(c, watermark_art, photo_x + photo_w, photo_y, 56, 56)
+
+        if redact_photo:
+            # Simulates a scanned/uploaded document where the photo itself has
+            # been blacked out -- solid fill, no caption.
+            c.setFillColor(colors.black)
+            c.rect(photo_x, photo_y, photo_w, photo_h, fill=1, stroke=0)
 
         tx = photo_x + photo_w + 22
         text_right = CARD_X + CARD_W - 18
@@ -301,8 +312,16 @@ def generate_passport_page(
         mrz_w = CARD_W - 2 * mrz_margin
         mrz_raw_w = pdfmetrics.stringWidth(line1, "Courier-Bold", mrz_size)
         mrz_tracking = max(0.0, (mrz_w - mrz_raw_w) / (len(line1) - 1))
+        # Clip the fill to the card's own rounded outline -- a plain square-cornered
+        # rect flush with the card's bottom edge otherwise pokes past the card's
+        # rounded corners there.
+        c.saveState()
+        card_path = c.beginPath()
+        card_path.roundRect(CARD_X, CARD_Y, CARD_W, CARD_H, 8)
+        c.clipPath(card_path, stroke=0, fill=0)
         c.setFillColor(MRZ_BG)
         c.rect(CARD_X, CARD_Y, CARD_W, mrz_h, fill=1, stroke=0)
+        c.restoreState()
         _text(c, CARD_X + mrz_margin, CARD_Y + 31, line1, font="Courier-Bold", size=mrz_size, color=colors.black, tracking=mrz_tracking)
         _text(c, CARD_X + mrz_margin, CARD_Y + 12, line2, font="Courier-Bold", size=mrz_size, color=colors.black, tracking=mrz_tracking)
 

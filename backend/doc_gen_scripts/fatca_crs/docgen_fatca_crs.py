@@ -189,7 +189,10 @@ def _gldb_values(p: dict[str, Any]) -> dict[str, Any]:
 
     v["Full Legal Name of Entity Branch"] = p.get("entity_name", "")
     v["Country of Incorporation"] = p.get("country_of_incorporation", "")
+    v["Block"] = addr.get("block", "")
     v["Street"] = addr.get("street", "")
+    v["Floor"] = addr.get("floor", "")
+    v["Unit"] = addr.get("unit", "")
     v["City  State"] = addr.get("city", "")
     v["Postal Code"] = addr.get("postal_code", "")
     v["Country"] = addr.get("country", "")
@@ -404,17 +407,40 @@ def _rows(ws) -> list[dict[str, Any]]:
 
 
 def _split_registered_address(addr: str) -> dict[str, str]:
-    """'21 Tampines Street 12, #05-34, Singapore 529456' -> street / city / postal_code / country."""
+    """'1 Raffles Place, #32-01, Singapore 048616' -> block / street / floor / unit /
+    city / postal_code / country. The form has separate Block/Street/Floor/Unit
+    boxes (not one combined address line), so this pulls all four out instead of
+    dumping the whole line into Street."""
     addr = (addr or "").strip()
-    m = re.search(r",\s*Singapore\s*(\d{6})\s*$", addr, flags=re.I)
-    if m:
-        return {
-            "street": addr[: m.start()].strip().rstrip(","),
-            "city": "Singapore",
-            "postal_code": m.group(1),
-            "country": "Singapore",
-        }
-    return {"street": addr, "city": "", "postal_code": "", "country": "Singapore"}
+    city = ""
+    postal_code = ""
+    postal_m = re.search(r",\s*Singapore\s*(\d{6})\s*$", addr, flags=re.I)
+    if postal_m:
+        city = "Singapore"
+        postal_code = postal_m.group(1)
+        addr = addr[: postal_m.start()].strip().rstrip(",")
+
+    floor, unit = "", ""
+    unit_m = re.search(r"#\s*(\w+)\s*-\s*(\w+)", addr)
+    if unit_m:
+        floor, unit = unit_m.group(1), unit_m.group(2)
+        addr = addr[: unit_m.start()] + addr[unit_m.end():]
+        addr = re.sub(r",\s*,", ",", addr).strip(", ").strip()
+
+    block, street = "", addr
+    block_m = re.match(r"(\S+)\s+(.*)", addr)
+    if block_m:
+        block, street = block_m.group(1), block_m.group(2).strip(", ").strip()
+
+    return {
+        "block": block,
+        "street": street,
+        "floor": floor,
+        "unit": unit,
+        "city": city,
+        "postal_code": postal_code,
+        "country": "Singapore",
+    }
 
 
 def _fmt_date(value: Any) -> str:

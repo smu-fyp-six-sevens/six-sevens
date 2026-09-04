@@ -42,13 +42,20 @@ EMPLOYER_STREETS = ["1 Marina Boulevard", "8 Shenton Way", "80 Robinson Road",
                      "6 Battery Road", "50 Raffles Place", "3 Church Street"]
 
 
-def synthesize_payslip_data(individual_id: str, *, employee_name: str, employee_id: str,
+def synthesize_payslip_data(individual_id: str, *, employee_name: str,
                              employer_name: str, role: str = "", application_date: date | None = None,
-                             currency: str = "SGD") -> dict:
+                             currency: str = "SGD", company_address: str = "") -> dict:
     """Invent a plausible month of pay for one employee, seeded on their individual
     ID so re-runs are reproducible. The mastersheet's Payslips tab only carries
     identity fields (name, NRIC, role, employer) — no salary figures — so every
-    monetary field a payslip template needs is synthesized here.
+    monetary field a payslip template needs is synthesized here, including a
+    realistic-looking employee ID (the mastersheet's internal individual ID, e.g.
+    "C008-P2", is only used to seed the RNG, never shown on the document).
+
+    `company_address` should be the case's actual registered company address
+    (e.g. from case_facts.company_facts()) so it agrees with every other document
+    generated for the case. If not supplied (e.g. standalone/demo use), a
+    plausible address is invented instead.
 
     Returns a superset of the fields build_payslip_1/2/3 each read, so callers
     don't need to branch on which template they're about to build.
@@ -67,14 +74,16 @@ def synthesize_payslip_data(individual_id: str, *, employee_name: str, employee_
     tax_withholding = round(basic_salary * rng.uniform(0.05, 0.12), 2)
     other_deductions = round(rng.uniform(20, 120), 2)
 
-    street = EMPLOYER_STREETS[rng.randrange(len(EMPLOYER_STREETS))]
-    postal = rng.randint(18900, 68999)
+    if not company_address:
+        street = EMPLOYER_STREETS[rng.randrange(len(EMPLOYER_STREETS))]
+        postal = rng.randint(18900, 68999)
+        company_address = f"{street}, Singapore {postal:06d}"
 
     return {
         "company_name": employer_name,
-        "company_address": f"{street}, Singapore {postal:06d}",
+        "company_address": company_address,
         "employee_name": employee_name,
-        "employee_id": employee_id,
+        "employee_id": f"EMP-{rng.randint(1000, 9999)}",
         "pay_period": period_start.strftime("%B %Y"),
         "payment_date": period_end.strftime("%Y-%m-%d"),
         "currency": currency,
@@ -224,7 +233,7 @@ def build_payslip_2(output_path: Path, data: dict) -> float:
         - (data["tax_withholding"] + data["other_deductions"])
 
     s = {
-        "h1": ParagraphStyle("h1", fontName="Courier-Bold", fontSize=15, alignment=1),
+        "h1": ParagraphStyle("h1", fontName="Courier-Bold", fontSize=15, alignment=1, spaceAfter=6),
         "sub": ParagraphStyle("sub", fontName="Courier", fontSize=9, alignment=1),
         "line_l": ParagraphStyle("line_l", fontName="Courier", fontSize=9.5),
         "line_r": ParagraphStyle("line_r", fontName="Courier", fontSize=9.5, alignment=2),

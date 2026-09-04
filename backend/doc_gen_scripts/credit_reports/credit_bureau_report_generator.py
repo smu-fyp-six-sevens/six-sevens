@@ -115,6 +115,19 @@ class AccountRow:
 # column backs any of these, so build_persona() doesn't invent new ones -- it takes
 # this same template and runs it through _jitter_* (below) so each case's numbers and
 # dates move a little without the banks/products/narrative text changing case to case.
+# Real-looking grantor banks to substitute for the "Bank A"/"Bank B"/"Bank C"
+# placeholders in SAMPLE_ACCOUNTS et al. -- build_persona() draws 3 distinct names
+# per case (seeded), so the credit history doesn't read as obviously templated.
+GRANTOR_BANK_POOL = [
+    "DBS Bank", "OCBC Bank", "UOB", "Citibank", "Maybank", "HSBC", "CIMB Bank", "Standard Chartered",
+]
+
+
+def _pick_grantor_banks(rng) -> dict[str, str]:
+    a, b, c = rng.sample(GRANTOR_BANK_POOL, 3)
+    return {"Bank A": a, "Bank B": b, "Bank C": c}
+
+
 SAMPLE_ACCOUNTS = [
     AccountRow("Unsecured Credit Card", "Bank A", "Single", "22/03/2004", "05/03/2024", "6,500.00", "WHHHDDDDCBA*", "NNNNNNNNNNN-"),
     AccountRow("HDB Loan", "Bank A", "Joint", "10/10/2014", "", "", "AAAAAABAAAAA"),
@@ -173,13 +186,13 @@ def _jitter_date(value: str, rng, max_days: int = 30, offset_days: int | None = 
     return (dt + timedelta(days=days)).strftime("%d/%m/%Y")
 
 
-def _jitter_accounts(accounts: list[AccountRow], rng) -> list[AccountRow]:
+def _jitter_accounts(accounts: list[AccountRow], rng, bank_map: dict[str, str]) -> list[AccountRow]:
     jittered = []
     for row in accounts:
         shift = rng.randint(-30, 30)  # keeps each row's open/close gap intact
         jittered.append(AccountRow(
             product_type=row.product_type,
-            grantor=row.grantor,
+            grantor=bank_map.get(row.grantor, row.grantor),
             account_type=row.account_type,
             date_opened=_jitter_date(row.date_opened, rng, offset_days=shift),
             date_closed=_jitter_date(row.date_closed, rng, offset_days=shift),
@@ -190,13 +203,13 @@ def _jitter_accounts(accounts: list[AccountRow], rng) -> list[AccountRow]:
     return jittered
 
 
-def _jitter_enquiries(rows: list[tuple], rng) -> list[tuple]:
-    return [(_jitter_date(a, rng), b, c, d, e) for a, b, c, d, e in rows]
+def _jitter_enquiries(rows: list[tuple], rng, bank_map: dict[str, str]) -> list[tuple]:
+    return [(_jitter_date(a, rng), bank_map.get(b, b), c, d, e) for a, b, c, d, e in rows]
 
 
-def _jitter_defaults(rows: list[tuple], rng) -> list[tuple]:
+def _jitter_defaults(rows: list[tuple], rng, bank_map: dict[str, str]) -> list[tuple]:
     return [
-        (a, b, _jitter_date(c, rng), _jitter_amount(d, rng), _jitter_amount(e, rng), f)
+        (a, bank_map.get(b, b), _jitter_date(c, rng), _jitter_amount(d, rng), _jitter_amount(e, rng), f)
         for a, b, c, d, e, f in rows
     ]
 
@@ -210,8 +223,12 @@ def _jitter_bankruptcy(rows: list[tuple], rng) -> list[tuple]:
     ]
 
 
-def _jitter_narratives(rows: list[tuple], rng, max_days: int = 30) -> list[tuple]:
-    return [(dt + timedelta(days=rng.randint(-max_days, max_days)), t, text) for dt, t, text in rows]
+def _jitter_narratives(rows: list[tuple], rng, bank_map: dict[str, str], max_days: int = 30) -> list[tuple]:
+    def sub(text: str) -> str:
+        for placeholder, real in bank_map.items():
+            text = text.replace(placeholder, real)
+        return text
+    return [(dt + timedelta(days=rng.randint(-max_days, max_days)), t, sub(text)) for dt, t, text in rows]
 
 
 def _styles():
@@ -439,9 +456,15 @@ def generate_credit_bureau_report(
     risk_grade: str = "HH",
     probability_of_default: str = "3.56%",
     narratives: list[tuple[date, str, str]] | None = None,
+    bank_map: dict[str, str] | None = None,
 ) -> dict:
     s = _styles()
     story: list = []
+    # Two "Aggregated ..." tables further down are static template rows (no
+    # mastersheet source), so they still reference the "Bank A"/"Bank B"/"Bank C"
+    # placeholders directly -- substitute the same per-case bank names used for
+    # `accounts` so they agree with the rest of the report.
+    bank_map = bank_map or {}
 
     # `is None` rather than falsy-`or`: a caller (build_persona, for a real mastersheet
     # identity) needs to be able to pass [] to suppress these sample aliases -- showing
@@ -650,11 +673,11 @@ def generate_credit_bureau_report(
     story.append(_section_bar("Aggregated Outstanding Balances"))
     outstanding = [
         ["Month", "Product Type", "Grantor Bank", "Secured Balances", "Unsecured Balances", "Interest Bearing Unsecured Balances", "Non-Interest Bearing Exempted Unsecured Balances"],
-        ["May 2025", "HDB Loan", "Bank A", "157,000.00", "0.00", "0.00", "0.00"],
-        ["", "Executive Condominium Purchase", "Bank B", "1,700,250.00", "0.00", "0.00", "0.00"],
-        ["", "Unsecured Personal Loan", "Bank B", "0.00", "7,000.00", "0.00", "0.00"],
-        ["", "Unsecured Credit Card", "Bank B", "0.00", "0.00", "2,500.00", "0.00"],
-        ["", "Mortgage Restructured Loan", "Bank C", "75,000.00", "0.00", "0.00", "0.00"],
+        ["May 2025", "HDB Loan", bank_map.get("Bank A", "Bank A"), "157,000.00", "0.00", "0.00", "0.00"],
+        ["", "Executive Condominium Purchase", bank_map.get("Bank B", "Bank B"), "1,700,250.00", "0.00", "0.00", "0.00"],
+        ["", "Unsecured Personal Loan", bank_map.get("Bank B", "Bank B"), "0.00", "7,000.00", "0.00", "0.00"],
+        ["", "Unsecured Credit Card", bank_map.get("Bank B", "Bank B"), "0.00", "0.00", "2,500.00", "0.00"],
+        ["", "Mortgage Restructured Loan", bank_map.get("Bank C", "Bank C"), "75,000.00", "0.00", "0.00", "0.00"],
         ["Total", "", "", "1,932,250.00", "7,000.00", "2,500.00", "0.00"],
     ]
     story.append(Table([[Paragraph(cell, s["tiny"]) for cell in row] for row in outstanding], colWidths=_scale_widths([20 * mm, 34 * mm, 22 * mm, 25 * mm, 25 * mm, 30 * mm, 30 * mm]), style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2F4F7")), ("FONTSIZE", (0, 0), (-1, -1), 6.5)])))
@@ -673,11 +696,11 @@ def generate_credit_bureau_report(
     story.append(_section_bar("Aggregated Monthly Instalment"))
     monthly = [
         ["Month", "Product Type", "Grantor Bank", "Account Type**", "Property***", "Non-Property", "Unsecured", "Exempted Unsecured"],
-        ["May 2025*", "HDB Loan", "Bank A", "Joint", "2,800.00", "0.00", "0.00", "0.00"],
-        ["", "Executive Condominium Purchase", "Bank B", "Single", "2,500.00", "0.00", "0.00", "0.00"],
-        ["", "Unsecured Personal Loan", "Bank B", "Single", "0.00", "0.00", "300.00", "0.00"],
-        ["", "Unsecured Credit Card", "Bank B", "Single", "0.00", "0.00", "100.00", "0.00"],
-        ["", "Mortgage Restructured Loan", "Bank C", "Single", "1,000.00", "0.00", "0.00", "0.00"],
+        ["May 2025*", "HDB Loan", bank_map.get("Bank A", "Bank A"), "Joint", "2,800.00", "0.00", "0.00", "0.00"],
+        ["", "Executive Condominium Purchase", bank_map.get("Bank B", "Bank B"), "Single", "2,500.00", "0.00", "0.00", "0.00"],
+        ["", "Unsecured Personal Loan", bank_map.get("Bank B", "Bank B"), "Single", "0.00", "0.00", "300.00", "0.00"],
+        ["", "Unsecured Credit Card", bank_map.get("Bank B", "Bank B"), "Single", "0.00", "0.00", "100.00", "0.00"],
+        ["", "Mortgage Restructured Loan", bank_map.get("Bank C", "Bank C"), "Single", "1,000.00", "0.00", "0.00", "0.00"],
         ["Total", "", "", "", "6,300.00", "0.00", "400.00", "0.00"],
     ]
     story.append(Table([[Paragraph(cell, s["tiny"]) for cell in row] for row in monthly], colWidths=_scale_widths([18 * mm, 33 * mm, 18 * mm, 17 * mm, 22 * mm, 18 * mm, 18 * mm, 20 * mm]), style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2F4F7")), ("FONTSIZE", (0, 0), (-1, -1), 6.3)])))
@@ -768,6 +791,7 @@ def build_persona(case: dict, people: list[dict]) -> dict:
     the person behind the case."""
     case_id = str(case["Case ID"])
     rng = seeded_rng(f"{case_id}|credit-report")
+    bank_map = _pick_grantor_banks(rng)
 
     director = next(
         (p for p in people if "director" in str(p.get("Role") or "").lower()),
@@ -835,14 +859,16 @@ def build_persona(case: dict, people: list[dict]) -> dict:
         score=score,
         risk_grade=risk_grade,
         probability_of_default=probability_of_default,
-        # Same banks/products/narrative text every case (there's no mastersheet
-        # source to vary them from), but the amounts and dates get a small per-case
-        # jitter so 36 cases don't all show byte-identical credit histories.
-        accounts=_jitter_accounts(SAMPLE_ACCOUNTS, rng),
-        previous_enquiries=_jitter_enquiries(SAMPLE_PREVIOUS_ENQUIRIES, rng),
-        default_records=_jitter_defaults(SAMPLE_DEFAULT_RECORDS, rng),
+        # Same products/narrative text every case (there's no mastersheet source to
+        # vary them from), but the amounts/dates get a small per-case jitter and the
+        # "Bank A"/"Bank B"/"Bank C" placeholders are swapped for 3 real bank names
+        # (also seeded) so 36 cases don't all show byte-identical credit histories.
+        accounts=_jitter_accounts(SAMPLE_ACCOUNTS, rng, bank_map),
+        previous_enquiries=_jitter_enquiries(SAMPLE_PREVIOUS_ENQUIRIES, rng, bank_map),
+        default_records=_jitter_defaults(SAMPLE_DEFAULT_RECORDS, rng, bank_map),
         bankruptcy_rows=_jitter_bankruptcy(SAMPLE_BANKRUPTCY_ROWS, rng),
-        narratives=_jitter_narratives(SAMPLE_NARRATIVES, rng),
+        narratives=_jitter_narratives(SAMPLE_NARRATIVES, rng, bank_map),
+        bank_map=bank_map,
     )
 
 

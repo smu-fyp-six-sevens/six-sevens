@@ -212,7 +212,9 @@ def _ocbc_row_height(row: OcbcRow) -> float:
 
 
 def ocbc_info_box_height() -> float:
-    return 5 * O_INFO_ROW_H + 11
+    # +10 reserves room for "BIC Name" (the bank's full legal name) wrapping onto
+    # a second line in the last row -- it's too long to fit on one line.
+    return 5 * O_INFO_ROW_H + 11 + 10
 
 
 # --------------------------------------------------------------------------
@@ -292,8 +294,10 @@ def ocbc_draw_info_box(c: pdfcanvas.Canvas, ctx: dict[str, Any], y: float) -> fl
                 c.setFont(FONT, 8.5)
                 c.drawString(cx, yy, amount_str)
             else:
-                for wrapped in (simpleSplit(value, FONT, 8.5, col_w - 126) or [""])[:1]:
-                    c.drawString(x0 + 118, yy, wrapped)
+                max_lines = 2 if label == "BIC Name" else 1
+                lines = (simpleSplit(value, FONT, 8.5, col_w - 126) or [""])[:max_lines]
+                for j, wrapped in enumerate(lines):
+                    c.drawString(x0 + 118, yy - j * 10, wrapped)
             yy -= O_INFO_ROW_H
 
     draw_col(left, O_M_L, numeric=False)

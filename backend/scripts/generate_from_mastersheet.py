@@ -34,7 +34,7 @@ from doc_gen_scripts.corporate_bank_statement.docgen_bankstatement import (
 # UOB profiles built in.
 from doc_gen_scripts.corporate_bank_statement import docgen_bankstatement_ocbc  # noqa: F401
 from doc_gen_scripts.certificate_of_incorporation.coi_generator import generate_certificate_of_incorporation
-from doc_gen_scripts.personal_proof_of_residence.utility_bill_generator import generate_utility_bill
+from doc_gen_scripts.personal_proof_of_residence.utility_bill_generator import generate_utility_bill, synthesize_utility_bill_data
 from doc_gen_scripts.personal_proof_of_residence.docgen_bankstatement_ocbc_personal import render_ocbc_personal, build_personal_blocks
 from doc_gen_scripts.credit_reports.credit_bureau_report_generator import generate_credit_bureau_report, build_persona as build_credit_persona
 from doc_gen_scripts.company_constitution.docgen_constitution import generate as generate_constitution
@@ -235,7 +235,7 @@ def generate_for_case(case_id: str) -> None:
                     person = next((p for p in people_rows if str(p.get("Individual ID")) == individual), {})
                     address = str(person.get("Residential Address") or "")
                     persona = build_nric_persona(r, address)
-                    generate_nric_card(str(nric_path), **persona)
+                    generate_nric_card(str(nric_path), redact_photo=True, **persona)
                     print("Wrote", nric_path)
                 if "passport" in template:
                     pp_path = out / f"{individual}_Passport.pdf"
@@ -244,7 +244,7 @@ def generate_for_case(case_id: str) -> None:
                     # Name field -- build_passport_persona() derives/invents all
                     # of these the same way build_nric_persona() does.
                     persona = build_passport_persona(r)
-                    generate_passport_page(str(pp_path), **persona)
+                    generate_passport_page(str(pp_path), redact_photo=True, **persona)
                     print("Wrote", pp_path)
             except Exception as e:
                 print("ID generation failed:", e)
@@ -269,15 +269,19 @@ def generate_for_case(case_id: str) -> None:
 
                 # The Payslips tab only carries identity fields (name, NRIC, role,
                 # employer) — no salary figures — so the money fields are synthesized,
-                # seeded on Individual ID so re-runs are reproducible.
-                application_date = as_date(_openpyxl_case_row("Case Registry", case_id).get("Application Date"))
+                # seeded on Individual ID so re-runs are reproducible. The employer
+                # address is pulled from company_facts() (not invented) so it agrees
+                # with the registered address shown on every other document.
+                case_row = _openpyxl_case_row("Case Registry", case_id)
+                application_date = as_date(case_row.get("Application Date"))
+                facts = company_facts(case_row, _openpyxl_case_rows("Individuals", case_id))
                 data = synthesize_payslip_data(
                     individual,
                     employee_name=r.get("Individual Name (auto)") or "Employee",
-                    employee_id=individual,
                     employer_name=r.get("Employer Name") or "Employer",
                     role=r.get("Role (auto)") or "",
                     application_date=application_date,
+                    company_address=str(facts.get("registered_address") or ""),
                 )
                 builder(ps_path, data)
             except Exception as e:
@@ -310,7 +314,26 @@ def generate_for_case(case_id: str) -> None:
             if "utility" in template:
                 try:
                     util_path = out / str(r.get("Filename") or f"utility_bill_{case_id}.pdf")
-                    generate_utility_bill(str(util_path), provider_name=r.get("Provider Name") or r.get("Employer Name") or "PacificLight", bill_date=r.get("Date") or datetime.now().date(), ple_account_no=r.get("Account No") or "", statement_no=r.get("Filename") or "", customer_name=r.get("Individual Name (auto)") or r.get("Company Name (auto)") or "", address_lines=[r.get("Residential Address") or r.get("Registered Address") or ""], total_amount_payable=float(r.get("Amount") or 0), payment_due=datetime.now().date(), invoice_address_lines=[r.get("Residential Address") or ""], mssl_account_no="", billing_period_start=datetime.now().date(), billing_period_end=datetime.now().date())
+                    # Proof of Address carries no address/provider/account/amount
+                    # columns of its own -- the address comes from the Individuals
+                    # tab (same join the bank-statement branch below uses), and
+                    # every other field is synthesized (see synthesize_utility_bill_data).
+                    person = next(
+                        (p for p in _openpyxl_case_rows("Individuals", case_id)
+                         if str(p.get("Individual ID")) == individual),
+                        {},
+                    )
+                    address = str(person.get("Residential Address") or "")
+                    address_lines = [p.strip() for p in address.split(",") if p.strip()] or [address]
+                    application_date = as_date(_openpyxl_case_row("Case Registry", case_id).get("Application Date"))
+                    synth = synthesize_utility_bill_data(individual, application_date=application_date)
+                    generate_utility_bill(
+                        str(util_path),
+                        customer_name=r.get("Individual Name (auto)") or r.get("Company Name (auto)") or "",
+                        address_lines=address_lines,
+                        invoice_address_lines=address_lines,
+                        **synth,
+                    )
                     print("Wrote", util_path)
                 except Exception as e:
                     print("Utility bill generation failed:", e)

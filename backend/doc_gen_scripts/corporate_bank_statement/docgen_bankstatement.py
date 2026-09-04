@@ -297,7 +297,9 @@ CARD_MERCHANTS = [
 
 
 def _card_ref(rng: random.Random) -> str:
-    return f"{rng.randint(4000,4999)}-{rng.randint(1000,9999)}-{rng.randint(1000,9999)}-{rng.randint(1000,9999)}"
+    """Masked card reference, like a real statement -- only the last 4 digits are
+    shown in clear, never the full card number."""
+    return f"{rng.randint(4000,4999)}-XXXX-XXXX-{rng.randint(1000,9999)}"
 
 
 def month_transactions(

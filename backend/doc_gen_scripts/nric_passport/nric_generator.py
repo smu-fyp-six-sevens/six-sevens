@@ -340,6 +340,7 @@ def generate_nric_card(
     back_ghost_asset: str | Path | None = DEFAULT_BACK_GHOST_ASSET,
     ghost_alpha: float = 0.22,
     synthetic_tag: bool = True,
+    redact_photo: bool = False,
 ) -> dict:
     """`expiry_date`, `nationality` and `card_type` are accepted for call-site
     compatibility but are not drawn: the card carries none of them (it does not
@@ -385,7 +386,13 @@ def generate_nric_card(
         photo_w, photo_h = 112.0, 142.0
         photo_x = CARD_X + 10
         photo_y = band_y - 8 - photo_h
-        _placeholder_box(c, photo_x, photo_y, photo_w, photo_h, "PHOTO\nPLACEHOLDER")
+        if redact_photo:
+            # Simulates a scanned/uploaded document where the photo itself has
+            # been blacked out -- solid fill, no caption.
+            c.setFillColor(colors.black)
+            c.rect(photo_x, photo_y, photo_w, photo_h, fill=1, stroke=0)
+        else:
+            _placeholder_box(c, photo_x, photo_y, photo_w, photo_h, "PHOTO\nPLACEHOLDER")
 
         # ---- field column
         fx = CARD_X + 140
@@ -427,7 +434,11 @@ def generate_nric_card(
         fp_w, fp_h = 96.0, 100.0
         fp_x = CARD_X + 46
         fp_y = y0 + 88
-        _placeholder_box(c, fp_x, fp_y, fp_w, fp_h, "FINGERPRINT\nPLACEHOLDER")
+        if redact_photo:
+            c.setFillColor(colors.black)
+            c.rect(fp_x, fp_y, fp_w, fp_h, fill=1, stroke=0)
+        else:
+            _placeholder_box(c, fp_x, fp_y, fp_w, fp_h, "FINGERPRINT\nPLACEHOLDER")
 
         # ---- date of issue, right of the fingerprint
         _field(c, CARD_X + 190, y0 + 112, "Date of issue", issue_date.strftime("%d-%m-%Y"))

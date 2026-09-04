@@ -11,9 +11,13 @@ pixel-for-pixel more than they need to reflow.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+import sys
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from case_facts import seeded_rng
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -101,6 +105,36 @@ def _draw_logo(c: pdfcanvas.Canvas, x: float, y: float) -> None:
     c.circle(x + 3, y + 1, 4, stroke=0, fill=1)
 
 
+UTILITY_PROVIDERS = ["PacificLight", "Keppel Electric", "Sembcorp Power", "Geneco", "Tuas Power"]
+
+
+def synthesize_utility_bill_data(individual_id: str, *, application_date: date | None = None) -> dict:
+    """Invent plausible account numbers, billing period and amount for one utility
+    bill, seeded on the individual's ID so re-runs are reproducible. The mastersheet's
+    Proof of Address tab carries no provider/account/amount columns at all -- every
+    field a utility bill template needs beyond identity/address is synthesized here.
+    """
+    rng = seeded_rng(f"{individual_id}|utility-bill")
+    application_date = application_date or datetime.now().date()
+
+    bill_date = application_date - timedelta(days=rng.randint(2, 10))
+    period_end = date(bill_date.year, bill_date.month, 1) - timedelta(days=1)
+    period_start = period_end - timedelta(days=27 + rng.randint(0, 3))
+    payment_due = bill_date + timedelta(days=14)
+
+    return dict(
+        provider_name=UTILITY_PROVIDERS[rng.randrange(len(UTILITY_PROVIDERS))],
+        bill_date=bill_date,
+        payment_due=payment_due,
+        billing_period_start=period_start,
+        billing_period_end=period_end,
+        ple_account_no=f"{rng.randint(10_000_000, 99_999_999)}",
+        mssl_account_no=f"{rng.randint(1_000_000_000, 9_999_999_999)}",
+        statement_no=f"{rng.randint(1_000_000, 9_999_999)}",
+        total_amount_payable=round(rng.uniform(80, 260), 2),
+    )
+
+
 def generate_utility_bill(
     output_path: str,
     *,
@@ -147,12 +181,12 @@ def generate_utility_bill(
 
         my = y
         _text(c, f"Bill Date: {bill_date.strftime('%d %b %Y')}", right, my, size=9.5, align="right")
-        my -= 13
+        my -= 18
         _text(c, f"PLE Account No.: {ple_account_no}", right, my, size=9, color=GREY_LABEL, align="right")
-        my -= 12
+        my -= 16
         _text(c, f"Statement No.: {statement_no}", right, my, size=9, color=GREY_LABEL, align="right")
 
-        y -= 44
+        y -= 56
 
         # --- Customer block (left) / Amount + Due + Invoice-for (right) ---
         left_y = y

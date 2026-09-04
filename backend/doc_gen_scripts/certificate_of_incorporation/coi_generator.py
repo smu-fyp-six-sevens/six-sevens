@@ -29,6 +29,32 @@ DEFAULT_CONTEXT: dict[str, Any] = {
     "verification_url": "https://www.acratrustbar.gov.sg/verify/4n3NIEdM",
 }
 
+# Word pools for synthesizing a former company name, distinct per case, rather than
+# every case that keeps its former-names section showing the same literal
+# "Def Company Pte. Ltd." from DEFAULT_CONTEXT.
+FORMER_NAME_PREFIXES = [
+    "Golden", "Silver", "Crimson", "Azure", "Ivory", "Titan", "Meridian", "Zenith",
+    "Coral", "Vantage", "Harbor", "Diamond", "Aurora", "Falcon", "Emerald", "Nexus",
+    "Pacific", "Sterling", "Orchid", "Summit",
+]
+FORMER_NAME_NOUNS = ["Harvest", "Oak", "Bay", "Point", "Peak", "Grove", "Light", "Rim", "Ridge", "Field", "Cove", "Bridge"]
+FORMER_NAME_TYPES = [
+    "Trading", "Logistics", "Construction", "Marine Services", "Manufacturing",
+    "Distribution", "Consulting Group", "Engineering", "Holdings", "Enterprises",
+    "Industries", "Investments",
+]
+
+
+def _synthesize_former_name(rng: random.Random, current_name: str) -> str:
+    """A plausible former company name, distinct from the current one."""
+    current_upper = current_name.strip().upper()
+    name = current_name
+    for _ in range(10):
+        name = f"{rng.choice(FORMER_NAME_PREFIXES)} {rng.choice(FORMER_NAME_NOUNS)} {rng.choice(FORMER_NAME_TYPES)} Pte. Ltd."
+        if name.upper() != current_upper:
+            break
+    return name
+
 
 def _parse_date(value: Any) -> date:
     """Coerce a date/datetime/string into a plain date (dropping any time-of-day)."""
@@ -440,10 +466,24 @@ def generate_certificate_of_incorporation(
         context["verification_url"] = verification_url
 
     # Not every company has a former name on record - vary this deterministically per
-    # company so the synthetic dataset isn't 100% "has former names".
-    if random.Random(f"{context['uen']}|former-names").random() >= 0.4:
+    # company so the synthetic dataset isn't 100% "has former names". When one is
+    # kept, synthesize a name and effective date specific to this case instead of
+    # DEFAULT_CONTEXT's literal "Def Company Pte. Ltd." showing up on every case.
+    rng = random.Random(f"{context['uen']}|former-names")
+    if rng.random() >= 0.4:
         context["former_names"] = []
         context["name_change_note"] = None
+    else:
+        incorporation_date = _parse_date(context.get("incorporation_date", ""))
+        effective = date(
+            incorporation_date.year + rng.randint(1, 6), rng.randint(1, 12), rng.randint(1, 28)
+        )
+        effective_str = effective.strftime("%d %b %Y")
+        context["former_names"] = [{
+            "name": _synthesize_former_name(rng, str(context["company_name"])),
+            "effective_from": effective_str,
+        }]
+        context["name_change_note"] = f"name change effective from {effective_str}"
 
     out_path = Path(output_path)
     write_pdf_reportlab(context, out_path)
