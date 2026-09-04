@@ -9,13 +9,17 @@ from app.injection.pdf import (
     BUILTIN_FONT_HELVETICA,
     BUILTIN_FONT_TIMES,
     _builtin_fallback_font,
+    _font_insert_kwargs,
     _normalize_font,
+    _overlay_cover_rect,
     apply_text_emphasis,
     discover_fields_from_pdf,
     extract_pdf_text,
+    overlay_field_text,
     read_pdf_metadata,
     replace_field_text,
     resolve_emphasis_font_file,
+    resolve_family_font_file,
 )
 from app.injection.schemas import DefectType
 from app.injection.store import get_document, get_document_file_path, reset_sample_documents
@@ -52,6 +56,16 @@ def test_unknown_serif_fonts_are_not_forced_to_helvetica() -> None:
         assert "sans" not in Path(italic_serif).name.lower()
     assert resolve_emphasis_font_file("bold", "Helvetica") is None
     assert resolve_emphasis_font_file("italic", "helv") is None
+
+
+def test_helvetica_neue_bold_uses_a_bold_sans_ttf() -> None:
+    path = resolve_family_font_file("HelveticaNeue-Bold")
+    assert path is not None
+    assert Path(path).exists()
+    assert "bold" in Path(path).name.lower()
+    kwargs = _font_insert_kwargs("HelveticaNeue-Bold", preserve_face=True)
+    assert kwargs.get("fontfile")
+    assert kwargs.get("fontname") != "helv"
 
 
 def _inject(
@@ -479,3 +493,177 @@ def _make_custom_pdf(path: Path) -> None:
     doc.set_metadata({"title": "Tenancy Agreement", "author": "Broker"})
     doc.save(path)
     doc.close()
+
+
+def test_text_overlay_keeps_original_and_adds_matching_text() -> None:
+    response = _inject(
+        DOC_ID,
+        TEXT_FIELD,
+        DefectType.TEXT_OVERLAY,
+        new_text="CERT COPY",
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["before_text"] == payload["after_text"]
+    assert "CERT COPY" in payload["description"]
+    text = extract_pdf_text(Path(get_document_file_path(DOC_ID) or ""))
+    assert "Golden Harvest Trading Pte Ltd" in text
+    assert "CERT COPY" in text
+
+
+def test_pdf_overlay_matches_field_background_font_and_origin(tmp_path: Path) -> None:
+    path = tmp_path / "overlay.pdf"
+    fill = (0.82, 0.90, 0.96)
+    doc = pymupdf.open()
+    page = doc.new_page(width=400, height=200)
+    page.draw_rect(page.rect, color=fill, fill=fill)
+    page.insert_text((72, 100), "S8000000A", fontsize=14, fontname="helv")
+    doc.save(path)
+    doc.close()
+
+    fields = discover_fields_from_pdf(path)
+    field = next(value for value in fields.values() if "S8000000A" in value.text)
+    overlay_field_text(path, field, "CERT COPY")
+
+    after = pymupdf.open(path)
+    page = after[0]
+    extracted = page.get_text()
+    assert "S8000000A" in extracted
+    assert "CERT COPY" in extracted
+
+    spans = [
+        span
+        for block in page.get_text("dict")["blocks"]
+        for line in block.get("lines", [])
+        for span in line.get("spans", [])
+    ]
+    original = next(span for span in spans if "S8000000A" in span["text"])
+    overlay = next(span for span in spans if "CERT COPY" in span["text"])
+    assert abs(overlay["origin"][0] - original["origin"][0]) < 1.0
+    assert abs(overlay["origin"][1] - original["origin"][1]) < 1.0
+    assert abs(overlay["size"] - original["size"]) < 0.5
+
+    box = pymupdf.Rect(field.rect) & page.rect
+    pix = page.get_pixmap(matrix=pymupdf.Matrix(2, 2), clip=box, alpha=False)
+    samples = pix.samples
+    n = pix.n
+    lights = []
+    for i in range(0, len(samples) - 2, n):
+        pixel = (samples[i], samples[i + 1], samples[i + 2])
+        if 0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2] >= 140:
+            lights.append(pixel)
+    after.close()
+
+    assert lights
+    median = sorted(lights, key=lambda p: p[0] + p[1] + p[2])[len(lights) // 2]
+    expected = tuple(int(channel * 255) for channel in fill)
+    assert all(abs(median[i] - expected[i]) < 40 for i in range(3)), (median, expected)
+    assert median != (255, 255, 255)
+
+
+def test_pdf_overlay_leaves_nearby_table_rules(tmp_path: Path) -> None:
+    path = tmp_path / "totals.pdf"
+    doc = pymupdf.open()
+    page = doc.new_page(width=400, height=200)
+    page.insert_text((72, 100), "$1,452,650", fontsize=11, fontname="hebo")
+    page.draw_line(pymupdf.Point(70, 86), pymupdf.Point(150, 86), width=0.7)
+    page.draw_line(pymupdf.Point(70, 106), pymupdf.Point(150, 106), width=0.8)
+    page.draw_line(pymupdf.Point(70, 108.2), pymupdf.Point(150, 108.2), width=0.8)
+    doc.save(path)
+    doc.close()
+
+    fields = discover_fields_from_pdf(path)
+    field = next(value for value in fields.values() if "1,452,650" in value.text)
+    overlay_field_text(path, field, "$1,999,999")
+
+    after = pymupdf.open(path)
+    page = after[0]
+    assert "$1,452,650" in page.get_text()
+    assert "$1,999,999" in page.get_text()
+
+    def _line_still_dark(y: float) -> bool:
+        box = pymupdf.Rect(72, y - 0.6, 140, y + 0.6) & page.rect
+        pix = page.get_pixmap(matrix=pymupdf.Matrix(3, 3), clip=box, alpha=False)
+        samples = pix.samples
+        n = pix.n
+        dark = 0
+        total = 0
+        for i in range(0, len(samples) - 2, n):
+            total += 1
+            if 0.299 * samples[i] + 0.587 * samples[i + 1] + 0.114 * samples[i + 2] <= 80:
+                dark += 1
+        return total > 0 and dark / total >= 0.12
+
+    assert _line_still_dark(86)
+    assert _line_still_dark(106)
+    assert _line_still_dark(108.2)
+    after.close()
+
+
+def test_overlay_cover_includes_original_span_when_no_rules(tmp_path: Path) -> None:
+    path = tmp_path / "name.pdf"
+    doc = pymupdf.open()
+    page = doc.new_page(width=400, height=200)
+    page.insert_text((40, 100), "Tan Wei Ming", fontsize=11.25, fontname="hebo")
+    doc.save(path)
+    doc.close()
+
+    fields = discover_fields_from_pdf(path)
+    field = next(value for value in fields.values() if "Tan Wei Ming" in value.text)
+    insert_kwargs = _font_insert_kwargs(field.font, preserve_face=True)
+    insert_kwargs["fontsize"] = field.font_size
+    opened = pymupdf.open(path)
+    cover = _overlay_cover_rect(
+        opened[0],
+        field,
+        "TAN WEI NING",
+        field.font_size,
+        (field.x, field.y),
+        insert_kwargs,
+    )
+    opened.close()
+    box = pymupdf.Rect(field.rect)
+    assert cover.y0 <= box.y0 + 0.05
+    assert cover.y1 >= box.y1 - 0.05
+    assert cover.x0 <= box.x0 + 0.05
+    assert cover.x1 >= box.x1 - 0.05
+
+
+def test_image_manipulation_rejects_unknown_indicator() -> None:
+    response = _inject(
+        DOC_ID,
+        TEXT_FIELD,
+        DefectType.IMAGE_MANIPULATION,
+        indicator="not_a_real_indicator",
+    )
+    assert response.status_code == 400
+    assert "indicator" in response.json()["detail"].lower()
+
+
+@pytest.mark.parametrize(
+    "indicator",
+    [
+        "resolution_mismatch",
+        "compression_mismatch",
+        "visible_boundary",
+        "scaling_anomaly",
+        "image_overlay",
+        "duplicate_image",
+        "quality_mismatch",
+    ],
+)
+def test_image_manipulation_indicators_rewrite_the_field_region(indicator: str) -> None:
+    before_bytes = Path(get_document_file_path(DOC_ID) or "").read_bytes()
+    response = _inject(
+        DOC_ID,
+        TEXT_FIELD,
+        DefectType.IMAGE_MANIPULATION,
+        indicator=indicator,
+    )
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    assert payload["defect_type"] == "image_manipulation"
+    assert indicator.replace("_", " ") in payload["description"].lower()
+    after = Path(get_document_file_path(DOC_ID) or "")
+    assert after.read_bytes() != before_bytes
+    assert after.read_bytes().startswith(b"%PDF")

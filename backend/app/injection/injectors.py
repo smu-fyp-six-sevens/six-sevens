@@ -5,12 +5,16 @@ import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from .field_text import replace_value, require_value, split_label_and_value
+from .field_text import field_value_text, replace_value, require_value, split_label_and_value
 from .pdf import (
     BUILTIN_FONT_HELVETICA,
     BUILTIN_FONT_TIMES,
+    MANIPULATION_INDICATORS,
     apply_text_emphasis,
     available_custom_fonts,
+    is_image_template,
+    manipulate_field_region,
+    overlay_field_text,
     replace_field_text,
     read_document_metadata,
     set_document_metadata,
@@ -100,6 +104,26 @@ def _rng() -> random.Random:
 
 def _opts(overrides: InjectOverrides | None) -> InjectOverrides:
     return overrides or InjectOverrides()
+
+
+def _clean_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = value.strip()
+    if not text or text.lower() == "string":
+        return None
+    return text
+
+
+_INDICATOR_LABELS = {
+    "resolution_mismatch": "Resolution Mismatch",
+    "compression_mismatch": "Compression Mismatch",
+    "visible_boundary": "Visible Boundary",
+    "scaling_anomaly": "Scaling Anomaly",
+    "image_overlay": "Image Overlay",
+    "duplicate_image": "Duplicate Image",
+    "quality_mismatch": "Quality Mismatch",
+}
 
 
 def _replacement_text(field: FieldValue, new_text: str) -> str:
@@ -543,6 +567,75 @@ class EmphasisInjector(DefectInjector):
         )
 
 
+class TextOverlayInjector(DefectInjector):
+    defect_type = DefectType.TEXT_OVERLAY
+
+    def inject(
+        self,
+        document: InjectableDocument,
+        field_name: str,
+        overrides: InjectOverrides | None = None,
+    ) -> InjectedDefect:
+        field = document.fields[field_name]
+        before = _snapshot(field)
+        if is_image_template(_working_path(document)):
+            raise ValueError("text_overlay currently supports PDF templates only")
+        opts = _opts(overrides)
+        overlay = _clean_text(opts.new_text) or field_value_text(field.text) or field.text.strip()
+        if not overlay:
+            raise ValueError(f"Field '{field_name}' has no text to overlay")
+        overlay_field_text(
+            _working_path(document),
+            field,
+            overlay,
+            x=opts.x,
+            y=opts.y,
+        )
+        field.overlay = overlay
+        return InjectedDefect(
+            defect_type=self.defect_type,
+            field_name=field_name,
+            description=f"Overlaid matching text on existing field: {overlay!r}",
+            before=before,
+            after=_snapshot(field),
+        )
+
+
+class ImageManipulationInjector(DefectInjector):
+    defect_type = DefectType.IMAGE_MANIPULATION
+
+    def inject(
+        self,
+        document: InjectableDocument,
+        field_name: str,
+        overrides: InjectOverrides | None = None,
+    ) -> InjectedDefect:
+        _require_injectable_value(document, field_name)
+        field = document.fields[field_name]
+        before = _snapshot(field)
+        opts = _opts(overrides)
+        requested = _clean_text(opts.indicator)
+        if requested:
+            indicator = requested.lower().replace(" ", "_")
+            if indicator not in MANIPULATION_INDICATORS:
+                raise ValueError(
+                    f"Unknown image-manipulation indicator {requested!r}. "
+                    f"Use one of: {', '.join(MANIPULATION_INDICATORS)}"
+                )
+        else:
+            indicator = _rng().choice(MANIPULATION_INDICATORS)
+        manipulate_field_region(_working_path(document), field, indicator)
+        field.manipulation = indicator
+        label = _INDICATOR_LABELS.get(indicator, indicator)
+        return InjectedDefect(
+            defect_type=self.defect_type,
+            field_name=field_name,
+            description=f"Applied image manipulation: {label}",
+            before=before,
+            after=_snapshot(field),
+        )
+
+
 INJECTORS: dict[DefectType, DefectInjector] = {
     DefectType.FONT: FontInjector(),
     DefectType.FONT_SIZE: FontSizeInjector(),
@@ -551,6 +644,8 @@ INJECTORS: dict[DefectType, DefectInjector] = {
     DefectType.SPELLING: SpellingInjector(),
     DefectType.MISALIGNMENT: MisalignmentInjector(),
     DefectType.EMPHASIS: EmphasisInjector(),
+    DefectType.TEXT_OVERLAY: TextOverlayInjector(),
+    DefectType.IMAGE_MANIPULATION: ImageManipulationInjector(),
 }
 
 

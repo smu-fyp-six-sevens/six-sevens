@@ -32,6 +32,8 @@ CHANGED_KEYS: dict[DefectType, set[str]] = {
     DefectType.SPELLING: {"text"},
     DefectType.MISALIGNMENT: {"x", "y"},
     DefectType.EMPHASIS: {"style"},
+    DefectType.TEXT_OVERLAY: {"overlay"},
+    DefectType.IMAGE_MANIPULATION: {"manipulation"},
 }
 
 
