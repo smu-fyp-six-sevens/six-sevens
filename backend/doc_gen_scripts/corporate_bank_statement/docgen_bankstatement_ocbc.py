@@ -44,6 +44,7 @@ from typing import Any
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import simpleSplit
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas as pdfcanvas
 
 # Reuse everything from your existing generator: layout base, bank profiles,
@@ -258,8 +259,8 @@ def ocbc_draw_info_box(c: pdfcanvas.Canvas, ctx: dict[str, Any], y: float) -> fl
     left = [
         ("Account Number", f"{ctx['account_no_fmt']} - SGD", None),
         ("Account Name", ctx["company_name"], None),
-        ("Debits", f"{ctx['debit_count']}    Amount   S${ctx['total_debit']:,.2f}", None),
-        ("Credits", f"{ctx['credit_count']}    Amount   S${ctx['total_credit']:,.2f}", None),
+        ("Debits", (str(ctx["debit_count"]), f"S${ctx['total_debit']:,.2f}"), None),
+        ("Credits", (str(ctx["credit_count"]), f"S${ctx['total_credit']:,.2f}"), None),
         ("BIC Code", ctx["bank"].bic_code, None),
     ]
     right = [
@@ -270,7 +271,7 @@ def ocbc_draw_info_box(c: pdfcanvas.Canvas, ctx: dict[str, Any], y: float) -> fl
         ("BIC Name", ctx["bank"].bic_name, None),
     ]
 
-    def draw_col(items: list[tuple[str, str, date | None]], x0: float, numeric: bool) -> None:
+    def draw_col(items: list[tuple[str, Any, date | None]], x0: float, numeric: bool) -> None:
         yy = y - 17
         for label, value, dt in items:
             c.setFillColor(colors.black)
@@ -280,6 +281,16 @@ def ocbc_draw_info_box(c: pdfcanvas.Canvas, ctx: dict[str, Any], y: float) -> fl
             if numeric and dt is not None:
                 c.drawRightString(x0 + col_w - 70, yy, value)
                 c.drawRightString(x0 + col_w - 8, yy, f"{dt:%d-%b-%Y}")
+            elif isinstance(value, tuple):
+                count_str, amount_str = value
+                cx = x0 + 118
+                c.drawString(cx, yy, count_str)
+                cx += stringWidth(count_str, FONT, 8.5) + 22
+                c.setFont(FONT_B, 8.5)
+                c.drawString(cx, yy, "Amount")
+                cx += stringWidth("Amount", FONT_B, 8.5) + 6
+                c.setFont(FONT, 8.5)
+                c.drawString(cx, yy, amount_str)
             else:
                 for wrapped in (simpleSplit(value, FONT, 8.5, col_w - 126) or [""])[:1]:
                     c.drawString(x0 + 118, yy, wrapped)

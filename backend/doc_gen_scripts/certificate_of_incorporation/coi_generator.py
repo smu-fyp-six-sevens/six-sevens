@@ -253,32 +253,33 @@ def write_pdf_reportlab(context: dict[str, Any], output_path: Path) -> None:
     y = draw_paragraph(body_html, left, y, min(px(520), content_w), size=px(11), leading=px(17))
     y -= px(35)
 
-    # --- Former names ---
-    y = draw_lines("THE COMPANY WAS FORMERLY KNOWN AS:", left, y, font=FONT, size=px(11), color=BLACK)
-    y -= px(10)
-
-    col2_x = right - px(10)
-    c.setFont(f"{FONT}-Bold", px(10))
-    c.setFillColor(BLACK)
-    c.drawString(left, y - px(10), "Previous Name(s)")
-    c.drawRightString(col2_x, y - px(10), "Effective From")
-    y -= px(10) + px(6)
-
+    # --- Former names (only shown when the company actually has any) ---
     former_names = context.get("former_names") or []
-    rows = [(str(f.get("name", "")), str(f.get("effective_from", ""))) for f in former_names] or [("—", "—")]
-    for name, effective in rows:
-        c.setFont(FONT, px(9))
-        c.setFillColor(BLACK)
-        c.drawString(left, y - px(9), name)
-        c.drawRightString(col2_x, y - px(9), effective)
-        y -= px(9) * 1.4
-    y -= px(5)
+    if former_names:
+        y = draw_lines("THE COMPANY WAS FORMERLY KNOWN AS:", left, y, font=FONT, size=px(11), color=BLACK)
+        y -= px(10)
 
-    y = draw_lines(
-        "Only the 5 most recent former names are listed. Any change in name effected "
-        "before 13 Jan 2003 will not be listed.",
-        left, y, font=FONT, size=px(8), leading=px(11.2), color=BLACK, width=content_w,
-    )
+        col2_x = right - px(10)
+        c.setFont(f"{FONT}-Bold", px(10))
+        c.setFillColor(BLACK)
+        c.drawString(left, y - px(10), "Previous Name(s)")
+        c.drawRightString(col2_x, y - px(10), "Effective From")
+        y -= px(10) + px(6)
+
+        for f in former_names:
+            name, effective = str(f.get("name", "")), str(f.get("effective_from", ""))
+            c.setFont(FONT, px(9))
+            c.setFillColor(BLACK)
+            c.drawString(left, y - px(9), name)
+            c.drawRightString(col2_x, y - px(9), effective)
+            y -= px(9) * 1.4
+        y -= px(5)
+
+        y = draw_lines(
+            "Only the 5 most recent former names are listed. Any change in name effected "
+            "before 13 Jan 2003 will not be listed.",
+            left, y, font=FONT, size=px(8), leading=px(11.2), color=BLACK, width=content_w,
+        )
 
     # --- Bottom section: signature block (left) and verify box (right), both
     # bottom-aligned px(20) above the page edge, matching .bottom{bottom:20px}. ---
@@ -437,6 +438,12 @@ def generate_certificate_of_incorporation(
         context["receipt_no"] = receipt_no
     if verification_url:
         context["verification_url"] = verification_url
+
+    # Not every company has a former name on record - vary this deterministically per
+    # company so the synthetic dataset isn't 100% "has former names".
+    if random.Random(f"{context['uen']}|former-names").random() >= 0.4:
+        context["former_names"] = []
+        context["name_change_note"] = None
 
     out_path = Path(output_path)
     write_pdf_reportlab(context, out_path)

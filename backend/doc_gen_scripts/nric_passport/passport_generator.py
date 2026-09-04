@@ -307,7 +307,7 @@ def generate_passport_page(
         _text(c, CARD_X + mrz_margin, CARD_Y + 12, line2, font="Courier-Bold", size=mrz_size, color=colors.black, tracking=mrz_tracking)
 
         _text_centred(c, PAGE_W / 2, CARD_Y - 22,
-                      "SPECIMEN - SYNTHETIC TEST DATA - NOT A GOVERNMENT-ISSUED DOCUMENT",
+                      "",
                       size=7, color=colors.HexColor("#8a8a8a"))
 
     _save_pdf(output_path, draw, synthetic_tag=synthetic_tag)
