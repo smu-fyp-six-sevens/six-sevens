@@ -1,5 +1,4 @@
 from pathlib import Path
-import re
 
 import pymupdf
 import pytest
@@ -11,6 +10,7 @@ from app.injection.pdf import (
     BUILTIN_FONT_TIMES,
     _apply_manipulation,
     _builtin_fallback_font,
+    _clip_treated_to_bounds,
     _font_insert_kwargs,
     _normalize_font,
     _overlay_cover_rect,
@@ -82,6 +82,22 @@ def _inject(
     }
     if field_name is not None:
         payload["field_name"] = field_name
+    defaults: dict = {
+        DefectType.FONT: {"font": "cour"},
+        DefectType.FONT_SIZE: {"font_size": 16.0},
+        DefectType.NUMERICAL: {"new_text": "100001"},
+        DefectType.SPELLING: {"new_text": "GOLDEN HARVEST TRADING PTE LTDx"},
+        DefectType.METADATA: {"metadata": {"author": "Reviewer"}},
+        DefectType.MISALIGNMENT: {"x": 90.0},
+        DefectType.EMPHASIS: {"style": "italic"},
+        DefectType.TEXT_OVERLAY: {"new_text": "CERT COPY"},
+        DefectType.IMAGE_MANIPULATION: {"indicator": "compression_mismatch"},
+    }
+    if field_name == MIXED_FIELD and defect_type == DefectType.SPELLING:
+        defaults[DefectType.SPELLING] = {"new_text": "12345679"}
+    if field_name == MIXED_FIELD and defect_type == DefectType.NUMERICAL:
+        defaults[DefectType.NUMERICAL] = {"new_text": "87654321"}
+    payload.update(defaults[defect_type])
     payload.update(extra)
     return client.post("/api/dev/inject", json=payload)
 
@@ -200,7 +216,7 @@ def test_spelling_injection_keeps_embedded_serif_font(
     assert "helv" not in original_font.lower()
     assert "helvetica" not in original_font.lower()
 
-    response = _inject(doc_id, field_name, DefectType.SPELLING)
+    response = _inject(doc_id, field_name, DefectType.SPELLING, new_text="S8000000B")
     assert response.status_code == 200
     after_text = response.json()["after_text"]
 
@@ -326,23 +342,16 @@ def test_rejects_unknown_document() -> None:
     assert response.status_code == 404
 
 
-def test_inject_without_field_picks_a_random_target() -> None:
+def test_inject_without_field_is_rejected() -> None:
     response = _inject(DOC_ID, None, DefectType.NUMERICAL)
 
-    assert response.status_code == 200
-    payload = response.json()
-    document = get_document(DOC_ID)
-    assert document is not None
-    assert payload["field_name"] in document.fields
-    assert re.search(r"\d", payload["before_text"] or "")
-    assert payload["before_text"] != payload["after_text"]
+    assert response.status_code == 422
 
 
-def test_inject_spelling_without_field_picks_a_word() -> None:
+def test_inject_spelling_without_field_is_rejected() -> None:
     response = _inject(DOC_ID, None, DefectType.SPELLING)
 
-    assert response.status_code == 200
-    assert response.json()["field_name"] in get_document(DOC_ID).fields
+    assert response.status_code == 422
 
 
 def test_templates_folder_pdf_is_auto_registered() -> None:
@@ -412,13 +421,16 @@ def test_rejects_spelling_on_label_only_field() -> None:
     assert "label" in response.json()["detail"].lower()
 
 
-def test_random_spelling_does_not_pick_a_label() -> None:
-    for _ in range(8):
-        reset_sample_documents()
-        response = _inject(DOC_ID, None, DefectType.SPELLING)
-        assert response.status_code == 200
-        assert response.json()["field_name"] != LABEL_FIELD
-        assert not response.json()["before_text"].startswith("Opening Balance")
+def test_spelling_without_new_text_is_rejected() -> None:
+    response = client.post(
+        "/api/dev/inject",
+        json={
+            "document_id": DOC_ID,
+            "defect_type": "spelling",
+            "field_name": TEXT_FIELD,
+        },
+    )
+    assert response.status_code == 422
 
 
 def test_spelling_accepts_explicit_replacement() -> None:
@@ -722,11 +734,13 @@ def test_scaling_anomaly_keeps_the_full_mark_but_changes_aspect() -> None:
     draw.rectangle([0, 0, 18, 39], fill=(220, 20, 20))
     draw.rectangle([82, 0, 99, 39], fill=(20, 20, 220))
     out = _apply_manipulation(image, "scaling_anomaly")
-    assert out.size == (155, 24)
+    assert out.size == (185, 18)
     assert out.tobytes() != image.tobytes()
     pixels = list(out.getdata())
     assert any(pixel[0] > 180 and pixel[2] < 80 for pixel in pixels)
     assert any(pixel[2] > 180 and pixel[0] < 80 for pixel in pixels)
+    custom = _apply_manipulation(image, "scaling_anomaly", scale_x=2.0, scale_y=0.5)
+    assert custom.size == (200, 20)
 
 
 def test_scaling_anomaly_inserts_the_image_stretched() -> None:
@@ -750,8 +764,47 @@ def test_scaling_anomaly_inserts_the_image_stretched() -> None:
     doc.close()
     stretched = max(infos, key=lambda info: info["bbox"][2] - info["bbox"][0])
     x0, y0, x1, y1 = stretched["bbox"]
-    assert (x1 - x0) > orig_w * 1.3
-    assert (y1 - y0) < orig_h * 0.8
+    assert (x1 - x0) > orig_w * 1.6
+    assert (y1 - y0) < orig_h * 0.6
+
+
+def test_scaling_anomaly_honours_scale_overrides() -> None:
+    document = get_document(DOC_ID)
+    assert document is not None
+    field_name = next(
+        name for name, field in document.fields.items() if field.kind == "image"
+    )
+    field = document.fields[field_name]
+    orig_w = field.rect[2] - field.rect[0]
+    orig_h = field.rect[3] - field.rect[1]
+    response = _inject(
+        DOC_ID,
+        field_name,
+        DefectType.IMAGE_MANIPULATION,
+        indicator="scaling_anomaly",
+        scale_x=2.0,
+        scale_y=0.4,
+    )
+    assert response.status_code == 200, response.json()
+    assert "2× wide" in response.json()["description"]
+    assert "0.4× tall" in response.json()["description"]
+    doc = pymupdf.open(get_document_file_path(DOC_ID) or "")
+    infos = doc[field.page].get_image_info()
+    doc.close()
+    stretched = max(infos, key=lambda info: info["bbox"][2] - info["bbox"][0])
+    x0, y0, x1, y1 = stretched["bbox"]
+    assert (x1 - x0) > orig_w * 1.8
+    assert (y1 - y0) < orig_h * 0.55
+
+
+def test_scaling_anomaly_crops_overflow_instead_of_squashing() -> None:
+    image = Image.new("RGB", (100, 40), (10, 20, 200))
+    insert = pymupdf.Rect(0, 0, 100, 40)
+    bounds = pymupdf.Rect(0, 0, 60, 40)
+    cropped, visible = _clip_treated_to_bounds(image, insert, bounds)
+    assert cropped.size == (60, 40)
+    assert abs(visible.width - 60) < 0.01
+    assert abs(visible.height - 40) < 0.01
 
 
 def test_image_overlay_covers_the_original_pixels() -> None:

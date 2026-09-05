@@ -1,23 +1,18 @@
 from __future__ import annotations
 
-import random
-import re
 from copy import deepcopy
 from pathlib import Path
 
 from fastapi import HTTPException, status
 
-from .field_text import field_value_text, is_preferred_value
 from .injectors import get_injector
 from .schemas import (
     DefectType,
     InjectDefectRequest,
     InjectDefectResponse,
     InjectedDefect,
-    InjectableDocument,
 )
 from .store import (
-    get_document,
     get_template_document,
     list_documents,
     save_document,
@@ -51,15 +46,7 @@ class InjectionService:
             )
 
         field_name = request.field_name
-        if field_name is None:
-            try:
-                field_name = _pick_random_field(document, request.defect_type)
-            except ValueError as exc:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=str(exc),
-                ) from exc
-        elif field_name not in document.fields:
+        if field_name not in document.fields:
             available = ", ".join(sorted(document.fields))
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -68,7 +55,7 @@ class InjectionService:
                     f"Available fields: {available}"
                 ),
             )
-        elif (
+        if (
             document.fields[field_name].kind == "image"
             and request.defect_type
             not in {DefectType.IMAGE_MANIPULATION, DefectType.METADATA}
@@ -112,64 +99,6 @@ class InjectionService:
             defect_count=len(saved.defects),
             generated_filename=generated.name,
         )
-
-
-def _pick_random_field(document: InjectableDocument, defect_type: DefectType) -> str:
-    """Choose a random value field; never a label-only 'variable name' span."""
-    if not document.fields:
-        raise ValueError(f"Document '{document.id}' has no injectable fields")
-
-    if defect_type == DefectType.IMAGE_MANIPULATION:
-        candidates = [
-            name for name, field in document.fields.items() if field.kind == "image"
-        ]
-        if not candidates:
-            raise ValueError(
-                f"Document '{document.id}' has no embedded PDF images to manipulate"
-            )
-        return random.choice(candidates)
-
-    # Metadata is document-level and does not rewrite visible labels.
-    if defect_type == DefectType.METADATA:
-        return random.choice(list(document.fields.keys()))
-
-    valued = [
-        (name, field_value_text(field.text))
-        for name, field in document.fields.items()
-        if field.kind != "image" and field_value_text(field.text).strip()
-    ]
-
-    candidates: list[str]
-    if defect_type == DefectType.NUMERICAL:
-        candidates = [name for name, value in valued if re.search(r"\d+(?:\.\d+)?", value)]
-        if not candidates:
-            raise ValueError(
-                f"Document '{document.id}' has no numeric value to inject a numerical defect into"
-            )
-    elif defect_type == DefectType.SPELLING:
-        candidates = [
-            name
-            for name, value in valued
-            if re.search(r"[A-Za-z]", value) and len(value.strip()) > 1
-        ]
-        if not candidates:
-            raise ValueError(
-                f"Document '{document.id}' has no word-like value to inject a spelling defect into"
-            )
-    else:
-        # font / font_size / misalignment / emphasis / overlay: restyle values only
-        candidates = [name for name, _value in valued]
-        if not candidates:
-            raise ValueError(
-                f"Document '{document.id}' has no value fields to inject a {defect_type.value} defect into"
-            )
-
-    preferred = [
-        name
-        for name in candidates
-        if is_preferred_value(document.fields[name].text)
-    ]
-    return random.choice(preferred or candidates)
 
 
 def _assert_single_defect(injected_defect: InjectedDefect, defect_type: DefectType) -> None:

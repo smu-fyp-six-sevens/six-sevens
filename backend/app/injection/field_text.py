@@ -80,8 +80,6 @@ _LABEL_ONLY_PATTERNS = (
     re.compile(r"^branch(\s+code|\s+name)?$", re.I),
 )
 
-_BOILERPLATE_WORD_LIMIT = 8
-
 
 def _tokens(text: str) -> list[str]:
     return re.findall(r"[A-Za-z]+", text.lower())
@@ -163,11 +161,3 @@ def require_value(field_name: str, text: str) -> str:
             "inject into the corresponding value instead"
         )
     return value
-
-
-def is_preferred_value(text: str) -> bool:
-    """True for short data-like values (skip long boilerplate when picking)."""
-    value = field_value_text(text).strip()
-    if not value:
-        return False
-    return len(value.split()) <= _BOILERPLATE_WORD_LIMIT

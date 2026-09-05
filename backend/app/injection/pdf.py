@@ -1745,6 +1745,10 @@ MANIPULATION_INDICATORS = (
     "quality_mismatch",
 )
 
+# Wide and short enough to read as a wrong aspect, not as blur.
+SCALING_ANOMALY_WIDTH = 1.85
+SCALING_ANOMALY_HEIGHT = 0.45
+
 
 def overlay_field_text(
     file_path: Path,
@@ -1762,7 +1766,14 @@ def overlay_field_text(
     _overlay_field_text_on_pdf(file_path, field, text, x=x, y=y)
 
 
-def manipulate_field_region(file_path: Path, field: FieldValue, indicator: str) -> None:
+def manipulate_field_region(
+    file_path: Path,
+    field: FieldValue,
+    indicator: str,
+    *,
+    scale_x: float | None = None,
+    scale_y: float | None = None,
+) -> None:
     """Apply a targeted image-forensic artefact to one field's bounding box."""
     indicator = indicator.strip().lower()
     if indicator not in MANIPULATION_INDICATORS:
@@ -1774,7 +1785,13 @@ def manipulate_field_region(file_path: Path, field: FieldValue, indicator: str) 
         raise ValueError("image_manipulation currently supports PDF templates only")
     if len(field.rect) != 4:
         raise ValueError("image_manipulation requires a field bounding box")
-    _manipulate_region_on_pdf(file_path, field, indicator)
+    _manipulate_region_on_pdf(
+        file_path,
+        field,
+        indicator,
+        scale_x=scale_x,
+        scale_y=scale_y,
+    )
 
 
 def _longest_true_run(values: list[bool]) -> int:
@@ -1963,12 +1980,37 @@ def _overlay_field_text_on_pdf(
     _save_pdf(doc, pdf_path)
 
 
-def _apply_manipulation(crop: Image.Image, indicator: str) -> Image.Image:
-    crop = crop.convert("RGB")
+def _resolved_scale_factors(
+    scale_x: float | None,
+    scale_y: float | None,
+) -> tuple[float, float]:
+    width = SCALING_ANOMALY_WIDTH if scale_x is None else float(scale_x)
+    height = SCALING_ANOMALY_HEIGHT if scale_y is None else float(scale_y)
+    for name, value in (("scale_x", width), ("scale_y", height)):
+        if value <= 0 or value > 5:
+            raise ValueError(f"{name} must be between 0.05 and 5")
+    return width, height
+
+
+def _apply_manipulation(
+    crop: Image.Image,
+    indicator: str,
+    *,
+    scale_x: float | None = None,
+    scale_y: float | None = None,
+) -> Image.Image:
     width, height = crop.size
     if width < 2 or height < 2:
         return crop
 
+    if indicator == "scaling_anomaly":
+        spread, compress = _resolved_scale_factors(scale_x, scale_y)
+        return crop.resize(
+            (max(1, int(width * spread)), max(1, int(height * compress))),
+            Image.Resampling.BICUBIC,
+        )
+
+    crop = crop.convert("RGB")
     if indicator == "resolution_mismatch":
         small_w = max(1, width // 3)
         small_h = max(1, height // 3)
@@ -1999,13 +2041,6 @@ def _apply_manipulation(crop: Image.Image, indicator: str) -> Image.Image:
         ring = ring.filter(ImageFilter.GaussianBlur(radius=max(1.6, thickness * 0.45)))
         wash = Image.new("RGB", (width, height), halo)
         return Image.composite(wash, out, ring)
-
-    if indicator == "scaling_anomaly":
-        # Leave the wrong aspect in place; the caller inserts this at a matching rect.
-        return crop.resize(
-            (max(1, int(width * 1.55)), max(1, int(height * 0.62))),
-            Image.Resampling.BICUBIC,
-        )
 
     if indicator == "image_overlay":
         ghost = ImageEnhance.Brightness(crop).enhance(1.06)
@@ -2046,10 +2081,18 @@ def _insert_pil_on_page(
 ) -> None:
     buffer = io.BytesIO()
     if jpeg:
-        image.save(buffer, format="JPEG", quality=16)
+        image.convert("RGB").save(buffer, format="JPEG", quality=16)
     else:
-        image.save(buffer, format="PNG")
+        image.convert("RGB").save(buffer, format="PNG")
     page.insert_image(box, stream=buffer.getvalue(), keep_proportion=False)
+
+
+def _flatten_rgba_on_paper(image: Image.Image, paper: Image.Image) -> Image.Image:
+    """Bake transparency into local paper so viewers don't need a PDF soft mask."""
+    if image.mode != "RGBA":
+        return image.convert("RGB")
+    base = paper.convert("RGB").resize(image.size, Image.Resampling.NEAREST).convert("RGBA")
+    return Image.alpha_composite(base, image).convert("RGB")
 
 
 def _insert_rect_for_treated(
@@ -2068,7 +2111,141 @@ def _insert_rect_for_treated(
     )
 
 
-def _manipulate_region_on_pdf(pdf_path: Path, field: FieldValue, indicator: str) -> None:
+def _host_image_rect(page: pymupdf.Page, box: pymupdf.Rect) -> pymupdf.Rect | None:
+    """Largest embedded image that contains this box (the card photo, if any)."""
+    best: pymupdf.Rect | None = None
+    for info in page.get_image_info() or []:
+        bbox = info.get("bbox")
+        if not bbox or len(bbox) != 4:
+            continue
+        rect = pymupdf.Rect(bbox)
+        if rect.width < box.width * 1.3 or rect.height < box.height * 1.3:
+            continue
+        if (rect & box).get_area() < box.get_area() * 0.85:
+            continue
+        if best is None or rect.get_area() > best.get_area():
+            best = rect
+    if best is None:
+        return None
+    # Stay inside rounded card corners / drop shadows in the host photo.
+    margin = min(14.0, best.width * 0.03, best.height * 0.03)
+    inset = pymupdf.Rect(
+        best.x0 + margin,
+        best.y0 + margin,
+        best.x1 - margin,
+        best.y1 - margin,
+    )
+    return inset if inset.width > box.width and inset.height > box.height else best
+
+
+def _clip_treated_to_bounds(
+    treated: Image.Image,
+    insert_box: pymupdf.Rect,
+    bounds: pymupdf.Rect,
+) -> tuple[Image.Image, pymupdf.Rect]:
+    """Keep the stretched aspect; cut pixels that would paint outside the host."""
+    visible = insert_box & bounds
+    if visible.is_empty or insert_box.width < 0.5 or insert_box.height < 0.5:
+        return treated, insert_box
+    if (
+        abs(visible.x0 - insert_box.x0) < 0.05
+        and abs(visible.y0 - insert_box.y0) < 0.05
+        and abs(visible.x1 - insert_box.x1) < 0.05
+        and abs(visible.y1 - insert_box.y1) < 0.05
+    ):
+        return treated, insert_box
+    scale_x = treated.width / insert_box.width
+    scale_y = treated.height / insert_box.height
+    left = max(0, int(round((visible.x0 - insert_box.x0) * scale_x)))
+    top = max(0, int(round((visible.y0 - insert_box.y0) * scale_y)))
+    right = min(treated.width, max(left + 1, int(round((visible.x1 - insert_box.x0) * scale_x))))
+    bottom = min(treated.height, max(top + 1, int(round((visible.y1 - insert_box.y0) * scale_y))))
+    if right - left < 2 or bottom - top < 2:
+        return treated, insert_box
+    return treated.crop((left, top, right, bottom)), visible
+
+
+def _cover_slot_with_nearby_paper(page: pymupdf.Page, box: pymupdf.Rect) -> bool:
+    """Hide the original mark by stretching a same-height neighbour strip horizontally."""
+    pad = 12.0
+    candidates = (
+        pymupdf.Rect(box.x0 - pad, box.y0, box.x0 - 0.4, box.y1),
+        pymupdf.Rect(box.x1 + 0.4, box.y0, box.x1 + pad, box.y1),
+    )
+    strip = None
+    for candidate in candidates:
+        candidate = candidate & page.rect
+        if candidate.width >= 1.5 and candidate.height >= box.height * 0.8:
+            strip = candidate
+            break
+    if strip is None:
+        return False
+    matrix = pymupdf.Matrix(2, 2)
+    target = page.get_pixmap(matrix=matrix, clip=box, alpha=False)
+    source = page.get_pixmap(matrix=matrix, clip=strip, alpha=False)
+    paper = Image.frombytes("RGB", (source.width, source.height), source.samples)
+    filled = paper.resize((target.width, target.height), Image.Resampling.NEAREST)
+    _insert_pil_on_page(page, filled, box)
+    return True
+
+
+def _pdf_image_info_for_field(page: pymupdf.Page, field: FieldValue) -> dict | None:
+    box = pymupdf.Rect(field.rect)
+    best = None
+    best_iou = 0.0
+    for info in page.get_image_info(xrefs=True) or []:
+        bbox = info.get("bbox")
+        if not bbox or len(bbox) != 4:
+            continue
+        other = pymupdf.Rect(bbox)
+        overlap = (box & other).get_area()
+        union = (box | other).get_area()
+        if union <= 0:
+            continue
+        iou = overlap / union
+        if iou > best_iou:
+            best_iou = iou
+            best = info
+    if best is None or best_iou < 0.4:
+        return None
+    return best
+
+
+def _pil_from_pdf_image(doc: pymupdf.Document, xref: int) -> Image.Image | None:
+    """Native bitmap (and mask) so scaling stays sharp instead of a 2x page raster."""
+    if xref < 1:
+        return None
+    try:
+        extracted = doc.extract_image(xref)
+    except Exception:
+        return None
+    blob = extracted.get("image") if extracted else None
+    if not blob:
+        return None
+    image = Image.open(io.BytesIO(blob))
+    smask = extracted.get("smask") or 0
+    if smask:
+        try:
+            mask_blob = doc.extract_image(int(smask)).get("image")
+            mask = Image.open(io.BytesIO(mask_blob)).convert("L")
+            image = image.convert("RGBA")
+            if mask.size != image.size:
+                mask = mask.resize(image.size, Image.Resampling.BILINEAR)
+            image.putalpha(mask)
+            return image
+        except Exception:
+            pass
+    return image.convert("RGB")
+
+
+def _manipulate_region_on_pdf(
+    pdf_path: Path,
+    field: FieldValue,
+    indicator: str,
+    *,
+    scale_x: float | None = None,
+    scale_y: float | None = None,
+) -> None:
     doc = pymupdf.open(pdf_path)
     page = doc[field.page]
     box = pymupdf.Rect(field.rect) & page.rect
@@ -2077,14 +2254,39 @@ def _manipulate_region_on_pdf(pdf_path: Path, field: FieldValue, indicator: str)
         raise ValueError("image_manipulation field box is empty")
     pad = 0.8
     cover = pymupdf.Rect(box.x0 - pad, box.y0 - pad, box.x1 + pad, box.y1 + pad) & page.rect
-    crop = _pdf_clip_to_pil(page, cover)
+    paper_sample = _pdf_clip_to_pil(page, cover)
+    paper = _rgb01(paper_sample.getpixel((0, 0)))
+    crop = paper_sample
+    insert_box = cover
+    if indicator == "scaling_anomaly":
+        info = _pdf_image_info_for_field(page, field)
+        xref = int(info.get("xref") or 0) if info else 0
+        extracted = _pil_from_pdf_image(doc, xref) if xref else None
+        host = _host_image_rect(page, box)
+        if extracted is not None:
+            crop = extracted
+        if not _cover_slot_with_nearby_paper(page, box):
+            page.draw_rect(cover, color=None, fill=paper, width=0, overlay=True)
+        treated = _apply_manipulation(
+            crop,
+            indicator,
+            scale_x=scale_x,
+            scale_y=scale_y,
+        )
+        insert_box = _insert_rect_for_treated(box, crop, treated)
+        bounds = (host & page.rect) if host is not None else page.rect
+        treated, insert_box = _clip_treated_to_bounds(treated, insert_box, bounds)
+        if treated.mode == "RGBA":
+            treated = _flatten_rgba_on_paper(treated, _pdf_clip_to_pil(page, insert_box))
+        _insert_pil_on_page(page, treated, insert_box)
+        _save_pdf(doc, pdf_path)
+        return
     treated = _apply_manipulation(crop, indicator)
-    paper = _rgb01(crop.getpixel((0, 0)))
     page.draw_rect(cover, color=None, fill=paper, width=0, overlay=True)
     _insert_pil_on_page(
         page,
         treated,
-        _insert_rect_for_treated(cover, crop, treated),
+        insert_box,
         jpeg=indicator == "compression_mismatch",
     )
     _save_pdf(doc, pdf_path)

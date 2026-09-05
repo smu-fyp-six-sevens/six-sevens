@@ -1,6 +1,6 @@
 from enum import Enum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class DefectType(str, Enum):
@@ -94,7 +94,7 @@ class DocumentFieldInfo(BaseModel):
 
 
 class InjectOverrides(BaseModel):
-    """Per-request replacement; omitted fields keep the injector's random behaviour."""
+    """Explicit replacement for one inject. Every defect type requires its control."""
 
     new_text: str | None = None
     font: str | None = None
@@ -104,6 +104,8 @@ class InjectOverrides(BaseModel):
     style: str | None = None
     metadata: dict[str, str] | None = None
     indicator: str | None = None
+    scale_x: float | None = None
+    scale_y: float | None = None
 
 
 class InjectDefectRequest(BaseModel):
@@ -140,51 +142,102 @@ class InjectDefectRequest(BaseModel):
                     "field_name": "image_0_50_35",
                     "indicator": "compression_mismatch",
                 },
+                {
+                    "document_id": "NRIC_Sample",
+                    "defect_type": "image_manipulation",
+                    "field_name": "image_0_456_124",
+                    "indicator": "scaling_anomaly",
+                    "scale_x": 1.6,
+                    "scale_y": 0.55,
+                },
             ]
         }
     )
     document_id: str
     defect_type: DefectType
-    field_name: str | None = Field(
-        default=None,
-        description="Optional. If omitted, a suitable word/number in the document is chosen at random.",
+    field_name: str = Field(
+        min_length=1,
+        description="Field to inject into. Required.",
     )
     new_text: str | None = Field(
         default=None,
-        description="Optional replacement text for spelling/numerical/text_overlay. Label prefixes are kept if you pass only the value.",
+        description="Required for spelling, numerical, and text_overlay. Label prefixes are kept if you pass only the value.",
     )
     font: str | None = Field(
         default=None,
-        description="Optional typeface for font defects (e.g. 'cour', 'tiro', 'arial', 'helv').",
+        description="Required for font defects (e.g. 'cour', 'tiro', 'arial', 'helv').",
     )
     font_size: float | None = Field(
         default=None,
-        description="Optional point size for font_size defects.",
+        description="Required for font_size defects.",
     )
     x: float | None = Field(
         default=None,
-        description="Optional absolute x for misalignment defects.",
+        description="Required for misalignment (with y) — absolute x.",
     )
     y: float | None = Field(
         default=None,
-        description="Optional absolute y for misalignment defects.",
+        description="Required for misalignment (with x) — absolute y.",
     )
     style: str | None = Field(
         default=None,
-        description="Optional emphasis: 'bold', 'italic', or 'underline'.",
+        description="Required for emphasis: 'bold', 'italic', or 'underline'.",
     )
     metadata: dict[str, str] | None = Field(
         default=None,
-        description="Optional metadata keys to set (author, creator, title, subject).",
+        description="Required for metadata defects (author, creator, title, subject).",
     )
     indicator: str | None = Field(
         default=None,
         description=(
-            "Optional image_manipulation indicator: resolution_mismatch, "
+            "Required for image_manipulation: resolution_mismatch, "
             "compression_mismatch, visible_boundary, scaling_anomaly, "
             "image_overlay, quality_mismatch."
         ),
     )
+    scale_x: float | None = Field(
+        default=None,
+        description=(
+            "Optional scaling_anomaly horizontal factor. Values >1 spread wider. "
+            "Default 1.85."
+        ),
+    )
+    scale_y: float | None = Field(
+        default=None,
+        description=(
+            "Optional scaling_anomaly vertical factor. Values <1 compress shorter. "
+            "Default 0.45."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def require_explicit_controls(self) -> "InjectDefectRequest":
+        if not self.field_name.strip():
+            raise ValueError("field_name is required")
+        required: dict[DefectType, tuple[str, ...]] = {
+            DefectType.FONT: ("font",),
+            DefectType.FONT_SIZE: ("font_size",),
+            DefectType.NUMERICAL: ("new_text",),
+            DefectType.SPELLING: ("new_text",),
+            DefectType.TEXT_OVERLAY: ("new_text",),
+            DefectType.METADATA: ("metadata",),
+            DefectType.EMPHASIS: ("style",),
+            DefectType.IMAGE_MANIPULATION: ("indicator",),
+        }
+        if self.defect_type == DefectType.MISALIGNMENT:
+            if self.x is None and self.y is None:
+                raise ValueError("misalignment requires x and/or y")
+            return self
+        names = required.get(self.defect_type, ())
+        for name in names:
+            value = getattr(self, name)
+            if value is None:
+                raise ValueError(f"{self.defect_type.value} requires {name}")
+            if isinstance(value, str) and not value.strip():
+                raise ValueError(f"{self.defect_type.value} requires {name}")
+            if name == "metadata" and not value:
+                raise ValueError("metadata requires at least one key")
+        return self
 
     def overrides(self) -> InjectOverrides:
         return InjectOverrides(
@@ -196,6 +249,8 @@ class InjectDefectRequest(BaseModel):
             style=self.style,
             metadata=self.metadata,
             indicator=self.indicator,
+            scale_x=self.scale_x,
+            scale_y=self.scale_y,
         )
 
 

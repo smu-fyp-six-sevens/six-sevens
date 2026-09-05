@@ -35,6 +35,18 @@ def _inject(document_id: str, field_name: str | None, defect_type: DefectType, *
     }
     if field_name is not None:
         payload["field_name"] = field_name
+    defaults: dict = {
+        DefectType.FONT: {"font": "cour"},
+        DefectType.FONT_SIZE: {"font_size": 16.0},
+        DefectType.NUMERICAL: {"new_text": "100001"},
+        DefectType.SPELLING: {"new_text": "OCBCX"},
+        DefectType.METADATA: {"metadata": {"author": "Reviewer"}},
+        DefectType.MISALIGNMENT: {"x": 90.0},
+        DefectType.EMPHASIS: {"style": "italic"},
+        DefectType.TEXT_OVERLAY: {"new_text": "JANE CITIZEN"},
+        DefectType.IMAGE_MANIPULATION: {"indicator": "compression_mismatch"},
+    }
+    payload.update(defaults[defect_type])
     payload.update(extra)
     return client.post("/api/dev/inject", json=payload)
 
@@ -146,7 +158,7 @@ def test_png_spelling_keeps_combined_label_prefix() -> None:
     )
     assert mixed is not None
 
-    response = _inject("ocbc_sample.png", mixed, DefectType.SPELLING)
+    response = _inject("ocbc_sample.png", mixed, DefectType.SPELLING, new_text="12345679")
 
     assert response.status_code == 200
     payload = response.json()
