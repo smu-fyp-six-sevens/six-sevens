@@ -609,3 +609,35 @@ def _ink_width(gray: Image.Image) -> int:
     if not xs:
         return 0
     return max(xs) - min(xs) + 1
+
+
+def test_png_text_overlay_is_not_supported() -> None:
+    document = get_document("ocbc_sample")
+    assert document is not None
+    field_name = next(iter(document.fields))
+    response = _inject(
+        "ocbc_sample",
+        field_name,
+        DefectType.TEXT_OVERLAY,
+        new_text="JANE CITIZEN",
+    )
+    assert response.status_code == 400
+    assert "pdf" in response.json()["detail"].lower()
+
+
+def test_png_image_manipulation_is_not_supported() -> None:
+    document = get_document("ocbc_sample")
+    assert document is not None
+    field_name = next(
+        name
+        for name, field in document.fields.items()
+        if any(ch.isdigit() for ch in field.text) and len(field.rect) == 4
+    )
+    response = _inject(
+        "ocbc_sample",
+        field_name,
+        DefectType.IMAGE_MANIPULATION,
+        indicator="compression_mismatch",
+    )
+    assert response.status_code == 400
+    assert "pdf" in response.json()["detail"].lower()

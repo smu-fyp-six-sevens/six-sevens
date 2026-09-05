@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import io
 import os
 import re
 from pathlib import Path
 
 import pymupdf
-from PIL import Image, ImageDraw, ImageFont, PngImagePlugin
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, PngImagePlugin
 
 from .field_text import split_label_and_value
 from .schemas import FieldValue
@@ -1186,6 +1187,25 @@ def _is_serif_font_name(font_name: str) -> bool:
     )
 
 
+def _is_sans_font_name(font_name: str) -> bool:
+    lowered = font_name.lower()
+    return any(
+        token in lowered
+        for token in (
+            "helvetica",
+            "neue",
+            "arial",
+            "calibri",
+            "geneva",
+            "verdana",
+            "tahoma",
+            "sans",
+            "inter",
+            "roboto",
+        )
+    )
+
+
 def resolve_family_font_file(font_name: str | None) -> str | None:
     """A full system TTF in the same family (serif/sans, bold/regular).
 
@@ -1203,7 +1223,7 @@ def resolve_family_font_file(font_name: str | None) -> str | None:
         return _first_existing_font(_SERIF_BOLD_CANDIDATES if bold else _SERIF_REGULAR_CANDIDATES)
     if "courier" in lowered or "mono" in lowered:
         return None
-    if "sans" in lowered or "arial" in lowered or "calibri" in lowered:
+    if _is_sans_font_name(font_name):
         return _first_existing_font(_SANS_BOLD_CANDIDATES if bold else _SANS_REGULAR_CANDIDATES)
     return None
 
@@ -1638,15 +1658,67 @@ def _discover_native_pdf_fields(
                         y=y,
                         page=page_index,
                         rect=[float(v) for v in bbox],
+                        kind="text",
                     )
     return fields
 
 
+_MIN_IMAGE_PT = 8.0
+_MIN_IMAGE_PX = 8
+
+
+def _discover_pdf_image_fields(
+    doc: pymupdf.Document,
+    metadata: dict[str, str],
+    existing: dict[str, FieldValue],
+) -> dict[str, FieldValue]:
+    """Register embedded bitmap placements from PyMuPDF (not vector drawings)."""
+    fields = dict(existing)
+    seen: set[tuple] = set()
+    for page_index, page in enumerate(doc):
+        for info in page.get_image_info() or []:
+            bbox = info.get("bbox")
+            if not bbox or len(bbox) != 4:
+                continue
+            rect = pymupdf.Rect(bbox) & page.rect
+            if rect.is_empty or rect.width < _MIN_IMAGE_PT or rect.height < _MIN_IMAGE_PT:
+                continue
+            pixel_w = int(info.get("width") or 0)
+            pixel_h = int(info.get("height") or 0)
+            if pixel_w < _MIN_IMAGE_PX or pixel_h < _MIN_IMAGE_PX:
+                continue
+            key = (
+                page_index,
+                round(rect.x0, 1),
+                round(rect.y0, 1),
+                round(rect.x1, 1),
+                round(rect.y1, 1),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            base = f"image_{page_index}_{int(round(rect.x0))}_{int(round(rect.y0))}"
+            name = _unique_field_name(base, fields)
+            fields[name] = FieldValue(
+                text=f"[image {pixel_w}x{pixel_h}]",
+                font=BUILTIN_FONT_HELVETICA,
+                font_size=1.0,
+                metadata=dict(metadata),
+                x=float(rect.x0),
+                y=float(rect.y0),
+                page=page_index,
+                rect=[float(rect.x0), float(rect.y0), float(rect.x1), float(rect.y1)],
+                kind="image",
+            )
+    return fields
+
+
 def discover_fields_from_pdf(pdf_path: Path) -> dict[str, FieldValue]:
-    """Extract injectable fields from a native PDF text layer."""
+    """Extract injectable text spans and embedded image boxes from a PDF."""
     doc = pymupdf.open(pdf_path)
     metadata = {key: value for key, value in (doc.metadata or {}).items() if value}
     fields = _discover_native_pdf_fields(doc, metadata)
+    fields = _discover_pdf_image_fields(doc, metadata, fields)
     if not fields:
         page = doc[0]
         fields["document_image"] = FieldValue(
@@ -1658,6 +1730,361 @@ def discover_fields_from_pdf(pdf_path: Path) -> dict[str, FieldValue]:
             y=24.0,
             page=0,
             rect=[10.0, 10.0, min(page.rect.width - 10.0, 220.0), 28.0],
+            kind="text",
         )
     doc.close()
     return fields
+
+
+MANIPULATION_INDICATORS = (
+    "resolution_mismatch",
+    "compression_mismatch",
+    "visible_boundary",
+    "scaling_anomaly",
+    "image_overlay",
+    "quality_mismatch",
+)
+
+
+def overlay_field_text(
+    file_path: Path,
+    field: FieldValue,
+    text: str,
+    *,
+    x: float | None = None,
+    y: float | None = None,
+) -> None:
+    """Draw extra text over a field using the local paper, ink, typeface, and alignment."""
+    if not text.strip():
+        raise ValueError("overlay text must not be empty")
+    if is_image_template(file_path):
+        raise ValueError("text_overlay currently supports PDF templates only")
+    _overlay_field_text_on_pdf(file_path, field, text, x=x, y=y)
+
+
+def manipulate_field_region(file_path: Path, field: FieldValue, indicator: str) -> None:
+    """Apply a targeted image-forensic artefact to one field's bounding box."""
+    indicator = indicator.strip().lower()
+    if indicator not in MANIPULATION_INDICATORS:
+        raise ValueError(
+            f"Unknown image-manipulation indicator {indicator!r}. "
+            f"Use one of: {', '.join(MANIPULATION_INDICATORS)}"
+        )
+    if is_image_template(file_path):
+        raise ValueError("image_manipulation currently supports PDF templates only")
+    if len(field.rect) != 4:
+        raise ValueError("image_manipulation requires a field bounding box")
+    _manipulate_region_on_pdf(file_path, field, indicator)
+
+
+def _longest_true_run(values: list[bool]) -> int:
+    longest = current = 0
+    for flag in values:
+        if flag:
+            current += 1
+            longest = max(longest, current)
+        else:
+            current = 0
+    return longest
+
+
+def _overlay_origin(
+    field: FieldValue,
+    *,
+    x: float | None,
+    y: float | None,
+) -> tuple[float, float]:
+    """Same baseline-left origin as the existing field value."""
+    return (
+        float(x) if x is not None else float(field.x),
+        float(y) if y is not None else float(field.y),
+    )
+
+
+def _pdf_text_length(text: str, fontsize: float, insert_kwargs: dict) -> float:
+    fontfile = insert_kwargs.get("fontfile")
+    fontname = insert_kwargs.get("fontname") or "helv"
+    try:
+        font = pymupdf.Font(fontfile=fontfile) if fontfile else pymupdf.Font(fontname)
+        return float(font.text_length(text, fontsize=fontsize))
+    except Exception:
+        return float(fontsize) * max(1, len(text)) * 0.5
+
+
+def _pdf_glyph_ink_rect(page: pymupdf.Page, field: FieldValue) -> pymupdf.Rect | None:
+    """Tight box around the field's glyphs, ignoring nearby table rules."""
+    if len(field.rect) != 4:
+        return None
+    clip = pymupdf.Rect(field.rect) & page.rect
+    if clip.is_empty or clip.width < 0.5 or clip.height < 0.5:
+        return None
+    scale = 3.0
+    pix = page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), clip=clip, alpha=False)
+    if pix.n not in {1, 3, 4}:
+        pix = pymupdf.Pixmap(pymupdf.csRGB, pix)
+    pixels = _pixmap_rgb_pixels(pix)
+    width, height = pix.width, pix.height
+    if width < 2 or height < 2 or len(pixels) < width * height:
+        return None
+    dark = [_luminance(pixel) <= 110 for pixel in pixels[: width * height]]
+    rule_row = [False] * height
+    for row in range(height):
+        flags = dark[row * width : (row + 1) * width]
+        if _longest_true_run(flags) >= max(4, int(width * 0.55)):
+            rule_row[row] = True
+    xs: list[int] = []
+    ys: list[int] = []
+    for row in range(height):
+        if rule_row[row]:
+            continue
+        offset = row * width
+        for col in range(width):
+            if dark[offset + col]:
+                xs.append(col)
+                ys.append(row)
+    if not xs:
+        return None
+    return pymupdf.Rect(
+        clip.x0 + min(xs) / scale,
+        clip.y0 + min(ys) / scale,
+        clip.x0 + (max(xs) + 1) / scale,
+        clip.y0 + (max(ys) + 1) / scale,
+    )
+
+
+def _horizontal_rule_ys(page: pymupdf.Page, clip: pymupdf.Rect) -> list[float]:
+    """Y positions of near-horizontal strokes that cross the field's column."""
+    ys: list[float] = []
+    x0, x1 = clip.x0 - 6, clip.x1 + 28
+    y0, y1 = clip.y0 - 16, clip.y1 + 16
+    for drawing in page.get_drawings():
+        for item in drawing.get("items") or []:
+            if not item:
+                continue
+            kind = item[0]
+            if kind == "l" and len(item) >= 3:
+                start, end = item[1], item[2]
+                if abs(start.y - end.y) > 0.7:
+                    continue
+                left, right = min(start.x, end.x), max(start.x, end.x)
+                y = (start.y + end.y) / 2
+                if right < x0 or left > x1 or y < y0 or y > y1:
+                    continue
+                ys.append(float(y))
+            elif kind == "re" and len(item) >= 2:
+                rect = item[1]
+                if rect.height > 1.4 or rect.width < 8:
+                    continue
+                if rect.x1 < x0 or rect.x0 > x1:
+                    continue
+                y = (rect.y0 + rect.y1) / 2
+                if y0 <= y <= y1:
+                    ys.append(float(y))
+    return ys
+
+
+def _overlay_cover_rect(
+    page: pymupdf.Page,
+    field: FieldValue,
+    text: str,
+    size: float,
+    origin: tuple[float, float],
+    insert_kwargs: dict,
+) -> pymupdf.Rect:
+    """Paper patch over the original glyphs only — not table rules around them."""
+    origin_x, origin_y = origin
+    glyphs = _pdf_glyph_ink_rect(page, field)
+    if glyphs is None or glyphs.is_empty:
+        if len(field.rect) == 4:
+            glyphs = pymupdf.Rect(field.rect)
+        else:
+            glyphs = pymupdf.Rect(
+                origin_x,
+                origin_y - size * 0.72,
+                origin_x + _pdf_text_length(field.text or text, size, insert_kwargs),
+                origin_y + size * 0.22,
+            )
+    overlay_w = _pdf_text_length(text, size, insert_kwargs)
+    x0, y0, x1, y1 = glyphs.x0, glyphs.y0, max(glyphs.x1, origin_x + overlay_w), glyphs.y1
+    if len(field.rect) == 4:
+        box = pymupdf.Rect(field.rect)
+        x0 = min(x0, box.x0)
+        y0 = min(y0, box.y0)
+        x1 = max(x1, box.x1)
+        y1 = max(y1, box.y1)
+    pad = 0.4
+    cover = pymupdf.Rect(x0 - pad, y0 - pad, x1 + pad, y1 + pad)
+    probe = pymupdf.Rect(field.rect) if len(field.rect) == 4 else cover
+    for rule_y in _horizontal_rule_ys(page, probe):
+        if rule_y < origin_y:
+            cover.y0 = max(cover.y0, rule_y + 0.85)
+        elif rule_y > origin_y:
+            cover.y1 = min(cover.y1, rule_y - 0.85)
+    if cover.y1 <= cover.y0:
+        cover.y0 = origin_y - size * 0.72
+        cover.y1 = origin_y + size * 0.22
+    return cover & page.rect
+
+
+def _overlay_field_text_on_pdf(
+    pdf_path: Path,
+    field: FieldValue,
+    text: str,
+    *,
+    x: float | None,
+    y: float | None,
+) -> None:
+    """Paint matching paper over the glyphs, then redraw at the original origin.
+
+    Original text operators are left in the file (unlike spelling, which redacts).
+    Nearby drawings such as total underlines are left alone.
+    """
+    doc = pymupdf.open(pdf_path)
+    page = doc[field.page]
+    size = float(field.font_size or 12.0)
+    insert_kwargs = _font_insert_kwargs(field.font, preserve_face=True)
+    insert_kwargs["fontsize"] = size
+    sample_rect = field.rect if len(field.rect) == 4 else [
+        field.x,
+        field.y - size,
+        field.x + 40,
+        field.y,
+    ]
+    ink, bg = _sample_pdf_field_colors(page, sample_rect)
+    insert_kwargs["color"] = _rgb01(ink)
+    if insert_kwargs.get("fontfile"):
+        insert_kwargs["set_simple"] = True
+
+    origin = _overlay_origin(field, x=x, y=y)
+    cover = _overlay_cover_rect(page, field, text, size, origin, insert_kwargs)
+    if not cover.is_empty:
+        page.draw_rect(cover, color=None, fill=_rgb01(bg), width=0, overlay=True)
+    page.insert_text(origin, text, **insert_kwargs)
+    _save_pdf(doc, pdf_path)
+
+
+def _apply_manipulation(crop: Image.Image, indicator: str) -> Image.Image:
+    crop = crop.convert("RGB")
+    width, height = crop.size
+    if width < 2 or height < 2:
+        return crop
+
+    if indicator == "resolution_mismatch":
+        small_w = max(1, width // 3)
+        small_h = max(1, height // 3)
+        return crop.resize((small_w, small_h), Image.Resampling.BILINEAR).resize(
+            (width, height), Image.Resampling.NEAREST
+        )
+
+    if indicator == "compression_mismatch":
+        buffer = io.BytesIO()
+        crop.save(buffer, format="JPEG", quality=16)
+        buffer.seek(0)
+        return Image.open(buffer).convert("RGB")
+
+    if indicator == "visible_boundary":
+        out = crop.convert("RGB")
+        paper = crop.getpixel((0, 0))
+        halo = tuple(max(0, min(255, channel - 22)) for channel in paper)
+        thickness = max(3, min(width, height) // 16)
+        ring = Image.new("L", (width, height), 0)
+        draw = ImageDraw.Draw(ring)
+        draw.rectangle([0, 0, width - 1, height - 1], outline=170, width=thickness)
+        if width > thickness * 2 + 2 and height > thickness * 2 + 2:
+            draw.rectangle(
+                [thickness, thickness, width - 1 - thickness, height - 1 - thickness],
+                outline=70,
+                width=max(1, thickness // 3),
+            )
+        ring = ring.filter(ImageFilter.GaussianBlur(radius=max(1.6, thickness * 0.45)))
+        wash = Image.new("RGB", (width, height), halo)
+        return Image.composite(wash, out, ring)
+
+    if indicator == "scaling_anomaly":
+        # Leave the wrong aspect in place; the caller inserts this at a matching rect.
+        return crop.resize(
+            (max(1, int(width * 1.55)), max(1, int(height * 0.62))),
+            Image.Resampling.BICUBIC,
+        )
+
+    if indicator == "image_overlay":
+        ghost = ImageEnhance.Brightness(crop).enhance(1.06)
+        ghost = ImageEnhance.Contrast(ghost).enhance(0.94)
+        enlarged = ghost.resize(
+            (max(width + 1, int(round(width * 1.08))), max(height + 1, int(round(height * 1.08)))),
+            Image.Resampling.BICUBIC,
+        )
+        return enlarged.resize((width, height), Image.Resampling.BICUBIC)
+
+    # quality_mismatch: brightness / contrast / colour / sharpness / noise
+    out = ImageEnhance.Brightness(crop).enhance(1.18)
+    out = ImageEnhance.Contrast(out).enhance(1.32)
+    out = ImageEnhance.Color(out).enhance(0.72)
+    out = ImageEnhance.Sharpness(out).enhance(2.4)
+    out = out.filter(ImageFilter.UnsharpMask(radius=1, percent=140, threshold=2))
+    noise = Image.effect_noise(out.size, 22).convert("RGB")
+    return Image.blend(out, noise, 0.12)
+
+
+def _pdf_clip_to_pil(page: pymupdf.Page, box: pymupdf.Rect) -> Image.Image:
+    pix = page.get_pixmap(matrix=pymupdf.Matrix(2, 2), clip=box, alpha=False)
+    if pix.n == 1:
+        image = Image.frombytes("L", (pix.width, pix.height), pix.samples)
+    elif pix.n == 4:
+        image = Image.frombytes("RGBA", (pix.width, pix.height), pix.samples)
+    else:
+        image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+    return image.convert("RGB")
+
+
+def _insert_pil_on_page(
+    page: pymupdf.Page,
+    image: Image.Image,
+    box: pymupdf.Rect,
+    *,
+    jpeg: bool = False,
+) -> None:
+    buffer = io.BytesIO()
+    if jpeg:
+        image.save(buffer, format="JPEG", quality=16)
+    else:
+        image.save(buffer, format="PNG")
+    page.insert_image(box, stream=buffer.getvalue(), keep_proportion=False)
+
+
+def _insert_rect_for_treated(
+    cover: pymupdf.Rect,
+    crop: Image.Image,
+    treated: Image.Image,
+) -> pymupdf.Rect:
+    """Place a resized crop at its new aspect, from the original top-left."""
+    if crop.size == treated.size or crop.width < 1 or crop.height < 1:
+        return cover
+    return pymupdf.Rect(
+        cover.x0,
+        cover.y0,
+        cover.x0 + cover.width * (treated.width / crop.width),
+        cover.y0 + cover.height * (treated.height / crop.height),
+    )
+
+
+def _manipulate_region_on_pdf(pdf_path: Path, field: FieldValue, indicator: str) -> None:
+    doc = pymupdf.open(pdf_path)
+    page = doc[field.page]
+    box = pymupdf.Rect(field.rect) & page.rect
+    if box.is_empty or box.width < 0.5 or box.height < 0.5:
+        doc.close()
+        raise ValueError("image_manipulation field box is empty")
+    pad = 0.8
+    cover = pymupdf.Rect(box.x0 - pad, box.y0 - pad, box.x1 + pad, box.y1 + pad) & page.rect
+    crop = _pdf_clip_to_pil(page, cover)
+    treated = _apply_manipulation(crop, indicator)
+    paper = _rgb01(crop.getpixel((0, 0)))
+    page.draw_rect(cover, color=None, fill=paper, width=0, overlay=True)
+    _insert_pil_on_page(
+        page,
+        treated,
+        _insert_rect_for_treated(cover, crop, treated),
+        jpeg=indicator == "compression_mismatch",
+    )
+    _save_pdf(doc, pdf_path)

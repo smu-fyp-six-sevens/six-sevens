@@ -32,6 +32,8 @@ CHANGED_KEYS: dict[DefectType, set[str]] = {
     DefectType.SPELLING: {"text"},
     DefectType.MISALIGNMENT: {"x", "y"},
     DefectType.EMPHASIS: {"style"},
+    DefectType.TEXT_OVERLAY: {"overlay"},
+    DefectType.IMAGE_MANIPULATION: {"manipulation"},
 }
 
 
@@ -64,6 +66,18 @@ class InjectionService:
                 detail=(
                     f"Field '{field_name}' not found on document '{request.document_id}'. "
                     f"Available fields: {available}"
+                ),
+            )
+        elif (
+            document.fields[field_name].kind == "image"
+            and request.defect_type
+            not in {DefectType.IMAGE_MANIPULATION, DefectType.METADATA}
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Field '{field_name}' is an embedded PDF image. "
+                    "Use defect_type 'image_manipulation' for image fields."
                 ),
             )
 
@@ -105,6 +119,16 @@ def _pick_random_field(document: InjectableDocument, defect_type: DefectType) ->
     if not document.fields:
         raise ValueError(f"Document '{document.id}' has no injectable fields")
 
+    if defect_type == DefectType.IMAGE_MANIPULATION:
+        candidates = [
+            name for name, field in document.fields.items() if field.kind == "image"
+        ]
+        if not candidates:
+            raise ValueError(
+                f"Document '{document.id}' has no embedded PDF images to manipulate"
+            )
+        return random.choice(candidates)
+
     # Metadata is document-level and does not rewrite visible labels.
     if defect_type == DefectType.METADATA:
         return random.choice(list(document.fields.keys()))
@@ -112,7 +136,7 @@ def _pick_random_field(document: InjectableDocument, defect_type: DefectType) ->
     valued = [
         (name, field_value_text(field.text))
         for name, field in document.fields.items()
-        if field_value_text(field.text).strip()
+        if field.kind != "image" and field_value_text(field.text).strip()
     ]
 
     candidates: list[str]
@@ -133,7 +157,7 @@ def _pick_random_field(document: InjectableDocument, defect_type: DefectType) ->
                 f"Document '{document.id}' has no word-like value to inject a spelling defect into"
             )
     else:
-        # font / font_size / misalignment / emphasis: restyle values only
+        # font / font_size / misalignment / emphasis / overlay: restyle values only
         candidates = [name for name, _value in valued]
         if not candidates:
             raise ValueError(

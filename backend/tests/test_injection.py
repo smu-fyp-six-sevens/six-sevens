@@ -4,18 +4,24 @@ import re
 import pymupdf
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image, ImageDraw
 
 from app.injection.pdf import (
     BUILTIN_FONT_HELVETICA,
     BUILTIN_FONT_TIMES,
+    _apply_manipulation,
     _builtin_fallback_font,
+    _font_insert_kwargs,
     _normalize_font,
+    _overlay_cover_rect,
     apply_text_emphasis,
     discover_fields_from_pdf,
     extract_pdf_text,
+    overlay_field_text,
     read_pdf_metadata,
     replace_field_text,
     resolve_emphasis_font_file,
+    resolve_family_font_file,
 )
 from app.injection.schemas import DefectType
 from app.injection.store import get_document, get_document_file_path, reset_sample_documents
@@ -54,6 +60,16 @@ def test_unknown_serif_fonts_are_not_forced_to_helvetica() -> None:
     assert resolve_emphasis_font_file("italic", "helv") is None
 
 
+def test_helvetica_neue_bold_uses_a_bold_sans_ttf() -> None:
+    path = resolve_family_font_file("HelveticaNeue-Bold")
+    assert path is not None
+    assert Path(path).exists()
+    assert "bold" in Path(path).name.lower()
+    kwargs = _font_insert_kwargs("HelveticaNeue-Bold", preserve_face=True)
+    assert kwargs.get("fontfile")
+    assert kwargs.get("fontname") != "helv"
+
+
 def _inject(
     document_id: str,
     field_name: str | None,
@@ -71,7 +87,15 @@ def _inject(
 
 
 def _field_for(defect_type: DefectType) -> str:
-    return NUMERIC_FIELD if defect_type == DefectType.NUMERICAL else TEXT_FIELD
+    if defect_type == DefectType.NUMERICAL:
+        return NUMERIC_FIELD
+    if defect_type == DefectType.IMAGE_MANIPULATION:
+        document = get_document(DOC_ID)
+        assert document is not None
+        return next(
+            name for name, field in document.fields.items() if field.kind == "image"
+        )
+    return TEXT_FIELD
 
 
 @pytest.mark.parametrize("defect_type", list(DefectType))
@@ -479,3 +503,263 @@ def _make_custom_pdf(path: Path) -> None:
     doc.set_metadata({"title": "Tenancy Agreement", "author": "Broker"})
     doc.save(path)
     doc.close()
+
+
+def test_text_overlay_keeps_original_and_adds_matching_text() -> None:
+    response = _inject(
+        DOC_ID,
+        TEXT_FIELD,
+        DefectType.TEXT_OVERLAY,
+        new_text="CERT COPY",
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["before_text"] == payload["after_text"]
+    assert "CERT COPY" in payload["description"]
+    text = extract_pdf_text(Path(get_document_file_path(DOC_ID) or ""))
+    assert "Golden Harvest Trading Pte Ltd" in text
+    assert "CERT COPY" in text
+
+
+def test_pdf_overlay_matches_field_background_font_and_origin(tmp_path: Path) -> None:
+    path = tmp_path / "overlay.pdf"
+    fill = (0.82, 0.90, 0.96)
+    doc = pymupdf.open()
+    page = doc.new_page(width=400, height=200)
+    page.draw_rect(page.rect, color=fill, fill=fill)
+    page.insert_text((72, 100), "S8000000A", fontsize=14, fontname="helv")
+    doc.save(path)
+    doc.close()
+
+    fields = discover_fields_from_pdf(path)
+    field = next(value for value in fields.values() if "S8000000A" in value.text)
+    overlay_field_text(path, field, "CERT COPY")
+
+    after = pymupdf.open(path)
+    page = after[0]
+    extracted = page.get_text()
+    assert "S8000000A" in extracted
+    assert "CERT COPY" in extracted
+
+    spans = [
+        span
+        for block in page.get_text("dict")["blocks"]
+        for line in block.get("lines", [])
+        for span in line.get("spans", [])
+    ]
+    original = next(span for span in spans if "S8000000A" in span["text"])
+    overlay = next(span for span in spans if "CERT COPY" in span["text"])
+    assert abs(overlay["origin"][0] - original["origin"][0]) < 1.0
+    assert abs(overlay["origin"][1] - original["origin"][1]) < 1.0
+    assert abs(overlay["size"] - original["size"]) < 0.5
+
+    box = pymupdf.Rect(field.rect) & page.rect
+    pix = page.get_pixmap(matrix=pymupdf.Matrix(2, 2), clip=box, alpha=False)
+    samples = pix.samples
+    n = pix.n
+    lights = []
+    for i in range(0, len(samples) - 2, n):
+        pixel = (samples[i], samples[i + 1], samples[i + 2])
+        if 0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2] >= 140:
+            lights.append(pixel)
+    after.close()
+
+    assert lights
+    median = sorted(lights, key=lambda p: p[0] + p[1] + p[2])[len(lights) // 2]
+    expected = tuple(int(channel * 255) for channel in fill)
+    assert all(abs(median[i] - expected[i]) < 40 for i in range(3)), (median, expected)
+    assert median != (255, 255, 255)
+
+
+def test_pdf_overlay_leaves_nearby_table_rules(tmp_path: Path) -> None:
+    path = tmp_path / "totals.pdf"
+    doc = pymupdf.open()
+    page = doc.new_page(width=400, height=200)
+    page.insert_text((72, 100), "$1,452,650", fontsize=11, fontname="hebo")
+    page.draw_line(pymupdf.Point(70, 86), pymupdf.Point(150, 86), width=0.7)
+    page.draw_line(pymupdf.Point(70, 106), pymupdf.Point(150, 106), width=0.8)
+    page.draw_line(pymupdf.Point(70, 108.2), pymupdf.Point(150, 108.2), width=0.8)
+    doc.save(path)
+    doc.close()
+
+    fields = discover_fields_from_pdf(path)
+    field = next(value for value in fields.values() if "1,452,650" in value.text)
+    overlay_field_text(path, field, "$1,999,999")
+
+    after = pymupdf.open(path)
+    page = after[0]
+    assert "$1,452,650" in page.get_text()
+    assert "$1,999,999" in page.get_text()
+
+    def _line_still_dark(y: float) -> bool:
+        box = pymupdf.Rect(72, y - 0.6, 140, y + 0.6) & page.rect
+        pix = page.get_pixmap(matrix=pymupdf.Matrix(3, 3), clip=box, alpha=False)
+        samples = pix.samples
+        n = pix.n
+        dark = 0
+        total = 0
+        for i in range(0, len(samples) - 2, n):
+            total += 1
+            if 0.299 * samples[i] + 0.587 * samples[i + 1] + 0.114 * samples[i + 2] <= 80:
+                dark += 1
+        return total > 0 and dark / total >= 0.12
+
+    assert _line_still_dark(86)
+    assert _line_still_dark(106)
+    assert _line_still_dark(108.2)
+    after.close()
+
+
+def test_overlay_cover_includes_original_span_when_no_rules(tmp_path: Path) -> None:
+    path = tmp_path / "name.pdf"
+    doc = pymupdf.open()
+    page = doc.new_page(width=400, height=200)
+    page.insert_text((40, 100), "Tan Wei Ming", fontsize=11.25, fontname="hebo")
+    doc.save(path)
+    doc.close()
+
+    fields = discover_fields_from_pdf(path)
+    field = next(value for value in fields.values() if "Tan Wei Ming" in value.text)
+    insert_kwargs = _font_insert_kwargs(field.font, preserve_face=True)
+    insert_kwargs["fontsize"] = field.font_size
+    opened = pymupdf.open(path)
+    cover = _overlay_cover_rect(
+        opened[0],
+        field,
+        "TAN WEI NING",
+        field.font_size,
+        (field.x, field.y),
+        insert_kwargs,
+    )
+    opened.close()
+    box = pymupdf.Rect(field.rect)
+    assert cover.y0 <= box.y0 + 0.05
+    assert cover.y1 >= box.y1 - 0.05
+    assert cover.x0 <= box.x0 + 0.05
+    assert cover.x1 >= box.x1 - 0.05
+
+
+def test_image_manipulation_rejects_unknown_indicator() -> None:
+    response = _inject(
+        DOC_ID,
+        TEXT_FIELD,
+        DefectType.IMAGE_MANIPULATION,
+        indicator="not_a_real_indicator",
+    )
+    assert response.status_code == 400
+    assert "indicator" in response.json()["detail"].lower()
+
+
+def test_image_manipulation_rejects_text_fields() -> None:
+    response = _inject(
+        DOC_ID,
+        TEXT_FIELD,
+        DefectType.IMAGE_MANIPULATION,
+        indicator="compression_mismatch",
+    )
+    assert response.status_code == 400
+    detail = response.json()["detail"].lower()
+    assert "image" in detail
+
+
+def test_pdf_discovers_embedded_image_fields(tmp_path: Path) -> None:
+    path = tmp_path / "logo.pdf"
+    doc = pymupdf.open()
+    page = doc.new_page(width=400, height=200)
+    page.insert_text((72, 120), "Heading", fontsize=12, fontname="helv")
+    logo = pymupdf.open()
+    logo_page = logo.new_page(width=40, height=20)
+    logo_page.draw_rect(logo_page.rect, color=(0, 0, 1), fill=(0, 0, 1))
+    pixmap = logo_page.get_pixmap()
+    logo.close()
+    page.insert_image(pymupdf.Rect(20, 20, 80, 50), pixmap=pixmap)
+    doc.save(path)
+    doc.close()
+
+    fields = discover_fields_from_pdf(path)
+    images = [field for field in fields.values() if field.kind == "image"]
+    assert len(images) == 1
+    assert images[0].rect[0] < 25
+    assert images[0].text.startswith("[image ")
+
+
+@pytest.mark.parametrize(
+    "indicator",
+    [
+        "resolution_mismatch",
+        "compression_mismatch",
+        "visible_boundary",
+        "scaling_anomaly",
+        "image_overlay",
+        "quality_mismatch",
+    ],
+)
+def test_image_manipulation_indicators_rewrite_the_field_region(indicator: str) -> None:
+    document = get_document(DOC_ID)
+    assert document is not None
+    field_name = next(
+        name for name, field in document.fields.items() if field.kind == "image"
+    )
+    before_bytes = Path(get_document_file_path(DOC_ID) or "").read_bytes()
+    response = _inject(
+        DOC_ID,
+        field_name,
+        DefectType.IMAGE_MANIPULATION,
+        indicator=indicator,
+    )
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    assert payload["defect_type"] == "image_manipulation"
+    assert indicator.replace("_", " ") in payload["description"].lower()
+    after = Path(get_document_file_path(DOC_ID) or "")
+    assert after.read_bytes() != before_bytes
+    assert after.read_bytes().startswith(b"%PDF")
+
+
+def test_scaling_anomaly_keeps_the_full_mark_but_changes_aspect() -> None:
+    image = Image.new("RGB", (100, 40), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle([0, 0, 18, 39], fill=(220, 20, 20))
+    draw.rectangle([82, 0, 99, 39], fill=(20, 20, 220))
+    out = _apply_manipulation(image, "scaling_anomaly")
+    assert out.size == (155, 24)
+    assert out.tobytes() != image.tobytes()
+    pixels = list(out.getdata())
+    assert any(pixel[0] > 180 and pixel[2] < 80 for pixel in pixels)
+    assert any(pixel[2] > 180 and pixel[0] < 80 for pixel in pixels)
+
+
+def test_scaling_anomaly_inserts_the_image_stretched() -> None:
+    document = get_document(DOC_ID)
+    assert document is not None
+    field_name = next(
+        name for name, field in document.fields.items() if field.kind == "image"
+    )
+    field = document.fields[field_name]
+    orig_w = field.rect[2] - field.rect[0]
+    orig_h = field.rect[3] - field.rect[1]
+    response = _inject(
+        DOC_ID,
+        field_name,
+        DefectType.IMAGE_MANIPULATION,
+        indicator="scaling_anomaly",
+    )
+    assert response.status_code == 200, response.json()
+    doc = pymupdf.open(get_document_file_path(DOC_ID) or "")
+    infos = doc[field.page].get_image_info()
+    doc.close()
+    stretched = max(infos, key=lambda info: info["bbox"][2] - info["bbox"][0])
+    x0, y0, x1, y1 = stretched["bbox"]
+    assert (x1 - x0) > orig_w * 1.3
+    assert (y1 - y0) < orig_h * 0.8
+
+
+def test_image_overlay_covers_the_original_pixels() -> None:
+    image = Image.new("RGB", (40, 24), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle([0, 0, 3, 23], fill=(0, 200, 0))
+    draw.ellipse([8, 4, 32, 20], fill=(200, 20, 20))
+    out = _apply_manipulation(image, "image_overlay")
+    assert out.size == image.size
+    assert out.tobytes() != image.tobytes()
+    assert out.getpixel((1, 12)) != (0, 200, 0)

@@ -11,6 +11,17 @@ class DefectType(str, Enum):
     SPELLING = "spelling"
     MISALIGNMENT = "misalignment"
     EMPHASIS = "emphasis"
+    TEXT_OVERLAY = "text_overlay"
+    IMAGE_MANIPULATION = "image_manipulation"
+
+
+class ManipulationIndicator(str, Enum):
+    RESOLUTION_MISMATCH = "resolution_mismatch"
+    COMPRESSION_MISMATCH = "compression_mismatch"
+    VISIBLE_BOUNDARY = "visible_boundary"
+    SCALING_ANOMALY = "scaling_anomaly"
+    IMAGE_OVERLAY = "image_overlay"
+    QUALITY_MISMATCH = "quality_mismatch"
 
 
 class FieldValue(BaseModel):
@@ -25,6 +36,18 @@ class FieldValue(BaseModel):
     style: str = Field(
         default="",
         description="Text emphasis: '', 'bold', 'italic', or 'underline'",
+    )
+    overlay: str = Field(
+        default="",
+        description="Extra text drawn over the field for a text_overlay defect.",
+    )
+    manipulation: str = Field(
+        default="",
+        description="Image-manipulation indicator applied to this field's region.",
+    )
+    kind: str = Field(
+        default="text",
+        description="How this field was found: 'text' (PDF span / OCR) or 'image' (embedded PDF image).",
     )
 
 
@@ -56,13 +79,17 @@ class InjectableDocument(BaseModel):
 
 
 class DocumentFieldInfo(BaseModel):
-    """A recognised injectable field (PDF text span or OCR text on an image)."""
+    """A recognised injectable field (PDF text span, OCR text, or embedded image)."""
 
     field_name: str
     text: str
     page: int = 0
     source: str = Field(
         description="How the field was recognised: 'pdf_text' or 'ocr'",
+    )
+    kind: str = Field(
+        default="text",
+        description="'text' or 'image'. image_manipulation only applies to image fields.",
     )
 
 
@@ -76,6 +103,7 @@ class InjectOverrides(BaseModel):
     y: float | None = None
     style: str | None = None
     metadata: dict[str, str] | None = None
+    indicator: str | None = None
 
 
 class InjectDefectRequest(BaseModel):
@@ -100,6 +128,18 @@ class InjectDefectRequest(BaseModel):
                     "field_name": "atm_withdrawal",
                     "font": "cour",
                 },
+                {
+                    "document_id": "C001_CertIncumbency",
+                    "defect_type": "text_overlay",
+                    "field_name": "golden_harvest_trading_pte_ltd",
+                    "new_text": "CERT COPY",
+                },
+                {
+                    "document_id": "Bank_Statement",
+                    "defect_type": "image_manipulation",
+                    "field_name": "image_0_50_35",
+                    "indicator": "compression_mismatch",
+                },
             ]
         }
     )
@@ -111,7 +151,7 @@ class InjectDefectRequest(BaseModel):
     )
     new_text: str | None = Field(
         default=None,
-        description="Optional replacement text for spelling/numerical. Label prefixes are kept if you pass only the value.",
+        description="Optional replacement text for spelling/numerical/text_overlay. Label prefixes are kept if you pass only the value.",
     )
     font: str | None = Field(
         default=None,
@@ -137,6 +177,14 @@ class InjectDefectRequest(BaseModel):
         default=None,
         description="Optional metadata keys to set (author, creator, title, subject).",
     )
+    indicator: str | None = Field(
+        default=None,
+        description=(
+            "Optional image_manipulation indicator: resolution_mismatch, "
+            "compression_mismatch, visible_boundary, scaling_anomaly, "
+            "image_overlay, quality_mismatch."
+        ),
+    )
 
     def overrides(self) -> InjectOverrides:
         return InjectOverrides(
@@ -147,6 +195,7 @@ class InjectDefectRequest(BaseModel):
             y=self.y,
             style=self.style,
             metadata=self.metadata,
+            indicator=self.indicator,
         )
 
 
