@@ -4,9 +4,14 @@ import argparse
 import html
 import json
 import random
+import sys
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from case_facts import seeded_rng
 
 FONT = "Helvetica"
 
@@ -469,7 +474,7 @@ def generate_certificate_of_incorporation(
     # company so the synthetic dataset isn't 100% "has former names". When one is
     # kept, synthesize a name and effective date specific to this case instead of
     # DEFAULT_CONTEXT's literal "Def Company Pte. Ltd." showing up on every case.
-    rng = random.Random(f"{context['uen']}|former-names")
+    rng = seeded_rng(f"{context['uen']}|former-names")
     if rng.random() >= 0.4:
         context["former_names"] = []
         context["name_change_note"] = None

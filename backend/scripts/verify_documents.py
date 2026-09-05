@@ -23,9 +23,14 @@ from __future__ import annotations
 
 import os
 import sys
+import warnings
 from pathlib import Path
 
 import openpyxl
+
+# The mastersheet has data-validation dropdowns openpyxl reads fine but warns
+# about on every load_workbook() call.
+warnings.filterwarnings("ignore", message="Data Validation extension is not supported")
 
 BASE = Path(__file__).resolve().parents[1]
 MASTERSHEET = BASE / "doc_gen_scripts" / "v9_document_mastersheet.xlsx"

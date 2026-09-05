@@ -33,9 +33,14 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "certificate_of_incorporation"))
 
 import openpyxl
 from case_facts import company_facts, seeded_rng
+# Same seed key + word pools as coi_generator.py's own former-name synthesis, so a
+# case's Certificate of Incorporation and Certificate of Incumbency agree on
+# whether the company has a former name on record, and what it is.
+from coi_generator import _synthesize_former_name
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -237,9 +242,25 @@ def build_content(record: dict[str, Any]) -> dict[str, Any]:
     last_agm = date(profile_date.year - 1, fye_month, fye_day) + timedelta(days=rng.randint(90, 150))
     last_ar = last_agm + timedelta(days=rng.randint(7, 45))
 
+    # Same seed key, draw order and 0.4 threshold as coi_generator.py's
+    # generate_certificate_of_incorporation(), so this case's COI and Business
+    # Profile independently land on the same "has a former name?" decision (and the
+    # same name) without either generator needing to pass data to the other. The
+    # effective-date draws are consumed (not just the keep/clear roll) even though
+    # this document doesn't show that date, to keep the two RNG streams in step.
+    former_rng = seeded_rng(f"{facts['uen']}|former-names")
+    if former_rng.random() >= 0.4:
+        former_name = ""
+    else:
+        former_rng.randint(1, 6)
+        former_rng.randint(1, 12)
+        former_rng.randint(1, 28)
+        former_name = _synthesize_former_name(former_rng, str(facts["company_name"]))
+
     return {
         "case_id": case_id,
         "company_name": str(facts["company_name"]).upper(),
+        "former_name": former_name.upper() if former_name else "",
         "uen": facts["uen"],
         "registered_address": str(facts["registered_address"]).upper(),
         "incorporation_date": facts["incorporation_date"],
@@ -518,7 +539,7 @@ def render(content: dict[str, Any], out_pdf: str | Path, synthetic_tag: bool = T
             [
                 ("UEN", content["uen"]),
                 ("Name", content["company_name"]),
-                ("Former Name if any", ""),
+                ("Former Name if any", content.get("former_name") or "-"),
                 ("Incorporation Date", _d(content["incorporation_date"])),
                 ("Company Type", sw(content["company_type"])),
                 ("Status", "LIVE COMPANY"),

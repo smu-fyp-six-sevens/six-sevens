@@ -26,8 +26,15 @@ from __future__ import annotations
 import hashlib
 import random
 import re
+import warnings
 from datetime import date, datetime, timedelta
 from typing import Any
+
+# The mastersheet has data-validation dropdowns (e.g. Fraud Injected? Y/N) that
+# openpyxl can read fine but warns about on every single load_workbook() call --
+# every generator in this package loads that same file, so silence it once, here,
+# rather than at each of the ~10 call sites.
+warnings.filterwarnings("ignore", message="Data Validation extension is not supported")
 
 CORP_SEC_FIRMS = [
     ("Rivergate Corporate Services Pte. Ltd.", "8 Cross Street, #24-03 Manulife Tower, Singapore 048424"),
