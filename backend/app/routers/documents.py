@@ -5,9 +5,14 @@ import logging
 
 from fastapi import APIRouter, HTTPException, status
 
-from .. import document_repository, storage_service
+from .. import classification_cache, document_repository, storage_service
 from ..config import settings
-from ..models import DocumentDownloadResponse, DocumentRecord, DocumentStatus
+from ..models import (
+    ClassificationPreviewResponse,
+    DocumentDownloadResponse,
+    DocumentRecord,
+    DocumentStatus,
+)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 logger = logging.getLogger(__name__)
@@ -43,6 +48,20 @@ async def get_document(document_id: str) -> DocumentRecord:
             status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
         )
     return document
+
+
+@router.get("/{document_id}/classification-preview", response_model=ClassificationPreviewResponse)
+async def get_classification_preview(document_id: str) -> ClassificationPreviewResponse:
+    """
+    Evidence from the Classifier's raw output — held in an in-memory cache
+    (see classification_cache.py), not persisted to Supabase. Confidence
+    lives on DocumentRecord.confidence now (a real column) rather than
+    here. Returns empty until classification has actually run for this
+    document, rather than 404ing, since "not classified yet" is an
+    expected transient state while the frontend is polling.
+    """
+    evidence = classification_cache.get_evidence(document_id)
+    return ClassificationPreviewResponse(evidence=evidence or [])
 
 
 @router.get("/{document_id}/download", response_model=DocumentDownloadResponse)

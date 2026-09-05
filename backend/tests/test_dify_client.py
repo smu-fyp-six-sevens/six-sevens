@@ -29,7 +29,7 @@ async def test_run_workflow_success_returns_json_body() -> None:
     with patch("app.dify_client.httpx.AsyncClient") as mock_async_client_cls:
         mock_async_client_cls.return_value = _mock_async_client(post_return=mock_response)
 
-        result = await client.run_workflow("wf-1", {"a": 1})
+        result = await client.run_workflow("wf-1", {"a": 1}, user="test-user")
 
         assert result == {"data": {"outputs": {"ok": True}}}
         posted_kwargs = mock_async_client_cls.return_value.post.call_args
@@ -37,6 +37,7 @@ async def test_run_workflow_success_returns_json_body() -> None:
         assert posted_kwargs.kwargs["json"]["workflow_id"] == "wf-1"
         assert posted_kwargs.kwargs["json"]["inputs"] == {"a": 1}
         assert posted_kwargs.kwargs["json"]["response_mode"] == "blocking"
+        assert posted_kwargs.kwargs["json"]["user"] == "test-user"
 
 
 @pytest.mark.asyncio
@@ -51,7 +52,7 @@ async def test_run_workflow_raises_dify_error_on_http_status_error() -> None:
         mock_async_client_cls.return_value = _mock_async_client(post_return=mock_response)
 
         with pytest.raises(DifyInvocationError):
-            await client.run_workflow("wf-1", {"a": 1})
+            await client.run_workflow("wf-1", {"a": 1}, user="test-user")
 
 
 @pytest.mark.asyncio
@@ -64,7 +65,7 @@ async def test_run_workflow_raises_dify_error_on_request_error() -> None:
         )
 
         with pytest.raises(DifyInvocationError):
-            await client.run_workflow("wf-1", {"a": 1})
+            await client.run_workflow("wf-1", {"a": 1}, user="test-user")
 
 
 @pytest.mark.asyncio
@@ -74,7 +75,7 @@ async def test_run_workflow_with_retry_succeeds_first_try() -> None:
         patch.object(client, "run_workflow", new=AsyncMock(return_value={"ok": True})) as mock_run,
         patch("app.dify_client.asyncio.sleep", new=AsyncMock()) as mock_sleep,
     ):
-        result = await client.run_workflow_with_retry("wf-1", {"a": 1})
+        result = await client.run_workflow_with_retry("wf-1", {"a": 1}, user="test-user")
 
         assert result == {"ok": True}
         assert mock_run.await_count == 1
@@ -98,7 +99,7 @@ async def test_run_workflow_with_retry_succeeds_after_transient_failures() -> No
         ) as mock_run,
         patch("app.dify_client.asyncio.sleep", new=AsyncMock()) as mock_sleep,
     ):
-        result = await client.run_workflow_with_retry("wf-1", {"a": 1})
+        result = await client.run_workflow_with_retry("wf-1", {"a": 1}, user="test-user")
 
         assert result == {"ok": True}
         assert mock_run.await_count == 3
@@ -118,7 +119,7 @@ async def test_run_workflow_with_retry_raises_after_exhausting_all_attempts() ->
         patch("app.dify_client.asyncio.sleep", new=AsyncMock()) as mock_sleep,
     ):
         with pytest.raises(DifyInvocationError) as exc_info:
-            await client.run_workflow_with_retry("wf-1", {"a": 1})
+            await client.run_workflow_with_retry("wf-1", {"a": 1}, user="test-user")
 
         assert mock_run.await_count == 3
         # backoff happens between attempts 1->2 and 2->3, not after the last one

@@ -52,6 +52,28 @@ def update_status(
     supabase_client.table("documents").update(update).eq("id", document_id).execute()
 
 
+def record_classification(
+    document_id: str,
+    *,
+    document_type: Optional[str],
+    confidence: Optional[float],
+    classification_outcome: str,
+) -> None:
+    """
+    Persists the classification-stage decision (type, confidence, and
+    whether it was accepted or sent to manual review) independently of
+    document status — this can happen well before the document reaches a
+    terminal ANALYZED/FAILED status, since Extraction is a separate stage
+    that runs afterward and can fail on its own.
+    """
+    update = {
+        "document_type": document_type,
+        "confidence": confidence,
+        "classification_outcome": classification_outcome,
+    }
+    supabase_client.table("documents").update(update).eq("id", document_id).execute()
+
+
 def get_document(document_id: str) -> Optional[DocumentRecord]:
     result = supabase_client.table("documents").select("*").eq("id", document_id).execute()
     if not result.data:

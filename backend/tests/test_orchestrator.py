@@ -110,7 +110,11 @@ async def test_intake_coordinator_uploads_signed_url_of_the_document() -> None:
 
         await orchestrator.process_document("doc-1")
 
-        mock_storage.create_signed_url.assert_called_once_with(
+        # Called once for the Classifier's chat `files` attachment and once
+        # more for Extraction's `input_file` workflow input — both need the
+        # same document, so both get a signed URL for it.
+        assert mock_storage.create_signed_url.call_count == 2
+        mock_storage.create_signed_url.assert_called_with(
             document.storage_path, orchestrator.settings.SIGNED_URL_EXPIRY_SECONDS, document.filename
         )
         args, kwargs = mock_dify.run_chatflow_with_retry.call_args
@@ -125,6 +129,17 @@ async def test_intake_coordinator_uploads_signed_url_of_the_document() -> None:
                 "url": "https://signed.example/doc.pdf",
             }
         ]
+
+        # Extraction's Start node requires a file-type `input_file` input —
+        # this was missing entirely before and Dify rejected every call
+        # with "input_file is required in input form".
+        extraction_args, extraction_kwargs = mock_dify.run_workflow_with_retry.call_args
+        assert extraction_args[1]["input_file"] == {
+            "transfer_method": "remote_url",
+            "url": "https://signed.example/doc.pdf",
+            "type": "document",
+        }
+        assert extraction_kwargs["user"] == "doc-1"
 
 
 @pytest.mark.asyncio

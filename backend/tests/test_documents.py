@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 from postgrest.exceptions import APIError
 
+from app.config import settings
 from app.main import app
 from app.models import CaseRecord, DocumentRecord, DocumentStatus
 
@@ -253,4 +254,4 @@ def test_get_document_download_url() -> None:
     body = response.json()
     assert body["document_id"] == "doc-1"
     assert body["signed_url"] == "https://example.supabase.co/signed/doc-1"
-    assert body["expires_in"] == 300
+    assert body["expires_in"] == settings.SIGNED_URL_EXPIRY_SECONDS

@@ -11,7 +11,53 @@ export interface BulkUploadResponse {
   results: BulkUploadItemResult[];
 }
 
+// Mirrors DocumentRecord in backend/app/models.py
+export interface DocumentRecord {
+  id: string;
+  case_id: string | null;
+  filename: string;
+  document_type: string | null;
+  confidence: number | null;
+  classification_outcome: 'accepted' | 'manual_review' | null;
+  storage_path: string | null;
+  status: string;
+  retry_count: number;
+  uploaded_at: string;
+  queued_at: string | null;
+  processing_started_at: string | null;
+  failure_reason: string | null;
+}
+
 const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
+
+export async function getDocument(documentId: string): Promise<DocumentRecord> {
+  const response = await fetch(`${apiBaseUrl}/documents/${documentId}`);
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to fetch document (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as DocumentRecord;
+}
+
+// Mirrors ClassificationPreviewResponse in backend/app/models.py — evidence
+// held in-memory on the backend only, not persisted to Supabase (confidence
+// lives on DocumentRecord.confidence, a real column, instead).
+export interface ClassificationPreview {
+  evidence: string[];
+}
+
+export async function getClassificationPreview(documentId: string): Promise<ClassificationPreview> {
+  const response = await fetch(`${apiBaseUrl}/documents/${documentId}/classification-preview`);
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to fetch classification preview (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as ClassificationPreview;
+}
 
 export async function uploadDocuments(caseId: string, files: File[]): Promise<BulkUploadResponse> {
   const formData = new FormData();

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from app.config import settings
 from app.models import DocumentRecord, DocumentStatus
 from app.queue_service import DocumentQueue
 
@@ -23,16 +24,18 @@ def _make_document(
     )
 
 
-def test_start_creates_worker_task_only_once() -> None:
+def test_start_creates_worker_pool_only_once() -> None:
     queue = DocumentQueue()
     with patch("app.queue_service.asyncio.create_task") as mock_create_task:
         queue.start()
         queue.start()
 
-        assert mock_create_task.call_count == 1
-        # create_task is mocked, so the real coroutine passed to it (from
-        # self._worker_loop()) never actually gets scheduled — close it
-        # explicitly rather than leaving it to warn "never awaited".
+        # One task per pool slot on the first call; the second call is a
+        # no-op since _worker_tasks is already populated.
+        assert mock_create_task.call_count == settings.QUEUE_WORKER_CONCURRENCY
+        # create_task is mocked, so the real coroutines passed to it (from
+        # self._worker_loop(...)) never actually get scheduled — close them
+        # explicitly rather than leaving them to warn "never awaited".
         for call in mock_create_task.call_args_list:
             call.args[0].close()
 
@@ -118,7 +121,7 @@ async def test_worker_loop_continues_after_one_item_raises() -> None:
             raise RuntimeError("boom")
 
     with patch.object(queue, "_process_document", new=fake_process):
-        task = asyncio.create_task(queue._worker_loop())
+        task = asyncio.create_task(queue._worker_loop(0))
         try:
             await queue._queue.put("doc-bad")
             await queue._queue.put("doc-good")

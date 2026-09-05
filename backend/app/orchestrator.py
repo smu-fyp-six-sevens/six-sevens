@@ -4,10 +4,10 @@ import asyncio
 import logging
 import re
 
-from . import document_repository, storage_service
+from . import classification_cache, document_repository, storage_service
 from .config import settings
 from .dify_client import dify_client, DifyInvocationError
-from .models import DocumentStatus
+from .models import ClassificationOutcome, DocumentStatus
 
 logger = logging.getLogger("classifier_pipeline.orchestrator")
 
@@ -52,19 +52,11 @@ async def process_document(document_id: str) -> None:
         await _fail(document_id, f"Intake Coordinator invocation failed: {exc}")
         return
 
-    if classification.get("needs_manual_review"):
-        # Still persist the best-guess type even though it's below threshold —
-        # per classification.py's own design, a low-confidence guess is
-        # useful context for manual review, not something to discard.
-        await _fail(
-            document_id,
-            f"Classification confidence below threshold ({classification.get('confidence')})",
-            document_type=classification.get("document_type"),
-        )
+    if not await _finalise_classification(document_id, classification):
         return
 
     try:
-        extraction = await _run_extraction(document_id, classification["document_type"])
+        extraction = await _run_extraction(document_id, document, classification["document_type"])
     except DifyInvocationError as exc:
         await _fail(
             document_id,
@@ -90,16 +82,11 @@ async def process_document(document_id: str) -> None:
             await _fail(document_id, f"Re-classification invocation failed: {exc}")
             return
 
-        if classification.get("needs_manual_review"):
-            await _fail(
-                document_id,
-                f"Re-classification still below confidence threshold ({classification.get('confidence')})",
-                document_type=classification.get("document_type"),
-            )
+        if not await _finalise_classification(document_id, classification):
             return
 
         try:
-            extraction = await _run_extraction(document_id, classification["document_type"])
+            extraction = await _run_extraction(document_id, document, classification["document_type"])
         except DifyInvocationError as exc:
             await _fail(
                 document_id,
@@ -166,17 +153,38 @@ async def _run_intake_coordinator(
             }
         ],
     )
-    return _unwrap_chatflow_output(result)
+    classification = _unwrap_chatflow_output(result)
+    classification_cache.set_evidence(document_id, classification.get("evidence", []))
+    return classification
 
 
 def _dify_file_type(filename: str) -> str:
     return "document" if filename.lower().endswith(".pdf") else "image"
 
 
-async def _run_extraction(document_id: str, document_type: str) -> dict:
-    inputs = {"document_id": document_id, "document_type": document_type}
+async def _run_extraction(document_id: str, document, document_type: str) -> dict:
+    """
+    Extraction's Start node requires a file-type input variable named
+    input_file — same signed-URL pattern as the Classifier's `files`
+    attachment, just passed as a workflow input instead of a chat file.
+    """
+    signed_url = await asyncio.to_thread(
+        storage_service.create_signed_url,
+        document.storage_path,
+        settings.SIGNED_URL_EXPIRY_SECONDS,
+        document.filename,
+    )
+    inputs = {
+        "document_id": document_id,
+        "document_type": document_type,
+        "input_file": {
+            "transfer_method": "remote_url",
+            "url": signed_url,
+            "type": _dify_file_type(document.filename),
+        },
+    }
     result = await dify_client.run_workflow_with_retry(
-        settings.DIFY_EXTRACTION_WORKFLOW_ID, inputs
+        settings.DIFY_EXTRACTION_WORKFLOW_ID, inputs, user=document_id
     )
     return _unwrap_workflow_output(result)
 
@@ -265,6 +273,60 @@ def _parse_chatflow_answer(answer: str) -> dict:
         "reasoning": reasoning,
         "evidence": evidence,
     }
+
+
+def _is_unrecognised(document_type: str | None) -> bool:
+    return document_type in (None, "", "unrecognised")
+
+
+def _is_below_threshold(confidence: float | None) -> bool:
+    return confidence is None or confidence < settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
+
+
+async def _finalise_classification(document_id: str, classification: dict) -> bool:
+    """
+    Records the classification-stage result (type, confidence, outcome) and
+    enforces the confidence threshold as a system-level gate rather than
+    trusting Dify's own needs_manual_review flag alone — that flag is still
+    OR'd in as an extra signal for cases the numeric threshold alone
+    wouldn't catch (e.g. the sub-classifiers disagreeing despite a
+    survivable confidence number).
+
+    Returns True if classification is accepted and extraction should run;
+    False if it's been routed to manual review (FAILED already recorded).
+    """
+    document_type = classification.get("document_type")
+    confidence = classification.get("confidence")
+    unrecognised = _is_unrecognised(document_type)
+    below_threshold = _is_below_threshold(confidence)
+    accepted = not unrecognised and not below_threshold and not classification.get("needs_manual_review")
+
+    outcome = ClassificationOutcome.ACCEPTED if accepted else ClassificationOutcome.MANUAL_REVIEW
+    await asyncio.to_thread(
+        document_repository.record_classification,
+        document_id,
+        document_type=document_type,
+        confidence=confidence,
+        classification_outcome=outcome.value,
+    )
+
+    if accepted:
+        return True
+
+    if unrecognised:
+        reason = "Document does not match any known category — flagged for manual review"
+    elif below_threshold:
+        reason = (
+            f"Classification confidence ({confidence}) is below the required "
+            f"threshold ({settings.CLASSIFICATION_CONFIDENCE_THRESHOLD})"
+        )
+    else:
+        reason = f"Classifier flagged for manual review (confidence {confidence})"
+        if classification.get("reasoning"):
+            reason += f": {classification['reasoning']}"
+
+    await _fail(document_id, reason, document_type=document_type)
+    return False
 
 
 async def _fail(document_id: str, reason: str, *, document_type: str | None = None) -> None:

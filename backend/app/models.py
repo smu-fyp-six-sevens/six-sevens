@@ -15,6 +15,19 @@ class DocumentStatus(str, Enum):
     FAILED = "failed"           # AC3: retries exhausted, needs manual review
 
 
+class ClassificationOutcome(str, Enum):
+    """
+    Routing decision made at the classification stage, independent of
+    whether the later Extraction stage subsequently succeeds or fails.
+    ACCEPTED means classification met the confidence threshold and was
+    routed to Analysis — it does not mean the document ultimately reached
+    ANALYZED status.
+    """
+
+    ACCEPTED = "accepted"
+    MANUAL_REVIEW = "manual_review"
+
+
 class DocumentType(str, Enum):
     """The document categories the Classifier Agent recognises."""
 
@@ -29,6 +42,10 @@ class DocumentType(str, Enum):
     SOURCE_OF_WEALTH = "source_of_wealth"
     CREDIT_REPORT = "credit_report"
     LIST_OF_LOANS = "list_of_loans"
+    # Not a real category — an explicit, queryable outcome for "this document
+    # doesn't match any of the categories above", distinct from a low-
+    # confidence guess among them. Always paired with needs_manual_review.
+    UNRECOGNISED = "unrecognised"
 
 
 class CaseRecord(BaseModel):
@@ -67,6 +84,8 @@ class DocumentRecord(BaseModel):
     case_id: Optional[str] = None
     filename: str
     document_type: Optional[str] = None
+    confidence: Optional[float] = None
+    classification_outcome: Optional[ClassificationOutcome] = None
     storage_path: Optional[str] = None
     status: DocumentStatus
     retry_count: int = 0
@@ -79,6 +98,16 @@ class DocumentRecord(BaseModel):
 class UploadResponse(BaseModel):
     document_id: str
     status: DocumentStatus
+
+
+class ClassificationPreviewResponse(BaseModel):
+    """
+    Evidence held in-memory only (see classification_cache.py) — confidence
+    now lives on DocumentRecord.confidence since it's a real, persisted
+    column; this endpoint only covers the part that still isn't persisted.
+    """
+
+    evidence: list[str] = Field(default_factory=list)
 
 
 class BulkUploadItemResult(BaseModel):

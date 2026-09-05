@@ -45,6 +45,23 @@ class Settings:
     # Bounded classification<->extraction escalation loop (see orchestrator.py)
     MAX_RECLASSIFICATION_ATTEMPTS: int = 2
 
+    # Number of documents processed concurrently by the in-memory queue
+    # worker pool (see queue_service.py). Each worker independently calls
+    # out to Dify per document, so this is mostly bounded by Dify's own
+    # rate limits rather than local resources.
+    QUEUE_WORKER_CONCURRENCY: int = int(os.environ.get("QUEUE_WORKER_CONCURRENCY", "4"))
+
+    # Separate, usually-tighter cap on simultaneous Classifier chatflow
+    # calls specifically (see DifyClient.run_chatflow) — the Classifier's
+    # Agent node has shown crashes ('str' object has no attribute 'get')
+    # under concurrent load that plain Workflow calls (Extraction) don't,
+    # so this is deliberately independent of QUEUE_WORKER_CONCURRENCY
+    # rather than reusing it. Start conservative (1 = fully serialized)
+    # and raise it only after confirming Dify handles more at once.
+    DIFY_CLASSIFIER_MAX_CONCURRENCY: int = int(
+        os.environ.get("DIFY_CLASSIFIER_MAX_CONCURRENCY", "1")
+    )
+
     # Classification: filename-rule matches scoring below this are treated
     # as unrecognised/low-confidence and flagged for manual review.
     CLASSIFICATION_CONFIDENCE_THRESHOLD: float = 0.6
@@ -57,7 +74,11 @@ class Settings:
     MAX_FILE_SIZE_BYTES: int = 25 * 1024 * 1024  # 25 MB
     MAX_BULK_FILES: int = 20
 
-    SIGNED_URL_EXPIRY_SECONDS: int = 300
+    # A signed URL is generated once per Classifier invocation and reused
+    # across all MAX_INVOCATION_RETRIES retry attempts (see dify_client.py),
+    # so it needs to outlive a slow run + backoff, not just one request —
+    # under concurrent load a single attempt alone has taken ~20-90s.
+    SIGNED_URL_EXPIRY_SECONDS: int = 1800
 
 
 settings = Settings()
