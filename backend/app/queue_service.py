@@ -77,10 +77,28 @@ class DocumentQueue:
             dequeued_at = time.monotonic()
             try:
                 await self._process_document(document_id, dequeued_at)
-            except Exception:  # noqa: BLE001 — never let one bad item kill the worker
+            except Exception as exc:  # noqa: BLE001 — never let one bad item kill the worker
                 logger.exception(
                     "Worker %d: unhandled error processing document %s", worker_id, document_id
                 )
+                self._record_error(document_id, str(exc))
+                # Last-resort safety net: orchestrator.process_document already
+                # catches its own exceptions and marks FAILED, but errors raised
+                # before/outside that call (e.g. get_document here) would
+                # otherwise leave the document stuck at a non-terminal status
+                # forever, with the frontend polling indefinitely.
+                try:
+                    await asyncio.to_thread(
+                        document_repository.update_status,
+                        document_id,
+                        DocumentStatus.FAILED,
+                        failure_reason=f"Unhandled processing error: {exc}",
+                    )
+                except Exception:
+                    logger.exception(
+                        "Worker %d: failed to mark document %s FAILED after unhandled error",
+                        worker_id, document_id,
+                    )
             finally:
                 self._queue.task_done()
 

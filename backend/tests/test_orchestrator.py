@@ -165,9 +165,10 @@ async def test_low_confidence_classification_fails_before_extraction() -> None:
         args, kwargs = mock_repo.update_status.call_args
         assert args[0] == "doc-1"
         assert args[1] == DocumentStatus.FAILED
-        # document_type=None here (the mocked output had no guess at all) —
-        # confirms we still pass it through rather than crashing on absence.
-        assert kwargs["document_type"] is None
+        # The mocked output had no type guess at all (None) — confirms that
+        # gets normalised to the "unrecognised" sentinel rather than being
+        # persisted as NULL, so Supabase/the frontend see an explicit value.
+        assert kwargs["document_type"] == "unrecognised"
 
 
 @pytest.mark.asyncio

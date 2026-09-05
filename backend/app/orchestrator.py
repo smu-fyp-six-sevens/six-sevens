@@ -18,6 +18,29 @@ class OrchestrationError(Exception):
 
 async def process_document(document_id: str) -> None:
     """
+    Runs Intake Coordinator -> Extraction for one document. Thin wrapper
+    around _process_document that guarantees the "always leaves the
+    document at ANALYZED or FAILED" contract described there: any
+    exception _process_document doesn't already translate into a FAILED
+    status (e.g. an unexpected Supabase write error, not just a
+    DifyInvocationError) is caught here so the document never gets stuck
+    at a non-terminal status — which would otherwise leave the frontend
+    polling forever.
+    """
+    try:
+        await _process_document(document_id)
+    except Exception as exc:  # noqa: BLE001 — last line of defence against a stuck document
+        logger.exception("Document %s: unhandled error during orchestration", document_id)
+        try:
+            await _fail(document_id, f"Unhandled orchestration error: {exc}")
+        except Exception:
+            logger.exception(
+                "Document %s: failed to record FAILED status after unhandled error", document_id
+            )
+
+
+async def _process_document(document_id: str) -> None:
+    """
     Runs Intake Coordinator -> Extraction for one document, handling the
     bounded classification<->extraction escalation loop:
 
@@ -39,7 +62,8 @@ async def process_document(document_id: str) -> None:
     Terminal: always leaves the document at ANALYZED or FAILED — failures
     are caught and translated into a FAILED status + failure_reason rather
     than propagating, so the queue worker doesn't need its own retry loop
-    around this (see queue_service._process_document).
+    around this (see queue_service._process_document). Any exception this
+    function doesn't itself translate is caught by process_document above.
     """
     document = await asyncio.to_thread(document_repository.get_document, document_id)
     if document is None:
@@ -298,6 +322,12 @@ async def _finalise_classification(document_id: str, classification: dict) -> bo
     document_type = classification.get("document_type")
     confidence = classification.get("confidence")
     unrecognised = _is_unrecognised(document_type)
+    if unrecognised:
+        # Normalise Dify's various ways of saying "no type" (None, "", or the
+        # literal words null/none/n/a already folded to None by
+        # _parse_chatflow_answer) to the explicit "unrecognised" sentinel so
+        # it's what actually lands in Supabase/the frontend, not NULL.
+        document_type = "unrecognised"
     below_threshold = _is_below_threshold(confidence)
     accepted = not unrecognised and not below_threshold and not classification.get("needs_manual_review")
 
