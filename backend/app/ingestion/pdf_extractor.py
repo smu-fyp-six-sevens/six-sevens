@@ -3,8 +3,7 @@ import pymupdf
 
 def extract_pdf(file_bytes: bytes):
     """
-    Extract text, bounding boxes and font information
-    from a digitally generated PDF.
+    Extract text and font information from a digitally generated PDF.
     """
 
     document = pymupdf.open(
@@ -21,10 +20,6 @@ def extract_pdf(file_bytes: bytes):
 
         page_text = page.get_text("text")
 
-        # --------------------------------
-        # Extract detailed text information
-        # --------------------------------
-
         page_dict = page.get_text("dict")
 
         elements = []
@@ -40,7 +35,6 @@ def extract_pdf(file_bytes: bytes):
 
                     element = {
                         "text": span["text"],
-                        "bbox": span["bbox"],
                         "font": span["font"],
                         "font_size": span["size"],
                         "flags": span["flags"],
@@ -62,6 +56,7 @@ def extract_pdf(file_bytes: bytes):
         "text": "\n".join(total_text),
         "pages": pages
     }
+
 
 def pdf_contains_text(file_bytes: bytes) -> bool:
 

@@ -20,13 +20,12 @@ def extract_image_with_ocr(image, page_number: int = 1) -> dict:
     for bbox, text, confidence in results:
         elements.append({
             "text": text,
-            "bbox": bbox,
             "confidence": float(confidence),
             "extraction_method": "ocr"
         })
 
     return {
-        "page_number": page_number,                                                                                                                                                                                                                                                                                                      
+        "page_number": page_number,
         "text": " ".join(e["text"] for e in elements),
         "elements": elements
     }

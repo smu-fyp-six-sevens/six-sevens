@@ -23,23 +23,40 @@ class DifyClient:
             "Content-Type": "application/json",
         }
 
-    async def run_workflow(self, workflow_id: str, inputs: dict) -> dict:
+    async def run_workflow(
+        self,
+        workflow_id: str,
+        inputs: dict,
+        *,
+        api_key: str | None = None,
+        user: str = "system",
+    ) -> dict:
         """
-        Generic Dify workflow invocation — any workflow_id/inputs shape.
-        Raises DifyInvocationError on any non-2xx response or network
-        failure; callers decide how to handle that (retry, fail, etc).
+        Generic Dify workflow invocation. Dify routes by the API key in the
+        Authorization header, not by workflow_id in the body — so callers
+        for apps other than the default (api_key=None uses settings.DIFY_API_KEY)
+        MUST pass that app's own key here, or Dify will silently run whatever
+        app the default key belongs to.
         """
         payload = {
             "workflow_id": workflow_id,
             "inputs": inputs,
             "response_mode": "blocking",
+            "user": user,
         }
+
+        headers = self._headers
+        if api_key is not None:
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            }
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
                 response = await client.post(
                     f"{self._base_url}/workflows/run",
-                    headers=self._headers,
+                    headers=headers,
                     json=payload,
                 )
                 response.raise_for_status()
@@ -49,21 +66,18 @@ class DifyClient:
                     f"Workflow {workflow_id} invocation failed: {exc}"
                 ) from exc
 
-    async def run_workflow_with_retry(self, workflow_id: str, inputs: dict) -> dict:
-        """
-        AC3: same as run_workflow, but retries up to
-        settings.MAX_INVOCATION_RETRIES times (linear backoff) before giving
-        up. This is the one place invocation retry lives — every caller that
-        needs AC3 behavior (orchestrator's Intake Coordinator and Extraction
-        calls, both the initial attempt and every escalation-loop
-        re-attempt) should call this instead of run_workflow directly, so
-        the retry policy can't drift out of sync between call sites.
-
-        Raises DifyInvocationError, with the message noting the attempt
-        count, once retries are exhausted.
-        """
+    async def run_workflow_with_retry(
+        self,
+        workflow_id: str,
+        inputs: dict,
+        *,
+        api_key: str | None = None,
+        user: str = "system",
+    ) -> dict:
+        """AC3: same as run_workflow, but retries with linear backoff — see run_chatflow_with_retry."""
         return await self._with_retry(
-            f"Workflow {workflow_id}", lambda: self.run_workflow(workflow_id, inputs)
+            f"Workflow {workflow_id}",
+            lambda: self.run_workflow(workflow_id, inputs, api_key=api_key, user=user),
         )
 
     async def run_chatflow(
@@ -75,17 +89,6 @@ class DifyClient:
         *,
         files: list[dict] | None = None,
     ) -> dict:
-        """
-        Invokes a Dify Chatflow app (e.g. the Classifier/Intake Coordinator,
-        which — unlike Extraction — is a chat app, not a workflow app).
-        Chat apps are identified purely by their own API key (there's no
-        workflow_id in the request body), and require `query`/`user` fields
-        that workflow apps don't. `files` follows Dify's file-object shape,
-        e.g. {"type": "document", "transfer_method": "remote_url", "url": ...}.
-
-        Raises DifyInvocationError on any non-2xx response or network
-        failure, same contract as run_workflow.
-        """
         payload: dict = {
             "inputs": inputs,
             "query": query,
@@ -121,7 +124,6 @@ class DifyClient:
         *,
         files: list[dict] | None = None,
     ) -> dict:
-        """AC3 retry, same policy as run_workflow_with_retry — see there."""
         return await self._with_retry(
             "Chatflow", lambda: self.run_chatflow(api_key, inputs, query, user, files=files)
         )
