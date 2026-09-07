@@ -17,6 +17,7 @@ from app.injection.pdf import (
     _image_redraw_span,
     _match_font_to_crop,
     _sample_bg_color,
+    _save_raster_image,
     _value_redraw_span,
 )
 from app.injection.schemas import DefectType, FieldValue
@@ -296,7 +297,7 @@ def _draw_amount(path: Path, text: str, font_path: str, size: int = 28) -> list[
         float(origin[0] + bbox[2] + 2),
         float(origin[1] + bbox[3] + 2),
     ]
-    image.save(path)
+    _save_raster_image(image, path)
     return rect
 
 
@@ -394,7 +395,8 @@ def test_png_numerical_rewrite_stays_sans_not_courier(tmp_path: Path) -> None:
     assert "serif" not in name
 
 
-def test_png_overlay_keeps_bold_sans_not_serif(tmp_path: Path) -> None:
+@pytest.mark.parametrize("suffix", [".png", ".jpg", ".jpeg"])
+def test_overlay_keeps_bold_sans_not_serif(tmp_path: Path, suffix: str) -> None:
     sans = _first_existing_ttf(
         "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
@@ -404,7 +406,7 @@ def test_png_overlay_keeps_bold_sans_not_serif(tmp_path: Path) -> None:
     if sans is None:
         pytest.skip("no sans TTF available")
 
-    path = tmp_path / "overlay_amount.png"
+    path = tmp_path / f"overlay_amount{suffix}"
     rect = _draw_amount(path, "$187.41", sans, size=36)
     before = Image.open(path).convert("L")
     bx0, by0, bx1, by1 = [int(round(v)) for v in rect]
@@ -448,7 +450,8 @@ def test_png_overlay_keeps_bold_sans_not_serif(tmp_path: Path) -> None:
     assert abs(overlay_h - source_h) / source_h < 0.18
 
 
-def test_png_overlay_matches_smaller_label_size(tmp_path: Path) -> None:
+@pytest.mark.parametrize("suffix", [".png", ".jpg", ".jpeg"])
+def test_overlay_matches_smaller_label_size(tmp_path: Path, suffix: str) -> None:
     sans = _first_existing_ttf(
         "/System/Library/Fonts/Supplemental/Arial.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
@@ -457,7 +460,7 @@ def test_png_overlay_matches_smaller_label_size(tmp_path: Path) -> None:
     if sans is None:
         pytest.skip("no sans TTF available")
 
-    path = tmp_path / "overlay_date.png"
+    path = tmp_path / f"overlay_date{suffix}"
     rect = _draw_amount(path, "15 Apr 2026", sans, size=14)
     before = Image.open(path).convert("L")
     bx0, by0, bx1, by1 = [int(round(v)) for v in rect]
@@ -478,7 +481,10 @@ def test_png_overlay_matches_smaller_label_size(tmp_path: Path) -> None:
     assert abs(overlay_h - source_h) / source_h < 0.22
 
 
-def test_png_overlay_copies_a_digit_from_elsewhere_in_the_document(tmp_path: Path) -> None:
+@pytest.mark.parametrize("suffix", [".png", ".jpg", ".jpeg"])
+def test_overlay_copies_a_digit_from_elsewhere_in_the_document(
+    tmp_path: Path, suffix: str
+) -> None:
     sans = _first_existing_ttf(
         "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
@@ -489,7 +495,7 @@ def test_png_overlay_copies_a_digit_from_elsewhere_in_the_document(tmp_path: Pat
         pytest.skip("no sans TTF available")
 
     font = ImageFont.truetype(sans, 36)
-    path = tmp_path / "copy_digit.png"
+    path = tmp_path / f"copy_digit{suffix}"
     image = Image.new("RGB", (420, 180), (255, 255, 255))
     draw = ImageDraw.Draw(image)
     draw.text((24, 62), "$187.41", fill=(18, 18, 18), font=font, anchor="ls")
@@ -504,7 +510,7 @@ def test_png_overlay_copies_a_digit_from_elsewhere_in_the_document(tmp_path: Pat
         float(24 + bbox[2] + 2),
         float(62 + bbox[3] + 2),
     ]
-    image.save(path)
+    _save_raster_image(image, path)
     field = FieldValue(
         text="$187.41",
         font="helv",
@@ -526,8 +532,10 @@ def test_png_overlay_copies_a_digit_from_elsewhere_in_the_document(tmp_path: Pat
     assert reds, "overlay should paste the red donor '2', not a newly rendered glyph"
 
 
-def test_png_overlay_keeps_unchanged_prefix_when_rewriting_a_word(
+@pytest.mark.parametrize("suffix", [".png", ".jpg", ".jpeg"])
+def test_overlay_keeps_unchanged_prefix_when_rewriting_a_word(
     tmp_path: Path,
+    suffix: str,
 ) -> None:
     sans = _first_existing_ttf(
         "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
@@ -539,7 +547,7 @@ def test_png_overlay_keeps_unchanged_prefix_when_rewriting_a_word(
         pytest.skip("no sans TTF available")
 
     font = ImageFont.truetype(sans, 22)
-    path = tmp_path / "charges.png"
+    path = tmp_path / f"charges{suffix}"
     image = Image.new("RGB", (520, 180), (255, 255, 255))
     draw = ImageDraw.Draw(image)
     heading = "SUMMARY OF CHARGES"
@@ -563,7 +571,7 @@ def test_png_overlay_keeps_unchanged_prefix_when_rewriting_a_word(
         int(20 + prefix_bbox[2]),
         int(50 + prefix_bbox[3]),
     )
-    image.save(path)
+    _save_raster_image(image, path)
     before = Image.open(path).convert("RGB")
     before_prefix = before.crop(prefix_box)
     field = FieldValue(
@@ -583,7 +591,7 @@ def test_png_overlay_keeps_unchanged_prefix_when_rewriting_a_word(
         for pa, pb in zip(before_prefix.getdata(), after_prefix.getdata())
         for a, b in zip(pa, pb)
     ) / max(1, before_prefix.width * before_prefix.height * 3)
-    assert delta < 6, delta
+    assert delta < (12 if suffix in {".jpg", ".jpeg"} else 6), delta
     suffix = after.crop(
         (
             prefix_box[2],
@@ -880,7 +888,37 @@ def test_can_overlay_text_on_png_and_stay_png() -> None:
     assert path.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
 
 
-def test_png_overlay_matches_field_background_and_origin(tmp_path: Path) -> None:
+@pytest.mark.parametrize("stem,suffix", [("ocbc_jpg", ".jpg"), ("ocbc_jpeg", ".jpeg")])
+def test_can_overlay_text_on_jpeg_and_stay_jpeg(
+    isolated_injection_templates: Path, stem: str, suffix: str
+) -> None:
+    source = isolated_injection_templates / "ocbc_sample.png"
+    dest = isolated_injection_templates / f"{stem}{suffix}"
+    _save_raster_image(Image.open(source).convert("RGB"), dest)
+    reset_sample_documents()
+
+    document = get_document(stem)
+    assert document is not None
+    field_name = next(iter(document.fields))
+    original = document.fields[field_name].text
+    response = _inject(
+        stem,
+        field_name,
+        DefectType.TEXT_OVERLAY,
+        new_text="JANE CITIZEN",
+    )
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    assert payload["before_text"] == payload["after_text"] == original
+    assert payload["filename"] == f"{stem}{suffix}"
+    assert "JANE CITIZEN" in payload["description"]
+    path = Path(get_document_file_path(stem) or "")
+    assert path.suffix.lower() == suffix
+    assert path.read_bytes()[:3] == b"\xff\xd8\xff"
+
+
+@pytest.mark.parametrize("suffix", [".png", ".jpg", ".jpeg"])
+def test_overlay_matches_field_background_and_origin(tmp_path: Path, suffix: str) -> None:
     font_path = _first_existing_ttf(
         "/System/Library/Fonts/Supplemental/Arial.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -889,7 +927,7 @@ def test_png_overlay_matches_field_background_and_origin(tmp_path: Path) -> None
     if font_path is None:
         pytest.skip("no sans TTF available")
     fill = (209, 230, 245)
-    path = tmp_path / "overlay.png"
+    path = tmp_path / f"overlay{suffix}"
     image = Image.new("RGB", (400, 200), fill)
     draw = ImageDraw.Draw(image)
     font = ImageFont.truetype(font_path, 14)
@@ -905,7 +943,7 @@ def test_png_overlay_matches_field_background_and_origin(tmp_path: Path) -> None
         origin[0] + bbox[2],
         origin[1] + bbox[3],
     ]
-    image.save(path)
+    _save_raster_image(image, path)
     field = FieldValue(
         text="S8000000A",
         font="helv",
@@ -937,7 +975,8 @@ def test_png_overlay_matches_field_background_and_origin(tmp_path: Path) -> None
     assert after.tobytes() != Image.new("RGB", after.size, fill).tobytes()
 
 
-def test_png_overlay_leaves_nearby_table_rules(tmp_path: Path) -> None:
+@pytest.mark.parametrize("suffix", [".png", ".jpg", ".jpeg"])
+def test_overlay_leaves_nearby_table_rules(tmp_path: Path, suffix: str) -> None:
     font_path = _first_existing_ttf(
         "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
         "/System/Library/Fonts/Supplemental/Arial.ttf",
@@ -946,7 +985,7 @@ def test_png_overlay_leaves_nearby_table_rules(tmp_path: Path) -> None:
     )
     if font_path is None:
         pytest.skip("no sans TTF available")
-    path = tmp_path / "totals.png"
+    path = tmp_path / f"totals{suffix}"
     image = Image.new("RGB", (400, 200), (255, 255, 255))
     draw = ImageDraw.Draw(image)
     font = ImageFont.truetype(font_path, 11)
@@ -965,7 +1004,7 @@ def test_png_overlay_leaves_nearby_table_rules(tmp_path: Path) -> None:
         origin[0] + bbox[2],
         origin[1] + bbox[3],
     ]
-    image.save(path)
+    _save_raster_image(image, path)
     field = FieldValue(
         text="$1,452,650",
         font="helv",

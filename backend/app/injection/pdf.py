@@ -94,6 +94,8 @@ _SANS_ITALIC_CANDIDATES = (
     "C:/Windows/Fonts/ariali.ttf",
 )
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"}
+_JPEG_SUFFIXES = {".jpg", ".jpeg"}
+_JPEG_SAVE_KWARGS = {"quality": 95, "subsampling": 0, "optimize": True}
 
 _MEDIA_TYPES = {
     ".pdf": "application/pdf",
@@ -160,10 +162,10 @@ def _save_pdf(doc: pymupdf.Document, pdf_path: Path) -> None:
 def _save_raster_image(image: Image.Image, image_path: Path) -> None:
     suffix = image_path.suffix.lower()
     save_kwargs: dict = {}
-    if suffix in {".jpg", ".jpeg"}:
+    if suffix in _JPEG_SUFFIXES:
         if image.mode != "RGB":
             image = image.convert("RGB")
-        save_kwargs["quality"] = 95
+        save_kwargs.update(_JPEG_SAVE_KWARGS)
     image.save(image_path, **save_kwargs)
 
 
@@ -258,7 +260,7 @@ def _set_image_metadata(file_path: Path, metadata: dict[str, str]) -> None:
         working.save(file_path, pnginfo=pnginfo)
         return
 
-    if suffix in {".jpg", ".jpeg"}:
+    if suffix in _JPEG_SUFFIXES:
         if working.mode != "RGB":
             working = working.convert("RGB")
         exif = working.getexif()
@@ -268,7 +270,7 @@ def _set_image_metadata(file_path: Path, metadata: dict[str, str]) -> None:
             exif[_EXIF_IMAGE_DESCRIPTION] = metadata["title"]
         if metadata.get("creator"):
             exif[_EXIF_SOFTWARE] = metadata["creator"]
-        working.save(file_path, quality=95, exif=exif)
+        working.save(file_path, exif=exif, **_JPEG_SAVE_KWARGS)
         return
 
     # Other image types: leave pixels unchanged; metadata stays in memory only.
@@ -1139,7 +1141,7 @@ def _replace_field_text_on_image(
     x: float | None = None,
     y: float | None = None,
 ) -> None:
-    image = Image.open(image_path)
+    image = _open_raster_image(image_path)
     if image.mode not in {"RGB", "RGBA", "L"}:
         image = image.convert("RGB")
     draw = ImageDraw.Draw(image)
@@ -1555,7 +1557,7 @@ def _apply_emphasis_on_pdf(pdf_path: Path, field: FieldValue, style: str) -> Non
 
 
 def _apply_emphasis_on_image(image_path: Path, field: FieldValue, style: str) -> None:
-    image = Image.open(image_path)
+    image = _open_raster_image(image_path)
     if image.mode not in {"RGB", "RGBA", "L"}:
         image = image.convert("RGB")
     draw = ImageDraw.Draw(image)
