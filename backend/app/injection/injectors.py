@@ -319,8 +319,6 @@ class TextOverlayInjector(DefectInjector):
     ) -> InjectedDefect:
         field = document.fields[field_name]
         before = _snapshot(field)
-        if is_image_template(_working_path(document)):
-            raise ValueError("text_overlay currently supports PDF templates only")
         opts = _opts(overrides)
         overlay = _require_text(opts.new_text, "new_text")
         overlay_field_text(
@@ -351,8 +349,7 @@ class ImageManipulationInjector(DefectInjector):
     ) -> InjectedDefect:
         field = document.fields[field_name]
         before = _snapshot(field)
-        if is_image_template(_working_path(document)):
-            raise ValueError("image_manipulation currently supports PDF templates only")
+        path = _working_path(document)
         opts = _opts(overrides)
         indicator = _require_text(opts.indicator, "indicator").lower().replace(" ", "_")
         if indicator not in MANIPULATION_INDICATORS:
@@ -360,7 +357,7 @@ class ImageManipulationInjector(DefectInjector):
                 f"Unknown image-manipulation indicator {indicator!r}. "
                 f"Use one of: {', '.join(MANIPULATION_INDICATORS)}"
             )
-        if field.kind != "image":
+        if not is_image_template(path) and field.kind != "image":
             image_names = [
                 name for name, item in document.fields.items() if item.kind == "image"
             ]
@@ -372,8 +369,10 @@ class ImageManipulationInjector(DefectInjector):
             raise ValueError(
                 f"Document '{document.id}' has no embedded PDF images to manipulate"
             )
+        if is_image_template(path) and len(field.rect) != 4:
+            raise ValueError("image_manipulation requires a field bounding box")
         manipulate_field_region(
-            _working_path(document),
+            path,
             field,
             indicator,
             scale_x=opts.scale_x if indicator == "scaling_anomaly" else None,

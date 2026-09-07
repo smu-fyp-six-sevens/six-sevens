@@ -7,7 +7,10 @@ from PIL import Image, ImageDraw, ImageFont
 from app.injection import pdf as injection_pdf
 from app.injection.field_text import is_label_only
 from app.injection.pdf import (
+    MANIPULATION_INDICATORS,
     discover_fields_from_image,
+    manipulate_field_region,
+    overlay_field_text,
     read_document_metadata,
     replace_field_text,
     resolve_emphasis_font_file,
@@ -387,6 +390,238 @@ def test_png_numerical_rewrite_stays_sans_not_courier(tmp_path: Path) -> None:
     name = Path(getattr(rematched, "path", "") or "").name.lower()
     assert "courier" not in name
     assert "mono" not in name
+    assert "times" not in name
+    assert "serif" not in name
+
+
+def test_png_overlay_keeps_bold_sans_not_serif(tmp_path: Path) -> None:
+    sans = _first_existing_ttf(
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+    )
+    if sans is None:
+        pytest.skip("no sans TTF available")
+
+    path = tmp_path / "overlay_amount.png"
+    rect = _draw_amount(path, "$187.41", sans, size=36)
+    before = Image.open(path).convert("L")
+    bx0, by0, bx1, by1 = [int(round(v)) for v in rect]
+    source_h = _ink_height(before.crop((bx0, by0, bx1, by1)))
+    field = FieldValue(
+        text="$187.41",
+        font="helv",
+        font_size=36.0,
+        x=rect[0],
+        y=rect[3] - 1.0,
+        page=0,
+        rect=rect,
+    )
+    overlay_field_text(path, field, "$287.41")
+    after = Image.open(path)
+    rematched = _match_font_to_crop(
+        after,
+        [
+            rect[0] - 8,
+            rect[1] - 8,
+            rect[2] + 40,
+            rect[3] + 8,
+        ],
+        "$287.41",
+        ink=(18, 18, 18),
+        bg=(255, 255, 255),
+        max_size=36,
+    )
+    name = Path(getattr(rematched, "path", "") or "").name.lower()
+    style = (getattr(getattr(rematched, "font", None), "style", "") or "").lower()
+    family = (getattr(getattr(rematched, "font", None), "family", "") or "").lower()
+    blob = f"{name} {style} {family}"
+    assert "times" not in blob
+    assert "serif" not in blob.replace("sans-serif", "sans").replace("sans serif", "sans")
+    assert "courier" not in blob
+    assert "mono" not in blob
+    overlay_h = _ink_height(
+        after.convert("L").crop((max(0, bx0 - 4), max(0, by0 - 4), bx1 + 48, by1 + 4))
+    )
+    assert source_h > 0 and overlay_h > 0
+    assert abs(overlay_h - source_h) / source_h < 0.18
+
+
+def test_png_overlay_matches_smaller_label_size(tmp_path: Path) -> None:
+    sans = _first_existing_ttf(
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    )
+    if sans is None:
+        pytest.skip("no sans TTF available")
+
+    path = tmp_path / "overlay_date.png"
+    rect = _draw_amount(path, "15 Apr 2026", sans, size=14)
+    before = Image.open(path).convert("L")
+    bx0, by0, bx1, by1 = [int(round(v)) for v in rect]
+    source_h = _ink_height(before.crop((bx0, by0, bx1, by1)))
+    field = FieldValue(
+        text="15 Apr 2026",
+        font="helv",
+        font_size=14.0,
+        x=rect[0],
+        y=rect[3] - 1.0,
+        page=0,
+        rect=rect,
+    )
+    overlay_field_text(path, field, "15 Apr 3026")
+    after = Image.open(path).convert("L")
+    overlay_h = _ink_height(after.crop((max(0, bx0 - 4), max(0, by0 - 4), bx1 + 8, by1 + 4)))
+    assert source_h > 0 and overlay_h > 0
+    assert abs(overlay_h - source_h) / source_h < 0.22
+
+
+def test_png_overlay_copies_a_digit_from_elsewhere_in_the_document(tmp_path: Path) -> None:
+    sans = _first_existing_ttf(
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+    )
+    if sans is None:
+        pytest.skip("no sans TTF available")
+
+    font = ImageFont.truetype(sans, 36)
+    path = tmp_path / "copy_digit.png"
+    image = Image.new("RGB", (420, 180), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    draw.text((24, 62), "$187.41", fill=(18, 18, 18), font=font, anchor="ls")
+    draw.text((24, 130), "200.00", fill=(210, 20, 20), font=font, anchor="ls")
+    try:
+        bbox = font.getbbox("$187.41", anchor="ls")
+    except TypeError:
+        bbox = font.getbbox("$187.41")
+    rect = [
+        float(24 + bbox[0] - 2),
+        float(62 + bbox[1] - 2),
+        float(24 + bbox[2] + 2),
+        float(62 + bbox[3] + 2),
+    ]
+    image.save(path)
+    field = FieldValue(
+        text="$187.41",
+        font="helv",
+        font_size=36.0,
+        x=rect[0],
+        y=rect[3] - 1.0,
+        page=0,
+        rect=rect,
+    )
+    overlay_field_text(path, field, "$287.41")
+    after = Image.open(path).convert("RGB")
+    x0, y0, x1, y1 = [int(round(v)) for v in rect]
+    crop = after.crop((max(0, x0), max(0, y0), min(after.width, x1), min(after.height, y1)))
+    reds = [
+        pixel
+        for pixel in crop.getdata()
+        if pixel[0] > 160 and pixel[1] < 80 and pixel[2] < 80
+    ]
+    assert reds, "overlay should paste the red donor '2', not a newly rendered glyph"
+
+
+def test_png_overlay_keeps_unchanged_prefix_when_rewriting_a_word(
+    tmp_path: Path,
+) -> None:
+    sans = _first_existing_ttf(
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+    )
+    if sans is None:
+        pytest.skip("no sans TTF available")
+
+    font = ImageFont.truetype(sans, 22)
+    path = tmp_path / "charges.png"
+    image = Image.new("RGB", (520, 180), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    heading = "SUMMARY OF CHARGES"
+    draw.text((20, 50), heading, fill=(18, 18, 18), font=font, anchor="ls")
+    draw.text((20, 110), "CONSUMPTION TREND EXTRA", fill=(18, 18, 18), font=font, anchor="ls")
+    try:
+        bbox = font.getbbox(heading, anchor="ls")
+        prefix_bbox = font.getbbox("SUMMARY OF ", anchor="ls")
+    except TypeError:
+        bbox = font.getbbox(heading)
+        prefix_bbox = font.getbbox("SUMMARY OF ")
+    rect = [
+        float(20 + bbox[0] - 2),
+        float(50 + bbox[1] - 2),
+        float(20 + bbox[2] + 2),
+        float(50 + bbox[3] + 2),
+    ]
+    prefix_box = (
+        max(0, int(20 + prefix_bbox[0])),
+        max(0, int(50 + prefix_bbox[1])),
+        int(20 + prefix_bbox[2]),
+        int(50 + prefix_bbox[3]),
+    )
+    image.save(path)
+    before = Image.open(path).convert("RGB")
+    before_prefix = before.crop(prefix_box)
+    field = FieldValue(
+        text=heading,
+        font="helv",
+        font_size=22.0,
+        x=rect[0],
+        y=rect[3] - 1.0,
+        page=0,
+        rect=rect,
+    )
+    overlay_field_text(path, field, "SUMMARY OF EXPENSES")
+    after = Image.open(path).convert("RGB")
+    after_prefix = after.crop(prefix_box)
+    delta = sum(
+        abs(a - b)
+        for pa, pb in zip(before_prefix.getdata(), after_prefix.getdata())
+        for a, b in zip(pa, pb)
+    ) / max(1, before_prefix.width * before_prefix.height * 3)
+    assert delta < 6, delta
+    suffix = after.crop(
+        (
+            prefix_box[2],
+            max(0, int(rect[1])),
+            min(after.width, int(rect[2]) + 40),
+            min(after.height, int(rect[3])),
+        )
+    )
+    assert any(pixel[0] < 80 for pixel in suffix.getdata())
+
+
+def test_png_font_match_keeps_times_when_source_is_serif(tmp_path: Path) -> None:
+    serif = _first_existing_ttf(
+        "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
+    )
+    if serif is None:
+        pytest.skip("no serif TTF available")
+
+    text = "2,843.75"
+    path = tmp_path / "serif_amount.png"
+    rect = _draw_amount(path, text, serif, size=28)
+    image = Image.open(path)
+    matched = _match_font_to_crop(
+        image,
+        rect,
+        text,
+        ink=(18, 18, 18),
+        bg=(255, 255, 255),
+        max_size=28,
+    )
+    name = Path(getattr(matched, "path", "") or "").name.lower()
+    family = (getattr(getattr(matched, "font", None), "family", "") or "").lower()
+    blob = f"{name} {family}"
+    assert "times" in blob or "serif" in blob
+    assert "courier" not in blob
+    assert "mono" not in blob
 
 
 def test_image_spelling_span_redraws_whole_value_not_two_letters() -> None:
@@ -623,21 +858,156 @@ def _ink_width(gray: Image.Image) -> int:
     return max(xs) - min(xs) + 1
 
 
-def test_png_text_overlay_is_not_supported() -> None:
+def test_can_overlay_text_on_png_and_stay_png() -> None:
     document = get_document("ocbc_sample")
     assert document is not None
     field_name = next(iter(document.fields))
+    before = get_document("ocbc_sample")
+    assert before is not None
+    original = before.fields[field_name].text
     response = _inject(
         "ocbc_sample",
         field_name,
         DefectType.TEXT_OVERLAY,
         new_text="JANE CITIZEN",
     )
-    assert response.status_code == 400
-    assert "pdf" in response.json()["detail"].lower()
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    assert payload["before_text"] == payload["after_text"] == original
+    assert "JANE CITIZEN" in payload["description"]
+    path = Path(get_document_file_path("ocbc_sample") or "")
+    assert path.suffix.lower() == ".png"
+    assert path.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
 
 
-def test_png_image_manipulation_is_not_supported() -> None:
+def test_png_overlay_matches_field_background_and_origin(tmp_path: Path) -> None:
+    font_path = _first_existing_ttf(
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    )
+    if font_path is None:
+        pytest.skip("no sans TTF available")
+    fill = (209, 230, 245)
+    path = tmp_path / "overlay.png"
+    image = Image.new("RGB", (400, 200), fill)
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.truetype(font_path, 14)
+    origin = (72.0, 100.0)
+    draw.text(origin, "S8000000A", fill=(20, 20, 20), font=font, anchor="ls")
+    try:
+        bbox = font.getbbox("S8000000A", anchor="ls")
+    except TypeError:
+        bbox = font.getbbox("S8000000A")
+    rect = [
+        origin[0] + bbox[0],
+        origin[1] + bbox[1],
+        origin[0] + bbox[2],
+        origin[1] + bbox[3],
+    ]
+    image.save(path)
+    field = FieldValue(
+        text="S8000000A",
+        font="helv",
+        font_size=14.0,
+        x=origin[0],
+        y=origin[1],
+        page=0,
+        rect=rect,
+    )
+    overlay_field_text(path, field, "CERT COPY")
+
+    after = Image.open(path).convert("RGB")
+    x0, y0, x1, y1 = [int(round(v)) for v in rect]
+    crop = after.crop((max(0, x0 - 4), max(0, y0 - 4), x1 + 24, y1 + 4))
+    lights = [
+        pixel
+        for pixel in crop.getdata()
+        if 0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2] >= 140
+    ]
+    assert lights
+    median = sorted(lights, key=lambda p: p[0] + p[1] + p[2])[len(lights) // 2]
+    assert all(abs(median[i] - fill[i]) < 40 for i in range(3)), (median, fill)
+    darks = [
+        pixel
+        for pixel in crop.getdata()
+        if 0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2] <= 70
+    ]
+    assert darks
+    assert after.tobytes() != Image.new("RGB", after.size, fill).tobytes()
+
+
+def test_png_overlay_leaves_nearby_table_rules(tmp_path: Path) -> None:
+    font_path = _first_existing_ttf(
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    )
+    if font_path is None:
+        pytest.skip("no sans TTF available")
+    path = tmp_path / "totals.png"
+    image = Image.new("RGB", (400, 200), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.truetype(font_path, 11)
+    origin = (72.0, 100.0)
+    draw.text(origin, "$1,452,650", fill=(18, 18, 18), font=font, anchor="ls")
+    draw.line([(70, 86), (150, 86)], fill=(10, 10, 10), width=2)
+    draw.line([(70, 106), (150, 106)], fill=(10, 10, 10), width=2)
+    draw.line([(70, 108), (150, 108)], fill=(10, 10, 10), width=2)
+    try:
+        bbox = font.getbbox("$1,452,650", anchor="ls")
+    except TypeError:
+        bbox = font.getbbox("$1,452,650")
+    rect = [
+        origin[0] + bbox[0],
+        origin[1] + bbox[1],
+        origin[0] + bbox[2],
+        origin[1] + bbox[3],
+    ]
+    image.save(path)
+    field = FieldValue(
+        text="$1,452,650",
+        font="helv",
+        font_size=11.0,
+        x=origin[0],
+        y=origin[1],
+        page=0,
+        rect=rect,
+    )
+    overlay_field_text(path, field, "$1,999,999")
+
+    after = Image.open(path).convert("RGB")
+
+    def _line_still_dark(y: float) -> bool:
+        band = after.crop((72, int(y) - 1, 140, int(y) + 2))
+        dark = 0
+        total = 0
+        for pixel in band.getdata():
+            total += 1
+            if 0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2] <= 80:
+                dark += 1
+        return total > 0 and dark / total >= 0.12
+
+    assert _line_still_dark(86)
+    assert _line_still_dark(106)
+    assert _line_still_dark(108)
+
+
+def _logo_field(rect: list[float]) -> FieldValue:
+    return FieldValue(
+        text="[image]",
+        font="helv",
+        font_size=12.0,
+        x=rect[0],
+        y=rect[3],
+        page=0,
+        rect=rect,
+        kind="text",
+    )
+
+
+def test_can_manipulate_png_region_and_stay_png() -> None:
     document = get_document("ocbc_sample")
     assert document is not None
     field_name = next(
@@ -645,11 +1015,77 @@ def test_png_image_manipulation_is_not_supported() -> None:
         for name, field in document.fields.items()
         if any(ch.isdigit() for ch in field.text) and len(field.rect) == 4
     )
+    before_bytes = Path(get_document_file_path("ocbc_sample") or "").read_bytes()
     response = _inject(
         "ocbc_sample",
         field_name,
         DefectType.IMAGE_MANIPULATION,
         indicator="compression_mismatch",
     )
-    assert response.status_code == 400
-    assert "pdf" in response.json()["detail"].lower()
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    assert payload["defect_type"] == "image_manipulation"
+    assert "compression mismatch" in payload["description"].lower()
+    path = Path(get_document_file_path("ocbc_sample") or "")
+    assert path.read_bytes() != before_bytes
+    assert path.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+@pytest.mark.parametrize("indicator", list(MANIPULATION_INDICATORS))
+def test_png_image_manipulation_indicators_rewrite_the_field_region(
+    tmp_path: Path, indicator: str
+) -> None:
+    path = tmp_path / f"logo_{indicator}.png"
+    image = Image.new("RGB", (220, 90), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle([24, 18, 88, 58], fill=(200, 30, 30))
+    draw.rectangle([90, 18, 120, 58], fill=(30, 30, 200))
+    image.save(path)
+    before = path.read_bytes()
+    field = _logo_field([24.0, 18.0, 120.0, 58.0])
+    extra = {}
+    if indicator == "scaling_anomaly":
+        extra = {"scale_x": 1.85, "scale_y": 0.45}
+    manipulate_field_region(path, field, indicator, **extra)
+    assert path.read_bytes() != before
+    assert path.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_png_scaling_anomaly_keeps_the_full_mark_but_changes_aspect(tmp_path: Path) -> None:
+    path = tmp_path / "crest.png"
+    image = Image.new("RGB", (200, 80), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle([20, 10, 38, 49], fill=(220, 20, 20))
+    draw.rectangle([102, 10, 119, 49], fill=(20, 20, 220))
+    image.save(path)
+    field = _logo_field([20.0, 10.0, 120.0, 50.0])
+    manipulate_field_region(path, field, "scaling_anomaly")
+    after = Image.open(path).convert("RGB")
+    pixels = list(after.getdata())
+    assert any(pixel[0] > 180 and pixel[2] < 80 for pixel in pixels)
+    assert any(pixel[2] > 180 and pixel[0] < 80 for pixel in pixels)
+    reds = [i % after.width for i, pixel in enumerate(pixels) if pixel[0] > 180 and pixel[2] < 80]
+    blues = [i % after.width for i, pixel in enumerate(pixels) if pixel[2] > 180 and pixel[0] < 80]
+    assert reds and blues
+    assert max(blues) - min(reds) > 100
+
+
+def test_png_scaling_anomaly_honours_scale_overrides(tmp_path: Path) -> None:
+    path = tmp_path / "crest_custom.png"
+    image = Image.new("RGB", (200, 80), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle([20, 10, 119, 49], fill=(40, 160, 40))
+    image.save(path)
+    field = _logo_field([20.0, 10.0, 120.0, 50.0])
+    manipulate_field_region(path, field, "scaling_anomaly", scale_x=2.0, scale_y=0.4)
+    after = Image.open(path).convert("RGB")
+    greens = [
+        (i % after.width, i // after.width)
+        for i, pixel in enumerate(after.getdata())
+        if pixel[1] > 120 and pixel[0] < 100
+    ]
+    assert greens
+    xs = [x for x, _ in greens]
+    ys = [y for _, y in greens]
+    assert max(xs) - min(xs) > 160
+    assert max(ys) - min(ys) < 28

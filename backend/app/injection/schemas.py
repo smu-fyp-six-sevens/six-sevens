@@ -89,7 +89,7 @@ class DocumentFieldInfo(BaseModel):
     )
     kind: str = Field(
         default="text",
-        description="'text' or 'image'. image_manipulation only applies to image fields.",
+        description="'text' or 'image'. On PDFs, image_manipulation targets embedded images; on PNG/JPEG it targets a field box.",
     )
 
 
