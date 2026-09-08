@@ -93,7 +93,7 @@ _SANS_ITALIC_CANDIDATES = (
     "/Library/Fonts/Microsoft/Arial Italic.ttf",
     "C:/Windows/Fonts/ariali.ttf",
 )
-IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"}
+IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 _JPEG_SUFFIXES = {".jpg", ".jpeg"}
 _JPEG_SAVE_KWARGS = {"quality": 95, "subsampling": 0, "optimize": True}
 
@@ -102,9 +102,6 @@ _MEDIA_TYPES = {
     ".png": "image/png",
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
-    ".webp": "image/webp",
-    ".tif": "image/tiff",
-    ".tiff": "image/tiff",
 }
 
 _ocr_engine = None
@@ -133,7 +130,7 @@ def slugify_document_id(name: str) -> str:
 
 
 def find_template_path(document_id: str) -> Path | None:
-    """Resolve a template by id for PDF or common image extensions."""
+    """Resolve a template by id for PDF, PNG, or JPEG."""
     stem = document_id
     for suffix in (".pdf",) + tuple(IMAGE_SUFFIXES):
         candidate = TEMPLATES_DIR / f"{stem}{suffix}"
@@ -273,8 +270,7 @@ def _set_image_metadata(file_path: Path, metadata: dict[str, str]) -> None:
         working.save(file_path, exif=exif, **_JPEG_SAVE_KWARGS)
         return
 
-    # Other image types: leave pixels unchanged; metadata stays in memory only.
-    working.save(file_path)
+    raise ValueError(f"unsupported image type for metadata: {suffix}")
 
 
 def read_document_metadata(file_path: Path) -> dict[str, str]:
@@ -631,20 +627,60 @@ def _gray_ink_metrics(
 ) -> tuple[tuple[int, int, int, int], float, float] | None:
     """Return (bbox, fill_ratio, aspect) of pixels darker than threshold."""
     gray = image.convert("L")
-    pixels = list(gray.getdata())
     width, height = gray.size
+    data = list(gray.getdata())
     xs: list[int] = []
     ys: list[int] = []
-    for index, value in enumerate(pixels):
+    row_hits = [0] * height
+    for index, value in enumerate(data):
         if value < threshold:
-            xs.append(index % width)
-            ys.append(index // width)
+            x = index % width
+            y = index // width
+            xs.append(x)
+            ys.append(y)
+            row_hits[y] += 1
     if not xs:
         return None
-    x0, y0, x1, y1 = min(xs), min(ys), max(xs) + 1, max(ys) + 1
+    y0, y1 = _primary_ink_row_span(row_hits)
+    band_xs = [x for x, y in zip(xs, ys) if y0 <= y < y1]
+    if not band_xs:
+        y0, y1 = min(ys), max(ys) + 1
+        band_xs = xs
+    x0, x1 = min(band_xs), max(band_xs) + 1
     area = max(1, (x1 - x0) * (y1 - y0))
     fill = sum(1 for x, y in zip(xs, ys) if x0 <= x < x1 and y0 <= y < y1)
     return (x0, y0, x1, y1), fill / area, (x1 - x0) / max(1, y1 - y0)
+
+
+def _primary_ink_row_span(row_hits: list[int]) -> tuple[int, int]:
+    """Prefer the largest ink band when an OCR box clips a neighboring line."""
+    bands: list[tuple[int, int, int]] = []
+    start = None
+    total = 0
+    for row, hits in enumerate(row_hits):
+        if hits > 0:
+            if start is None:
+                start = row
+                total = 0
+            total += hits
+            continue
+        if start is not None:
+            bands.append((start, row, total))
+            start = None
+    if start is not None:
+        bands.append((start, len(row_hits), total))
+    if not bands:
+        return 0, len(row_hits)
+    # Merge bands separated by a 1px anti-alias gap.
+    merged: list[tuple[int, int, int]] = [bands[0]]
+    for start, end, total in bands[1:]:
+        prev_start, prev_end, prev_total = merged[-1]
+        if start - prev_end <= 1:
+            merged[-1] = (prev_start, end, prev_total + total)
+        else:
+            merged.append((start, end, total))
+    start, end, _total = max(merged, key=lambda band: (band[2], band[1] - band[0]))
+    return start, end
 
 
 def _ink_threshold(ink: tuple[int, int, int], bg: tuple[int, int, int]) -> int:
@@ -1072,13 +1108,17 @@ def _origin_for_ink_box(
     ink_rect: list[float],
     *,
     baseline: float | None = None,
+    align: str = "left",
 ) -> tuple[float, float]:
-    """Baseline-left origin so the drawn glyphs sit on the original ink box."""
+    """Baseline origin so the drawn glyphs sit on the original ink box."""
     try:
-        left, top, _, _ = font.getbbox(text, anchor="ls")
+        left, top, right, _bottom = font.getbbox(text, anchor="ls")
     except TypeError:
-        left, top, _, _ = font.getbbox(text)
-    text_x = ink_rect[0] - float(left)
+        left, top, right, _bottom = font.getbbox(text)
+    if align == "right":
+        text_x = ink_rect[2] - float(right)
+    else:
+        text_x = ink_rect[0] - float(left)
     if baseline is not None:
         return text_x, baseline
     return text_x, ink_rect[1] - float(top)
@@ -1131,6 +1171,218 @@ def _union_wipe_rect(original: list[float], glyphs: list[float], pad: float = 2.
     ]
 
 
+def _ink_line_wipe_rect(
+    ink: list[float],
+    extra: list[float] | None = None,
+    *,
+    pad_x: float = 2.0,
+    pad_y: float = 1.0,
+) -> list[float]:
+    """Wipe the original ink line. Expand horizontally for new glyphs, not into other rows."""
+    x0, y0, x1, y1 = ink[0], ink[1], ink[2], ink[3]
+    if extra is not None:
+        x0 = min(x0, extra[0])
+        x1 = max(x1, extra[2])
+    return [x0 - pad_x, y0 - pad_y, x1 + pad_x, y1 + pad_y]
+
+
+def _keep_pixel_span(old: str, new: str) -> tuple[int, int, int, int] | None:
+    """Prefix/suffix that can stay as original pixels when rewriting `old` → `new`."""
+    if not old or not new or old == new:
+        return None
+    prefix = _common_prefix_len(old, new)
+    old_i, new_i = len(old), len(new)
+    while old_i > prefix and new_i > prefix and old[old_i - 1] == new[new_i - 1]:
+        old_i -= 1
+        new_i -= 1
+    if old_i <= prefix and new_i <= prefix:
+        return None
+    kept = prefix + (len(old) - old_i)
+    if kept < 1:
+        return None
+    return prefix, old_i, prefix, new_i
+
+
+def _mapped_span_xs(
+    ink: list[float],
+    font: ImageFont.ImageFont,
+    text: str,
+    start: int,
+    end: int,
+) -> tuple[float, float]:
+    full_w = max(1.0, _text_width(font, text))
+    ink_w = max(1.0, ink[2] - ink[0])
+    start_w = _text_width(font, text[:start]) if start else 0.0
+    end_w = _text_width(font, text[:end]) if end else full_w
+    return ink[0] + ink_w * (start_w / full_w), ink[0] + ink_w * (end_w / full_w)
+
+
+def _snap_cut_x(
+    image: Image.Image,
+    ink: list[float],
+    approx_x: float,
+    threshold: int,
+) -> float:
+    """Nudge a splice x to a nearby column with little ink (the gap between letters)."""
+    x0, y0, x1, y1 = _clamp_pixel_box(ink, image)
+    gray = image.crop((x0, y0, x1, y1)).convert("L")
+    width, height = gray.size
+    if width < 3 or height < 1:
+        return approx_x
+    data = list(gray.getdata())
+    cols = [
+        sum(1 for row in range(height) if data[row * width + col] < threshold)
+        for col in range(width)
+    ]
+    rel = max(0, min(width - 1, int(round(approx_x)) - x0))
+    window = 5
+    lo, hi = max(0, rel - window), min(width - 1, rel + window)
+    peak = max(cols) or 1
+    best, best_count = rel, cols[rel]
+    for col in range(lo, hi + 1):
+        if cols[col] < best_count:
+            best, best_count = col, cols[col]
+    if best_count > max(1, peak * 0.12):
+        return approx_x
+    return float(x0 + best)
+
+
+def _fill_rect(image: Image.Image, rect: list[float], fill: tuple[int, int, int]) -> None:
+    box = _clamp_pixel_box(rect, image)
+    ImageDraw.Draw(image).rectangle(list(box), fill=fill)
+
+
+def _draw_text_ls(
+    image: Image.Image,
+    origin: tuple[float, float],
+    text: str,
+    *,
+    fill: tuple[int, int, int],
+    font: ImageFont.ImageFont,
+) -> None:
+    draw = ImageDraw.Draw(image)
+    try:
+        draw.text(origin, text, fill=fill, font=font, anchor="ls")
+    except TypeError:
+        size = float(getattr(font, "size", 12) or 12)
+        draw.text((origin[0], origin[1] - size), text, fill=fill, font=font)
+
+
+def _try_splice_rewritten_text(
+    image: Image.Image,
+    field: FieldValue,
+    new_text: str,
+    *,
+    ink: tuple[int, int, int],
+    bg: tuple[int, int, int],
+    matched: ImageFont.ImageFont,
+    full_ink: list[float],
+    align: str,
+) -> bool:
+    """Keep original prefix/suffix pixels; TTF-draw only the changed middle."""
+    span = _keep_pixel_span(field.text, new_text)
+    if span is None:
+        return False
+    old_start, old_end, new_start, new_end = span
+    prefix = field.text[:old_start]
+    suffix = field.text[old_end:]
+    new_mid = new_text[new_start:new_end]
+    if not prefix and not suffix:
+        return False
+
+    threshold = _ink_threshold(ink, bg)
+    prefix_x1 = _mapped_span_xs(full_ink, matched, field.text, 0, old_start)[1]
+    suffix_x0 = _mapped_span_xs(full_ink, matched, field.text, old_end, len(field.text))[0]
+    if prefix:
+        prefix_x1 = _snap_cut_x(image, full_ink, prefix_x1, threshold)
+    if suffix:
+        suffix_x0 = _snap_cut_x(image, full_ink, suffix_x0, threshold)
+    if prefix and suffix and prefix_x1 >= suffix_x0 - 0.5:
+        return False
+
+    probe = [
+        prefix_x1 if prefix else full_ink[0],
+        full_ink[1],
+        suffix_x0 if suffix else full_ink[2],
+        full_ink[3],
+    ]
+    if probe[2] - probe[0] < 2:
+        return False
+    old_mid_ink = _ink_rect_in_image(image, probe, ink, bg)
+    line_w = max(1.0, full_ink[2] - full_ink[0])
+    if (old_mid_ink[2] - old_mid_ink[0]) > line_w * 0.85:
+        return False
+
+    old_w = max(1.0, old_mid_ink[2] - old_mid_ink[0])
+    old_h = max(1.0, old_mid_ink[3] - old_mid_ink[1])
+    short_swap = (
+        bool(prefix)
+        and bool(suffix)
+        and (old_end - old_start) <= 2
+        and (new_end - new_start) <= 2
+    )
+    path, index = _font_path_index(matched)
+    fitted = matched
+    new_w = 0.0
+    if new_mid:
+        if path:
+            cap = max(
+                old_h * 2.4,
+                float(getattr(matched, "size", old_h) or old_h) * 1.6,
+            )
+            probe_w = _glyph_ink_size(matched, new_mid)[0]
+            width_target = old_w
+            if not short_swap and abs(probe_w - old_w) > max(2.5, old_w * 0.35):
+                width_target = 0.0
+            try:
+                fitted = _fit_truetype_to_ink(
+                    path,
+                    index,
+                    new_mid,
+                    target_width=width_target,
+                    target_height=old_h,
+                    min_size=max(6.0, old_h * 0.55),
+                    max_size=cap,
+                )
+            except OSError:
+                fitted = matched
+            mid_crop = image.crop(_clamp_pixel_box(old_mid_ink, image))
+            metrics = _gray_ink_metrics(mid_crop, threshold)
+            if metrics is not None and metrics[1] >= 0.32:
+                styled = _styled_face(fitted, "bold")
+                if styled:
+                    try:
+                        fitted = _fit_truetype_to_ink(
+                            styled[0],
+                            styled[1],
+                            new_mid,
+                            target_width=width_target,
+                            target_height=old_h,
+                            min_size=max(6.0, old_h * 0.55),
+                            max_size=cap,
+                        )
+                    except OSError:
+                        pass
+        new_w = max(1.0, _glyph_ink_size(fitted, new_mid)[0])
+    shift = new_w - old_w if new_mid else -old_w
+
+    # Width changes need a reflow; redraw the whole line instead of a visible seam.
+    if not short_swap and (abs(shift) > 2.5 or not prefix or not suffix):
+        return False
+
+    wipe = [
+        old_mid_ink[0],
+        max(full_ink[1], old_mid_ink[1] - 1.0),
+        old_mid_ink[2],
+        min(full_ink[3], old_mid_ink[3] + 1.0),
+    ]
+    _fill_rect(image, wipe, bg)
+    if new_mid:
+        origin = _origin_for_ink_box(fitted, new_mid, old_mid_ink)
+        _draw_text_ls(image, origin, new_mid, fill=ink, font=fitted)
+    return True
+
+
 def _replace_field_text_on_image(
     image_path: Path,
     field: FieldValue,
@@ -1151,6 +1403,41 @@ def _replace_field_text_on_image(
     preserve_face = font is None
     dx = 0.0 if x is None else (x - field.x)
     dy = 0.0 if y is None else (y - field.y)
+
+    if (
+        new_text == field.text
+        and font is None
+        and font_size is None
+        and (dx != 0.0 or dy != 0.0)
+        and len(field.rect) == 4
+    ):
+        _shift_field_on_image(image, field, dx, dy)
+        _save_raster_image(image, image_path)
+        return
+
+    if (
+        new_text == field.text
+        and font is None
+        and font_size is not None
+        and dx == 0.0
+        and dy == 0.0
+        and len(field.rect) == 4
+    ):
+        _scale_field_on_image(image, field, requested_size)
+        _save_raster_image(image, image_path)
+        return
+
+    if (
+        new_text != field.text
+        and font is None
+        and font_size is None
+        and dx == 0.0
+        and dy == 0.0
+        and len(field.rect) == 4
+    ):
+        _mimic_rewritten_text_on_image(image, field, new_text)
+        _save_raster_image(image, image_path)
+        return
 
     if len(field.rect) != 4:
         pil_font = _pil_font(font_name, requested_size, bold=False)
@@ -1245,6 +1532,86 @@ def _replace_field_text_on_image(
         draw.text((text_x, text_y - requested_size), draw_text, fill=ink, font=pil_font)
 
     _save_raster_image(image, image_path)
+
+
+def _shift_field_on_image(
+    image: Image.Image,
+    field: FieldValue,
+    dx: float,
+    dy: float,
+) -> None:
+    """Move the original raster glyphs. Do not redraw with a new TTF."""
+    ink = _sample_ink_color(image, field.rect)
+    bg = _sample_bg_color(image, field.rect)
+    ink_box = _ink_rect_in_image(image, field.rect, ink, bg)
+    box = _clamp_pixel_box(ink_box, image, pad=2.0)
+    crop = image.crop(box).convert("RGB")
+    ImageDraw.Draw(image).rectangle(list(box), fill=bg)
+    dest = (int(round(box[0] + dx)), int(round(box[1] + dy)))
+    image.paste(crop, dest)
+
+
+def _scale_field_on_image(
+    image: Image.Image,
+    field: FieldValue,
+    new_size: float,
+) -> None:
+    """Resize the original raster glyphs. Do not redraw with a new TTF."""
+    original = max(6.0, float(field.font_size) or 12.0)
+    scale = max(0.35, min(3.5, float(new_size) / original))
+    if abs(scale - 1.0) < 0.02:
+        return
+    ink = _sample_ink_color(image, field.rect)
+    bg = _sample_bg_color(image, field.rect)
+    ink_box = _ink_rect_in_image(image, field.rect, ink, bg)
+    box = _clamp_pixel_box(ink_box, image, pad=2.0)
+    crop = image.crop(box).convert("RGB")
+    new_w = max(1, int(round(crop.width * scale)))
+    new_h = max(1, int(round(crop.height * scale)))
+    resized = crop.resize((new_w, new_h), Image.Resampling.LANCZOS)
+    ImageDraw.Draw(image).rectangle(list(box), fill=bg)
+    mid_x = (box[0] + box[2]) / 2.0
+    dest_x = box[2] - new_w if mid_x > image.width * 0.55 else box[0]
+    dest_y = box[3] - new_h
+    image.paste(resized, (dest_x, dest_y))
+
+
+def _mimic_rewritten_text_on_image(
+    image: Image.Image,
+    field: FieldValue,
+    new_text: str,
+) -> None:
+    """Keep original glyphs where the text is unchanged; lookalike-TTF the rest."""
+    ink = _sample_ink_color(image, field.rect)
+    bg = _sample_bg_color(image, field.rect)
+    box_h = max(1.0, field.rect[3] - field.rect[1])
+    match_size = min(float(field.font_size), box_h * 0.95)
+    matched = _match_font_to_crop(
+        image,
+        field.rect,
+        field.text,
+        ink=ink,
+        bg=bg,
+        max_size=match_size,
+    )
+    full_ink = _ink_rect_in_image(image, field.rect, ink, bg)
+    mid_x = (full_ink[0] + full_ink[2]) / 2.0
+    align = "right" if mid_x > image.width * 0.55 else "left"
+    if _try_splice_rewritten_text(
+        image,
+        field,
+        new_text,
+        ink=ink,
+        bg=bg,
+        matched=matched,
+        full_ink=full_ink,
+        align=align,
+    ):
+        return
+    origin = _origin_for_ink_box(matched, new_text, full_ink, align=align)
+    wipe = _ink_line_wipe_rect(full_ink, _glyph_box(matched, new_text, origin))
+    _fill_rect(image, wipe, bg)
+    _draw_text_ls(image, origin, new_text, fill=ink, font=matched)
 
 
 def _first_existing_font(candidates: tuple[str, ...]) -> str | None:
@@ -1761,8 +2128,36 @@ def discover_fields_from_image(
             width = min(220, img.width - 10)
         fields["document_image"] = _placeholder_image_field(meta, width=width)
 
+    _separate_stacked_ocr_boxes(fields)
     _ocr_cache[cache_key] = {name: field.model_copy(deep=True) for name, field in fields.items()}
     return fields
+
+
+def _separate_stacked_ocr_boxes(fields: dict[str, FieldValue]) -> None:
+    """Stop stacked OCR boxes from sharing pixels (amount vs the label above it)."""
+    items = [field for field in fields.values() if len(field.rect) == 4]
+    for index, left in enumerate(items):
+        for right in items[index + 1 :]:
+            ax0, ay0, ax1, ay1 = left.rect
+            bx0, by0, bx1, by1 = right.rect
+            overlap_x = min(ax1, bx1) - max(ax0, bx0)
+            overlap_y = min(ay1, by1) - max(ay0, by0)
+            if overlap_x <= 1.0 or overlap_y <= 1.0:
+                continue
+            left_h = max(1.0, ay1 - ay0)
+            right_h = max(1.0, by1 - by0)
+            left_mid = (ay0 + ay1) / 2.0
+            right_mid = (by0 + by1) / 2.0
+            if abs(left_mid - right_mid) < min(left_h, right_h) * 0.35:
+                continue
+            upper, lower = (left, right) if left_mid < right_mid else (right, left)
+            mid = (upper.rect[3] + lower.rect[1]) / 2.0
+            if mid <= upper.rect[1] + 1.0 or mid >= lower.rect[3] - 1.0:
+                continue
+            upper.rect[3] = mid
+            lower.rect[1] = mid
+            upper.y = upper.rect[3] - 1.0
+            lower.y = lower.rect[3] - 1.0
 
 
 def _discover_native_pdf_fields(
@@ -2187,413 +2582,6 @@ def _overlay_cover_rect_on_image(
     return _clamp_pixel_box(cover, image)
 
 
-def _char_width_weight(char: str) -> float:
-    if char.isspace():
-        return 0.35
-    if char in ".,:'|":
-        return 0.28
-    if char in "1ilI!":
-        return 0.42
-    if char in "mwMW@$":
-        return 1.35
-    return 1.0
-
-
-def _ink_column_runs(image: Image.Image, box: tuple[int, int, int, int], threshold: int) -> list[tuple[int, int]]:
-    x0, y0, x1, y1 = box
-    crop = image.crop((x0, y0, x1, y1)).convert("L")
-    width, height = crop.size
-    pixels = list(crop.getdata())
-    runs: list[tuple[int, int]] = []
-    index = 0
-    while index < width:
-        while index < width and not any(
-            pixels[row * width + index] < threshold for row in range(height)
-        ):
-            index += 1
-        if index >= width:
-            break
-        end = index + 1
-        while end < width and any(
-            pixels[row * width + end] < threshold for row in range(height)
-        ):
-            end += 1
-        runs.append((index, end))
-        index = end
-    return runs
-
-
-def _tighten_char_box(
-    image: Image.Image,
-    box: tuple[int, int, int, int],
-    threshold: int,
-) -> tuple[int, int, int, int]:
-    x0, y0, x1, y1 = _clamp_pixel_box(box, image)
-    crop = image.crop((x0, y0, x1, y1)).convert("L")
-    pixels = list(crop.getdata())
-    width, height = crop.size
-    xs: list[int] = []
-    ys: list[int] = []
-    for index, value in enumerate(pixels):
-        if value < threshold:
-            xs.append(index % width)
-            ys.append(index // width)
-    if not xs:
-        return x0, y0, x1, y1
-    return x0 + min(xs), y0 + min(ys), x0 + max(xs) + 1, y0 + max(ys) + 1
-
-
-def _segment_field_characters(
-    image: Image.Image,
-    field: FieldValue,
-    ink: tuple[int, int, int],
-    bg: tuple[int, int, int],
-) -> list[tuple[str, tuple[int, int, int, int]]] | None:
-    """Map each character in field.text to a pixel box."""
-    text = field.text or ""
-    if not text or len(field.rect) != 4:
-        return None
-    threshold = _ink_threshold(ink, bg)
-    ink_box = _ink_rect_in_image(image, field.rect, ink, bg)
-    ix0, iy0, ix1, iy1 = _clamp_pixel_box(ink_box, image)
-    if ix1 - ix0 < 2 or iy1 - iy0 < 2:
-        return None
-    runs = _ink_column_runs(image, (ix0, iy0, ix1, iy1), threshold)
-    non_space = [char for char in text if not char.isspace()]
-    boxes: list[tuple[str, tuple[int, int, int, int]]] = []
-    if len(runs) == len(non_space):
-        run_index = 0
-        prev_x = ix0
-        for char in text:
-            if char.isspace():
-                next_x = ix0 + runs[run_index][0] if run_index < len(runs) else ix1
-                boxes.append((char, (prev_x, iy0, max(prev_x + 1, next_x), iy1)))
-                prev_x = max(prev_x + 1, next_x)
-                continue
-            start, end = runs[run_index]
-            box = _tighten_char_box(
-                image, (ix0 + start, iy0, ix0 + end, iy1), threshold
-            )
-            boxes.append((char, box))
-            prev_x = box[2]
-            run_index += 1
-        return boxes
-    weights = [_char_width_weight(char) for char in text]
-    total = sum(weights) or 1.0
-    cursor = float(ix0)
-    span = float(ix1 - ix0)
-    for char, weight in zip(text, weights):
-        next_x = cursor + span * (weight / total)
-        box = (
-            int(round(cursor)),
-            iy0,
-            max(int(round(cursor)) + 1, int(round(next_x))),
-            iy1,
-        )
-        if not char.isspace():
-            box = _tighten_char_box(image, box, threshold)
-        boxes.append((char, box))
-        cursor = next_x
-    return boxes
-
-
-class _CopiedGlyph:
-    __slots__ = ("image", "density")
-
-    def __init__(self, image: Image.Image, density: float) -> None:
-        self.image = image
-        self.density = density
-
-
-def _rgba_cutout(crop: Image.Image, bg: tuple[int, int, int]) -> Image.Image:
-    """Keep original ink pixels fully opaque. Paper becomes transparent."""
-    rgb = crop.convert("RGB")
-    out = Image.new("RGBA", rgb.size)
-    source = rgb.load()
-    dest = out.load()
-    paper_r, paper_g, paper_b = bg
-    for y in range(rgb.height):
-        for x in range(rgb.width):
-            red, green, blue = source[x, y]
-            dist = abs(red - paper_r) + abs(green - paper_g) + abs(blue - paper_b)
-            if dist < 18:
-                dest[x, y] = (red, green, blue, 0)
-            else:
-                dest[x, y] = (red, green, blue, 255)
-    return out
-
-
-def _glyph_ink_density(glyph: Image.Image) -> float:
-    alpha = glyph.getchannel("A") if glyph.mode == "RGBA" else glyph.convert("L")
-    hist = alpha.histogram()
-    opaque = sum(hist[128:])
-    return opaque / max(1, glyph.width * glyph.height)
-
-
-def _collect_glyph_bank(
-    image: Image.Image,
-    fields: dict[str, FieldValue],
-) -> dict[str, list[_CopiedGlyph]]:
-    bank: dict[str, list[_CopiedGlyph]] = {}
-    for item in fields.values():
-        if item.kind == "image" or not item.text or len(item.rect) != 4:
-            continue
-        ink = _sample_ink_color(image, item.rect)
-        bg = _sample_bg_color(image, item.rect)
-        segments = _segment_field_characters(image, item, ink, bg)
-        if not segments:
-            continue
-        for char, box in segments:
-            if char.isspace():
-                continue
-            x0, y0, x1, y1 = _clamp_pixel_box(box, image)
-            if x1 - x0 < 2 or y1 - y0 < 3:
-                continue
-            if (x1 - x0) > max(8, int((y1 - y0) * 2.4)) and char not in "mwMW@$":
-                continue
-            cut = _rgba_cutout(image.crop((x0, y0, x1, y1)), bg)
-            extrema = cut.getextrema()
-            if not extrema or extrema[3][1] == 0:
-                continue
-            bank.setdefault(char, []).append(_CopiedGlyph(cut, _glyph_ink_density(cut)))
-    return bank
-
-
-def _field_ink_density(
-    image: Image.Image,
-    bg: tuple[int, int, int],
-    segments: list[tuple[str, tuple[int, int, int, int]]] | None,
-) -> float:
-    densities: list[float] = []
-    for char, box in segments or []:
-        if char.isspace():
-            continue
-        cut = _rgba_cutout(image.crop(_clamp_pixel_box(box, image)), bg)
-        if cut.getextrema()[3][1] == 0:
-            continue
-        densities.append(_glyph_ink_density(cut))
-    if densities:
-        densities.sort()
-        return densities[len(densities) // 2]
-    return 0.35
-
-
-def _expected_glyph_aspect(char: str) -> float:
-    if char in ".,:'|":
-        return 0.28
-    if char in "1ilI!":
-        return 0.42
-    if char in "mwMW@$":
-        return 1.05
-    return 0.78
-
-
-def _pick_copied_glyph(
-    bank: dict[str, list[_CopiedGlyph]],
-    char: str,
-    target_height: int,
-    *,
-    target_density: float | None = None,
-) -> Image.Image | None:
-    candidates = bank.get(char)
-    if not candidates and char.lower() != char.upper():
-        candidates = bank.get(char.upper()) or bank.get(char.lower())
-    if not candidates:
-        return None
-    min_h = max(3, int(round(target_height * 0.55)))
-    thin = char in "1ilI!.,:'|"
-    usable: list[_CopiedGlyph] = []
-    for glyph in candidates:
-        height = glyph.image.height
-        width = glyph.image.width
-        if height < min_h:
-            continue
-        if not thin and width / max(height, 1) < 0.4:
-            continue
-        usable.append(glyph)
-    if not usable:
-        usable = [glyph for glyph in candidates if glyph.image.height >= min_h] or list(
-            candidates
-        )
-    expected_aspect = _expected_glyph_aspect(char)
-
-    def _score(glyph: _CopiedGlyph) -> tuple[float, float]:
-        height = max(1, glyph.image.height)
-        width = max(1, glyph.image.width)
-        size_err = abs(height - target_height) / max(target_height, 1)
-        if abs(height - target_height) > 1:
-            size_err += 0.45
-        dens_err = (
-            abs(glyph.density - target_density) if target_density is not None else 0.0
-        )
-        aspect_err = abs(width / height - expected_aspect)
-        return (size_err * 2.2 + aspect_err * 1.3 + dens_err * 0.6, size_err)
-
-    best = min(usable, key=_score)
-    if best.image.height < 1:
-        return None
-    if abs(best.image.height - target_height) <= 1:
-        return best.image
-    return None
-
-
-def _paste_glyph(
-    image: Image.Image,
-    glyph: Image.Image,
-    xy: tuple[int, int],
-) -> None:
-    if glyph.mode == "RGBA":
-        image.paste(glyph, xy, glyph)
-    else:
-        image.paste(glyph, xy)
-
-
-def _wipe_pixel_box(
-    image: Image.Image,
-    box: tuple[int, int, int, int],
-    bg: tuple[int, int, int],
-    *,
-    pad: float = 2.0,
-) -> tuple[int, int, int, int]:
-    x0, y0, x1, y1 = _clamp_pixel_box(box, image, pad=pad)
-    ImageDraw.Draw(image).rectangle([x0, y0, x1, y1], fill=bg)
-    return x0, y0, x1, y1
-
-
-def _stamp_copied_line(
-    image: Image.Image,
-    field: FieldValue,
-    text: str,
-    bank: dict[str, list[_CopiedGlyph]],
-    ink: tuple[int, int, int],
-    bg: tuple[int, int, int],
-    origin: tuple[float, float] | None,
-    *,
-    wipe_box: tuple[int, int, int, int] | None = None,
-    target_density: float | None = None,
-) -> bool:
-    ink_box = _ink_rect_in_image(image, field.rect, ink, bg)
-    _, ink_y0, _, ink_y1 = _clamp_pixel_box(ink_box, image)
-    x0, y0, x1, y1 = _clamp_pixel_box(wipe_box or ink_box, image, pad=2.0)
-    if wipe_box is not None:
-        x0 = max(0, min(wipe_box[0], image.width - 1))
-    if wipe_box is None and len(field.rect) == 4:
-        y0 = min(y0, int(round(field.rect[1])))
-        y1 = max(y1, int(round(field.rect[3])))
-        y0, y1 = max(0, y0), min(image.height, y1)
-    target_h = max(1, ink_y1 - ink_y0)
-    pieces: list[Image.Image | int] = []
-    for char in text:
-        if char.isspace():
-            pieces.append(max(2, int(target_h * 0.35)))
-            continue
-        glyph = _pick_copied_glyph(
-            bank,
-            char,
-            target_h,
-            target_density=target_density,
-        )
-        if glyph is None:
-            return False
-        pieces.append(glyph)
-    extra = sum(piece.width + 1 if not isinstance(piece, int) else piece for piece in pieces)
-    x1 = min(image.width, max(x1, x0 + extra + 2))
-    ImageDraw.Draw(image).rectangle([x0, y0, x1, y1], fill=bg)
-    cursor = int(round(origin[0])) if origin is not None else x0
-    baseline = int(round(origin[1])) if origin is not None else ink_y1
-    for piece in pieces:
-        if isinstance(piece, int):
-            cursor += piece
-            continue
-        py = max(0, baseline - piece.height)
-        _paste_glyph(image, piece, (cursor, py))
-        cursor += max(1, piece.width) + 1
-    return True
-
-
-def _overlay_by_copying_glyphs(
-    image: Image.Image,
-    field: FieldValue,
-    text: str,
-    fields: dict[str, FieldValue],
-    ink: tuple[int, int, int],
-    bg: tuple[int, int, int],
-    *,
-    origin: tuple[float, float] | None,
-) -> bool:
-    """Rewrite the field by cutting glyphs from this document. No new TTF."""
-    bank = _collect_glyph_bank(image, fields)
-    if not bank:
-        return False
-    old = field.text or ""
-    segments = _segment_field_characters(image, field, ink, bg)
-    target_density = _field_ink_density(image, bg, segments)
-    if (
-        origin is None
-        and segments is not None
-        and len(old) == len(text)
-        and len(segments) == len(text)
-    ):
-        replacements: list[tuple[tuple[int, int, int, int], Image.Image]] = []
-        for (old_char, box), new_char in zip(segments, text):
-            if old_char == new_char:
-                continue
-            height = max(1, box[3] - box[1])
-            glyph = _pick_copied_glyph(
-                bank,
-                new_char,
-                height,
-                target_density=target_density,
-            )
-            if glyph is None:
-                replacements = []
-                break
-            replacements.append((box, glyph))
-        if replacements:
-            for box, glyph in replacements:
-                x0, y0, x1, y1 = _wipe_pixel_box(image, box, bg, pad=2.0)
-                py = y1 - glyph.height
-                _paste_glyph(image, glyph, (x0, max(0, py)))
-            return True
-    prefix = _common_prefix_len(old, text)
-    if (
-        origin is None
-        and segments is not None
-        and prefix > 0
-        and prefix < len(segments)
-        and prefix < len(text)
-    ):
-        start = segments[prefix][1]
-        ink_box = _ink_rect_in_image(image, field.rect, ink, bg)
-        wipe = (
-            start[0],
-            min(int(round(ink_box[1])), start[1], int(round(field.rect[1]))),
-            max(int(round(ink_box[2])), int(round(field.rect[2]))),
-            max(int(round(ink_box[3])), start[3], int(round(field.rect[3]))),
-        )
-        return _stamp_copied_line(
-            image,
-            field,
-            text[prefix:],
-            bank,
-            ink,
-            bg,
-            origin=None,
-            wipe_box=wipe,
-            target_density=target_density,
-        )
-    return _stamp_copied_line(
-        image,
-        field,
-        text,
-        bank,
-        ink,
-        bg,
-        origin,
-        target_density=target_density,
-    )
-
-
 def _overlay_field_text_on_image(
     image_path: Path,
     field: FieldValue,
@@ -2602,80 +2590,44 @@ def _overlay_field_text_on_image(
     x: float | None,
     y: float | None,
 ) -> None:
-    """Prefer same-size glyphs from this page; otherwise match a font to the field we replace."""
+    """Keep original pixels for unchanged letters; match a TTF to this field for new ones."""
     if len(field.rect) != 4:
         raise ValueError("text_overlay requires a field bounding box")
-    fields = discover_fields_from_image(image_path)
     image = _open_raster_image(image_path)
     if image.mode != "RGB":
         image = image.convert("RGB")
+    origin_override = None if x is None and y is None else _overlay_origin(field, x=x, y=y)
+    if origin_override is None:
+        _mimic_rewritten_text_on_image(image, field, text)
+        _save_raster_image(image, image_path)
+        return
+
     draw = ImageDraw.Draw(image)
     box_h = max(1.0, field.rect[3] - field.rect[1])
     ink = _sample_ink_color(image, field.rect)
     bg = _sample_bg_color(image, field.rect)
-    origin_override = None if x is None and y is None else _overlay_origin(field, x=x, y=y)
-    if _overlay_by_copying_glyphs(
-        image,
-        field,
-        text,
-        fields,
-        ink,
-        bg,
-        origin=origin_override,
-    ):
-        _save_raster_image(image, image_path)
-        return
-    sample = field.text or text
     pil_font = _match_font_to_crop(
         image,
         field.rect,
-        sample,
+        field.text or text,
         ink=ink,
         bg=bg,
         max_size=box_h,
     )
-    old = field.text or ""
-    prefix = _common_prefix_len(old, text)
-    segments = _segment_field_characters(image, field, ink, bg)
-    paint_field = field
-    paint_text = text
-    if (
-        origin_override is None
-        and prefix > 0
-        and segments is not None
-        and prefix < len(segments)
-        and prefix < len(text)
-    ):
-        start = segments[prefix][1]
-        paint_text = text[prefix:]
-        paint_field = field.model_copy(
-            update={
-                "text": paint_text,
-                "x": float(start[0]),
-                "rect": [
-                    float(start[0]),
-                    float(field.rect[1]),
-                    float(max(field.rect[2], start[2])),
-                    float(field.rect[3]),
-                ],
-            }
-        )
-    ink_box = _ink_rect_in_image(image, paint_field.rect, ink, bg)
-    full_ink = _ink_rect_in_image(image, field.rect, ink, bg)
-    ink_box = [ink_box[0], full_ink[1], ink_box[2], full_ink[3]]
-    if origin_override is None:
-        origin = _origin_for_ink_box(pil_font, paint_text, ink_box)
-    else:
-        origin = origin_override
     cover = _overlay_cover_rect_on_image(
-        image, paint_field, paint_text, pil_font, origin, ink, bg
+        image, field, text, pil_font, origin_override, ink, bg
     )
     draw.rectangle(cover, fill=bg)
     try:
-        draw.text(origin, paint_text, fill=ink, font=pil_font, anchor="ls")
+        draw.text(origin_override, text, fill=ink, font=pil_font, anchor="ls")
     except TypeError:
         size = float(getattr(pil_font, "size", box_h) or box_h)
-        draw.text((origin[0], origin[1] - size), paint_text, fill=ink, font=pil_font)
+        draw.text(
+            (origin_override[0], origin_override[1] - size),
+            text,
+            fill=ink,
+            font=pil_font,
+        )
     _save_raster_image(image, image_path)
 
 
