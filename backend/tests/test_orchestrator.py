@@ -110,7 +110,11 @@ async def test_intake_coordinator_uploads_signed_url_of_the_document() -> None:
 
         await orchestrator.process_document("doc-1")
 
-        mock_storage.create_signed_url.assert_called_once_with(
+        # Called once for the Classifier's chat `files` attachment and once
+        # more for Extraction's `input_file` workflow input — both need the
+        # same document, so both get a signed URL for it.
+        assert mock_storage.create_signed_url.call_count == 2
+        mock_storage.create_signed_url.assert_called_with(
             document.storage_path, orchestrator.settings.SIGNED_URL_EXPIRY_SECONDS, document.filename
         )
         args, kwargs = mock_dify.run_chatflow_with_retry.call_args
@@ -125,6 +129,17 @@ async def test_intake_coordinator_uploads_signed_url_of_the_document() -> None:
                 "url": "https://signed.example/doc.pdf",
             }
         ]
+
+        # Extraction's Start node requires a file-type `input_file` input —
+        # this was missing entirely before and Dify rejected every call
+        # with "input_file is required in input form".
+        extraction_args, extraction_kwargs = mock_dify.run_workflow_with_retry.call_args
+        assert extraction_args[1]["input_file"] == {
+            "transfer_method": "remote_url",
+            "url": "https://signed.example/doc.pdf",
+            "type": "document",
+        }
+        assert extraction_kwargs["user"] == "doc-1"
 
 
 @pytest.mark.asyncio
@@ -150,9 +165,10 @@ async def test_low_confidence_classification_fails_before_extraction() -> None:
         args, kwargs = mock_repo.update_status.call_args
         assert args[0] == "doc-1"
         assert args[1] == DocumentStatus.FAILED
-        # document_type=None here (the mocked output had no guess at all) —
-        # confirms we still pass it through rather than crashing on absence.
-        assert kwargs["document_type"] is None
+        # The mocked output had no type guess at all (None) — confirms that
+        # gets normalised to the "unrecognised" sentinel rather than being
+        # persisted as NULL, so Supabase/the frontend see an explicit value.
+        assert kwargs["document_type"] == "unrecognised"
 
 
 @pytest.mark.asyncio

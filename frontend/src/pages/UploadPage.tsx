@@ -1,9 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CaseRecord } from '../App';
 import DropZone from '../components/DropZone';
 import FileRow from '../components/FileRow';
-import { uploadDocuments } from '../services/uploadService';
-import type { BulkUploadItemResult } from '../services/uploadService';
+import { getClassificationPreview, getDocument, uploadDocuments } from '../services/uploadService';
+import type {
+  BulkUploadItemResult,
+  ClassificationPreview,
+  DocumentRecord,
+} from '../services/uploadService';
+
+const TERMINAL_STATUSES = new Set(['analyzed', 'failed']);
+const POLL_INTERVAL_MS = 2000;
 import {
   MAX_BULK_FILES,
   MAX_FILE_SIZE_BYTES,
@@ -18,6 +25,10 @@ const MAX_FILE_SIZE_MB = Math.floor(MAX_FILE_SIZE_BYTES / (1024 * 1024));
 interface UploadPageProps {
   selectedCase: CaseRecord;
   onBack: () => void;
+}
+
+function isExtractionNotConfiguredFailure(reason: string | null | undefined): boolean {
+  return Boolean(reason?.startsWith('Extraction invocation failed'));
 }
 
 function describeIssue(issue: FileIssue): string {
@@ -42,8 +53,56 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
   const [results, setResults] = useState<BulkUploadItemResult[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [documentDetails, setDocumentDetails] = useState<Map<string, DocumentRecord>>(new Map());
+  const [classificationPreviews, setClassificationPreviews] = useState<
+    Map<string, ClassificationPreview>
+  >(new Map());
+
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const hasOutcome = results.length > 0 || rejections.length > 0;
+
+  async function pollDocument(documentId: string) {
+    // No attempt cap — how long classification actually takes depends on
+    // how many other documents are ahead of it (the classifier serializes
+    // calls, see DIFY_CLASSIFIER_MAX_CONCURRENCY on the backend), so a
+    // fixed timeout just goes stale under load instead of ever being
+    // "long enough". Keeps polling for as long as this page stays mounted.
+    while (isMountedRef.current) {
+      let document: DocumentRecord | null = null;
+      try {
+        document = await getDocument(documentId);
+      } catch {
+        // transient fetch failure — skip this cycle rather than giving up
+        // on the document for the rest of the session
+      }
+
+      if (!isMountedRef.current) return;
+
+      if (document) {
+        setDocumentDetails((current) => new Map(current).set(documentId, document as DocumentRecord));
+
+        try {
+          const preview = await getClassificationPreview(documentId);
+          if (isMountedRef.current) {
+            setClassificationPreviews((current) => new Map(current).set(documentId, preview));
+          }
+        } catch {
+          // classification preview is best-effort — document status is the source of truth
+        }
+
+        if (TERMINAL_STATUSES.has(document.status)) return;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    }
+  }
 
   const resultByFilename = useMemo(
     () => new Map(results.map((result) => [result.filename, result])),
@@ -69,6 +128,8 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
     setError(null);
     setResults([]);
     setRejections([]);
+    setDocumentDetails(new Map());
+    setClassificationPreviews(new Map());
 
     try {
       const { ok, rejected } = await validateFiles(selectedFiles, selectedCase.id);
@@ -86,6 +147,9 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
       response.results.forEach((result, index) => {
         if (result.success) {
           recordUploadedHash(selectedCase.id, ok[index].hash);
+        }
+        if (result.success && result.document_id) {
+          void pollDocument(result.document_id);
         }
       });
     } catch (err) {
@@ -221,6 +285,92 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
               Upload succeeded. The extraction and quality-check details are not returned by
               the current upload API, so this UI leaves those stages pending rather than
               inventing processing results.
+            </p>
+          </section>
+        )}
+
+        {results.some((result) => result.success) && (
+          <section className="pipeline-note">
+            <div className="section-label">
+              <span>Classification result</span>
+              <span className="mock-badge live">LIVE</span>
+            </div>
+
+            {results
+              .filter((result) => result.success && result.document_id)
+              .map((result) => {
+                const documentId = result.document_id as string;
+                const document = documentDetails.get(documentId);
+                const preview = classificationPreviews.get(documentId);
+                const status = document?.status ?? result.status ?? 'queued';
+                const isTerminal = TERMINAL_STATUSES.has(status);
+                const extractionNotConfigured =
+                  status === 'failed' && isExtractionNotConfiguredFailure(document?.failure_reason);
+
+                return (
+                  <div key={result.filename} className="mock-classification-row">
+                    <span className="mock-filename">{result.filename}</span>
+                    <div className="mock-classification">
+                      <div>
+                        <span className="mock-label">Status</span>
+                        <span className="mock-value">
+                          {status}
+                          {!isTerminal && '…'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="mock-label">Document type</span>
+                        <span className="mock-value">{document?.document_type ?? '—'}</span>
+                      </div>
+                      <div>
+                        <span className="mock-label">Confidence</span>
+                        <span className="mock-value">
+                          {document?.confidence != null ? document.confidence.toFixed(2) : '—'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="mock-label">Routing outcome</span>
+                        <span className="mock-value">
+                          {document?.classification_outcome ?? '—'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {preview && preview.evidence.length > 0 && (
+                      <ul className="mock-evidence">
+                        {preview.evidence.map((item, i) => (
+                          <li key={i}>{item}</li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {document?.document_type === 'unrecognised' && (
+                      <p className="mock-note warning">
+                        This document doesn't match any known KYC category and has been
+                        flagged for manual review.
+                      </p>
+                    )}
+
+                    {extractionNotConfigured && document?.document_type !== 'unrecognised' && (
+                      <p className="mock-note">
+                        Classification succeeded — this failed because the extraction workflow
+                        hasn't been set up in Dify yet, not because of the classifier.
+                      </p>
+                    )}
+
+                    {status === 'failed' && document?.failure_reason && (
+                      <p className="mock-failure-reason">{document.failure_reason}</p>
+                    )}
+                  </div>
+                );
+              })}
+
+            <p>
+              Status, document type, confidence, and routing outcome are all persisted in
+              Supabase and come from GET /documents/&#123;id&#125;. Evidence is the one field
+              still not persisted — it comes from GET /documents/&#123;id&#125;/classification-preview,
+              an in-memory cache on the backend that clears on restart. Both are polled every
+              {' '}{POLL_INTERVAL_MS / 1000}s until classification finishes.
             </p>
           </section>
         )}

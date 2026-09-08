@@ -6,12 +6,12 @@ import logging
 import mimetypes
 import re
 
-from . import document_repository, storage_service
+from . import classification_cache, document_repository, storage_service
 from .config import settings
 from .dify_client import dify_client, DifyInvocationError
 from .extraction_prompts import build_extraction_prompt
 from .ingestion.ingestion_service import ingest_document
-from .models import DocumentStatus
+from .models import ClassificationOutcome, DocumentStatus
 
 logger = logging.getLogger("classifier_pipeline.orchestrator")
 
@@ -21,6 +21,54 @@ class OrchestrationError(Exception):
 
 
 async def process_document(document_id: str) -> None:
+    """
+    Runs Intake Coordinator -> Extraction for one document. Thin wrapper
+    around _process_document that guarantees the "always leaves the
+    document at ANALYZED or FAILED" contract described there: any
+    exception _process_document doesn't already translate into a FAILED
+    status (e.g. an unexpected Supabase write error, not just a
+    DifyInvocationError) is caught here so the document never gets stuck
+    at a non-terminal status — which would otherwise leave the frontend
+    polling forever.
+    """
+    try:
+        await _process_document(document_id)
+    except Exception as exc:  # noqa: BLE001 — last line of defence against a stuck document
+        logger.exception("Document %s: unhandled error during orchestration", document_id)
+        try:
+            await _fail(document_id, f"Unhandled orchestration error: {exc}")
+        except Exception:
+            logger.exception(
+                "Document %s: failed to record FAILED status after unhandled error", document_id
+            )
+
+
+async def _process_document(document_id: str) -> None:
+    """
+    Runs Intake Coordinator -> Extraction for one document, handling the
+    bounded classification<->extraction escalation loop:
+
+      - Extraction may report `escalation` in its output when the
+        classified type doesn't fit the content (e.g. classified as
+        Payslip but reads like a shipping manifest).
+      - On escalation, Intake Coordinator is re-run WITH the escalation
+        reason as extra context (not a blind retry) so it can weigh it.
+      - Capped at settings.MAX_RECLASSIFICATION_ATTEMPTS — if still
+        unresolved after that, the document is routed to manual review
+        rather than looping indefinitely. Same escalation-depth-cap
+        principle used everywhere else in this pipeline.
+
+    Note: Dify workflows are forward-only DAGs, so this back-and-forth
+    control flow lives here, not inside a single Dify workflow. Dify
+    holds each agent's reasoning; this orchestrator holds the control
+    flow between agents.
+
+    Terminal: always leaves the document at ANALYZED or FAILED — failures
+    are caught and translated into a FAILED status + failure_reason rather
+    than propagating, so the queue worker doesn't need its own retry loop
+    around this (see queue_service._process_document). Any exception this
+    function doesn't itself translate is caught by process_document above.
+    """
     document = await asyncio.to_thread(document_repository.get_document, document_id)
     if document is None:
         logger.error("Document %s not found; cannot orchestrate", document_id)
@@ -32,12 +80,7 @@ async def process_document(document_id: str) -> None:
         await _fail(document_id, f"Intake Coordinator invocation failed: {exc}")
         return
 
-    if classification.get("needs_manual_review"):
-        await _fail(
-            document_id,
-            f"Classification confidence below threshold ({classification.get('confidence')})",
-            document_type=classification.get("document_type"),
-        )
+    if not await _finalise_classification(document_id, classification):
         return
 
     try:
@@ -48,7 +91,7 @@ async def process_document(document_id: str) -> None:
 
     try:
         extraction = await _run_extraction(
-            document_id, document, classification["document_type"], raw_text
+            document_id, document, document, classification["document_type"], raw_text
         )
     except DifyInvocationError as exc:
         await _fail(
@@ -75,12 +118,7 @@ async def process_document(document_id: str) -> None:
             await _fail(document_id, f"Re-classification invocation failed: {exc}")
             return
 
-        if classification.get("needs_manual_review"):
-            await _fail(
-                document_id,
-                f"Re-classification still below confidence threshold ({classification.get('confidence')})",
-                document_type=classification.get("document_type"),
-            )
+        if not await _finalise_classification(document_id, classification):
             return
 
         try:
@@ -185,7 +223,9 @@ async def _run_intake_coordinator(
             }
         ],
     )
-    return _unwrap_chatflow_output(result)
+    classification = _unwrap_chatflow_output(result)
+    classification_cache.set_evidence(document_id, classification.get("evidence", []))
+    return classification
 
 
 def _dify_file_type(filename: str) -> str:
@@ -317,6 +357,66 @@ def _parse_chatflow_answer(answer: str) -> dict:
         "reasoning": reasoning,
         "evidence": evidence,
     }
+
+
+def _is_unrecognised(document_type: str | None) -> bool:
+    return document_type in (None, "", "unrecognised")
+
+
+def _is_below_threshold(confidence: float | None) -> bool:
+    return confidence is None or confidence < settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
+
+
+async def _finalise_classification(document_id: str, classification: dict) -> bool:
+    """
+    Records the classification-stage result (type, confidence, outcome) and
+    enforces the confidence threshold as a system-level gate rather than
+    trusting Dify's own needs_manual_review flag alone — that flag is still
+    OR'd in as an extra signal for cases the numeric threshold alone
+    wouldn't catch (e.g. the sub-classifiers disagreeing despite a
+    survivable confidence number).
+
+    Returns True if classification is accepted and extraction should run;
+    False if it's been routed to manual review (FAILED already recorded).
+    """
+    document_type = classification.get("document_type")
+    confidence = classification.get("confidence")
+    unrecognised = _is_unrecognised(document_type)
+    if unrecognised:
+        # Normalise Dify's various ways of saying "no type" (None, "", or the
+        # literal words null/none/n/a already folded to None by
+        # _parse_chatflow_answer) to the explicit "unrecognised" sentinel so
+        # it's what actually lands in Supabase/the frontend, not NULL.
+        document_type = "unrecognised"
+    below_threshold = _is_below_threshold(confidence)
+    accepted = not unrecognised and not below_threshold and not classification.get("needs_manual_review")
+
+    outcome = ClassificationOutcome.ACCEPTED if accepted else ClassificationOutcome.MANUAL_REVIEW
+    await asyncio.to_thread(
+        document_repository.record_classification,
+        document_id,
+        document_type=document_type,
+        confidence=confidence,
+        classification_outcome=outcome.value,
+    )
+
+    if accepted:
+        return True
+
+    if unrecognised:
+        reason = "Document does not match any known category — flagged for manual review"
+    elif below_threshold:
+        reason = (
+            f"Classification confidence ({confidence}) is below the required "
+            f"threshold ({settings.CLASSIFICATION_CONFIDENCE_THRESHOLD})"
+        )
+    else:
+        reason = f"Classifier flagged for manual review (confidence {confidence})"
+        if classification.get("reasoning"):
+            reason += f": {classification['reasoning']}"
+
+    await _fail(document_id, reason, document_type=document_type)
+    return False
 
 
 async def _fail(document_id: str, reason: str, *, document_type: str | None = None) -> None:
