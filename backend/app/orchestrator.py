@@ -7,7 +7,7 @@ import re
 from . import document_repository, storage_service
 from .config import settings
 from .dify_client import dify_client, DifyInvocationError
-from .models import ClassificationOutcome, DocumentStatus
+from .models import REQUIRED_DOCUMENT_TYPES, ClassificationOutcome, DocumentStatus, DocumentType
 
 logger = logging.getLogger("classifier_pipeline.orchestrator")
 
@@ -288,13 +288,67 @@ def _parse_chatflow_answer(answer: str) -> dict:
         if line.strip().startswith(("-", "*"))
     ]
 
+    fulfilled_requirements = _parse_fulfilled_requirements(answer, document_type)
+
+    # Enforced deterministically rather than trusting the Classifier to
+    # correctly propagate its own "Address check: visible" evidence line
+    # into Fulfils requirements — it reliably writes the evidence line when
+    # asked to, but self-consistency between two separate output fields is
+    # exactly the kind of thing LLMs are unreliable at even when told
+    # explicitly to do it. Reading the same signal back out of evidence here
+    # is a 100%-reliable string match instead of a probabilistic judgement.
+    if (
+        document_type in (DocumentType.ID_DOCUMENT.value, DocumentType.BANK_STATEMENT.value)
+        and DocumentType.PROOF_OF_ADDRESS.value not in fulfilled_requirements
+        and _evidence_confirms_visible_address(evidence)
+    ):
+        fulfilled_requirements = [*fulfilled_requirements, DocumentType.PROOF_OF_ADDRESS.value]
+
     return {
         "document_type": document_type,
         "confidence": confidence,
         "needs_manual_review": needs_manual_review,
         "reasoning": reasoning,
         "evidence": evidence,
+        "fulfilled_requirements": fulfilled_requirements,
     }
+
+
+def _evidence_confirms_visible_address(evidence: list[str]) -> bool:
+    """
+    Matches "Address check: visible — ..." but not "Address check: not
+    visible — ..." (the "not" sits between "check:" and "visible", so the
+    pattern's tight `:\\s*visible` never matches the negative phrasing).
+    """
+    pattern = re.compile(r"address\s*check\s*:\s*visible", re.IGNORECASE)
+    return any(pattern.search(line) for line in evidence)
+
+
+def _parse_fulfilled_requirements(answer: str, document_type: str | None) -> list[str]:
+    """
+    A document can satisfy more than one checklist requirement (e.g. an
+    NRIC also covers Proof of Address, but a passport doesn't) — this reads
+    the Classifier's own judgement of which ones, rather than assuming a
+    fixed type-to-requirement table, since that judgement depends on the
+    document's actual content.
+
+    Falls back to just [document_type] when the Classifier prompt hasn't
+    been updated yet to include this section — self-fulfilment is still
+    correct even without the cross-requirement judgement.
+    """
+    block = _answer_section(answer, "Fulfils requirements") or ""
+    values = [
+        line.lstrip("-* ").strip().lower().replace(" ", "_")
+        for line in block.splitlines()
+        if line.strip().startswith(("-", "*"))
+    ]
+    recognised = [value for value in values if value in REQUIRED_DOCUMENT_TYPES]
+    if recognised:
+        return recognised
+
+    if document_type in REQUIRED_DOCUMENT_TYPES:
+        return [document_type]
+    return []
 
 
 def _is_unrecognised(document_type: str | None) -> bool:
@@ -337,6 +391,7 @@ async def _finalise_classification(document_id: str, classification: dict) -> bo
         confidence=confidence,
         classification_outcome=outcome.value,
         evidence=classification.get("evidence", []),
+        fulfilled_requirements=classification.get("fulfilled_requirements", []),
     )
 
     if accepted:

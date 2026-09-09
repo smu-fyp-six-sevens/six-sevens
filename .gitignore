@@ -16,3 +16,4 @@ postman/
 *.ses
 document_templates/
 documents_generated/
+fyp_backend.egg-info

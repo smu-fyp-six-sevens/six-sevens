@@ -48,6 +48,16 @@ class DocumentType(str, Enum):
     UNRECOGNISED = "unrecognised"
 
 
+# The fixed checklist every case is required to satisfy — every real
+# DocumentType is also a document requirement. A single document can fulfil
+# more than one of these (e.g. an NRIC also covers Proof of Address), which
+# is why fulfilment is tracked as its own list rather than assumed 1:1 with
+# a document's own document_type — see DocumentRecord.fulfilled_requirements.
+REQUIRED_DOCUMENT_TYPES: list[str] = [
+    doc_type.value for doc_type in DocumentType if doc_type != DocumentType.UNRECOGNISED
+]
+
+
 class CaseRecord(BaseModel):
     id: str
     company_name: Optional[str] = None
@@ -76,7 +86,18 @@ class CaseDocumentsStatus(str, Enum):
 
 
 class CaseSummary(CaseRecord):
+    """
+    documents_status and fulfilled_requirements are both computed live from
+    the documents table on every read, never stored — see case_status.py.
+    recommended_additional_documents is repurposed here as the computed
+    "still missing" list (the checklist requirements no accepted document
+    has fulfilled yet), overriding whatever's in the underlying (always
+    empty — nothing ever wrote to it) cases.recommended_additional_documents
+    column.
+    """
+
     documents_status: CaseDocumentsStatus
+    fulfilled_requirements: list[str] = Field(default_factory=list)
 
 
 class DocumentRecord(BaseModel):
@@ -94,6 +115,7 @@ class DocumentRecord(BaseModel):
     processing_started_at: Optional[datetime] = None
     failure_reason: Optional[str] = None
     evidence: list[str] = Field(default_factory=list)
+    fulfilled_requirements: list[str] = Field(default_factory=list)
 
 
 class UploadResponse(BaseModel):

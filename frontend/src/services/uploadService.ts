@@ -27,7 +27,25 @@ export interface DocumentRecord {
   processing_started_at: string | null;
   failure_reason: string | null;
   evidence: string[];
+  fulfilled_requirements: string[];
 }
+
+// Mirrors REQUIRED_DOCUMENT_TYPES in backend/app/models.py — the fixed
+// checklist every case must satisfy. A single document can fulfil more
+// than one of these (see DocumentRecord.fulfilled_requirements).
+export const REQUIRED_DOCUMENT_TYPES: { value: string; label: string }[] = [
+  { value: 'bank_statement', label: 'Bank statement' },
+  { value: 'certificate_of_incorporation', label: 'Certificate of incorporation' },
+  { value: 'payslip', label: 'Payslip' },
+  { value: 'id_document', label: 'ID document' },
+  { value: 'fatca_crs_declaration', label: 'FATCA/CRS declaration' },
+  { value: 'certificate_of_incumbency', label: 'Certificate of incumbency' },
+  { value: 'company_constitution', label: 'Company constitution' },
+  { value: 'proof_of_address', label: 'Proof of address' },
+  { value: 'source_of_wealth', label: 'Source of wealth' },
+  { value: 'credit_report', label: 'Credit report' },
+  { value: 'list_of_loans', label: 'List of loans' },
+];
 
 const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 

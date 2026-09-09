@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from app.case_status import compute_documents_status
+from app.case_status import compute_documents_status, compute_requirement_coverage
 from app.config import settings
-from app.models import CaseDocumentsStatus, DocumentRecord, DocumentStatus
+from app.models import CaseDocumentsStatus, ClassificationOutcome, DocumentRecord, DocumentStatus
 
 
 def _now() -> datetime:
@@ -18,6 +18,8 @@ def _make_document(
     uploaded_seconds_ago: float = 0,
     queued_seconds_ago: float | None = None,
     processing_seconds_ago: float | None = None,
+    classification_outcome: ClassificationOutcome | None = None,
+    fulfilled_requirements: list[str] | None = None,
 ) -> DocumentRecord:
     now = _now()
     return DocumentRecord(
@@ -31,6 +33,8 @@ def _make_document(
         processing_started_at=(
             (now - timedelta(seconds=processing_seconds_ago)) if processing_seconds_ago else None
         ),
+        classification_outcome=classification_outcome,
+        fulfilled_requirements=fulfilled_requirements or [],
     )
 
 
@@ -84,3 +88,56 @@ def test_mixed_uploaded_queued_processing_returns_in_progress() -> None:
         _make_document("doc-3", DocumentStatus.PROCESSING, processing_seconds_ago=1),
     ]
     assert compute_documents_status(documents) == CaseDocumentsStatus.IN_PROGRESS
+
+
+def test_coverage_with_no_documents_is_all_missing() -> None:
+    fulfilled, missing = compute_requirement_coverage([])
+    assert fulfilled == []
+    assert missing  # the full checklist
+
+
+def test_single_document_can_fulfil_multiple_requirements() -> None:
+    """The story's own example: an NRIC also covers Proof of Address."""
+    documents = [
+        _make_document(
+            "doc-1",
+            DocumentStatus.ANALYZED,
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            fulfilled_requirements=["id_document", "proof_of_address"],
+        )
+    ]
+    fulfilled, missing = compute_requirement_coverage(documents)
+    assert "id_document" in fulfilled
+    assert "proof_of_address" in fulfilled
+    assert "id_document" not in missing
+    assert "proof_of_address" not in missing
+
+
+def test_manual_review_document_does_not_count_as_fulfilled() -> None:
+    """An unconfirmed classification shouldn't retire a checklist item."""
+    documents = [
+        _make_document(
+            "doc-1",
+            DocumentStatus.ANALYZED,
+            classification_outcome=ClassificationOutcome.MANUAL_REVIEW,
+            fulfilled_requirements=["bank_statement"],
+        )
+    ]
+    fulfilled, missing = compute_requirement_coverage(documents)
+    assert "bank_statement" not in fulfilled
+    assert "bank_statement" in missing
+
+
+def test_passport_does_not_fulfil_proof_of_address() -> None:
+    """A passport is an id_document but carries no address, unlike an NRIC."""
+    documents = [
+        _make_document(
+            "doc-1",
+            DocumentStatus.ANALYZED,
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            fulfilled_requirements=["id_document"],
+        )
+    ]
+    fulfilled, missing = compute_requirement_coverage(documents)
+    assert "id_document" in fulfilled
+    assert "proof_of_address" in missing

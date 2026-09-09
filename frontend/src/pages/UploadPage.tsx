@@ -2,7 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CaseRecord } from '../App';
 import DropZone from '../components/DropZone';
 import FileRow from '../components/FileRow';
-import { getDocument, listDocuments, uploadDocuments } from '../services/uploadService';
+import {
+  REQUIRED_DOCUMENT_TYPES,
+  getDocument,
+  listDocuments,
+  uploadDocuments,
+} from '../services/uploadService';
 import type { BulkUploadItemResult, DocumentRecord } from '../services/uploadService';
 
 const TERMINAL_STATUSES = new Set(['analyzed', 'failed']);
@@ -18,6 +23,10 @@ import type { FileIssue } from '../utils/fileValidation';
 
 const MAX_FILE_SIZE_MB = Math.floor(MAX_FILE_SIZE_BYTES / (1024 * 1024));
 
+const REQUIREMENT_LABELS = new Map(
+  REQUIRED_DOCUMENT_TYPES.map((requirement) => [requirement.value, requirement.label]),
+);
+
 interface UploadPageProps {
   selectedCase: CaseRecord;
   onBack: () => void;
@@ -25,6 +34,16 @@ interface UploadPageProps {
 
 function isExtractionNotConfiguredFailure(reason: string | null | undefined): boolean {
   return Boolean(reason?.startsWith('Extraction invocation failed'));
+}
+
+function formatRoutingOutcome(outcome: string | null | undefined): string {
+  switch (outcome) {
+    case 'accepted':
+    case 'manual_review':
+      return 'Proceed with extractor agent';
+    default:
+      return '—';
+  }
 }
 
 function describeIssue(issue: FileIssue): string {
@@ -98,14 +117,6 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
         if (cancelled) return;
 
         setDocumentDetails(new Map(documents.map((document) => [document.id, document])));
-        setResults(
-          documents.map((document) => ({
-            filename: document.filename,
-            success: true,
-            document_id: document.id,
-            status: document.status,
-          })),
-        );
 
         documents.forEach((document) => {
           if (!TERMINAL_STATUSES.has(document.status)) {
@@ -129,6 +140,21 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
     [results],
   );
 
+  // A requirement counts as met only once a document's classification was
+  // actually accepted — one still in manual review hasn't been confirmed to
+  // be what it claims. A single document can satisfy more than one
+  // requirement (e.g. an NRIC also covers Proof of Address), so this is a
+  // union across every document for this case, not a 1:1 count.
+  const fulfilledRequirements = useMemo(() => {
+    const fulfilled = new Set<string>();
+    for (const document of documentDetails.values()) {
+      if (document.classification_outcome === 'accepted') {
+        document.fulfilled_requirements.forEach((requirement) => fulfilled.add(requirement));
+      }
+    }
+    return fulfilled;
+  }, [documentDetails]);
+
   function handleFiles(files: File[]) {
     setSelectedFiles((current) => {
       const combined = [...current, ...files];
@@ -149,7 +175,6 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
     setError(null);
     setResults([]);
     setRejections([]);
-    setDocumentDetails(new Map());
     setJustSubmitted(true);
 
     try {
@@ -194,7 +219,7 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
   const failedCount = results.filter((result) => !result.success).length + rejections.length;
 
   return (
-    <main className="shell">
+    <main className="shell shell--upload">
       <header className="app-header">
         <div className="brand">
           GLDB <span>Fraud Review</span>
@@ -202,192 +227,229 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
         <div className="officer-tag">Loan Officer · J. Tan</div>
       </header>
 
-      <section className="upload-view">
-        <button type="button" className="back-link" onClick={onBack}>
-          ← Back to case queue
-        </button>
+      <div className="upload-view">
+        <section className="upload-main">
+          <button type="button" className="back-link" onClick={onBack}>
+            ← Back to case queue
+          </button>
 
-        <p className="eyebrow">
-          Case #{selectedCase.id} · {selectedCase.type} — {selectedCase.applicant}
-        </p>
-        <h1>Upload supporting documents</h1>
-        <p className="sub">
-          Accepted files are logged and assigned a document ID for the investigation record.
-        </p>
+          <p className="eyebrow">
+            Case #{selectedCase.id} · {selectedCase.type} — {selectedCase.applicant}
+          </p>
+          <h1>Upload supporting documents</h1>
+          <p className="sub">
+            Accepted files are logged and assigned a document ID for the investigation record.
+          </p>
 
-        <DropZone onFiles={handleFiles} disabled={isSubmitting} />
+          <DropZone onFiles={handleFiles} disabled={isSubmitting} />
 
-        {selectedFiles.length > 0 && (
-          <>
-            <div className="section-label">
-              <span>Selected files</span>
-              <span>{selectedFiles.length} selected</span>
+          {selectedFiles.length > 0 && (
+            <>
+              <div className="section-label">
+                <span>Selected files</span>
+                <span>{selectedFiles.length} selected</span>
+              </div>
+
+              <div className="file-list">
+                {selectedFiles.map((file, index) => {
+                  const rejection = rejections.find((item) => item.file === file);
+                  return (
+                    <FileRow
+                      key={`${file.name}-${index}`}
+                      file={file}
+                      result={resultByFilename.get(file.name)}
+                      rejected={rejection ? describeIssue(rejection.issue) : undefined}
+                      isUploading={isSubmitting}
+                      onRemove={() => removeFile(index)}
+                    />
+                  );
+                })}
+              </div>
+
+              <div className="action-bar">
+                <span className="count">
+                  {hasOutcome
+                    ? `${completedCount} / ${selectedFiles.length} processed`
+                    : `${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''} selected`}
+                </span>
+
+                <button
+                  type="button"
+                  className="upload-btn"
+                  disabled={isSubmitting || selectedFiles.length === 0}
+                  onClick={() => {
+                    void handleSubmit();
+                  }}
+                >
+                  {isSubmitting
+                    ? 'Uploading…'
+                    : hasOutcome
+                      ? 'Upload again'
+                      : `Upload ${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''}`}
+                </button>
+              </div>
+            </>
+          )}
+
+          {selectedFiles.length === 0 && !isSubmitting && (
+            <div className="empty">
+              No files selected yet — drag files above or click browse
             </div>
+          )}
 
-            <div className="file-list">
-              {selectedFiles.map((file, index) => {
-                const rejection = rejections.find((item) => item.file === file);
-                return (
-                  <FileRow
-                    key={`${file.name}-${index}`}
-                    file={file}
-                    result={resultByFilename.get(file.name)}
-                    rejected={rejection ? describeIssue(rejection.issue) : undefined}
-                    isUploading={isSubmitting}
-                    onRemove={() => removeFile(index)}
-                  />
-                );
-              })}
-            </div>
+          {countError && <div className="toast show mixed">⚠ {countError}</div>}
+          {error && <div className="toast show mixed">⚠ {error}</div>}
 
-            <div className="action-bar">
-              <span className="count">
-                {hasOutcome
-                  ? `${completedCount} / ${selectedFiles.length} processed`
-                  : `${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''} selected`}
+          {justSubmitted && hasOutcome && !error && !isSubmitting && (
+            <div className={`toast show ${failedCount > 0 ? 'mixed' : 'all-ok'}`}>
+              <span>{failedCount > 0 ? '⚠' : '✓'}</span>
+              <span>
+                <b>
+                  {successfulCount} of {selectedFiles.length} documents uploaded.
+                </b>{' '}
+                {failedCount > 0
+                  ? `${failedCount} need attention above.`
+                  : 'All documents uploaded successfully.'}
               </span>
-
-              <button
-                type="button"
-                className="upload-btn"
-                disabled={isSubmitting || selectedFiles.length === 0}
-                onClick={() => {
-                  void handleSubmit();
-                }}
-              >
-                {isSubmitting
-                  ? 'Uploading…'
-                  : hasOutcome
-                    ? 'Upload again'
-                    : `Upload ${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''}`}
-              </button>
             </div>
-          </>
-        )}
+          )}
 
-        {selectedFiles.length === 0 && !isSubmitting && (
-          <div className="empty">
-            No files selected yet — drag files above or click browse
-          </div>
-        )}
+          {documentDetails.size > 0 && (
+            <section className="pipeline-note">
+              <div className="section-label">
+                <span>Next step</span>
+                <span>Document processing</span>
+              </div>
+              <div className="pipeline">
+                <span className="pstage done">Uploaded</span>
+                <span className="pconnector" />
+                <span className="pstage pending">Extracting</span>
+                <span className="pconnector" />
+                <span className="pstage pending">Quality check</span>
+                <span className="pconnector" />
+                <span className="pstage pending">Result</span>
+              </div>
+              <p>
+                Upload succeeded. The extraction and quality-check details are not returned by
+                the current upload API, so this UI leaves those stages pending rather than
+                inventing processing results.
+              </p>
+            </section>
+          )}
 
-        {countError && <div className="toast show mixed">⚠ {countError}</div>}
-        {error && <div className="toast show mixed">⚠ {error}</div>}
+          {documentDetails.size > 0 && (
+            <section className="pipeline-note">
+              <div className="section-label">
+                <span>Classification result</span>
+                <span className="mock-badge live">LIVE</span>
+              </div>
 
-        {justSubmitted && hasOutcome && !error && !isSubmitting && (
-          <div className={`toast show ${failedCount > 0 ? 'mixed' : 'all-ok'}`}>
-            <span>{failedCount > 0 ? '⚠' : '✓'}</span>
+              {Array.from(documentDetails.values())
+                .sort((a, b) => a.uploaded_at.localeCompare(b.uploaded_at))
+                .map((document) => {
+                  const status = document.status;
+                  const isTerminal = TERMINAL_STATUSES.has(status);
+                  const extractionNotConfigured =
+                    status === 'failed' && isExtractionNotConfiguredFailure(document.failure_reason);
+
+                  return (
+                    <div key={document.id} className="mock-classification-row">
+                      <span className="mock-filename">{document.filename}</span>
+                      <div className="mock-classification">
+                        <div>
+                          <span className="mock-label">Status</span>
+                          <span className="mock-value">
+                            {status}
+                            {!isTerminal && '…'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="mock-label">Document type</span>
+                          <span className="mock-value">{document.document_type ?? '—'}</span>
+                        </div>
+                        <div>
+                          <span className="mock-label">Confidence</span>
+                          <span className="mock-value">
+                            {document.confidence != null ? document.confidence.toFixed(2) : '—'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="mock-label">Routing outcome</span>
+                          <span className="mock-value">
+                            {formatRoutingOutcome(document.classification_outcome)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {document.classification_outcome === 'accepted' &&
+                        document.fulfilled_requirements.length > 0 && (
+                          <div className="fulfils-row">
+                            <span className="mock-label">Fulfils requirements</span>
+                            <div className="fulfils-tags">
+                              {document.fulfilled_requirements.map((requirement) => (
+                                <span key={requirement} className="fulfils-tag">
+                                  {REQUIREMENT_LABELS.get(requirement) ?? requirement}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                      {document.evidence && document.evidence.length > 0 && (
+                        <ul className="mock-evidence">
+                          {document.evidence.map((item, i) => (
+                            <li key={i}>{item}</li>
+                          ))}
+                        </ul>
+                      )}
+
+                      {document.document_type === 'unrecognised' && (
+                        <p className="mock-note warning">
+                          This document doesn't match any known KYC category and has been
+                          flagged for manual review.
+                        </p>
+                      )}
+
+                      {extractionNotConfigured && document.document_type !== 'unrecognised' && (
+                        <p className="mock-note">
+                          Classification succeeded — this failed because the extraction workflow
+                          hasn't been set up in Dify yet, not because of the classifier.
+                        </p>
+                      )}
+
+                      {status === 'failed' && document.failure_reason && (
+                        <p className="mock-failure-reason">{document.failure_reason}</p>
+                      )}
+                    </div>
+                  );
+                })}
+            </section>
+          )}
+        </section>
+
+        <aside className="upload-sidebar">
+          <div className="section-label">
+            <span>Document requirements</span>
             <span>
-              <b>
-                {successfulCount} of {selectedFiles.length} documents uploaded.
-              </b>{' '}
-              {failedCount > 0
-                ? `${failedCount} need attention above.`
-                : 'All documents uploaded successfully.'}
+              {fulfilledRequirements.size} / {REQUIRED_DOCUMENT_TYPES.length}
             </span>
           </div>
-        )}
-
-        {results.some((result) => result.success) && (
-          <section className="pipeline-note">
-            <div className="section-label">
-              <span>Next step</span>
-              <span>Document processing</span>
-            </div>
-            <div className="pipeline">
-              <span className="pstage done">Uploaded</span>
-              <span className="pconnector" />
-              <span className="pstage pending">Extracting</span>
-              <span className="pconnector" />
-              <span className="pstage pending">Quality check</span>
-              <span className="pconnector" />
-              <span className="pstage pending">Result</span>
-            </div>
-            <p>
-              Upload succeeded. The extraction and quality-check details are not returned by
-              the current upload API, so this UI leaves those stages pending rather than
-              inventing processing results.
-            </p>
-          </section>
-        )}
-
-        {results.some((result) => result.success) && (
-          <section className="pipeline-note">
-            <div className="section-label">
-              <span>Classification result</span>
-              <span className="mock-badge live">LIVE</span>
-            </div>
-
-            {results
-              .filter((result) => result.success && result.document_id)
-              .map((result) => {
-                const documentId = result.document_id as string;
-                const document = documentDetails.get(documentId);
-                const status = document?.status ?? result.status ?? 'queued';
-                const isTerminal = TERMINAL_STATUSES.has(status);
-                const extractionNotConfigured =
-                  status === 'failed' && isExtractionNotConfiguredFailure(document?.failure_reason);
-
-                return (
-                  <div key={result.filename} className="mock-classification-row">
-                    <span className="mock-filename">{result.filename}</span>
-                    <div className="mock-classification">
-                      <div>
-                        <span className="mock-label">Status</span>
-                        <span className="mock-value">
-                          {status}
-                          {!isTerminal && '…'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="mock-label">Document type</span>
-                        <span className="mock-value">{document?.document_type ?? '—'}</span>
-                      </div>
-                      <div>
-                        <span className="mock-label">Confidence</span>
-                        <span className="mock-value">
-                          {document?.confidence != null ? document.confidence.toFixed(2) : '—'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="mock-label">Routing outcome</span>
-                        <span className="mock-value">
-                          {document?.classification_outcome ?? '—'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {document?.evidence && document.evidence.length > 0 && (
-                      <ul className="mock-evidence">
-                        {document.evidence.map((item, i) => (
-                          <li key={i}>{item}</li>
-                        ))}
-                      </ul>
-                    )}
-
-                    {document?.document_type === 'unrecognised' && (
-                      <p className="mock-note warning">
-                        This document doesn't match any known KYC category and has been
-                        flagged for manual review.
-                      </p>
-                    )}
-
-                    {extractionNotConfigured && document?.document_type !== 'unrecognised' && (
-                      <p className="mock-note">
-                        Classification succeeded — this failed because the extraction workflow
-                        hasn't been set up in Dify yet, not because of the classifier.
-                      </p>
-                    )}
-
-                    {status === 'failed' && document?.failure_reason && (
-                      <p className="mock-failure-reason">{document.failure_reason}</p>
-                    )}
-                  </div>
-                );
-              })}
-          </section>
-        )}
-      </section>
+          <ul className="requirements-list">
+            {REQUIRED_DOCUMENT_TYPES.map((requirement) => {
+              const isFulfilled = fulfilledRequirements.has(requirement.value);
+              return (
+                <li
+                  key={requirement.value}
+                  className={`requirement-row${isFulfilled ? ' fulfilled' : ''}`}
+                >
+                  <span className="requirement-dot" />
+                  {requirement.label}
+                </li>
+              );
+            })}
+          </ul>
+        </aside>
+      </div>
     </main>
   );
 }
