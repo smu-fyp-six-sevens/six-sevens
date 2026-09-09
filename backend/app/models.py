@@ -93,21 +93,12 @@ class DocumentRecord(BaseModel):
     queued_at: Optional[datetime] = None
     processing_started_at: Optional[datetime] = None
     failure_reason: Optional[str] = None
+    evidence: list[str] = Field(default_factory=list)
 
 
 class UploadResponse(BaseModel):
     document_id: str
     status: DocumentStatus
-
-
-class ClassificationPreviewResponse(BaseModel):
-    """
-    Evidence held in-memory only (see classification_cache.py) — confidence
-    now lives on DocumentRecord.confidence since it's a real, persisted
-    column; this endpoint only covers the part that still isn't persisted.
-    """
-
-    evidence: list[str] = Field(default_factory=list)
 
 
 class BulkUploadItemResult(BaseModel):

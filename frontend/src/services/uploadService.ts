@@ -26,6 +26,7 @@ export interface DocumentRecord {
   queued_at: string | null;
   processing_started_at: string | null;
   failure_reason: string | null;
+  evidence: string[];
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
@@ -41,22 +42,15 @@ export async function getDocument(documentId: string): Promise<DocumentRecord> {
   return (await response.json()) as DocumentRecord;
 }
 
-// Mirrors ClassificationPreviewResponse in backend/app/models.py — evidence
-// held in-memory on the backend only, not persisted to Supabase (confidence
-// lives on DocumentRecord.confidence, a real column, instead).
-export interface ClassificationPreview {
-  evidence: string[];
-}
-
-export async function getClassificationPreview(documentId: string): Promise<ClassificationPreview> {
-  const response = await fetch(`${apiBaseUrl}/documents/${documentId}/classification-preview`);
+export async function listDocuments(caseId: string): Promise<DocumentRecord[]> {
+  const response = await fetch(`${apiBaseUrl}/documents?case_id=${encodeURIComponent(caseId)}`);
 
   if (!response.ok) {
     const detail = await response.text();
-    throw new Error(`Failed to fetch classification preview (${response.status}): ${detail}`);
+    throw new Error(`Failed to fetch documents (${response.status}): ${detail}`);
   }
 
-  return (await response.json()) as ClassificationPreview;
+  return (await response.json()) as DocumentRecord[];
 }
 
 export async function uploadDocuments(caseId: string, files: File[]): Promise<BulkUploadResponse> {

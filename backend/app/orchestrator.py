@@ -4,7 +4,7 @@ import asyncio
 import logging
 import re
 
-from . import classification_cache, document_repository, storage_service
+from . import document_repository, storage_service
 from .config import settings
 from .dify_client import dify_client, DifyInvocationError
 from .models import ClassificationOutcome, DocumentStatus
@@ -177,9 +177,7 @@ async def _run_intake_coordinator(
             }
         ],
     )
-    classification = _unwrap_chatflow_output(result)
-    classification_cache.set_evidence(document_id, classification.get("evidence", []))
-    return classification
+    return _unwrap_chatflow_output(result)
 
 
 def _dify_file_type(filename: str) -> str:
@@ -338,6 +336,7 @@ async def _finalise_classification(document_id: str, classification: dict) -> bo
         document_type=document_type,
         confidence=confidence,
         classification_outcome=outcome.value,
+        evidence=classification.get("evidence", []),
     )
 
     if accepted:
