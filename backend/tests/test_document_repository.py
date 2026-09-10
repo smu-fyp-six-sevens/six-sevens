@@ -139,6 +139,44 @@ def test_list_documents_with_no_filters_does_not_call_eq() -> None:
         mock_client.table.return_value.select.return_value.eq.assert_not_called()
 
 
+def test_update_extracted_fields_sends_fields_and_extraction_confidence() -> None:
+    with patch("app.document_repository.supabase_client") as mock_client:
+        document_repository.update_extracted_fields(
+            "doc-1", {"individual_name": "Jane Tan"}, 0.9
+        )
+
+        update_payload = mock_client.table.return_value.update.call_args[0][0]
+        assert update_payload == {
+            "extracted_fields": {"individual_name": "Jane Tan"},
+            "extraction_confidence": 0.9,
+        }
+        mock_client.table.return_value.update.return_value.eq.assert_called_once_with(
+            "id", "doc-1"
+        )
+
+
+def test_record_escalation_sends_reason() -> None:
+    with patch("app.document_repository.supabase_client") as mock_client:
+        document_repository.record_escalation("doc-1", "reads like a shipping manifest")
+
+        update_payload = mock_client.table.return_value.update.call_args[0][0]
+        assert update_payload == {"escalation_reason": "reads like a shipping manifest"}
+        mock_client.table.return_value.update.return_value.eq.assert_called_once_with(
+            "id", "doc-1"
+        )
+
+
+def test_update_metadata_sends_metadata() -> None:
+    with patch("app.document_repository.supabase_client") as mock_client:
+        document_repository.update_metadata("doc-1", {"Author": "Jane Tan"})
+
+        update_payload = mock_client.table.return_value.update.call_args[0][0]
+        assert update_payload == {"metadata": {"Author": "Jane Tan"}}
+        mock_client.table.return_value.update.return_value.eq.assert_called_once_with(
+            "id", "doc-1"
+        )
+
+
 def test_list_documents_applies_case_id_and_status_filters() -> None:
     with patch("app.document_repository.supabase_client") as mock_client:
         query = mock_client.table.return_value.select.return_value

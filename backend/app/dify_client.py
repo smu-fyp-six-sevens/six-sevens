@@ -26,6 +26,12 @@ def _response_body(exc: Exception) -> str:
     """
     response = getattr(exc, "response", None)
     if response is None:
+        # A client-side timeout/connection failure has no response to read,
+        # and httpx.TimeoutException's own str() is often empty — without
+        # this, the resulting error message is just a bare trailing colon
+        # with no indication of what actually went wrong.
+        if isinstance(exc, httpx.TimeoutException):
+            return " (request timed out)"
         return ""
     try:
         return f" | Dify response: {response.text[:500]}"
@@ -47,8 +53,10 @@ class DifyClient:
     async def run_workflow(
         self,
         workflow_id: str,
-        inputs: dict, 
+        inputs: dict,
         user: str,
+        *,
+        api_key: str | None = None,
     ) -> dict:
         """
         Generic Dify workflow invocation — any workflow_id/inputs shape.
@@ -56,6 +64,12 @@ class DifyClient:
         end-user); omitting it fails with "Arg user must be provided."
         Raises DifyInvocationError on any non-2xx response or network
         failure; callers decide how to handle that (retry, fail, etc).
+
+        `api_key` lets a caller target a different Dify app than the one
+        this client was constructed with (e.g. Extraction has its own
+        DIFY_EXTRACTION_API_KEY, distinct from the default DIFY_API_KEY) —
+        same idea as run_chatflow's api_key param. Falls back to
+        self._headers (built from settings.DIFY_API_KEY) when omitted.
         """
         payload = {
             "workflow_id": workflow_id,
@@ -63,8 +77,13 @@ class DifyClient:
             "response_mode": "blocking",
             "user": user,
         }
+        headers = (
+            {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            if api_key is not None
+            else self._headers
+        )
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=settings.DIFY_REQUEST_TIMEOUT_SECONDS) as client:
             try:
                 response = await client.post(
                     f"{self._base_url}/workflows/run",
@@ -78,7 +97,9 @@ class DifyClient:
                     f"Workflow {workflow_id} invocation failed: {exc}{_response_body(exc)}"
                 ) from exc
 
-    async def run_workflow_with_retry(self, workflow_id: str, inputs: dict, user: str) -> dict:
+    async def run_workflow_with_retry(
+        self, workflow_id: str, inputs: dict, user: str, *, api_key: str | None = None
+    ) -> dict:
         """
         AC3: same as run_workflow, but retries up to
         settings.MAX_INVOCATION_RETRIES times (linear backoff) before giving
@@ -93,7 +114,7 @@ class DifyClient:
         """
         return await self._with_retry(
             f"Workflow {workflow_id}",
-            lambda: self.run_workflow(workflow_id, inputs, user),
+            lambda: self.run_workflow(workflow_id, inputs, user, api_key=api_key),
         )
 
     async def run_chatflow(
@@ -119,7 +140,7 @@ class DifyClient:
             "Content-Type": "application/json",
         }
 
-        async with self._chatflow_semaphore, httpx.AsyncClient(timeout=30.0) as client:
+        async with self._chatflow_semaphore, httpx.AsyncClient(timeout=settings.DIFY_REQUEST_TIMEOUT_SECONDS) as client:
             try:
                 response = await client.post(
                     f"{self._base_url}/chat-messages",

@@ -6,10 +6,10 @@ import logging
 import mimetypes
 import re
 
-from . import classification_cache, document_repository, storage_service
+from . import classification_cache, document_repository, extracted_fields_repository, storage_service
 from .config import settings
 from .dify_client import dify_client, DifyInvocationError
-from .extraction_prompts import build_extraction_prompt
+from .extraction_prompts import EXTRACTION_SCHEMAS, build_extraction_prompt
 from .ingestion.ingestion_service import ingest_document
 from .models import ClassificationOutcome, DocumentStatus
 
@@ -91,7 +91,7 @@ async def _process_document(document_id: str) -> None:
 
     try:
         extraction = await _run_extraction(
-            document_id, document, document, classification["document_type"], raw_text
+            document_id, document, classification["document_type"], raw_text
         )
     except DifyInvocationError as exc:
         await _fail(
@@ -108,6 +108,13 @@ async def _process_document(document_id: str) -> None:
             "Document %s: Extraction escalated classification (%s) — attempt %d/%d",
             document_id, escalation.get("reason"), attempts + 1,
             settings.MAX_RECLASSIFICATION_ATTEMPTS,
+        )
+        # Persisted before re-running Intake Coordinator (not just logged) so
+        # the frontend can show "classification was re-run" regardless of
+        # whether it happens to poll during the reclassification window, and
+        # regardless of what the loop eventually resolves to.
+        await asyncio.to_thread(
+            document_repository.record_escalation, document_id, escalation.get("reason", "")
         )
 
         try:
@@ -144,12 +151,23 @@ async def _process_document(document_id: str) -> None:
         )
         return
 
-    # NEW: persist extracted fields before marking ANALYZED
+    # Persist extracted fields before marking ANALYZED — both the jsonb blob
+    # on documents (what the frontend currently reads) and the normalised
+    # one-row-per-field table (for querying/reporting on individual fields).
+    extracted_fields = extraction.get("extracted_fields", {})
+    extraction_confidence = extraction.get("confidence", 0.0)
     await asyncio.to_thread(
         document_repository.update_extracted_fields,
         document_id,
-        extraction.get("extracted_fields", {}),
-        extraction.get("confidence", 0.0),
+        extracted_fields,
+        extraction_confidence,
+    )
+    await asyncio.to_thread(
+        extracted_fields_repository.replace_extracted_fields,
+        document_id,
+        extracted_fields,
+        confidence=extraction_confidence,
+        required_field_names=set(EXTRACTION_SCHEMAS.get(classification["document_type"], [])),
     )
 
     await asyncio.to_thread(
@@ -177,6 +195,15 @@ async def _extract_raw_text(document_id: str, document) -> str:
         )
     except Exception as exc:
         raise OrchestrationError(f"Text extraction failed: {exc}") from exc
+
+    # Persisted regardless of whether raw_text turns out usable below — file
+    # metadata (author, creation date, software, ...) is independent of text
+    # extraction quality, so a document that fails the check right after
+    # this still keeps whatever metadata was found.
+    if ingestion_result["metadata"]:
+        await asyncio.to_thread(
+            document_repository.update_metadata, document_id, ingestion_result["metadata"]
+        )
 
     if not ingestion_result["raw_text"].strip():
         raise OrchestrationError("Extraction produced no usable text")
@@ -376,8 +403,16 @@ async def _finalise_classification(document_id: str, classification: dict) -> bo
     wouldn't catch (e.g. the sub-classifiers disagreeing despite a
     survivable confidence number).
 
-    Returns True if classification is accepted and extraction should run;
-    False if it's been routed to manual review (FAILED already recorded).
+    Returns True if extraction should run — either because classification was
+    accepted outright, or because it came back "unrecognised", in which case
+    Extraction still runs but against a general, loan-application-relevant
+    field list rather than a type-specific one (see build_extraction_prompt)
+    so a reviewer has something pulled out instead of nothing. classification
+    is still recorded as MANUAL_REVIEW in that case — this only changes
+    whether Extraction runs, not whether the document reads as confidently
+    classified. Returns False only for a *typed* classification that's below
+    the confidence threshold or explicitly flagged for manual review, where
+    FAILED has already been recorded.
     """
     document_type = classification.get("document_type")
     confidence = classification.get("confidence")
@@ -386,8 +421,13 @@ async def _finalise_classification(document_id: str, classification: dict) -> bo
         # Normalise Dify's various ways of saying "no type" (None, "", or the
         # literal words null/none/n/a already folded to None by
         # _parse_chatflow_answer) to the explicit "unrecognised" sentinel so
-        # it's what actually lands in Supabase/the frontend, not NULL.
+        # it's what actually lands in Supabase/the frontend, not NULL. Written
+        # back into the classification dict (not just this local variable) so
+        # the caller's later `classification["document_type"]` reads — used to
+        # build the Extraction prompt — see the normalised value too, rather
+        # than the original None.
         document_type = "unrecognised"
+        classification["document_type"] = document_type
     below_threshold = _is_below_threshold(confidence)
     accepted = not unrecognised and not below_threshold and not classification.get("needs_manual_review")
 
@@ -400,12 +440,10 @@ async def _finalise_classification(document_id: str, classification: dict) -> bo
         classification_outcome=outcome.value,
     )
 
-    if accepted:
+    if accepted or unrecognised:
         return True
 
-    if unrecognised:
-        reason = "Document does not match any known category — flagged for manual review"
-    elif below_threshold:
+    if below_threshold:
         reason = (
             f"Classification confidence ({confidence}) is below the required "
             f"threshold ({settings.CLASSIFICATION_CONFIDENCE_THRESHOLD})"

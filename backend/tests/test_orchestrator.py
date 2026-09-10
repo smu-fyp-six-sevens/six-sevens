@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -51,10 +52,46 @@ def _workflow_output(**outputs) -> dict:
     return {"data": {"outputs": outputs}}
 
 
+def _extraction_output(
+    extracted_fields: dict | None = None,
+    confidence: float = 0.9,
+    escalation: dict | None = None,
+) -> dict:
+    """
+    Wraps outputs the way the Extraction workflow actually replies: a
+    single `llm_output` string containing the JSON payload (see
+    orchestrator._parse_extraction_output), not a raw outputs dict.
+    """
+    payload = {
+        "extracted_fields": extracted_fields or {},
+        "confidence": confidence,
+        "escalation": escalation,
+    }
+    return _workflow_output(llm_output=json.dumps(payload))
+
+
+def _stub_ingestion(
+    mock_storage, mock_ingest, raw_text: str = "sample document text", metadata: dict | None = None
+) -> None:
+    """
+    Any test that reaches Extraction goes through _extract_raw_text first,
+    which downloads the file then runs it through ingestion_service.ingest_document
+    — stub both so that step succeeds without touching real bytes/OCR.
+    """
+    mock_storage.download_file.return_value = b"%PDF-1.4 fake bytes"
+    mock_ingest.return_value = {
+        "raw_text": raw_text,
+        "needs_review": False,
+        "extraction_method": "native_pdf",
+        "metadata": metadata if metadata is not None else {},
+    }
+
+
 @pytest.mark.asyncio
 async def test_document_not_found_returns_without_updating_status() -> None:
     with (
         patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository") as mock_fields_repo,
         patch("app.orchestrator.dify_client") as mock_dify,
     ):
         mock_repo.get_document.return_value = None
@@ -70,16 +107,19 @@ async def test_document_not_found_returns_without_updating_status() -> None:
 async def test_no_escalation_marks_analyzed() -> None:
     with (
         patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository") as mock_fields_repo,
         patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
         patch("app.orchestrator.dify_client") as mock_dify,
     ):
         mock_repo.get_document.return_value = _make_document()
         mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest)
         mock_dify.run_chatflow_with_retry = AsyncMock(
             return_value=_chat_output(document_type="payslip", confidence=0.9, needs_manual_review=False)
         )
         mock_dify.run_workflow_with_retry = AsyncMock(
-            return_value=_workflow_output(document_type="payslip")  # no "escalation" key
+            return_value=_extraction_output(extracted_fields={"individual_name": "Jane Tan"}, confidence=0.95)
         )
 
         await orchestrator.process_document("doc-1")
@@ -89,23 +129,92 @@ async def test_no_escalation_marks_analyzed() -> None:
         mock_repo.update_status.assert_called_once_with(
             "doc-1", DocumentStatus.ANALYZED, document_type="payslip"
         )
+        mock_repo.update_extracted_fields.assert_called_once_with(
+            "doc-1", {"individual_name": "Jane Tan"}, 0.95
+        )
+        # Also mirrored into the normalised one-row-per-field table — with
+        # required_field_names drawn from payslip's own extraction schema so
+        # field_category can distinguish "required" from LLM-added extras.
+        mock_fields_repo.replace_extracted_fields.assert_called_once_with(
+            "doc-1",
+            {"individual_name": "Jane Tan"},
+            confidence=0.95,
+            required_field_names={"individual_name", "company_name", "net_pay"},
+        )
+
+
+@pytest.mark.asyncio
+async def test_metadata_persisted_when_present() -> None:
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository") as mock_fields_repo,
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
+        patch("app.orchestrator.dify_client") as mock_dify,
+    ):
+        mock_repo.get_document.return_value = _make_document()
+        mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(
+            mock_storage, mock_ingest, metadata={"Author": "Jane Tan", "Software": "Acrobat"}
+        )
+        mock_dify.run_chatflow_with_retry = AsyncMock(
+            return_value=_chat_output(document_type="payslip", confidence=0.9, needs_manual_review=False)
+        )
+        mock_dify.run_workflow_with_retry = AsyncMock(
+            return_value=_extraction_output(extracted_fields={"individual_name": "Jane Tan"})
+        )
+
+        await orchestrator.process_document("doc-1")
+
+        # Persisted as soon as it's available (during raw-text extraction),
+        # independent of whether classification/Extraction later succeed.
+        mock_repo.update_metadata.assert_called_once_with(
+            "doc-1", {"Author": "Jane Tan", "Software": "Acrobat"}
+        )
+
+
+@pytest.mark.asyncio
+async def test_metadata_not_persisted_when_empty() -> None:
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository") as mock_fields_repo,
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
+        patch("app.orchestrator.dify_client") as mock_dify,
+    ):
+        mock_repo.get_document.return_value = _make_document()
+        mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest, metadata={})
+        mock_dify.run_chatflow_with_retry = AsyncMock(
+            return_value=_chat_output(document_type="payslip", confidence=0.9, needs_manual_review=False)
+        )
+        mock_dify.run_workflow_with_retry = AsyncMock(
+            return_value=_extraction_output(extracted_fields={"individual_name": "Jane Tan"})
+        )
+
+        await orchestrator.process_document("doc-1")
+
+        mock_repo.update_metadata.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_intake_coordinator_uploads_signed_url_of_the_document() -> None:
     with (
         patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository") as mock_fields_repo,
         patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
         patch("app.orchestrator.dify_client") as mock_dify,
     ):
         document = _make_document()
         mock_repo.get_document.return_value = document
         mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest)
         mock_dify.run_chatflow_with_retry = AsyncMock(
             return_value=_chat_output(document_type="payslip", confidence=0.9, needs_manual_review=False)
         )
         mock_dify.run_workflow_with_retry = AsyncMock(
-            return_value=_workflow_output(document_type="payslip")
+            return_value=_extraction_output(extracted_fields={"individual_name": "Jane Tan"})
         )
 
         await orchestrator.process_document("doc-1")
@@ -143,43 +252,85 @@ async def test_intake_coordinator_uploads_signed_url_of_the_document() -> None:
 
 
 @pytest.mark.asyncio
-async def test_low_confidence_classification_fails_before_extraction() -> None:
+async def test_typed_low_confidence_classification_fails_before_extraction() -> None:
     with (
         patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository") as mock_fields_repo,
         patch("app.orchestrator.storage_service") as mock_storage,
         patch("app.orchestrator.dify_client") as mock_dify,
     ):
         mock_repo.get_document.return_value = _make_document()
         mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
         mock_dify.run_chatflow_with_retry = AsyncMock(
-            return_value=_chat_output(document_type=None, confidence=0.2, needs_manual_review=True)
+            return_value=_chat_output(document_type="payslip", confidence=0.2, needs_manual_review=False)
         )
         mock_dify.run_workflow_with_retry = AsyncMock()
 
         await orchestrator.process_document("doc-1")
 
-        # Only the Intake Coordinator ran — Extraction never gets called on
-        # a classification that already needs manual review.
+        # A real type guess that's just below the confidence threshold still
+        # fails before Extraction ever runs — unlike "unrecognised" (see
+        # test_unrecognised_classification_still_runs_general_extraction),
+        # there's no fallback field list to fall back to here.
         assert mock_dify.run_chatflow_with_retry.await_count == 1
         mock_dify.run_workflow_with_retry.assert_not_called()
         args, kwargs = mock_repo.update_status.call_args
         assert args[0] == "doc-1"
         assert args[1] == DocumentStatus.FAILED
-        # The mocked output had no type guess at all (None) — confirms that
-        # gets normalised to the "unrecognised" sentinel rather than being
-        # persisted as NULL, so Supabase/the frontend see an explicit value.
-        assert kwargs["document_type"] == "unrecognised"
+        assert kwargs["document_type"] == "payslip"
+
+
+@pytest.mark.asyncio
+async def test_unrecognised_classification_still_runs_general_extraction() -> None:
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository") as mock_fields_repo,
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
+        patch("app.orchestrator.dify_client") as mock_dify,
+    ):
+        mock_repo.get_document.return_value = _make_document()
+        mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest)
+        mock_dify.run_chatflow_with_retry = AsyncMock(
+            return_value=_chat_output(document_type=None, confidence=0.2, needs_manual_review=True)
+        )
+        mock_dify.run_workflow_with_retry = AsyncMock(
+            return_value=_extraction_output(extracted_fields={"company_name": "Acme"}, confidence=0.4)
+        )
+
+        await orchestrator.process_document("doc-1")
+
+        # Classification is still recorded as manual_review (the type guess
+        # had no real category at all), but Extraction runs anyway — with
+        # the general/loan-application field list build_extraction_prompt
+        # falls back to for document_type == "unrecognised" — rather than
+        # being skipped outright, so a reviewer gets something to look at.
+        assert mock_dify.run_chatflow_with_retry.await_count == 1
+        assert mock_dify.run_workflow_with_retry.await_count == 1
+        mock_repo.record_classification.assert_called_once_with(
+            "doc-1",
+            document_type="unrecognised",
+            confidence=0.2,
+            classification_outcome="manual_review",
+        )
+        mock_repo.update_status.assert_called_once_with(
+            "doc-1", DocumentStatus.ANALYZED, document_type="unrecognised"
+        )
 
 
 @pytest.mark.asyncio
 async def test_escalation_resolves_on_reclassification() -> None:
     with (
         patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository") as mock_fields_repo,
         patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
         patch("app.orchestrator.dify_client") as mock_dify,
     ):
         mock_repo.get_document.return_value = _make_document()
         mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest)
         mock_dify.run_chatflow_with_retry = AsyncMock(
             side_effect=[
                 # 1st Intake Coordinator call
@@ -191,12 +342,9 @@ async def test_escalation_resolves_on_reclassification() -> None:
         mock_dify.run_workflow_with_retry = AsyncMock(
             side_effect=[
                 # 1st Extraction call — escalates
-                _workflow_output(
-                    document_type="payslip",
-                    escalation={"reason": "reads like a shipping manifest"},
-                ),
+                _extraction_output(escalation={"reason": "reads like a shipping manifest"}),
                 # 2nd Extraction call — no escalation this time
-                _workflow_output(document_type="list_of_loans"),
+                _extraction_output(extracted_fields={"loan_amount": "SGD 10,000"}, confidence=0.85),
             ]
         )
 
@@ -209,13 +357,20 @@ async def test_escalation_resolves_on_reclassification() -> None:
         mock_repo.update_status.assert_called_once_with(
             "doc-1", DocumentStatus.ANALYZED, document_type="list_of_loans"
         )
+        # Persisted so the frontend can show "classification was re-run" even
+        # though the document ultimately resolved cleanly.
+        mock_repo.record_escalation.assert_called_once_with(
+            "doc-1", "reads like a shipping manifest"
+        )
 
 
 @pytest.mark.asyncio
 async def test_escalation_cap_routes_to_manual_review() -> None:
     with (
         patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository") as mock_fields_repo,
         patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
         patch("app.orchestrator.settings") as mock_settings,
         patch("app.orchestrator.dify_client") as mock_dify,
     ):
@@ -225,9 +380,10 @@ async def test_escalation_cap_routes_to_manual_review() -> None:
         mock_settings.DIFY_CLASSIFIER_API_KEY = "classifier-key"
         mock_repo.get_document.return_value = _make_document()
         mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest)
 
         classifying = _chat_output(document_type="payslip", confidence=0.9, needs_manual_review=False)
-        escalating = _workflow_output(document_type="payslip", escalation={"reason": "still doesn't fit"})
+        escalating = _extraction_output(escalation={"reason": "still doesn't fit"})
         # Intake -> Extraction(escalate) -> Intake -> Extraction(escalate)
         # -> Intake -> Extraction(escalate) : cap of 2 attempts exhausted
         mock_dify.run_chatflow_with_retry = AsyncMock(
@@ -243,13 +399,19 @@ async def test_escalation_cap_routes_to_manual_review() -> None:
         assert args[0] == "doc-1"
         assert args[1] == DocumentStatus.FAILED
         assert "Unresolved after 2 reclassification" in kwargs["failure_reason"]
+        assert "still doesn't fit" in kwargs["failure_reason"]
         assert kwargs["document_type"] == "payslip"
+        # Escalation is recorded on every attempt, not just the first —
+        # each one is a real re-run of Intake Coordinator.
+        assert mock_repo.record_escalation.call_count == 2
+        mock_repo.record_escalation.assert_called_with("doc-1", "still doesn't fit")
 
 
 @pytest.mark.asyncio
 async def test_intake_coordinator_invocation_failure_marks_failed() -> None:
     with (
         patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository") as mock_fields_repo,
         patch("app.orchestrator.storage_service") as mock_storage,
         patch("app.orchestrator.dify_client") as mock_dify,
     ):
@@ -271,11 +433,14 @@ async def test_intake_coordinator_invocation_failure_marks_failed() -> None:
 async def test_extraction_invocation_failure_marks_failed() -> None:
     with (
         patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository") as mock_fields_repo,
         patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
         patch("app.orchestrator.dify_client") as mock_dify,
     ):
         mock_repo.get_document.return_value = _make_document()
         mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest)
         mock_dify.run_chatflow_with_retry = AsyncMock(
             return_value=_chat_output(document_type="payslip", confidence=0.9, needs_manual_review=False)
         )

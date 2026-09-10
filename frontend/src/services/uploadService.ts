@@ -26,7 +26,18 @@ export interface DocumentRecord {
   queued_at: string | null;
   processing_started_at: string | null;
   failure_reason: string | null;
+  extracted_fields: Record<string, unknown> | null;
+  // Extraction's own confidence in extracted_fields — separate from
+  // `confidence` above (the classifier's), never overwrites it.
+  extraction_confidence: number | null;
+  escalation_reason: string | null;
+  metadata: Record<string, unknown> | null;
 }
+
+// Mirrors settings.EXTRACTION_CONFIDENCE_THRESHOLD in backend/app/config.py —
+// below this, the UI renders extracted fields as editable so a loan officer
+// can correct values the LLM wasn't confident about.
+export const EXTRACTION_CONFIDENCE_THRESHOLD = 0.7;
 
 const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 
@@ -57,6 +68,24 @@ export async function getClassificationPreview(documentId: string): Promise<Clas
   }
 
   return (await response.json()) as ClassificationPreview;
+}
+
+export async function updateExtractedFields(
+  documentId: string,
+  extractedFields: Record<string, unknown>,
+): Promise<DocumentRecord> {
+  const response = await fetch(`${apiBaseUrl}/documents/${documentId}/extracted-fields`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ extracted_fields: extractedFields }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to save extracted fields (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as DocumentRecord;
 }
 
 export async function uploadDocuments(caseId: string, files: File[]): Promise<BulkUploadResponse> {

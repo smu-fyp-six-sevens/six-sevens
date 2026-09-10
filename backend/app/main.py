@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from .health import check_db_connection
 from .queue_service import document_queue
-from .routers import injection, cases, documents, monitoring, upload
+from .routers import extraction, injection, cases, documents, monitoring, upload
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,7 @@ app.include_router(upload.router)
 app.include_router(documents.router)
 app.include_router(monitoring.router)
 app.include_router(injection.router)
+app.include_router(extraction.router)
 
 
 @app.get("/health")

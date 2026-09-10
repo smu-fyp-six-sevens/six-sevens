@@ -26,6 +26,21 @@ def test_bank_statement_fields():
     prompt = build_extraction_prompt("bank_statement", "sample text")
     assert "account_number" in prompt
     assert "bank_name" in prompt
+    assert "transactions" in prompt
+
+
+def test_bank_statement_includes_transaction_structure_guidance():
+    prompt = build_extraction_prompt("bank_statement", "sample text")
+    assert "array of objects" in prompt
+    assert '"amount"' in prompt
+    assert '"balance"' in prompt
+
+
+def test_typed_prompt_marks_schema_fields_required_and_allows_extras():
+    prompt = build_extraction_prompt("payslip", "sample text")
+    assert "REQUIRED" in prompt
+    assert "OTHER fields" in prompt
+    assert "loan application" in prompt.lower()
 
 
 def test_id_document_fields():
@@ -33,3 +48,12 @@ def test_id_document_fields():
     assert "id_number" in prompt
     assert "date_of_birth" in prompt
     assert "nationality" in prompt
+
+
+def test_unrecognised_document_type_builds_general_prompt():
+    prompt = build_extraction_prompt("unrecognised", "sample text")
+    for field in EXTRACTION_SCHEMAS["unrecognised"]:
+        assert field in prompt
+    # There's no expected type here to escalate against, so the general
+    # prompt shouldn't ask the model to judge a mismatch — just extract.
+    assert "does not actually look like" not in prompt.lower()

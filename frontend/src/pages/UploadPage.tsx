@@ -2,7 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CaseRecord } from '../App';
 import DropZone from '../components/DropZone';
 import FileRow from '../components/FileRow';
-import { getClassificationPreview, getDocument, uploadDocuments } from '../services/uploadService';
+import {
+  EXTRACTION_CONFIDENCE_THRESHOLD,
+  getClassificationPreview,
+  getDocument,
+  updateExtractedFields,
+  uploadDocuments,
+} from '../services/uploadService';
 import type {
   BulkUploadItemResult,
   ClassificationPreview,
@@ -31,6 +37,31 @@ function isExtractionNotConfiguredFailure(reason: string | null | undefined): bo
   return Boolean(reason?.startsWith('Extraction invocation failed'));
 }
 
+// Extracted field keys are snake_case identifiers (e.g. "bank_name",
+// "id_number") since they're also used as object keys sent back on save —
+// this only affects how they're displayed, not the underlying data.
+const FIELD_KEY_ACRONYMS = new Set(['id', 'uen', 'tin', 'nric']);
+
+function humanizeFieldKey(key: string): string {
+  return key
+    .split('_')
+    .filter(Boolean)
+    .map((word) =>
+      FIELD_KEY_ACRONYMS.has(word.toLowerCase())
+        ? word.toUpperCase()
+        : word.charAt(0).toUpperCase() + word.slice(1),
+    )
+    .join(' ');
+}
+
+function fieldsToDraft(fields: Record<string, unknown>): Record<string, string> {
+  const draft: Record<string, string> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    draft[key] = value === null || value === undefined ? '' : String(value);
+  }
+  return draft;
+}
+
 function describeIssue(issue: FileIssue): string {
   switch (issue.type) {
     case 'empty':
@@ -57,6 +88,9 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
   const [classificationPreviews, setClassificationPreviews] = useState<
     Map<string, ClassificationPreview>
   >(new Map());
+  const [fieldDrafts, setFieldDrafts] = useState<Map<string, Record<string, string>>>(new Map());
+  const [savingFields, setSavingFields] = useState<Set<string>>(new Set());
+  const [saveFieldErrors, setSaveFieldErrors] = useState<Map<string, string>>(new Map());
 
   const isMountedRef = useRef(true);
   useEffect(() => {
@@ -156,6 +190,65 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
       setError(err instanceof Error ? err.message : 'Upload failed.');
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  function getFieldDraft(documentId: string, extractedFields: Record<string, unknown>): Record<string, string> {
+    return fieldDrafts.get(documentId) ?? fieldsToDraft(extractedFields);
+  }
+
+  function setFieldDraftValue(documentId: string, extractedFields: Record<string, unknown>, key: string, value: string) {
+    setFieldDrafts((current) => {
+      const next = new Map(current);
+      const draft = { ...getFieldDraft(documentId, extractedFields), [key]: value };
+      next.set(documentId, draft);
+      return next;
+    });
+  }
+
+  async function saveFieldDraft(documentId: string) {
+    const draft = fieldDrafts.get(documentId);
+    if (!draft) return;
+
+    setSavingFields((current) => new Set(current).add(documentId));
+    setSaveFieldErrors((current) => {
+      const next = new Map(current);
+      next.delete(documentId);
+      return next;
+    });
+
+    // Empty string means "cleared by the officer" — send null rather than ""
+    // so it reads as "not present" the same way an LLM-omitted field does.
+    const payload: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(draft)) {
+      payload[key] = value.trim() === '' ? null : value;
+    }
+
+    try {
+      const updated = await updateExtractedFields(documentId, payload);
+      if (!isMountedRef.current) return;
+      setDocumentDetails((current) => new Map(current).set(documentId, updated));
+      setFieldDrafts((current) => {
+        const next = new Map(current);
+        next.delete(documentId);
+        return next;
+      });
+    } catch (err) {
+      if (!isMountedRef.current) return;
+      setSaveFieldErrors((current) =>
+        new Map(current).set(
+          documentId,
+          err instanceof Error ? err.message : 'Failed to save fields.',
+        ),
+      );
+    } finally {
+      if (isMountedRef.current) {
+        setSavingFields((current) => {
+          const next = new Set(current);
+          next.delete(documentId);
+          return next;
+        });
+      }
     }
   }
 
@@ -269,29 +362,6 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
         {results.some((result) => result.success) && (
           <section className="pipeline-note">
             <div className="section-label">
-              <span>Next step</span>
-              <span>Document processing</span>
-            </div>
-            <div className="pipeline">
-              <span className="pstage done">Uploaded</span>
-              <span className="pconnector" />
-              <span className="pstage pending">Extracting</span>
-              <span className="pconnector" />
-              <span className="pstage pending">Quality check</span>
-              <span className="pconnector" />
-              <span className="pstage pending">Result</span>
-            </div>
-            <p>
-              Upload succeeded. The extraction and quality-check details are not returned by
-              the current upload API, so this UI leaves those stages pending rather than
-              inventing processing results.
-            </p>
-          </section>
-        )}
-
-        {results.some((result) => result.success) && (
-          <section className="pipeline-note">
-            <div className="section-label">
               <span>Classification result</span>
               <span className="mock-badge live">LIVE</span>
             </div>
@@ -344,6 +414,85 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
                       </ul>
                     )}
 
+                    {document?.escalation_reason && (
+                      <p className="mock-note warning">
+                        Classification was re-run — Extraction flagged that this didn't look
+                        like the initial guess: "{document.escalation_reason}"
+                      </p>
+                    )}
+
+                    {status === 'analyzed' && document?.extracted_fields && (
+                      <>
+                        <div className="section-label" style={{ marginTop: 10 }}>
+                          <span>Extracted fields</span>
+                          <span>
+                            Extraction confidence:{' '}
+                            {document.extraction_confidence != null
+                              ? document.extraction_confidence.toFixed(2)
+                              : '—'}
+                          </span>
+                        </div>
+
+                        {document.extraction_confidence != null &&
+                        document.extraction_confidence < EXTRACTION_CONFIDENCE_THRESHOLD ? (
+                          <>
+                            <p className="mock-note warning">
+                              Low extraction confidence — review and correct these fields before
+                              relying on them.
+                            </p>
+                            <div className="kv-grid kv-grid--editable">
+                              {Object.entries(
+                                getFieldDraft(documentId, document.extracted_fields),
+                              ).map(([key, value]) => (
+                                <div key={key} className="kv-row">
+                                  <span className="kv-key">{humanizeFieldKey(key)}</span>
+                                  <input
+                                    className="kv-input"
+                                    value={value}
+                                    disabled={savingFields.has(documentId)}
+                                    onChange={(event) =>
+                                      setFieldDraftValue(
+                                        documentId,
+                                        document.extracted_fields as Record<string, unknown>,
+                                        key,
+                                        event.target.value,
+                                      )
+                                    }
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                            <div className="action-bar" style={{ marginTop: 10 }}>
+                              <span className="count">
+                                {saveFieldErrors.get(documentId) ?? 'Edits are saved to Supabase.'}
+                              </span>
+                              <button
+                                type="button"
+                                className="upload-btn"
+                                disabled={savingFields.has(documentId)}
+                                onClick={() => {
+                                  void saveFieldDraft(documentId);
+                                }}
+                              >
+                                {savingFields.has(documentId) ? 'Saving…' : 'Save fields'}
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="kv-grid">
+                            {Object.entries(document.extracted_fields).map(([key, value]) => (
+                              <div key={key} className="kv-row">
+                                <span className="kv-key">{humanizeFieldKey(key)}</span>
+                                <span className="kv-value">
+                                  {value === null || value === undefined ? '—' : String(value)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+
                     {document?.document_type === 'unrecognised' && (
                       <p className="mock-note warning">
                         This document doesn't match any known KYC category and has been
@@ -366,11 +515,12 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
               })}
 
             <p>
-              Status, document type, confidence, and routing outcome are all persisted in
-              Supabase and come from GET /documents/&#123;id&#125;. Evidence is the one field
-              still not persisted — it comes from GET /documents/&#123;id&#125;/classification-preview,
-              an in-memory cache on the backend that clears on restart. Both are polled every
-              {' '}{POLL_INTERVAL_MS / 1000}s until classification finishes.
+              Status, document type, confidence, routing outcome, and (once analyzed) extracted
+              fields are all persisted in Supabase and come from GET /documents/&#123;id&#125;.
+              Evidence is the one field still not persisted — it comes from GET
+              /documents/&#123;id&#125;/classification-preview, an in-memory cache on the backend
+              that clears on restart. Both are polled every {POLL_INTERVAL_MS / 1000}s until
+              extraction finishes.
             </p>
           </section>
         )}

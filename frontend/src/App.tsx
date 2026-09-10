@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import CaseQueuePage from './pages/CaseQueuePage';
+import ExtractionTestPage from './pages/ExtractionTestPage';
 import UploadPage from './pages/UploadPage';
 
 export interface CaseRecord {
@@ -35,6 +36,7 @@ export default function App() {
   const [selectedCase, setSelectedCase] = useState<CaseRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showExtractionTest, setShowExtractionTest] = useState(false);
 
   async function loadCases(signal?: AbortSignal) {
     setIsLoading(true);
@@ -89,6 +91,10 @@ export default function App() {
     return () => controller.abort();
   }, []);
 
+  if (showExtractionTest) {
+    return <ExtractionTestPage onBack={() => setShowExtractionTest(false)} />;
+  }
+
   if (selectedCase) {
     return (
       <UploadPage
@@ -105,6 +111,7 @@ export default function App() {
       error={error}
       onRetry={() => void loadCases()}
       onOpenCase={setSelectedCase}
+      onOpenExtractionTest={() => setShowExtractionTest(true)}
     />
   );
 }

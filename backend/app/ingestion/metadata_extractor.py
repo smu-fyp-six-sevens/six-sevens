@@ -1,7 +1,10 @@
 import json
+import logging
 import subprocess
 import tempfile
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def extract_metadata(
@@ -37,6 +40,10 @@ def extract_metadata(
         if data:
             return data[0]
 
+        return {}
+
+    except (FileNotFoundError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        logger.warning("Metadata extraction unavailable for %s: %s", file_name, exc)
         return {}
 
     finally:

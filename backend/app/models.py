@@ -84,6 +84,9 @@ class DocumentRecord(BaseModel):
     case_id: Optional[str] = None
     filename: str
     document_type: Optional[str] = None
+    # The Classifier's confidence in document_type — set once at classification
+    # and never overwritten by Extraction. See extraction_confidence below for
+    # the separate, later stage's own confidence in the field values it found.
     confidence: Optional[float] = None
     classification_outcome: Optional[ClassificationOutcome] = None
     storage_path: Optional[str] = None
@@ -93,6 +96,23 @@ class DocumentRecord(BaseModel):
     queued_at: Optional[datetime] = None
     processing_started_at: Optional[datetime] = None
     failure_reason: Optional[str] = None
+    extracted_fields: Optional[dict] = None
+    # Extraction's own confidence in the values it pulled into extracted_fields
+    # — distinct from (and no longer overwrites) the classifier's `confidence`
+    # above. Set to 1.0 when a loan officer manually saves corrected fields.
+    extraction_confidence: Optional[float] = None
+    escalation_reason: Optional[str] = None
+    metadata: Optional[dict] = None
+
+
+class UpdateExtractedFieldsRequest(BaseModel):
+    """
+    A loan officer's manual correction of low-confidence extracted fields.
+    Replaces the full extracted_fields dict (not a per-field patch) since
+    the frontend always edits the complete set it was shown.
+    """
+
+    extracted_fields: dict
 
 
 class UploadResponse(BaseModel):
@@ -126,6 +146,33 @@ class DocumentDownloadResponse(BaseModel):
     document_id: str
     signed_url: str
     expires_in: int
+
+
+class ExtractionTestPage(BaseModel):
+    """
+    One page's worth of extraction output. `elements` shape depends on
+    extraction_method: native-PDF elements carry font/size/flags, OCR
+    elements carry a per-line confidence score — kept as free-form dicts
+    here rather than a union model since this endpoint is a debugging
+    window onto whatever ingest_document actually returned.
+    """
+
+    page_number: int
+    text: str
+    elements: list[dict] = Field(default_factory=list)
+
+
+class ExtractionTestResponse(BaseModel):
+    """Mirrors the dict returned by ingestion.ingestion_service.ingest_document."""
+
+    file_name: str
+    file_type: str
+    metadata: dict = Field(default_factory=dict)
+    extraction_method: str
+    raw_text: str
+    pages: list[ExtractionTestPage]
+    needs_review: bool
+    status: str
 
 
 class StuckDocument(BaseModel):
