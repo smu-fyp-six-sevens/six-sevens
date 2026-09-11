@@ -23,16 +23,31 @@ export default function CaseQueuePage({
   onOpenCase,
 }: CaseQueuePageProps) {
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const statusOptions = useMemo(() => {
+    const statuses = cases
+      .map((item) => item.status)
+      .filter(Boolean);
+
+    return Array.from(new Set(statuses));
+  }, [cases]);
 
   const matches = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return cases;
 
-    return cases.filter((item) =>
-      [displayCaseNumber(item), item.id, item.applicant, item.type, item.status]
-        .some((value) => value.toLowerCase().includes(query)),
-    );
-  }, [cases, search]);
+    return cases.filter((item) => {
+      const matchesSearch =
+        !query ||
+        [displayCaseNumber(item), item.applicant]
+          .some((value) => value.toLowerCase().includes(query));
+
+      const matchesStatus =
+        statusFilter === 'all' ||
+        item.status === statusFilter;
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [cases, search, statusFilter]);
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -71,8 +86,29 @@ export default function CaseQueuePage({
           <button className="go-btn" type="submit">Go</button>
         </form>
 
+        <div className="filter-row">
+          <label htmlFor="status-filter">
+            Filter by status
+          </label>
+
+          <select
+            id="status-filter"
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+          >
+            <option value="all">All statuses</option>
+
+            {statusOptions.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </select>
+        </div>
+
+
         <div className="queue-label">
-          Assigned to you ({cases.length})
+          Assigned to you ({matches.length})
         </div>
 
         {isLoading ? (

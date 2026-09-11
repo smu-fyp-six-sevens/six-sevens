@@ -186,7 +186,7 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
         </button>
 
         <p className="eyebrow">
-          Case #{selectedCase.id} · {selectedCase.type} — {selectedCase.applicant}
+          Case #{selectedCase.caseNumber} · {selectedCase.type} — {selectedCase.applicant}
         </p>
         <h1>Upload supporting documents</h1>
         <p className="sub">
