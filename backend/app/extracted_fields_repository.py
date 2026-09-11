@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 from .supabase_client import supabase_client
-
+from .fraud_detection.font_consistency_v2 import ExtractedField
 
 def _infer_field_type(value: object) -> str:
     if value is None:
@@ -61,3 +61,19 @@ def replace_extracted_fields(
         for name, value in fields.items()
     ]
     supabase_client.table("extracted_fields").insert(rows).execute()
+
+
+
+def get_extracted_fields(document_id: str) -> list[ExtractedField]:
+    """
+    Extra columns on the extracted_fields table (id, document_id, idx,
+    extracted_at, field_category, ...) are dropped automatically —
+    ExtractedField only declares what font_consistency_v2 actually uses.
+    """
+    result = (
+        supabase_client.table("extracted_fields")
+        .select("*")
+        .eq("document_id", document_id)
+        .execute()
+    )
+    return [ExtractedField(**row) for row in result.data]

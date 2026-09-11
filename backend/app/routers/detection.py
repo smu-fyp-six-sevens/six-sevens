@@ -5,15 +5,19 @@ import logging
 
 from fastapi import APIRouter, HTTPException, status
 
-from .. import document_repository, storage_service
+from .. import document_repository, extracted_fields_repository, storage_service
 from ..fraud_detection.font_consistency import FontConsistencyResult, check_font_consistency
+from ..fraud_detection.font_consistency_v2 import (
+    ExtractedField,
+    FontConsistencyResultV2,
+    check_font_consistency_v2,
+)
 
 router = APIRouter(prefix="/documents", tags=["detection"])
 logger = logging.getLogger(__name__)
 
 
-@router.get("/{document_id}/detection/font-consistency", response_model=FontConsistencyResult)
-async def get_font_consistency(document_id: str) -> FontConsistencyResult:
+async def _fetch_document_bytes(document_id: str) -> bytes:
     try:
         document = await asyncio.to_thread(document_repository.get_document, document_id)
     except Exception as exc:
@@ -31,7 +35,7 @@ async def get_font_consistency(document_id: str) -> FontConsistencyResult:
         )
 
     try:
-        file_bytes = await asyncio.to_thread(storage_service.download_file, document.storage_path)
+        return await asyncio.to_thread(storage_service.download_file, document.storage_path)
     except Exception as exc:
         logger.exception("Failed to download document %s from storage", document_id)
         raise HTTPException(
@@ -39,4 +43,32 @@ async def get_font_consistency(document_id: str) -> FontConsistencyResult:
             detail="Failed to fetch the document from storage",
         ) from exc
 
+
+@router.get("/{document_id}/detection/font-consistency", response_model=FontConsistencyResult)
+async def get_font_consistency(document_id: str) -> FontConsistencyResult:
+    file_bytes = await _fetch_document_bytes(document_id)
     return await asyncio.to_thread(check_font_consistency, document_id, file_bytes)
+
+
+async def _fetch_extracted_fields(document_id: str) -> list[ExtractedField]:
+    # Extracted fields are an enrichment, not a prerequisite — the check
+    # still runs meaningfully without them (row-level only), so a fetch
+    # failure here degrades gracefully instead of failing the request.
+    try:
+        return await asyncio.to_thread(
+            extracted_fields_repository.get_extracted_fields, document_id
+        )
+    except Exception:
+        logger.exception("Failed to fetch extracted fields for document %s", document_id)
+        return []
+
+
+@router.get(
+    "/{document_id}/detection/font-consistency-v2", response_model=FontConsistencyResultV2
+)
+async def get_font_consistency_v2(document_id: str) -> FontConsistencyResultV2:
+    file_bytes = await _fetch_document_bytes(document_id)
+    extracted_fields = await _fetch_extracted_fields(document_id)
+    return await asyncio.to_thread(
+        check_font_consistency_v2, document_id, file_bytes, extracted_fields
+    )
