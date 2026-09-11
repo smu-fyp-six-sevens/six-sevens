@@ -256,3 +256,65 @@ def test_get_document_download_url() -> None:
     assert body["document_id"] == "doc-1"
     assert body["signed_url"] == "https://example.supabase.co/signed/doc-1"
     assert body["expires_in"] == settings.SIGNED_URL_EXPIRY_SECONDS
+
+
+def test_update_extracted_fields_success() -> None:
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+    ):
+        original = DocumentRecord(
+            id="doc-1",
+            case_id="case-1",
+            filename="payslip.pdf",
+            document_type="payslip",
+            storage_path="case-1/doc-1_payslip.pdf",
+            status=DocumentStatus.ANALYZED,
+            uploaded_at="2026-08-26T00:00:00Z",
+        )
+        updated = original.model_copy(
+            update={
+                "extracted_fields": {"individual_name": "Jane Tan (corrected)"},
+                "extraction_confidence": 1.0,
+            }
+        )
+        mock_repo.get_document.side_effect = [original, updated]
+
+        response = client.patch(
+            "/documents/doc-1/extracted-fields",
+            json={"extracted_fields": {"individual_name": "Jane Tan (corrected)"}},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["extracted_fields"] == {"individual_name": "Jane Tan (corrected)"}
+    assert body["extraction_confidence"] == 1.0
+
+    mock_repo.update_extracted_fields.assert_called_once_with(
+        "doc-1", {"individual_name": "Jane Tan (corrected)"}, 1.0
+    )
+    # required_field_names drawn from the document's own document_type
+    # ("payslip") so field_category reflects the same required/additional
+    # split as the automated pipeline's own save.
+    mock_fields_repo.replace_extracted_fields.assert_called_once_with(
+        "doc-1",
+        {"individual_name": "Jane Tan (corrected)"},
+        confidence=1.0,
+        required_field_names={"individual_name", "company_name", "net_pay"},
+    )
+
+
+def test_update_extracted_fields_not_found() -> None:
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+    ):
+        mock_repo.get_document.return_value = None
+
+        response = client.patch(
+            "/documents/missing-id/extracted-fields",
+            json={"extracted_fields": {"a": "b"}},
+        )
+
+    assert response.status_code == 404
+    mock_fields_repo.replace_extracted_fields.assert_not_called()

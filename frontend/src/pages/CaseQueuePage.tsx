@@ -9,6 +9,7 @@ interface CaseQueuePageProps {
   error: string | null;
   onRetry: () => void;
   onOpenCase: (caseRecord: CaseRecord) => void;
+  onOpenExtractionTest: () => void;
   onCreateCase: () => void;
 }
 
@@ -22,6 +23,7 @@ export default function CaseQueuePage({
   error,
   onRetry,
   onOpenCase,
+  onOpenExtractionTest,
   onCreateCase,
 }: CaseQueuePageProps) {
   const [search, setSearch] = useState('');
@@ -124,6 +126,9 @@ export default function CaseQueuePage({
 
         <div className="queue-label">
           Assigned to you ({matches.length})
+          <button type="button" className="dev-tool-link" onClick={onOpenExtractionTest}>
+            Test extraction logic →
+          </button>
         </div>
 
         {isLoading ? (

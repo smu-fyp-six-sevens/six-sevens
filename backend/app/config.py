@@ -18,6 +18,18 @@ class Settings:
     SUPABASE_PUBLISHABLE_KEY: str = os.environ.get("SUPABASE_PUBLISHABLE_KEY", "")
     SUPABASE_STORAGE_BUCKET: str = os.environ.get("SUPABASE_STORAGE_BUCKET", "documents")
 
+    # Dify workflow/chatflow calls have been observed taking ~20-90s under
+    # concurrent load (see SIGNED_URL_EXPIRY_SECONDS below) — httpx's default
+    # request timeout is far shorter than that, so without an explicit
+    # override every slow-but-otherwise-fine call gets killed by our own
+    # client and reported as a failure (with an unhelpful, often-blank
+    # error message, since a client-side timeout has no HTTP response body).
+    # Extraction in particular got slower once bank_statement started asking
+    # for a full transaction-by-transaction breakdown (see
+    # extraction_prompts.EXTRA_FIELD_GUIDANCE) — 120s wasn't enough for that
+    # on a vision-based (image) statement in testing, all 3 retries timed out.
+    DIFY_REQUEST_TIMEOUT_SECONDS: float = 240.0
+
     DIFY_BASE_URL: str = os.environ.get("DIFY_BASE_URL", "https://api.dify.ai/v1")
     DIFY_API_KEY: str = os.environ.get("DIFY_API_KEY", "")
     # Classifier (Intake Coordinator) is a Dify Chatflow app, not a Workflow
@@ -28,6 +40,7 @@ class Settings:
     DIFY_CLASSIFIER_API_KEY: str = os.environ.get("DIFY_CLASSIFIER_API_KEY", "")
     DIFY_CLASSIFIER_WORKFLOW_ID: str = os.environ.get("DIFY_CLASSIFIER_WORKFLOW_ID", "")
     DIFY_EXTRACTION_WORKFLOW_ID: str = os.environ.get("DIFY_EXTRACTION_WORKFLOW_ID", "")
+    DIFY_EXTRACTION_API_KEY: str = os.environ.get("DIFY_EXTRACTION_API_KEY", "")
 
     DEEPSEEK_BASE_URL: str = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
     DEEPSEEK_API_KEY: str = os.environ.get("DEEPSEEK_API_KEY", "")
@@ -42,8 +55,11 @@ class Settings:
     # AC4: a document idle in queued/processing longer than this is "stuck"
     STUCK_THRESHOLD_SECONDS: int = 10
 
-    # Bounded classification<->extraction escalation loop (see orchestrator.py)
-    MAX_RECLASSIFICATION_ATTEMPTS: int = 2
+    # Bounded classification<->extraction escalation loop (see orchestrator.py).
+    # Capped at one re-classification attempt: if Extraction still doesn't
+    # recognise the document after the classifier has had one look at the
+    # escalation reason, it's routed to manual review rather than looping again.
+    MAX_RECLASSIFICATION_ATTEMPTS: int = 1
 
     # Number of documents processed concurrently by the in-memory queue
     # worker pool (see queue_service.py). Each worker independently calls
@@ -65,6 +81,15 @@ class Settings:
     # Classification: filename-rule matches scoring below this are treated
     # as unrecognised/low-confidence and flagged for manual review.
     CLASSIFICATION_CONFIDENCE_THRESHOLD: float = 0.6
+
+    # Extraction: below this, the frontend renders extracted fields as
+    # editable inputs (with a save button) instead of read-only text, so a
+    # loan officer can correct values the LLM wasn't confident about. Set
+    # a bit above the classification threshold since a human is meant to
+    # actually act on these values (loan amounts, IDs), not just route the
+    # document — a wrong-but-plausible-looking field is costlier than a
+    # wrongly-routed document.
+    EXTRACTION_CONFIDENCE_THRESHOLD: float = 0.7
 
     ALLOWED_CONTENT_TYPES: set[str] = {
         "application/pdf",
