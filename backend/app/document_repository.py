@@ -58,6 +58,7 @@ def record_classification(
     document_type: Optional[str],
     confidence: Optional[float],
     classification_outcome: str,
+    evidence: Optional[list[str]] = None,
 ) -> None:
     """
     Persists the classification-stage decision (type, confidence, and
@@ -70,6 +71,7 @@ def record_classification(
         "document_type": document_type,
         "confidence": confidence,
         "classification_outcome": classification_outcome,
+        "evidence": evidence or [],
     }
     supabase_client.table("documents").update(update).eq("id", document_id).execute()
 

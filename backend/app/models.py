@@ -50,6 +50,7 @@ class DocumentType(str, Enum):
 
 class CaseRecord(BaseModel):
     id: str
+    greenlink_case_id: str
     company_name: Optional[str] = None
     status: str = "open"
     submission_finalized: bool = False
@@ -113,21 +114,12 @@ class UpdateExtractedFieldsRequest(BaseModel):
     """
 
     extracted_fields: dict
+    evidence: list[str] = Field(default_factory=list)
 
 
 class UploadResponse(BaseModel):
     document_id: str
     status: DocumentStatus
-
-
-class ClassificationPreviewResponse(BaseModel):
-    """
-    Evidence held in-memory only (see classification_cache.py) — confidence
-    now lives on DocumentRecord.confidence since it's a real, persisted
-    column; this endpoint only covers the part that still isn't persisted.
-    """
-
-    evidence: list[str] = Field(default_factory=list)
 
 
 class BulkUploadItemResult(BaseModel):

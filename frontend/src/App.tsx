@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import CaseQueuePage from './pages/CaseQueuePage';
 import ExtractionTestPage from './pages/ExtractionTestPage';
 import UploadPage from './pages/UploadPage';
+import CreateCasePage from './pages/CreateCasePage';
 
 export interface CaseRecord {
   id: string;
@@ -9,6 +10,7 @@ export interface CaseRecord {
   applicant: string;
   type: string;
   status: string;
+  caseStatus: string;
 }
 
 const API_BASE_URL =
@@ -34,6 +36,7 @@ function mapStatus(status: string): string {
 export default function App() {
   const [cases, setCases] = useState<CaseRecord[]>([]);
   const [selectedCase, setSelectedCase] = useState<CaseRecord | null>(null);
+  const [isCreatingCase, setIsCreatingCase] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showExtractionTest, setShowExtractionTest] = useState(false);
@@ -51,21 +54,22 @@ export default function App() {
 
       const data = (await response.json()) as Array<{
         id: string;
-        case_number?: string | null;
+        greenlink_case_id?: string | null;
         company_name?: string | null;
         status?: string | null;
         documents_status?: string | null;
       }>;
-
+      
       setCases(
         data.map((item) => ({
           id: item.id,
-          caseNumber: item.case_number ?? null,
+          caseNumber: item.greenlink_case_id ?? null,
           applicant: item.company_name ?? 'Unnamed company',
           type: 'Corporate Loan',
           status: mapStatus(
             item.documents_status ?? item.status ?? 'open'
           ),
+          caseStatus: item.status ?? 'open',
         }))
       );
     } catch (err) {
@@ -95,6 +99,18 @@ export default function App() {
     return <ExtractionTestPage onBack={() => setShowExtractionTest(false)} />;
   }
 
+  if (isCreatingCase) {
+    return (
+      <CreateCasePage
+        onBack={() => setIsCreatingCase(false)}
+        onCreated={() => {
+          setIsCreatingCase(false);
+          void loadCases();
+        }}
+      />
+    );
+  }
+
   if (selectedCase) {
     return (
       <UploadPage
@@ -112,6 +128,7 @@ export default function App() {
       onRetry={() => void loadCases()}
       onOpenCase={setSelectedCase}
       onOpenExtractionTest={() => setShowExtractionTest(true)}
+      onCreateCase={() => setIsCreatingCase(true)}
     />
   );
 }

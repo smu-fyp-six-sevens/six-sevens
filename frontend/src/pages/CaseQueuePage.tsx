@@ -10,6 +10,7 @@ interface CaseQueuePageProps {
   onRetry: () => void;
   onOpenCase: (caseRecord: CaseRecord) => void;
   onOpenExtractionTest: () => void;
+  onCreateCase: () => void;
 }
 
 function displayCaseNumber(caseRecord: CaseRecord): string {
@@ -23,18 +24,34 @@ export default function CaseQueuePage({
   onRetry,
   onOpenCase,
   onOpenExtractionTest,
+  onCreateCase,
 }: CaseQueuePageProps) {
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const statusOptions = useMemo(() => {
+    const statuses = cases
+      .map((item) => item.status)
+      .filter(Boolean);
+
+    return Array.from(new Set(statuses));
+  }, [cases]);
 
   const matches = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return cases;
 
-    return cases.filter((item) =>
-      [displayCaseNumber(item), item.id, item.applicant, item.type, item.status]
-        .some((value) => value.toLowerCase().includes(query)),
-    );
-  }, [cases, search]);
+    return cases.filter((item) => {
+      const matchesSearch =
+        !query ||
+        [displayCaseNumber(item), item.applicant]
+          .some((value) => value.toLowerCase().includes(query));
+
+      const matchesStatus =
+        statusFilter === 'all' ||
+        item.status === statusFilter;
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [cases, search, statusFilter]);
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -54,11 +71,24 @@ export default function CaseQueuePage({
       <AppHeader />
 
       <section className="queue-view">
-        <p className="eyebrow">My case queue</p>
-        <h1>Find a case</h1>
-        <p className="sub">
-          Search by case number or applicant, or pick from your assigned cases below.
-        </p>
+        <div className="case-queue-header">
+            <div>
+              <p className="eyebrow">My case queue</p>
+              <h1>Find a case</h1>
+            </div>
+
+            <button
+              type="button"
+              className="create-case-btn"
+              onClick={onCreateCase}
+            >
+              + Create new case
+            </button>
+          </div>
+
+          <p className="sub">
+            Search by case number or applicant, or pick from your assigned cases below.
+          </p>
 
         <form className="search-row" onSubmit={handleSubmit}>
           <label className="search-box">
@@ -73,8 +103,29 @@ export default function CaseQueuePage({
           <button className="go-btn" type="submit">Go</button>
         </form>
 
+        <div className="filter-row">
+          <label htmlFor="status-filter">
+            Filter by status
+          </label>
+
+          <select
+            id="status-filter"
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+          >
+            <option value="all">All statuses</option>
+
+            {statusOptions.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </select>
+        </div>
+
+
         <div className="queue-label">
-          Assigned to you ({cases.length})
+          Assigned to you ({matches.length})
           <button type="button" className="dev-tool-link" onClick={onOpenExtractionTest}>
             Test extraction logic →
           </button>

@@ -4,16 +4,12 @@ import DropZone from '../components/DropZone';
 import FileRow from '../components/FileRow';
 import {
   EXTRACTION_CONFIDENCE_THRESHOLD,
-  getClassificationPreview,
+ 
   getDocument,
   updateExtractedFields,
-  uploadDocuments,
+  listDocuments, uploadDocuments,
 } from '../services/uploadService';
-import type {
-  BulkUploadItemResult,
-  ClassificationPreview,
-  DocumentRecord,
-} from '../services/uploadService';
+import type { BulkUploadItemResult, DocumentRecord } from '../services/uploadService';
 
 const TERMINAL_STATUSES = new Set(['analyzed', 'failed']);
 const POLL_INTERVAL_MS = 2000;
@@ -82,12 +78,10 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
   const [countError, setCountError] = useState<string | null>(null);
   const [rejections, setRejections] = useState<{ file: File; issue: FileIssue }[]>([]);
   const [results, setResults] = useState<BulkUploadItemResult[]>([]);
+  const [justSubmitted, setJustSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [documentDetails, setDocumentDetails] = useState<Map<string, DocumentRecord>>(new Map());
-  const [classificationPreviews, setClassificationPreviews] = useState<
-    Map<string, ClassificationPreview>
-  >(new Map());
   const [fieldDrafts, setFieldDrafts] = useState<Map<string, Record<string, string>>>(new Map());
   const [savingFields, setSavingFields] = useState<Set<string>>(new Set());
   const [saveFieldErrors, setSaveFieldErrors] = useState<Map<string, string>>(new Map());
@@ -122,21 +116,47 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
       if (document) {
         setDocumentDetails((current) => new Map(current).set(documentId, document as DocumentRecord));
 
-        try {
-          const preview = await getClassificationPreview(documentId);
-          if (isMountedRef.current) {
-            setClassificationPreviews((current) => new Map(current).set(documentId, preview));
-          }
-        } catch {
-          // classification preview is best-effort — document status is the source of truth
-        }
-
         if (TERMINAL_STATUSES.has(document.status)) return;
       }
 
       await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
     }
   }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadExistingDocuments() {
+      try {
+        const documents = await listDocuments(selectedCase.id);
+        if (cancelled) return;
+
+        setDocumentDetails(new Map(documents.map((document) => [document.id, document])));
+        setResults(
+          documents.map((document) => ({
+            filename: document.filename,
+            success: true,
+            document_id: document.id,
+            status: document.status,
+          })),
+        );
+
+        documents.forEach((document) => {
+          if (!TERMINAL_STATUSES.has(document.status)) {
+            void pollDocument(document.id);
+          }
+        });
+      } catch {
+        // best-effort load — leave the page in its empty state if this fails
+      }
+    }
+
+    void loadExistingDocuments();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCase.id]);
 
   const resultByFilename = useMemo(
     () => new Map(results.map((result) => [result.filename, result])),
@@ -153,6 +173,7 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
     setResults([]);
     setRejections([]);
     setError(null);
+    setJustSubmitted(false);
   }
 
   async function handleSubmit() {
@@ -163,7 +184,7 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
     setResults([]);
     setRejections([]);
     setDocumentDetails(new Map());
-    setClassificationPreviews(new Map());
+    setJustSubmitted(true);
 
     try {
       const { ok, rejected } = await validateFiles(selectedFiles, selectedCase.id);
@@ -258,6 +279,7 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
     setResults([]);
     setRejections([]);
     setError(null);
+    setJustSubmitted(false);
   }
 
   const completedCount = results.length + rejections.length;
@@ -279,7 +301,7 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
         </button>
 
         <p className="eyebrow">
-          Case #{selectedCase.id} · {selectedCase.type} — {selectedCase.applicant}
+          Case #{selectedCase.caseNumber} · {selectedCase.type} — {selectedCase.applicant}
         </p>
         <h1>Upload supporting documents</h1>
         <p className="sub">
@@ -345,7 +367,7 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
         {countError && <div className="toast show mixed">⚠ {countError}</div>}
         {error && <div className="toast show mixed">⚠ {error}</div>}
 
-        {hasOutcome && !error && !isSubmitting && (
+        {justSubmitted && hasOutcome && !error && !isSubmitting && (
           <div className={`toast show ${failedCount > 0 ? 'mixed' : 'all-ok'}`}>
             <span>{failedCount > 0 ? '⚠' : '✓'}</span>
             <span>
@@ -371,7 +393,6 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
               .map((result) => {
                 const documentId = result.document_id as string;
                 const document = documentDetails.get(documentId);
-                const preview = classificationPreviews.get(documentId);
                 const status = document?.status ?? result.status ?? 'queued';
                 const isTerminal = TERMINAL_STATUSES.has(status);
                 const extractionNotConfigured =
@@ -406,9 +427,9 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
                       </div>
                     </div>
 
-                    {preview && preview.evidence.length > 0 && (
+                    {document?.evidence && document.evidence.length > 0 && (
                       <ul className="mock-evidence">
-                        {preview.evidence.map((item, i) => (
+                        {document.evidence.map((item, i) => (
                           <li key={i}>{item}</li>
                         ))}
                       </ul>

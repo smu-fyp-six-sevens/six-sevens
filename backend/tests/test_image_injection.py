@@ -482,7 +482,7 @@ def test_overlay_matches_smaller_label_size(tmp_path: Path, suffix: str) -> None
 
 
 @pytest.mark.parametrize("suffix", [".png", ".jpg", ".jpeg"])
-def test_overlay_copies_a_digit_from_elsewhere_in_the_document(
+def test_overlay_does_not_paste_donor_glyphs_from_elsewhere(
     tmp_path: Path, suffix: str
 ) -> None:
     sans = _first_existing_ttf(
@@ -529,7 +529,7 @@ def test_overlay_copies_a_digit_from_elsewhere_in_the_document(
         for pixel in crop.getdata()
         if pixel[0] > 160 and pixel[1] < 80 and pixel[2] < 80
     ]
-    assert reds, "overlay should paste the red donor '2', not a newly rendered glyph"
+    assert not reds, "overlay should mimic this field, not paste a glyph from elsewhere"
 
 
 @pytest.mark.parametrize("suffix", [".png", ".jpg", ".jpeg"])
@@ -572,8 +572,6 @@ def test_overlay_keeps_unchanged_prefix_when_rewriting_a_word(
         int(50 + prefix_bbox[3]),
     )
     _save_raster_image(image, path)
-    before = Image.open(path).convert("RGB")
-    before_prefix = before.crop(prefix_box)
     field = FieldValue(
         text=heading,
         font="helv",
@@ -585,13 +583,22 @@ def test_overlay_keeps_unchanged_prefix_when_rewriting_a_word(
     )
     overlay_field_text(path, field, "SUMMARY OF EXPENSES")
     after = Image.open(path).convert("RGB")
-    after_prefix = after.crop(prefix_box)
-    delta = sum(
-        abs(a - b)
-        for pa, pb in zip(before_prefix.getdata(), after_prefix.getdata())
-        for a, b in zip(pa, pb)
-    ) / max(1, before_prefix.width * before_prefix.height * 3)
-    assert delta < (12 if suffix in {".jpg", ".jpeg"} else 6), delta
+    rematched = _match_font_to_crop(
+        after,
+        [
+            rect[0] - 4,
+            rect[1] - 4,
+            rect[2] + 40,
+            rect[3] + 4,
+        ],
+        "SUMMARY OF EXPENSES",
+        ink=(18, 18, 18),
+        bg=(255, 255, 255),
+        max_size=22,
+    )
+    blob = Path(getattr(rematched, "path", "") or "").name.lower()
+    assert "courier" not in blob
+    assert "times" not in blob
     suffix = after.crop(
         (
             prefix_box[2],
@@ -917,6 +924,61 @@ def test_can_overlay_text_on_jpeg_and_stay_jpeg(
     assert path.read_bytes()[:3] == b"\xff\xd8\xff"
 
 
+def test_jpeg_font_fontsize_numerical_spelling_misalignment_emphasis(
+    isolated_injection_templates: Path,
+) -> None:
+    source = isolated_injection_templates / "ocbc_sample.png"
+    dest = isolated_injection_templates / "ocbc_jpg.jpg"
+    _save_raster_image(Image.open(source).convert("RGB"), dest)
+    reset_sample_documents()
+
+    document = get_document("ocbc_jpg")
+    assert document is not None
+    injectable = [
+        (name, field)
+        for name, field in document.fields.items()
+        if field.text.strip() and not is_label_only(field.text)
+    ]
+    numeric = next(
+        (
+            name
+            for name, field in injectable
+            if any(ch.isdigit() for ch in field.text)
+        ),
+        None,
+    )
+    assert numeric is not None
+    text_name = next(
+        (
+            name
+            for name, field in injectable
+            if name != numeric and not any(ch.isdigit() for ch in field.text)
+        ),
+        numeric,
+    )
+    text_field = document.fields[text_name]
+    num_field = document.fields[numeric]
+    spelling = text_field.text + "X" if not text_field.text.endswith("X") else text_field.text + "Z"
+    numerical = "100001" if num_field.text != "100001" else "100002"
+    cases = [
+        (text_name, DefectType.FONT, {"font": "cour"}),
+        (text_name, DefectType.FONT_SIZE, {"font_size": round(text_field.font_size + 8.0, 1)}),
+        (numeric, DefectType.NUMERICAL, {"new_text": numerical}),
+        (text_name, DefectType.SPELLING, {"new_text": spelling}),
+        (text_name, DefectType.MISALIGNMENT, {"x": text_field.x + 24.0}),
+        (text_name, DefectType.EMPHASIS, {"style": "italic"}),
+    ]
+    for field_name, defect, extra in cases:
+        response = _inject("ocbc_jpg", field_name, defect, **extra)
+        assert response.status_code == 200, (defect.value, response.json())
+        payload = response.json()
+        assert payload["filename"] == "ocbc_jpg.jpg"
+        assert payload["generated_filename"].endswith(".jpg")
+        generated = isolated_injection_templates.parent / "documents_generated" / payload["generated_filename"]
+        assert generated.exists()
+        assert generated.read_bytes()[:3] == b"\xff\xd8\xff"
+
+
 @pytest.mark.parametrize("suffix", [".png", ".jpg", ".jpeg"])
 def test_overlay_matches_field_background_and_origin(tmp_path: Path, suffix: str) -> None:
     font_path = _first_existing_ttf(
@@ -1128,3 +1190,274 @@ def test_png_scaling_anomaly_honours_scale_overrides(tmp_path: Path) -> None:
     ys = [y for _, y in greens]
     assert max(xs) - min(xs) > 160
     assert max(ys) - min(ys) < 28
+
+
+@pytest.mark.parametrize("suffix", [".png", ".jpg"])
+def test_image_misalignment_moves_original_pixels_not_a_new_font(
+    tmp_path: Path, suffix: str
+) -> None:
+    sans = _first_existing_ttf(
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+    )
+    if sans is None:
+        pytest.skip("no sans TTF available")
+    font = ImageFont.truetype(sans, 28)
+    path = tmp_path / f"shift_name{suffix}"
+    image = Image.new("RGB", (420, 120), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    origin = (24.0, 70.0)
+    draw.text(origin, "Ang Choon Huat", fill=(210, 20, 20), font=font, anchor="ls")
+    try:
+        bbox = font.getbbox("Ang Choon Huat", anchor="ls")
+    except TypeError:
+        bbox = font.getbbox("Ang Choon Huat")
+    rect = [
+        float(origin[0] + bbox[0] - 2),
+        float(origin[1] + bbox[1] - 2),
+        float(origin[0] + bbox[2] + 2),
+        float(origin[1] + bbox[3] + 2),
+    ]
+    _save_raster_image(image, path)
+    before = Image.open(path).convert("RGB")
+    x0, y0, x1, y1 = [int(round(v)) for v in rect]
+    source_crop = before.crop((x0, y0, x1, y1))
+    field = FieldValue(
+        text="Ang Choon Huat",
+        font="helv",
+        font_size=28.0,
+        x=origin[0],
+        y=origin[1],
+        page=0,
+        rect=rect,
+    )
+    replace_field_text(path, field, field.text, x=origin[0] + 30)
+    after = Image.open(path).convert("RGB")
+    original_slot = after.crop((x0, y0, min(x0 + 24, x1), y1))
+    moved_slot = after.crop((x0 + 30, y0, x1 + 30, y1))
+    assert not any(
+        pixel[0] > 160 and pixel[1] < 80 and pixel[2] < 80
+        for pixel in original_slot.getdata()
+    )
+    mae = sum(
+        abs(a[0] - b[0]) + abs(a[1] - b[1]) + abs(a[2] - b[2])
+        for a, b in zip(source_crop.getdata(), moved_slot.getdata())
+    ) / max(1, source_crop.width * source_crop.height)
+    assert mae < 12, f"shifted pixels should match the original crop, mae={mae}"
+
+
+@pytest.mark.parametrize("suffix", [".png", ".jpg"])
+def test_image_font_size_scales_original_pixels_not_a_new_font(
+    tmp_path: Path, suffix: str
+) -> None:
+    sans = _first_existing_ttf(
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+    )
+    if sans is None:
+        pytest.skip("no sans TTF available")
+    text = "Ang Choon Huat"
+    font = ImageFont.truetype(sans, 18)
+    path = tmp_path / f"size_name{suffix}"
+    image = Image.new("RGB", (420, 140), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    origin = (24.0, 90.0)
+    draw.text(origin, text, fill=(210, 20, 20), font=font, anchor="ls")
+    try:
+        bbox = font.getbbox(text, anchor="ls")
+    except TypeError:
+        bbox = font.getbbox(text)
+    rect = [
+        float(origin[0] + bbox[0] - 2),
+        float(origin[1] + bbox[1] - 2),
+        float(origin[0] + bbox[2] + 2),
+        float(origin[1] + bbox[3] + 2),
+    ]
+    _save_raster_image(image, path)
+    field = FieldValue(
+        text=text,
+        font="helv",
+        font_size=18.0,
+        x=origin[0],
+        y=origin[1],
+        page=0,
+        rect=rect,
+    )
+    before = Image.open(path).convert("L")
+    bx0, by0, bx1, by1 = [int(round(v)) for v in rect]
+    before_h = _ink_height(before.crop((bx0, by0, bx1, by1)))
+    replace_field_text(path, field, text, font_size=28.0)
+    after = Image.open(path).convert("RGB")
+    after_gray = after.convert("L")
+    pad = 20
+    after_h = _ink_height(
+        after_gray.crop(
+            (
+                max(0, bx0 - pad),
+                max(0, by0 - pad),
+                min(after.width, bx1 + pad),
+                min(after.height, by1 + pad),
+            )
+        )
+    )
+    assert after_h > before_h * 1.15, (before_h, after_h)
+    assert any(
+        pixel[0] > 160 and pixel[1] < 80 and pixel[2] < 80
+        for pixel in after.getdata()
+    )
+
+
+@pytest.mark.parametrize("suffix", [".png", ".jpg"])
+def test_image_spelling_keeps_unchanged_prefix_pixels(
+    tmp_path: Path, suffix: str
+) -> None:
+    sans = _first_existing_ttf(
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+    )
+    if sans is None:
+        pytest.skip("no sans TTF available")
+    font = ImageFont.truetype(sans, 22)
+    path = tmp_path / f"spell_name{suffix}"
+    image = Image.new("RGB", (460, 140), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    draw.text((24.0, 40.0), "Geneco", fill=(210, 20, 20), font=font, anchor="ls")
+    origin = (24.0, 95.0)
+    text = "Ang Choon Huat"
+    draw.text(origin, text, fill=(210, 20, 20), font=font, anchor="ls")
+    try:
+        bbox = font.getbbox(text, anchor="ls")
+    except TypeError:
+        bbox = font.getbbox(text)
+    rect = [
+        float(origin[0] + bbox[0] - 2),
+        float(origin[1] + bbox[1] - 2),
+        float(origin[0] + bbox[2] + 2),
+        float(origin[1] + bbox[3] + 2),
+    ]
+    _save_raster_image(image, path)
+    before = Image.open(path).convert("RGB")
+    try:
+        prefix_bbox = font.getbbox("Ang Choon Hu", anchor="ls")
+    except TypeError:
+        prefix_bbox = font.getbbox("Ang Choon Hu")
+    px0 = int(origin[0] + prefix_bbox[0])
+    py0 = int(origin[1] + prefix_bbox[1])
+    px1 = int(origin[0] + prefix_bbox[2] - 3)
+    py1 = int(origin[1] + prefix_bbox[3])
+    source_prefix = before.crop((px0, py0, px1, py1))
+    x0, y0, x1, y1 = [int(round(v)) for v in rect]
+    field = FieldValue(
+        text=text,
+        font="helv",
+        font_size=22.0,
+        x=origin[0],
+        y=origin[1],
+        page=0,
+        rect=rect,
+    )
+    replace_field_text(path, field, "Ang Choon Huet")
+    after = Image.open(path).convert("RGB")
+    rematched = _match_font_to_crop(
+        after,
+        rect,
+        "Ang Choon Huet",
+        ink=(210, 20, 20),
+        bg=(255, 255, 255),
+        max_size=22,
+    )
+    name = Path(getattr(rematched, "path", "") or "").name.lower()
+    assert "courier" not in name
+    assert "mono" not in name
+    after_gray = after.convert("L")
+    assert _ink_height(after_gray.crop((x0, y0, x1 + 8, y1))) > 10
+    after_prefix = after.crop((px0, py0, px1, py1))
+    mae = sum(
+        abs(a[0] - b[0]) + abs(a[1] - b[1]) + abs(a[2] - b[2])
+        for a, b in zip(source_prefix.getdata(), after_prefix.getdata())
+    ) / max(1, source_prefix.width * source_prefix.height)
+    limit = 18.0 if suffix in {".jpg", ".jpeg"} else 6.0
+    assert mae < limit, f"unchanged prefix should keep original pixels, mae={mae}"
+
+
+@pytest.mark.parametrize("suffix", [".png", ".jpg"])
+def test_numerical_rewrite_does_not_clip_line_above(tmp_path: Path, suffix: str) -> None:
+    sans = _first_existing_ttf(
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    )
+    bold = _first_existing_ttf(
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        sans,
+    )
+    if sans is None or bold is None:
+        pytest.skip("no sans TTF available")
+    label_font = ImageFont.truetype(sans, 16)
+    amount_font = ImageFont.truetype(bold, 36)
+    path = tmp_path / f"amount_over_label{suffix}"
+    image = Image.new("RGB", (420, 200), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    label = "Statement No.: 6871408"
+    amount = "$187.41"
+    label_origin = (180.0, 70.0)
+    amount_origin = (220.0, 130.0)
+    draw.text(label_origin, label, fill=(90, 90, 90), font=label_font, anchor="ls")
+    draw.text(amount_origin, amount, fill=(20, 20, 20), font=amount_font, anchor="ls")
+    try:
+        label_bbox = label_font.getbbox(label, anchor="ls")
+        amount_bbox = amount_font.getbbox(amount, anchor="ls")
+    except TypeError:
+        label_bbox = label_font.getbbox(label)
+        amount_bbox = amount_font.getbbox(amount)
+    label_box = (
+        int(label_origin[0] + label_bbox[0]),
+        int(label_origin[1] + label_bbox[1]),
+        int(label_origin[0] + label_bbox[2]),
+        int(label_origin[1] + label_bbox[3]),
+    )
+    # OCR-style box that overlaps the line above, like the Geneco bill.
+    rect = [
+        float(amount_origin[0] + amount_bbox[0] - 4),
+        float(label_box[3] - 4),
+        float(amount_origin[0] + amount_bbox[2] + 4),
+        float(amount_origin[1] + amount_bbox[3] + 4),
+    ]
+    _save_raster_image(image, path)
+    before = Image.open(path).convert("RGB")
+    source_label = before.crop(label_box)
+    field = FieldValue(
+        text=amount,
+        font="helv",
+        font_size=36.0,
+        x=amount_origin[0],
+        y=amount_origin[1],
+        page=0,
+        rect=rect,
+    )
+    replace_field_text(path, field, "$287.41")
+    after = Image.open(path).convert("RGB")
+    after_label = after.crop(label_box)
+    mae = sum(
+        abs(a[0] - b[0]) + abs(a[1] - b[1]) + abs(a[2] - b[2])
+        for a, b in zip(source_label.getdata(), after_label.getdata())
+    ) / max(1, source_label.width * source_label.height)
+    limit = 16.0 if suffix in {".jpg", ".jpeg"} else 4.0
+    assert mae < limit, f"line above the amount should stay intact, mae={mae}"
+    amount_crop = after.crop(
+        (
+            int(rect[0]),
+            int(rect[1] + 8),
+            int(rect[2] + 12),
+            int(rect[3]),
+        )
+    )
+    assert _ink_width(amount_crop.convert("L")) > 20

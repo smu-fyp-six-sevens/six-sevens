@@ -14,6 +14,7 @@ def _execute_result(data: list[dict]) -> MagicMock:
 def _row(**overrides) -> dict:
     row = {
         "id": "case-1",
+        "greenlink_case_id": "GLDB-1",
         "company_name": None,
         "status": "open",
         "submission_finalized": False,
@@ -35,6 +36,7 @@ def test_create_case_inserts_expected_row_and_returns_record() -> None:
         result = case_repository.create_case()
 
         assert result.id == "case-1"
+        assert result.greenlink_case_id == "GLDB-1"
         assert result.company_name is None
         mock_client.table.assert_called_with("cases")
         inserted_row = mock_client.table.return_value.insert.call_args[0][0]

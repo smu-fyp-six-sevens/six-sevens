@@ -10,6 +10,10 @@ from .supabase_client import supabase_client
 
 def create_case(company_name: Optional[str] = None) -> CaseRecord:
     now = datetime.now(timezone.utc)
+
+    # greenlink_case_id is intentionally omitted — it's assigned by a DB
+    # trigger (see migrations/001_add_greenlink_case_id_generation.sql) and
+    # comes back populated in the inserted row's representation below.
     row = {
         "id": str(uuid.uuid4()),
         "company_name": company_name,
@@ -19,7 +23,9 @@ def create_case(company_name: Optional[str] = None) -> CaseRecord:
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
     }
+
     result = supabase_client.table("cases").insert(row).execute()
+
     return CaseRecord(**result.data[0])
 
 
