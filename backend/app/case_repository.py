@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from unittest import result
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -10,6 +11,7 @@ from .supabase_client import supabase_client
 
 def create_case(company_name: Optional[str] = None) -> CaseRecord:
     now = datetime.now(timezone.utc)
+
     row = {
         "id": str(uuid.uuid4()),
         "company_name": company_name,
@@ -19,7 +21,17 @@ def create_case(company_name: Optional[str] = None) -> CaseRecord:
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
     }
-    result = supabase_client.table("cases").insert(row).execute()
+
+    result = (
+        supabase_client
+        .table("cases")
+        .insert(row)
+        .select("*")
+        .execute()
+    )
+
+    print("CREATE CASE SUPABASE RESULT:", result.data)
+
     return CaseRecord(**result.data[0])
 
 

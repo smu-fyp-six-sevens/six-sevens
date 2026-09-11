@@ -11,9 +11,14 @@ from app.models import CaseDocumentsStatus, CaseRecord, CaseSummary
 client = TestClient(app)
 
 
-def _make_case(case_id: str = "case-1", company_name: str | None = None) -> CaseRecord:
+def _make_case(
+    case_id: str = "case-1",
+    company_name: str | None = None,
+    greenlink_case_id: str = "GLDB-1",
+) -> CaseRecord:
     return CaseRecord(
         id=case_id,
+        greenlink_case_id=greenlink_case_id,
         company_name=company_name,
         status="open",
         submission_finalized=False,
