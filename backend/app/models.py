@@ -97,6 +97,7 @@ class DocumentRecord(BaseModel):
     queued_at: Optional[datetime] = None
     processing_started_at: Optional[datetime] = None
     failure_reason: Optional[str] = None
+    evidence: list[str] = Field(default_factory=list)
     extracted_fields: Optional[dict] = None
     # Extraction's own confidence in the values it pulled into extracted_fields
     # — distinct from (and no longer overwrites) the classifier's `confidence`

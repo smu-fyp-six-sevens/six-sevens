@@ -313,6 +313,7 @@ async def test_unrecognised_classification_still_runs_general_extraction() -> No
             document_type="unrecognised",
             confidence=0.2,
             classification_outcome="manual_review",
+            evidence=[],
         )
         mock_repo.update_status.assert_called_once_with(
             "doc-1", DocumentStatus.ANALYZED, document_type="unrecognised"

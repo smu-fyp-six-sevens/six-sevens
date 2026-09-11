@@ -38,6 +38,11 @@ def _assert_json_serializable(obj, path="root"):
 @pytest.mark.parametrize("file_path,content_type", TEST_CASES)
 def test_ingestion_e2e_shape_and_db_readiness(file_path, content_type):
     path = Path(file_path)
+    if not path.exists():
+        pytest.skip(
+            f"{file_path} not present — backend/test_files is gitignored local-only "
+            "fixture data, not available in CI"
+        )
     result = ingest_document(path.read_bytes(), path.name, content_type)
 
     # --- 1. Required top-level keys exist ---

@@ -4,10 +4,10 @@ import DropZone from '../components/DropZone';
 import FileRow from '../components/FileRow';
 import {
   EXTRACTION_CONFIDENCE_THRESHOLD,
- 
   getDocument,
   updateExtractedFields,
-  listDocuments, uploadDocuments,
+  listDocuments,
+  uploadDocuments,
 } from '../services/uploadService';
 import type { BulkUploadItemResult, DocumentRecord } from '../services/uploadService';
 

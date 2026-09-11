@@ -6,7 +6,7 @@ import logging
 import mimetypes
 import re
 
-from . import classification_cache, document_repository, extracted_fields_repository, storage_service
+from . import document_repository, extracted_fields_repository, storage_service
 from .config import settings
 from .dify_client import dify_client, DifyInvocationError
 from .extraction_prompts import EXTRACTION_SCHEMAS, build_extraction_prompt

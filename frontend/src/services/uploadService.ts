@@ -53,22 +53,36 @@ export async function getDocument(documentId: string): Promise<DocumentRecord> {
   return (await response.json()) as DocumentRecord;
 }
 
-// Mirrors ClassificationPreviewResponse in backend/app/models.py — evidence
-// held in-memory on the backend only, not persisted to Supabase (confidence
-// lives on DocumentRecord.confidence, a real column, instead).
-export interface ClassificationPreview {
-  evidence: string[];
-}
-
-export async function getClassificationPreview(documentId: string): Promise<ClassificationPreview> {
-  const response = await fetch(`${apiBaseUrl}/documents/${documentId}/classification-preview`);
+export async function listDocuments(caseId: string): Promise<DocumentRecord[]> {
+  const response = await fetch(`${apiBaseUrl}/documents?case_id=${encodeURIComponent(caseId)}`);
 
   if (!response.ok) {
     const detail = await response.text();
-    throw new Error(`Failed to fetch classification preview (${response.status}): ${detail}`);
+    throw new Error(`Failed to fetch documents (${response.status}): ${detail}`);
   }
 
-  return (await response.json()) as ClassificationPreview;
+  return (await response.json()) as DocumentRecord[];
+}
+
+// Mirrors UpdateExtractedFieldsRequest in backend/app/models.py — always sends
+// the full extracted_fields dict (not a per-field patch), matching the PATCH
+// /documents/{document_id}/extracted-fields endpoint in routers/documents.py.
+export async function updateExtractedFields(
+  documentId: string,
+  extractedFields: Record<string, unknown>,
+): Promise<DocumentRecord> {
+  const response = await fetch(`${apiBaseUrl}/documents/${documentId}/extracted-fields`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ extracted_fields: extractedFields }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to update extracted fields (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as DocumentRecord;
 }
 
 export async function uploadDocuments(caseId: string, files: File[]): Promise<BulkUploadResponse> {
