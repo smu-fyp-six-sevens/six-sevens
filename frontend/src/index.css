@@ -139,6 +139,53 @@ h1 {
   color: #9ea6b5;
 }
 
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 22px 0 28px;
+}
+
+.filter-row label {
+  font-size: 16px;
+  font-weight: 600;
+  color: #17294d;
+}
+
+.filter-row select {
+  appearance: none;
+  -webkit-appearance: none;
+
+  min-width: 190px;
+  padding: 11px 42px 11px 16px;
+
+  border: 1px solid #d8d3c8;
+  border-radius: 10px;
+
+  background-color: #fffdf9;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2317294d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 16px;
+
+  color: #17294d;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+
+  cursor: pointer;
+  outline: none;
+}
+
+.filter-row select:hover {
+  border-color: #9e9a91;
+}
+
+.filter-row select:focus {
+  border-color: #17294d;
+  box-shadow: 0 0 0 3px rgba(23, 41, 77, 0.12);
+}
+
 .go-btn,
 .upload-btn {
   font-size: 13px;

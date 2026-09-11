@@ -11,9 +11,9 @@ export default function CaseCard({ caseRecord, onOpen }: CaseCardProps) {
       type="button"
       className="case-card"
       onClick={() => onOpen(caseRecord)}
-      aria-label={`Open case ${caseRecord.id}, ${caseRecord.applicant}`}
+      aria-label={`Open case ${caseRecord.caseNumber}, ${caseRecord.applicant}`}
     >
-      <span className="case-id">{caseRecord.id}</span>
+      <span className="case-id">{caseRecord.caseNumber}</span>
       <span className="case-main">
         <span className="case-name">{caseRecord.applicant}</span>
         <span className="case-sub">

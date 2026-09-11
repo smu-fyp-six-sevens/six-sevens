@@ -8,6 +8,7 @@ export interface CaseRecord {
   applicant: string;
   type: string;
   status: string;
+  caseStatus: string;
 }
 
 const API_BASE_URL =
@@ -49,21 +50,22 @@ export default function App() {
 
       const data = (await response.json()) as Array<{
         id: string;
-        case_number?: string | null;
+        greenlink_case_id?: string | null;
         company_name?: string | null;
         status?: string | null;
         documents_status?: string | null;
       }>;
-
+      
       setCases(
         data.map((item) => ({
           id: item.id,
-          caseNumber: item.case_number ?? null,
+          caseNumber: item.greenlink_case_id ?? null,
           applicant: item.company_name ?? 'Unnamed company',
           type: 'Corporate Loan',
           status: mapStatus(
             item.documents_status ?? item.status ?? 'open'
           ),
+          caseStatus: item.status ?? 'open',
         }))
       );
     } catch (err) {

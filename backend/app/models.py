@@ -50,6 +50,7 @@ class DocumentType(str, Enum):
 
 class CaseRecord(BaseModel):
     id: str
+    greenlink_case_id: str
     company_name: Optional[str] = None
     status: str = "open"
     submission_finalized: bool = False
