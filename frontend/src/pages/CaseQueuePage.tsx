@@ -9,6 +9,7 @@ interface CaseQueuePageProps {
   error: string | null;
   onRetry: () => void;
   onOpenCase: (caseRecord: CaseRecord) => void;
+  onCreateCase: () => void;
 }
 
 function displayCaseNumber(caseRecord: CaseRecord): string {
@@ -21,6 +22,7 @@ export default function CaseQueuePage({
   error,
   onRetry,
   onOpenCase,
+  onCreateCase,
 }: CaseQueuePageProps) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -67,11 +69,24 @@ export default function CaseQueuePage({
       <AppHeader />
 
       <section className="queue-view">
-        <p className="eyebrow">My case queue</p>
-        <h1>Find a case</h1>
-        <p className="sub">
-          Search by case number or applicant, or pick from your assigned cases below.
-        </p>
+        <div className="case-queue-header">
+            <div>
+              <p className="eyebrow">My case queue</p>
+              <h1>Find a case</h1>
+            </div>
+
+            <button
+              type="button"
+              className="create-case-btn"
+              onClick={onCreateCase}
+            >
+              + Create new case
+            </button>
+          </div>
+
+          <p className="sub">
+            Search by case number or applicant, or pick from your assigned cases below.
+          </p>
 
         <form className="search-row" onSubmit={handleSubmit}>
           <label className="search-box">

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import CaseQueuePage from './pages/CaseQueuePage';
 import UploadPage from './pages/UploadPage';
+import CreateCasePage from './pages/CreateCasePage';
 
 export interface CaseRecord {
   id: string;
@@ -34,6 +35,7 @@ function mapStatus(status: string): string {
 export default function App() {
   const [cases, setCases] = useState<CaseRecord[]>([]);
   const [selectedCase, setSelectedCase] = useState<CaseRecord | null>(null);
+  const [isCreatingCase, setIsCreatingCase] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -91,6 +93,18 @@ export default function App() {
     return () => controller.abort();
   }, []);
 
+  if (isCreatingCase) {
+    return (
+      <CreateCasePage
+        onBack={() => setIsCreatingCase(false)}
+        onCreated={() => {
+          setIsCreatingCase(false);
+          void loadCases();
+        }}
+      />
+    );
+  }
+
   if (selectedCase) {
     return (
       <UploadPage
@@ -107,6 +121,7 @@ export default function App() {
       error={error}
       onRetry={() => void loadCases()}
       onOpenCase={setSelectedCase}
+      onCreateCase={() => setIsCreatingCase(true)}
     />
   );
 }
