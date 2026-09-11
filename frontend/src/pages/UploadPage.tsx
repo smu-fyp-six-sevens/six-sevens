@@ -514,14 +514,6 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
                 );
               })}
 
-            <p>
-              Status, document type, confidence, routing outcome, and (once analyzed) extracted
-              fields are all persisted in Supabase and come from GET /documents/&#123;id&#125;.
-              Evidence is the one field still not persisted — it comes from GET
-              /documents/&#123;id&#125;/classification-preview, an in-memory cache on the backend
-              that clears on restart. Both are polled every {POLL_INTERVAL_MS / 1000}s until
-              extraction finishes.
-            </p>
           </section>
         )}
       </section>

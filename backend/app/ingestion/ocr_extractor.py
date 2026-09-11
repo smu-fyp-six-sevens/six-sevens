@@ -3,26 +3,27 @@ from __future__ import annotations
 
 import numpy as np
 from PIL import Image
-import easyocr
+from rapidocr import RapidOCR
 
 
-reader = easyocr.Reader(["en"], gpu=False)
+reader = RapidOCR()
 
 
 def extract_image_with_ocr(image, page_number: int = 1) -> dict:
     if isinstance(image, Image.Image):
-        image = np.array(image)
+        image = np.array(image.convert("RGB"))
 
-    results = reader.readtext(image, detail=1)
+    result = reader(image)
 
     elements = []
 
-    for bbox, text, confidence in results:
-        elements.append({
-            "text": text,
-            "confidence": float(confidence),
-            "extraction_method": "ocr"
-        })
+    if result.boxes is not None:
+        for text, confidence in zip(result.txts, result.scores):
+            elements.append({
+                "text": text,
+                "confidence": float(confidence),
+                "extraction_method": "ocr"
+            })
 
     return {
         "page_number": page_number,
