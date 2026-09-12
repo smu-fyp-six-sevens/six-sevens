@@ -5,7 +5,6 @@ from unittest.mock import patch
 
 from app.case_status import (
     compute_documents_status,
-    compute_identity_proof_of_address_progress,
     compute_requirement_coverage,
     sync_submission_finalized,
 )
@@ -259,59 +258,6 @@ def test_proof_of_address_missing_when_no_identity_yet() -> None:
     ]
     fulfilled, missing = compute_requirement_coverage(documents)
     assert "proof_of_address" in missing
-
-
-def test_progress_is_zero_of_zero_with_no_identities() -> None:
-    assert compute_identity_proof_of_address_progress([]) == (0, 0)
-
-
-def test_progress_counts_covered_and_total_identities() -> None:
-    """The GLDB-20-shaped scenario: one of two identities has an address."""
-    documents = [
-        _make_document(
-            "doc-1",
-            DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
-            document_type="id_document",
-            extracted_fields={"individual_name": "Amanda Koh", "individual_address": "1 Main St"},
-        ),
-        _make_document(
-            "doc-2",
-            DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
-            document_type="id_document",
-            extracted_fields={"individual_name": "Bryan Lim", "individual_address": None},
-        ),
-    ]
-    assert compute_identity_proof_of_address_progress(documents) == (1, 2)
-
-
-def test_progress_tolerates_non_string_individual_name() -> None:
-    """
-    Real observed failure: a company_constitution naming several directors
-    came back from Extraction with individual_name as a list, which crashed
-    the whole /cases endpoint for every case, not just this one document.
-    """
-    documents = [
-        _make_document(
-            "doc-1",
-            DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
-            document_type="id_document",
-            extracted_fields={"individual_name": "Amanda Koh", "individual_address": None},
-        ),
-        _make_document(
-            "doc-2",
-            DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
-            document_type="company_constitution",
-            extracted_fields={
-                "individual_name": ["Tan Wei Ming", "Tan Wei Jun"],
-                "individual_address": "1 Main St",
-            },
-        ),
-    ]
-    assert compute_identity_proof_of_address_progress(documents) == (0, 1)
 
 
 def _make_fully_covered_documents() -> list[DocumentRecord]:

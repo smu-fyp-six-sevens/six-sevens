@@ -73,7 +73,7 @@ def compute_fulfilled_requirements(
     Note: this only decides what a single document fulfils on its own —
     with multiple identities in a case (multiple ID documents), whether
     proof_of_address counts case-wide requires matching each identity to
-    an address by name; see case_status.compute_identity_proof_of_address_coverage.
+    an address by name; see mapper.compute_identity_proof_of_address_coverage.
     """
     if document_type not in REQUIRED_DOCUMENT_TYPES:
         return []
@@ -116,7 +116,7 @@ class ProofOfAddressCoverage(BaseModel):
     """
     How many of the case's identified individuals (one per accepted
     id_document) currently have an address on file, out of how many there
-    are — see case_status.compute_identity_proof_of_address_progress.
+    are — see mapper.compute_identity_proof_of_address_progress.
     total=0 means no ID document has been accepted yet, so there's nothing
     to report coverage against (distinct from 0 covered out of >0 total).
     """

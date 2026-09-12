@@ -43,7 +43,7 @@ function formatRoutingOutcome(outcome: string | null | undefined): string {
   switch (outcome) {
     case 'accepted':
     case 'manual_review':
-      return 'Proceed with extractor agent';
+      return 'Proceed to fraud detection';
     default:
       return '—';
   }
