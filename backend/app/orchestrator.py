@@ -6,11 +6,7 @@ import logging
 import mimetypes
 import re
 
-<<<<<<< Updated upstream
-from . import document_repository, extracted_fields_repository, storage_service
-=======
-from . import case_status, document_repository, storage_service
->>>>>>> Stashed changes
+from . import case_status, document_repository, extracted_fields_repository, storage_service
 from .config import settings
 from .dify_client import dify_client, DifyInvocationError
 from .extraction_prompts import EXTRACTION_SCHEMAS, build_extraction_prompt
@@ -461,7 +457,11 @@ async def _finalise_classification(
     wouldn't catch (e.g. the sub-classifiers disagreeing despite a
     survivable confidence number).
 
-<<<<<<< Updated upstream
+    Also syncs the case's submission_finalized flag, since this is the one
+    place a document's fulfilled_requirements (and therefore the case's
+    overall requirement coverage) actually changes — both a document's
+    first classification and a /retry reclassification land here.
+
     Returns True if extraction should run — either because classification was
     accepted outright, or because it came back "unrecognised", in which case
     Extraction still runs but against a general, loan-application-relevant
@@ -472,15 +472,6 @@ async def _finalise_classification(
     classified. Returns False only for a *typed* classification that's below
     the confidence threshold or explicitly flagged for manual review, where
     FAILED has already been recorded.
-=======
-    Also syncs the case's submission_finalized flag, since this is the one
-    place a document's fulfilled_requirements (and therefore the case's
-    overall requirement coverage) actually changes — both a document's
-    first classification and a /retry reclassification land here.
-
-    Returns True if classification is accepted and extraction should run;
-    False if it's been routed to manual review (FAILED already recorded).
->>>>>>> Stashed changes
     """
     document_type = classification.get("document_type")
     confidence = classification.get("confidence")
@@ -510,14 +501,10 @@ async def _finalise_classification(
         fulfilled_requirements=classification.get("fulfilled_requirements", []),
     )
 
-<<<<<<< Updated upstream
-    if accepted or unrecognised:
-=======
     if case_id is not None:
         await asyncio.to_thread(case_status.sync_submission_finalized, case_id)
 
-    if accepted:
->>>>>>> Stashed changes
+    if accepted or unrecognised:
         return True
 
     if below_threshold:

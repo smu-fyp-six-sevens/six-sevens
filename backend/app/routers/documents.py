@@ -52,7 +52,6 @@ async def get_document(document_id: str) -> DocumentRecord:
     return document
 
 
-<<<<<<< Updated upstream
 @router.patch("/{document_id}/extracted-fields", response_model=DocumentRecord)
 async def update_extracted_fields(
     document_id: str, request: UpdateExtractedFieldsRequest
@@ -63,18 +62,6 @@ async def update_extracted_fields(
     editable form below that threshold). Sets extraction_confidence to 1.0
     since a human has now verified the values, which also takes the document
     back above the threshold so the frontend stops showing it as editable.
-=======
-@router.post("/{document_id}/retry", response_model=DocumentRecord)
-async def retry_document(document_id: str) -> DocumentRecord:
-    """
-    Re-enqueues a document that's stuck or failed. Exists specifically for
-    orphaned in-memory-queue state: this queue (see queue_service.py) does
-    not survive a backend restart, so any document still QUEUED/PROCESSING
-    at that moment is permanently abandoned — nothing else will ever pick
-    it back up. Also useful for a genuinely FAILED document the officer
-    wants to re-attempt. Refuses ANALYZED documents since there's nothing
-    to retry there.
->>>>>>> Stashed changes
     """
     try:
         document = await asyncio.to_thread(document_repository.get_document, document_id)
@@ -88,7 +75,6 @@ async def retry_document(document_id: str) -> DocumentRecord:
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
-<<<<<<< Updated upstream
     try:
         await asyncio.to_thread(
             document_repository.update_extracted_fields,
@@ -112,7 +98,31 @@ async def retry_document(document_id: str) -> DocumentRecord:
 
     updated = await asyncio.to_thread(document_repository.get_document, document_id)
     return updated
-=======
+
+
+@router.post("/{document_id}/retry", response_model=DocumentRecord)
+async def retry_document(document_id: str) -> DocumentRecord:
+    """
+    Re-enqueues a document that's stuck or failed. Exists specifically for
+    orphaned in-memory-queue state: this queue (see queue_service.py) does
+    not survive a backend restart, so any document still QUEUED/PROCESSING
+    at that moment is permanently abandoned — nothing else will ever pick
+    it back up. Also useful for a genuinely FAILED document the officer
+    wants to re-attempt. Refuses ANALYZED documents since there's nothing
+    to retry there.
+    """
+    try:
+        document = await asyncio.to_thread(document_repository.get_document, document_id)
+    except Exception as exc:
+        logger.exception("Failed to fetch document %s", document_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch the document. Check Supabase table access.",
+        ) from exc
+
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
     if document.status == DocumentStatus.ANALYZED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -141,7 +151,6 @@ async def retry_document(document_id: str) -> DocumentRecord:
         ) from exc
 
     return await asyncio.to_thread(document_repository.get_document, document_id)
->>>>>>> Stashed changes
 
 
 @router.get("/{document_id}/download", response_model=DocumentDownloadResponse)
