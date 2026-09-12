@@ -17,8 +17,14 @@ from .models import (
 from .monitoring import is_stuck
 
 
-def _normalize_name(name: Optional[str]) -> Optional[str]:
-    if not name:
+def _normalize_name(name: object) -> Optional[str]:
+    # extracted_fields is LLM output, not a validated schema — individual_name
+    # usually comes back as a single string, but a document naming several
+    # people (e.g. a company constitution listing multiple directors) can
+    # legitimately come back as a list instead. Not a string means it can't
+    # be joined against anything here, so treat it as no usable name rather
+    # than crashing the whole case list over one document's shape.
+    if not isinstance(name, str) or not name:
         return None
     return " ".join(name.strip().upper().split())
 
