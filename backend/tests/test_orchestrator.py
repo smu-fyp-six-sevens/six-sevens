@@ -111,6 +111,7 @@ async def test_no_escalation_marks_analyzed() -> None:
         patch("app.orchestrator.storage_service") as mock_storage,
         patch("app.orchestrator.ingest_document") as mock_ingest,
         patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status"),
     ):
         mock_repo.get_document.return_value = _make_document()
         mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
@@ -193,6 +194,7 @@ async def test_metadata_persisted_when_present() -> None:
         patch("app.orchestrator.storage_service") as mock_storage,
         patch("app.orchestrator.ingest_document") as mock_ingest,
         patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status"),
     ):
         mock_repo.get_document.return_value = _make_document()
         mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
@@ -314,6 +316,7 @@ async def test_intake_coordinator_uploads_signed_url_of_the_document() -> None:
         patch("app.orchestrator.storage_service") as mock_storage,
         patch("app.orchestrator.ingest_document") as mock_ingest,
         patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status"),
     ):
         document = _make_document()
         mock_repo.get_document.return_value = document
@@ -367,6 +370,7 @@ async def test_typed_low_confidence_classification_fails_before_extraction() -> 
         patch("app.orchestrator.extracted_fields_repository") as mock_fields_repo,
         patch("app.orchestrator.storage_service") as mock_storage,
         patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status"),
     ):
         mock_repo.get_document.return_value = _make_document()
         mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
@@ -397,6 +401,7 @@ async def test_unrecognised_classification_still_runs_general_extraction() -> No
         patch("app.orchestrator.storage_service") as mock_storage,
         patch("app.orchestrator.ingest_document") as mock_ingest,
         patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status"),
     ):
         mock_repo.get_document.return_value = _make_document()
         mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
@@ -438,6 +443,7 @@ async def test_escalation_resolves_on_reclassification() -> None:
         patch("app.orchestrator.storage_service") as mock_storage,
         patch("app.orchestrator.ingest_document") as mock_ingest,
         patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status"),
     ):
         mock_repo.get_document.return_value = _make_document()
         mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
@@ -484,6 +490,7 @@ async def test_escalation_cap_routes_to_manual_review() -> None:
         patch("app.orchestrator.ingest_document") as mock_ingest,
         patch("app.orchestrator.settings") as mock_settings,
         patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status"),
     ):
         mock_settings.MAX_RECLASSIFICATION_ATTEMPTS = 2
         mock_settings.CLASSIFICATION_CONFIDENCE_THRESHOLD = 0.6
@@ -548,6 +555,7 @@ async def test_extraction_invocation_failure_marks_failed() -> None:
         patch("app.orchestrator.storage_service") as mock_storage,
         patch("app.orchestrator.ingest_document") as mock_ingest,
         patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status"),
     ):
         mock_repo.get_document.return_value = _make_document()
         mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
