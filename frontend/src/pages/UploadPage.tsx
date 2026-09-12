@@ -54,6 +54,16 @@ function formatRoutingOutcome(outcome: string | null | undefined): string {
 // this only affects how they're displayed, not the underlying data.
 const FIELD_KEY_ACRONYMS = new Set(['id', 'uen', 'tin', 'nric']);
 
+// Fields that carry structured data (arrays/objects) rather than a single
+// display-able value — shown nowhere in this UI (no natural single-line or
+// text-input representation), but still round-tripped untouched on save so
+// editing an unrelated field never wipes them out (see saveFieldDraft).
+const NON_DISPLAYED_FIELD_KEYS = new Set(['transactions']);
+
+function displayableFieldEntries(fields: Record<string, unknown>): [string, unknown][] {
+  return Object.entries(fields).filter(([key]) => !NON_DISPLAYED_FIELD_KEYS.has(key));
+}
+
 function humanizeFieldKey(key: string): string {
   return key
     .split('_')
@@ -68,7 +78,7 @@ function humanizeFieldKey(key: string): string {
 
 function fieldsToDraft(fields: Record<string, unknown>): Record<string, string> {
   const draft: Record<string, string> = {};
-  for (const [key, value] of Object.entries(fields)) {
+  for (const [key, value] of displayableFieldEntries(fields)) {
     draft[key] = value === null || value === undefined ? '' : String(value);
   }
   return draft;
@@ -260,7 +270,7 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
     });
   }
 
-  async function saveFieldDraft(documentId: string) {
+  async function saveFieldDraft(documentId: string, originalFields: Record<string, unknown>) {
     const draft = fieldDrafts.get(documentId);
     if (!draft) return;
 
@@ -271,9 +281,12 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
       return next;
     });
 
-    // Empty string means "cleared by the officer" — send null rather than ""
-    // so it reads as "not present" the same way an LLM-omitted field does.
-    const payload: Record<string, unknown> = {};
+    // Start from the original fields so non-displayed ones (e.g.
+    // "transactions") round-trip untouched instead of being dropped by a
+    // save that only ever saw the displayable subset. Empty string means
+    // "cleared by the officer" — send null rather than "" so it reads as
+    // "not present" the same way an LLM-omitted field does.
+    const payload: Record<string, unknown> = { ...originalFields };
     for (const [key, value] of Object.entries(draft)) {
       payload[key] = value.trim() === '' ? null : value;
     }
@@ -561,8 +574,10 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
                                   className="upload-btn"
                                   disabled={savingFields.has(document.id)}
                                   onClick={() => {
-                                    void saveFieldDraft(document.id);
-                                  }}
+                                  void saveFieldDraft(
+                                    document.id,
+                                    document.extracted_fields as Record<string, unknown>,
+                                  );                                  }}
                                 >
                                   {savingFields.has(document.id) ? 'Saving…' : 'Save fields'}
                                 </button>
@@ -570,7 +585,7 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
                             </>
                           ) : (
                             <div className="kv-grid">
-                              {Object.entries(document.extracted_fields).map(([key, value]) => (
+                              {displayableFieldEntries(document.extracted_fields).map(([key, value]) => (
                                 <div key={key} className="kv-row">
                                   <span className="kv-key">{humanizeFieldKey(key)}</span>
                                   <span className="kv-value">

@@ -62,13 +62,14 @@ EXTRACTION_SCHEMAS: dict[str, list[str]] = {
 # than a single scalar value.
 EXTRA_FIELD_GUIDANCE: dict[str, str] = {
     "bank_statement": (
-        'For "transactions", extract an array of objects — one per transaction line '
-        'visible in the statement — each with these keys: "date" (as shown in the '
-        'document), "description", "amount" (numeric; negative for debits/'
-        'withdrawals, positive for credits/deposits), and "balance" (the running '
-        "balance after that transaction, if shown, else null). Include every "
-        "transaction you can find in the text — do not summarise, truncate, or "
-        "only include a sample."
+        'For "transactions", its "value" should be an array of objects — one per '
+        'transaction line visible in the statement — each with these keys: "date" '
+        '(as shown in the document), "description", "amount" (numeric; negative for '
+        "debits/withdrawals, positive for credits/deposits), and \"balance\" (the "
+        "running balance after that transaction, if shown, else null). Include "
+        "every transaction you can find in the text — do not summarise, truncate, "
+        "or only include a sample. Its \"confidence\" should reflect your overall "
+        "confidence in the transaction list as a whole."
     ),
 }
 
@@ -96,22 +97,28 @@ specific to any one type.
 Fields to check for:
 {field_list}
 
-Use null for any of the fields above that isn't present — do not guess or
-invent values. You may also add any other fields you find relevant,
-using clear, descriptive snake_case keys.
+Use null as the value for any of the fields above that isn't present — do
+not guess or invent values. You may also add any other fields you find
+relevant, using clear, descriptive snake_case keys.
+
+Each field in extracted_fields must be an object of the form
+{{"value": <the extracted value, or null if not present>, "confidence": <float
+0.0-1.0, your confidence that this specific value is correct and clearly
+supported by the text>}} — do not return a bare value, always wrap it like
+this.
 
 Document text:
 {raw_text}
 
 Respond with ONLY a JSON object, no other text, of this shape:
-{{"extracted_fields": {{...}}, "confidence": <float 0.0-1.0>, "escalation": null}}
+{{"extracted_fields": {{"<field_name>": {{"value": ..., "confidence": <float 0.0-1.0>}}, ...}}, "confidence": <float 0.0-1.0>, "escalation": null}}
 """
 
     return f"""You are extracting structured data from a {document_type.replace('_', ' ')} for a KYC/onboarding pipeline.
 
 Given the document text below, extract these REQUIRED fields. Every one of
-them must appear as a key in extracted_fields — use null for any that
-aren't present in the text, rather than omitting the key.
+them must appear as a key in extracted_fields — use null as the value for
+any that aren't present in the text, rather than omitting the key.
 
 Required fields:
 {field_list}
@@ -122,6 +129,12 @@ amounts, addresses) beyond the required list above — there's no fixed list
 for these, use your judgement about what a loan officer reviewing this
 document would find useful. Add them directly into extracted_fields using
 clear, descriptive snake_case keys, alongside the required fields.
+
+Each field in extracted_fields must be an object of the form
+{{"value": <the extracted value, or null if not present>, "confidence": <float
+0.0-1.0, your confidence that this specific value is correct and clearly
+supported by the text>}} — do not return a bare value, always wrap it like
+this, for both required and additional fields.
 
 If the text does NOT actually look like a {document_type.replace('_', ' ')} (e.g. it's clearly a
 different document type), do not force-fit these fields. Instead return an
@@ -134,7 +147,7 @@ Document text:
 {raw_text}
 
 Respond with ONLY a JSON object, no other text, of this shape:
-{{"extracted_fields": {{...}}, "confidence": <float 0.0-1.0>, "escalation": null}}
+{{"extracted_fields": {{"<field_name>": {{"value": ..., "confidence": <float 0.0-1.0>}}, ...}}, "confidence": <float 0.0-1.0>, "escalation": null}}
 
 OR, if the document doesn't match:
 {{"extracted_fields": {{}}, "confidence": 0.0, "escalation": {{"reason": "<what the document actually looks like>"}}}}

@@ -155,6 +155,7 @@ async def _process_document(document_id: str) -> None:
     # on documents (what the frontend currently reads) and the normalised
     # one-row-per-field table (for querying/reporting on individual fields).
     extracted_fields = extraction.get("extracted_fields", {})
+    field_confidences = extraction.get("field_confidences", {})
     extraction_confidence = extraction.get("confidence", 0.0)
     # Recomputed here (not left as whatever Classification recorded) since
     # this is the point individual_address is actually known — an NRIC only
@@ -173,7 +174,8 @@ async def _process_document(document_id: str) -> None:
         extracted_fields_repository.replace_extracted_fields,
         document_id,
         extracted_fields,
-        confidence=extraction_confidence,
+        field_confidences=field_confidences,
+        default_confidence=extraction_confidence,
         required_field_names=set(EXTRACTION_SCHEMAS.get(classification["document_type"], [])),
     )
 
@@ -275,7 +277,12 @@ async def _run_extraction(document_id: str, document, document_type: str, raw_te
         prompt = build_extraction_prompt(document_type, raw_text)
     except ValueError as exc:
         logger.error("Document %s: %s", document_id, exc)
-        return {"extracted_fields": {}, "confidence": 0.0, "escalation": {"reason": str(exc)}}
+        return {
+            "extracted_fields": {},
+            "field_confidences": {},
+            "confidence": 0.0,
+            "escalation": {"reason": str(exc)},
+        }
 
     signed_url = await asyncio.to_thread(
         storage_service.create_signed_url,
@@ -320,15 +327,47 @@ def _parse_extraction_output(llm_output: str) -> dict:
         logger.error("Extraction LLM returned non-JSON output: %r", llm_output[:500])
         return {
             "extracted_fields": {},
+            "field_confidences": {},
             "confidence": 0.0,
             "escalation": {"reason": "Extraction produced unparsable output"},
         }
 
+    raw_fields = parsed.get("extracted_fields", {})
+    extracted_fields, field_confidences = _split_field_confidences(
+        raw_fields if isinstance(raw_fields, dict) else {}
+    )
+
     return {
-        "extracted_fields": parsed.get("extracted_fields", {}),
+        "extracted_fields": extracted_fields,
+        "field_confidences": field_confidences,
         "confidence": parsed.get("confidence", 0.0),
         "escalation": parsed.get("escalation"),
     }
+
+
+def _split_field_confidences(raw_fields: dict) -> tuple[dict, dict]:
+    """
+    The extraction prompt asks the LLM to wrap each field as
+    {"value": ..., "confidence": <float>} rather than a bare value (see
+    build_extraction_prompt). Splits that into a flat name->value dict —
+    what documents.extracted_fields and the frontend expect — and a
+    parallel name->confidence dict for extracted_fields_repository.
+
+    Falls back to treating the whole entry as a bare value with an unknown
+    (None) confidence if the LLM didn't wrap a particular field, since real
+    LLM output doesn't always perfectly follow the requested shape.
+    """
+    values: dict = {}
+    confidences: dict = {}
+    for name, entry in raw_fields.items():
+        if isinstance(entry, dict) and "value" in entry:
+            values[name] = entry["value"]
+            confidence = entry.get("confidence")
+            confidences[name] = float(confidence) if isinstance(confidence, (int, float)) else None
+        else:
+            values[name] = entry
+            confidences[name] = None
+    return values, confidences
 
 
 def _unwrap_workflow_output(result: dict) -> dict:
