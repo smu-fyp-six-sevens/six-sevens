@@ -241,6 +241,73 @@ def test_get_document_download_url_db_failure_returns_502() -> None:
     assert response.status_code == 502
 
 
+def test_retry_document_not_found() -> None:
+    with patch("app.routers.documents.document_repository") as mock_repo:
+        mock_repo.get_document.return_value = None
+
+        response = client.post("/documents/missing-id/retry")
+
+    assert response.status_code == 404
+
+
+def test_retry_document_rejects_already_analyzed() -> None:
+    document = _make_document("doc-1")
+    document.status = DocumentStatus.ANALYZED
+
+    with patch("app.routers.documents.document_repository") as mock_repo:
+        mock_repo.get_document.return_value = document
+
+        response = client.post("/documents/doc-1/retry")
+
+    assert response.status_code == 400
+
+
+def test_retry_document_requeues_stuck_processing_document() -> None:
+    stuck = _make_document("doc-1")
+    stuck.status = DocumentStatus.PROCESSING
+    stuck.retry_count = 0
+    requeued = _make_document("doc-1")
+    requeued.status = DocumentStatus.QUEUED
+    requeued.retry_count = 1
+
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.document_queue") as mock_queue,
+    ):
+        mock_repo.get_document.side_effect = [stuck, requeued]
+        mock_queue.enqueue = AsyncMock()
+
+        response = client.post("/documents/doc-1/retry")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "queued"
+    mock_repo.update_status.assert_called_once_with(
+        "doc-1", DocumentStatus.QUEUED, retry_count=1
+    )
+    mock_queue.enqueue.assert_awaited_once_with("doc-1")
+
+
+def test_retry_document_allows_retrying_failed_document() -> None:
+    failed = _make_document("doc-1")
+    failed.status = DocumentStatus.FAILED
+    failed.failure_reason = "Classifier flagged for manual review"
+    failed.retry_count = 2
+
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.document_queue") as mock_queue,
+    ):
+        mock_repo.get_document.side_effect = [failed, failed]
+        mock_queue.enqueue = AsyncMock()
+
+        response = client.post("/documents/doc-1/retry")
+
+    assert response.status_code == 200
+    mock_repo.update_status.assert_called_once_with(
+        "doc-1", DocumentStatus.QUEUED, retry_count=3
+    )
+
+
 def test_get_document_download_url() -> None:
     with (
         patch("app.routers.documents.document_repository") as mock_repo,
@@ -262,6 +329,7 @@ def test_update_extracted_fields_success() -> None:
     with (
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+        patch("app.routers.documents.case_status") as mock_case_status,
     ):
         original = DocumentRecord(
             id="doc-1",
@@ -290,8 +358,11 @@ def test_update_extracted_fields_success() -> None:
     assert body["extracted_fields"] == {"individual_name": "Jane Tan (corrected)"}
     assert body["extraction_confidence"] == 1.0
 
+    # fulfilled_requirements recomputed from the corrected fields (see
+    # models.compute_fulfilled_requirements) rather than left untouched —
+    # here just self-fulfilment since no individual_address was corrected in.
     mock_repo.update_extracted_fields.assert_called_once_with(
-        "doc-1", {"individual_name": "Jane Tan (corrected)"}, 1.0
+        "doc-1", {"individual_name": "Jane Tan (corrected)"}, 1.0, ["payslip"]
     )
     # required_field_names drawn from the document's own document_type
     # ("payslip") so field_category reflects the same required/additional
@@ -302,6 +373,9 @@ def test_update_extracted_fields_success() -> None:
         confidence=1.0,
         required_field_names={"individual_name", "company_name", "net_pay"},
     )
+    # A manual correction can change requirement coverage (e.g. adding an
+    # address that was missing) just as much as the automated pipeline can.
+    mock_case_status.sync_submission_finalized.assert_called_once_with("case-1")
 
 
 def test_update_extracted_fields_not_found() -> None:

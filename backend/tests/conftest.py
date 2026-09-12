@@ -7,6 +7,58 @@ PDF_DOC_ID = "C001_CertIncumbency"
 IMAGE_DOC_ID = "ocbc_sample"
 
 
+class _BlockedSupabaseAccess:
+    """
+    Stands in for supabase_client.table/.storage in every test. Both
+    __call__ and __getattr__ raise, so it fails loudly whether code calls
+    it directly (supabase_client.table(...)) or chains through it
+    (supabase_client.storage.from_(...).download(...)).
+    """
+
+    def __init__(self, entry_point: str) -> None:
+        self._entry_point = entry_point
+
+    def _raise(self):
+        raise RuntimeError(
+            f"Test attempted a real Supabase call via supabase_client.{self._entry_point}(...). "
+            "Mock the repository/service function that calls it (e.g. "
+            'patch("app.<module>.document_repository") or similar) instead of letting '
+            "it reach the network."
+        )
+
+    def __call__(self, *args, **kwargs):
+        self._raise()
+
+    def __getattr__(self, name):
+        self._raise()
+
+
+@pytest.fixture(autouse=True)
+def _block_real_supabase_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Every repository/service module binds the same shared supabase_client
+    instance (see app/supabase_client.py — each does
+    `from .supabase_client import supabase_client`), so patching attributes
+    on that one object blocks real network access everywhere it's used,
+    regardless of which module holds the name.
+
+    Without this, a test that forgets to mock a call site silently
+    succeeds locally (a real .env with real credentials is present) but
+    fails in CI (no network egress) — exactly what happened with
+    case_status.sync_submission_finalized in test_orchestrator.py: it
+    wasn't mocked, "passed" locally against the real dev database, and
+    only broke in CI. Failing loudly here makes that reproducible locally
+    the moment it happens, instead of only in CI.
+    """
+    from app.supabase_client import supabase_client
+
+    monkeypatch.setattr(supabase_client, "table", _BlockedSupabaseAccess("table"))
+    # .storage is a read-only property (no setter) whose body just returns
+    # self._storage once set — patch that plain backing attribute instead
+    # of the property itself, which monkeypatch can't assign to.
+    monkeypatch.setattr(supabase_client, "_storage", _BlockedSupabaseAccess("storage"))
+
+
 def _write_sample_pdf(path: Path) -> None:
     doc = pymupdf.open()
     page = doc.new_page(width=400, height=300)

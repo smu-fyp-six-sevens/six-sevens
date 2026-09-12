@@ -155,6 +155,20 @@ def test_update_extracted_fields_sends_fields_and_extraction_confidence() -> Non
         )
 
 
+def test_update_extracted_fields_includes_fulfilled_requirements_when_given() -> None:
+    with patch("app.document_repository.supabase_client") as mock_client:
+        document_repository.update_extracted_fields(
+            "doc-1", {"individual_name": "Jane Tan"}, 0.9, ["id_document", "proof_of_address"]
+        )
+
+        update_payload = mock_client.table.return_value.update.call_args[0][0]
+        assert update_payload == {
+            "extracted_fields": {"individual_name": "Jane Tan"},
+            "extraction_confidence": 0.9,
+            "fulfilled_requirements": ["id_document", "proof_of_address"],
+        }
+
+
 def test_record_escalation_sends_reason() -> None:
     with patch("app.document_repository.supabase_client") as mock_client:
         document_repository.record_escalation("doc-1", "reads like a shipping manifest")

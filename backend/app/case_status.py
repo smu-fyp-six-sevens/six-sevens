@@ -4,7 +4,20 @@ from collections import defaultdict
 from typing import Optional
 
 from . import case_repository, document_repository
-from .models import CaseDocumentsStatus, CaseSummary, DocumentRecord, DocumentStatus
+from .mapper import (
+    compute_identity_proof_of_address_coverage,
+    compute_identity_proof_of_address_progress,
+)
+from .models import (
+    REQUIRED_DOCUMENT_TYPES,
+    CaseDocumentsStatus,
+    CaseSummary,
+    ClassificationOutcome,
+    DocumentRecord,
+    DocumentStatus,
+    DocumentType,
+    ProofOfAddressCoverage,
+)
 from .monitoring import is_stuck
 
 
@@ -25,14 +38,77 @@ def compute_documents_status(documents: list[DocumentRecord]) -> CaseDocumentsSt
     return CaseDocumentsStatus.IN_PROGRESS
 
 
+def compute_requirement_coverage(documents: list[DocumentRecord]) -> tuple[list[str], list[str]]:
+    """
+    A requirement counts as fulfilled only by a document whose
+    classification was actually ACCEPTED — one sitting in manual review
+    hasn't been confirmed to be what it claims, so it shouldn't retire a
+    checklist item yet. A single document can fulfil more than one
+    requirement (see DocumentRecord.fulfilled_requirements), so most
+    requirements are a union across all of a case's accepted documents, not
+    a 1:1 count — proof_of_address is the one exception, requiring coverage
+    per identity rather than just once anywhere in the case (see
+    compute_identity_proof_of_address_coverage).
+
+    Returns (fulfilled, missing) against the fixed REQUIRED_DOCUMENT_TYPES
+    checklist, both in checklist order.
+    """
+    fulfilled: set[str] = set()
+    for doc in documents:
+        if doc.classification_outcome == ClassificationOutcome.ACCEPTED:
+            fulfilled.update(doc.fulfilled_requirements)
+
+    # Overrides whatever individual documents self-reported for this one
+    # requirement — see compute_identity_proof_of_address_coverage for why
+    # proof_of_address can't just be unioned like every other requirement.
+    proof_of_address = DocumentType.PROOF_OF_ADDRESS.value
+    if compute_identity_proof_of_address_coverage(documents):
+        fulfilled.add(proof_of_address)
+    else:
+        fulfilled.discard(proof_of_address)
+
+    return (
+        [req for req in REQUIRED_DOCUMENT_TYPES if req in fulfilled],
+        [req for req in REQUIRED_DOCUMENT_TYPES if req not in fulfilled],
+    )
+
+
+def sync_submission_finalized(case_id: str) -> None:
+    """
+    Persists whether this case's requirement checklist is currently fully
+    satisfied. Called right after every classification result is recorded
+    (a document's first classification, or a /retry reclassification —
+    either can change coverage), rather than only computing this at read
+    time like documents_status. Reversible by design: recomputes from
+    scratch every call, so if coverage has dropped back below 100% since
+    it was last synced (e.g. a retry reclassifies a document away from a
+    requirement nothing else covers), this correctly flips back to
+    False/None rather than leaving a stale True in place.
+    """
+    documents = document_repository.list_documents(case_id=case_id)
+    _, missing = compute_requirement_coverage(documents)
+    case_repository.set_submission_finalized(case_id, finalized=not missing)
+
+
+def _build_summary(case, documents: list[DocumentRecord]) -> CaseSummary:
+    fulfilled, missing = compute_requirement_coverage(documents)
+    covered, total = compute_identity_proof_of_address_progress(documents)
+    data = case.model_dump()
+    data["recommended_additional_documents"] = missing
+    return CaseSummary(
+        **data,
+        documents_status=compute_documents_status(documents),
+        fulfilled_requirements=fulfilled,
+        proof_of_address_coverage=ProofOfAddressCoverage(covered=covered, total=total),
+    )
+
+
 def get_case_summary(case_id: str) -> Optional[CaseSummary]:
     case = case_repository.get_case(case_id)
     if case is None:
         return None
     documents = document_repository.list_documents(case_id=case_id)
-    return CaseSummary(
-        **case.model_dump(), documents_status=compute_documents_status(documents)
-    )
+    return _build_summary(case, documents)
 
 
 def list_case_summaries() -> list[CaseSummary]:
@@ -47,10 +123,4 @@ def list_case_summaries() -> list[CaseSummary]:
         if doc.case_id is not None:
             documents_by_case[doc.case_id].append(doc)
 
-    return [
-        CaseSummary(
-            **case.model_dump(),
-            documents_status=compute_documents_status(documents_by_case.get(case.id, [])),
-        )
-        for case in cases
-    ]
+    return [_build_summary(case, documents_by_case.get(case.id, [])) for case in cases]

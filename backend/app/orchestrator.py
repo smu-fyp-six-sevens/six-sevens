@@ -6,12 +6,12 @@ import logging
 import mimetypes
 import re
 
-from . import document_repository, extracted_fields_repository, storage_service
+from . import case_status, document_repository, extracted_fields_repository, storage_service
 from .config import settings
 from .dify_client import dify_client, DifyInvocationError
 from .extraction_prompts import EXTRACTION_SCHEMAS, build_extraction_prompt
 from .ingestion.ingestion_service import ingest_document
-from .models import ClassificationOutcome, DocumentStatus
+from .models import ClassificationOutcome, DocumentStatus, compute_fulfilled_requirements
 
 logger = logging.getLogger("classifier_pipeline.orchestrator")
 
@@ -80,7 +80,7 @@ async def _process_document(document_id: str) -> None:
         await _fail(document_id, f"Intake Coordinator invocation failed: {exc}")
         return
 
-    if not await _finalise_classification(document_id, classification):
+    if not await _finalise_classification(document_id, document.case_id, classification):
         return
 
     try:
@@ -125,7 +125,7 @@ async def _process_document(document_id: str) -> None:
             await _fail(document_id, f"Re-classification invocation failed: {exc}")
             return
 
-        if not await _finalise_classification(document_id, classification):
+        if not await _finalise_classification(document_id, document.case_id, classification):
             return
 
         try:
@@ -156,11 +156,18 @@ async def _process_document(document_id: str) -> None:
     # one-row-per-field table (for querying/reporting on individual fields).
     extracted_fields = extraction.get("extracted_fields", {})
     extraction_confidence = extraction.get("confidence", 0.0)
+    # Recomputed here (not left as whatever Classification recorded) since
+    # this is the point individual_address is actually known — an NRIC only
+    # turns out to also fulfil proof_of_address once Extraction has run.
+    fulfilled_requirements = compute_fulfilled_requirements(
+        classification["document_type"], extracted_fields
+    )
     await asyncio.to_thread(
         document_repository.update_extracted_fields,
         document_id,
         extracted_fields,
         extraction_confidence,
+        fulfilled_requirements,
     )
     await asyncio.to_thread(
         extracted_fields_repository.replace_extracted_fields,
@@ -176,6 +183,12 @@ async def _process_document(document_id: str) -> None:
         DocumentStatus.ANALYZED,
         document_type=classification["document_type"],
     )
+    # A case's proof_of_address coverage can only become true once
+    # Extraction has run (see compute_fulfilled_requirements above), so this
+    # needs its own sync — the one in _finalise_classification runs too
+    # early to see it.
+    if document.case_id is not None:
+        await asyncio.to_thread(case_status.sync_submission_finalized, document.case_id)
     logger.info("Document %s: classification+extraction complete", document_id)
 
 
@@ -392,7 +405,9 @@ def _is_below_threshold(confidence: float | None) -> bool:
     return confidence is None or confidence < settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
 
 
-async def _finalise_classification(document_id: str, classification: dict) -> bool:
+async def _finalise_classification(
+    document_id: str, case_id: str | None, classification: dict
+) -> bool:
     """
     Records the classification-stage result (type, confidence, outcome) and
     enforces the confidence threshold as a system-level gate rather than
@@ -400,6 +415,11 @@ async def _finalise_classification(document_id: str, classification: dict) -> bo
     OR'd in as an extra signal for cases the numeric threshold alone
     wouldn't catch (e.g. the sub-classifiers disagreeing despite a
     survivable confidence number).
+
+    Also syncs the case's submission_finalized flag, since this is the one
+    place a document's fulfilled_requirements (and therefore the case's
+    overall requirement coverage) actually changes — both a document's
+    first classification and a /retry reclassification land here.
 
     Returns True if extraction should run — either because classification was
     accepted outright, or because it came back "unrecognised", in which case
@@ -430,6 +450,10 @@ async def _finalise_classification(document_id: str, classification: dict) -> bo
     accepted = not unrecognised and not below_threshold and not classification.get("needs_manual_review")
 
     outcome = ClassificationOutcome.ACCEPTED if accepted else ClassificationOutcome.MANUAL_REVIEW
+    # Self-fulfilment only at this stage — individual_address isn't known
+    # until Extraction runs, so proof_of_address cross-fulfilment (see
+    # compute_fulfilled_requirements) gets recomputed and persisted again
+    # once extraction succeeds, further down in _process_document.
     await asyncio.to_thread(
         document_repository.record_classification,
         document_id,
@@ -437,7 +461,11 @@ async def _finalise_classification(document_id: str, classification: dict) -> bo
         confidence=confidence,
         classification_outcome=outcome.value,
         evidence=classification.get("evidence", []),
+        fulfilled_requirements=compute_fulfilled_requirements(document_type, None),
     )
+
+    if case_id is not None:
+        await asyncio.to_thread(case_status.sync_submission_finalized, case_id)
 
     if accepted or unrecognised:
         return True

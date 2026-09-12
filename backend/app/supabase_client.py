@@ -20,7 +20,15 @@ def _build_client() -> Client:
     # concurrent thread access (intermittent httpcore.ReadError). Supplying
     # our own HTTP/1.1 client makes httpx hand each concurrent request its
     # own pooled connection instead, which is thread-safe.
-    http_client = httpx.Client(http2=False)
+    #
+    # timeout=30.0: httpx's unset default is 5s for connect/read/write,
+    # which is tight for uploading an actual file's bytes to Storage under
+    # any real network variance — a plain 5s read timeout surfaced as
+    # "Failed to store the uploaded file. Check Supabase bucket access."
+    # (a misleading message for what was really just httpcore.ReadTimeout,
+    # nothing to do with permissions). Matches dify_client.py's own
+    # timeout=30.0 for the same class of external-call latency.
+    http_client = httpx.Client(http2=False, timeout=30.0)
     return create_client(
         settings.SUPABASE_URL,
         settings.SUPABASE_PUBLISHABLE_KEY,

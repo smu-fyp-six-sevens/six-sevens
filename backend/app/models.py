@@ -48,6 +48,42 @@ class DocumentType(str, Enum):
     UNRECOGNISED = "unrecognised"
 
 
+# The fixed checklist every case is required to satisfy — every real
+# DocumentType is also a document requirement. A single document can fulfil
+# more than one of these (e.g. an NRIC also covers Proof of Address), which
+# is why fulfilment is tracked as its own list rather than assumed 1:1 with
+# a document's own document_type — see DocumentRecord.fulfilled_requirements.
+REQUIRED_DOCUMENT_TYPES: list[str] = [
+    doc_type.value for doc_type in DocumentType if doc_type != DocumentType.UNRECOGNISED
+]
+
+
+def compute_fulfilled_requirements(
+    document_type: str | None, extracted_fields: Optional[dict]
+) -> list[str]:
+    """
+    Deterministic replacement for what the Classifier used to self-report
+    via free-text ("Fulfils requirements" section, cross-checked against an
+    "Address check: visible" evidence line) — decided here instead from the
+    actually-extracted individual_address field, once Extraction has run.
+    An NRIC (or any other document type whose schema happens to capture an
+    address) fulfils proof_of_address for whoever individual_address names,
+    on top of fulfilling its own document_type.
+
+    Note: this only decides what a single document fulfils on its own —
+    with multiple identities in a case (multiple ID documents), whether
+    proof_of_address counts case-wide requires matching each identity to
+    an address by name; see mapper.compute_identity_proof_of_address_coverage.
+    """
+    if document_type not in REQUIRED_DOCUMENT_TYPES:
+        return []
+    fulfilled = [document_type]
+    has_address = bool((extracted_fields or {}).get("individual_address"))
+    if has_address and document_type != DocumentType.PROOF_OF_ADDRESS.value:
+        fulfilled.append(DocumentType.PROOF_OF_ADDRESS.value)
+    return fulfilled
+
+
 class CaseRecord(BaseModel):
     id: str
     greenlink_case_id: str
@@ -76,8 +112,35 @@ class CaseDocumentsStatus(str, Enum):
     ANALYZED = "analyzed"
 
 
+class ProofOfAddressCoverage(BaseModel):
+    """
+    How many of the case's identified individuals (one per accepted
+    id_document) currently have an address on file, out of how many there
+    are — see mapper.compute_identity_proof_of_address_progress.
+    total=0 means no ID document has been accepted yet, so there's nothing
+    to report coverage against (distinct from 0 covered out of >0 total).
+    """
+
+    covered: int
+    total: int
+
+
 class CaseSummary(CaseRecord):
+    """
+    documents_status and fulfilled_requirements are both computed live from
+    the documents table on every read, never stored — see case_status.py.
+    recommended_additional_documents is repurposed here as the computed
+    "still missing" list (the checklist requirements no accepted document
+    has fulfilled yet), overriding whatever's in the underlying (always
+    empty — nothing ever wrote to it) cases.recommended_additional_documents
+    column.
+    """
+
     documents_status: CaseDocumentsStatus
+    fulfilled_requirements: list[str] = Field(default_factory=list)
+    proof_of_address_coverage: ProofOfAddressCoverage = Field(
+        default_factory=lambda: ProofOfAddressCoverage(covered=0, total=0)
+    )
 
 
 class DocumentRecord(BaseModel):
@@ -98,6 +161,7 @@ class DocumentRecord(BaseModel):
     processing_started_at: Optional[datetime] = None
     failure_reason: Optional[str] = None
     evidence: list[str] = Field(default_factory=list)
+    fulfilled_requirements: list[str] = Field(default_factory=list)
     extracted_fields: Optional[dict] = None
     # Extraction's own confidence in the values it pulled into extracted_fields
     # — distinct from (and no longer overwrites) the classifier's `confidence`

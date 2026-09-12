@@ -42,10 +42,6 @@ class Settings:
     DIFY_EXTRACTION_WORKFLOW_ID: str = os.environ.get("DIFY_EXTRACTION_WORKFLOW_ID", "")
     DIFY_EXTRACTION_API_KEY: str = os.environ.get("DIFY_EXTRACTION_API_KEY", "")
 
-    DEEPSEEK_BASE_URL: str = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-    DEEPSEEK_API_KEY: str = os.environ.get("DEEPSEEK_API_KEY", "")
-    DEEPSEEK_MODEL: str = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
-
     # AC2: invocation should be attempted within this window of being dequeued
     DEQUEUE_TO_INVOKE_TARGET_SECONDS: float = 1.0
     # AC3: retry policy for a failed Dify workflow invocation (any workflow —
@@ -78,8 +74,9 @@ class Settings:
         os.environ.get("DIFY_CLASSIFIER_MAX_CONCURRENCY", "1")
     )
 
-    # Classification: filename-rule matches scoring below this are treated
-    # as unrecognised/low-confidence and flagged for manual review.
+    # Classifier confidence below this is treated as low-confidence and
+    # routed to manual review, regardless of what document_type was guessed
+    # (see orchestrator._is_below_threshold).
     CLASSIFICATION_CONFIDENCE_THRESHOLD: float = 0.6
 
     # Extraction: below this, the frontend renders extracted fields as

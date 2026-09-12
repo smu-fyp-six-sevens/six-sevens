@@ -5,7 +5,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, status
 
-from .. import document_repository, extracted_fields_repository, storage_service
+from .. import case_status, document_repository, extracted_fields_repository, storage_service
 from ..config import settings
 from ..extraction_prompts import EXTRACTION_SCHEMAS
 from ..models import (
@@ -13,7 +13,9 @@ from ..models import (
     DocumentRecord,
     DocumentStatus,
     UpdateExtractedFieldsRequest,
+    compute_fulfilled_requirements,
 )
+from ..queue_service import document_queue
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 logger = logging.getLogger(__name__)
@@ -75,11 +77,19 @@ async def update_extracted_fields(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
     try:
+        # Recomputed rather than left as whatever the automated pipeline last
+        # wrote — a loan officer correcting individual_address (e.g. filling
+        # one in the classifier/extractor missed) can change whether this
+        # document now also fulfils proof_of_address.
+        fulfilled_requirements = compute_fulfilled_requirements(
+            document.document_type, request.extracted_fields
+        )
         await asyncio.to_thread(
             document_repository.update_extracted_fields,
             document_id,
             request.extracted_fields,
             1.0,
+            fulfilled_requirements,
         )
         await asyncio.to_thread(
             extracted_fields_repository.replace_extracted_fields,
@@ -95,8 +105,64 @@ async def update_extracted_fields(
             detail="Failed to save extracted fields. Check Supabase table access.",
         ) from exc
 
+    if document.case_id is not None:
+        await asyncio.to_thread(case_status.sync_submission_finalized, document.case_id)
+
     updated = await asyncio.to_thread(document_repository.get_document, document_id)
     return updated
+
+
+@router.post("/{document_id}/retry", response_model=DocumentRecord)
+async def retry_document(document_id: str) -> DocumentRecord:
+    """
+    Re-enqueues a document that's stuck or failed. Exists specifically for
+    orphaned in-memory-queue state: this queue (see queue_service.py) does
+    not survive a backend restart, so any document still QUEUED/PROCESSING
+    at that moment is permanently abandoned — nothing else will ever pick
+    it back up. Also useful for a genuinely FAILED document the officer
+    wants to re-attempt. Refuses ANALYZED documents since there's nothing
+    to retry there.
+    """
+    try:
+        document = await asyncio.to_thread(document_repository.get_document, document_id)
+    except Exception as exc:
+        logger.exception("Failed to fetch document %s", document_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch the document. Check Supabase table access.",
+        ) from exc
+
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    if document.status == DocumentStatus.ANALYZED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Document already analyzed; nothing to retry.",
+        )
+
+    try:
+        # update_status only ever writes fields passed as non-None, so this
+        # can't clear a stale failure_reason from the prior attempt — it's
+        # left in place and will read as stale once this retry succeeds.
+        # Pre-existing limitation of update_status, not new to this retry
+        # path (the classification-escalation loop's own success path has
+        # the same gap), so not fixed here.
+        await asyncio.to_thread(
+            document_repository.update_status,
+            document_id,
+            DocumentStatus.QUEUED,
+            retry_count=document.retry_count + 1,
+        )
+        await document_queue.enqueue(document_id)
+    except Exception as exc:
+        logger.exception("Failed to re-enqueue document %s", document_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to re-enqueue the document.",
+        ) from exc
+
+    return await asyncio.to_thread(document_repository.get_document, document_id)
 
 
 @router.get("/{document_id}/download", response_model=DocumentDownloadResponse)

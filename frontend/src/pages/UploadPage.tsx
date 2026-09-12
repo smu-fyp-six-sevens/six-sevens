@@ -3,7 +3,9 @@ import type { CaseRecord } from '../App';
 import DropZone from '../components/DropZone';
 import FileRow from '../components/FileRow';
 import {
+  REQUIRED_DOCUMENT_TYPES,
   EXTRACTION_CONFIDENCE_THRESHOLD,
+  getCaseRequirementCoverage,
   getDocument,
   updateExtractedFields,
   listDocuments,
@@ -24,6 +26,10 @@ import type { FileIssue } from '../utils/fileValidation';
 
 const MAX_FILE_SIZE_MB = Math.floor(MAX_FILE_SIZE_BYTES / (1024 * 1024));
 
+const REQUIREMENT_LABELS = new Map(
+  REQUIRED_DOCUMENT_TYPES.map((requirement) => [requirement.value, requirement.label]),
+);
+
 interface UploadPageProps {
   selectedCase: CaseRecord;
   onBack: () => void;
@@ -31,6 +37,16 @@ interface UploadPageProps {
 
 function isExtractionNotConfiguredFailure(reason: string | null | undefined): boolean {
   return Boolean(reason?.startsWith('Extraction invocation failed'));
+}
+
+function formatRoutingOutcome(outcome: string | null | undefined): string {
+  switch (outcome) {
+    case 'accepted':
+    case 'manual_review':
+      return 'Proceed to fraud detection';
+    default:
+      return '—';
+  }
 }
 
 // Extracted field keys are snake_case identifiers (e.g. "bank_name",
@@ -82,6 +98,8 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [documentDetails, setDocumentDetails] = useState<Map<string, DocumentRecord>>(new Map());
+  const [fulfilledRequirements, setFulfilledRequirements] = useState<Set<string>>(new Set());
+  const [proofOfAddressCoverage, setProofOfAddressCoverage] = useState({ covered: 0, total: 0 });
   const [fieldDrafts, setFieldDrafts] = useState<Map<string, Record<string, string>>>(new Map());
   const [savingFields, setSavingFields] = useState<Set<string>>(new Set());
   const [saveFieldErrors, setSaveFieldErrors] = useState<Map<string, string>>(new Map());
@@ -95,6 +113,24 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
   }, []);
 
   const hasOutcome = results.length > 0 || rejections.length > 0;
+
+  // Fetched from the backend rather than unioned client-side from each
+  // document's own fulfilled_requirements — proof_of_address specifically
+  // requires every identified individual (every id_document) to have an
+  // address on file, not just one anywhere in the case, and that
+  // identity-matching logic lives in case_status.py, not here. See
+  // getCaseRequirementCoverage's docstring in uploadService.ts.
+  async function refreshRequirementCoverage() {
+    try {
+      const coverage = await getCaseRequirementCoverage(selectedCase.id);
+      if (isMountedRef.current) {
+        setFulfilledRequirements(new Set(coverage.fulfilled_requirements));
+        setProofOfAddressCoverage(coverage.proof_of_address_coverage);
+      }
+    } catch {
+      // best-effort refresh — leave the last-known checklist state on screen
+    }
+  }
 
   async function pollDocument(documentId: string) {
     // No attempt cap — how long classification actually takes depends on
@@ -116,7 +152,12 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
       if (document) {
         setDocumentDetails((current) => new Map(current).set(documentId, document as DocumentRecord));
 
-        if (TERMINAL_STATUSES.has(document.status)) return;
+        if (TERMINAL_STATUSES.has(document.status)) {
+          // Requirement coverage (esp. proof_of_address) can only be known
+          // for certain once this document reaches a terminal status.
+          void refreshRequirementCoverage();
+          return;
+        }
       }
 
       await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
@@ -132,14 +173,6 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
         if (cancelled) return;
 
         setDocumentDetails(new Map(documents.map((document) => [document.id, document])));
-        setResults(
-          documents.map((document) => ({
-            filename: document.filename,
-            success: true,
-            document_id: document.id,
-            status: document.status,
-          })),
-        );
 
         documents.forEach((document) => {
           if (!TERMINAL_STATUSES.has(document.status)) {
@@ -152,6 +185,7 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
     }
 
     void loadExistingDocuments();
+    void refreshRequirementCoverage();
 
     return () => {
       cancelled = true;
@@ -183,7 +217,6 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
     setError(null);
     setResults([]);
     setRejections([]);
-    setDocumentDetails(new Map());
     setJustSubmitted(true);
 
     try {
@@ -287,7 +320,7 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
   const failedCount = results.filter((result) => !result.success).length + rejections.length;
 
   return (
-    <main className="shell">
+    <main className="shell shell--upload">
       <header className="app-header">
         <div className="brand">
           GLDB <span>Fraud Review</span>
@@ -295,249 +328,321 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
         <div className="officer-tag">Loan Officer · J. Tan</div>
       </header>
 
-      <section className="upload-view">
-        <button type="button" className="back-link" onClick={onBack}>
-          ← Back to case queue
-        </button>
+      <div className="upload-view">
+        <section className="upload-main">
+          <button type="button" className="back-link" onClick={onBack}>
+            ← Back to case queue
+          </button>
 
-        <p className="eyebrow">
-          Case #{selectedCase.caseNumber} · {selectedCase.type} — {selectedCase.applicant}
-        </p>
-        <h1>Upload supporting documents</h1>
-        <p className="sub">
-          Accepted files are logged and assigned a document ID for the investigation record.
-        </p>
+          <p className="eyebrow">
+            Case #{selectedCase.caseNumber} · {selectedCase.type} — {selectedCase.applicant}
+          </p>
+          <h1>Upload supporting documents</h1>
+          <p className="sub">
+            Accepted files are logged and assigned a document ID for the investigation record.
+          </p>
 
-        <DropZone onFiles={handleFiles} disabled={isSubmitting} />
+          <DropZone onFiles={handleFiles} disabled={isSubmitting} />
 
-        {selectedFiles.length > 0 && (
-          <>
-            <div className="section-label">
-              <span>Selected files</span>
-              <span>{selectedFiles.length} selected</span>
+          {selectedFiles.length > 0 && (
+            <>
+              <div className="section-label">
+                <span>Selected files</span>
+                <span>{selectedFiles.length} selected</span>
+              </div>
+
+              <div className="file-list">
+                {selectedFiles.map((file, index) => {
+                  const rejection = rejections.find((item) => item.file === file);
+                  return (
+                    <FileRow
+                      key={`${file.name}-${index}`}
+                      file={file}
+                      result={resultByFilename.get(file.name)}
+                      rejected={rejection ? describeIssue(rejection.issue) : undefined}
+                      isUploading={isSubmitting}
+                      onRemove={() => removeFile(index)}
+                    />
+                  );
+                })}
+              </div>
+
+              <div className="action-bar">
+                <span className="count">
+                  {hasOutcome
+                    ? `${completedCount} / ${selectedFiles.length} processed`
+                    : `${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''} selected`}
+                </span>
+
+                <button
+                  type="button"
+                  className="upload-btn"
+                  disabled={isSubmitting || selectedFiles.length === 0}
+                  onClick={() => {
+                    void handleSubmit();
+                  }}
+                >
+                  {isSubmitting
+                    ? 'Uploading…'
+                    : hasOutcome
+                      ? 'Upload again'
+                      : `Upload ${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''}`}
+                </button>
+              </div>
+            </>
+          )}
+
+          {selectedFiles.length === 0 && !isSubmitting && (
+            <div className="empty">
+              No files selected yet — drag files above or click browse
             </div>
+          )}
 
-            <div className="file-list">
-              {selectedFiles.map((file, index) => {
-                const rejection = rejections.find((item) => item.file === file);
-                return (
-                  <FileRow
-                    key={`${file.name}-${index}`}
-                    file={file}
-                    result={resultByFilename.get(file.name)}
-                    rejected={rejection ? describeIssue(rejection.issue) : undefined}
-                    isUploading={isSubmitting}
-                    onRemove={() => removeFile(index)}
-                  />
-                );
-              })}
-            </div>
+          {countError && <div className="toast show mixed">⚠ {countError}</div>}
+          {error && <div className="toast show mixed">⚠ {error}</div>}
 
-            <div className="action-bar">
-              <span className="count">
-                {hasOutcome
-                  ? `${completedCount} / ${selectedFiles.length} processed`
-                  : `${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''} selected`}
+          {justSubmitted && hasOutcome && !error && !isSubmitting && (
+            <div className={`toast show ${failedCount > 0 ? 'mixed' : 'all-ok'}`}>
+              <span>{failedCount > 0 ? '⚠' : '✓'}</span>
+              <span>
+                <b>
+                  {successfulCount} of {selectedFiles.length} documents uploaded.
+                </b>{' '}
+                {failedCount > 0
+                  ? `${failedCount} need attention above.`
+                  : 'All documents uploaded successfully.'}
               </span>
-
-              <button
-                type="button"
-                className="upload-btn"
-                disabled={isSubmitting || selectedFiles.length === 0}
-                onClick={() => {
-                  void handleSubmit();
-                }}
-              >
-                {isSubmitting
-                  ? 'Uploading…'
-                  : hasOutcome
-                    ? 'Upload again'
-                    : `Upload ${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''}`}
-              </button>
             </div>
-          </>
-        )}
+          )}
 
-        {selectedFiles.length === 0 && !isSubmitting && (
-          <div className="empty">
-            No files selected yet — drag files above or click browse
-          </div>
-        )}
+          {documentDetails.size > 0 && (
+            <section className="pipeline-note">
+              <div className="section-label">
+                <span>Next step</span>
+                <span>Document processing</span>
+              </div>
+              <div className="pipeline">
+                <span className="pstage done">Uploaded</span>
+                <span className="pconnector" />
+                <span className="pstage pending">Extracting</span>
+                <span className="pconnector" />
+                <span className="pstage pending">Quality check</span>
+                <span className="pconnector" />
+                <span className="pstage pending">Result</span>
+              </div>
+              <p>
+                Upload succeeded. The extraction and quality-check details are not returned by
+                the current upload API, so this UI leaves those stages pending rather than
+                inventing processing results.
+              </p>
+            </section>
+          )}
 
-        {countError && <div className="toast show mixed">⚠ {countError}</div>}
-        {error && <div className="toast show mixed">⚠ {error}</div>}
+          {documentDetails.size > 0 && (
+            <section className="pipeline-note">
+              <div className="section-label">
+                <span>Classification result</span>
+                <span className="mock-badge live">LIVE</span>
+              </div>
 
-        {justSubmitted && hasOutcome && !error && !isSubmitting && (
-          <div className={`toast show ${failedCount > 0 ? 'mixed' : 'all-ok'}`}>
-            <span>{failedCount > 0 ? '⚠' : '✓'}</span>
-            <span>
-              <b>
-                {successfulCount} of {selectedFiles.length} documents uploaded.
-              </b>{' '}
-              {failedCount > 0
-                ? `${failedCount} need attention above.`
-                : 'All documents uploaded successfully.'}
-            </span>
-          </div>
-        )}
+              {Array.from(documentDetails.values())
+                .sort((a, b) => a.uploaded_at.localeCompare(b.uploaded_at))
+                .map((document) => {
+                  const status = document.status;
+                  const isTerminal = TERMINAL_STATUSES.has(status);
+                  const extractionNotConfigured =
+                    status === 'failed' && isExtractionNotConfiguredFailure(document.failure_reason);
 
-        {results.some((result) => result.success) && (
-          <section className="pipeline-note">
-            <div className="section-label">
-              <span>Classification result</span>
-              <span className="mock-badge live">LIVE</span>
-            </div>
-
-            {results
-              .filter((result) => result.success && result.document_id)
-              .map((result) => {
-                const documentId = result.document_id as string;
-                const document = documentDetails.get(documentId);
-                const status = document?.status ?? result.status ?? 'queued';
-                const isTerminal = TERMINAL_STATUSES.has(status);
-                const extractionNotConfigured =
-                  status === 'failed' && isExtractionNotConfiguredFailure(document?.failure_reason);
-
-                return (
-                  <div key={result.filename} className="mock-classification-row">
-                    <span className="mock-filename">{result.filename}</span>
-                    <div className="mock-classification">
-                      <div>
-                        <span className="mock-label">Status</span>
-                        <span className="mock-value">
-                          {status}
-                          {!isTerminal && '…'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="mock-label">Document type</span>
-                        <span className="mock-value">{document?.document_type ?? '—'}</span>
-                      </div>
-                      <div>
-                        <span className="mock-label">Confidence</span>
-                        <span className="mock-value">
-                          {document?.confidence != null ? document.confidence.toFixed(2) : '—'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="mock-label">Routing outcome</span>
-                        <span className="mock-value">
-                          {document?.classification_outcome ?? '—'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {document?.evidence && document.evidence.length > 0 && (
-                      <ul className="mock-evidence">
-                        {document.evidence.map((item, i) => (
-                          <li key={i}>{item}</li>
-                        ))}
-                      </ul>
-                    )}
-
-                    {document?.escalation_reason && (
-                      <p className="mock-note warning">
-                        Classification was re-run — Extraction flagged that this didn't look
-                        like the initial guess: "{document.escalation_reason}"
-                      </p>
-                    )}
-
-                    {status === 'analyzed' && document?.extracted_fields && (
-                      <>
-                        <div className="section-label" style={{ marginTop: 10 }}>
-                          <span>Extracted fields</span>
-                          <span>
-                            Extraction confidence:{' '}
-                            {document.extraction_confidence != null
-                              ? document.extraction_confidence.toFixed(2)
-                              : '—'}
+                  return (
+                    <div key={document.id} className="mock-classification-row">
+                      <span className="mock-filename">{document.filename}</span>
+                      <div className="mock-classification">
+                        <div>
+                          <span className="mock-label">Status</span>
+                          <span className="mock-value">
+                            {status}
+                            {!isTerminal && '…'}
                           </span>
                         </div>
+                        <div>
+                          <span className="mock-label">Document type</span>
+                          <span className="mock-value">{document.document_type ?? '—'}</span>
+                        </div>
+                        <div>
+                          <span className="mock-label">Confidence</span>
+                          <span className="mock-value">
+                            {document.confidence != null ? document.confidence.toFixed(2) : '—'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="mock-label">Routing outcome</span>
+                          <span className="mock-value">
+                            {formatRoutingOutcome(document.classification_outcome)}
+                          </span>
+                        </div>
+                      </div>
 
-                        {document.extraction_confidence != null &&
-                        document.extraction_confidence < EXTRACTION_CONFIDENCE_THRESHOLD ? (
-                          <>
-                            <p className="mock-note warning">
-                              Low extraction confidence — review and correct these fields before
-                              relying on them.
-                            </p>
-                            <div className="kv-grid kv-grid--editable">
-                              {Object.entries(
-                                getFieldDraft(documentId, document.extracted_fields),
-                              ).map(([key, value]) => (
+                      {document.classification_outcome === 'accepted' &&
+                        document.fulfilled_requirements.length > 0 && (
+                          <div className="fulfils-row">
+                            <span className="mock-label">Fulfils requirements</span>
+                            <div className="fulfils-tags">
+                              {document.fulfilled_requirements.map((requirement) => (
+                                <span key={requirement} className="fulfils-tag">
+                                  {REQUIREMENT_LABELS.get(requirement) ?? requirement}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                      {document.evidence && document.evidence.length > 0 && (
+                        <ul className="mock-evidence">
+                          {document.evidence.map((item, i) => (
+                            <li key={i}>{item}</li>
+                          ))}
+                        </ul>
+                      )}
+
+                      {document.escalation_reason && (
+                        <p className="mock-note warning">
+                          Classification was re-run — Extraction flagged that this didn't look
+                          like the initial guess: "{document.escalation_reason}"
+                        </p>
+                      )}
+
+                      {status === 'analyzed' && document.extracted_fields && (
+                        <>
+                          <div className="section-label" style={{ marginTop: 10 }}>
+                            <span>Extracted fields</span>
+                            <span>
+                              Extraction confidence:{' '}
+                              {document.extraction_confidence != null
+                                ? document.extraction_confidence.toFixed(2)
+                                : '—'}
+                            </span>
+                          </div>
+
+                          {document.extraction_confidence != null &&
+                          document.extraction_confidence < EXTRACTION_CONFIDENCE_THRESHOLD ? (
+                            <>
+                              <p className="mock-note warning">
+                                Low extraction confidence — review and correct these fields before
+                                relying on them.
+                              </p>
+                              <div className="kv-grid kv-grid--editable">
+                                {Object.entries(
+                                  getFieldDraft(document.id, document.extracted_fields),
+                                ).map(([key, value]) => (
+                                  <div key={key} className="kv-row">
+                                    <span className="kv-key">{humanizeFieldKey(key)}</span>
+                                    <input
+                                      className="kv-input"
+                                      value={value}
+                                      disabled={savingFields.has(document.id)}
+                                      onChange={(event) =>
+                                        setFieldDraftValue(
+                                          document.id,
+                                          document.extracted_fields as Record<string, unknown>,
+                                          key,
+                                          event.target.value,
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="action-bar" style={{ marginTop: 10 }}>
+                                <span className="count">
+                                  {saveFieldErrors.get(document.id) ?? 'Edits are saved to Supabase.'}
+                                </span>
+                                <button
+                                  type="button"
+                                  className="upload-btn"
+                                  disabled={savingFields.has(document.id)}
+                                  onClick={() => {
+                                    void saveFieldDraft(document.id);
+                                  }}
+                                >
+                                  {savingFields.has(document.id) ? 'Saving…' : 'Save fields'}
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="kv-grid">
+                              {Object.entries(document.extracted_fields).map(([key, value]) => (
                                 <div key={key} className="kv-row">
                                   <span className="kv-key">{humanizeFieldKey(key)}</span>
-                                  <input
-                                    className="kv-input"
-                                    value={value}
-                                    disabled={savingFields.has(documentId)}
-                                    onChange={(event) =>
-                                      setFieldDraftValue(
-                                        documentId,
-                                        document.extracted_fields as Record<string, unknown>,
-                                        key,
-                                        event.target.value,
-                                      )
-                                    }
-                                  />
+                                  <span className="kv-value">
+                                    {value === null || value === undefined ? '—' : String(value)}
+                                  </span>
                                 </div>
                               ))}
                             </div>
-                            <div className="action-bar" style={{ marginTop: 10 }}>
-                              <span className="count">
-                                {saveFieldErrors.get(documentId) ?? 'Edits are saved to Supabase.'}
-                              </span>
-                              <button
-                                type="button"
-                                className="upload-btn"
-                                disabled={savingFields.has(documentId)}
-                                onClick={() => {
-                                  void saveFieldDraft(documentId);
-                                }}
-                              >
-                                {savingFields.has(documentId) ? 'Saving…' : 'Save fields'}
-                              </button>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="kv-grid">
-                            {Object.entries(document.extracted_fields).map(([key, value]) => (
-                              <div key={key} className="kv-row">
-                                <span className="kv-key">{humanizeFieldKey(key)}</span>
-                                <span className="kv-value">
-                                  {value === null || value === undefined ? '—' : String(value)}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </>
-                    )}
+                          )}
+                        </>
+                      )}
 
-                    {document?.document_type === 'unrecognised' && (
-                      <p className="mock-note warning">
-                        This document doesn't match any known KYC category and has been
-                        flagged for manual review.
-                      </p>
-                    )}
+                      {document.document_type === 'unrecognised' && (
+                        <p className="mock-note warning">
+                          This document doesn't match any known KYC category and has been
+                          flagged for manual review.
+                        </p>
+                      )}
 
-                    {extractionNotConfigured && document?.document_type !== 'unrecognised' && (
-                      <p className="mock-note">
-                        Classification succeeded — this failed because the extraction workflow
-                        hasn't been set up in Dify yet, not because of the classifier.
-                      </p>
-                    )}
+                      {extractionNotConfigured && document.document_type !== 'unrecognised' && (
+                        <p className="mock-note">
+                          Classification succeeded — this failed because the extraction workflow
+                          hasn't been set up in Dify yet, not because of the classifier.
+                        </p>
+                      )}
 
-                    {status === 'failed' && document?.failure_reason && (
-                      <p className="mock-failure-reason">{document.failure_reason}</p>
-                    )}
-                  </div>
-                );
-              })}
+                      {status === 'failed' && document.failure_reason && (
+                        <p className="mock-failure-reason">{document.failure_reason}</p>
+                      )}
+                    </div>
+                  );
+                })}
+            </section>
+          )}
+        </section>
 
-          </section>
-        )}
-      </section>
+        <aside className="upload-sidebar">
+          <div className="section-label">
+            <span>Document requirements</span>
+            <span>
+              {fulfilledRequirements.size} / {REQUIRED_DOCUMENT_TYPES.length}
+            </span>
+          </div>
+          <ul className="requirements-list">
+            {REQUIRED_DOCUMENT_TYPES.map((requirement) => {
+              const isFulfilled = fulfilledRequirements.has(requirement.value);
+              // proof_of_address is the one requirement that isn't just
+              // yes/no — it needs an address on file per identified
+              // individual (one per ID document), not just once anywhere
+              // in the case. Shown as a fraction once there's at least one
+              // identity to count; before that there's nothing to divide.
+              const isProofOfAddress = requirement.value === 'proof_of_address';
+              const showProgress = isProofOfAddress && proofOfAddressCoverage.total > 0;
+              return (
+                <li
+                  key={requirement.value}
+                  className={`requirement-row${isFulfilled ? ' fulfilled' : ''}`}
+                >
+                  <span className="requirement-dot" />
+                  {requirement.label}
+                  {showProgress && (
+                    <span className="requirement-progress">
+                      {' '}
+                      ({proofOfAddressCoverage.covered}/{proofOfAddressCoverage.total})
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </aside>
+      </div>
     </main>
   );
 }

@@ -111,6 +111,7 @@ async def test_no_escalation_marks_analyzed() -> None:
         patch("app.orchestrator.storage_service") as mock_storage,
         patch("app.orchestrator.ingest_document") as mock_ingest,
         patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status"),
     ):
         mock_repo.get_document.return_value = _make_document()
         mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
@@ -130,7 +131,7 @@ async def test_no_escalation_marks_analyzed() -> None:
             "doc-1", DocumentStatus.ANALYZED, document_type="payslip"
         )
         mock_repo.update_extracted_fields.assert_called_once_with(
-            "doc-1", {"individual_name": "Jane Tan"}, 0.95
+            "doc-1", {"individual_name": "Jane Tan"}, 0.95, ["payslip"]
         )
         # Also mirrored into the normalised one-row-per-field table — with
         # required_field_names drawn from payslip's own extraction schema so
@@ -144,6 +145,48 @@ async def test_no_escalation_marks_analyzed() -> None:
 
 
 @pytest.mark.asyncio
+async def test_extracted_address_adds_proof_of_address_fulfilment() -> None:
+    """
+    An ID document whose Extraction output actually carries an address
+    fulfils proof_of_address too — decided here from the extracted field,
+    not from the Classifier's own prose judgement (see
+    models.compute_fulfilled_requirements).
+    """
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository") as mock_fields_repo,
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
+        patch("app.orchestrator.case_status") as mock_case_status,
+        patch("app.orchestrator.dify_client") as mock_dify,
+    ):
+        mock_repo.get_document.return_value = _make_document()
+        mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest)
+        mock_dify.run_chatflow_with_retry = AsyncMock(
+            return_value=_chat_output(document_type="id_document", confidence=0.95, needs_manual_review=False)
+        )
+        mock_dify.run_workflow_with_retry = AsyncMock(
+            return_value=_extraction_output(
+                extracted_fields={"individual_name": "Jane Tan", "individual_address": "1 Main St"},
+                confidence=0.9,
+            )
+        )
+
+        await orchestrator.process_document("doc-1")
+
+        mock_repo.update_extracted_fields.assert_called_once_with(
+            "doc-1",
+            {"individual_name": "Jane Tan", "individual_address": "1 Main St"},
+            0.9,
+            ["id_document", "proof_of_address"],
+        )
+        # Synced again after extraction (on top of the classification-time
+        # sync) since proof_of_address coverage can only become true here.
+        assert mock_case_status.sync_submission_finalized.call_count == 2
+
+
+@pytest.mark.asyncio
 async def test_metadata_persisted_when_present() -> None:
     with (
         patch("app.orchestrator.document_repository") as mock_repo,
@@ -151,6 +194,7 @@ async def test_metadata_persisted_when_present() -> None:
         patch("app.orchestrator.storage_service") as mock_storage,
         patch("app.orchestrator.ingest_document") as mock_ingest,
         patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status"),
     ):
         mock_repo.get_document.return_value = _make_document()
         mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
@@ -198,6 +242,73 @@ async def test_metadata_not_persisted_when_empty() -> None:
 
 
 @pytest.mark.asyncio
+async def test_accepted_classification_syncs_case_submission_finalized() -> None:
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status") as mock_case_status,
+    ):
+        mock_repo.get_document.return_value = _make_document()  # case_id="case-1"
+        mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        mock_dify.run_chatflow_with_retry = AsyncMock(
+            return_value=_chat_output(document_type="payslip", confidence=0.9, needs_manual_review=False)
+        )
+        mock_dify.run_workflow_with_retry = AsyncMock(return_value=_workflow_output(document_type="payslip"))
+
+        await orchestrator.process_document("doc-1")
+
+        mock_case_status.sync_submission_finalized.assert_called_once_with("case-1")
+
+
+@pytest.mark.asyncio
+async def test_manual_review_classification_still_syncs_case_submission_finalized() -> None:
+    """
+    A manual-review outcome can still change coverage (e.g. a retry that
+    reclassifies a document AWAY from something it used to fulfil), so the
+    sync must not be skipped just because classification wasn't accepted.
+    """
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status") as mock_case_status,
+    ):
+        mock_repo.get_document.return_value = _make_document()  # case_id="case-1"
+        mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        mock_dify.run_chatflow_with_retry = AsyncMock(
+            return_value=_chat_output(document_type="payslip", confidence=0.9, needs_manual_review=True)
+        )
+
+        await orchestrator.process_document("doc-1")
+
+        mock_case_status.sync_submission_finalized.assert_called_once_with("case-1")
+
+
+@pytest.mark.asyncio
+async def test_unassigned_document_does_not_sync_submission_finalized() -> None:
+    document = _make_document()
+    document.case_id = None
+
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status") as mock_case_status,
+    ):
+        mock_repo.get_document.return_value = document
+        mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        mock_dify.run_chatflow_with_retry = AsyncMock(
+            return_value=_chat_output(document_type="payslip", confidence=0.9, needs_manual_review=False)
+        )
+        mock_dify.run_workflow_with_retry = AsyncMock(return_value=_workflow_output(document_type="payslip"))
+
+        await orchestrator.process_document("doc-1")
+
+        mock_case_status.sync_submission_finalized.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_intake_coordinator_uploads_signed_url_of_the_document() -> None:
     with (
         patch("app.orchestrator.document_repository") as mock_repo,
@@ -205,6 +316,7 @@ async def test_intake_coordinator_uploads_signed_url_of_the_document() -> None:
         patch("app.orchestrator.storage_service") as mock_storage,
         patch("app.orchestrator.ingest_document") as mock_ingest,
         patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status"),
     ):
         document = _make_document()
         mock_repo.get_document.return_value = document
@@ -258,6 +370,7 @@ async def test_typed_low_confidence_classification_fails_before_extraction() -> 
         patch("app.orchestrator.extracted_fields_repository") as mock_fields_repo,
         patch("app.orchestrator.storage_service") as mock_storage,
         patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status"),
     ):
         mock_repo.get_document.return_value = _make_document()
         mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
@@ -288,6 +401,7 @@ async def test_unrecognised_classification_still_runs_general_extraction() -> No
         patch("app.orchestrator.storage_service") as mock_storage,
         patch("app.orchestrator.ingest_document") as mock_ingest,
         patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status"),
     ):
         mock_repo.get_document.return_value = _make_document()
         mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
@@ -314,6 +428,7 @@ async def test_unrecognised_classification_still_runs_general_extraction() -> No
             confidence=0.2,
             classification_outcome="manual_review",
             evidence=[],
+            fulfilled_requirements=[],
         )
         mock_repo.update_status.assert_called_once_with(
             "doc-1", DocumentStatus.ANALYZED, document_type="unrecognised"
@@ -328,6 +443,7 @@ async def test_escalation_resolves_on_reclassification() -> None:
         patch("app.orchestrator.storage_service") as mock_storage,
         patch("app.orchestrator.ingest_document") as mock_ingest,
         patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status"),
     ):
         mock_repo.get_document.return_value = _make_document()
         mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
@@ -374,6 +490,7 @@ async def test_escalation_cap_routes_to_manual_review() -> None:
         patch("app.orchestrator.ingest_document") as mock_ingest,
         patch("app.orchestrator.settings") as mock_settings,
         patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status"),
     ):
         mock_settings.MAX_RECLASSIFICATION_ATTEMPTS = 2
         mock_settings.CLASSIFICATION_CONFIDENCE_THRESHOLD = 0.6
@@ -438,6 +555,7 @@ async def test_extraction_invocation_failure_marks_failed() -> None:
         patch("app.orchestrator.storage_service") as mock_storage,
         patch("app.orchestrator.ingest_document") as mock_ingest,
         patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status"),
     ):
         mock_repo.get_document.return_value = _make_document()
         mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
@@ -513,3 +631,24 @@ def test_unwrap_chatflow_output_missing_answer_key_falls_back_to_manual_review()
     result = orchestrator._unwrap_chatflow_output({"unexpected": "shape"})
 
     assert result == {"needs_manual_review": True}
+
+
+def test_finalise_classification_records_self_fulfilment_only() -> None:
+    """
+    fulfilled_requirements at classification time is trivial self-fulfilment
+    only — proof_of_address cross-fulfilment now depends on
+    individual_address, which isn't known until Extraction runs (see
+    models.compute_fulfilled_requirements and the recompute in
+    orchestrator._process_document after extraction succeeds).
+    """
+    result = orchestrator._unwrap_chatflow_output(
+        {
+            "answer": (
+                "**Document type:** id_document\n"
+                "**Confidence:** 0.95\n"
+                "**Needs manual review:** False\n"
+            )
+        }
+    )
+
+    assert "fulfilled_requirements" not in result
