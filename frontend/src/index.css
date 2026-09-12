@@ -643,6 +643,11 @@ h1 {
   background: var(--teal);
 }
 
+.requirement-progress {
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
 @media (max-width: 860px) {
   .upload-view {
     grid-template-columns: 1fr;

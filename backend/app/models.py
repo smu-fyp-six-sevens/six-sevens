@@ -112,6 +112,19 @@ class CaseDocumentsStatus(str, Enum):
     ANALYZED = "analyzed"
 
 
+class ProofOfAddressCoverage(BaseModel):
+    """
+    How many of the case's identified individuals (one per accepted
+    id_document) currently have an address on file, out of how many there
+    are — see case_status.compute_identity_proof_of_address_progress.
+    total=0 means no ID document has been accepted yet, so there's nothing
+    to report coverage against (distinct from 0 covered out of >0 total).
+    """
+
+    covered: int
+    total: int
+
+
 class CaseSummary(CaseRecord):
     """
     documents_status and fulfilled_requirements are both computed live from
@@ -125,6 +138,9 @@ class CaseSummary(CaseRecord):
 
     documents_status: CaseDocumentsStatus
     fulfilled_requirements: list[str] = Field(default_factory=list)
+    proof_of_address_coverage: ProofOfAddressCoverage = Field(
+        default_factory=lambda: ProofOfAddressCoverage(covered=0, total=0)
+    )
 
 
 class DocumentRecord(BaseModel):

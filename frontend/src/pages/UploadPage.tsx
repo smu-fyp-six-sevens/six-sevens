@@ -99,6 +99,7 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [documentDetails, setDocumentDetails] = useState<Map<string, DocumentRecord>>(new Map());
   const [fulfilledRequirements, setFulfilledRequirements] = useState<Set<string>>(new Set());
+  const [proofOfAddressCoverage, setProofOfAddressCoverage] = useState({ covered: 0, total: 0 });
   const [fieldDrafts, setFieldDrafts] = useState<Map<string, Record<string, string>>>(new Map());
   const [savingFields, setSavingFields] = useState<Set<string>>(new Set());
   const [saveFieldErrors, setSaveFieldErrors] = useState<Map<string, string>>(new Map());
@@ -124,6 +125,7 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
       const coverage = await getCaseRequirementCoverage(selectedCase.id);
       if (isMountedRef.current) {
         setFulfilledRequirements(new Set(coverage.fulfilled_requirements));
+        setProofOfAddressCoverage(coverage.proof_of_address_coverage);
       }
     } catch {
       // best-effort refresh — leave the last-known checklist state on screen
@@ -615,6 +617,13 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
           <ul className="requirements-list">
             {REQUIRED_DOCUMENT_TYPES.map((requirement) => {
               const isFulfilled = fulfilledRequirements.has(requirement.value);
+              // proof_of_address is the one requirement that isn't just
+              // yes/no — it needs an address on file per identified
+              // individual (one per ID document), not just once anywhere
+              // in the case. Shown as a fraction once there's at least one
+              // identity to count; before that there's nothing to divide.
+              const isProofOfAddress = requirement.value === 'proof_of_address';
+              const showProgress = isProofOfAddress && proofOfAddressCoverage.total > 0;
               return (
                 <li
                   key={requirement.value}
@@ -622,6 +631,12 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
                 >
                   <span className="requirement-dot" />
                   {requirement.label}
+                  {showProgress && (
+                    <span className="requirement-progress">
+                      {' '}
+                      ({proofOfAddressCoverage.covered}/{proofOfAddressCoverage.total})
+                    </span>
+                  )}
                 </li>
               );
             })}

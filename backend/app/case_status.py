@@ -12,6 +12,7 @@ from .models import (
     DocumentRecord,
     DocumentStatus,
     DocumentType,
+    ProofOfAddressCoverage,
 )
 from .monitoring import is_stuck
 
@@ -22,7 +23,7 @@ def _normalize_name(name: Optional[str]) -> Optional[str]:
     return " ".join(name.strip().upper().split())
 
 
-def compute_identity_proof_of_address_coverage(documents: list[DocumentRecord]) -> bool:
+def compute_identity_proof_of_address_progress(documents: list[DocumentRecord]) -> tuple[int, int]:
     """
     proof_of_address is the one requirement that isn't case-wide from a
     single document: uploading multiple ID documents means multiple
@@ -35,9 +36,9 @@ def compute_identity_proof_of_address_coverage(documents: list[DocumentRecord]) 
     only id_document/credit_report extract an id_number at all — a
     proof_of_address document has no such field to join on.
 
-    Returns False (nothing to cover) when there are no accepted ID
-    documents yet — proof_of_address only makes sense once at least one
-    identity has actually been identified.
+    Returns (covered, total) identities — total is how many accepted
+    id_documents have been identified in the case at all, so (0, 0) means
+    there's nothing to report coverage against yet, distinct from (0, 2).
     """
     accepted = [
         doc for doc in documents if doc.classification_outcome == ClassificationOutcome.ACCEPTED
@@ -49,8 +50,6 @@ def compute_identity_proof_of_address_coverage(documents: list[DocumentRecord]) 
         if doc.document_type == DocumentType.ID_DOCUMENT.value
     }
     identities.discard(None)
-    if not identities:
-        return False
 
     names_with_address = {
         _normalize_name((doc.extracted_fields or {}).get("individual_name"))
@@ -59,7 +58,18 @@ def compute_identity_proof_of_address_coverage(documents: list[DocumentRecord]) 
     }
     names_with_address.discard(None)
 
-    return identities.issubset(names_with_address)
+    covered = sum(1 for name in identities if name in names_with_address)
+    return covered, len(identities)
+
+
+def compute_identity_proof_of_address_coverage(documents: list[DocumentRecord]) -> bool:
+    """
+    Returns False when there are no accepted ID documents yet —
+    proof_of_address only makes sense once at least one identity has
+    actually been identified.
+    """
+    covered, total = compute_identity_proof_of_address_progress(documents)
+    return total > 0 and covered == total
 
 
 def compute_documents_status(documents: list[DocumentRecord]) -> CaseDocumentsStatus:
@@ -133,12 +143,14 @@ def sync_submission_finalized(case_id: str) -> None:
 
 def _build_summary(case, documents: list[DocumentRecord]) -> CaseSummary:
     fulfilled, missing = compute_requirement_coverage(documents)
+    covered, total = compute_identity_proof_of_address_progress(documents)
     data = case.model_dump()
     data["recommended_additional_documents"] = missing
     return CaseSummary(
         **data,
         documents_status=compute_documents_status(documents),
         fulfilled_requirements=fulfilled,
+        proof_of_address_coverage=ProofOfAddressCoverage(covered=covered, total=total),
     )
 
 

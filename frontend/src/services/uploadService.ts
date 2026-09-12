@@ -71,6 +71,10 @@ const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 export interface CaseRequirementCoverage {
   fulfilled_requirements: string[];
   recommended_additional_documents: string[];
+  // How many of the case's identified individuals (one per accepted
+  // id_document) currently have an address on file, out of how many there
+  // are. total=0 means no ID document has been accepted yet.
+  proof_of_address_coverage: { covered: number; total: number };
 }
 
 export async function getCaseRequirementCoverage(caseId: string): Promise<CaseRequirementCoverage> {
