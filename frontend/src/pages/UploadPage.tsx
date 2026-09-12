@@ -5,6 +5,7 @@ import FileRow from '../components/FileRow';
 import {
   REQUIRED_DOCUMENT_TYPES,
   EXTRACTION_CONFIDENCE_THRESHOLD,
+  getCaseRequirementCoverage,
   getDocument,
   updateExtractedFields,
   listDocuments,
@@ -97,6 +98,7 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [documentDetails, setDocumentDetails] = useState<Map<string, DocumentRecord>>(new Map());
+  const [fulfilledRequirements, setFulfilledRequirements] = useState<Set<string>>(new Set());
   const [fieldDrafts, setFieldDrafts] = useState<Map<string, Record<string, string>>>(new Map());
   const [savingFields, setSavingFields] = useState<Set<string>>(new Set());
   const [saveFieldErrors, setSaveFieldErrors] = useState<Map<string, string>>(new Map());
@@ -110,6 +112,23 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
   }, []);
 
   const hasOutcome = results.length > 0 || rejections.length > 0;
+
+  // Fetched from the backend rather than unioned client-side from each
+  // document's own fulfilled_requirements — proof_of_address specifically
+  // requires every identified individual (every id_document) to have an
+  // address on file, not just one anywhere in the case, and that
+  // identity-matching logic lives in case_status.py, not here. See
+  // getCaseRequirementCoverage's docstring in uploadService.ts.
+  async function refreshRequirementCoverage() {
+    try {
+      const coverage = await getCaseRequirementCoverage(selectedCase.id);
+      if (isMountedRef.current) {
+        setFulfilledRequirements(new Set(coverage.fulfilled_requirements));
+      }
+    } catch {
+      // best-effort refresh — leave the last-known checklist state on screen
+    }
+  }
 
   async function pollDocument(documentId: string) {
     // No attempt cap — how long classification actually takes depends on
@@ -131,7 +150,12 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
       if (document) {
         setDocumentDetails((current) => new Map(current).set(documentId, document as DocumentRecord));
 
-        if (TERMINAL_STATUSES.has(document.status)) return;
+        if (TERMINAL_STATUSES.has(document.status)) {
+          // Requirement coverage (esp. proof_of_address) can only be known
+          // for certain once this document reaches a terminal status.
+          void refreshRequirementCoverage();
+          return;
+        }
       }
 
       await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
@@ -159,6 +183,7 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
     }
 
     void loadExistingDocuments();
+    void refreshRequirementCoverage();
 
     return () => {
       cancelled = true;
@@ -169,21 +194,6 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
     () => new Map(results.map((result) => [result.filename, result])),
     [results],
   );
-
-  // A requirement counts as met only once a document's classification was
-  // actually accepted — one still in manual review hasn't been confirmed to
-  // be what it claims. A single document can satisfy more than one
-  // requirement (e.g. an NRIC also covers Proof of Address), so this is a
-  // union across every document for this case, not a 1:1 count.
-  const fulfilledRequirements = useMemo(() => {
-    const fulfilled = new Set<string>();
-    for (const document of documentDetails.values()) {
-      if (document.classification_outcome === 'accepted') {
-        document.fulfilled_requirements.forEach((requirement) => fulfilled.add(requirement));
-      }
-    }
-    return fulfilled;
-  }, [documentDetails]);
 
   function handleFiles(files: File[]) {
     setSelectedFiles((current) => {

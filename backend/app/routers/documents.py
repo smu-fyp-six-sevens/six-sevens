@@ -5,7 +5,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, status
 
-from .. import document_repository, extracted_fields_repository, storage_service
+from .. import case_status, document_repository, extracted_fields_repository, storage_service
 from ..config import settings
 from ..extraction_prompts import EXTRACTION_SCHEMAS
 from ..models import (
@@ -13,6 +13,7 @@ from ..models import (
     DocumentRecord,
     DocumentStatus,
     UpdateExtractedFieldsRequest,
+    compute_fulfilled_requirements,
 )
 from ..queue_service import document_queue
 
@@ -76,11 +77,19 @@ async def update_extracted_fields(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
     try:
+        # Recomputed rather than left as whatever the automated pipeline last
+        # wrote — a loan officer correcting individual_address (e.g. filling
+        # one in the classifier/extractor missed) can change whether this
+        # document now also fulfils proof_of_address.
+        fulfilled_requirements = compute_fulfilled_requirements(
+            document.document_type, request.extracted_fields
+        )
         await asyncio.to_thread(
             document_repository.update_extracted_fields,
             document_id,
             request.extracted_fields,
             1.0,
+            fulfilled_requirements,
         )
         await asyncio.to_thread(
             extracted_fields_repository.replace_extracted_fields,
@@ -95,6 +104,9 @@ async def update_extracted_fields(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to save extracted fields. Check Supabase table access.",
         ) from exc
+
+    if document.case_id is not None:
+        await asyncio.to_thread(case_status.sync_submission_finalized, document.case_id)
 
     updated = await asyncio.to_thread(document_repository.get_document, document_id)
     return updated

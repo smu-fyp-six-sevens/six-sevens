@@ -58,6 +58,32 @@ REQUIRED_DOCUMENT_TYPES: list[str] = [
 ]
 
 
+def compute_fulfilled_requirements(
+    document_type: str | None, extracted_fields: Optional[dict]
+) -> list[str]:
+    """
+    Deterministic replacement for what the Classifier used to self-report
+    via free-text ("Fulfils requirements" section, cross-checked against an
+    "Address check: visible" evidence line) — decided here instead from the
+    actually-extracted individual_address field, once Extraction has run.
+    An NRIC (or any other document type whose schema happens to capture an
+    address) fulfils proof_of_address for whoever individual_address names,
+    on top of fulfilling its own document_type.
+
+    Note: this only decides what a single document fulfils on its own —
+    with multiple identities in a case (multiple ID documents), whether
+    proof_of_address counts case-wide requires matching each identity to
+    an address by name; see case_status.compute_identity_proof_of_address_coverage.
+    """
+    if document_type not in REQUIRED_DOCUMENT_TYPES:
+        return []
+    fulfilled = [document_type]
+    has_address = bool((extracted_fields or {}).get("individual_address"))
+    if has_address and document_type != DocumentType.PROOF_OF_ADDRESS.value:
+        fulfilled.append(DocumentType.PROOF_OF_ADDRESS.value)
+    return fulfilled
+
+
 class CaseRecord(BaseModel):
     id: str
     greenlink_case_id: str

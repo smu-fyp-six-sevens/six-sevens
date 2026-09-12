@@ -79,7 +79,10 @@ def record_classification(
 
 
 def update_extracted_fields(
-    document_id: str, extracted_fields: dict, extraction_confidence: float
+    document_id: str,
+    extracted_fields: dict,
+    extraction_confidence: float,
+    fulfilled_requirements: Optional[list[str]] = None,
 ) -> None:
     """
     Persists the Extraction-stage output into its own extraction_confidence
@@ -89,11 +92,19 @@ def update_extracted_fields(
     for a loan officer's manual correction (see routers/documents.py's PATCH
     endpoint), which passes extraction_confidence=1.0 since a human has now
     verified the values.
+
+    fulfilled_requirements is optional (rather than always written here)
+    since callers compute it from the extracted_fields they're passing in
+    (see models.compute_fulfilled_requirements) — kept out of this
+    function's own responsibility so it stays a pure "persist what I was
+    given" write.
     """
-    update = {
+    update: dict = {
         "extracted_fields": extracted_fields,
         "extraction_confidence": extraction_confidence,
     }
+    if fulfilled_requirements is not None:
+        update["fulfilled_requirements"] = fulfilled_requirements
     supabase_client.table("documents").update(update).eq("id", document_id).execute()
 
 

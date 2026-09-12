@@ -329,6 +329,7 @@ def test_update_extracted_fields_success() -> None:
     with (
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+        patch("app.routers.documents.case_status") as mock_case_status,
     ):
         original = DocumentRecord(
             id="doc-1",
@@ -357,8 +358,11 @@ def test_update_extracted_fields_success() -> None:
     assert body["extracted_fields"] == {"individual_name": "Jane Tan (corrected)"}
     assert body["extraction_confidence"] == 1.0
 
+    # fulfilled_requirements recomputed from the corrected fields (see
+    # models.compute_fulfilled_requirements) rather than left untouched —
+    # here just self-fulfilment since no individual_address was corrected in.
     mock_repo.update_extracted_fields.assert_called_once_with(
-        "doc-1", {"individual_name": "Jane Tan (corrected)"}, 1.0
+        "doc-1", {"individual_name": "Jane Tan (corrected)"}, 1.0, ["payslip"]
     )
     # required_field_names drawn from the document's own document_type
     # ("payslip") so field_category reflects the same required/additional
@@ -369,6 +373,9 @@ def test_update_extracted_fields_success() -> None:
         confidence=1.0,
         required_field_names={"individual_name", "company_name", "net_pay"},
     )
+    # A manual correction can change requirement coverage (e.g. adding an
+    # address that was missing) just as much as the automated pipeline can.
+    mock_case_status.sync_submission_finalized.assert_called_once_with("case-1")
 
 
 def test_update_extracted_fields_not_found() -> None:

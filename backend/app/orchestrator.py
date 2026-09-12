@@ -11,7 +11,7 @@ from .config import settings
 from .dify_client import dify_client, DifyInvocationError
 from .extraction_prompts import EXTRACTION_SCHEMAS, build_extraction_prompt
 from .ingestion.ingestion_service import ingest_document
-from .models import REQUIRED_DOCUMENT_TYPES, ClassificationOutcome, DocumentStatus, DocumentType
+from .models import ClassificationOutcome, DocumentStatus, compute_fulfilled_requirements
 
 logger = logging.getLogger("classifier_pipeline.orchestrator")
 
@@ -156,11 +156,18 @@ async def _process_document(document_id: str) -> None:
     # one-row-per-field table (for querying/reporting on individual fields).
     extracted_fields = extraction.get("extracted_fields", {})
     extraction_confidence = extraction.get("confidence", 0.0)
+    # Recomputed here (not left as whatever Classification recorded) since
+    # this is the point individual_address is actually known — an NRIC only
+    # turns out to also fulfil proof_of_address once Extraction has run.
+    fulfilled_requirements = compute_fulfilled_requirements(
+        classification["document_type"], extracted_fields
+    )
     await asyncio.to_thread(
         document_repository.update_extracted_fields,
         document_id,
         extracted_fields,
         extraction_confidence,
+        fulfilled_requirements,
     )
     await asyncio.to_thread(
         extracted_fields_repository.replace_extracted_fields,
@@ -176,6 +183,12 @@ async def _process_document(document_id: str) -> None:
         DocumentStatus.ANALYZED,
         document_type=classification["document_type"],
     )
+    # A case's proof_of_address coverage can only become true once
+    # Extraction has run (see compute_fulfilled_requirements above), so this
+    # needs its own sync — the one in _finalise_classification runs too
+    # early to see it.
+    if document.case_id is not None:
+        await asyncio.to_thread(case_status.sync_submission_finalized, document.case_id)
     logger.info("Document %s: classification+extraction complete", document_id)
 
 
@@ -375,67 +388,13 @@ def _parse_chatflow_answer(answer: str) -> dict:
         if line.strip().startswith(("-", "*"))
     ]
 
-    fulfilled_requirements = _parse_fulfilled_requirements(answer, document_type)
-
-    # Enforced deterministically rather than trusting the Classifier to
-    # correctly propagate its own "Address check: visible" evidence line
-    # into Fulfils requirements — it reliably writes the evidence line when
-    # asked to, but self-consistency between two separate output fields is
-    # exactly the kind of thing LLMs are unreliable at even when told
-    # explicitly to do it. Reading the same signal back out of evidence here
-    # is a 100%-reliable string match instead of a probabilistic judgement.
-    if (
-        document_type in (DocumentType.ID_DOCUMENT.value, DocumentType.BANK_STATEMENT.value)
-        and DocumentType.PROOF_OF_ADDRESS.value not in fulfilled_requirements
-        and _evidence_confirms_visible_address(evidence)
-    ):
-        fulfilled_requirements = [*fulfilled_requirements, DocumentType.PROOF_OF_ADDRESS.value]
-
     return {
         "document_type": document_type,
         "confidence": confidence,
         "needs_manual_review": needs_manual_review,
         "reasoning": reasoning,
         "evidence": evidence,
-        "fulfilled_requirements": fulfilled_requirements,
     }
-
-
-def _evidence_confirms_visible_address(evidence: list[str]) -> bool:
-    """
-    Matches "Address check: visible — ..." but not "Address check: not
-    visible — ..." (the "not" sits between "check:" and "visible", so the
-    pattern's tight `:\\s*visible` never matches the negative phrasing).
-    """
-    pattern = re.compile(r"address\s*check\s*:\s*visible", re.IGNORECASE)
-    return any(pattern.search(line) for line in evidence)
-
-
-def _parse_fulfilled_requirements(answer: str, document_type: str | None) -> list[str]:
-    """
-    A document can satisfy more than one checklist requirement (e.g. an
-    NRIC also covers Proof of Address, but a passport doesn't) — this reads
-    the Classifier's own judgement of which ones, rather than assuming a
-    fixed type-to-requirement table, since that judgement depends on the
-    document's actual content.
-
-    Falls back to just [document_type] when the Classifier prompt hasn't
-    been updated yet to include this section — self-fulfilment is still
-    correct even without the cross-requirement judgement.
-    """
-    block = _answer_section(answer, "Fulfils requirements") or ""
-    values = [
-        line.lstrip("-* ").strip().lower().replace(" ", "_")
-        for line in block.splitlines()
-        if line.strip().startswith(("-", "*"))
-    ]
-    recognised = [value for value in values if value in REQUIRED_DOCUMENT_TYPES]
-    if recognised:
-        return recognised
-
-    if document_type in REQUIRED_DOCUMENT_TYPES:
-        return [document_type]
-    return []
 
 
 def _is_unrecognised(document_type: str | None) -> bool:
@@ -491,6 +450,10 @@ async def _finalise_classification(
     accepted = not unrecognised and not below_threshold and not classification.get("needs_manual_review")
 
     outcome = ClassificationOutcome.ACCEPTED if accepted else ClassificationOutcome.MANUAL_REVIEW
+    # Self-fulfilment only at this stage — individual_address isn't known
+    # until Extraction runs, so proof_of_address cross-fulfilment (see
+    # compute_fulfilled_requirements) gets recomputed and persisted again
+    # once extraction succeeds, further down in _process_document.
     await asyncio.to_thread(
         document_repository.record_classification,
         document_id,
@@ -498,7 +461,7 @@ async def _finalise_classification(
         confidence=confidence,
         classification_outcome=outcome.value,
         evidence=classification.get("evidence", []),
-        fulfilled_requirements=classification.get("fulfilled_requirements", []),
+        fulfilled_requirements=compute_fulfilled_requirements(document_type, None),
     )
 
     if case_id is not None:

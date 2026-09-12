@@ -11,8 +11,55 @@ from .models import (
     ClassificationOutcome,
     DocumentRecord,
     DocumentStatus,
+    DocumentType,
 )
 from .monitoring import is_stuck
+
+
+def _normalize_name(name: Optional[str]) -> Optional[str]:
+    if not name:
+        return None
+    return " ".join(name.strip().upper().split())
+
+
+def compute_identity_proof_of_address_coverage(documents: list[DocumentRecord]) -> bool:
+    """
+    proof_of_address is the one requirement that isn't case-wide from a
+    single document: uploading multiple ID documents means multiple
+    identities are in play, and each one needs its own address on file —
+    not just one address anywhere in the case. An identity is "covered"
+    either by its own ID document carrying an address, or by a separate
+    document (e.g. a utility bill) whose extracted individual_name matches.
+
+    Matching is by normalized individual_name rather than id_number, since
+    only id_document/credit_report extract an id_number at all — a
+    proof_of_address document has no such field to join on.
+
+    Returns False (nothing to cover) when there are no accepted ID
+    documents yet — proof_of_address only makes sense once at least one
+    identity has actually been identified.
+    """
+    accepted = [
+        doc for doc in documents if doc.classification_outcome == ClassificationOutcome.ACCEPTED
+    ]
+
+    identities = {
+        _normalize_name((doc.extracted_fields or {}).get("individual_name"))
+        for doc in accepted
+        if doc.document_type == DocumentType.ID_DOCUMENT.value
+    }
+    identities.discard(None)
+    if not identities:
+        return False
+
+    names_with_address = {
+        _normalize_name((doc.extracted_fields or {}).get("individual_name"))
+        for doc in accepted
+        if (doc.extracted_fields or {}).get("individual_address")
+    }
+    names_with_address.discard(None)
+
+    return identities.issubset(names_with_address)
 
 
 def compute_documents_status(documents: list[DocumentRecord]) -> CaseDocumentsStatus:
@@ -38,8 +85,11 @@ def compute_requirement_coverage(documents: list[DocumentRecord]) -> tuple[list[
     classification was actually ACCEPTED — one sitting in manual review
     hasn't been confirmed to be what it claims, so it shouldn't retire a
     checklist item yet. A single document can fulfil more than one
-    requirement (see DocumentRecord.fulfilled_requirements), so this is a
-    union across all of a case's accepted documents, not a 1:1 count.
+    requirement (see DocumentRecord.fulfilled_requirements), so most
+    requirements are a union across all of a case's accepted documents, not
+    a 1:1 count — proof_of_address is the one exception, requiring coverage
+    per identity rather than just once anywhere in the case (see
+    compute_identity_proof_of_address_coverage).
 
     Returns (fulfilled, missing) against the fixed REQUIRED_DOCUMENT_TYPES
     checklist, both in checklist order.
@@ -48,6 +98,15 @@ def compute_requirement_coverage(documents: list[DocumentRecord]) -> tuple[list[
     for doc in documents:
         if doc.classification_outcome == ClassificationOutcome.ACCEPTED:
             fulfilled.update(doc.fulfilled_requirements)
+
+    # Overrides whatever individual documents self-reported for this one
+    # requirement — see compute_identity_proof_of_address_coverage for why
+    # proof_of_address can't just be unioned like every other requirement.
+    proof_of_address = DocumentType.PROOF_OF_ADDRESS.value
+    if compute_identity_proof_of_address_coverage(documents):
+        fulfilled.add(proof_of_address)
+    else:
+        fulfilled.discard(proof_of_address)
 
     return (
         [req for req in REQUIRED_DOCUMENT_TYPES if req in fulfilled],

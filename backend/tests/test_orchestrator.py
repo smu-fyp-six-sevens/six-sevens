@@ -130,7 +130,7 @@ async def test_no_escalation_marks_analyzed() -> None:
             "doc-1", DocumentStatus.ANALYZED, document_type="payslip"
         )
         mock_repo.update_extracted_fields.assert_called_once_with(
-            "doc-1", {"individual_name": "Jane Tan"}, 0.95
+            "doc-1", {"individual_name": "Jane Tan"}, 0.95, ["payslip"]
         )
         # Also mirrored into the normalised one-row-per-field table — with
         # required_field_names drawn from payslip's own extraction schema so
@@ -141,6 +141,48 @@ async def test_no_escalation_marks_analyzed() -> None:
             confidence=0.95,
             required_field_names={"individual_name", "company_name", "net_pay"},
         )
+
+
+@pytest.mark.asyncio
+async def test_extracted_address_adds_proof_of_address_fulfilment() -> None:
+    """
+    An ID document whose Extraction output actually carries an address
+    fulfils proof_of_address too — decided here from the extracted field,
+    not from the Classifier's own prose judgement (see
+    models.compute_fulfilled_requirements).
+    """
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository") as mock_fields_repo,
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
+        patch("app.orchestrator.case_status") as mock_case_status,
+        patch("app.orchestrator.dify_client") as mock_dify,
+    ):
+        mock_repo.get_document.return_value = _make_document()
+        mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest)
+        mock_dify.run_chatflow_with_retry = AsyncMock(
+            return_value=_chat_output(document_type="id_document", confidence=0.95, needs_manual_review=False)
+        )
+        mock_dify.run_workflow_with_retry = AsyncMock(
+            return_value=_extraction_output(
+                extracted_fields={"individual_name": "Jane Tan", "individual_address": "1 Main St"},
+                confidence=0.9,
+            )
+        )
+
+        await orchestrator.process_document("doc-1")
+
+        mock_repo.update_extracted_fields.assert_called_once_with(
+            "doc-1",
+            {"individual_name": "Jane Tan", "individual_address": "1 Main St"},
+            0.9,
+            ["id_document", "proof_of_address"],
+        )
+        # Synced again after extraction (on top of the classification-time
+        # sync) since proof_of_address coverage can only become true here.
+        assert mock_case_status.sync_submission_finalized.call_count == 2
 
 
 @pytest.mark.asyncio
@@ -583,121 +625,22 @@ def test_unwrap_chatflow_output_missing_answer_key_falls_back_to_manual_review()
     assert result == {"needs_manual_review": True}
 
 
-def test_fulfilled_requirements_parses_multi_value_section() -> None:
-    # The story's own example: an NRIC also covers Proof of Address.
-    answer = (
-        "**Document type:** id_document\n"
-        "**Confidence:** 0.95\n"
-        "**Needs manual review:** False\n"
-        "**Fulfils requirements:**\n"
-        "- id_document\n"
-        "- proof_of_address\n"
+def test_finalise_classification_records_self_fulfilment_only() -> None:
+    """
+    fulfilled_requirements at classification time is trivial self-fulfilment
+    only — proof_of_address cross-fulfilment now depends on
+    individual_address, which isn't known until Extraction runs (see
+    models.compute_fulfilled_requirements and the recompute in
+    orchestrator._process_document after extraction succeeds).
+    """
+    result = orchestrator._unwrap_chatflow_output(
+        {
+            "answer": (
+                "**Document type:** id_document\n"
+                "**Confidence:** 0.95\n"
+                "**Needs manual review:** False\n"
+            )
+        }
     )
 
-    result = orchestrator._unwrap_chatflow_output({"answer": answer})
-
-    assert result["fulfilled_requirements"] == ["id_document", "proof_of_address"]
-
-
-def test_fulfilled_requirements_drops_values_outside_the_checklist() -> None:
-    # Guards against a hallucinated/misspelled requirement reaching the DB.
-    answer = (
-        "**Document type:** id_document\n"
-        "**Confidence:** 0.9\n"
-        "**Needs manual review:** False\n"
-        "**Fulfils requirements:**\n"
-        "- id_document\n"
-        "- not_a_real_requirement\n"
-    )
-
-    result = orchestrator._unwrap_chatflow_output({"answer": answer})
-
-    assert result["fulfilled_requirements"] == ["id_document"]
-
-
-def test_fulfilled_requirements_falls_back_to_self_when_section_missing() -> None:
-    # Classifier prompt not updated yet — still correct for the 1:1 case.
-    answer = "**Document type:** payslip\n**Confidence:** 0.9\n**Needs manual review:** False\n"
-
-    result = orchestrator._unwrap_chatflow_output({"answer": answer})
-
-    assert result["fulfilled_requirements"] == ["payslip"]
-
-
-def test_fulfilled_requirements_empty_when_no_document_type_and_section_missing() -> None:
-    answer = "**Document type:** null\n**Confidence:** 0.0\n**Needs manual review:** True\n"
-
-    result = orchestrator._unwrap_chatflow_output({"answer": answer})
-
-    assert result["fulfilled_requirements"] == []
-
-
-def test_address_check_visible_forces_proof_of_address_even_if_model_omits_it() -> None:
-    # Real observed failure: the model reliably writes the Address check
-    # evidence line but doesn't reliably carry it into Fulfils requirements
-    # — this is the deterministic backstop for that gap.
-    answer = (
-        "**Document type:** id_document\n"
-        "**Confidence:** 0.99\n"
-        "**Needs manual review:** False\n"
-        "**Evidence:**\n"
-        "- All three tools agree: id_document\n"
-        "- Address check: visible — vision tool reports 'residential address on reverse' is present\n"
-        "**Fulfils requirements:**\n"
-        "- id_document\n"
-    )
-
-    result = orchestrator._unwrap_chatflow_output({"answer": answer})
-
-    assert result["fulfilled_requirements"] == ["id_document", "proof_of_address"]
-
-
-def test_address_check_not_visible_does_not_force_proof_of_address() -> None:
-    answer = (
-        "**Document type:** id_document\n"
-        "**Confidence:** 0.99\n"
-        "**Needs manual review:** False\n"
-        "**Evidence:**\n"
-        "- Address check: not visible — only front of card shown\n"
-        "**Fulfils requirements:**\n"
-        "- id_document\n"
-    )
-
-    result = orchestrator._unwrap_chatflow_output({"answer": answer})
-
-    assert result["fulfilled_requirements"] == ["id_document"]
-
-
-def test_address_check_visible_not_applied_to_unrelated_document_types() -> None:
-    # Sanity check: the override is scoped to id_document/bank_statement,
-    # not any document type that happens to have this evidence string.
-    answer = (
-        "**Document type:** payslip\n"
-        "**Confidence:** 0.9\n"
-        "**Needs manual review:** False\n"
-        "**Evidence:**\n"
-        "- Address check: visible — some address text present\n"
-        "**Fulfils requirements:**\n"
-        "- payslip\n"
-    )
-
-    result = orchestrator._unwrap_chatflow_output({"answer": answer})
-
-    assert result["fulfilled_requirements"] == ["payslip"]
-
-
-def test_address_check_visible_not_duplicated_if_model_already_included_it() -> None:
-    answer = (
-        "**Document type:** id_document\n"
-        "**Confidence:** 0.99\n"
-        "**Needs manual review:** False\n"
-        "**Evidence:**\n"
-        "- Address check: visible — present\n"
-        "**Fulfils requirements:**\n"
-        "- id_document\n"
-        "- proof_of_address\n"
-    )
-
-    result = orchestrator._unwrap_chatflow_output({"answer": answer})
-
-    assert result["fulfilled_requirements"] == ["id_document", "proof_of_address"]
+    assert "fulfilled_requirements" not in result

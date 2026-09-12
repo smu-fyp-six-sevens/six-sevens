@@ -60,6 +60,30 @@ export const EXTRACTION_CONFIDENCE_THRESHOLD = 0.7;
 
 const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 
+// Mirrors the subset of CaseSummary in backend/app/models.py this page
+// needs. fulfilled_requirements here is NOT just a union of each document's
+// own fulfilled_requirements — proof_of_address specifically requires every
+// identified individual (every id_document) to have an address on file, not
+// just one anywhere in the case — see case_status.py's
+// compute_identity_proof_of_address_coverage. That's why the sidebar
+// checklist fetches this from the backend rather than recomputing it from
+// documentDetails client-side.
+export interface CaseRequirementCoverage {
+  fulfilled_requirements: string[];
+  recommended_additional_documents: string[];
+}
+
+export async function getCaseRequirementCoverage(caseId: string): Promise<CaseRequirementCoverage> {
+  const response = await fetch(`${apiBaseUrl}/cases/${caseId}`);
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to fetch case (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as CaseRequirementCoverage;
+}
+
 export async function getDocument(documentId: string): Promise<DocumentRecord> {
   const response = await fetch(`${apiBaseUrl}/documents/${documentId}`);
 
