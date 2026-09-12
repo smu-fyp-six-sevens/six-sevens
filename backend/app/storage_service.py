@@ -1,3 +1,4 @@
+# storage_service.py
 from __future__ import annotations
 
 import uuid
@@ -19,6 +20,10 @@ def upload_file(
         storage_path, file_bytes, {"content-type": content_type}
     )
     return storage_path
+
+
+def download_file(storage_path: str) -> bytes:
+    return supabase_client.storage.from_(settings.SUPABASE_STORAGE_BUCKET).download(storage_path)
 
 
 def delete_file(storage_path: str) -> None:

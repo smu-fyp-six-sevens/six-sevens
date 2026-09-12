@@ -4,7 +4,9 @@ import DropZone from '../components/DropZone';
 import FileRow from '../components/FileRow';
 import {
   REQUIRED_DOCUMENT_TYPES,
+  EXTRACTION_CONFIDENCE_THRESHOLD,
   getDocument,
+  updateExtractedFields,
   listDocuments,
   uploadDocuments,
 } from '../services/uploadService';
@@ -46,6 +48,31 @@ function formatRoutingOutcome(outcome: string | null | undefined): string {
   }
 }
 
+// Extracted field keys are snake_case identifiers (e.g. "bank_name",
+// "id_number") since they're also used as object keys sent back on save —
+// this only affects how they're displayed, not the underlying data.
+const FIELD_KEY_ACRONYMS = new Set(['id', 'uen', 'tin', 'nric']);
+
+function humanizeFieldKey(key: string): string {
+  return key
+    .split('_')
+    .filter(Boolean)
+    .map((word) =>
+      FIELD_KEY_ACRONYMS.has(word.toLowerCase())
+        ? word.toUpperCase()
+        : word.charAt(0).toUpperCase() + word.slice(1),
+    )
+    .join(' ');
+}
+
+function fieldsToDraft(fields: Record<string, unknown>): Record<string, string> {
+  const draft: Record<string, string> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    draft[key] = value === null || value === undefined ? '' : String(value);
+  }
+  return draft;
+}
+
 function describeIssue(issue: FileIssue): string {
   switch (issue.type) {
     case 'empty':
@@ -70,6 +97,9 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [documentDetails, setDocumentDetails] = useState<Map<string, DocumentRecord>>(new Map());
+  const [fieldDrafts, setFieldDrafts] = useState<Map<string, Record<string, string>>>(new Map());
+  const [savingFields, setSavingFields] = useState<Set<string>>(new Set());
+  const [saveFieldErrors, setSaveFieldErrors] = useState<Map<string, string>>(new Map());
 
   const isMountedRef = useRef(true);
   useEffect(() => {
@@ -205,6 +235,65 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
     }
   }
 
+  function getFieldDraft(documentId: string, extractedFields: Record<string, unknown>): Record<string, string> {
+    return fieldDrafts.get(documentId) ?? fieldsToDraft(extractedFields);
+  }
+
+  function setFieldDraftValue(documentId: string, extractedFields: Record<string, unknown>, key: string, value: string) {
+    setFieldDrafts((current) => {
+      const next = new Map(current);
+      const draft = { ...getFieldDraft(documentId, extractedFields), [key]: value };
+      next.set(documentId, draft);
+      return next;
+    });
+  }
+
+  async function saveFieldDraft(documentId: string) {
+    const draft = fieldDrafts.get(documentId);
+    if (!draft) return;
+
+    setSavingFields((current) => new Set(current).add(documentId));
+    setSaveFieldErrors((current) => {
+      const next = new Map(current);
+      next.delete(documentId);
+      return next;
+    });
+
+    // Empty string means "cleared by the officer" — send null rather than ""
+    // so it reads as "not present" the same way an LLM-omitted field does.
+    const payload: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(draft)) {
+      payload[key] = value.trim() === '' ? null : value;
+    }
+
+    try {
+      const updated = await updateExtractedFields(documentId, payload);
+      if (!isMountedRef.current) return;
+      setDocumentDetails((current) => new Map(current).set(documentId, updated));
+      setFieldDrafts((current) => {
+        const next = new Map(current);
+        next.delete(documentId);
+        return next;
+      });
+    } catch (err) {
+      if (!isMountedRef.current) return;
+      setSaveFieldErrors((current) =>
+        new Map(current).set(
+          documentId,
+          err instanceof Error ? err.message : 'Failed to save fields.',
+        ),
+      );
+    } finally {
+      if (isMountedRef.current) {
+        setSavingFields((current) => {
+          const next = new Set(current);
+          next.delete(documentId);
+          return next;
+        });
+      }
+    }
+  }
+
   function removeFile(index: number) {
     setSelectedFiles((files) => files.filter((_, i) => i !== index));
     setCountError(null);
@@ -234,7 +323,7 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
           </button>
 
           <p className="eyebrow">
-            Case #{selectedCase.id} · {selectedCase.type} — {selectedCase.applicant}
+            Case #{selectedCase.caseNumber} · {selectedCase.type} — {selectedCase.applicant}
           </p>
           <h1>Upload supporting documents</h1>
           <p className="sub">
@@ -450,6 +539,164 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
           </ul>
         </aside>
       </div>
+
+        {results.some((result) => result.success) && (
+          <section className="pipeline-note">
+            <div className="section-label">
+              <span>Classification result</span>
+              <span className="mock-badge live">LIVE</span>
+            </div>
+
+            {results
+              .filter((result) => result.success && result.document_id)
+              .map((result) => {
+                const documentId = result.document_id as string;
+                const document = documentDetails.get(documentId);
+                const status = document?.status ?? result.status ?? 'queued';
+                const isTerminal = TERMINAL_STATUSES.has(status);
+                const extractionNotConfigured =
+                  status === 'failed' && isExtractionNotConfiguredFailure(document?.failure_reason);
+
+                return (
+                  <div key={result.filename} className="mock-classification-row">
+                    <span className="mock-filename">{result.filename}</span>
+                    <div className="mock-classification">
+                      <div>
+                        <span className="mock-label">Status</span>
+                        <span className="mock-value">
+                          {status}
+                          {!isTerminal && '…'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="mock-label">Document type</span>
+                        <span className="mock-value">{document?.document_type ?? '—'}</span>
+                      </div>
+                      <div>
+                        <span className="mock-label">Confidence</span>
+                        <span className="mock-value">
+                          {document?.confidence != null ? document.confidence.toFixed(2) : '—'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="mock-label">Routing outcome</span>
+                        <span className="mock-value">
+                          {document?.classification_outcome ?? '—'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {document?.evidence && document.evidence.length > 0 && (
+                      <ul className="mock-evidence">
+                        {document.evidence.map((item, i) => (
+                          <li key={i}>{item}</li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {document?.escalation_reason && (
+                      <p className="mock-note warning">
+                        Classification was re-run — Extraction flagged that this didn't look
+                        like the initial guess: "{document.escalation_reason}"
+                      </p>
+                    )}
+
+                    {status === 'analyzed' && document?.extracted_fields && (
+                      <>
+                        <div className="section-label" style={{ marginTop: 10 }}>
+                          <span>Extracted fields</span>
+                          <span>
+                            Extraction confidence:{' '}
+                            {document.extraction_confidence != null
+                              ? document.extraction_confidence.toFixed(2)
+                              : '—'}
+                          </span>
+                        </div>
+
+                        {document.extraction_confidence != null &&
+                        document.extraction_confidence < EXTRACTION_CONFIDENCE_THRESHOLD ? (
+                          <>
+                            <p className="mock-note warning">
+                              Low extraction confidence — review and correct these fields before
+                              relying on them.
+                            </p>
+                            <div className="kv-grid kv-grid--editable">
+                              {Object.entries(
+                                getFieldDraft(documentId, document.extracted_fields),
+                              ).map(([key, value]) => (
+                                <div key={key} className="kv-row">
+                                  <span className="kv-key">{humanizeFieldKey(key)}</span>
+                                  <input
+                                    className="kv-input"
+                                    value={value}
+                                    disabled={savingFields.has(documentId)}
+                                    onChange={(event) =>
+                                      setFieldDraftValue(
+                                        documentId,
+                                        document.extracted_fields as Record<string, unknown>,
+                                        key,
+                                        event.target.value,
+                                      )
+                                    }
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                            <div className="action-bar" style={{ marginTop: 10 }}>
+                              <span className="count">
+                                {saveFieldErrors.get(documentId) ?? 'Edits are saved to Supabase.'}
+                              </span>
+                              <button
+                                type="button"
+                                className="upload-btn"
+                                disabled={savingFields.has(documentId)}
+                                onClick={() => {
+                                  void saveFieldDraft(documentId);
+                                }}
+                              >
+                                {savingFields.has(documentId) ? 'Saving…' : 'Save fields'}
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="kv-grid">
+                            {Object.entries(document.extracted_fields).map(([key, value]) => (
+                              <div key={key} className="kv-row">
+                                <span className="kv-key">{humanizeFieldKey(key)}</span>
+                                <span className="kv-value">
+                                  {value === null || value === undefined ? '—' : String(value)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {document?.document_type === 'unrecognised' && (
+                      <p className="mock-note warning">
+                        This document doesn't match any known KYC category and has been
+                        flagged for manual review.
+                      </p>
+                    )}
+
+                    {extractionNotConfigured && document?.document_type !== 'unrecognised' && (
+                      <p className="mock-note">
+                        Classification succeeded — this failed because the extraction workflow
+                        hasn't been set up in Dify yet, not because of the classifier.
+                      </p>
+                    )}
+
+                    {status === 'failed' && document?.failure_reason && (
+                      <p className="mock-failure-reason">{document.failure_reason}</p>
+                    )}
+                  </div>
+                );
+              })}
+
+          </section>
+        )}
+
     </main>
   );
 }

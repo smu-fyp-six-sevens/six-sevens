@@ -78,6 +78,52 @@ def record_classification(
     supabase_client.table("documents").update(update).eq("id", document_id).execute()
 
 
+def update_extracted_fields(
+    document_id: str, extracted_fields: dict, extraction_confidence: float
+) -> None:
+    """
+    Persists the Extraction-stage output into its own extraction_confidence
+    column — kept separate from record_classification's confidence (the
+    Classifier's confidence in document_type) so neither stage's number
+    overwrites the other's; both remain readable after the fact. Also used
+    for a loan officer's manual correction (see routers/documents.py's PATCH
+    endpoint), which passes extraction_confidence=1.0 since a human has now
+    verified the values.
+    """
+    update = {
+        "extracted_fields": extracted_fields,
+        "extraction_confidence": extraction_confidence,
+    }
+    supabase_client.table("documents").update(update).eq("id", document_id).execute()
+
+
+def record_escalation(document_id: str, reason: str) -> None:
+    """
+    Marks that Extraction judged the classified document_type to be wrong
+    at least once during processing, triggering a re-run of Intake
+    Coordinator (see orchestrator._process_document's escalation loop).
+    Persisted independently of the final outcome so the frontend can show
+    "classification was re-run" even once the document reaches a terminal
+    status under a different (or the same) document_type.
+    """
+    supabase_client.table("documents").update({"escalation_reason": reason}).eq(
+        "id", document_id
+    ).execute()
+
+
+def update_metadata(document_id: str, metadata: dict) -> None:
+    """
+    Persists the file metadata pulled by ingestion.metadata_extractor
+    (exiftool — author/creation-date/software/etc.) alongside the raw-text
+    extraction step, independent of classification/Extraction succeeding —
+    it's captured as soon as the file is read, not gated on downstream
+    stages.
+    """
+    supabase_client.table("documents").update({"metadata": metadata}).eq(
+        "id", document_id
+    ).execute()
+
+
 def get_document(document_id: str) -> Optional[DocumentRecord]:
     result = supabase_client.table("documents").select("*").eq("id", document_id).execute()
     if not result.data:
