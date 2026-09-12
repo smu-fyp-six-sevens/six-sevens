@@ -492,6 +492,85 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
                         </ul>
                       )}
 
+                      {document.escalation_reason && (
+                        <p className="mock-note warning">
+                          Classification was re-run — Extraction flagged that this didn't look
+                          like the initial guess: "{document.escalation_reason}"
+                        </p>
+                      )}
+
+                      {status === 'analyzed' && document.extracted_fields && (
+                        <>
+                          <div className="section-label" style={{ marginTop: 10 }}>
+                            <span>Extracted fields</span>
+                            <span>
+                              Extraction confidence:{' '}
+                              {document.extraction_confidence != null
+                                ? document.extraction_confidence.toFixed(2)
+                                : '—'}
+                            </span>
+                          </div>
+
+                          {document.extraction_confidence != null &&
+                          document.extraction_confidence < EXTRACTION_CONFIDENCE_THRESHOLD ? (
+                            <>
+                              <p className="mock-note warning">
+                                Low extraction confidence — review and correct these fields before
+                                relying on them.
+                              </p>
+                              <div className="kv-grid kv-grid--editable">
+                                {Object.entries(
+                                  getFieldDraft(document.id, document.extracted_fields),
+                                ).map(([key, value]) => (
+                                  <div key={key} className="kv-row">
+                                    <span className="kv-key">{humanizeFieldKey(key)}</span>
+                                    <input
+                                      className="kv-input"
+                                      value={value}
+                                      disabled={savingFields.has(document.id)}
+                                      onChange={(event) =>
+                                        setFieldDraftValue(
+                                          document.id,
+                                          document.extracted_fields as Record<string, unknown>,
+                                          key,
+                                          event.target.value,
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="action-bar" style={{ marginTop: 10 }}>
+                                <span className="count">
+                                  {saveFieldErrors.get(document.id) ?? 'Edits are saved to Supabase.'}
+                                </span>
+                                <button
+                                  type="button"
+                                  className="upload-btn"
+                                  disabled={savingFields.has(document.id)}
+                                  onClick={() => {
+                                    void saveFieldDraft(document.id);
+                                  }}
+                                >
+                                  {savingFields.has(document.id) ? 'Saving…' : 'Save fields'}
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="kv-grid">
+                              {Object.entries(document.extracted_fields).map(([key, value]) => (
+                                <div key={key} className="kv-row">
+                                  <span className="kv-key">{humanizeFieldKey(key)}</span>
+                                  <span className="kv-value">
+                                    {value === null || value === undefined ? '—' : String(value)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+
                       {document.document_type === 'unrecognised' && (
                         <p className="mock-note warning">
                           This document doesn't match any known KYC category and has been
