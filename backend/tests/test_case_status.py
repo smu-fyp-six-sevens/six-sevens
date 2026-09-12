@@ -1,10 +1,21 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
-from app.case_status import compute_documents_status, compute_requirement_coverage
+from app.case_status import (
+    compute_documents_status,
+    compute_requirement_coverage,
+    sync_submission_finalized,
+)
 from app.config import settings
-from app.models import CaseDocumentsStatus, ClassificationOutcome, DocumentRecord, DocumentStatus
+from app.models import (
+    REQUIRED_DOCUMENT_TYPES,
+    CaseDocumentsStatus,
+    ClassificationOutcome,
+    DocumentRecord,
+    DocumentStatus,
+)
 
 
 def _now() -> datetime:
@@ -141,3 +152,82 @@ def test_passport_does_not_fulfil_proof_of_address() -> None:
     fulfilled, missing = compute_requirement_coverage(documents)
     assert "id_document" in fulfilled
     assert "proof_of_address" in missing
+
+
+def test_sync_submission_finalized_true_when_all_requirements_met() -> None:
+    all_fulfilled = [
+        _make_document(
+            f"doc-{i}",
+            DocumentStatus.ANALYZED,
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            fulfilled_requirements=[requirement],
+        )
+        for i, requirement in enumerate(REQUIRED_DOCUMENT_TYPES)
+    ]
+
+    with (
+        patch("app.case_status.document_repository") as mock_doc_repo,
+        patch("app.case_status.case_repository") as mock_case_repo,
+    ):
+        mock_doc_repo.list_documents.return_value = all_fulfilled
+
+        sync_submission_finalized("case-1")
+
+        mock_case_repo.set_submission_finalized.assert_called_once_with("case-1", finalized=True)
+
+
+def test_sync_submission_finalized_false_when_incomplete() -> None:
+    documents = [
+        _make_document(
+            "doc-1",
+            DocumentStatus.ANALYZED,
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            fulfilled_requirements=["bank_statement"],
+        )
+    ]
+
+    with (
+        patch("app.case_status.document_repository") as mock_doc_repo,
+        patch("app.case_status.case_repository") as mock_case_repo,
+    ):
+        mock_doc_repo.list_documents.return_value = documents
+
+        sync_submission_finalized("case-1")
+
+        mock_case_repo.set_submission_finalized.assert_called_once_with("case-1", finalized=False)
+
+
+def test_sync_submission_finalized_reverses_when_coverage_drops() -> None:
+    """
+    Simulates a /retry reclassifying a document away from a requirement
+    nothing else covers — a previously-complete case must flip back to
+    finalized=False, not keep a stale True.
+    """
+    with (
+        patch("app.case_status.document_repository") as mock_doc_repo,
+        patch("app.case_status.case_repository") as mock_case_repo,
+    ):
+        mock_doc_repo.list_documents.return_value = [
+            _make_document(
+                f"doc-{i}",
+                DocumentStatus.ANALYZED,
+                classification_outcome=ClassificationOutcome.ACCEPTED,
+                fulfilled_requirements=[requirement],
+            )
+            for i, requirement in enumerate(REQUIRED_DOCUMENT_TYPES)
+        ]
+        sync_submission_finalized("case-1")
+        mock_case_repo.set_submission_finalized.assert_called_with("case-1", finalized=True)
+
+        # One document's fulfilled_requirements is now empty (reclassified away).
+        mock_doc_repo.list_documents.return_value = [
+            _make_document(
+                f"doc-{i}",
+                DocumentStatus.ANALYZED,
+                classification_outcome=ClassificationOutcome.ACCEPTED,
+                fulfilled_requirements=[requirement] if i != 0 else [],
+            )
+            for i, requirement in enumerate(REQUIRED_DOCUMENT_TYPES)
+        ]
+        sync_submission_finalized("case-1")
+        mock_case_repo.set_submission_finalized.assert_called_with("case-1", finalized=False)

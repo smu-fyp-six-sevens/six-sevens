@@ -198,6 +198,73 @@ async def test_metadata_not_persisted_when_empty() -> None:
 
 
 @pytest.mark.asyncio
+async def test_accepted_classification_syncs_case_submission_finalized() -> None:
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status") as mock_case_status,
+    ):
+        mock_repo.get_document.return_value = _make_document()  # case_id="case-1"
+        mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        mock_dify.run_chatflow_with_retry = AsyncMock(
+            return_value=_chat_output(document_type="payslip", confidence=0.9, needs_manual_review=False)
+        )
+        mock_dify.run_workflow_with_retry = AsyncMock(return_value=_workflow_output(document_type="payslip"))
+
+        await orchestrator.process_document("doc-1")
+
+        mock_case_status.sync_submission_finalized.assert_called_once_with("case-1")
+
+
+@pytest.mark.asyncio
+async def test_manual_review_classification_still_syncs_case_submission_finalized() -> None:
+    """
+    A manual-review outcome can still change coverage (e.g. a retry that
+    reclassifies a document AWAY from something it used to fulfil), so the
+    sync must not be skipped just because classification wasn't accepted.
+    """
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status") as mock_case_status,
+    ):
+        mock_repo.get_document.return_value = _make_document()  # case_id="case-1"
+        mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        mock_dify.run_chatflow_with_retry = AsyncMock(
+            return_value=_chat_output(document_type="payslip", confidence=0.9, needs_manual_review=True)
+        )
+
+        await orchestrator.process_document("doc-1")
+
+        mock_case_status.sync_submission_finalized.assert_called_once_with("case-1")
+
+
+@pytest.mark.asyncio
+async def test_unassigned_document_does_not_sync_submission_finalized() -> None:
+    document = _make_document()
+    document.case_id = None
+
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status") as mock_case_status,
+    ):
+        mock_repo.get_document.return_value = document
+        mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        mock_dify.run_chatflow_with_retry = AsyncMock(
+            return_value=_chat_output(document_type="payslip", confidence=0.9, needs_manual_review=False)
+        )
+        mock_dify.run_workflow_with_retry = AsyncMock(return_value=_workflow_output(document_type="payslip"))
+
+        await orchestrator.process_document("doc-1")
+
+        mock_case_status.sync_submission_finalized.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_intake_coordinator_uploads_signed_url_of_the_document() -> None:
     with (
         patch("app.orchestrator.document_repository") as mock_repo,

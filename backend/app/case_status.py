@@ -55,6 +55,23 @@ def compute_requirement_coverage(documents: list[DocumentRecord]) -> tuple[list[
     )
 
 
+def sync_submission_finalized(case_id: str) -> None:
+    """
+    Persists whether this case's requirement checklist is currently fully
+    satisfied. Called right after every classification result is recorded
+    (a document's first classification, or a /retry reclassification —
+    either can change coverage), rather than only computing this at read
+    time like documents_status. Reversible by design: recomputes from
+    scratch every call, so if coverage has dropped back below 100% since
+    it was last synced (e.g. a retry reclassifies a document away from a
+    requirement nothing else covers), this correctly flips back to
+    False/None rather than leaving a stale True in place.
+    """
+    documents = document_repository.list_documents(case_id=case_id)
+    _, missing = compute_requirement_coverage(documents)
+    case_repository.set_submission_finalized(case_id, finalized=not missing)
+
+
 def _build_summary(case, documents: list[DocumentRecord]) -> CaseSummary:
     fulfilled, missing = compute_requirement_coverage(documents)
     data = case.model_dump()
