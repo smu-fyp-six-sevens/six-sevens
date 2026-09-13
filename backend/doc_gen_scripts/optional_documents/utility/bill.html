@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Electricity Bill - Mock Document</title>
+
+    <link rel="stylesheet" href="bill.css">
+</head>
+
+<body>
+
+<div class="bill">
+
+    <!-- =========================================================
+         HEADER
+    ========================================================== -->
+
+    <header class="top-section">
+
+        <div class="logo">
+            <svg class="logo-mark" viewBox="0 0 64 64" aria-hidden="true">
+                <circle cx="32" cy="32" r="31" fill="#f6dcc0"/>
+                <ellipse cx="32" cy="20" rx="12" ry="18" fill="#e8a24c" transform="rotate(0 32 32)"/>
+                <ellipse cx="32" cy="20" rx="12" ry="18" fill="#c46a28" transform="rotate(72 32 32)"/>
+                <ellipse cx="32" cy="20" rx="12" ry="18" fill="#f3c78a" transform="rotate(144 32 32)"/>
+                <ellipse cx="32" cy="20" rx="12" ry="18" fill="#d88838" transform="rotate(216 32 32)"/>
+                <ellipse cx="32" cy="20" rx="12" ry="18" fill="#a8521e" transform="rotate(288 32 32)"/>
+                <circle cx="32" cy="32" r="8" fill="#f8ead4"/>
+            </svg>
+            <div class="company-logo">PacificLight</div>
+        </div>
+
+        <div class="header-meta">
+            <div class="bill-date-line">
+                Bill Date: <strong>{{BILL_DATE}}</strong>
+            </div>
+            <div class="header-id">
+                PLE Account No.: {{ACCOUNT_NUMBER}}
+            </div>
+            <div class="header-id">
+                Statement No.: {{STATEMENT_NUMBER}}
+            </div>
+        </div>
+
+        <div class="customer-block">
+            <div class="customer-name">{{BILLING_NAME}}</div>
+            <div class="address">
+                {{BILLING_ADDRESS_LINE_1}} {{BILLING_ADDRESS_LINE_2}}<br>
+                Singapore {{BILLING_POSTAL_CODE}}
+            </div>
+        </div>
+
+        <div class="amount-stack">
+            <div class="amount-card">
+                <div class="amount-card-top">
+                    <div class="total-amount">${{TOTAL_AMOUNT}}</div>
+                    <div class="amount-card-label">Total Amount Payable</div>
+                </div>
+                <div class="amount-card-bottom">
+                    <div class="due-date-value">{{PAYMENT_DUE_DATE}}</div>
+                    <div class="amount-card-label">Payment Due</div>
+                </div>
+            </div>
+
+            <div class="tax-invoice">
+                <div class="tax-invoice-label">THIS IS YOUR TAX INVOICE FOR:</div>
+                <div class="address">
+                    {{PREMISE_ADDRESS_LINE_1}} {{PREMISE_ADDRESS_LINE_2}}<br>
+                    Singapore {{PREMISE_POSTAL_CODE}}
+                </div>
+            </div>
+        </div>
+
+    </header>
+
+
+    <!-- =========================================================
+         6 / 7 — ACCOUNT META
+    ========================================================== -->
+
+    <section class="account-meta">
+
+        <div class="mssl-line">
+            MSSL ACCOUNT NO.: {{SP_ACCOUNT_NUMBER}}
+        </div>
+
+        <div class="information-grid">
+
+            <div class="information-item">
+                <div class="field-label">BILLING PERIOD</div>
+                <div class="field-value">
+                    {{BILLING_PERIOD_START}} – {{BILLING_PERIOD_END}}
+                </div>
+            </div>
+
+            <div class="information-item">
+                <div class="field-label">BILL DATE</div>
+                <div class="field-value">{{BILL_DATE}}</div>
+            </div>
+
+            <div class="information-item">
+                <div class="field-label">ACCOUNT TYPE</div>
+                <div class="field-value">{{ACCOUNT_TYPE}}</div>
+            </div>
+
+            <div class="information-item">
+                <div class="field-label">DEPOSIT</div>
+                <div class="field-value">{{SECURITY_DEPOSIT}}</div>
+            </div>
+
+            <div class="information-item">
+                <div class="field-label">CONTRACT END DATE</div>
+                <div class="field-value">{{CONTRACT_END_DATE}}</div>
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- =========================================================
+         8 / 9 — CONSUMPTION TREND
+    ========================================================== -->
+
+    <section class="card consumption-card">
+
+        <div class="card-title centered">CONSUMPTION TREND</div>
+
+        <div class="consumption-grid">
+
+            <div class="consumption-side">
+                <div class="side-heading">ELECTRICITY</div>
+                <div class="icon-wrap">
+                    <svg class="utility-icon" viewBox="0 0 80 80" aria-hidden="true">
+                        <circle cx="28" cy="28" r="10" fill="#f0b35a"/>
+                        <circle cx="58" cy="24" r="8" fill="#e39b4a"/>
+                        <circle cx="52" cy="52" r="14" fill="#f6d7a8"/>
+                        <path d="M52 34c-6 0-11 5-11 12 0 5 3 8 6 11v5h10v-5c3-3 6-6 6-11 0-7-5-12-11-12z" fill="#5c4030"/>
+                        <rect x="47" y="62" width="10" height="3" rx="1" fill="#5c4030"/>
+                        <rect x="48" y="66" width="8" height="2" rx="1" fill="#5c4030"/>
+                    </svg>
+                </div>
+            </div>
+
+            <div class="chart">
+                <div class="chart-plot">
+                    <div class="chart-y-label">kWh</div>
+                    <div class="chart-area">
+
+                        <div class="bar-container">
+                            <div class="bar-value">{{MONTH_1_KWH}}</div>
+                            <div class="bar" data-kwh="{{MONTH_1_KWH}}"></div>
+                            <span>{{MONTH_1}}</span>
+                        </div>
+
+                        <div class="bar-container">
+                            <div class="bar-value">{{MONTH_2_KWH}}</div>
+                            <div class="bar" data-kwh="{{MONTH_2_KWH}}"></div>
+                            <span>{{MONTH_2}}</span>
+                        </div>
+
+                        <div class="bar-container">
+                            <div class="bar-value">{{MONTH_3_KWH}}</div>
+                            <div class="bar" data-kwh="{{MONTH_3_KWH}}"></div>
+                            <span>{{MONTH_3}}</span>
+                        </div>
+
+                        <div class="bar-container">
+                            <div class="bar-value">{{MONTH_4_KWH}}</div>
+                            <div class="bar" data-kwh="{{MONTH_4_KWH}}"></div>
+                            <span>{{MONTH_4}}</span>
+                        </div>
+
+                        <div class="bar-container">
+                            <div class="bar-value">{{MONTH_5_KWH}}</div>
+                            <div class="bar" data-kwh="{{MONTH_5_KWH}}"></div>
+                            <span>{{MONTH_5}}</span>
+                        </div>
+
+                        <div class="bar-container">
+                            <div class="bar-value">{{CURRENT_MONTH_KWH}}</div>
+                            <div class="bar current" data-kwh="{{CURRENT_MONTH_KWH}}"></div>
+                            <span>{{CURRENT_MONTH}}</span>
+                        </div>
+
+                    </div>
+                    <div class="chart-x-label">Usage</div>
+                </div>
+                <div class="chart-note">*Estimated month</div>
+            </div>
+
+            <div class="consumption-side usage-side">
+                <div class="side-heading">USAGE</div>
+                <div class="usage-value">
+                    {{CURRENT_CONSUMPTION}} <span>kWh</span>
+                </div>
+                <div class="usage-note">(Rounded to whole number)</div>
+                <div class="icon-wrap">
+                    <svg class="utility-icon" viewBox="0 0 80 80" aria-hidden="true">
+                        <circle cx="30" cy="30" r="16" fill="#f0b35a"/>
+                        <circle cx="54" cy="48" r="18" fill="#e89a42"/>
+                        <rect x="22" y="20" width="22" height="28" rx="2" fill="#fff"/>
+                        <path d="M28 28h10M28 33h10M28 38h7" stroke="#c47a2e" stroke-width="1.6"/>
+                        <path d="M58 38l-8 12h6l-4 12 12-16h-7l7-8z" fill="#fff"/>
+                    </svg>
+                </div>
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- =========================================================
+         10 — SUMMARY OF CHARGES
+    ========================================================== -->
+
+    <section class="card charges-card">
+
+        <div class="card-title">SUMMARY OF CHARGES</div>
+
+        <div class="charge-row">
+            <span>Balance Brought Forward from Previous Bill</span>
+            <span>${{BALANCE_BROUGHT_FORWARD}}</span>
+        </div>
+
+        <div class="charge-row">
+            <span>Payment Received on/before {{PAYMENT_RECEIVED_DATE}} - Thank You</span>
+            <span>-${{PAYMENT_RECEIVED}}</span>
+        </div>
+
+        <div class="charge-row">
+            <span>Outstanding Balance</span>
+            <span>${{OUTSTANDING_BALANCE}}</span>
+        </div>
+
+        <div class="charge-row">
+            <span>Current Charges</span>
+            <span>${{CURRENT_MONTH_CHARGES}}</span>
+        </div>
+
+        <div class="charges-total">
+            <div class="charges-total-note">
+                Total Amount Payable will be deducted from your
+                {{BANK_NAME}} bank account ending with {{BANK_ACCOUNT_LAST4}}
+                on {{PAYMENT_DEDUCTION_DATE}}
+            </div>
+            <div class="charges-total-amount">${{TOTAL_AMOUNT}}</div>
+        </div>
+
+    </section>
+
+</div>
+
+<script>
+    (function () {
+        var bars = Array.prototype.slice.call(
+            document.querySelectorAll(".bar[data-kwh]")
+        );
+
+        var values = bars.map(function (bar) {
+            return Number(bar.getAttribute("data-kwh"));
+        }).filter(function (value) {
+            return Number.isFinite(value) && value >= 0;
+        });
+
+        if (!values.length) {
+            return;
+        }
+
+        var max = Math.max.apply(Math, values.concat([1]));
+
+        bars.forEach(function (bar) {
+            var value = Number(bar.getAttribute("data-kwh"));
+
+            if (Number.isFinite(value) && value >= 0) {
+                bar.style.setProperty(
+                    "--bar-height",
+                    (value / max * 100) + "%"
+                );
+            }
+        });
+    })();
+</script>
+
+</body>
+</html>
