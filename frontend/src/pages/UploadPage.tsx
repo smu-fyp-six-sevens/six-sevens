@@ -42,8 +42,9 @@ function isExtractionNotConfiguredFailure(reason: string | null | undefined): bo
 function formatRoutingOutcome(outcome: string | null | undefined): string {
   switch (outcome) {
     case 'accepted':
-    case 'manual_review':
       return 'Proceed to fraud detection';
+    case 'manual_review':
+      return 'Flagged for manual review';
     default:
       return '—';
   }
