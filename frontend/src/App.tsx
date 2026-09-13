@@ -1,4 +1,13 @@
 import { useEffect, useState } from 'react';
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useNavigate,
+  useParams,
+} from 'react-router-dom';
+
 import CaseQueuePage from './pages/CaseQueuePage';
 import ExtractionTestPage from './pages/ExtractionTestPage';
 import UploadPage from './pages/UploadPage';
@@ -34,14 +43,145 @@ function mapStatus(status: string): string {
   }
 }
 
+function CaseQueueRoute({
+  cases,
+  isLoading,
+  error,
+  onRetry,
+}: {
+  cases: CaseRecord[];
+  isLoading: boolean;
+  error: string | null;
+  onRetry: () => void;
+}) {
+  const navigate = useNavigate();
+
+  return (
+    <CaseQueuePage
+      cases={cases}
+      isLoading={isLoading}
+      error={error}
+      onRetry={onRetry}
+      onOpenCase={(selectedCase) =>
+        navigate(`/cases/${selectedCase.caseNumber ?? selectedCase.id}`)
+      }
+      onOpenExtractionTest={() => navigate('/test-extraction')}
+      onCreateCase={() => navigate('/create-case')}
+    />
+  );
+}
+
+function CaseDetailsRoute({
+  cases,
+}: {
+  cases: CaseRecord[];
+}) {
+  const { caseNumber } = useParams();
+  const navigate = useNavigate();
+
+  const selectedCase = cases.find(
+    (item) =>
+      item.caseNumber === caseNumber ||
+      item.id === caseNumber
+  );
+
+  if (!selectedCase) {
+    return (
+      <div className="shell">
+        <p>Case not found.</p>
+        <button onClick={() => navigate('/cases')}>
+          Back to case queue
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <UploadPage
+      selectedCase={selectedCase}
+      onBack={() => navigate('/cases')}
+      onOpenDocument={(documentId) =>
+        navigate(
+          `/cases/${selectedCase.caseNumber ?? selectedCase.id}/documents/${documentId}`
+        )
+      }
+    />
+  );
+}
+
+function DocumentDetailsRoute({
+  cases,
+}: {
+  cases: CaseRecord[];
+}) {
+  const { caseNumber, documentId } = useParams();
+  const navigate = useNavigate();
+
+  const selectedCase = cases.find(
+    (item) =>
+      item.caseNumber === caseNumber ||
+      item.id === caseNumber
+  );
+
+  if (!selectedCase || !documentId) {
+    return (
+      <div className="shell">
+        <p>Document not found.</p>
+        <button onClick={() => navigate('/cases')}>
+          Back to case queue
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <DocumentDetailsPage
+      selectedCase={selectedCase}
+      documentId={documentId}
+      onBack={() =>
+        navigate(
+          `/cases/${selectedCase.caseNumber ?? selectedCase.id}`
+        )
+      }
+    />
+  );
+}
+
+function CreateCaseRoute({
+  onCreated,
+  onReloadCases,
+}: {
+  onCreated: () => void;
+  onReloadCases: () => void;
+}) {
+  const navigate = useNavigate();
+
+  return (
+    <CreateCasePage
+      onBack={() => navigate('/cases')}
+      onCreated={() => {
+        onCreated();
+        onReloadCases();
+        navigate('/cases');
+      }}
+    />
+  );
+}
+
+function ExtractionTestRoute() {
+  const navigate = useNavigate();
+
+  return (
+    <ExtractionTestPage
+      onBack={() => navigate('/cases')}
+    />
+  );
+}
+
 export default function App() {
   const [cases, setCases] = useState<CaseRecord[]>([]);
-  const [selectedCase, setSelectedCase] = useState<CaseRecord | null>(null);
-  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
-  const [isCreatingCase, setIsCreatingCase] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showExtractionTest, setShowExtractionTest] = useState(false);
 
   async function loadCases(signal?: AbortSignal) {
     setIsLoading(true);
@@ -61,7 +201,7 @@ export default function App() {
         status?: string | null;
         documents_status?: string | null;
       }>;
-      
+
       setCases(
         data.map((item) => ({
           id: item.id,
@@ -97,51 +237,72 @@ export default function App() {
     return () => controller.abort();
   }, []);
 
-  if (showExtractionTest) {
-    return <ExtractionTestPage onBack={() => setShowExtractionTest(false)} />;
-  }
-
-  if (isCreatingCase) {
-    return (
-      <CreateCasePage
-        onBack={() => setIsCreatingCase(false)}
-        onCreated={() => {
-          setIsCreatingCase(false);
-          void loadCases();
-        }}
-      />
-    );
-  }
-
-  if (selectedCase && selectedDocumentId) {
-    return (
-      <DocumentDetailsPage
-        selectedCase={selectedCase}
-        documentId={selectedDocumentId}
-        onBack={() => setSelectedDocumentId(null)}
-      />
-    );
-  }
-
-  if (selectedCase) {
-    return (
-      <UploadPage
-        selectedCase={selectedCase}
-        onBack={() => setSelectedCase(null)}
-        onOpenDocument={setSelectedDocumentId}
-      />
-    );
-  }
-
   return (
-    <CaseQueuePage
-      cases={cases}
-      isLoading={isLoading}
-      error={error}
-      onRetry={() => void loadCases()}
-      onOpenCase={setSelectedCase}
-      onOpenExtractionTest={() => setShowExtractionTest(true)}
-      onCreateCase={() => setIsCreatingCase(true)}
-    />
+    <BrowserRouter>
+      <Routes>
+        <Route
+          path="/"
+          element={<Navigate to="/cases" replace />}
+        />
+
+        <Route
+          path="/cases"
+          element={
+            <CaseQueueRoute
+              cases={cases}
+              isLoading={isLoading}
+              error={error}
+              onRetry={() => void loadCases()}
+            />
+          }
+        />
+
+        <Route
+          path="/cases/:caseNumber"
+          element={
+            isLoading ? (
+              <div className="shell">
+                <p>Loading case...</p>
+              </div>
+            ) : (
+              <CaseDetailsRoute cases={cases} />
+            )
+          }
+        />
+
+        <Route
+          path="/cases/:caseNumber/documents/:documentId"
+          element={
+            isLoading ? (
+              <div className="shell">
+                <p>Loading document...</p>
+              </div>
+            ) : (
+              <DocumentDetailsRoute cases={cases} />
+            )
+          }
+        />
+
+        <Route
+          path="/create-case"
+          element={
+            <CreateCaseRoute
+              onCreated={() => undefined}
+              onReloadCases={() => void loadCases()}
+            />
+          }
+        />
+
+        <Route
+          path="/test-extraction"
+          element={<ExtractionTestRoute />}
+        />
+
+        <Route
+          path="*"
+          element={<Navigate to="/cases" replace />}
+        />
+      </Routes>
+    </BrowserRouter>
   );
 }
