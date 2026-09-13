@@ -23,7 +23,8 @@ def replace_extracted_fields(
     document_id: str,
     fields: dict,
     *,
-    confidence: Optional[float],
+    field_confidences: Optional[dict] = None,
+    default_confidence: Optional[float],
     required_field_names: set[str],
 ) -> None:
     """
@@ -40,26 +41,28 @@ def replace_extracted_fields(
 
     field_category records whether a field was one of the document type's
     required schema fields (see extraction_prompts.EXTRACTION_SCHEMAS) or
-    one the LLM added on its own initiative — confidence is currently a
-    single document-level value (the LLM doesn't return per-field
-    confidence), so every row for a given call shares the same number.
+    one the LLM added on its own initiative. confidence is per-field where
+    the LLM actually returned one (field_confidences), falling back to
+    default_confidence — the document-level confidence, or 1.0 for a
+    human-reviewed manual save — for any field it didn't.
     """
     supabase_client.table("extracted_fields").delete().eq("document_id", document_id).execute()
 
     if not fields:
         return
 
-    rows = [
-        {
+    field_confidences = field_confidences or {}
+    rows = []
+    for name, value in fields.items():
+        per_field_confidence = field_confidences.get(name)
+        rows.append({
             "document_id": document_id,
             "field_name": name,
             "field_value": value,
-            "confidence": confidence,
+            "confidence": per_field_confidence if per_field_confidence is not None else default_confidence,
             "field_category": "required" if name in required_field_names else "additional",
             "field_type": _infer_field_type(value),
-        }
-        for name, value in fields.items()
-    ]
+        })
     supabase_client.table("extracted_fields").insert(rows).execute()
 
 

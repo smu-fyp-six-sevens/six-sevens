@@ -56,14 +56,26 @@ def _extraction_output(
     extracted_fields: dict | None = None,
     confidence: float = 0.9,
     escalation: dict | None = None,
+    field_confidence: float | None = None,
 ) -> dict:
     """
     Wraps outputs the way the Extraction workflow actually replies: a
     single `llm_output` string containing the JSON payload (see
     orchestrator._parse_extraction_output), not a raw outputs dict.
+
+    Callers pass extracted_fields as a plain {name: value} dict for
+    convenience — this wraps each value as {"value": ..., "confidence": ...}
+    to match the real per-field-confidence prompt shape (see
+    extraction_prompts.py). field_confidence defaults to the same value as
+    the overall confidence unless a test needs them to differ.
     """
+    resolved_field_confidence = confidence if field_confidence is None else field_confidence
+    wrapped_fields = {
+        name: {"value": value, "confidence": resolved_field_confidence}
+        for name, value in (extracted_fields or {}).items()
+    }
     payload = {
-        "extracted_fields": extracted_fields or {},
+        "extracted_fields": wrapped_fields,
         "confidence": confidence,
         "escalation": escalation,
     }
@@ -139,7 +151,8 @@ async def test_no_escalation_marks_analyzed() -> None:
         mock_fields_repo.replace_extracted_fields.assert_called_once_with(
             "doc-1",
             {"individual_name": "Jane Tan"},
-            confidence=0.95,
+            field_confidences={"individual_name": 0.95},
+            default_confidence=0.95,
             required_field_names={"individual_name", "company_name", "net_pay"},
         )
 
@@ -572,6 +585,40 @@ async def test_extraction_invocation_failure_marks_failed() -> None:
         assert args[1] == DocumentStatus.FAILED
         assert "Extraction invocation failed" in kwargs["failure_reason"]
         assert kwargs["document_type"] == "payslip"
+
+
+def test_parse_extraction_output_splits_value_and_confidence_per_field() -> None:
+    llm_output = json.dumps({
+        "extracted_fields": {
+            "bank_name": {"value": "OCBC", "confidence": 0.95},
+            "account_number": {"value": None, "confidence": 0.2},
+        },
+        "confidence": 0.8,
+        "escalation": None,
+    })
+
+    result = orchestrator._parse_extraction_output(llm_output)
+
+    assert result["extracted_fields"] == {"bank_name": "OCBC", "account_number": None}
+    assert result["field_confidences"] == {"bank_name": 0.95, "account_number": 0.2}
+    assert result["confidence"] == 0.8
+
+
+def test_parse_extraction_output_falls_back_for_unwrapped_field() -> None:
+    # Defensive case: the LLM didn't follow the {"value", "confidence"}
+    # shape for one field — its bare value should still come through, just
+    # with an unknown (None) per-field confidence rather than crashing or
+    # dropping the field.
+    llm_output = json.dumps({
+        "extracted_fields": {"bank_name": "OCBC"},
+        "confidence": 0.8,
+        "escalation": None,
+    })
+
+    result = orchestrator._parse_extraction_output(llm_output)
+
+    assert result["extracted_fields"] == {"bank_name": "OCBC"}
+    assert result["field_confidences"] == {"bank_name": None}
 
 
 def test_unwrap_chatflow_output_parses_real_dify_markdown_reply() -> None:

@@ -370,7 +370,7 @@ def test_update_extracted_fields_success() -> None:
     mock_fields_repo.replace_extracted_fields.assert_called_once_with(
         "doc-1",
         {"individual_name": "Jane Tan (corrected)"},
-        confidence=1.0,
+        default_confidence=1.0,
         required_field_names={"individual_name", "company_name", "net_pay"},
     )
     # A manual correction can change requirement coverage (e.g. adding an

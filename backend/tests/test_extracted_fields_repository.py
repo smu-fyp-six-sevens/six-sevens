@@ -10,7 +10,7 @@ def test_replace_extracted_fields_deletes_then_inserts_one_row_per_field() -> No
         extracted_fields_repository.replace_extracted_fields(
             "doc-1",
             {"individual_name": "Jane Tan", "net_pay": 5000, "loan_purpose": "renovation"},
-            confidence=0.9,
+            default_confidence=0.9,
             required_field_names={"individual_name", "net_pay"},
         )
 
@@ -34,10 +34,30 @@ def test_replace_extracted_fields_deletes_then_inserts_one_row_per_field() -> No
             assert row["confidence"] == 0.9
 
 
+def test_replace_extracted_fields_uses_per_field_confidence_with_fallback() -> None:
+    with patch("app.extracted_fields_repository.supabase_client") as mock_client:
+        extracted_fields_repository.replace_extracted_fields(
+            "doc-1",
+            {"bank_name": "OCBC", "account_number": "1234", "loan_purpose": "renovation"},
+            field_confidences={"bank_name": 0.98, "account_number": 0.4},
+            default_confidence=0.7,
+            required_field_names={"bank_name", "account_number"},
+        )
+
+        inserted_rows = mock_client.table.return_value.insert.call_args[0][0]
+        by_name = {row["field_name"]: row for row in inserted_rows}
+        # Fields the LLM gave a confidence for keep their own number...
+        assert by_name["bank_name"]["confidence"] == 0.98
+        assert by_name["account_number"]["confidence"] == 0.4
+        # ...while one missing from field_confidences falls back to the
+        # document-level default rather than being left blank.
+        assert by_name["loan_purpose"]["confidence"] == 0.7
+
+
 def test_replace_extracted_fields_skips_insert_when_no_fields() -> None:
     with patch("app.extracted_fields_repository.supabase_client") as mock_client:
         extracted_fields_repository.replace_extracted_fields(
-            "doc-1", {}, confidence=0.0, required_field_names=set()
+            "doc-1", {}, default_confidence=0.0, required_field_names=set()
         )
 
         mock_client.table.return_value.delete.return_value.eq.assert_called_once_with(
@@ -56,7 +76,7 @@ def test_replace_extracted_fields_infers_types_for_lists_dicts_and_null() -> Non
                 "missing_field": None,
                 "is_verified": True,
             },
-            confidence=0.5,
+            default_confidence=0.5,
             required_field_names={"transactions"},
         )
 
