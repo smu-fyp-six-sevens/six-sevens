@@ -45,6 +45,11 @@ from doc_gen_scripts.list_of_loans.term_loan_facility_generator import generate_
 from doc_gen_scripts.list_of_loans.efs_facility_generator import generate_efs_letter
 from doc_gen_scripts.list_of_loans.overdraft_facility_generator import generate_overdraft_letter
 
+# NEW: shared PDF -> PNG/JPG/JPEG converter, used only in the normalization pass
+# at the end of generate_for_case(). Every generator above is untouched and still
+# only knows how to write a PDF.
+from doc_gen_scripts.output_writer import normalize_extension
+
 BASE = Path(__file__).resolve().parents[1]
 MASTERSHEET = BASE / "doc_gen_scripts" / "v9_document_mastersheet.xlsx"
 OUT_DIR = BASE / "documents_generated"
@@ -218,6 +223,12 @@ def generate_for_case(case_id: str) -> None:
                 print("Bank statement generation failed:", e)
 
     # 4) NRIC/Passport/ID documents
+    #
+    # CHANGED: previously hardcoded f"{individual}_NRIC.pdf" / f"{individual}_Passport.pdf",
+    # ignoring the mastersheet's own Filename column entirely for this section. Now
+    # reads r.get("Filename") like every other section does, so a row the mastersheet
+    # marks as e.g. "ChiaWM_Passport_scan.jpg" is honoured (the normalization pass at
+    # the end of this function then converts the PDF bytes to a real .jpg).
     id_df = _read_sheet("NRIC-Passport") if (MASTERSHEET.exists()) else pd.DataFrame()
     if not id_df.empty:
         people_rows = _openpyxl_case_rows("Individuals", case_id)
@@ -226,7 +237,7 @@ def generate_for_case(case_id: str) -> None:
                 template = str(r.get("Template") or "").lower()
                 individual = str(r.get("Individual ID") or r.get("Filename") or f"{case_id}-id")
                 if "nric" in template:
-                    nric_path = out / f"{individual}_NRIC.pdf"
+                    nric_path = out / str(r.get("Filename") or f"{individual}_NRIC.pdf")
                     # NRIC-Passport itself carries no Residential Address, Sex or
                     # Race column -- build_nric_persona() is the single source of
                     # truth for deriving/inventing them (race from the name's CMIO
@@ -238,7 +249,7 @@ def generate_for_case(case_id: str) -> None:
                     generate_nric_card(str(nric_path), redact_photo=True, **persona)
                     print("Wrote", nric_path)
                 if "passport" in template:
-                    pp_path = out / f"{individual}_Passport.pdf"
+                    pp_path = out / str(r.get("Filename") or f"{individual}_Passport.pdf")
                     # NRIC-Passport carries no Sex, Place of Birth or National ID
                     # No column, and no surname/given-names split of its single
                     # Name field -- build_passport_persona() derives/invents all
@@ -250,6 +261,9 @@ def generate_for_case(case_id: str) -> None:
                 print("ID generation failed:", e)
 
     # 6) Payslip
+    #
+    # CHANGED: previously hardcoded f"{individual}_Payslip.pdf", ignoring the
+    # mastersheet's Filename column. Now reads r.get("Filename") first.
     payslip_df = _read_sheet("Payslips") if (MASTERSHEET.exists()) else pd.DataFrame()
     if not payslip_df.empty:
         for _, r in payslip_df.iterrows():
@@ -257,7 +271,7 @@ def generate_for_case(case_id: str) -> None:
                 continue
             try:
                 individual = str(r.get("Individual ID") or r.get("Filename") or f"{case_id}-payslip")
-                ps_path = out / f"{individual}_Payslip.pdf"
+                ps_path = out / str(r.get("Filename") or f"{individual}_Payslip.pdf")
                 # pick builder based on Template column (e.g. 'Payslip 1')
                 template = str(r.get("Template") or "").lower()
                 if "2" in template or "payslip 2" in template:
@@ -284,6 +298,7 @@ def generate_for_case(case_id: str) -> None:
                     company_address=str(facts.get("registered_address") or ""),
                 )
                 builder(ps_path, data)
+                print("Wrote", ps_path)
             except Exception as e:
                 print("Payslip generation failed:", e)
 
@@ -387,11 +402,17 @@ def generate_for_case(case_id: str) -> None:
     # 11) FATCA / CRS Self-Declaration — one combined entity self-cert per case (the
     # mastersheet tab has a row per individual/signatory, but the GLDB form itself is
     # one company-level form, so a single PDF per case is correct here).
+    #
+    # CHANGED: previously hardcoded f"{case_id}_selfcert.pdf", ignoring the FATCA
+    # tab's own Filename column entirely. Now looks up that row's Filename (falling
+    # back to the old hardcoded name if the tab has no matching row for some reason).
     fatca_df = _read_sheet("FATCA Self-Declaration") if (MASTERSHEET.exists()) else pd.DataFrame()
     if not fatca_df.empty:
         try:
             for persona in build_fatca_personas(str(MASTERSHEET), cases=[case_id]):
-                fatca_path = out / f"{case_id}_selfcert.pdf"
+                fatca_row = _get_row_by_case(fatca_df, case_id)
+                fatca_filename = str(fatca_row.get("Filename") or f"{case_id}_selfcert.pdf")
+                fatca_path = out / fatca_filename
                 fill_fatca_form(persona, out_pdf=fatca_path)
                 print("Wrote", fatca_path)
         except Exception as e:
@@ -467,6 +488,20 @@ def generate_for_case(case_id: str) -> None:
                 print("Wrote", loan_path)
             except Exception as e:
                 print("List of loans generation failed:", e)
+
+    # --------------------------------------------------------------------
+    # NEW: final normalization pass.
+    #
+    # Every generator called above only knows how to write a PDF. Most of them
+    # were already given the mastersheet's real Filename (which may end in
+    # .jpg/.jpeg/.png), so at this point `out` may contain files that are
+    # PDF bytes sitting under an image extension. This single pass fixes all
+    # of them in place, for every doc type, without any of the generators or
+    # the sections above needing to know PNG/JPG/JPEG exist at all.
+    # --------------------------------------------------------------------
+    for f in out.iterdir():
+        if f.is_file():
+            normalize_extension(f)
 
     print("Generation completed for", case_id)
 
