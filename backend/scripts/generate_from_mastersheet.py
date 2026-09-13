@@ -51,7 +51,7 @@ from doc_gen_scripts.list_of_loans.overdraft_facility_generator import generate_
 from doc_gen_scripts.output_writer import normalize_extension
 
 BASE = Path(__file__).resolve().parents[1]
-MASTERSHEET = BASE / "doc_gen_scripts" / "v9_document_mastersheet.xlsx"
+MASTERSHEET = BASE / "doc_gen_scripts" / "v13_document_mastersheet.xlsx"
 OUT_DIR = BASE / "documents_generated"
 
 # "OCBC Personal" isn't registered by default in docgen_bankstatement's BANK_PROFILES
@@ -499,9 +499,17 @@ def generate_for_case(case_id: str) -> None:
     # of them in place, for every doc type, without any of the generators or
     # the sections above needing to know PNG/JPG/JPEG exist at all.
     # --------------------------------------------------------------------
-    for f in out.iterdir():
-        if f.is_file():
-            normalize_extension(f)
+    # Snapshot the listing first — a multi-page source gets split into
+    # several new page files and has its original placeholder deleted (see
+    # normalize_extension), and mutating the directory while iterating it
+    # live is asking for trouble.
+    for f in list(out.iterdir()):
+        if not f.is_file():
+            continue
+        written = normalize_extension(f)
+        if written != [f]:
+            for p in written:
+                print("Wrote", p)
 
     print("Generation completed for", case_id)
 
