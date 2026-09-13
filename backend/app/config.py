@@ -77,7 +77,7 @@ class Settings:
     # Classifier confidence below this is treated as low-confidence and
     # routed to manual review, regardless of what document_type was guessed
     # (see orchestrator._is_below_threshold).
-    CLASSIFICATION_CONFIDENCE_THRESHOLD: float = 0.6
+    CLASSIFICATION_CONFIDENCE_THRESHOLD: float = 0.8
 
     # Extraction: below this, the frontend renders extracted fields as
     # editable inputs (with a save button) instead of read-only text, so a
