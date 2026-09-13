@@ -56,7 +56,7 @@ export const REQUIRED_DOCUMENT_TYPES: { value: string; label: string }[] = [
 // Mirrors settings.EXTRACTION_CONFIDENCE_THRESHOLD in backend/app/config.py —
 // below this, the UI renders extracted fields as editable so a loan officer
 // can correct values the LLM wasn't confident about.
-export const EXTRACTION_CONFIDENCE_THRESHOLD = 0.7;
+export const EXTRACTION_CONFIDENCE_THRESHOLD = 0.95;
 
 const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 

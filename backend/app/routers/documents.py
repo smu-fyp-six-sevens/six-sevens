@@ -95,7 +95,7 @@ async def update_extracted_fields(
             extracted_fields_repository.replace_extracted_fields,
             document_id,
             request.extracted_fields,
-            confidence=1.0,
+            default_confidence=1.0,
             required_field_names=set(EXTRACTION_SCHEMAS.get(document.document_type or "", [])),
         )
     except Exception as exc:
