@@ -43,7 +43,7 @@ export default function DropZone({ onFiles, disabled = false }: DropZoneProps) {
         className="sr-only"
         type="file"
         multiple
-        accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+        accept=".pdf,.png,.jpg,.jpeg"
         onChange={(event) => {
           if (event.target.files) acceptFiles(event.target.files);
           event.target.value = '';
@@ -56,7 +56,7 @@ export default function DropZone({ onFiles, disabled = false }: DropZoneProps) {
         <span className="browse-link">browse</span>
       </div>
       <div className="dz-formats">
-        PDF · PNG · JPG · DOCX — up to 25MB each
+        PDF · PNG · JPG  — up to 25MB each
       </div>
     </div>
   );

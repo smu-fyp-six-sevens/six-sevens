@@ -33,6 +33,7 @@ const REQUIREMENT_LABELS = new Map(
 interface UploadPageProps {
   selectedCase: CaseRecord;
   onBack: () => void;
+  onOpenDocument: (documentId: string) => void;
 }
 
 function isExtractionNotConfiguredFailure(reason: string | null | undefined): boolean {
@@ -100,7 +101,11 @@ function describeIssue(issue: FileIssue): string {
   }
 }
 
-export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
+export default function UploadPage({
+    selectedCase,
+    onBack,
+    onOpenDocument,
+  }: UploadPageProps) {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [countError, setCountError] = useState<string | null>(null);
   const [rejections, setRejections] = useState<{ file: File; issue: FileIssue }[]>([]);
@@ -114,6 +119,12 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
   const [fieldDrafts, setFieldDrafts] = useState<Map<string, Record<string, string>>>(new Map());
   const [savingFields, setSavingFields] = useState<Set<string>>(new Set());
   const [saveFieldErrors, setSaveFieldErrors] = useState<Map<string, string>>(new Map());
+  const flaggedDocuments = Array.from(documentDetails.values()).filter(
+    (document) =>
+      document.classification_outcome === 'manual_review' ||
+      (document.extraction_confidence != null &&
+        document.extraction_confidence < EXTRACTION_CONFIDENCE_THRESHOLD),
+  );
 
   const isMountedRef = useRef(true);
   useEffect(() => {
@@ -430,197 +441,207 @@ export default function UploadPage({ selectedCase, onBack }: UploadPageProps) {
           )}
 
           {documentDetails.size > 0 && (
-            <section className="pipeline-note">
-              <div className="section-label">
-                <span>Next step</span>
-                <span>Document processing</span>
-              </div>
-              <div className="pipeline">
-                <span className="pstage done">Uploaded</span>
-                <span className="pconnector" />
-                <span className="pstage pending">Extracting</span>
-                <span className="pconnector" />
-                <span className="pstage pending">Quality check</span>
-                <span className="pconnector" />
-                <span className="pstage pending">Result</span>
-              </div>
-              <p>
-                Upload succeeded. The extraction and quality-check details are not returned by
-                the current upload API, so this UI leaves those stages pending rather than
-                inventing processing results.
-              </p>
-            </section>
-          )}
+            <section className="documents-card">
+              <div className="documents-card-header">
+                <div className="documents-card-title">
+                  <span className="documents-card-icon">▣</span>
+                  <span>Extracted Files</span>
+                </div>
 
-          {documentDetails.size > 0 && (
-            <section className="pipeline-note">
-              <div className="section-label">
-                <span>Classification result</span>
                 <span className="mock-badge live">LIVE</span>
               </div>
 
-              {Array.from(documentDetails.values())
-                .sort((a, b) => a.uploaded_at.localeCompare(b.uploaded_at))
-                .map((document) => {
-                  const status = document.status;
-                  const isTerminal = TERMINAL_STATUSES.has(status);
-                  const extractionNotConfigured =
-                    status === 'failed' && isExtractionNotConfiguredFailure(document.failure_reason);
+              <div className="documents-table">
+                <div className="documents-table-header">
+                  <span>Filename</span>
+                  <span>Document Type</span>
+                  <span>Status</span>
+                  <span>Classification Confidence</span>
+                  <span>Routing Outcome</span>
+                  <span>Action</span>
+                </div>
 
-                  return (
-                    <div key={document.id} className="mock-classification-row">
-                      <span className="mock-filename">{document.filename}</span>
-                      <div className="mock-classification">
-                        <div>
-                          <span className="mock-label">Status</span>
-                          <span className="mock-value">
+                {Array.from(documentDetails.values())
+                  .sort((a, b) => a.uploaded_at.localeCompare(b.uploaded_at))
+                  .map((document) => {
+                    const status = document.status;
+                    const isTerminal = TERMINAL_STATUSES.has(status);
+
+                    return (
+                      <div key={document.id} className="documents-table-row">
+                        <span className="document-filename">
+                          {document.filename}
+                        </span>
+
+                        <span className="document-type-cell">
+                          {document.document_type ?? '—'}
+                        </span>
+
+                        <span className="document-status-cell">
+                          <span
+                            className={`status-dot ${
+                              status === 'analyzed'
+                                ? 'status-dot--success'
+                                : ''
+                            }`}
+                          />
+                          <span>
                             {status}
                             {!isTerminal && '…'}
                           </span>
-                        </div>
-                        <div>
-                          <span className="mock-label">Document type</span>
-                          <span className="mock-value">{document.document_type ?? '—'}</span>
-                        </div>
-                        <div>
-                          <span className="mock-label">Confidence</span>
-                          <span className="mock-value">
-                            {document.confidence != null ? document.confidence.toFixed(2) : '—'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="mock-label">Routing outcome</span>
-                          <span className="mock-value">
-                            {formatRoutingOutcome(document.classification_outcome)}
-                          </span>
-                        </div>
+                        </span>
+
+                        <span className="document-confidence">
+                          {document.confidence != null
+                            ? document.confidence.toFixed(2)
+                            : '—'}
+                        </span>
+
+                        <span className="document-routing">
+                          {document.classification_outcome ?? '—'}
+                        </span>
+
+                        <button
+                          type="button"
+                          className="document-view-link"
+                          onClick={() => onOpenDocument(document.id)}
+                        >
+                          View
+                        </button>
                       </div>
-
-                      {document.classification_outcome === 'accepted' &&
-                        document.fulfilled_requirements.length > 0 && (
-                          <div className="fulfils-row">
-                            <span className="mock-label">Fulfils requirements</span>
-                            <div className="fulfils-tags">
-                              {document.fulfilled_requirements.map((requirement) => (
-                                <span key={requirement} className="fulfils-tag">
-                                  {REQUIREMENT_LABELS.get(requirement) ?? requirement}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                      {document.evidence && document.evidence.length > 0 && (
-                        <ul className="mock-evidence">
-                          {document.evidence.map((item, i) => (
-                            <li key={i}>{item}</li>
-                          ))}
-                        </ul>
-                      )}
-
-                      {document.escalation_reason && (
-                        <p className="mock-note warning">
-                          Classification was re-run — Extraction flagged that this didn't look
-                          like the initial guess: "{document.escalation_reason}"
-                        </p>
-                      )}
-
-                      {status === 'analyzed' && document.extracted_fields && (
-                        <>
-                          <div className="section-label" style={{ marginTop: 10 }}>
-                            <span>Extracted fields</span>
-                            <span>
-                              Extraction confidence:{' '}
-                              {document.extraction_confidence != null
-                                ? document.extraction_confidence.toFixed(2)
-                                : '—'}
-                            </span>
-                          </div>
-
-                          {document.extraction_confidence != null &&
-                          document.extraction_confidence < EXTRACTION_CONFIDENCE_THRESHOLD ? (
-                            <>
-                              <p className="mock-note warning">
-                                Low extraction confidence — review and correct these fields before
-                                relying on them.
-                              </p>
-                              <div className="kv-grid kv-grid--editable">
-                                {Object.entries(
-                                  getFieldDraft(document.id, document.extracted_fields),
-                                ).map(([key, value]) => (
-                                  <div key={key} className="kv-row">
-                                    <span className="kv-key">{humanizeFieldKey(key)}</span>
-                                    <input
-                                      className="kv-input"
-                                      value={value}
-                                      disabled={savingFields.has(document.id)}
-                                      onChange={(event) =>
-                                        setFieldDraftValue(
-                                          document.id,
-                                          document.extracted_fields as Record<string, unknown>,
-                                          key,
-                                          event.target.value,
-                                        )
-                                      }
-                                    />
-                                  </div>
-                                ))}
-                              </div>
-                              <div className="action-bar" style={{ marginTop: 10 }}>
-                                <span className="count">
-                                  {saveFieldErrors.get(document.id) ?? 'Edits are saved to Supabase.'}
-                                </span>
-                                <button
-                                  type="button"
-                                  className="upload-btn"
-                                  disabled={savingFields.has(document.id)}
-                                  onClick={() => {
-                                  void saveFieldDraft(
-                                    document.id,
-                                    document.extracted_fields as Record<string, unknown>,
-                                  );                                  }}
-                                >
-                                  {savingFields.has(document.id) ? 'Saving…' : 'Save fields'}
-                                </button>
-                              </div>
-                            </>
-                          ) : (
-                            <div className="kv-grid">
-                              {displayableFieldEntries(document.extracted_fields).map(([key, value]) => (
-                                <div key={key} className="kv-row">
-                                  <span className="kv-key">{humanizeFieldKey(key)}</span>
-                                  <span className="kv-value">
-                                    {value === null || value === undefined ? '—' : String(value)}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </>
-                      )}
-
-                      {document.document_type === 'unrecognised' && (
-                        <p className="mock-note warning">
-                          This document doesn't match any known KYC category and has been
-                          flagged for manual review.
-                        </p>
-                      )}
-
-                      {extractionNotConfigured && document.document_type !== 'unrecognised' && (
-                        <p className="mock-note">
-                          Classification succeeded — this failed because the extraction workflow
-                          hasn't been set up in Dify yet, not because of the classifier.
-                        </p>
-                      )}
-
-                      {status === 'failed' && document.failure_reason && (
-                        <p className="mock-failure-reason">{document.failure_reason}</p>
-                      )}
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+              </div>
             </section>
           )}
+
+          <section className="summary-card">
+            <div className="summary-card-header">
+              <div className="summary-card-title">
+                <span className="summary-icon summary-icon--risk">▥</span>
+                <h2>Customer Risk Summary</h2>
+              </div>
+            </div>
+
+            <div className="summary-message summary-message--info">
+              <span className="summary-message-icon">ⓘ</span>
+
+              <div>
+                <strong>Risk summary not available yet.</strong>
+                <p>
+                  Risk analysis results will appear here once document extraction
+                  and fraud analysis are completed.
+                </p>
+              </div>
+            </div>
+          </section>
+          
+          <section className="summary-card">
+          <div className="summary-card-header">
+            <div className="summary-card-title">
+              <span className="summary-icon summary-icon--warning">△</span>
+              <h2>Flagged Items for Manual Review</h2>
+            </div>
+
+            {flaggedDocuments.length > 0 && (
+              <span className="summary-count">
+                {flaggedDocuments.length}{' '}
+                {flaggedDocuments.length === 1 ? 'item' : 'items'}
+              </span>
+            )}
+          </div>
+
+          {flaggedDocuments.length === 0 ? (
+            <div className="summary-message summary-message--warning">
+              <span className="summary-message-icon">ⓘ</span>
+
+              <div>
+                <strong>No flagged items at the moment.</strong>
+                <p>
+                  If any documents or extracted fields require manual review,
+                  they will be displayed here.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flagged-list">
+              {flaggedDocuments.map((document) => {
+                const lowExtractionConfidence =
+                  document.extraction_confidence != null &&
+                  document.extraction_confidence <
+                    EXTRACTION_CONFIDENCE_THRESHOLD;
+
+                const reason =
+                  document.classification_outcome === 'manual_review'
+                    ? document.escalation_reason ??
+                      (document.document_type === 'unrecognised'
+                        ? 'Document type could not be confidently recognised.'
+                        : lowExtractionConfidence
+                          ? 'Extracted fields have low confidence and require review.'
+                          : 'Document requires manual review.')
+                    : 'Extracted fields have low confidence and require review.';
+
+                return (
+                  <div key={document.id} className="flagged-item">
+                    <div className="flagged-item-main">
+                      <strong>{document.filename}</strong>
+
+                      <div className="flagged-item-meta">
+                        <span>
+                          {document.document_type ?? 'Unknown document type'}
+                        </span>
+
+                        {document.extraction_confidence != null && (
+                          <span>
+                            Extraction confidence:{' '}
+                            {document.extraction_confidence.toFixed(2)}
+                          </span>
+                        )}
+
+                        {document.classification_outcome === 'manual_review' && (
+                          <span className="flagged-status">
+                            Manual review
+                          </span>
+                        )}
+                      </div>
+
+                      <p>{reason}</p>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="flagged-view-button"
+                      onClick={() => onOpenDocument(document.id)}
+                    >
+                      View
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        <section className="summary-card">
+          <div className="summary-card-header">
+            <div className="summary-card-title">
+              <span className="summary-icon summary-icon--audit">◴</span>
+              <h2>Case Audit Trail</h2>
+            </div>
+          </div>
+
+          <div className="summary-message summary-message--info">
+            <span className="summary-message-icon">ⓘ</span>
+
+            <div>
+              <strong>No audit events available yet.</strong>
+              <p>
+                Case activity history will appear here once actions are
+                recorded.
+              </p>
+            </div>
+          </div>
+        </section>
         </section>
 
         <aside className="upload-sidebar">
