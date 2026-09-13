@@ -3,6 +3,7 @@ import CaseQueuePage from './pages/CaseQueuePage';
 import ExtractionTestPage from './pages/ExtractionTestPage';
 import UploadPage from './pages/UploadPage';
 import CreateCasePage from './pages/CreateCasePage';
+import DocumentDetailsPage from './pages/DocumentDetailsPage';
 
 export interface CaseRecord {
   id: string;
@@ -36,6 +37,7 @@ function mapStatus(status: string): string {
 export default function App() {
   const [cases, setCases] = useState<CaseRecord[]>([]);
   const [selectedCase, setSelectedCase] = useState<CaseRecord | null>(null);
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [isCreatingCase, setIsCreatingCase] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -111,11 +113,22 @@ export default function App() {
     );
   }
 
+  if (selectedCase && selectedDocumentId) {
+    return (
+      <DocumentDetailsPage
+        selectedCase={selectedCase}
+        documentId={selectedDocumentId}
+        onBack={() => setSelectedDocumentId(null)}
+      />
+    );
+  }
+
   if (selectedCase) {
     return (
       <UploadPage
         selectedCase={selectedCase}
         onBack={() => setSelectedCase(null)}
+        onOpenDocument={setSelectedDocumentId}
       />
     );
   }
