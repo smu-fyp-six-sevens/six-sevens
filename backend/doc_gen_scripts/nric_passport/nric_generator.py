@@ -320,6 +320,36 @@ def _card_shell(c: canvas.Canvas, y0: float) -> None:
     c.roundRect(CARD_X, y0, CARD_W, CARD_H, 8, fill=1, stroke=1)
 
 
+def card_regions(padding: float = 4.0) -> dict[str, tuple[float, float, float, float]]:
+    """
+    Bounding box of the front and back card artwork, in reportlab's own
+    coordinate convention (origin bottom-left, y increases upward) — the
+    same convention CARD_X/CARD_W/CARD_H/FRONT_TOP/BACK_TOP already use.
+    Padded a few points beyond the card's own edge so _card_shell's stroke
+    isn't clipped.
+
+    generate_nric_card() draws both cards on one full A4 page (a
+    print-and-cut sheet), not two separate pages — a renderer that wants a
+    standalone front-only or back-only image (rather than the whole A4
+    sheet with its surrounding whitespace) needs to crop to these regions,
+    not split by page. See output_writer.write_cropped_region.
+    """
+    return {
+        "front": (
+            CARD_X - padding,
+            FRONT_TOP - CARD_H - padding,
+            CARD_X + CARD_W + padding,
+            FRONT_TOP + padding,
+        ),
+        "back": (
+            CARD_X - padding,
+            BACK_TOP - CARD_H - padding,
+            CARD_X + CARD_W + padding,
+            BACK_TOP + padding,
+        ),
+    }
+
+
 def generate_nric_card(
     output_path: str,
     *,
