@@ -161,3 +161,113 @@ def test_progress_deduplicates_same_person_across_two_id_documents() -> None:
         ),
     ]
     assert compute_identity_proof_of_address_progress(documents) == (1, 1)
+
+
+def test_progress_deduplicates_same_id_number_despite_mismatched_names() -> None:
+    """
+    An NRIC uploaded as two separate images (front/back) produces two
+    id_document rows. OCR on the back image can garble or drop the name
+    entirely, so name-matching alone would wrongly treat this as two
+    identities. Sharing the same id_number should still merge them into one.
+    """
+    documents = [
+        _make_document(
+            "doc-1",
+            document_type="id_document",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={
+                "individual_name": "Amanda Koh",
+                "id_number": "S1234567D",
+                "individual_address": None,
+            },
+        ),
+        _make_document(
+            "doc-2",
+            document_type="id_document",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={
+                "individual_name": "AMANDAKOH",  # garbled OCR from the back image
+                "id_number": "s1234567d",
+                "individual_address": "1 Main St",
+            },
+        ),
+    ]
+    assert compute_identity_proof_of_address_progress(documents) == (1, 1)
+
+
+def test_progress_links_nric_front_and_back_uploaded_as_separate_files() -> None:
+    """
+    Mirrors an actual Singapore NRIC (see doc_gen_scripts/nric_passport/
+    nric_generator.py): the front prints the name and id_number but no
+    address, and the back prints the id_number again alongside the address
+    but no name at all. Uploaded as two independent files, each becomes its
+    own DocumentRecord and is classified/extracted independently (there is
+    no grouping step anywhere in the upload pipeline — see
+    app/routers/upload.py's _ingest_one). Under the old name-only matching,
+    the back row's address would have been silently dropped entirely
+    (normalized name is None, so it can't join to anything) and this person
+    would incorrectly show as missing proof_of_address. Matching by
+    id_number instead links the two rows into one covered identity.
+    """
+    documents = [
+        _make_document(
+            "doc-front",
+            document_type="id_document",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={
+                "individual_name": "Amanda Koh",
+                "id_number": "S1234567D",
+                "individual_address": None,
+            },
+        ),
+        _make_document(
+            "doc-back",
+            document_type="id_document",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={
+                "individual_name": None,
+                "id_number": "S1234567D",
+                "individual_address": "2 Orchard Turn, #01-01, Singapore 238801",
+            },
+        ),
+    ]
+    assert compute_identity_proof_of_address_progress(documents) == (1, 1)
+
+
+def test_progress_keeps_distinct_id_numbers_as_separate_identities() -> None:
+    """
+    Different id_numbers means different identities (not merged into one,
+    the way pure name-matching would). Coverage is still checked by name,
+    since proof_of_address documents carry no id_number to join on — so two
+    different people who happen to share a name are both counted as
+    covered here once either of them has an address on file. That's a
+    known, pre-existing limitation of name-based address matching (the old
+    purely-name-keyed code had the same blind spot, just via merging them
+    into a single identity outright instead), not something this id_number
+    grouping is expected to solve.
+    """
+    documents = [
+        _make_document(
+            "doc-1",
+            document_type="id_document",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={
+                "individual_name": "Amanda Koh",
+                "id_number": "S1234567D",
+                "individual_address": "1 Main St",
+            },
+        ),
+        _make_document(
+            "doc-2",
+            document_type="id_document",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={
+                "individual_name": "Amanda Koh",
+                "id_number": "T7654321Z",
+                "individual_address": None,
+            },
+        ),
+    ]
+    # Two identities (distinct id_numbers) — both read as covered because
+    # address-matching falls back to the shared name across identities.
+    assert compute_identity_proof_of_address_progress(documents) == (2, 2)
