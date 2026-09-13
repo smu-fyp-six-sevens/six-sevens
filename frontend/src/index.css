@@ -1223,7 +1223,7 @@ h1 {
    ========================================================= */
 
 .document-details-page {
-  width: 100%;
+  width: min(760px, calc(100% - 40px));
 }
 
 .document-details-intro {
