@@ -74,6 +74,60 @@ def write_document(
     return written
 
 
+RLBBox = tuple[float, float, float, float]  # reportlab convention: (x0, y0, x1, y1), origin bottom-left
+
+
+def write_cropped_region(
+    pdf_bytes: bytes,
+    region: RLBBox,
+    output_path: str | Path,
+    dpi: int = DEFAULT_DPI,
+    page_index: int = 0,
+) -> Path:
+    """
+    Rasterizes just one rectangular region of one page to a standalone
+    image — for a source page that deliberately packs more than one
+    logical artifact onto it (e.g. generate_nric_card's front+back
+    print-and-cut A4 sheet), rather than a page-per-file split.
+
+    `region` is in reportlab's coordinate convention (origin bottom-left,
+    y increases upward) — the same convention the generator that produced
+    the PDF used to place things on the page — and gets converted here to
+    PyMuPDF's top-left-origin convention internally.
+
+    output_path's extension must be one of SUPPORTED_IMAGE_EXTS — there's
+    no PDF case here, since cropping a region out to a standalone PDF page
+    isn't something this module currently needs.
+    """
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    ext = out.suffix.lower().lstrip(".")
+    if ext not in SUPPORTED_IMAGE_EXTS:
+        raise ValueError(
+            f"Unsupported output extension '.{ext}' for {out.name}; "
+            f"expected one of: {', '.join(sorted(SUPPORTED_IMAGE_EXTS))}"
+        )
+
+    doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+    try:
+        page = doc[page_index]
+        page_h = page.rect.height
+        x0, y0_rl, x1, y1_rl = region
+        clip = pymupdf.Rect(x0, page_h - y1_rl, x1, page_h - y0_rl)
+
+        zoom = dpi / 72.0
+        matrix = pymupdf.Matrix(zoom, zoom)
+        # alpha=False: see write_document — same reasoning (no transparency,
+        # plain white background matching a real scan/photo).
+        pix = page.get_pixmap(matrix=matrix, clip=clip, alpha=False)
+        img_bytes = pix.tobytes("png") if ext == "png" else pix.tobytes("jpeg", jpg_quality=88)
+        out.write_bytes(img_bytes)
+    finally:
+        doc.close()
+
+    return out
+
+
 def normalize_extension(path: Path, dpi: int = DEFAULT_DPI) -> list[Path]:
     """
     Fix a file that a generator wrote as raw PDF bytes under a non-.pdf name

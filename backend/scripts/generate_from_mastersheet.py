@@ -18,7 +18,7 @@ from datetime import datetime, timedelta
 import openpyxl
 import pandas as pd
 
-from doc_gen_scripts.nric_passport.nric_generator import generate_nric_card, build_persona as build_nric_persona
+from doc_gen_scripts.nric_passport.nric_generator import generate_nric_card, build_persona as build_nric_persona, card_regions
 from doc_gen_scripts.nric_passport.passport_generator import generate_passport_page, build_persona as build_passport_persona
 from doc_gen_scripts.payslips.generate_payslips import build_payslip_1, build_payslip_2, build_payslip_3, synthesize_payslip_data
 from doc_gen_scripts.corp_source_of_wealth.balance_sheet_income_statement_generator import generate as generate_sow
@@ -48,10 +48,10 @@ from doc_gen_scripts.list_of_loans.overdraft_facility_generator import generate_
 # NEW: shared PDF -> PNG/JPG/JPEG converter, used only in the normalization pass
 # at the end of generate_for_case(). Every generator above is untouched and still
 # only knows how to write a PDF.
-from doc_gen_scripts.output_writer import normalize_extension
+from doc_gen_scripts.output_writer import normalize_extension, write_cropped_region, SUPPORTED_IMAGE_EXTS
 
 BASE = Path(__file__).resolve().parents[1]
-MASTERSHEET = BASE / "doc_gen_scripts" / "v13_document_mastersheet.xlsx"
+MASTERSHEET = BASE / "doc_gen_scripts" / "v15_document_mastersheet.xlsx"
 OUT_DIR = BASE / "documents_generated"
 
 # "OCBC Personal" isn't registered by default in docgen_bankstatement's BANK_PROFILES
@@ -237,7 +237,8 @@ def generate_for_case(case_id: str) -> None:
                 template = str(r.get("Template") or "").lower()
                 individual = str(r.get("Individual ID") or r.get("Filename") or f"{case_id}-id")
                 if "nric" in template:
-                    nric_path = out / str(r.get("Filename") or f"{individual}_NRIC.pdf")
+                    nric_filename = str(r.get("Filename") or f"{individual}_NRIC.pdf")
+                    ext = Path(nric_filename).suffix.lower().lstrip(".")
                     # NRIC-Passport itself carries no Residential Address, Sex or
                     # Race column -- build_nric_persona() is the single source of
                     # truth for deriving/inventing them (race from the name's CMIO
@@ -246,8 +247,29 @@ def generate_for_case(case_id: str) -> None:
                     person = next((p for p in people_rows if str(p.get("Individual ID")) == individual), {})
                     address = str(person.get("Residential Address") or "")
                     persona = build_nric_persona(r, address)
-                    generate_nric_card(str(nric_path), redact_photo=True, **persona)
-                    print("Wrote", nric_path)
+
+                    if ext in SUPPORTED_IMAGE_EXTS:
+                        # generate_nric_card draws front+back on ONE full A4
+                        # "print and cut" sheet, not two separate pages -- a
+                        # request for an image needs two standalone card
+                        # photos (front/back), not a photo of the whole A4
+                        # sheet with its surrounding whitespace. Render to a
+                        # throwaway PDF, crop each card's own region out of
+                        # it (no page border, just the card's own frame),
+                        # then discard the scratch PDF.
+                        scratch_pdf = out / f".{Path(nric_filename).stem}_nric_scratch.pdf"
+                        generate_nric_card(str(scratch_pdf), redact_photo=True, **persona)
+                        pdf_bytes = scratch_pdf.read_bytes()
+                        stem = Path(nric_filename).stem
+                        for side, region in card_regions().items():
+                            side_path = out / f"{stem}_{side}.{ext}"
+                            write_cropped_region(pdf_bytes, region, side_path)
+                            print("Wrote", side_path)
+                        scratch_pdf.unlink(missing_ok=True)
+                    else:
+                        nric_path = out / nric_filename
+                        generate_nric_card(str(nric_path), redact_photo=True, **persona)
+                        print("Wrote", nric_path)
                 if "passport" in template:
                     pp_path = out / str(r.get("Filename") or f"{individual}_Passport.pdf")
                     # NRIC-Passport carries no Sex, Place of Birth or National ID
