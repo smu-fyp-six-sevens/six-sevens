@@ -47,7 +47,10 @@ class FieldValue(BaseModel):
     )
     kind: str = Field(
         default="text",
-        description="How this field was found: 'text' (PDF span / OCR) or 'image' (embedded PDF image).",
+        description=(
+            "How this field was found: 'text' (PDF span / OCR) or 'image' "
+            "(embedded PDF image, or a pictorial region on PNG/JPEG)."
+        ),
     )
 
 
@@ -89,7 +92,10 @@ class DocumentFieldInfo(BaseModel):
     )
     kind: str = Field(
         default="text",
-        description="'text' or 'image'. On PDFs, image_manipulation targets embedded images; on PNG/JPEG it targets a field box.",
+        description=(
+            "'text' or 'image'. image_manipulation targets embedded PDF images "
+            "or pictorial regions on PNG/JPEG."
+        ),
     )
 
 

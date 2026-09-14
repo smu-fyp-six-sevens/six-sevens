@@ -107,6 +107,16 @@ def _write_sample_png(path: Path) -> None:
     for line in lines:
         page.insert_text((72, y), line, fontsize=22, fontname="helv")
         y += 40
+    page.draw_rect(
+        pymupdf.Rect(430, 36, 560, 120),
+        color=(0.85, 0.05, 0.05),
+        fill=(0.85, 0.05, 0.05),
+    )
+    page.draw_rect(
+        pymupdf.Rect(444, 50, 492, 106),
+        color=(0.05, 0.05, 0.85),
+        fill=(0.05, 0.05, 0.85),
+    )
     pix = page.get_pixmap(dpi=150)
     pix.save(str(path))
     doc.close()

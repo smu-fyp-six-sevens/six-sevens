@@ -63,7 +63,7 @@ class InjectionService:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(
-                    f"Field '{field_name}' is an embedded PDF image. "
+                    f"Field '{field_name}' is an image field. "
                     "Use defect_type 'image_manipulation' for image fields."
                 ),
             )

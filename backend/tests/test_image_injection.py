@@ -79,6 +79,47 @@ def test_ocr_discovers_text_on_png() -> None:
     assert len(fields) > 5
     joined = " ".join(field.text for field in fields.values()).upper()
     assert "OCBC" in joined
+    images = [field for field in fields.values() if field.kind == "image"]
+    assert images, "sample PNG should expose a pictorial logo region"
+    logo = images[0]
+    assert logo.rect[2] - logo.rect[0] >= 80
+    assert logo.rect[3] - logo.rect[1] >= 40
+
+
+def test_png_discovers_synthetic_logo_region(tmp_path: Path) -> None:
+    path = tmp_path / "logo_page.png"
+    image = Image.new("RGB", (400, 220), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    draw.text((20, 24), "HELLO", fill=(20, 20, 20))
+    draw.rectangle([260, 40, 370, 150], fill=(210, 20, 20))
+    image.save(path)
+    fields = discover_fields_from_image(path)
+    images = [field for field in fields.values() if field.kind == "image"]
+    assert len(images) == 1
+    box = images[0].rect
+    assert box[0] < 270
+    assert box[2] > 360
+    assert box[1] < 50
+    assert box[3] > 140
+
+
+def test_png_image_manipulation_rejects_text_fields() -> None:
+    document = get_document("ocbc_sample")
+    assert document is not None
+    text_name = next(
+        name
+        for name, field in document.fields.items()
+        if field.kind != "image" and field.text.strip()
+    )
+    response = _inject(
+        "ocbc_sample",
+        text_name,
+        DefectType.IMAGE_MANIPULATION,
+        indicator="compression_mismatch",
+    )
+    assert response.status_code == 400
+    detail = response.json()["detail"].lower()
+    assert "image" in detail
 
 
 def test_can_inject_into_png_and_stay_png() -> None:
@@ -89,7 +130,7 @@ def test_can_inject_into_png_and_stay_png() -> None:
         (
             name
             for name, field in document.fields.items()
-            if any(ch.isdigit() for ch in field.text)
+            if field.kind != "image" and any(ch.isdigit() for ch in field.text)
         ),
         None,
     )
@@ -258,7 +299,7 @@ def test_png_numerical_keeps_tinted_background(isolated_injection_templates: Pat
     document = get_document("tinted_amount")
     assert document is not None
     numeric = next(
-        (name for name, field in document.fields.items() if any(ch.isdigit() for ch in field.text)),
+        (name for name, field in document.fields.items() if any(ch.isdigit() for ch in field.text) and field.kind != "image"),
         None,
     )
     assert numeric is not None
@@ -937,7 +978,7 @@ def test_jpeg_font_fontsize_numerical_spelling_misalignment_emphasis(
     injectable = [
         (name, field)
         for name, field in document.fields.items()
-        if field.text.strip() and not is_label_only(field.text)
+        if field.text.strip() and field.kind != "image" and not is_label_only(field.text)
     ]
     numeric = next(
         (
@@ -1104,7 +1145,7 @@ def _logo_field(rect: list[float]) -> FieldValue:
         y=rect[3],
         page=0,
         rect=rect,
-        kind="text",
+        kind="image",
     )
 
 
@@ -1114,7 +1155,7 @@ def test_can_manipulate_png_region_and_stay_png() -> None:
     field_name = next(
         name
         for name, field in document.fields.items()
-        if any(ch.isdigit() for ch in field.text) and len(field.rect) == 4
+        if field.kind == "image" and len(field.rect) == 4
     )
     before_bytes = Path(get_document_file_path("ocbc_sample") or "").read_bytes()
     response = _inject(

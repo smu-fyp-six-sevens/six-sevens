@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import os
 import re
+from collections import deque
 from pathlib import Path
 
 import pymupdf
@@ -2123,9 +2124,14 @@ def discover_fields_from_image(
             rect=[x0, y0, x1, y1],
         )
 
+    with Image.open(image_path) as img:
+        raster = img.convert("RGB")
+    fields.update(
+        _discover_raster_image_fields(raster, fields, metadata=meta, page=page)
+    )
+
     if not fields:
-        with Image.open(image_path) as img:
-            width = min(220, img.width - 10)
+        width = min(220, raster.width - 10)
         fields["document_image"] = _placeholder_image_field(meta, width=width)
 
     _separate_stacked_ocr_boxes(fields)
@@ -2135,7 +2141,11 @@ def discover_fields_from_image(
 
 def _separate_stacked_ocr_boxes(fields: dict[str, FieldValue]) -> None:
     """Stop stacked OCR boxes from sharing pixels (amount vs the label above it)."""
-    items = [field for field in fields.values() if len(field.rect) == 4]
+    items = [
+        field
+        for field in fields.values()
+        if len(field.rect) == 4 and field.kind != "image"
+    ]
     for index, left in enumerate(items):
         for right in items[index + 1 :]:
             ax0, ay0, ax1, ay1 = left.rect
@@ -2158,6 +2168,191 @@ def _separate_stacked_ocr_boxes(fields: dict[str, FieldValue]) -> None:
             lower.rect[1] = mid
             upper.y = upper.rect[3] - 1.0
             lower.y = lower.rect[3] - 1.0
+
+
+_RASTER_IMAGE_MIN_PX = 28
+_RASTER_IMAGE_MAX_PAGE_FRAC = 0.40
+_RASTER_IMAGE_MIN_FILL = 0.12
+_RASTER_IMAGE_MAX_OCR_OVERLAP = 0.50
+_RASTER_IMAGE_MAX_ASPECT = 12.0
+_RASTER_IMAGE_DETECT_MAX_SIDE = 480
+_RASTER_IMAGE_COLOR_DIST = 42.0
+
+
+def _dominant_paper_color(image: Image.Image) -> tuple[int, int, int]:
+    """Most common coarse colour — usually the page/card background."""
+    sample = image.resize((80, 50), Image.Resampling.BOX)
+    counts: dict[tuple[int, int, int], int] = {}
+    for pixel in sample.getdata():
+        key = (pixel[0] // 16, pixel[1] // 16, pixel[2] // 16)
+        counts[key] = counts.get(key, 0) + 1
+    quantized = max(counts, key=counts.get)
+    return (
+        quantized[0] * 16 + 8,
+        quantized[1] * 16 + 8,
+        quantized[2] * 16 + 8,
+    )
+
+
+def _rect_overlap_area(
+    left: list[float] | tuple[float, float, float, float],
+    right: list[float] | tuple[float, float, float, float],
+) -> float:
+    x0 = max(left[0], right[0])
+    y0 = max(left[1], right[1])
+    x1 = min(left[2], right[2])
+    y1 = min(left[3], right[3])
+    if x1 <= x0 or y1 <= y0:
+        return 0.0
+    return (x1 - x0) * (y1 - y0)
+
+
+def _ocr_overlap_fraction(
+    box: list[float],
+    text_rects: list[list[float]],
+) -> float:
+    area = max(1.0, (box[2] - box[0]) * (box[3] - box[1]))
+    covered = sum(_rect_overlap_area(box, rect) for rect in text_rects)
+    return covered / area
+
+
+def _discover_raster_image_fields(
+    image: Image.Image,
+    text_fields: dict[str, FieldValue],
+    *,
+    metadata: dict[str, str],
+    page: int,
+) -> dict[str, FieldValue]:
+    """
+    Find logos/photos on a PNG/JPEG: blobs that are not page colour and not OCR text.
+
+    Flat rasters have no embedded-image objects, so this is the equivalent of
+    PDF `kind="image"` discovery.
+    """
+    width, height = image.size
+    if width < _RASTER_IMAGE_MIN_PX or height < _RASTER_IMAGE_MIN_PX:
+        return {}
+
+    paper = _dominant_paper_color(image)
+    scale = min(1.0, _RASTER_IMAGE_DETECT_MAX_SIDE / max(width, height))
+    small_w = max(1, int(round(width * scale)))
+    small_h = max(1, int(round(height * scale)))
+    work = image.resize((small_w, small_h), Image.Resampling.BOX)
+    mask = Image.new("L", (small_w, small_h), 0)
+    mask_px = mask.load()
+    work_px = work.load()
+    for y in range(small_h):
+        for x in range(small_w):
+            red, green, blue = work_px[x, y]
+            dist = (
+                (red - paper[0]) ** 2
+                + (green - paper[1]) ** 2
+                + (blue - paper[2]) ** 2
+            ) ** 0.5
+            if dist >= _RASTER_IMAGE_COLOR_DIST:
+                mask_px[x, y] = 255
+
+    draw = ImageDraw.Draw(mask)
+    text_rects = [list(field.rect) for field in text_fields.values() if len(field.rect) == 4]
+    pad = 2.0 / max(scale, 1e-6)
+    for rect in text_rects:
+        draw.rectangle(
+            [
+                int(rect[0] * scale - pad),
+                int(rect[1] * scale - pad),
+                int(rect[2] * scale + pad),
+                int(rect[3] * scale + pad),
+            ],
+            fill=0,
+        )
+    mask = mask.filter(ImageFilter.MaxFilter(5)).filter(ImageFilter.MinFilter(3))
+
+    fields: dict[str, FieldValue] = {}
+    page_area = float(width * height)
+    for x0, y0, x1, y1 in _connected_pixel_boxes(mask, min_pixels=80):
+        fill = _mask_fill_ratio(mask, x0, y0, x1, y1)
+        orig = [
+            x0 / scale,
+            y0 / scale,
+            x1 / scale,
+            y1 / scale,
+        ]
+        orig_w = orig[2] - orig[0]
+        orig_h = orig[3] - orig[1]
+        if orig_w < _RASTER_IMAGE_MIN_PX or orig_h < _RASTER_IMAGE_MIN_PX:
+            continue
+        if fill < _RASTER_IMAGE_MIN_FILL:
+            continue
+        if (orig_w * orig_h) / page_area > _RASTER_IMAGE_MAX_PAGE_FRAC:
+            continue
+        aspect = max(orig_w, orig_h) / max(1.0, min(orig_w, orig_h))
+        if aspect > _RASTER_IMAGE_MAX_ASPECT:
+            continue
+        if _ocr_overlap_fraction(orig, text_rects) > _RASTER_IMAGE_MAX_OCR_OVERLAP:
+            continue
+        name = _unique_field_name(
+            f"image_{page}_{int(round(orig[0]))}_{int(round(orig[1]))}",
+            {**text_fields, **fields},
+        )
+        fields[name] = FieldValue(
+            text=f"[image {int(round(orig_w))}x{int(round(orig_h))}]",
+            font=BUILTIN_FONT_HELVETICA,
+            font_size=1.0,
+            metadata=dict(metadata),
+            x=orig[0],
+            y=orig[1],
+            page=page,
+            rect=orig,
+            kind="image",
+        )
+    return fields
+
+
+def _mask_fill_ratio(
+    mask: Image.Image, x0: int, y0: int, x1: int, y1: int
+) -> float:
+    crop = mask.crop((x0, y0, x1, y1))
+    if crop.width < 1 or crop.height < 1:
+        return 0.0
+    ink = sum(1 for value in crop.getdata() if value >= 128)
+    return ink / float(crop.width * crop.height)
+
+
+def _connected_pixel_boxes(
+    mask: Image.Image, *, min_pixels: int
+) -> list[tuple[int, int, int, int]]:
+    """Inclusive-start exclusive-end boxes of white blobs on an L mask."""
+    width, height = mask.size
+    pixels = mask.load()
+    seen = [[False] * width for _ in range(height)]
+    boxes: list[tuple[int, int, int, int]] = []
+    for start_y in range(height):
+        for start_x in range(width):
+            if pixels[start_x, start_y] < 128 or seen[start_y][start_x]:
+                continue
+            queue: deque[tuple[int, int]] = deque([(start_x, start_y)])
+            seen[start_y][start_x] = True
+            min_x = max_x = start_x
+            min_y = max_y = start_y
+            count = 0
+            while queue:
+                x, y = queue.popleft()
+                count += 1
+                min_x = min(min_x, x)
+                max_x = max(max_x, x)
+                min_y = min(min_y, y)
+                max_y = max(max_y, y)
+                for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+                    if nx < 0 or ny < 0 or nx >= width or ny >= height:
+                        continue
+                    if seen[ny][nx] or pixels[nx, ny] < 128:
+                        continue
+                    seen[ny][nx] = True
+                    queue.append((nx, ny))
+            if count < min_pixels:
+                continue
+            boxes.append((min_x, min_y, max_x + 1, max_y + 1))
+    return boxes
 
 
 def _discover_native_pdf_fields(

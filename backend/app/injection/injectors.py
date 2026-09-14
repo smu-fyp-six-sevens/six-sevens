@@ -10,7 +10,6 @@ from .pdf import (
     SCALING_ANOMALY_HEIGHT,
     SCALING_ANOMALY_WIDTH,
     apply_text_emphasis,
-    is_image_template,
     manipulate_field_region,
     overlay_field_text,
     replace_field_text,
@@ -357,19 +356,19 @@ class ImageManipulationInjector(DefectInjector):
                 f"Unknown image-manipulation indicator {indicator!r}. "
                 f"Use one of: {', '.join(MANIPULATION_INDICATORS)}"
             )
-        if not is_image_template(path) and field.kind != "image":
+        if field.kind != "image":
             image_names = [
                 name for name, item in document.fields.items() if item.kind == "image"
             ]
             if image_names:
                 raise ValueError(
-                    f"Field '{field_name}' is not an embedded PDF image. "
+                    f"Field '{field_name}' is not an image field. "
                     f"Use one of: {', '.join(sorted(image_names))}"
                 )
             raise ValueError(
-                f"Document '{document.id}' has no embedded PDF images to manipulate"
+                f"Document '{document.id}' has no image regions to manipulate"
             )
-        if is_image_template(path) and len(field.rect) != 4:
+        if len(field.rect) != 4:
             raise ValueError("image_manipulation requires a field bounding box")
         manipulate_field_region(
             path,
