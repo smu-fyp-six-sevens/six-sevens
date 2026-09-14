@@ -71,7 +71,6 @@ _LABEL_ONLY_PATTERNS = (
     re.compile(r"^revision\s+of\s+interest", re.I),
     re.compile(r"^(opening|average|closing)\s+balance$", re.I),
     re.compile(r"^available\s+balance$", re.I),
-    re.compile(r"^total\b.+$", re.I),
     re.compile(r"^(transaction|description|debit|deposit|balance)(\s*\$+)?$", re.I),
     re.compile(r"^dau?e(s)?(\s+\S+)?$", re.I),
     re.compile(r"^date(\s+\S+)?$", re.I),

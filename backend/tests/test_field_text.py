@@ -40,6 +40,8 @@ def test_label_only_headers_are_not_values() -> None:
         "Page 1 of 2",
         "OCBC",
         "OCBC Bank",
+        "Total Withdrawals",
+        "Total Withdrawals / Deposits",
     ):
         assert is_label_only(text), text
         assert field_value_text(text) == ""
@@ -55,6 +57,9 @@ def test_value_only_fields_keep_full_text() -> None:
         "BALANCE BF",
         "PAYROLL CREDIT",
         "Orchard Road Branch",
+        "TOTAL EQUITY AND LIABILITIES",
+        "Total equity",
+        "Revenue",
     ):
         assert split_label_and_value(text) == ("", text), text
         assert not is_label_only(text)
