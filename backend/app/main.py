@@ -2,13 +2,15 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, status
+from fastapi import Depends, FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from .auth import require_auth
+from .config import settings
 from .health import check_db_connection
 from .queue_service import document_queue
-from .routers import extraction, injection, cases, detection, documents, monitoring, upload
+from .routers import auth, extraction, injection, cases, detection, documents, monitoring, upload
 
 logger = logging.getLogger(__name__)
 
@@ -30,19 +32,22 @@ app = FastAPI(title="fyp API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.include_router(cases.router)
-app.include_router(upload.router)
-app.include_router(documents.router)
-app.include_router(monitoring.router)
-app.include_router(detection.router)
-app.include_router(injection.router)
-app.include_router(extraction.router)
+_protected = [Depends(require_auth)]
+
+app.include_router(auth.router)
+app.include_router(cases.router, dependencies=_protected)
+app.include_router(upload.router, dependencies=_protected)
+app.include_router(documents.router, dependencies=_protected)
+app.include_router(monitoring.router, dependencies=_protected)
+app.include_router(detection.router, dependencies=_protected)
+app.include_router(injection.router, dependencies=_protected)
+app.include_router(extraction.router, dependencies=_protected)
 
 
 @app.get("/health")

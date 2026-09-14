@@ -14,6 +14,22 @@ class Settings:
 
     DATABASE_URL: str = os.environ.get("DATABASE_URL", "")
 
+    # Shared-credential auth for the public demo deployment (see app/auth.py).
+    # AUTH_SECRET_KEY signs bearer tokens — must be set to a real random value
+    # in any deployed environment (an empty/default secret makes tokens
+    # trivially forgeable), local dev is the only place the "" default is fine.
+    AUTH_USERNAME: str = os.environ.get("AUTH_USERNAME", "")
+    AUTH_PASSWORD: str = os.environ.get("AUTH_PASSWORD", "")
+    AUTH_SECRET_KEY: str = os.environ.get("AUTH_SECRET_KEY", "")
+
+    # Comma-separated list of origins the frontend is served from, in
+    # addition to local dev. Set to the deployed frontend's Cloud Run URL.
+    ALLOWED_ORIGINS: list[str] = [
+        origin.strip()
+        for origin in os.environ.get("ALLOWED_ORIGINS", "").split(",")
+        if origin.strip()
+    ] + ["http://localhost:5173"]
+
     SUPABASE_URL: str = os.environ.get("SUPABASE_URL", "")
     SUPABASE_PUBLISHABLE_KEY: str = os.environ.get("SUPABASE_PUBLISHABLE_KEY", "")
     SUPABASE_STORAGE_BUCKET: str = os.environ.get("SUPABASE_STORAGE_BUCKET", "documents")

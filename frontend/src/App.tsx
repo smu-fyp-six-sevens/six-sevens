@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   BrowserRouter,
   Navigate,
@@ -13,6 +13,8 @@ import ExtractionTestPage from './pages/ExtractionTestPage';
 import UploadPage from './pages/UploadPage';
 import CreateCasePage from './pages/CreateCasePage';
 import DocumentDetailsPage from './pages/DocumentDetailsPage';
+import LoginPage from './pages/LoginPage';
+import { authFetch, getToken } from './lib/api';
 
 export interface CaseRecord {
   id: string;
@@ -22,9 +24,6 @@ export interface CaseRecord {
   status: string;
   caseStatus: string;
 }
-
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 
 function mapStatus(status: string): string {
   switch (status) {
@@ -178,17 +177,45 @@ function ExtractionTestRoute() {
   );
 }
 
+function RequireAuth({
+  isAuthed,
+  children,
+}: {
+  isAuthed: boolean;
+  children: ReactNode;
+}) {
+  if (!isAuthed) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function LoginRoute({ onLoggedIn }: { onLoggedIn: () => void }) {
+  const navigate = useNavigate();
+
+  return (
+    <LoginPage
+      onLoggedIn={() => {
+        onLoggedIn();
+        navigate('/cases', { replace: true });
+      }}
+    />
+  );
+}
+
 export default function App() {
   const [cases, setCases] = useState<CaseRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isAuthed, setIsAuthed] = useState(() => getToken() !== null);
 
   async function loadCases(signal?: AbortSignal) {
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/cases`, { signal });
+      const response = await authFetch('/cases', { signal });
 
       if (!response.ok) {
         throw new Error(`Failed to load cases (${response.status}).`);
@@ -230,12 +257,16 @@ export default function App() {
   }
 
   useEffect(() => {
+    if (!isAuthed) {
+      return;
+    }
+
     const controller = new AbortController();
 
     void loadCases(controller.signal);
 
     return () => controller.abort();
-  }, []);
+  }, [isAuthed]);
 
   return (
     <BrowserRouter>
@@ -246,56 +277,73 @@ export default function App() {
         />
 
         <Route
+          path="/login"
+          element={<LoginRoute onLoggedIn={() => setIsAuthed(true)} />}
+        />
+
+        <Route
           path="/cases"
           element={
-            <CaseQueueRoute
-              cases={cases}
-              isLoading={isLoading}
-              error={error}
-              onRetry={() => void loadCases()}
-            />
+            <RequireAuth isAuthed={isAuthed}>
+              <CaseQueueRoute
+                cases={cases}
+                isLoading={isLoading}
+                error={error}
+                onRetry={() => void loadCases()}
+              />
+            </RequireAuth>
           }
         />
 
         <Route
           path="/cases/:caseNumber"
           element={
-            isLoading ? (
-              <div className="shell">
-                <p>Loading case...</p>
-              </div>
-            ) : (
-              <CaseDetailsRoute cases={cases} />
-            )
+            <RequireAuth isAuthed={isAuthed}>
+              {isLoading ? (
+                <div className="shell">
+                  <p>Loading case...</p>
+                </div>
+              ) : (
+                <CaseDetailsRoute cases={cases} />
+              )}
+            </RequireAuth>
           }
         />
 
         <Route
           path="/cases/:caseNumber/documents/:documentId"
           element={
-            isLoading ? (
-              <div className="shell">
-                <p>Loading document...</p>
-              </div>
-            ) : (
-              <DocumentDetailsRoute cases={cases} />
-            )
+            <RequireAuth isAuthed={isAuthed}>
+              {isLoading ? (
+                <div className="shell">
+                  <p>Loading document...</p>
+                </div>
+              ) : (
+                <DocumentDetailsRoute cases={cases} />
+              )}
+            </RequireAuth>
           }
         />
 
         <Route
           path="/create-case"
           element={
-            <CreateCaseRoute
-              onCreated={() => undefined}
-              onReloadCases={() => void loadCases()}
-            />
+            <RequireAuth isAuthed={isAuthed}>
+              <CreateCaseRoute
+                onCreated={() => undefined}
+                onReloadCases={() => void loadCases()}
+              />
+            </RequireAuth>
           }
         />
 
         <Route
           path="/test-extraction"
-          element={<ExtractionTestRoute />}
+          element={
+            <RequireAuth isAuthed={isAuthed}>
+              <ExtractionTestRoute />
+            </RequireAuth>
+          }
         />
 
         <Route

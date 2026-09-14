@@ -1,3 +1,5 @@
+import { authFetch } from '../lib/api';
+
 // Mirrors BulkUploadItemResult / BulkUploadResponse in backend/app/models.py
 export interface BulkUploadItemResult {
   filename: string;
@@ -58,7 +60,6 @@ export const REQUIRED_DOCUMENT_TYPES: { value: string; label: string }[] = [
 // can correct values the LLM wasn't confident about.
 export const EXTRACTION_CONFIDENCE_THRESHOLD = 0.95;
 
-const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 
 // Mirrors the subset of CaseSummary in backend/app/models.py this page
 // needs. fulfilled_requirements here is NOT just a union of each document's
@@ -78,7 +79,7 @@ export interface CaseRequirementCoverage {
 }
 
 export async function getCaseRequirementCoverage(caseId: string): Promise<CaseRequirementCoverage> {
-  const response = await fetch(`${apiBaseUrl}/cases/${caseId}`);
+  const response = await authFetch(`/cases/${caseId}`);
 
   if (!response.ok) {
     const detail = await response.text();
@@ -89,7 +90,7 @@ export async function getCaseRequirementCoverage(caseId: string): Promise<CaseRe
 }
 
 export async function getDocument(documentId: string): Promise<DocumentRecord> {
-  const response = await fetch(`${apiBaseUrl}/documents/${documentId}`);
+  const response = await authFetch(`/documents/${documentId}`);
 
   if (!response.ok) {
     const detail = await response.text();
@@ -100,7 +101,7 @@ export async function getDocument(documentId: string): Promise<DocumentRecord> {
 }
 
 export async function listDocuments(caseId: string): Promise<DocumentRecord[]> {
-  const response = await fetch(`${apiBaseUrl}/documents?case_id=${encodeURIComponent(caseId)}`);
+  const response = await authFetch(`/documents?case_id=${encodeURIComponent(caseId)}`);
 
   if (!response.ok) {
     const detail = await response.text();
@@ -117,7 +118,7 @@ export async function updateExtractedFields(
   documentId: string,
   extractedFields: Record<string, unknown>,
 ): Promise<DocumentRecord> {
-  const response = await fetch(`${apiBaseUrl}/documents/${documentId}/extracted-fields`, {
+  const response = await authFetch(`/documents/${documentId}/extracted-fields`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ extracted_fields: extractedFields }),
@@ -138,7 +139,7 @@ export async function uploadDocuments(caseId: string, files: File[]): Promise<Bu
     formData.append('files', file);
   }
 
-  const response = await fetch(`${apiBaseUrl}/documents/upload-batch`, {
+  const response = await authFetch('/documents/upload-batch', {
     method: 'POST',
     body: formData,
   });

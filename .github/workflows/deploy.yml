@@ -1,0 +1,119 @@
+name: Deploy to Cloud Run
+
+# Manual dispatch is included deliberately: during initial setup you'll want
+# to re-run this after fixing a secret without needing a throwaway commit.
+on:
+  push:
+    branches: [cloud-deploy-gcp]
+  workflow_dispatch: {}
+
+env:
+  REGION: ${{ secrets.GCP_REGION || 'asia-southeast1' }}
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REPO: app
+  BACKEND_SERVICE: fyp-backend
+  FRONTEND_SERVICE: fyp-frontend
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: gcp-auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Ensure Artifact Registry repo exists
+        run: |
+          gcloud artifacts repositories describe "$REPO" \
+            --project "$PROJECT_ID" --location "$REGION" \
+            || gcloud artifacts repositories create "$REPO" \
+                 --project "$PROJECT_ID" --location "$REGION" \
+                 --repository-format=docker \
+                 --description="Fraud detection app images"
+
+      - name: Build and push backend image
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/backend:${GITHUB_SHA}"
+          docker build -f backend/Dockerfile --target base -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "BACKEND_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Deploy backend to Cloud Run
+        run: |
+          gcloud run deploy "$BACKEND_SERVICE" \
+            --image "$BACKEND_IMAGE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8000 \
+            --memory 2Gi \
+            --cpu 2 \
+            --timeout 300 \
+            --set-env-vars "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" \
+            --set-env-vars "SUPABASE_PUBLISHABLE_KEY=${{ secrets.SUPABASE_PUBLISHABLE_KEY }}" \
+            --set-env-vars "SUPABASE_STORAGE_BUCKET=${{ secrets.SUPABASE_STORAGE_BUCKET || 'documents' }}" \
+            --set-env-vars "DIFY_BASE_URL=${{ secrets.DIFY_BASE_URL || 'https://api.dify.ai/v1' }}" \
+            --set-env-vars "DIFY_API_KEY=${{ secrets.DIFY_API_KEY }}" \
+            --set-env-vars "DIFY_CLASSIFIER_API_KEY=${{ secrets.DIFY_CLASSIFIER_API_KEY }}" \
+            --set-env-vars "DIFY_CLASSIFIER_WORKFLOW_ID=${{ secrets.DIFY_CLASSIFIER_WORKFLOW_ID }}" \
+            --set-env-vars "DIFY_EXTRACTION_WORKFLOW_ID=${{ secrets.DIFY_EXTRACTION_WORKFLOW_ID }}" \
+            --set-env-vars "DIFY_EXTRACTION_API_KEY=${{ secrets.DIFY_EXTRACTION_API_KEY }}" \
+            --set-env-vars "AUTH_USERNAME=${{ secrets.AUTH_USERNAME }}" \
+            --set-env-vars "AUTH_PASSWORD=${{ secrets.AUTH_PASSWORD }}" \
+            --set-env-vars "AUTH_SECRET_KEY=${{ secrets.AUTH_SECRET_KEY }}"
+
+      - name: Resolve backend URL
+        run: |
+          BACKEND_URL=$(gcloud run services describe "$BACKEND_SERVICE" \
+            --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')
+          echo "BACKEND_URL=$BACKEND_URL" >> "$GITHUB_ENV"
+
+      - name: Build and push frontend image
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/frontend:${GITHUB_SHA}"
+          docker build -f frontend/Dockerfile --build-arg VITE_API_URL="$BACKEND_URL" -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "FRONTEND_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Deploy frontend to Cloud Run
+        run: |
+          gcloud run deploy "$FRONTEND_SERVICE" \
+            --image "$FRONTEND_IMAGE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 80 \
+            --memory 512Mi \
+            --cpu 1
+
+      # The backend's CORS allowlist needs the frontend's actual URL, which
+      # only exists after the frontend's first deploy above — so this closes
+      # the loop by updating the already-deployed backend in place. Stable
+      # across re-runs once both URLs exist (Cloud Run URLs don't change
+      # between deploys of the same service).
+      - name: Point backend CORS at the deployed frontend
+        run: |
+          FRONTEND_URL=$(gcloud run services describe "$FRONTEND_SERVICE" \
+            --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')
+          gcloud run services update "$BACKEND_SERVICE" \
+            --project "$PROJECT_ID" --region "$REGION" \
+            --update-env-vars "ALLOWED_ORIGINS=$FRONTEND_URL"
+
+          {
+            echo "### Deployed"
+            echo "- Frontend: $FRONTEND_URL"
+            echo "- Backend: $BACKEND_URL"
+          } >> "$GITHUB_STEP_SUMMARY"
