@@ -42,8 +42,6 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import simpleSplit
@@ -51,11 +49,29 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfgen import canvas as pdfcanvas
 
-from corporate_bank_statement.docgen_bankstatement import (
-    PAGE_W, PAGE_H, FONT, FONT_B,
-    BankProfile, BANK_PROFILES, RENDERERS,
-    Block, Txn, seeded_rng, load_logo,
-)
+# Prefer the dotted package import so this shares the exact same BANK_PROFILES/
+# RENDERERS dict objects as whatever else already imported docgen_bankstatement.py
+# that way (e.g. scripts/generate_from_mastersheet.py, and
+# corporate_bank_statement/docgen_bankstatement_ocbc.py) -- registering "OCBC
+# Personal" into a second, separately-imported copy of those module-level dicts
+# would leave it invisible to callers using the first copy (this used to be exactly
+# that bug: BANK_PROFILES["OCBC Personal"] was landing in a disconnected copy of the
+# dict, silently invisible to load_bank_case() as called from generate_from_mastersheet.py).
+# Falls back to the bare import for standalone script use (`python
+# docgen_bankstatement_ocbc_personal.py ...` from this directory).
+try:
+    from doc_gen_scripts.corporate_bank_statement.docgen_bankstatement import (
+        PAGE_W, PAGE_H, FONT, FONT_B,
+        BankProfile, BANK_PROFILES, RENDERERS,
+        Block, Txn, seeded_rng, load_logo,
+    )
+except ImportError:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from corporate_bank_statement.docgen_bankstatement import (
+        PAGE_W, PAGE_H, FONT, FONT_B,
+        BankProfile, BANK_PROFILES, RENDERERS,
+        Block, Txn, seeded_rng, load_logo,
+    )
 
 # Adobe's standard CJK font metrics ship with reportlab — no font file needed.
 # Rendering the actual glyphs relies on the PDF viewer having a CJK font
@@ -71,13 +87,15 @@ CJK_FONT = "STSong-Light"
 
 BANK_PROFILES["OCBC Personal"] = BankProfile(
     name="OCBC",
-    legal_name="Overseas-Chinese Banking Corporation Limited",
+    legal_name="Oversea-Chinese Banking Corporation Limited",
     address="65 Chulia Street, OCBC Centre, Singapore 049513",
     website="www.ocbc.com",
     footer_reg="Co. Reg. No. 193200032W",
     product="MONTHLY SAVINGS ACCOUNT",
     tagline=("", ""),
-    logo_path=str(Path(__file__).parent / "assets" / "ocbc-logo.png"),
+    # Reuses the real OCBC logo asset from the shared doc_gen_scripts/assets/images
+    # folder (all doc-gen logos/stamps live there, not scattered per-module).
+    logo_path=str(Path(__file__).resolve().parent.parent / "assets" / "images" / "ocbc-logo.png"),
     logo_style="plain",
     template="ocbc_personal",
     branch="Orchard Road Branch",

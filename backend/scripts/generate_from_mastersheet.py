@@ -25,8 +25,6 @@ from doc_gen_scripts.corp_source_of_wealth.balance_sheet_income_statement_genera
 from doc_gen_scripts.corporate_bank_statement.docgen_bankstatement import (
     generate as generate_bank_statement,
     load_case as load_bank_case,
-    BankProfile,
-    BANK_PROFILES,
 )
 # Import solely for its module-level side effect: registers BANK_PROFILES["OCBC"]
 # and RENDERERS["ocbc"] into the dicts imported above (same module object, so the
@@ -45,6 +43,16 @@ from doc_gen_scripts.list_of_loans.term_loan_facility_generator import generate_
 from doc_gen_scripts.list_of_loans.efs_facility_generator import generate_efs_letter
 from doc_gen_scripts.list_of_loans.overdraft_facility_generator import generate_overdraft_letter
 
+# Optional Documents tab (v15+): Company NOA, Proof of Address (Company) utility/
+# telecom bills, and Source of Wealth investment statements. Each of these
+# generate() functions is mastersheet-driven the same way generate_sow/
+# generate_cert_incumbency/generate_constitution above are (xlsx, outdir,
+# cases=[...]) and is a no-op if the case has no rows for that Document Type.
+from doc_gen_scripts.optional_documents.company_noa.generate_noa import generate as generate_optional_noa
+from doc_gen_scripts.optional_documents.utility.generate_bills import generate as generate_optional_utility
+from doc_gen_scripts.optional_documents.telecom.generate_telecom import generate as generate_optional_telecom
+from doc_gen_scripts.optional_documents.investment.generate_statements import generate as generate_optional_investment
+
 # NEW: shared PDF -> PNG/JPG/JPEG converter, used only in the normalization pass
 # at the end of generate_for_case(). Every generator above is untouched and still
 # only knows how to write a PDF.
@@ -53,25 +61,6 @@ from doc_gen_scripts.output_writer import normalize_extension, write_cropped_reg
 BASE = Path(__file__).resolve().parents[1]
 MASTERSHEET = BASE / "doc_gen_scripts" / "v15_document_mastersheet.xlsx"
 OUT_DIR = BASE / "documents_generated"
-
-# "OCBC Personal" isn't registered by default in docgen_bankstatement's BANK_PROFILES
-# (only the corporate bank profiles are). Register it once here so load_bank_case()
-# accepts it as a bank_override when we render a director's personal statement as a
-# Proof of Address document (see section 9 below). Reuses the real OCBC logo asset
-# that already ships with the corporate bank statement generator.
-BANK_PROFILES.setdefault("OCBC Personal", BankProfile(
-    name="OCBC",
-    legal_name="Oversea-Chinese Banking Corporation Limited",
-    address="65 Chulia Street, OCBC Centre, Singapore 049513",
-    website="www.ocbc.com",
-    footer_reg="Co. Reg. No. 193200032W",
-    product="MONTHLY SAVINGS ACCOUNT",
-    tagline=("", ""),
-    logo_path=str(BASE / "doc_gen_scripts" / "corporate_bank_statement" / "assets" / "ocbc-logo.png"),
-    logo_style="plain",
-    template="ocbc_personal",
-    branch="Orchard Road Branch",
-))
 
 # Bank letterhead addresses for the List of Loans facility letters (section 10) —
 # a small local lookup rather than reusing BANK_PROFILES, since those letters are an
@@ -510,6 +499,36 @@ def generate_for_case(case_id: str) -> None:
                 print("Wrote", loan_path)
             except Exception as e:
                 print("List of loans generation failed:", e)
+
+    # 13) Optional Documents — Company NOA, Proof of Address (Company) utility/
+    # telecom bills, and Source of Wealth (Individual) investment statements.
+    # Unlike the 12 mandatory document types above, all four of these share one
+    # mastersheet tab ("Optional Documents"), split by Document Type inside each
+    # generate() call (see doc_gen_scripts/optional_documents/*/generate_*.py for
+    # each type's own build_persona()). Each call is a no-op if this case has no
+    # rows for that particular Document Type.
+    optional_df = _read_sheet("Optional Documents") if (MASTERSHEET.exists()) else pd.DataFrame()
+    if not optional_df.empty:
+        try:
+            for p in generate_optional_noa(MASTERSHEET, out, cases=[case_id]):
+                print("Wrote", p)
+        except Exception as e:
+            print("Optional NOA generation failed:", e)
+        try:
+            for p in generate_optional_utility(MASTERSHEET, out, cases=[case_id]):
+                print("Wrote", p)
+        except Exception as e:
+            print("Optional utility bill generation failed:", e)
+        try:
+            for p in generate_optional_telecom(MASTERSHEET, out, cases=[case_id]):
+                print("Wrote", p)
+        except Exception as e:
+            print("Optional telecom bill generation failed:", e)
+        try:
+            for p in generate_optional_investment(MASTERSHEET, out, cases=[case_id]):
+                print("Wrote", p)
+        except Exception as e:
+            print("Optional investment statement generation failed:", e)
 
     # --------------------------------------------------------------------
     # NEW: final normalization pass.

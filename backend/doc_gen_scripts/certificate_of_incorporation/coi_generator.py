@@ -103,7 +103,7 @@ def load_context(json_path: Path | None) -> dict[str, Any]:
     return context
 
 
-ASSETS_DIR = Path(__file__).with_name("assets")
+ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets" / "images"
 LOGO_PATH = ASSETS_DIR / "acra_logo.jpg"
 STAMP_PATH = ASSETS_DIR / "acra_stamp.png"
 

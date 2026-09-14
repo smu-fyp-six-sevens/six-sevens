@@ -71,9 +71,9 @@ from case_facts import as_date, seeded_rng
 styles = getSampleStyleSheet()
 FONT = "Helvetica"
 
-# Logo supplied to more closely match the real CBS template (assets/CBS_Logo.png).
-LOGO_PATH = Path(__file__).resolve().parent / "assets" / "CBS_Logo.png"
-LOGO_ASPECT = 785 / 1893  # height / width of assets/CBS_Logo.png, for scaling by width
+# Logo supplied to more closely match the real CBS template.
+LOGO_PATH = Path(__file__).resolve().parent.parent / "assets" / "images" / "CBS_Logo.png"
+LOGO_ASPECT = 785 / 1893  # height / width of CBS_Logo.png, for scaling by width
 BRAND_NAVY = colors.HexColor("#0E1A64")  # sampled from the logo's "CBS" wordmark
 
 # Score/risk-grade/probability-of-default triples and credit-limit pools have no

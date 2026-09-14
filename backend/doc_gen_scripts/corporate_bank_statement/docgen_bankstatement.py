@@ -63,6 +63,8 @@ COL_WITHDRAW_R = PAGE_W - M_R - 175
 COL_DEPOSIT_R = PAGE_W - M_R - 90
 COL_BALANCE_R = PAGE_W - M_R
 
+ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets" / "images"
+
 FONT = "Helvetica"
 FONT_B = "Helvetica-Bold"
 SIZE_ROW = 7.2
@@ -115,7 +117,7 @@ BANK_PROFILES: dict[str, BankProfile] = {
         footer_reg="Co. Reg. No. 196800306E   GST Reg No: MR-8500180-3",
         product="Details of your DBS Corporate Multi-Currency Account",
         tagline=("Live more,", "Bank less"),
-        logo_path=str(Path(__file__).with_name("assets") / "dbs_logo.png"),
+        logo_path=str(ASSETS_DIR / "dbs_logo.png"),
         logo_style="panel",
     ),
     "UOB": BankProfile(
@@ -126,11 +128,11 @@ BANK_PROFILES: dict[str, BankProfile] = {
         footer_reg="Co. Reg. No. 193500026Z",
         product="Account Activities",
         tagline=("", ""),
-        logo_path=str(Path(__file__).with_name("assets") / "uob_logo.png"),
+        logo_path=str(ASSETS_DIR / "uob_logo.png"),
         logo_style="plain",
         template="uob",
         branch="UOB Orchard",
-        stamp_path=str(Path(__file__).with_name("assets") / "uob_stamp.jpg"),
+        stamp_path=str(ASSETS_DIR / "uob_stamp.jpg"),
     ),
     # OCBC also appears on the Bank Statements tab. Add a profile and a matching
     # renderer entry in RENDERERS before generating those cases.

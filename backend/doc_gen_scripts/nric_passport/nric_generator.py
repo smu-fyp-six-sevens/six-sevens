@@ -75,9 +75,10 @@ BOLD = "Helvetica-Bold"
 # Emblem artwork: the front header crest, the front ghost watermark (beside the
 # Sex field), and the back ghost watermark each use their own image by default --
 # see generate_nric_card()'s crest_asset/front_ghost_asset/back_ghost_asset.
-DEFAULT_CREST_ASSET = Path(__file__).resolve().parent / "tg_image_609089445.jpeg"
-DEFAULT_FRONT_GHOST_ASSET = Path(__file__).resolve().parent / "images.png"
-DEFAULT_BACK_GHOST_ASSET = Path(__file__).resolve().parent / "tg_image_609089445.jpeg"
+_SHARED_ASSETS = Path(__file__).resolve().parent.parent / "assets" / "images"
+DEFAULT_CREST_ASSET = _SHARED_ASSETS / "nric_crest.jpeg"
+DEFAULT_FRONT_GHOST_ASSET = _SHARED_ASSETS / "nric_front_ghost.png"
+DEFAULT_BACK_GHOST_ASSET = _SHARED_ASSETS / "nric_crest.jpeg"
 
 # ---- geometry ------------------------------------------------------------
 # ID-1 card is 85.6 x 54 mm (aspect 1.586).
