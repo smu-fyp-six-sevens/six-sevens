@@ -6,27 +6,41 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _env(name: str, default: str = "") -> str:
+    """
+    os.environ.get, stripped of surrounding whitespace. A value copied out
+    of a .env file or a GitHub Actions secret very easily picks up a
+    trailing newline (the file/textbox ends with one, the copy includes it)
+    — harmless for most settings, but fatal for anything sent as an HTTP
+    header value (e.g. SUPABASE_PUBLISHABLE_KEY): httpx raises "Illegal
+    header value" since a literal \\n in a header is invalid. Stripping
+    every env-sourced string here means that mistake fails loudly and
+    obviously at the copy-paste step instead of silently as a runtime error.
+    """
+    return os.environ.get(name, default).strip()
+
+
 class Settings:
     """
     Centralised config. All values come from environment variables so
     nothing sensitive (API keys, service role key) is hardcoded.
     """
 
-    DATABASE_URL: str = os.environ.get("DATABASE_URL", "")
+    DATABASE_URL: str = _env("DATABASE_URL")
 
     # Shared-credential auth for the public demo deployment (see app/auth.py).
     # AUTH_SECRET_KEY signs bearer tokens — must be set to a real random value
     # in any deployed environment (an empty/default secret makes tokens
     # trivially forgeable), local dev is the only place the "" default is fine.
-    AUTH_USERNAME: str = os.environ.get("AUTH_USERNAME", "")
-    AUTH_PASSWORD: str = os.environ.get("AUTH_PASSWORD", "")
-    AUTH_SECRET_KEY: str = os.environ.get("AUTH_SECRET_KEY", "")
+    AUTH_USERNAME: str = _env("AUTH_USERNAME")
+    AUTH_PASSWORD: str = _env("AUTH_PASSWORD")
+    AUTH_SECRET_KEY: str = _env("AUTH_SECRET_KEY")
 
     # Comma-separated list of exact origins the frontend is served from, in
     # addition to local dev.
     ALLOWED_ORIGINS: list[str] = [
         origin.strip()
-        for origin in os.environ.get("ALLOWED_ORIGINS", "").split(",")
+        for origin in _env("ALLOWED_ORIGINS").split(",")
         if origin.strip()
     ] + ["http://localhost:5173"]
 
@@ -40,11 +54,11 @@ class Settings:
     # match any hostname Cloud Run might hand the frontend service, keyed
     # off the stable service name rather than the unpredictable per-deploy
     # hash/region suffix.
-    ALLOWED_ORIGIN_REGEX: str | None = os.environ.get("ALLOWED_ORIGIN_REGEX") or None
+    ALLOWED_ORIGIN_REGEX: str | None = _env("ALLOWED_ORIGIN_REGEX") or None
 
-    SUPABASE_URL: str = os.environ.get("SUPABASE_URL", "")
-    SUPABASE_PUBLISHABLE_KEY: str = os.environ.get("SUPABASE_PUBLISHABLE_KEY", "")
-    SUPABASE_STORAGE_BUCKET: str = os.environ.get("SUPABASE_STORAGE_BUCKET", "documents")
+    SUPABASE_URL: str = _env("SUPABASE_URL")
+    SUPABASE_PUBLISHABLE_KEY: str = _env("SUPABASE_PUBLISHABLE_KEY")
+    SUPABASE_STORAGE_BUCKET: str = _env("SUPABASE_STORAGE_BUCKET", "documents")
 
     # Dify workflow/chatflow calls have been observed taking ~20-90s under
     # concurrent load (see SIGNED_URL_EXPIRY_SECONDS below) — httpx's default
@@ -58,17 +72,17 @@ class Settings:
     # on a vision-based (image) statement in testing, all 3 retries timed out.
     DIFY_REQUEST_TIMEOUT_SECONDS: float = 240.0
 
-    DIFY_BASE_URL: str = os.environ.get("DIFY_BASE_URL", "https://api.dify.ai/v1")
-    DIFY_API_KEY: str = os.environ.get("DIFY_API_KEY", "")
+    DIFY_BASE_URL: str = _env("DIFY_BASE_URL", "https://api.dify.ai/v1")
+    DIFY_API_KEY: str = _env("DIFY_API_KEY")
     # Classifier (Intake Coordinator) is a Dify Chatflow app, not a Workflow
     # app — Dify identifies a chat app purely by its own API key (sent as
     # the Authorization header on /chat-messages), so there's no workflow_id
     # to pass in the request body. DIFY_CLASSIFIER_WORKFLOW_ID is kept only
     # for reference/documentation of which Dify app this is.
-    DIFY_CLASSIFIER_API_KEY: str = os.environ.get("DIFY_CLASSIFIER_API_KEY", "")
-    DIFY_CLASSIFIER_WORKFLOW_ID: str = os.environ.get("DIFY_CLASSIFIER_WORKFLOW_ID", "")
-    DIFY_EXTRACTION_WORKFLOW_ID: str = os.environ.get("DIFY_EXTRACTION_WORKFLOW_ID", "")
-    DIFY_EXTRACTION_API_KEY: str = os.environ.get("DIFY_EXTRACTION_API_KEY", "")
+    DIFY_CLASSIFIER_API_KEY: str = _env("DIFY_CLASSIFIER_API_KEY")
+    DIFY_CLASSIFIER_WORKFLOW_ID: str = _env("DIFY_CLASSIFIER_WORKFLOW_ID")
+    DIFY_EXTRACTION_WORKFLOW_ID: str = _env("DIFY_EXTRACTION_WORKFLOW_ID")
+    DIFY_EXTRACTION_API_KEY: str = _env("DIFY_EXTRACTION_API_KEY")
 
     # AC2: invocation should be attempted within this window of being dequeued
     DEQUEUE_TO_INVOKE_TARGET_SECONDS: float = 1.0
