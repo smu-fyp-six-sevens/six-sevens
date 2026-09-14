@@ -1,8 +1,8 @@
-"""Split document labels from injectable values.
+"""Split mixed label+value spans so injection can keep the printed name.
 
-OCR often returns ``Account No. XXXX-0472`` as one span, or ``Opening Balance``
-as its own span. Fraud injection must keep the variable *name* (label) intact
-and only tamper the variable *value*.
+OCR often returns ``Account No. XXXX-0472`` as one span. The prefix stays;
+only the value is replaced. A standalone header such as ``Opening Balance``
+is injectable as its own field.
 """
 
 from __future__ import annotations
@@ -144,19 +144,19 @@ def is_label_only(text: str) -> bool:
 
 
 def replace_value(text: str, new_value: str) -> str:
-    """Keep the original label prefix and substitute only the value."""
+    """Keep a leading label prefix and substitute the value.
+
+    Header-only fields have no value portion, so the whole string is replaced.
+    """
     label, value = split_label_and_value(text)
     if not value.strip():
-        raise ValueError("Field is a document label, not a value")
+        return new_value
     return label + new_value
 
 
 def require_value(field_name: str, text: str) -> str:
-    """Return the value portion, or raise if the field is a label."""
+    """Return the value portion, or the full text for a header-only field."""
     value = field_value_text(text)
-    if not value.strip():
-        raise ValueError(
-            f"Field '{field_name}' is a document label ({text!r}); "
-            "inject into the corresponding value instead"
-        )
-    return value
+    if value.strip():
+        return value
+    return text

@@ -69,10 +69,5 @@ def test_replace_value_preserves_label() -> None:
     assert replace_value("Account No. XXXX-0472", "YYYY-1111") == "Account No. YYYY-1111"
 
 
-def test_replace_value_rejects_label_only() -> None:
-    try:
-        replace_value("Opening Balance", "1.00")
-    except ValueError as exc:
-        assert "label" in str(exc).lower()
-    else:
-        raise AssertionError("expected ValueError")
+def test_replace_value_replaces_header_entirely() -> None:
+    assert replace_value("Opening Balance", "Openign Balance") == "Openign Balance"

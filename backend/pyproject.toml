@@ -35,13 +35,9 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "--ignore=tests/test_injection.py --ignore=tests/test_image_injection.py"
 
 [tool.setuptools.packages.find]
 include = ["app*"]
-
-[tool.coverage.run]
-omit = ["app/injection/*", "app/routers/injection.py"]
 
 [tool.coverage.report]
 exclude_lines = [

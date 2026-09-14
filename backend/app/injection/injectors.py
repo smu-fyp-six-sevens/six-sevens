@@ -4,7 +4,7 @@ import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from .field_text import replace_value, require_value, split_label_and_value
+from .field_text import field_value_text, replace_value, split_label_and_value
 from .pdf import (
     MANIPULATION_INDICATORS,
     SCALING_ANOMALY_HEIGHT,
@@ -85,7 +85,8 @@ def _replacement_text(field: FieldValue, new_text: str) -> str:
 
 def _require_injectable_value(document: InjectableDocument, field_name: str) -> str:
     field = document.fields[field_name]
-    return require_value(field_name, field.text)
+    value = field_value_text(field.text)
+    return value if value.strip() else field.text
 
 
 class FontInjector(DefectInjector):
