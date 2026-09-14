@@ -270,9 +270,11 @@ app; you don't need to repeat any of this setup for them.
   app's own `/login` page. Don't put real customer data through this
   deployment.
 - No custom domain — you get the default `*.run.app` URLs.
-- Redeploying re-resolves and re-applies the frontend's URL to the
-  backend's CORS allowlist every run, so this stays correct even if you
-  ever delete and recreate a service (the `*.run.app` URL would change).
+- The backend's CORS allowlist matches any hostname Cloud Run might hand
+  the frontend service (regex on the stable service name, not one exact
+  resolved URL — see `ALLOWED_ORIGIN_REGEX` in the workflow), so it keeps
+  working even if you delete and recreate the frontend service and its
+  `*.run.app` URL changes.
 - Cold starts: RapidOCR/onnxruntime make the backend image relatively
   heavy; the first request after idle may take a few seconds longer.
 - To rotate the shared login credential later, just update the

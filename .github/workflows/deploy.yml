@@ -51,6 +51,15 @@ jobs:
 
       - name: Deploy backend to Cloud Run
         run: |
+          # ALLOWED_ORIGIN_REGEX is computed here, not fetched after the
+          # frontend deploys: Cloud Run hands each service more than one
+          # valid hostname (e.g. both "SERVICE-xxxxx-as.a.run.app" and
+          # "SERVICE-xxxxx.asia-southeast1.run.app" resolve to the same
+          # service), so pinning CORS to one exact resolved URL is fragile —
+          # whichever format a browser happens to be on can fail. Matching
+          # on the stable service-name prefix instead covers every hostname
+          # Cloud Run might hand this service, and needs no re-wiring after
+          # the frontend exists.
           gcloud run deploy "$BACKEND_SERVICE" \
             --image "$BACKEND_IMAGE" \
             --project "$PROJECT_ID" \
@@ -61,6 +70,7 @@ jobs:
             --memory 2Gi \
             --cpu 2 \
             --timeout 300 \
+            --set-env-vars "ALLOWED_ORIGIN_REGEX=^https://${FRONTEND_SERVICE}-.*\.run\.app\$" \
             --set-env-vars "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" \
             --set-env-vars "SUPABASE_PUBLISHABLE_KEY=${{ secrets.SUPABASE_PUBLISHABLE_KEY }}" \
             --set-env-vars "SUPABASE_STORAGE_BUCKET=${{ secrets.SUPABASE_STORAGE_BUCKET || 'documents' }}" \
@@ -99,18 +109,10 @@ jobs:
             --memory 512Mi \
             --cpu 1
 
-      # The backend's CORS allowlist needs the frontend's actual URL, which
-      # only exists after the frontend's first deploy above — so this closes
-      # the loop by updating the already-deployed backend in place. Stable
-      # across re-runs once both URLs exist (Cloud Run URLs don't change
-      # between deploys of the same service).
-      - name: Point backend CORS at the deployed frontend
+      - name: Print deployed URLs
         run: |
           FRONTEND_URL=$(gcloud run services describe "$FRONTEND_SERVICE" \
             --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')
-          gcloud run services update "$BACKEND_SERVICE" \
-            --project "$PROJECT_ID" --region "$REGION" \
-            --update-env-vars "ALLOWED_ORIGINS=$FRONTEND_URL"
 
           {
             echo "### Deployed"

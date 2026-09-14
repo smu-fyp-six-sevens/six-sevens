@@ -22,13 +22,25 @@ class Settings:
     AUTH_PASSWORD: str = os.environ.get("AUTH_PASSWORD", "")
     AUTH_SECRET_KEY: str = os.environ.get("AUTH_SECRET_KEY", "")
 
-    # Comma-separated list of origins the frontend is served from, in
-    # addition to local dev. Set to the deployed frontend's Cloud Run URL.
+    # Comma-separated list of exact origins the frontend is served from, in
+    # addition to local dev.
     ALLOWED_ORIGINS: list[str] = [
         origin.strip()
         for origin in os.environ.get("ALLOWED_ORIGINS", "").split(",")
         if origin.strip()
     ] + ["http://localhost:5173"]
+
+    # Regex alternative to ALLOWED_ORIGINS, for Cloud Run specifically: a
+    # single service gets handed out more than one valid hostname (e.g. both
+    # "fyp-frontend-xxxxx-as.a.run.app" and
+    # "fyp-frontend-xxxxx.asia-southeast1.run.app" resolve to the same
+    # service), so pinning ALLOWED_ORIGINS to one exact resolved URL is
+    # fragile — whichever format the browser happens to be on can fail CORS
+    # even though it's the right service. The deploy workflow sets this to
+    # match any hostname Cloud Run might hand the frontend service, keyed
+    # off the stable service name rather than the unpredictable per-deploy
+    # hash/region suffix.
+    ALLOWED_ORIGIN_REGEX: str | None = os.environ.get("ALLOWED_ORIGIN_REGEX") or None
 
     SUPABASE_URL: str = os.environ.get("SUPABASE_URL", "")
     SUPABASE_PUBLISHABLE_KEY: str = os.environ.get("SUPABASE_PUBLISHABLE_KEY", "")
