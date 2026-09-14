@@ -1170,6 +1170,11 @@ h1 {
   background: #16816d;
 }
 
+.status-dot--failed {
+  background: #dc2626;
+}
+
+
 .document-confidence {
   color: #17294d;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -1194,6 +1199,12 @@ h1 {
 .document-view-link:hover {
   color: #0d4f9f;
 }
+
+.document-status--failed {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
 
 /* Keep the table usable on smaller screens */
 @media (max-width: 900px) {
@@ -1302,12 +1313,21 @@ h1 {
   color: #167c68;
 }
 
+.document-status--failed {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
 .status-dot {
   width: 8px;
   height: 8px;
   flex: 0 0 8px;
   border-radius: 50%;
   background: #16816d;
+}
+
+.status-dot--failed {
+  background: #dc2626;
 }
 
 .document-status .status-dot {
@@ -1563,6 +1583,16 @@ h1 {
   color: #996500;
 }
 
+.review-message--error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+
+.review-message--error strong,
+.review-message--error div {
+  color: #b91c1c;
+}
 /* Approve / reject */
 
 .document-actions {

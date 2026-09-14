@@ -38,7 +38,10 @@ async def list_documents(
 @router.get("/{document_id}", response_model=DocumentRecord)
 async def get_document(document_id: str) -> DocumentRecord:
     try:
-        document = await asyncio.to_thread(document_repository.get_document, document_id)
+        document = await asyncio.to_thread(
+            document_repository.get_document,
+            document_id,
+        )
     except Exception as exc:
         logger.exception("Failed to fetch document %s", document_id)
         raise HTTPException(
@@ -48,8 +51,34 @@ async def get_document(document_id: str) -> DocumentRecord:
 
     if document is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
         )
+
+    try:
+        extracted_fields = await asyncio.to_thread(
+            extracted_fields_repository.get_extracted_fields,
+            document_id,
+        )
+    except Exception as exc:
+        logger.exception(
+            "Failed to fetch extracted fields for document %s",
+            document_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch extracted fields.",
+        ) from exc
+
+    if extracted_fields:
+        document.extracted_fields = {
+            field.field_name: {
+                "value": field.field_value,
+                "confidence": field.confidence,
+            }
+            for field in extracted_fields
+        }
+
     return document
 
 

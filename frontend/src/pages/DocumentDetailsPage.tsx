@@ -34,16 +34,52 @@ function humanizeFieldKey(key: string): string {
     .join(' ');
 }
 
+interface ExtractedField {
+  value: unknown;
+  confidence: number | null;
+}
+
 function displayableFieldEntries(
   fields: Record<string, unknown> | null,
-): [string, unknown][] {
+): [string, ExtractedField][] {
   if (!fields) {
     return [];
   }
 
-  return Object.entries(fields).filter(
-    ([key]) => !NON_DISPLAYED_FIELD_KEYS.has(key),
-  );
+  return Object.entries(fields)
+    .filter(([key]) => !NON_DISPLAYED_FIELD_KEYS.has(key))
+    .map(([key, rawField]) => {
+      if (
+        rawField &&
+        typeof rawField === 'object' &&
+        'value' in rawField
+      ) {
+        const field = rawField as {
+          value?: unknown;
+          confidence?: unknown;
+        };
+
+        return [
+          key,
+          {
+            value: field.value ?? null,
+            confidence:
+              typeof field.confidence === 'number'
+                ? field.confidence
+                : null,
+          },
+        ];
+      }
+
+      // Fallback for older/simple extracted-field data.
+      return [
+        key,
+        {
+          value: rawField,
+          confidence: null,
+        },
+      ];
+    });
 }
 
 function valueToString(value: unknown): string {
@@ -100,10 +136,10 @@ export default function DocumentDetailsPage({
 
         const nextDraft: Record<string, string> = {};
 
-        for (const [key, value] of displayableFieldEntries(
+        for (const [key, field] of displayableFieldEntries(
           result.extracted_fields,
         )) {
-          nextDraft[key] = valueToString(value);
+          nextDraft[key] = valueToString(field.value);
         }
 
         setFieldDraft(nextDraft);
@@ -136,6 +172,10 @@ export default function DocumentDetailsPage({
     [document?.extracted_fields],
   );
 
+  const isUnrecognisedDocument =
+    !document?.document_type ||
+    document.document_type.toLowerCase() === 'unrecognised';
+
   const needsManualReview =
     document?.extraction_confidence != null &&
     document.extraction_confidence < EXTRACTION_CONFIDENCE_THRESHOLD;
@@ -152,22 +192,20 @@ export default function DocumentDetailsPage({
 
   async function handleSaveFields() {
     if (!document) {
-        return;
+      return;
     }
 
     // Make sure every extracted field has a value before saving.
     const hasEmptyField = extractedFields.some(([key]) => {
-        const value = fieldDraft[key]?.trim();
+      const value = fieldDraft[key]?.trim();
 
-        return !value;
+      return !value;
     });
 
     if (hasEmptyField) {
-        setSaveMessage(null);
-        setSaveError(
-        'Please complete all fields before saving.',
-        );
-        return;
+      setSaveMessage(null);
+      setSaveError('Please complete all fields before saving.');
+      return;
     }
 
     setIsSaving(true);
@@ -175,36 +213,36 @@ export default function DocumentDetailsPage({
     setSaveError(null);
 
     try {
-        const updated = await updateExtractedFields(
+      const updated = await updateExtractedFields(
         document.id,
         fieldDraft,
-        );
+      );
 
-        setDocument(updated);
+      setDocument(updated);
 
-        const nextDraft: Record<string, string> = {};
+      const nextDraft: Record<string, string> = {};
 
-        for (const [key, value] of displayableFieldEntries(
+      for (const [key, field] of displayableFieldEntries(
         updated.extracted_fields,
-        )) {
-        nextDraft[key] = valueToString(value);
-        }
+      )) {
+        nextDraft[key] = valueToString(field.value);
+      }
 
-        setFieldDraft(nextDraft);
+      setFieldDraft(nextDraft);
 
-        setSaveMessage(
+      setSaveMessage(
         'Changes saved. The extracted fields are now verified and can no longer be edited.',
-        );
+      );
     } catch (error) {
-        setSaveError(
+      setSaveError(
         error instanceof Error
-            ? error.message
-            : 'Failed to save extracted fields.',
-        );
+          ? error.message
+          : 'Failed to save extracted fields.',
+      );
     } finally {
-        setIsSaving(false);
+      setIsSaving(false);
     }
-    }
+  }
 
   if (isLoading) {
     return (
@@ -291,10 +329,18 @@ export default function DocumentDetailsPage({
             className={`document-status ${
               document.status === 'analyzed'
                 ? 'document-status--success'
-                : ''
+                : document.status === 'failed'
+                  ? 'document-status--failed'
+                  : ''
             }`}
           >
-            <span className="status-dot" />
+            <span
+              className={`status-dot ${
+                document.status === 'failed'
+                  ? 'status-dot--failed'
+                  : ''
+              }`}
+            />
             {document.status}
           </div>
         </div>
@@ -308,7 +354,9 @@ export default function DocumentDetailsPage({
           </div>
 
           <div>
-            <span className="details-label">Classification Confidence</span>
+            <span className="details-label">
+              Classification Confidence
+            </span>
             <strong>
               {document.confidence != null
                 ? document.confidence.toFixed(2)
@@ -345,7 +393,7 @@ export default function DocumentDetailsPage({
         </div>
 
         {extractedFields.length === 0 ? (
-          <div className="review-message">
+          <div className="review-message review-message--error">
             <div>
               <strong>No extracted fields available.</strong>
               <div>
@@ -362,7 +410,7 @@ export default function DocumentDetailsPage({
               <span>Confidence</span>
             </div>
 
-            {extractedFields.map(([key, value]) => (
+            {extractedFields.map(([key, field]) => (
               <div
                 key={key}
                 className="extracted-table-row"
@@ -372,15 +420,15 @@ export default function DocumentDetailsPage({
                 </span>
 
                 <span className="field-value">
-                  {value === null || value === undefined
+                  {field.value === null || field.value === undefined
                     ? '—'
-                    : valueToString(value)}
+                    : valueToString(field.value)}
                 </span>
 
                 <span>
-                  {document.extraction_confidence != null ? (
+                  {field.confidence != null ? (
                     <span className="confidence-badge">
-                      {document.extraction_confidence.toFixed(2)}
+                      {field.confidence.toFixed(2)}
                     </span>
                   ) : (
                     '—'
@@ -396,7 +444,7 @@ export default function DocumentDetailsPage({
           Manual review
           ===================================================== */}
 
-      {needsManualReview && (
+      {(needsManualReview || isUnrecognisedDocument) && (
         <section className="details-card details-card--review">
           <div className="details-section-heading details-section-heading--warning">
             <span className="details-section-icon">⚠</span>
@@ -404,30 +452,30 @@ export default function DocumentDetailsPage({
           </div>
 
           <p className="review-description">
-            This document has low extraction confidence. Review and
+            This document has low extraction confidence or empty fields. Review and
             correct the extracted fields below before approving the
             document.
           </p>
 
-           <div className="manual-review-warning">
+          <div className="manual-review-warning">
             <span className="manual-review-warning-icon">⚠</span>
 
             <div>
-                <strong>Important: Review before saving</strong>
+              <strong>Important: Review before saving</strong>
 
-                <p>
+              <p>
                 All fields below will be saved together. Once saved,
                 the extracted data will be marked as verified with a
                 confidence score of <strong>1.00</strong> and will no
                 longer be editable.
-                </p>
+              </p>
 
-                <p>
+              <p>
                 Please make sure all required fields are completed
                 before saving.
-                </p>
+              </p>
             </div>
-            </div>
+          </div>
 
           <div className="manual-review-table">
             <div className="manual-review-header">
@@ -436,43 +484,63 @@ export default function DocumentDetailsPage({
               <span>Confidence</span>
             </div>
 
-            {extractedFields.map(([key]) => (
-              <div
-                key={key}
-                className="manual-review-row"
-              >
-                <span className="manual-review-field">
-                  {humanizeFieldKey(key)}
-                </span>
+            {extractedFields.map(([key, field]) => {
+              const isEmptyField =
+                field.value == null ||
+                String(field.value).trim() === '' ||
+                String(field.value).trim() === '-';
 
-                <input
+              const canEditField =
+                isUnrecognisedDocument ||
+                isEmptyField ||
+                (field.confidence != null &&
+                  field.confidence < EXTRACTION_CONFIDENCE_THRESHOLD);
+
+              return (
+                <div
+                  key={key}
+                  className="manual-review-row"
+                >
+                  <span className="manual-review-field">
+                    {humanizeFieldKey(key)}
+                  </span>
+
+                  <input
                     type="text"
                     className={`manual-review-input ${
-                        !fieldDraft[key]?.trim()
+                      !fieldDraft[key]?.trim()
                         ? 'manual-review-input--empty'
                         : ''
                     }`}
                     value={fieldDraft[key] ?? ''}
-                    disabled={isSaving}
+                    disabled={isSaving || !canEditField}
                     onChange={(event) =>
-                        handleFieldChange(
+                      handleFieldChange(
                         key,
                         event.target.value,
-                        )
+                      )
                     }
-                    />
+                  />
 
-                <span>
-                  {document.extraction_confidence != null ? (
-                    <span className="confidence-badge confidence-badge--warning">
-                      {document.extraction_confidence.toFixed(2)}
-                    </span>
-                  ) : (
-                    '—'
-                  )}
-                </span>
-              </div>
-            ))}
+                  <span>
+                    {field.confidence != null ? (
+                      <span
+                        className={
+                          field.confidence <
+                          EXTRACTION_CONFIDENCE_THRESHOLD
+                            ? 'confidence-badge confidence-badge--warning'
+                            : 'confidence-badge'
+                        }
+                      >
+                        {field.confidence.toFixed(2)}
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </span>
+                </div>
+              );
+            })}
           </div>
 
           <div className="manual-review-actions">

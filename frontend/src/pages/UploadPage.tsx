@@ -482,7 +482,9 @@ export default function UploadPage({
                             className={`status-dot ${
                               status === 'analyzed'
                                 ? 'status-dot--success'
-                                : ''
+                                : status === 'failed'
+                                  ? 'status-dot--failed'
+                                  : ''
                             }`}
                           />
                           <span>
