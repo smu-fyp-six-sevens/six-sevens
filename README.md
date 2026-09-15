@@ -42,4 +42,5 @@ Frontend is build-only for now.
 ## GitHub Actions
 
 - Pull requests and pushes to `main` run backend tests and frontend lint/build.
+- cloud
 - Pushes to `main` also publish Docker images to GitHub Container Registry.
