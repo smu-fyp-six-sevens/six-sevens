@@ -1,3 +1,5 @@
+import { authFetch } from '../lib/api';
+
 // Mirrors ExtractionTestResponse / ExtractionTestPage in backend/app/models.py
 export interface ExtractionTestPage {
   page_number: number;
@@ -16,13 +18,11 @@ export interface ExtractionTestResult {
   status: string;
 }
 
-const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
-
 export async function testExtraction(file: File): Promise<ExtractionTestResult> {
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await fetch(`${apiBaseUrl}/extraction/test`, {
+  const response = await authFetch('/extraction/test', {
     method: 'POST',
     body: formData,
   });

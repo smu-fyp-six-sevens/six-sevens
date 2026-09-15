@@ -3,8 +3,24 @@ from pathlib import Path
 import pymupdf
 import pytest
 
+from app.auth import require_auth
+from app.main import app
+
 PDF_DOC_ID = "C001_CertIncumbency"
 IMAGE_DOC_ID = "ocbc_sample"
+
+
+@pytest.fixture(autouse=True)
+def _bypass_auth():
+    """
+    Every route except /health and /auth/login requires require_auth (see
+    app/main.py) — existing tests exercise route behavior, not the shared-
+    credential login gate itself, so bypass it here by default. test_auth.py
+    clears this override locally to test the real login/token flow.
+    """
+    app.dependency_overrides[require_auth] = lambda: None
+    yield
+    app.dependency_overrides.pop(require_auth, None)
 
 
 class _BlockedSupabaseAccess:

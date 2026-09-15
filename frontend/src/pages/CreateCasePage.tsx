@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import AppHeader from '../components/AppHeader';
+import { authFetch } from '../lib/api';
 
 interface CreateCasePageProps {
   onBack: () => void;
@@ -13,9 +14,6 @@ export default function CreateCasePage({
   const [companyName, setCompanyName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const API_BASE_URL =
-    import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -32,7 +30,7 @@ export default function CreateCasePage({
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/cases`, {
+      const response = await authFetch('/cases', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

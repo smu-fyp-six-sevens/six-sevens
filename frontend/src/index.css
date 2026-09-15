@@ -75,6 +75,9 @@ button {
   font-size: 12px;
   color: var(--ink-soft);
   font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .eyebrow,
@@ -954,6 +957,18 @@ h1 {
 
 .create-case-view {
   margin-top: 28px;
+}
+
+.login-view {
+  margin-top: 120px;
+  max-width: 360px;
+}
+
+.login-form {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
 .create-case-form {
