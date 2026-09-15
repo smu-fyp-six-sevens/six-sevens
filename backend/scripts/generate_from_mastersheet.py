@@ -20,7 +20,7 @@ import pandas as pd
 
 from doc_gen_scripts.nric_passport.nric_generator import generate_nric_card, build_persona as build_nric_persona, card_regions
 from doc_gen_scripts.nric_passport.passport_generator import generate_passport_page, build_persona as build_passport_persona
-from doc_gen_scripts.payslips.generate_payslips import build_payslip_1, build_payslip_2, build_payslip_3, synthesize_payslip_data
+from doc_gen_scripts.payslips.generate_payslips import build_payslip_1, build_payslip_2, build_payslip_3, synthesize_payslip_data, compute_net_pay
 from doc_gen_scripts.corp_source_of_wealth.balance_sheet_income_statement_generator import generate as generate_sow
 from doc_gen_scripts.corporate_bank_statement.docgen_bankstatement import (
     generate as generate_bank_statement,
@@ -59,7 +59,7 @@ from doc_gen_scripts.optional_documents.investment.generate_statements import ge
 from doc_gen_scripts.output_writer import normalize_extension, write_cropped_region, SUPPORTED_IMAGE_EXTS
 
 BASE = Path(__file__).resolve().parents[1]
-MASTERSHEET = BASE / "doc_gen_scripts" / "v15_document_mastersheet.xlsx"
+MASTERSHEET = BASE / "doc_gen_scripts" / "v16_document_mastersheet.xlsx"
 OUT_DIR = BASE / "documents_generated"
 
 # Bank letterhead addresses for the List of Loans facility letters (section 10) —
@@ -293,20 +293,27 @@ def generate_for_case(case_id: str) -> None:
                     builder = build_payslip_1
 
                 # The Payslips tab only carries identity fields (name, NRIC, role,
-                # employer) — no salary figures — so the money fields are synthesized,
-                # seeded on Individual ID so re-runs are reproducible. The employer
-                # address is pulled from company_facts() (not invented) so it agrees
-                # with the registered address shown on every other document.
+                # employer, employer address) — no salary figures — so the money
+                # fields are synthesized, seeded on Individual ID so re-runs are
+                # reproducible. The employer address comes from the row's own
+                # "Employer Address" column, not company_facts()'s registered
+                # address — the Payslips tab's Employer Name may legitimately
+                # differ from the loan company (see README), so its address can
+                # too; falling back to company_facts() only if that column is
+                # blank for some reason.
                 case_row = _openpyxl_case_row("Case Registry", case_id)
                 application_date = as_date(case_row.get("Application Date"))
-                facts = company_facts(case_row, _openpyxl_case_rows("Individuals", case_id))
+                employer_address = str(r.get("Employer Address") or "")
+                if not employer_address:
+                    facts = company_facts(case_row, _openpyxl_case_rows("Individuals", case_id))
+                    employer_address = str(facts.get("registered_address") or "")
                 data = synthesize_payslip_data(
                     individual,
                     employee_name=r.get("Individual Name (auto)") or "Employee",
                     employer_name=r.get("Employer Name") or "Employer",
                     role=r.get("Role (auto)") or "",
                     application_date=application_date,
-                    company_address=str(facts.get("registered_address") or ""),
+                    company_address=employer_address,
                 )
                 builder(ps_path, data)
                 print("Wrote", ps_path)
@@ -383,7 +390,31 @@ def generate_for_case(case_id: str) -> None:
                     )
                     if person:
                         ctx["director"] = person
-                    blocks = build_personal_blocks(ctx)
+
+                    # If this individual is also this case's Payslip subject, the
+                    # statement's PAYROLL CREDIT line should show their exact net pay,
+                    # not an unrelated random amount -- same computation as section 6
+                    # above, seeded identically, so the two documents agree.
+                    known_salary = None
+                    payslip_row = next(
+                        (p for p in _openpyxl_case_rows("Payslips", case_id, key="Case ID (auto)")
+                         if str(p.get("Individual ID")) == individual),
+                        None,
+                    )
+                    if payslip_row:
+                        payslip_template = str(payslip_row.get("Template") or "")
+                        application_date = as_date(_openpyxl_case_row("Case Registry", case_id).get("Application Date"))
+                        payslip_data = synthesize_payslip_data(
+                            individual,
+                            employee_name=payslip_row.get("Individual Name (auto)") or "Employee",
+                            employer_name=payslip_row.get("Employer Name") or "Employer",
+                            role=payslip_row.get("Role (auto)") or "",
+                            application_date=application_date,
+                            company_address=str(payslip_row.get("Employer Address") or ""),
+                        )
+                        known_salary = compute_net_pay(payslip_data, payslip_template)
+
+                    blocks = build_personal_blocks(ctx, known_salary=known_salary)
                     render_ocbc_personal(ctx, blocks, pa_path)
                     print("Wrote", pa_path)
                 except Exception as e:
@@ -500,20 +531,25 @@ def generate_for_case(case_id: str) -> None:
             except Exception as e:
                 print("List of loans generation failed:", e)
 
-    # 13) Optional Documents — Company NOA, Proof of Address (Company) utility/
-    # telecom bills, and Source of Wealth (Individual) investment statements.
-    # Unlike the 12 mandatory document types above, all four of these share one
-    # mastersheet tab ("Optional Documents"), split by Document Type inside each
-    # generate() call (see doc_gen_scripts/optional_documents/*/generate_*.py for
-    # each type's own build_persona()). Each call is a no-op if this case has no
-    # rows for that particular Document Type.
-    optional_df = _read_sheet("Optional Documents") if (MASTERSHEET.exists()) else pd.DataFrame()
-    if not optional_df.empty:
+    # 13) Notice of Assessment (NOA) — Company. As of mastersheet v16 this has its
+    # own dedicated tab ("Notice of Assessment"), covering every case — it used to
+    # live inside "Optional Documents" (v15 and earlier) covering only a subset.
+    noa_df = _read_sheet("Notice of Assessment") if (MASTERSHEET.exists()) else pd.DataFrame()
+    if not noa_df.empty:
         try:
             for p in generate_optional_noa(MASTERSHEET, out, cases=[case_id]):
                 print("Wrote", p)
         except Exception as e:
-            print("Optional NOA generation failed:", e)
+            print("NOA generation failed:", e)
+
+    # 14) Optional Documents — Proof of Address (Company) utility/telecom bills,
+    # and Source of Wealth (Individual) investment statements. These three share
+    # one mastersheet tab ("Optional Documents"), split by Document Type inside
+    # each generate() call (see doc_gen_scripts/optional_documents/*/generate_*.py
+    # for each type's own build_persona()). Each call is a no-op if this case has
+    # no rows for that particular Document Type.
+    optional_df = _read_sheet("Optional Documents") if (MASTERSHEET.exists()) else pd.DataFrame()
+    if not optional_df.empty:
         try:
             for p in generate_optional_utility(MASTERSHEET, out, cases=[case_id]):
                 print("Wrote", p)

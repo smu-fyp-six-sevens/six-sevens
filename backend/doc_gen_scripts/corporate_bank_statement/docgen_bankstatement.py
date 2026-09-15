@@ -35,10 +35,13 @@ import hashlib
 import io
 import random
 import re
+import sys
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterable, TypedDict
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import openpyxl
 from reportlab.lib import colors
@@ -237,6 +240,38 @@ def parse_period(text: str) -> list[date]:
     return months
 
 
+def _known_utility_bill(wb: Any, case_id: str) -> dict[str, Any] | None:
+    """If this case has a company "Proof of Address (Company)" bill (electricity
+    or telecom) in the Optional Documents tab, return its exact amount + kind so
+    month_transactions()'s "utilities" line can reconcile against it -- rather
+    than inventing an unrelated number that happens to show up right next to the
+    real bill on the same case. Computed with the SAME seed + function the actual
+    bill generator uses (see optional_documents/utility|telecom), so it's not an
+    approximation -- it's the identical figure that document will show.
+    Returns None if this case has no such Optional Documents row (most cases
+    don't -- coverage there is deliberately sparse), in which case the "utilities"
+    line keeps its old random-amount behaviour since there's nothing to reconcile."""
+    if "Optional Documents" not in wb.sheetnames:
+        return None
+    for row in _rows(wb["Optional Documents"]):
+        if str(row.get("Case ID") or "") != case_id:
+            continue
+        if str(row.get("Document Type") or "") != "Proof of Address (Company)":
+            continue
+        filename = str(row.get("Filename") or "")
+        try:
+            if "telecom" in filename.lower():
+                from optional_documents.telecom.generate_telecom import synthesize_telecom_bill_data
+                data = synthesize_telecom_bill_data(case_id, filename)
+                return {"kind": "telecom", "amount": data["total_outstanding"]}
+            from optional_documents.utility.generate_bills import synthesize_company_bill_data
+            data = synthesize_company_bill_data(case_id, filename)
+            return {"kind": "utility", "amount": data["total_amount_payable"]}
+        except Exception:
+            return None
+    return None
+
+
 def load_case(xlsx: str | Path, case_id: str, bank_override: str | None = None) -> dict[str, Any]:
     wb = openpyxl.load_workbook(str(xlsx), data_only=True)
     case = next(r for r in _rows(wb["Case Registry"]) if str(r["Case ID"]) == case_id)
@@ -261,6 +296,7 @@ def load_case(xlsx: str | Path, case_id: str, bank_override: str | None = None) 
         "director": people[0] if people else None,
         "fraud_flag": str(stmt.get("Fraud Injected? (Y/N)") or "N").strip().upper() == "Y",
         "dimension": stmt.get("Detection Dimension"),
+        "known_utility_bill": _known_utility_bill(wb, case_id),
     }
 
 
@@ -332,7 +368,15 @@ def month_transactions(
     events.append((25, "payroll", {"name": rng.choice(salary_names),
                                    "amount": round(rng.uniform(3_500, 9_000), 2)}))
     events.append((1, "rent", {"amount": round(rng.uniform(3_000, 7_500), 2)}))
-    events.append((rng.randint(10, 18), "utilities", {"amount": round(rng.uniform(280, 1_400), 2)}))
+    # Always draw the random fallback amount even when a known bill exists below, so
+    # the rest of this month's rng sequence (card spend, etc.) doesn't shift depending
+    # on whether this case happens to have an Optional Documents utility/telecom bill.
+    utility_amount = round(rng.uniform(280, 1_400), 2)
+    known_bill = ctx.get("known_utility_bill")
+    if known_bill:
+        utility_amount = known_bill["amount"]
+    events.append((rng.randint(10, 18), "utilities",
+                   {"amount": utility_amount, "kind": (known_bill or {}).get("kind", "utility")}))
 
     # Card spend.
     for _ in range(rng.randint(1, 2)):
@@ -385,9 +429,10 @@ def month_transactions(
                 f"PREMISES RENTAL {month.strftime('%b%y').upper()}",
             ], withdrawal=p["amount"])
         elif kind == "utilities":
+            narrative = "STARHUB LTD TELECOM BILL" if p.get("kind") == "telecom" else "SP SERVICES LTD UTILITIES"
             add(day, [
                 "GIRO PAYMENT",
-                "SP SERVICES LTD UTILITIES",
+                narrative,
             ], withdrawal=p["amount"])
         elif kind == "card":
             add(day, [

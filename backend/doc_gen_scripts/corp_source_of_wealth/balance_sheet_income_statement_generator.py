@@ -20,13 +20,12 @@ matter which optional line items a given case happens to include — a note
 referenced from both statements (e.g. property, plant and equipment) keeps
 a single number.
 
-Mastersheet reality check: the "Source of Wealth Docs" tab still lists two
-rows per case (Document Type "Balance Sheet" and "Income Statement", each
-with its own Filename). Since this script now produces one combined PDF,
-generate() writes that same PDF out under both registered filenames so the
-existing two-row structure keeps working without a mastersheet edit. If you
-want a cleaner mastersheet, collapse those two rows into one per case (e.g.
-Document Type "Financial Statements", Filename "C001_SourceWealth_FS.pdf").
+Mastersheet reality check: as of v16, the "Source of Wealth Docs" tab has been
+collapsed to one row per case (entity-level combined document; the old
+Document Type "Balance Sheet" / "Income Statement" split column is gone, and
+so is the two-row-per-case shape it used to distinguish). This script already
+produces one combined PDF per case, so that collapse just means load_cases()
+now reads a single row per case directly instead of merging two.
 
 To generate:
 
@@ -640,11 +639,11 @@ def load_cases(xlsx: str | Path, cases: list[str] | None = None) -> list[dict[st
     wb = openpyxl.load_workbook(str(xlsx), data_only=True)
     registry = {str(r["Case ID"]): r for r in _rows(wb["Case Registry"])}
 
-    doc_rows: dict[str, dict[str, dict[str, Any]]] = {}
+    # v16 collapsed this tab to one row per case (entity-level combined document);
+    # the old Document Type "Balance Sheet" / "Income Statement" split is gone.
+    doc_rows: dict[str, dict[str, Any]] = {}
     for r in _rows(wb["Source of Wealth Docs"]):
-        case_id = str(r["Case ID"])
-        doc_type = str(r.get("Document Type") or "")
-        doc_rows.setdefault(case_id, {})[doc_type] = r
+        doc_rows[str(r["Case ID"])] = r
 
     people: dict[str, list[dict[str, Any]]] = {}
     for ind in _rows(wb["Individuals"]):
@@ -656,18 +655,13 @@ def load_cases(xlsx: str | Path, cases: list[str] | None = None) -> list[dict[st
             continue
         if not case.get("Company Name"):
             continue
-        docs = doc_rows.get(case_id, {})
-        # The mastersheet has since collapsed the old two-row-per-case shape
-        # ("Balance Sheet" + "Income Statement") into one row per case with
-        # Document Type "Financial Statements" -- accept either shape.
-        if not ({"Balance Sheet", "Income Statement", "Financial Statements"} & docs.keys()):
+        row = doc_rows.get(case_id)
+        if not row:
             continue
         out.append({
             "case_id": case_id,
             "case": case,
-            "bs_row": docs.get("Balance Sheet", {}),
-            "is_row": docs.get("Income Statement", {}),
-            "fs_row": docs.get("Financial Statements", {}),
+            "sow_row": row,
             "people": sorted(people.get(case_id, []), key=lambda r: r.get("Person Seq") or 0),
         })
     return out
@@ -684,15 +678,8 @@ def generate(xlsx: str | Path, outdir: str | Path, cases: list[str] | None = Non
         application_date = as_date(record["case"].get("Application Date")) or date(2026, 1, 1)
         period_end = _choose_period_end(seeded_rng(f"{case_id}|sow-fye"), application_date)
 
-        filenames = {
-            record["bs_row"].get("Filename"),
-            record["is_row"].get("Filename"),
-            record["fs_row"].get("Filename"),
-        } - {None}
-        if not filenames:
-            filenames = {f"{case_id}_SourceWealth_Financials.pdf"}
-
-        primary = Path(outdir) / sorted(filenames)[0]
+        filename = record["sow_row"].get("Filename") or f"{case_id}_SourceWealth_Financials.pdf"
+        primary = Path(outdir) / filename
         result = generate_financial_statements(
             str(primary),
             company_name=facts["company_name"],
@@ -703,10 +690,6 @@ def generate(xlsx: str | Path, outdir: str | Path, cases: list[str] | None = Non
             synthetic_tag=synthetic_tag,
         )
         written.append(primary)
-
-        # The mastersheet previously carried separate rows for Balance Sheet and
-        # Income Statement. This generator now emits a single combined PDF per
-        # case. Do not duplicate the same PDF under multiple filenames.
 
         print(f"{case_id}  {primary.name}  "
               f"profit={result['profit_for_year']:,.0f}  assets={result['total_assets']:,.0f}")

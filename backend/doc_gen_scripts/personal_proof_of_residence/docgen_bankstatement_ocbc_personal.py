@@ -150,7 +150,8 @@ CARD_MERCHANT_DESCS = [
 # Transaction engine (personal banking, not the corporate SME model)
 # --------------------------------------------------------------------------
 
-def personal_month_transactions(month: date, opening: float, rng: random.Random) -> list[Txn]:
+def personal_month_transactions(month: date, opening: float, rng: random.Random,
+                                 known_salary: float | None = None) -> list[Txn]:
     last_day = (date(month.year + (month.month == 12), (month.month % 12) + 1, 1)
                 - timedelta(days=1)).day
 
@@ -163,7 +164,13 @@ def personal_month_transactions(month: date, opening: float, rng: random.Random)
                        {"desc": rng.choice(CARD_MERCHANT_DESCS),
                         "amount": round(rng.uniform(15, 700), 2)}))
     events.append((rng.randint(5, 12), "utility", {"amount": round(rng.uniform(60, 300), 2)}))
-    events.append((rng.randint(15, 25), "payroll", {"amount": round(rng.uniform(2500, 9000), 2)}))
+    # Always draw the random fallback even when known_salary is given, so the rest of
+    # this month's rng sequence doesn't shift depending on whether this individual
+    # also happens to be this case's Payslip subject (see build_personal_blocks()).
+    payroll_amount = round(rng.uniform(2500, 9000), 2)
+    if known_salary is not None:
+        payroll_amount = known_salary
+    events.append((rng.randint(15, 25), "payroll", {"amount": payroll_amount}))
     if rng.random() < 0.7:
         events.append((rng.randint(1, last_day), "transfer",
                        {"amount": round(rng.uniform(50, 1000), 2), "out": rng.random() < 0.5}))
@@ -209,7 +216,13 @@ def _holder_seed_key(ctx: dict[str, Any]) -> str:
     return f"{ctx['case_id']}|{holder_id}"
 
 
-def build_personal_blocks(ctx: dict[str, Any], opening: float | None = None) -> list[Block]:
+def build_personal_blocks(ctx: dict[str, Any], opening: float | None = None,
+                           known_salary: float | None = None) -> list[Block]:
+    """known_salary: this account holder's exact net pay, when they're also this
+    case's Payslip subject -- so the PAYROLL CREDIT line agrees with what their
+    payslip shows, instead of an independent random amount. See
+    generate_from_mastersheet.py's Proof of Address / Bank Statement section,
+    which looks this up and passes it in."""
     blocks: list[Block] = []
     seed_base = _holder_seed_key(ctx)
     rng_open = seeded_rng(seed_base + "|personal-opening")
@@ -217,7 +230,7 @@ def build_personal_blocks(ctx: dict[str, Any], opening: float | None = None) -> 
 
     for month in ctx["months"]:
         rng = seeded_rng(f"{seed_base}|personal|{month:%Y-%m}")
-        txns = personal_month_transactions(month, balance, rng)
+        txns = personal_month_transactions(month, balance, rng, known_salary=known_salary)
         blocks.append(Block(
             month=month, opening=balance, txns=txns,
             closing=txns[-1].balance if txns else balance,

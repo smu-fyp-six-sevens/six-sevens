@@ -109,6 +109,22 @@ def synthesize_payslip_data(individual_id: str, *, employee_name: str,
     }
 
 
+def compute_net_pay(data: dict, template: str) -> float:
+    """Same formula each build_payslip_N() uses internally -- pulled out so a
+    caller that needs to know an employee's net pay without actually rendering
+    a PDF (e.g. reconciling a bank statement's salary-credit line against this
+    payslip) computes the exact same number, not an approximation."""
+    if "2" in template:
+        return (data["basic_salary"] + data["variable_pay"] + data["benefits"]) \
+            - (data["tax_withholding"] + data["other_deductions"])
+    if "3" in template:
+        return (data["basic_salary"] + data["housing_allowance"] + data["transport_allowance"]
+                + data["other_allowance"]) \
+            - (data["retirement_contribution"] + data["tax_deduction"] + data["other_deduction"])
+    return (data["basic_salary"] + data["allowances"] + data["overtime"]) \
+        - (data["cpf_employee"] + data["other_deductions"])
+
+
 def money(value: float) -> str:
     return f"{value:,.2f}"
 
@@ -145,7 +161,7 @@ def _build_pdf(output_path: Path, story: list, *, producer: str = "ReportLab PDF
 def build_payslip_1(output_path: Path, data: dict) -> float:
     total_earnings = data["basic_salary"] + data["allowances"] + data["overtime"]
     total_deductions = data["cpf_employee"] + data["other_deductions"]
-    net_pay = total_earnings - total_deductions
+    net_pay = compute_net_pay(data, "Payslip-1")
 
     s = {
         "company": ParagraphStyle("company", fontName="Helvetica-Bold", fontSize=17, leading=20,
@@ -229,8 +245,7 @@ def build_payslip_1(output_path: Path, data: dict) -> float:
 # ---------------------------------------------------------------------------
 
 def build_payslip_2(output_path: Path, data: dict) -> float:
-    net_pay = (data["basic_salary"] + data["variable_pay"] + data["benefits"]) \
-        - (data["tax_withholding"] + data["other_deductions"])
+    net_pay = compute_net_pay(data, "Payslip-2")
 
     s = {
         "h1": ParagraphStyle("h1", fontName="Courier-Bold", fontSize=15, alignment=1, spaceAfter=6),
@@ -367,7 +382,7 @@ def build_payslip_3(output_path: Path, data: dict) -> float:
         ("Tax Deduction", data["tax_deduction"]), ("Other Deduction", data["other_deduction"]),
     ], "Total Deductions")
 
-    net_pay = total_earnings - total_deductions
+    net_pay = compute_net_pay(data, "Payslip-3")
     story.append(Spacer(1, 7 * mm))
     net = Table([[Paragraph("NET PAY", s["net_label"]), Paragraph(money(net_pay), s["net_value"])]],
                colWidths=[85 * mm, 85 * mm])

@@ -4,8 +4,13 @@ myTax Portal export.
 
 Rewritten from an HTML/CSS + headless-Chrome pipeline to match the rest of
 doc_gen_scripts: pure ReportLab canvas output (no browser dependency required),
-driven by the mastersheet's "Optional Documents" tab directly (Document Type ==
-"Notice of Assessment (NOA) - Company") instead of a standalone CSV export.
+driven by the mastersheet directly (Document Type == "Notice of Assessment (NOA)
+- Company") instead of a standalone CSV export.
+
+As of mastersheet v16, NOA has its own dedicated "Notice of Assessment" tab,
+covering every case -- previously (v15) it lived inside "Optional Documents"
+alongside Proof of Address / Source of Wealth rows, and only covered a subset
+of cases.
 
 Visual design -- layout, colours, wording, the computation table -- is copied
 from noa.html/noa.css (kept alongside this file as the design reference; not
@@ -17,8 +22,8 @@ seeded per case so reruns are reproducible.
 
 Usage:
 cd backend/doc_gen_scripts/optional_documents/company_noa
-python generate_noa.py ../../v15_document_mastersheet.xlsx --outdir out/
-python generate_noa.py ../../v15_document_mastersheet.xlsx --outdir out/ --cases C042
+python generate_noa.py ../../v16_document_mastersheet.xlsx --outdir out/
+python generate_noa.py ../../v16_document_mastersheet.xlsx --outdir out/ --cases C042
 
 Run with no arguments to build one example NOA ("Harbourview Trading") at
 output/noa_harbourview_trading.pdf.
@@ -446,8 +451,11 @@ def _rows(ws) -> list[dict[str, Any]]:
 
 
 def load_cases(xlsx: str | Path, cases: list[str] | None = None) -> list[dict[str, Any]]:
+    # As of mastersheet v16, NOA has its own dedicated "Notice of Assessment" tab
+    # (split out of "Optional Documents", which used to hold it alongside Proof of
+    # Address / Source of Wealth rows) and now covers every case, not just a subset.
     wb = openpyxl.load_workbook(str(xlsx), data_only=True)
-    ws = wb["Optional Documents"]
+    ws = wb["Notice of Assessment"]
     out = []
     for row in _rows(ws):
         if str(row.get("Document Type") or "").strip() != NOA_DOCUMENT_TYPE:

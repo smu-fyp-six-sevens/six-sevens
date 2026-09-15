@@ -113,6 +113,13 @@ TAX_REASON_BOX = {
     3: {"A": "Check Box13", "B": "Check Box14", "C": "Check Box15"},
 }
 
+# Section 3 "Type of Controlling Person" is only applicable -- and only asked for on
+# the GLDB form -- when Section 2's entity type is "D" (Passive Investment Entity
+# managed by another FI; not currently modelled as a FATCA_CLASSES value) or "M"
+# (Passive NFFE). Every other Section 2 selection (e.g. "G" Active NFFE) must leave
+# Section 3 blank.
+SECTION_3_REQUIRED_CLASSES = {"passive_nffe"}  # M; add e.g. a "D" classification here if it's ever modelled
+
 # Section 3 "Type of Controlling Person", one checkbox set per CP row (up to 3).
 CP_NAME_FIELD = {1: "Text47", 2: "Text48", 3: "Text75"}
 CP_TYPE_BOX = {
@@ -244,11 +251,12 @@ def _gldb_values(p: dict[str, Any]) -> dict[str, Any]:
         b1, b2, b3 = _split_giin(p["giin"])
         v["Text21"], v["Text22"], v["Text23"] = b1, b2, b3
 
-    for i, cp in enumerate(p.get("controlling_persons", [])[:3], start=1):
-        v[CP_NAME_FIELD[i]] = cp.get("name", "")
-        cbox = CP_TYPE_BOX[i].get(cp.get("type", ""))
-        if cbox:
-            v[cbox] = "/Yes"
+    if cls in SECTION_3_REQUIRED_CLASSES:
+        for i, cp in enumerate(p.get("controlling_persons", [])[:3], start=1):
+            v[CP_NAME_FIELD[i]] = cp.get("name", "")
+            cbox = CP_TYPE_BOX[i].get(cp.get("type", ""))
+            if cbox:
+                v[cbox] = "/Yes"
 
     for i, s in enumerate(p.get("signatories", [])[:2]):
         suffix = "" if i == 0 else "_2"

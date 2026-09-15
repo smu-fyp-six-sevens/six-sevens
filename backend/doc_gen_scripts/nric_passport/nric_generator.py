@@ -528,6 +528,18 @@ def _rows(ws) -> list[dict]:
     return out
 
 
+def derive_gender(individual_id: str) -> str:
+    """The same seed + draw sequence as build_persona()'s own gender pick below,
+    so any other document for this individual (e.g. the credit bureau report)
+    that needs to agree with what's printed on their NRIC card can call this
+    instead of inventing its own independent coin flip."""
+    rng = seeded_rng(f"{individual_id}|nric-card")
+    rng.randint(2019, 2025)
+    rng.randint(1, 12)
+    rng.randint(1, 28)  # issue_date draws, consumed identically to build_persona()
+    return rng.choice(["M", "F"])
+
+
 def build_persona(row: dict, address: str) -> dict:
     individual_id = str(row.get("Individual ID") or "")
     rng = seeded_rng(f"{individual_id}|nric-card")

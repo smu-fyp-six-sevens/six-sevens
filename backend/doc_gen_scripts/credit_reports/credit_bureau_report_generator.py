@@ -67,6 +67,7 @@ from reportlab.platypus import (
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from case_facts import as_date, seeded_rng
+from nric_passport.nric_generator import derive_gender
 
 styles = getSampleStyleSheet()
 FONT = "Helvetica"
@@ -542,6 +543,7 @@ def generate_credit_bureau_report(
     nationality: str,
     marital_status: str,
     address: str,
+    gender: str = "Male",
     unformatted_name: str = "",
     additional_id: tuple[str, str, date] | None = None,
     additional_names: list[tuple[date, str]] | None = None,
@@ -638,7 +640,7 @@ def generate_credit_bureau_report(
         ("ID Type", id_type),
         ("ID Number", id_number),
         ("Date of Birth", date_of_birth.strftime("%d/%m/%Y")),
-        ("Gender", "Male"),
+        ("Gender", gender),
         ("Nationality", nationality),
         ("Marital Status", marital_status),
         ("Address", address),
@@ -926,6 +928,11 @@ def build_persona(case: dict, people: list[dict]) -> dict:
     id_type = "NRIC" if "singapor" in nationality.lower() else "Passport"
     surname, first_name, unformatted_name = _split_name(consumer_name)
 
+    # Same seeded pick nric_generator.py's build_persona() uses for this individual's
+    # NRIC card -- previously hardcoded "Male" here regardless of what the NRIC showed.
+    individual_id = str(director.get("Individual ID") or "")
+    gender = "Male" if derive_gender(individual_id) == "M" else "Female"
+
     postal_match = re.search(r"(\d{6})\s*$", address)
     postal_code = postal_match.group(1) if postal_match else ""
 
@@ -961,6 +968,7 @@ def build_persona(case: dict, people: list[dict]) -> dict:
         nationality=nationality,
         marital_status=marital_status,
         address=address,
+        gender=gender,
         # No mastersheet source for prior aliases/addresses/IDs -- suppress the
         # sample ones rather than show fake history under a real NRIC.
         additional_id=(),
