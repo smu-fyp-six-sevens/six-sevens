@@ -123,6 +123,12 @@ class ProofOfAddressCoverage(BaseModel):
 
     covered: int
     total: int
+    # Names carrying an address (proof_of_address, bank_statement, ...) that
+    # don't match any identified id_document in the case — e.g. an address
+    # uploaded for someone whose ID hasn't been uploaded yet. Not counted in
+    # covered/total (which is id_document-driven), so surfaced separately —
+    # see mapper.compute_unmatched_proof_of_address_names.
+    unmatched_names: list[str] = Field(default_factory=list)
 
 
 class CaseSummary(CaseRecord):

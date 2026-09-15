@@ -6,7 +6,7 @@ individual_name to figure out who still needs an address on file.
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import NamedTuple, Optional
 
 from .models import ClassificationOutcome, DocumentRecord, DocumentType
 
@@ -27,6 +27,48 @@ def _normalize_id_number(id_number: object) -> Optional[str]:
     if not isinstance(id_number, str) or not id_number:
         return None
     return "".join(id_number.strip().upper().split())
+
+
+class _IdentityState(NamedTuple):
+    # identity key (id_number, or name when no id_number was extracted) ->
+    # (normalized names seen under this identity, has its own address)
+    identities: dict[str, tuple[set[str], bool]]
+    # accepted documents (any type) carrying a non-empty individual_address
+    address_docs: list[DocumentRecord]
+    # normalized names drawn from address_docs
+    names_with_address: set[str]
+
+
+def _collect_identity_state(documents: list[DocumentRecord]) -> _IdentityState:
+    accepted = [
+        doc for doc in documents if doc.classification_outcome == ClassificationOutcome.ACCEPTED
+    ]
+
+    identities: dict[str, tuple[set[str], bool]] = {}
+    for doc in accepted:
+        if doc.document_type != DocumentType.ID_DOCUMENT.value:
+            continue
+        fields = doc.extracted_fields or {}
+        name = _normalize_name(fields.get("individual_name"))
+        id_number = _normalize_id_number(fields.get("id_number"))
+        key = id_number or name
+        if key is None:
+            continue
+        names, has_address = identities.get(key, (set(), False))
+        if name:
+            names.add(name)
+        if fields.get("individual_address"):
+            has_address = True
+        identities[key] = (names, has_address)
+
+    address_docs = [doc for doc in accepted if (doc.extracted_fields or {}).get("individual_address")]
+    names_with_address = {
+        normalized
+        for doc in address_docs
+        if (normalized := _normalize_name((doc.extracted_fields or {}).get("individual_name"))) is not None
+    }
+
+    return _IdentityState(identities, address_docs, names_with_address)
 
 
 def compute_identity_proof_of_address_progress(documents: list[DocumentRecord]) -> tuple[int, int]:
@@ -60,35 +102,11 @@ def compute_identity_proof_of_address_progress(documents: list[DocumentRecord]) 
     Returns (covered, total) identities — total is how many accepted
     id_documents have been identified in the case at all, so (0, 0) means
     there's nothing to report coverage against yet, distinct from (0, 2).
+    An address document (proof_of_address, bank_statement, ...) whose name
+    doesn't match any identified id_document isn't counted here at all — see
+    compute_unmatched_proof_of_address_names for surfacing those.
     """
-    accepted = [
-        doc for doc in documents if doc.classification_outcome == ClassificationOutcome.ACCEPTED
-    ]
-
-    # identity key -> (names seen under this identity, has its own address)
-    identities: dict[str, tuple[set[str], bool]] = {}
-    for doc in accepted:
-        if doc.document_type != DocumentType.ID_DOCUMENT.value:
-            continue
-        fields = doc.extracted_fields or {}
-        name = _normalize_name(fields.get("individual_name"))
-        id_number = _normalize_id_number(fields.get("id_number"))
-        key = id_number or name
-        if key is None:
-            continue
-        names, has_address = identities.get(key, (set(), False))
-        if name:
-            names.add(name)
-        if fields.get("individual_address"):
-            has_address = True
-        identities[key] = (names, has_address)
-
-    names_with_address = {
-        _normalize_name((doc.extracted_fields or {}).get("individual_name"))
-        for doc in accepted
-        if (doc.extracted_fields or {}).get("individual_address")
-    }
-    names_with_address.discard(None)
+    identities, _, names_with_address = _collect_identity_state(documents)
 
     covered = sum(
         1
@@ -106,3 +124,34 @@ def compute_identity_proof_of_address_coverage(documents: list[DocumentRecord]) 
     """
     covered, total = compute_identity_proof_of_address_progress(documents)
     return total > 0 and covered == total
+
+
+def compute_unmatched_proof_of_address_names(documents: list[DocumentRecord]) -> list[str]:
+    """
+    Names carrying an address (from an accepted proof_of_address,
+    bank_statement, or any other document type that happens to extract one)
+    that don't match any identified id_document identity in the case — e.g.
+    a proof_of_address uploaded for someone whose ID hasn't been uploaded
+    yet, or for a different person entirely. These addresses sit unused:
+    they don't count toward proof_of_address_coverage's total (which is
+    id_document-driven) and don't cover anyone, so without surfacing them
+    separately a reviewer has no way to see that an uploaded address is just
+    sitting there unmatched rather than confirming it silently did nothing.
+
+    Returned as display-cased names (as extracted, not the uppercased join
+    key), de-duplicated by normalized name, in first-seen order.
+    """
+    identities, address_docs, _ = _collect_identity_state(documents)
+
+    matched_names: set[str] = set()
+    for names, _ in identities.values():
+        matched_names |= names
+
+    unmatched: dict[str, str] = {}
+    for doc in address_docs:
+        raw_name = (doc.extracted_fields or {}).get("individual_name")
+        normalized = _normalize_name(raw_name)
+        if normalized is None or normalized in matched_names or not isinstance(raw_name, str):
+            continue
+        unmatched.setdefault(normalized, raw_name.strip())
+    return list(unmatched.values())

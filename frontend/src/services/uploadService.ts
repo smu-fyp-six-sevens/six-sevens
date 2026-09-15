@@ -75,7 +75,10 @@ export interface CaseRequirementCoverage {
   // How many of the case's identified individuals (one per accepted
   // id_document) currently have an address on file, out of how many there
   // are. total=0 means no ID document has been accepted yet.
-  proof_of_address_coverage: { covered: number; total: number };
+  // unmatched_names: names with an address on file (proof_of_address,
+  // bank_statement, ...) that don't match any identified id_document —
+  // not counted in covered/total, so surfaced separately.
+  proof_of_address_coverage: { covered: number; total: number; unmatched_names: string[] };
 }
 
 export async function getCaseRequirementCoverage(caseId: string): Promise<CaseRequirementCoverage> {

@@ -651,6 +651,12 @@ h1 {
   font-variant-numeric: tabular-nums;
 }
 
+.requirement-unmatched {
+  margin: 3px 0 0 16px;
+  font-size: 11px;
+  color: var(--amber);
+}
+
 @media (max-width: 860px) {
   .upload-view {
     grid-template-columns: 1fr;

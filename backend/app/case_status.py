@@ -7,6 +7,7 @@ from . import case_repository, document_repository
 from .mapper import (
     compute_identity_proof_of_address_coverage,
     compute_identity_proof_of_address_progress,
+    compute_unmatched_proof_of_address_names,
 )
 from .models import (
     REQUIRED_DOCUMENT_TYPES,
@@ -93,13 +94,16 @@ def sync_submission_finalized(case_id: str) -> None:
 def _build_summary(case, documents: list[DocumentRecord]) -> CaseSummary:
     fulfilled, missing = compute_requirement_coverage(documents)
     covered, total = compute_identity_proof_of_address_progress(documents)
+    unmatched_names = compute_unmatched_proof_of_address_names(documents)
     data = case.model_dump()
     data["recommended_additional_documents"] = missing
     return CaseSummary(
         **data,
         documents_status=compute_documents_status(documents),
         fulfilled_requirements=fulfilled,
-        proof_of_address_coverage=ProofOfAddressCoverage(covered=covered, total=total),
+        proof_of_address_coverage=ProofOfAddressCoverage(
+            covered=covered, total=total, unmatched_names=unmatched_names
+        ),
     )
 
 

@@ -115,7 +115,11 @@ export default function UploadPage({
   const [error, setError] = useState<string | null>(null);
   const [documentDetails, setDocumentDetails] = useState<Map<string, DocumentRecord>>(new Map());
   const [fulfilledRequirements, setFulfilledRequirements] = useState<Set<string>>(new Set());
-  const [proofOfAddressCoverage, setProofOfAddressCoverage] = useState({ covered: 0, total: 0 });
+  const [proofOfAddressCoverage, setProofOfAddressCoverage] = useState<{
+    covered: number;
+    total: number;
+    unmatched_names: string[];
+  }>({ covered: 0, total: 0, unmatched_names: [] });
   const [fieldDrafts, setFieldDrafts] = useState<Map<string, Record<string, string>>>(new Map());
   const [savingFields, setSavingFields] = useState<Set<string>>(new Set());
   const [saveFieldErrors, setSaveFieldErrors] = useState<Map<string, string>>(new Map());
@@ -663,18 +667,24 @@ export default function UploadPage({
               // identity to count; before that there's nothing to divide.
               const isProofOfAddress = requirement.value === 'proof_of_address';
               const showProgress = isProofOfAddress && proofOfAddressCoverage.total > 0;
+              const unmatchedNames = isProofOfAddress ? proofOfAddressCoverage.unmatched_names : [];
               return (
-                <li
-                  key={requirement.value}
-                  className={`requirement-row${isFulfilled ? ' fulfilled' : ''}`}
-                >
-                  <span className="requirement-dot" />
-                  {requirement.label}
-                  {showProgress && (
-                    <span className="requirement-progress">
-                      {' '}
-                      ({proofOfAddressCoverage.covered}/{proofOfAddressCoverage.total})
-                    </span>
+                <li key={requirement.value}>
+                  <div className={`requirement-row${isFulfilled ? ' fulfilled' : ''}`}>
+                    <span className="requirement-dot" />
+                    {requirement.label}
+                    {showProgress && (
+                      <span className="requirement-progress">
+                        {' '}
+                        ({proofOfAddressCoverage.covered}/{proofOfAddressCoverage.total})
+                      </span>
+                    )}
+                  </div>
+                  {unmatchedNames.length > 0 && (
+                    <div className="requirement-unmatched">
+                      Address on file but no matching ID uploaded:{' '}
+                      {unmatchedNames.join(', ')}
+                    </div>
                   )}
                 </li>
               );

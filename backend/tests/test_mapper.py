@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.mapper import compute_identity_proof_of_address_progress
+from app.mapper import (
+    compute_identity_proof_of_address_progress,
+    compute_unmatched_proof_of_address_names,
+)
 from app.models import ClassificationOutcome, DocumentRecord, DocumentStatus
 
 
@@ -271,3 +274,82 @@ def test_progress_keeps_distinct_id_numbers_as_separate_identities() -> None:
     # Two identities (distinct id_numbers) — both read as covered because
     # address-matching falls back to the shared name across identities.
     assert compute_identity_proof_of_address_progress(documents) == (2, 2)
+
+
+def test_unmatched_names_is_empty_with_no_address_documents() -> None:
+    documents = [
+        _make_document(
+            "doc-1",
+            document_type="id_document",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"individual_name": "Amanda Koh", "individual_address": None},
+        ),
+    ]
+    assert compute_unmatched_proof_of_address_names(documents) == []
+
+
+def test_unmatched_names_surfaces_a_proof_of_address_that_matches_no_identity() -> None:
+    """
+    Real observed scenario: a proof_of_address for "Chan Mei Xuan" was
+    uploaded, then an unrelated NRIC for "Lim Hui Ling" that happens to
+    carry its own address (self-covered — see the self-coverage tests
+    above). Chan Mei Xuan's address never matches Lim Hui Ling's identity
+    and isn't counted in proof_of_address_coverage's total at all (there's
+    no id_document for her), so without this it just silently does
+    nothing — this surfaces it as a "hanging" address instead.
+    """
+    documents = [
+        _make_document(
+            "doc-poa",
+            document_type="proof_of_address",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={
+                "individual_name": "Chan Mei Xuan",
+                "individual_address": "16 Bukit Panjang Ring Road, #04-16, Singapore 104065",
+            },
+        ),
+        _make_document(
+            "doc-nric",
+            document_type="id_document",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={
+                "individual_name": "LIM HUI LING",
+                "id_number": "S8523456B",
+                "individual_address": "28 BUKIT BATOK EAST AVENUE #04-47 SINGAPORE 278302",
+            },
+        ),
+    ]
+    # Lim Hui Ling is covered by her own NRIC; Chan Mei Xuan is unmatched.
+    assert compute_identity_proof_of_address_progress(documents) == (1, 1)
+    assert compute_unmatched_proof_of_address_names(documents) == ["Chan Mei Xuan"]
+
+
+def test_unmatched_names_excludes_a_name_that_does_match_an_identity() -> None:
+    documents = [
+        _make_document(
+            "doc-1",
+            document_type="id_document",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"individual_name": "Bryan Lim", "individual_address": None},
+        ),
+        _make_document(
+            "doc-2",
+            document_type="proof_of_address",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"individual_name": "bryan   lim", "individual_address": "2 Side St"},
+        ),
+    ]
+    assert compute_identity_proof_of_address_progress(documents) == (1, 1)
+    assert compute_unmatched_proof_of_address_names(documents) == []
+
+
+def test_unmatched_names_ignores_manual_review_documents() -> None:
+    documents = [
+        _make_document(
+            "doc-1",
+            document_type="proof_of_address",
+            classification_outcome=ClassificationOutcome.MANUAL_REVIEW,
+            extracted_fields={"individual_name": "Chan Mei Xuan", "individual_address": "16 Bukit Panjang"},
+        ),
+    ]
+    assert compute_unmatched_proof_of_address_names(documents) == []
