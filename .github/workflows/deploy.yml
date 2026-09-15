@@ -1,10 +1,10 @@
 name: Deploy to Cloud Run
 
-# Manual dispatch is included deliberately: during initial setup you'll want
-# to re-run this after fixing a secret without needing a throwaway commit.
+# Manual-only: pushing to this branch no longer auto-deploys, so you can
+# keep committing/iterating without touching the live Cloud Run services.
+# Deploy deliberately via the Actions tab -> "Deploy to Cloud Run" -> "Run
+# workflow" whenever you actually want the current branch state live.
 on:
-  push:
-    branches: [cloud-deploy-gcp]
   workflow_dispatch: {}
 
 env:

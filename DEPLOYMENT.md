@@ -5,8 +5,10 @@ never done this before. Budget ~30-45 minutes the first time. Every command
 below is meant to be copy-pasted as-is (replacing the placeholders in
 `ALL_CAPS`) — you shouldn't need to guess anything.
 
-**What actually happens once this is set up:** every time you push to the
-`cloud-deploy-gcp` branch (or click "Run workflow" on GitHub), a GitHub
+**What actually happens once this is set up:** the deploy workflow is
+**manual-only** — pushing commits to `main` never touches the live
+services, so you can keep developing without breaking what's already
+deployed. Only clicking "Run workflow" on GitHub triggers it: a GitHub
 Actions robot builds the app into two Docker images, uploads them to Google
 Cloud, and starts them running as two "Cloud Run services" (one for the
 backend, one for the frontend), each getting its own public URL. This is a
@@ -204,12 +206,11 @@ Remove-Item github-deployer-key.json
 
 ### C1. Trigger it
 
-Either:
-- Push a commit to the `cloud-deploy-gcp` branch, **or**
-- On github.com, go to the **Actions** tab → click **Deploy to Cloud Run**
-  in the left sidebar → click the **Run workflow** dropdown (top right) →
-  make sure the branch is `cloud-deploy-gcp` → click the green **Run
-  workflow** button.
+This only runs when you ask it to — pushing commits does nothing on its
+own. On github.com, go to the **Actions** tab → click **Deploy to Cloud
+Run** in the left sidebar → click the **Run workflow** dropdown (top right)
+→ make sure the branch is `main` (or whichever branch you want deployed)
+→ click the green **Run workflow** button.
 
 ### C2. Watch it run
 
