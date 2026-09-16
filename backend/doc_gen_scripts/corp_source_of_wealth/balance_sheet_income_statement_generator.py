@@ -564,6 +564,34 @@ def _build_pdf(output_path: str, story: list, *, producer: str = "DocuSuite Ente
 # Public entry point
 # --------------------------------------------------------------------------
 
+def compute_years(seed: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """
+    Pure financial-engine computation (no PDF rendering) — the numeric core
+    of generate_financial_statements(), factored out so any other document
+    that needs to agree with this case's actual income-statement/balance-
+    sheet figures (e.g. the NOA's Estimated Chargeable Income, which should
+    be this same case's profit_before_tax, not an independently-seeded
+    guess) can recompute the identical numbers from the same seed rather
+    than rendering — or duplicating — a whole financial-statements PDF.
+
+    `seed` drives every amount; the same seed always reproduces the same
+    (cur, prev) pair, matching whatever generate_financial_statements()
+    would render for that seed.
+    """
+    rng = seeded_rng(seed)
+    structure = _build_structure(rng)
+    share_capital = float(rng.choice(SHARE_CAPITAL_POOL))
+
+    revenue_prev = round(rng.uniform(1_400_000, 5_200_000), -3)
+    growth = rng.uniform(0.02, 0.22)
+    revenue_curr = round(revenue_prev * (1 + growth), -3)
+
+    retained_earnings_begin_prev = round(revenue_prev * rng.uniform(0.08, 0.22), -3)
+    prev = _build_year(rng, revenue_prev, structure, retained_earnings_begin_prev, share_capital)
+    cur = _build_year(rng, revenue_curr, structure, prev["retained_earnings_end"], share_capital)
+    return cur, prev
+
+
 def generate_financial_statements(
     output_path: str,
     *,
@@ -581,20 +609,17 @@ def generate_financial_statements(
     `seed` drives which optional accounts appear and every amount; the same
     seed always reproduces the same document.
     """
-    rng = seeded_rng(seed)
     prior_period_end = prior_period_end or date(period_end.year - 1, period_end.month, period_end.day)
-    signing_date = signing_date or period_end + timedelta(days=rng.randint(80, 150))
+    # Own sub-seed, independent of compute_years(seed)'s rng stream — this
+    # used to share one rng with the financial-engine draws (consuming the
+    # first value before structure/revenue were drawn); factoring the engine
+    # out into compute_years() for reuse (see its docstring) means signing_date
+    # needs its own draw that won't shift if compute_years' internals change.
+    signing_date = signing_date or period_end + timedelta(
+        days=seeded_rng(f"{seed}|signing-date").randint(80, 150)
+    )
 
-    structure = _build_structure(rng)
-    share_capital = float(rng.choice(SHARE_CAPITAL_POOL))
-
-    revenue_prev = round(rng.uniform(1_400_000, 5_200_000), -3)
-    growth = rng.uniform(0.02, 0.22)
-    revenue_curr = round(revenue_prev * (1 + growth), -3)
-
-    retained_earnings_begin_prev = round(revenue_prev * rng.uniform(0.08, 0.22), -3)
-    prev = _build_year(rng, revenue_prev, structure, retained_earnings_begin_prev, share_capital)
-    cur = _build_year(rng, revenue_curr, structure, prev["retained_earnings_end"], share_capital)
+    cur, prev = compute_years(seed)
 
     s = _styles()
     registry = NoteRegistry()

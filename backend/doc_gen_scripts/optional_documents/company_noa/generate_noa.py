@@ -49,6 +49,7 @@ from reportlab.pdfgen import canvas as pdfcanvas
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from case_facts import seeded_rng  # noqa: E402
 from synthetic_signature import draw_signature  # noqa: E402
+from corp_source_of_wealth.balance_sheet_income_statement_generator import compute_years  # noqa: E402
 
 FONT = "Helvetica"
 BOLD = "Helvetica-Bold"
@@ -416,9 +417,15 @@ def generate_noa(
 
 def build_persona(row: dict[str, Any]) -> dict:
     """Identity/date fields come straight from the mastersheet's own "(auto)"
-    columns and its NOA Date / Year of Assessment -- only ECI (and the tax
-    computation, previous-assessment date and tracking code it drives) has no
-    mastersheet source, so those stay seeded per case."""
+    columns and its NOA Date / Year of Assessment. ECI is not independently
+    seeded here: it's the same case's actual profit_before_tax from the
+    Source of Wealth income statement (see
+    corp_source_of_wealth.balance_sheet_income_statement_generator.generate,
+    which seeds that document's financial engine on f"{case_id}|sow-
+    financials") — otherwise a reviewer cross-checking the NOA against the
+    company's own financial statements would find two unrelated numbers for
+    what should be the same figure. Only the tax computation it drives, the
+    previous-assessment date, and the tracking code stay seeded per case."""
     case_id = str(row.get("Case ID") or "")
     filename = str(row.get("Filename") or "")
     rng = seeded_rng(f"{case_id}|{filename}|noa")
@@ -429,13 +436,16 @@ def build_persona(row: dict[str, Any]) -> dict:
     elif not isinstance(noa_date, date):
         noa_date = date.today()
 
+    cur, _prev = compute_years(f"{case_id}|sow-financials")
+    eci = max(round(cur["profit_before_tax"]), 0)
+
     return dict(
         tax_ref=str(row.get("Tax Reference Number (UEN) (auto)") or "").strip(),
         noa_date=noa_date,
         year_of_assessment=re.sub(r"\D", "", str(row.get("Year of Assessment") or "")) or "2025",
         company_name=str(row.get("Company Name (auto)") or ""),
         company_address=str(row.get("Company Address (auto)") or ""),
-        eci=rng.randrange(240_000, 820_000, 1_000),
+        eci=eci,
         previous_date=date(noa_date.year, 7, rng.choice([3, 5, 8, 10, 12, 15]))
         if noa_date.month > 7 else (noa_date - timedelta(days=rng.randint(30, 60))),
         tracking=f"{rng.randint(100000000, 999999999)}-{rng.randint(0, 9)}-{rng.randint(0, 9)}",

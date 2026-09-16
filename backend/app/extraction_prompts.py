@@ -168,7 +168,15 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # reference rate + margin instead) and uses a review date rather
         # than a fixed tenure.
         "required": ["company_name", "company_address", "individual_name", "loan_amount", "uen"],
-        "additional": ["interest_rate", "loan_tenure"],
+        # loan_terms (additional): the facility letter templates each render a
+        # "Facility Details"-style table with more rows than just interest_rate/
+        # loan_tenure — term_loan_facility_generator.py alone unconditionally
+        # renders Purpose, Tenure, Repayment, Interest Rate, and Security rows,
+        # plus prose covenants (prepayment fee schedule, security perfection).
+        # Rather than growing this schema's flat field list every time a
+        # template adds another named term, loan_terms is a catch-all array
+        # for whatever named contractual terms are actually present.
+        "additional": ["interest_rate", "loan_tenure", "loan_terms"],
         # prob change in the future to others like {lender, amount, currency, status}
     },
     "notice_of_assessment": {
@@ -177,12 +185,16 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # year_of_assessment, noa_date, eci (Estimated Chargeable Income) and
         # the computed tax_payable are all required kwargs / unconditionally
         # rendered in the tax computation table. Company-only document — no
-        # individual field.
+        # individual field. tax_computation (additional): compute_noa_tax()
+        # unconditionally renders the full step-by-step breakdown (exempt
+        # amounts, tax at 17%, rebate) between eci and tax_payable — worth
+        # capturing as its own structured field rather than only the two
+        # headline figures.
         "required": [
             "company_name", "uen", "company_address", "year_of_assessment",
             "noa_date", "eci", "tax_payable",
         ],
-        "additional": [],
+        "additional": ["tax_computation"],
     },
     # Fallback for documents the Classifier couldn't match to any category
     # above (document_type == "unrecognised"). Nothing is "required" since
@@ -202,9 +214,10 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
 
 # Extra, field-specific instructions appended after the required-field list
 # for document types where a plain "extract this field" instruction isn't
-# enough to get well-structured output — currently just bank statements'
-# transaction history, which needs to come back as a list of records rather
-# than a single scalar value.
+# enough to get well-structured output — a field whose value is naturally a
+# list of line items in the source document, not a single scalar. Each entry
+# spells out the exact per-item keys for that field, grounded in what the
+# matching doc_gen_scripts generator actually renders.
 EXTRA_FIELD_GUIDANCE: dict[str, str] = {
     "bank_statement": (
         'For "transactions", its "value" should be an array of objects — one per '
@@ -215,6 +228,45 @@ EXTRA_FIELD_GUIDANCE: dict[str, str] = {
         "every transaction you can find in the text — do not summarise, truncate, "
         "or only include a sample. Its \"confidence\" should reflect your overall "
         "confidence in the transaction list as a whole."
+    ),
+    "credit_report": (
+        'For "accounts", its "value" should be an array of objects — one per '
+        'credit account/facility listed — each with these keys: "product_type" '
+        '(e.g. "HDB Loan", "Unsecured Credit Card"), "grantor" (the lender), '
+        '"account_type" (e.g. "Single"/"Joint"), "date_opened", "date_closed" '
+        '(null if still open), "current_balance" (numeric, null if not shown), '
+        'and "monthly_instalment" (numeric, null if not shown). Include every '
+        "account you can find — do not summarise or sample.\n\n"
+        'For "defaults", its "value" should be an array of objects — one per '
+        'default record listed — each with these keys: "product_type", '
+        '"grantor", "date_loaded", "original_amount" (numeric), "balance" '
+        '(numeric), and "status" (e.g. "Negotiated Settlement"). An empty '
+        "array is correct if the report's Default Records section shows none — "
+        "that's the normal case, not a sign anything was missed."
+    ),
+    "source_of_wealth": (
+        'For "notes", its "value" should be an array of objects — one per '
+        'numbered note in the financial statements — each with these keys: '
+        '"note_number" (as shown, e.g. "3"), "heading" (e.g. "PROPERTY, PLANT '
+        'AND EQUIPMENT"), and "text" (the note\'s explanatory wording, not the '
+        "figures already captured elsewhere). Include every numbered note you "
+        "can find."
+    ),
+    "list_of_loans": (
+        'For "loan_terms", its "value" should be an array of objects — one per '
+        "named contractual term in the facility letter's terms table beyond "
+        'interest_rate/loan_tenure — each with keys "term_name" (as labelled '
+        'in the document, e.g. "Purpose", "Repayment", "Security") and "value" '
+        "(that term's text as shown). Capture whatever named terms are "
+        "actually present — the exact set varies by facility type (term loan, "
+        "overdraft, EFS) — rather than expecting a fixed list."
+    ),
+    "notice_of_assessment": (
+        'For "tax_computation", its "value" should be an array of objects — '
+        "one per line of the tax computation table between chargeable income "
+        'and tax payable — each with keys "line" (as labelled, e.g. "First '
+        '10,000 @ 75.00%", "Tax Rebate") and "amount" (numeric). Include every '
+        "computation line you can find, in the order shown."
     ),
 }
 
