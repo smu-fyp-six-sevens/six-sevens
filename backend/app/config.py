@@ -128,7 +128,7 @@ class Settings:
     # actually act on these values (loan amounts, IDs), not just route the
     # document — a wrong-but-plausible-looking field is costlier than a
     # wrongly-routed document.
-    EXTRACTION_CONFIDENCE_THRESHOLD: float = 0.7
+    EXTRACTION_CONFIDENCE_THRESHOLD: float = 0.95
 
     ALLOWED_CONTENT_TYPES: set[str] = {
         "application/pdf",

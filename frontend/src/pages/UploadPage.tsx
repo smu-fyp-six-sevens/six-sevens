@@ -13,6 +13,7 @@ import {
 } from '../services/uploadService';
 import type { BulkUploadItemResult, DocumentRecord } from '../services/uploadService';
 
+
 const TERMINAL_STATUSES = new Set(['analyzed', 'failed']);
 const POLL_INTERVAL_MS = 2000;
 import {
@@ -23,6 +24,16 @@ import {
   validateFiles,
 } from '../utils/fileValidation';
 import type { FileIssue } from '../utils/fileValidation';
+
+const formatDocumentType = (documentType?: string | null) => {
+  if (!documentType) return "—";
+
+  const formatted = documentType
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+  return formatted.replace(/\bId\b/g, "ID");
+};
 
 const MAX_FILE_SIZE_MB = Math.floor(MAX_FILE_SIZE_BYTES / (1024 * 1024));
 
@@ -102,10 +113,10 @@ function describeIssue(issue: FileIssue): string {
 }
 
 export default function UploadPage({
-    selectedCase,
-    onBack,
-    onOpenDocument,
-  }: UploadPageProps) {
+  selectedCase,
+  onBack,
+  onOpenDocument,
+}: UploadPageProps) {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [countError, setCountError] = useState<string | null>(null);
   const [rejections, setRejections] = useState<{ file: File; issue: FileIssue }[]>([]);
@@ -123,6 +134,7 @@ export default function UploadPage({
   const [fieldDrafts, setFieldDrafts] = useState<Map<string, Record<string, string>>>(new Map());
   const [savingFields, setSavingFields] = useState<Set<string>>(new Set());
   const [saveFieldErrors, setSaveFieldErrors] = useState<Map<string, string>>(new Map());
+
   const flaggedDocuments = Array.from(documentDetails.values()).filter(
     (document) =>
       document.classification_outcome === 'manual_review' ||
@@ -131,6 +143,7 @@ export default function UploadPage({
   );
 
   const isMountedRef = useRef(true);
+
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -166,6 +179,7 @@ export default function UploadPage({
     // "long enough". Keeps polling for as long as this page stays mounted.
     while (isMountedRef.current) {
       let document: DocumentRecord | null = null;
+
       try {
         document = await getDocument(documentId);
       } catch {
@@ -176,7 +190,9 @@ export default function UploadPage({
       if (!isMountedRef.current) return;
 
       if (document) {
-        setDocumentDetails((current) => new Map(current).set(documentId, document as DocumentRecord));
+        setDocumentDetails(
+          (current) => new Map(current).set(documentId, document as DocumentRecord),
+        );
 
         if (TERMINAL_STATUSES.has(document.status)) {
           // Requirement coverage (esp. proof_of_address) can only be known
@@ -198,7 +214,9 @@ export default function UploadPage({
         const documents = await listDocuments(selectedCase.id);
         if (cancelled) return;
 
-        setDocumentDetails(new Map(documents.map((document) => [document.id, document])));
+        setDocumentDetails(
+          new Map(documents.map((document) => [document.id, document])),
+        );
 
         documents.forEach((document) => {
           if (!TERMINAL_STATUSES.has(document.status)) {
@@ -246,7 +264,11 @@ export default function UploadPage({
     setJustSubmitted(true);
 
     try {
-      const { ok, rejected } = await validateFiles(selectedFiles, selectedCase.id);
+      const { ok, rejected } = await validateFiles(
+        selectedFiles,
+        selectedCase.id,
+      );
+
       setRejections(rejected);
 
       if (ok.length === 0) return;
@@ -262,6 +284,7 @@ export default function UploadPage({
         if (result.success) {
           recordUploadedHash(selectedCase.id, ok[index].hash);
         }
+
         if (result.success && result.document_id) {
           void pollDocument(result.document_id);
         }
@@ -273,24 +296,39 @@ export default function UploadPage({
     }
   }
 
-  function getFieldDraft(documentId: string, extractedFields: Record<string, unknown>): Record<string, string> {
+  function getFieldDraft(
+    documentId: string,
+    extractedFields: Record<string, unknown>,
+  ): Record<string, string> {
     return fieldDrafts.get(documentId) ?? fieldsToDraft(extractedFields);
   }
 
-  function setFieldDraftValue(documentId: string, extractedFields: Record<string, unknown>, key: string, value: string) {
+  function setFieldDraftValue(
+    documentId: string,
+    extractedFields: Record<string, unknown>,
+    key: string,
+    value: string,
+  ) {
     setFieldDrafts((current) => {
       const next = new Map(current);
-      const draft = { ...getFieldDraft(documentId, extractedFields), [key]: value };
+      const draft = {
+        ...getFieldDraft(documentId, extractedFields),
+        [key]: value,
+      };
       next.set(documentId, draft);
       return next;
     });
   }
 
-  async function saveFieldDraft(documentId: string, originalFields: Record<string, unknown>) {
+  async function saveFieldDraft(
+    documentId: string,
+    originalFields: Record<string, unknown>,
+  ) {
     const draft = fieldDrafts.get(documentId);
     if (!draft) return;
 
     setSavingFields((current) => new Set(current).add(documentId));
+
     setSaveFieldErrors((current) => {
       const next = new Map(current);
       next.delete(documentId);
@@ -303,14 +341,20 @@ export default function UploadPage({
     // "cleared by the officer" — send null rather than "" so it reads as
     // "not present" the same way an LLM-omitted field does.
     const payload: Record<string, unknown> = { ...originalFields };
+
     for (const [key, value] of Object.entries(draft)) {
       payload[key] = value.trim() === '' ? null : value;
     }
 
     try {
       const updated = await updateExtractedFields(documentId, payload);
+
       if (!isMountedRef.current) return;
-      setDocumentDetails((current) => new Map(current).set(documentId, updated));
+
+      setDocumentDetails(
+        (current) => new Map(current).set(documentId, updated),
+      );
+
       setFieldDrafts((current) => {
         const next = new Map(current);
         next.delete(documentId);
@@ -318,6 +362,7 @@ export default function UploadPage({
       });
     } catch (err) {
       if (!isMountedRef.current) return;
+
       setSaveFieldErrors((current) =>
         new Map(current).set(
           documentId,
@@ -346,7 +391,8 @@ export default function UploadPage({
 
   const completedCount = results.length + rejections.length;
   const successfulCount = results.filter((result) => result.success).length;
-  const failedCount = results.filter((result) => !result.success).length + rejections.length;
+  const failedCount =
+    results.filter((result) => !result.success).length + rejections.length;
 
   return (
     <main className="shell shell--upload">
@@ -354,6 +400,7 @@ export default function UploadPage({
         <div className="brand">
           GLDB <span>Fraud Review</span>
         </div>
+
         <div className="officer-tag">Loan Officer · J. Tan</div>
       </header>
 
@@ -364,11 +411,15 @@ export default function UploadPage({
           </button>
 
           <p className="eyebrow">
-            Case #{selectedCase.caseNumber} · {selectedCase.type} — {selectedCase.applicant}
+            Case #{selectedCase.caseNumber} · {selectedCase.type} —{' '}
+            {selectedCase.applicant}
           </p>
+
           <h1>Upload supporting documents</h1>
+
           <p className="sub">
-            Accepted files are logged and assigned a document ID for the investigation record.
+            Accepted files are logged and assigned a document ID for the
+            investigation record.
           </p>
 
           <DropZone onFiles={handleFiles} disabled={isSubmitting} />
@@ -382,13 +433,20 @@ export default function UploadPage({
 
               <div className="file-list">
                 {selectedFiles.map((file, index) => {
-                  const rejection = rejections.find((item) => item.file === file);
+                  const rejection = rejections.find(
+                    (item) => item.file === file,
+                  );
+
                   return (
                     <FileRow
                       key={`${file.name}-${index}`}
                       file={file}
                       result={resultByFilename.get(file.name)}
-                      rejected={rejection ? describeIssue(rejection.issue) : undefined}
+                      rejected={
+                        rejection
+                          ? describeIssue(rejection.issue)
+                          : undefined
+                      }
                       isUploading={isSubmitting}
                       onRemove={() => removeFile(index)}
                     />
@@ -400,7 +458,9 @@ export default function UploadPage({
                 <span className="count">
                   {hasOutcome
                     ? `${completedCount} / ${selectedFiles.length} processed`
-                    : `${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''} selected`}
+                    : `${selectedFiles.length} file${
+                        selectedFiles.length > 1 ? 's' : ''
+                      } selected`}
                 </span>
 
                 <button
@@ -415,7 +475,9 @@ export default function UploadPage({
                     ? 'Uploading…'
                     : hasOutcome
                       ? 'Upload again'
-                      : `Upload ${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''}`}
+                      : `Upload ${selectedFiles.length} file${
+                          selectedFiles.length > 1 ? 's' : ''
+                        }`}
                 </button>
               </div>
             </>
@@ -427,15 +489,26 @@ export default function UploadPage({
             </div>
           )}
 
-          {countError && <div className="toast show mixed">⚠ {countError}</div>}
-          {error && <div className="toast show mixed">⚠ {error}</div>}
+          {countError && (
+            <div className="toast show mixed">⚠ {countError}</div>
+          )}
+
+          {error && (
+            <div className="toast show mixed">⚠ {error}</div>
+          )}
 
           {justSubmitted && hasOutcome && !error && !isSubmitting && (
-            <div className={`toast show ${failedCount > 0 ? 'mixed' : 'all-ok'}`}>
+            <div
+              className={`toast show ${
+                failedCount > 0 ? 'mixed' : 'all-ok'
+              }`}
+            >
               <span>{failedCount > 0 ? '⚠' : '✓'}</span>
+
               <span>
                 <b>
-                  {successfulCount} of {selectedFiles.length} documents uploaded.
+                  {successfulCount} of {selectedFiles.length} documents
+                  uploaded.
                 </b>{' '}
                 {failedCount > 0
                   ? `${failedCount} need attention above.`
@@ -452,7 +525,20 @@ export default function UploadPage({
                   <span>Extracted Files</span>
                 </div>
 
-                <span className="mock-badge live">LIVE</span>
+                <div className="documents-card-actions">
+                  <button
+                    type="button"
+                    className="approve-all-btn"
+                    onClick={() => {
+                      // Frontend-only for now.
+                      // Backend approval logic can be connected later.
+                    }}
+                  >
+                    Approve all eligible documents
+                  </button>
+
+                  <span className="mock-badge live">LIVE</span>
+                </div>
               </div>
 
               <div className="documents-table">
@@ -466,19 +552,35 @@ export default function UploadPage({
                 </div>
 
                 {Array.from(documentDetails.values())
-                  .sort((a, b) => a.uploaded_at.localeCompare(b.uploaded_at))
+                  .sort((a, b) =>
+                    a.uploaded_at.localeCompare(b.uploaded_at),
+                  )
                   .map((document) => {
                     const status = document.status;
                     const isTerminal = TERMINAL_STATUSES.has(status);
 
                     return (
-                      <div key={document.id} className="documents-table-row">
+                      <div
+                        key={document.id}
+                        className="documents-table-row"
+                      >
                         <span className="document-filename">
+                          {document.classification_outcome ===
+                            'manual_review' && (
+                            <span
+                              className="document-manual-review-icon"
+                              title="Requires manual review"
+                              aria-label="Requires manual review"
+                            >
+                              ⚠
+                            </span>
+                          )}
+
                           {document.filename}
                         </span>
 
                         <span className="document-type-cell">
-                          {document.document_type ?? '—'}
+                          {formatDocumentType(document.document_type)}
                         </span>
 
                         <span className="document-status-cell">
@@ -491,6 +593,7 @@ export default function UploadPage({
                                   : ''
                             }`}
                           />
+
                           <span>
                             {status}
                             {!isTerminal && '…'}
@@ -510,7 +613,9 @@ export default function UploadPage({
                         <button
                           type="button"
                           className="document-view-link"
-                          onClick={() => onOpenDocument(document.id)}
+                          onClick={() =>
+                            onOpenDocument(document.id)
+                          }
                         >
                           View
                         </button>
@@ -524,7 +629,9 @@ export default function UploadPage({
           <section className="summary-card">
             <div className="summary-card-header">
               <div className="summary-card-title">
-                <span className="summary-icon summary-icon--risk">▥</span>
+                <span className="summary-icon summary-icon--risk">
+                  ▥
+                </span>
                 <h2>Customer Risk Summary</h2>
               </div>
             </div>
@@ -534,152 +641,189 @@ export default function UploadPage({
 
               <div>
                 <strong>Risk summary not available yet.</strong>
+
                 <p>
-                  Risk analysis results will appear here once document extraction
-                  and fraud analysis are completed.
+                  Risk analysis results will appear here once document
+                  extraction and fraud analysis are completed.
                 </p>
               </div>
             </div>
           </section>
-          
+
           <section className="summary-card">
-          <div className="summary-card-header">
-            <div className="summary-card-title">
-              <span className="summary-icon summary-icon--warning">△</span>
-              <h2>Flagged Items for Manual Review</h2>
+            <div className="summary-card-header">
+              <div className="summary-card-title">
+                <span className="summary-icon summary-icon--warning">
+                  △
+                </span>
+                <h2>Flagged Items for Manual Review</h2>
+              </div>
+
+              {flaggedDocuments.length > 0 && (
+                <span className="summary-count">
+                  {flaggedDocuments.length}{' '}
+                  {flaggedDocuments.length === 1 ? 'item' : 'items'}
+                </span>
+              )}
             </div>
 
-            {flaggedDocuments.length > 0 && (
-              <span className="summary-count">
-                {flaggedDocuments.length}{' '}
-                {flaggedDocuments.length === 1 ? 'item' : 'items'}
-              </span>
-            )}
-          </div>
+            {flaggedDocuments.length === 0 ? (
+              <div className="summary-message summary-message--warning">
+                <span className="summary-message-icon">ⓘ</span>
 
-          {flaggedDocuments.length === 0 ? (
-            <div className="summary-message summary-message--warning">
+                <div>
+                  <strong>No flagged items at the moment.</strong>
+
+                  <p>
+                    If any documents or extracted fields require manual
+                    review, they will be displayed here.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="flagged-list">
+                {flaggedDocuments.map((document) => {
+                  const lowExtractionConfidence =
+                    document.extraction_confidence != null &&
+                    document.extraction_confidence <
+                      EXTRACTION_CONFIDENCE_THRESHOLD;
+
+                  const reason =
+                    document.classification_outcome === 'manual_review'
+                      ? document.escalation_reason ??
+                        (document.document_type === 'unrecognised'
+                          ? 'Document type could not be confidently recognised.'
+                          : lowExtractionConfidence
+                            ? 'Extracted fields have low confidence and require review.'
+                            : 'Document requires manual review.')
+                      : 'Extracted fields have low confidence and require review.';
+
+                  return (
+                    <div
+                      key={document.id}
+                      className="flagged-item"
+                    >
+                      <div className="flagged-item-main">
+                        <strong>{document.filename}</strong>
+
+                        <div className="flagged-item-meta">
+                          <span>
+                            {document.document_type ??
+                              'Unknown document type'}
+                          </span>
+
+                          {document.extraction_confidence != null && (
+                            <span>
+                              Extraction confidence:{' '}
+                              {document.extraction_confidence.toFixed(
+                                2,
+                              )}
+                            </span>
+                          )}
+
+                          {document.classification_outcome ===
+                            'manual_review' && (
+                            <span className="flagged-status">
+                              Manual review
+                            </span>
+                          )}
+                        </div>
+
+                        <p>{reason}</p>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="flagged-view-button"
+                        onClick={() =>
+                          onOpenDocument(document.id)
+                        }
+                      >
+                        View
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          <section className="summary-card">
+            <div className="summary-card-header">
+              <div className="summary-card-title">
+                <span className="summary-icon summary-icon--audit">
+                  ◴
+                </span>
+                <h2>Case Audit Trail</h2>
+              </div>
+            </div>
+
+            <div className="summary-message summary-message--info">
               <span className="summary-message-icon">ⓘ</span>
 
               <div>
-                <strong>No flagged items at the moment.</strong>
+                <strong>No audit events available yet.</strong>
+
                 <p>
-                  If any documents or extracted fields require manual review,
-                  they will be displayed here.
+                  Case activity history will appear here once actions
+                  are recorded.
                 </p>
               </div>
             </div>
-          ) : (
-            <div className="flagged-list">
-              {flaggedDocuments.map((document) => {
-                const lowExtractionConfidence =
-                  document.extraction_confidence != null &&
-                  document.extraction_confidence <
-                    EXTRACTION_CONFIDENCE_THRESHOLD;
-
-                const reason =
-                  document.classification_outcome === 'manual_review'
-                    ? document.escalation_reason ??
-                      (document.document_type === 'unrecognised'
-                        ? 'Document type could not be confidently recognised.'
-                        : lowExtractionConfidence
-                          ? 'Extracted fields have low confidence and require review.'
-                          : 'Document requires manual review.')
-                    : 'Extracted fields have low confidence and require review.';
-
-                return (
-                  <div key={document.id} className="flagged-item">
-                    <div className="flagged-item-main">
-                      <strong>{document.filename}</strong>
-
-                      <div className="flagged-item-meta">
-                        <span>
-                          {document.document_type ?? 'Unknown document type'}
-                        </span>
-
-                        {document.extraction_confidence != null && (
-                          <span>
-                            Extraction confidence:{' '}
-                            {document.extraction_confidence.toFixed(2)}
-                          </span>
-                        )}
-
-                        {document.classification_outcome === 'manual_review' && (
-                          <span className="flagged-status">
-                            Manual review
-                          </span>
-                        )}
-                      </div>
-
-                      <p>{reason}</p>
-                    </div>
-
-                    <button
-                      type="button"
-                      className="flagged-view-button"
-                      onClick={() => onOpenDocument(document.id)}
-                    >
-                      View
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-        <section className="summary-card">
-          <div className="summary-card-header">
-            <div className="summary-card-title">
-              <span className="summary-icon summary-icon--audit">◴</span>
-              <h2>Case Audit Trail</h2>
-            </div>
-          </div>
-
-          <div className="summary-message summary-message--info">
-            <span className="summary-message-icon">ⓘ</span>
-
-            <div>
-              <strong>No audit events available yet.</strong>
-              <p>
-                Case activity history will appear here once actions are
-                recorded.
-              </p>
-            </div>
-          </div>
-        </section>
+          </section>
         </section>
 
         <aside className="upload-sidebar">
           <div className="section-label">
             <span>Document requirements</span>
+
             <span>
-              {fulfilledRequirements.size} / {REQUIRED_DOCUMENT_TYPES.length}
+              {fulfilledRequirements.size} /{' '}
+              {REQUIRED_DOCUMENT_TYPES.length}
             </span>
           </div>
+
           <ul className="requirements-list">
             {REQUIRED_DOCUMENT_TYPES.map((requirement) => {
-              const isFulfilled = fulfilledRequirements.has(requirement.value);
+              const isFulfilled =
+                fulfilledRequirements.has(requirement.value);
+
               // proof_of_address is the one requirement that isn't just
               // yes/no — it needs an address on file per identified
               // individual (one per ID document), not just once anywhere
               // in the case. Shown as a fraction once there's at least one
               // identity to count; before that there's nothing to divide.
-              const isProofOfAddress = requirement.value === 'proof_of_address';
-              const showProgress = isProofOfAddress && proofOfAddressCoverage.total > 0;
-              const unmatchedNames = isProofOfAddress ? proofOfAddressCoverage.unmatched_names : [];
+              const isProofOfAddress =
+                requirement.value === 'proof_of_address';
+
+              const showProgress =
+                isProofOfAddress &&
+                proofOfAddressCoverage.total > 0;
+
+              const unmatchedNames = isProofOfAddress
+                ? proofOfAddressCoverage.unmatched_names
+                : [];
+
               return (
                 <li key={requirement.value}>
-                  <div className={`requirement-row${isFulfilled ? ' fulfilled' : ''}`}>
+                  <div
+                    className={`requirement-row${
+                      isFulfilled ? ' fulfilled' : ''
+                    }`}
+                  >
                     <span className="requirement-dot" />
+
                     {requirement.label}
+
                     {showProgress && (
                       <span className="requirement-progress">
                         {' '}
-                        ({proofOfAddressCoverage.covered}/{proofOfAddressCoverage.total})
+                        ({proofOfAddressCoverage.covered}/
+                        {proofOfAddressCoverage.total})
                       </span>
                     )}
                   </div>
+
                   {unmatchedNames.length > 0 && (
                     <div className="requirement-unmatched">
                       Address on file but no matching ID uploaded:{' '}

@@ -13,6 +13,15 @@ interface DocumentDetailsPageProps {
   onBack: () => void;
 }
 
+const formatDocumentType = (documentType?: string | null) => {
+  if (!documentType) return "—";
+
+  const formatted = documentType
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+  return formatted.replace(/\bId\b/g, "ID");
+};
 const NON_DISPLAYED_FIELD_KEYS = new Set(['transactions']);
 
 const FIELD_KEY_ACRONYMS = new Set([
@@ -177,8 +186,13 @@ export default function DocumentDetailsPage({
     document.document_type.toLowerCase() === 'unrecognised';
 
   const needsManualReview =
-    document?.extraction_confidence != null &&
-    document.extraction_confidence < EXTRACTION_CONFIDENCE_THRESHOLD;
+  (document?.extraction_confidence != null &&
+    document.extraction_confidence < EXTRACTION_CONFIDENCE_THRESHOLD) ||
+  extractedFields.some(
+    ([, field]) =>
+      field.confidence != null &&
+      field.confidence < EXTRACTION_CONFIDENCE_THRESHOLD,
+  );
 
   function handleFieldChange(key: string, value: string) {
     setFieldDraft((current) => ({
@@ -349,7 +363,7 @@ export default function DocumentDetailsPage({
           <div>
             <span className="details-label">Document Type</span>
             <strong>
-              {document.document_type ?? '—'}
+              {formatDocumentType(document.document_type)}
             </strong>
           </div>
 
@@ -427,7 +441,13 @@ export default function DocumentDetailsPage({
 
                 <span>
                   {field.confidence != null ? (
-                    <span className="confidence-badge">
+                    <span
+                      className={
+                        field.confidence < EXTRACTION_CONFIDENCE_THRESHOLD
+                          ? 'confidence-badge confidence-badge--warning'
+                          : 'confidence-badge'
+                      }
+                    >
                       {field.confidence.toFixed(2)}
                     </span>
                   ) : (
@@ -460,19 +480,19 @@ export default function DocumentDetailsPage({
           <div className="manual-review-warning">
             <span className="manual-review-warning-icon">⚠</span>
 
-            <div>
-              <strong>Important: Review before saving</strong>
+            <div className="manual-review-warning-content">
+              <strong className="manual-review-warning-title">
+                Important: Review before saving
+              </strong>
 
               <p>
-                All fields below will be saved together. Once saved,
-                the extracted data will be marked as verified with a
-                confidence score of <strong>1.00</strong> and will no
-                longer be editable.
+                All fields below will be saved together. Fields you manually
+                change will receive a confidence score of <strong>1.00</strong>.
+                Unchanged fields will keep their original confidence score.
               </p>
 
-              <p>
-                Please make sure all required fields are completed
-                before saving.
+              <p className="manual-review-warning-note">
+                Please make sure all required fields are completed before saving.
               </p>
             </div>
           </div>

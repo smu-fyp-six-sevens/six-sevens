@@ -38,45 +38,95 @@ export default function LoginPage({ onLoggedIn }: LoginPageProps) {
   }
 
   return (
-    <main className="shell">
-      <section className="login-view">
-        <p className="eyebrow">GLDB Fraud Review</p>
-        <h1>Sign in</h1>
+    <main className="login-page">
+      <div className="login-background-decoration login-background-decoration--top" />
+      <div className="login-background-decoration login-background-decoration--bottom" />
+
+      <section className="login-card">
+       <div className="login-brand">
+        <div>
+          <div className="login-brand-name">GLDB</div>
+          <div className="login-brand-subtitle">Fraud Review</div>
+        </div>
+      </div>
+
+        <div className="login-heading">
+          <div className="login-security-icon">⌁</div>
+
+          <div>
+            <h1>Welcome back</h1>
+            <p>Sign in to continue to the fraud review portal.</p>
+          </div>
+        </div>
 
         <form className="login-form" onSubmit={handleSubmit}>
           <div className="form-field">
             <label htmlFor="username">Username</label>
-            <input
-              id="username"
-              type="text"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              autoFocus
-              disabled={isSubmitting}
-            />
+
+            <div className="login-input-wrapper">
+              <span className="login-input-icon">◯</span>
+
+              <input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                autoFocus
+                disabled={isSubmitting}
+                placeholder="Enter your username"
+                autoComplete="username"
+              />
+            </div>
           </div>
 
           <div className="form-field">
             <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              disabled={isSubmitting}
-            />
+
+            <div className="login-input-wrapper">
+              <span className="login-input-icon">●</span>
+
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                disabled={isSubmitting}
+                placeholder="Enter your password"
+                autoComplete="current-password"
+              />
+            </div>
           </div>
 
           {error && (
-            <div className="form-error" role="alert">
-              ⚠ {error}
+            <div className="login-error" role="alert">
+              <span className="login-error-icon">⚠</span>
+              <span>{error}</span>
             </div>
           )}
 
-          <button type="submit" className="upload-btn" disabled={isSubmitting}>
-            {isSubmitting ? 'Signing in…' : 'Sign in'}
+          <button
+            type="submit"
+            className="login-submit-button"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              <>
+                <span className="login-spinner" />
+                Signing in…
+              </>
+            ) : (
+              <>
+                Sign in
+                <span className="login-submit-arrow">→</span>
+              </>
+            )}
           </button>
         </form>
+
+        <div className="login-footer">
+          <span className="login-footer-dot" />
+          Secure internal review environment
+        </div>
       </section>
     </main>
   );

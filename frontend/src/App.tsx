@@ -23,6 +23,7 @@ export interface CaseRecord {
   type: string;
   status: string;
   caseStatus: string;
+  created_at?: string | null;
 }
 
 function mapStatus(status: string): string {
@@ -227,6 +228,7 @@ export default function App() {
         company_name?: string | null;
         status?: string | null;
         documents_status?: string | null;
+        created_at?: string | null;
       }>;
 
       setCases(
@@ -239,6 +241,7 @@ export default function App() {
             item.documents_status ?? item.status ?? 'open'
           ),
           caseStatus: item.status ?? 'open',
+          created_at: item.created_at ?? null,
         }))
       );
     } catch (err) {

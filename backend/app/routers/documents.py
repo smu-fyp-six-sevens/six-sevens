@@ -113,19 +113,84 @@ async def update_extracted_fields(
         fulfilled_requirements = compute_fulfilled_requirements(
             document.document_type, request.extracted_fields
         )
+                 # Get the original per-field values and confidence scores
+        # before replacing the extracted fields.
+        existing_fields = await asyncio.to_thread(
+            extracted_fields_repository.get_extracted_fields,
+            document_id,
+        )
+
+        def normalise_value(value: object) -> str:
+            """
+            Convert values to a comparable representation because the
+            frontend sends edited fields as strings, while the database
+            may contain numbers, strings, lists, etc.
+            """
+            if value is None:
+                return ""
+
+            if isinstance(value, str):
+                return value.strip()
+
+            return str(value).strip()
+
+        existing_by_name = {
+            field.field_name: field
+            for field in existing_fields
+        }
+
+        field_confidences = {}
+
+        is_unrecognised_document = (
+            document.document_type == "unrecognised"
+        )
+
+        for name, new_value in request.extracted_fields.items():
+            existing_field = existing_by_name.get(name)
+
+            if existing_field is None:
+                # New field added during manual review.
+                field_confidences[name] = 1.0
+                continue
+
+            old_value = normalise_value(existing_field.field_value)
+
+            # These fields were editable/reviewable by the loan officer.
+            was_editable = (
+                is_unrecognised_document
+                or old_value == ""
+                or (
+                    existing_field.confidence is not None
+                    and existing_field.confidence < settings.EXTRACTION_CONFIDENCE_THRESHOLD
+                )
+            )
+
+            if was_editable:
+                # The officer reviewed this field by clicking Save,
+                # so it is now considered human-verified.
+                field_confidences[name] = 1.0
+            else:
+                # This field was not part of manual review.
+                # Preserve the original extraction confidence.
+                field_confidences[name] = existing_field.confidence
+
         await asyncio.to_thread(
             document_repository.update_extracted_fields,
             document_id,
             request.extracted_fields,
-            1.0,
+            document.extraction_confidence,
             fulfilled_requirements,
         )
+
         await asyncio.to_thread(
             extracted_fields_repository.replace_extracted_fields,
             document_id,
             request.extracted_fields,
-            default_confidence=1.0,
-            required_field_names=set(schema_field_names(document.document_type or "")),
+            field_confidences=field_confidences,
+            default_confidence=None,
+            required_field_names=set(
+                schema_field_names(document.document_type or "")
+            ),
         )
     except Exception as exc:
         logger.exception("Failed to update extracted fields for document %s", document_id)
@@ -137,7 +202,7 @@ async def update_extracted_fields(
     if document.case_id is not None:
         await asyncio.to_thread(case_status.sync_submission_finalized, document.case_id)
 
-    updated = await asyncio.to_thread(document_repository.get_document, document_id)
+    updated = await get_document(document_id)
     return updated
 
 

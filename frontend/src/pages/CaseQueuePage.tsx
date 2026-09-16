@@ -28,6 +28,8 @@ export default function CaseQueuePage({
 }: CaseQueuePageProps) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
   const statusOptions = useMemo(() => {
     const statuses = cases
       .map((item) => item.status)
@@ -39,7 +41,7 @@ export default function CaseQueuePage({
   const matches = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    return cases.filter((item) => {
+    const filteredCases = cases.filter((item) => {
       const matchesSearch =
         !query ||
         [displayCaseNumber(item), item.applicant]
@@ -51,11 +53,30 @@ export default function CaseQueuePage({
 
       return matchesSearch && matchesStatus;
     });
-  }, [cases, search, statusFilter]);
+
+    return [...filteredCases].sort((a, b) => {
+      const caseNumberA = displayCaseNumber(a);
+      const caseNumberB = displayCaseNumber(b);
+
+      return sortOrder === 'asc'
+        ? caseNumberA.localeCompare(
+            caseNumberB,
+            undefined,
+            { numeric: true },
+          )
+        : caseNumberB.localeCompare(
+            caseNumberA,
+            undefined,
+            { numeric: true },
+          );
+    });
+  }, [cases, search, statusFilter, sortOrder]);
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
     const query = search.trim().toLowerCase();
+
     if (!query) return;
 
     const exact = cases.find((item) =>
@@ -63,7 +84,9 @@ export default function CaseQueuePage({
         .some((value) => value.toLowerCase() === query),
     );
 
-    if (exact) onOpenCase(exact);
+    if (exact) {
+      onOpenCase(exact);
+    }
   }
 
   return (
@@ -72,27 +95,28 @@ export default function CaseQueuePage({
 
       <section className="queue-view">
         <div className="case-queue-header">
-            <div>
-              <p className="eyebrow">My case queue</p>
-              <h1>Find a case</h1>
-            </div>
-
-            <button
-              type="button"
-              className="create-case-btn"
-              onClick={onCreateCase}
-            >
-              + Create new case
-            </button>
+          <div>
+            <p className="eyebrow">My case queue</p>
+            <h1>Find a case</h1>
           </div>
 
-          <p className="sub">
-            Search by case number or applicant, or pick from your assigned cases below.
-          </p>
+          <button
+            type="button"
+            className="create-case-btn"
+            onClick={onCreateCase}
+          >
+            + Create new case
+          </button>
+        </div>
+
+        <p className="sub">
+          Search by case number or applicant, or pick from your assigned cases below.
+        </p>
 
         <form className="search-row" onSubmit={handleSubmit}>
           <label className="search-box">
             <span aria-hidden="true">⌕</span>
+
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -100,43 +124,81 @@ export default function CaseQueuePage({
               aria-label="Search case number or applicant"
             />
           </label>
-          <button className="go-btn" type="submit">Go</button>
+
+          <button className="go-btn" type="submit">
+            Go
+          </button>
         </form>
 
-        <div className="filter-row">
-          <label htmlFor="status-filter">
-            Filter by status
-          </label>
+        <div className="queue-filters">
+          <div className="filter-row">
+            <label htmlFor="status-filter">
+              Filter by status
+            </label>
 
-          <select
-            id="status-filter"
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
-          >
-            <option value="all">All statuses</option>
+            <select
+              id="status-filter"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+            >
+              <option value="all">All statuses</option>
 
-            {statusOptions.map((status) => (
-              <option key={status} value={status}>
-                {status}
+              {statusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="filter-row">
+            <label htmlFor="case-sort">
+              Sort by case number
+            </label>
+
+            <select
+              id="case-sort"
+              value={sortOrder}
+              onChange={(event) =>
+                setSortOrder(event.target.value as 'asc' | 'desc')
+              }
+            >
+              <option value="asc">
+                Ascending (ASC)
               </option>
-            ))}
-          </select>
-        </div>
 
+              <option value="desc">
+                Descending (DESC)
+              </option>
+            </select>
+          </div>
+        </div>
 
         <div className="queue-label">
           Assigned to you ({matches.length})
-          <button type="button" className="dev-tool-link" onClick={onOpenExtractionTest}>
+
+          <button
+            type="button"
+            className="dev-tool-link"
+            onClick={onOpenExtractionTest}
+          >
             Test extraction logic →
           </button>
         </div>
 
         {isLoading ? (
-          <div className="no-results">Loading cases…</div>
+          <div className="no-results">
+            Loading cases…
+          </div>
         ) : error ? (
           <div className="no-results">
             <div>{error}</div>
-            <button type="button" className="go-btn queue-retry" onClick={onRetry}>
+
+            <button
+              type="button"
+              className="go-btn queue-retry"
+              onClick={onRetry}
+            >
               Retry
             </button>
           </div>
