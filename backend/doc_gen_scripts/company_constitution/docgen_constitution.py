@@ -182,6 +182,7 @@ def build_content(record: dict[str, Any]) -> dict[str, Any]:
         "case_id": facts["case_id"],
         "company_name": facts["company_name"],
         "uen": facts["uen"],
+        "company_type": facts["company_type"],
         "registered_address": facts["registered_address"],
         "incorporation_date": facts["incorporation_date"],
         "adoption_date": facts["incorporation_date"],
@@ -533,7 +534,7 @@ def render(content: dict[str, Any], out_pdf: str | Path, synthetic_tag: bool = T
     story.append(Paragraph("THE COMPANIES ACT 1967", st["cover_act"]))
     story.append(Paragraph(sw("REPUBLIC OF SINGAPORE"), st["cover_sub"]))
     story.append(Spacer(1, 18))
-    story.append(Paragraph("PRIVATE COMPANY LIMITED BY SHARES", st["cover_act"]))
+    story.append(Paragraph(sw(content["company_type"].upper()), st["cover_act"]))
     story.append(Spacer(1, 30))
     story.append(Paragraph(sw("CONSTITUTION"), st["cover_act"]))
     story.append(Paragraph("OF", st["cover_sub"]))

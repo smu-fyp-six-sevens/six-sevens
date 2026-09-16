@@ -143,7 +143,7 @@ def _mrz_check_digit(s: str) -> str:
 
 def build_mrz(passport_no: str, nationality_code: str, surname: str, given_names: str,
               date_of_birth: date, sex: str, date_of_expiry: date, national_id_no: str) -> tuple[str, str]:
-    line1 = ("P<" + nationality_code.upper()[:3].ljust(3, "<") + _mrz_name_field(surname, given_names))
+    line1 = ("PA" + nationality_code.upper()[:3].ljust(3, "<") + _mrz_name_field(surname, given_names))
     line1 = (line1 + "<" * 44)[:44]
 
     passport_field = _mrz_clean(passport_no).ljust(9, "<")[:9]

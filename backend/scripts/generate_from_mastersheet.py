@@ -328,7 +328,7 @@ def generate_for_case(case_id: str) -> None:
                 continue
             try:
                 coi_path = out / str(r.get("Filename") or f"certificate_of_incorporation_{case_id}.pdf")
-                generate_certificate_of_incorporation(str(coi_path), company_name=r.get("Company Name (auto)") or "", company_number=str(r.get("UEN (auto)") or ""), incorporation_date=r.get("Incorporation Date (auto)") or datetime.now().date())
+                generate_certificate_of_incorporation(str(coi_path), company_name=r.get("Company Name (auto)") or "", company_number=str(r.get("UEN (auto)") or ""), incorporation_date=r.get("Incorporation Date (auto)") or datetime.now().date(), company_type=r.get("Company Type (auto)") or None)
                 print("Wrote", coi_path)
             except Exception as e:
                 print("COI generation failed:", e)

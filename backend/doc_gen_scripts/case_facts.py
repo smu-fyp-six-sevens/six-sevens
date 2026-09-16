@@ -137,6 +137,7 @@ def company_facts(case: dict[str, Any], people: list[dict[str, Any]]) -> dict[st
         "case_id": case_id,
         "company_name": case.get("Company Name", ""),
         "uen": uen,
+        "company_type": case.get("Company Type", ""),
         "registered_address": case.get("Registered Address", ""),
         "application_date": application_date,
         "incorporation_date": incorporation_date,

@@ -452,6 +452,7 @@ def generate_certificate_of_incorporation(
     company_name: str,
     company_number: str,
     incorporation_date: str | date | datetime | None = None,
+    company_type: str | None = None,
     receipt_no: str | None = None,
     verification_url: str | None = None,
 ) -> dict:
@@ -464,6 +465,7 @@ def generate_certificate_of_incorporation(
         "company_name": company_name or context.get("company_name"),
         "uen": company_number or context.get("uen"),
         "incorporation_date": incorporation_date or context.get("incorporation_date"),
+        "company_status": company_type or context.get("company_status"),
     })
     if receipt_no:
         context["receipt_no"] = receipt_no

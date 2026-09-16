@@ -112,12 +112,6 @@ NATIONALITY_MAP = {
     "malaysian": "MALAYSIAN",
 }
 
-COMPANY_TYPES = [
-    "EXEMPT PRIVATE COMPANY LIMITED BY SHARES",
-    "PRIVATE COMPANY LIMITED BY SHARES",
-]
-
-
 # --------------------------------------------------------------------------
 # Mastersheet reading
 # --------------------------------------------------------------------------
@@ -265,7 +259,7 @@ def build_content(record: dict[str, Any]) -> dict[str, Any]:
         "registered_address": str(facts["registered_address"]).upper(),
         "incorporation_date": facts["incorporation_date"],
         "profile_date": profile_date,
-        "company_type": COMPANY_TYPES[rng.randrange(len(COMPANY_TYPES))],
+        "company_type": str(facts["company_type"]).upper(),
         "status_date": facts["incorporation_date"],
         "activity_code": code,
         "activity": activity,
