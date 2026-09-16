@@ -49,6 +49,17 @@ def test_health_does_not_require_auth():
     assert response.status_code == 200
 
 
+def test_openapi_exposes_bearer_auth_for_swagger():
+    response = client.get("/openapi.json")
+    assert response.status_code == 200
+    spec = response.json()
+    schemes = spec["components"]["securitySchemes"]
+    bearer = next(value for value in schemes.values() if value.get("scheme") == "bearer")
+    assert bearer["type"] == "http"
+    inject = spec["paths"]["/api/dev/inject"]["post"]
+    assert any("HTTPBearer" in item for item in inject.get("security", []))
+
+
 def test_verify_token_rejects_expired_token(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(auth, "TOKEN_TTL_SECONDS", -1)
     token = auth.create_token()

@@ -17,9 +17,17 @@ import hmac
 import json
 import time
 
-from fastapi import Header, HTTPException, status
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from .config import settings
+
+# HTTPBearer so /docs shows Authorize and actually sends the header.
+# Swagger UI silently drops a manual parameter named `authorization`.
+_bearer = HTTPBearer(
+    auto_error=False,
+    description="Paste the token from POST /auth/login. Do not include the word Bearer.",
+)
 
 TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days — shared demo credential, not a per-user session
 
@@ -70,15 +78,17 @@ def _verify_token(token: str) -> bool:
     return time.time() < exp
 
 
-def require_auth(authorization: str | None = Header(default=None)) -> None:
-    if not authorization or not authorization.startswith("Bearer "):
+def require_auth(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> None:
+    if credentials is None or not credentials.credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing or malformed Authorization header",
         )
 
-    token = authorization.removeprefix("Bearer ").strip()
-    if not _verify_token(token):
+    token = credentials.credentials.strip()
+    if credentials.scheme.lower() != "bearer" or not _verify_token(token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
