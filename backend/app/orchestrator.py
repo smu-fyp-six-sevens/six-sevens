@@ -86,8 +86,7 @@ async def _process_document(document_id: str) -> None:
         await _fail(document_id, f"Intake Coordinator invocation failed: {exc}")
         return
 
-    if not await _finalise_classification(document_id, document.case_id, classification):
-        return
+    await _finalise_classification(document_id, document.case_id, classification)
 
     if not raw_text.strip():
         # Extraction has no vision fallback (unlike Classifier's
@@ -135,15 +134,22 @@ async def _process_document(document_id: str) -> None:
                 raw_text,
                 conversation_id=classification.get("conversation_id"),
                 query=_reconsideration_query(
-                    escalation.get("reason", ""), escalation.get("evidence") or []
+                    escalation.get("reason", ""),
+                    escalation.get("evidence") or [],
+                    escalation.get("suggested_document_type"),
                 ),
+                escalation_context={
+                    "reason": escalation.get("reason", ""),
+                    "prior_document_type": classification["document_type"],
+                    "suggested_document_type": escalation.get("suggested_document_type"),
+                    "evidence": escalation.get("evidence") or [],
+                },
             )
         except DifyInvocationError as exc:
             await _fail(document_id, f"Re-classification invocation failed: {exc}")
             return
 
-        if not await _finalise_classification(document_id, document.case_id, classification):
-            return
+        await _finalise_classification(document_id, document.case_id, classification)
 
         try:
             extraction = await _run_extraction(
@@ -263,16 +269,26 @@ def _content_type_from_filename(filename: str) -> str:
     return guessed or "application/octet-stream"
 
 
-def _reconsideration_query(reason: str, evidence: list[str]) -> str:
+def _reconsideration_query(
+    reason: str, evidence: list[str], suggested_document_type: str | None = None
+) -> str:
     """
     Built as the *next chat turn* in the same Dify conversation, rather than
     a Start-node input — the agent already has its own prior classification
     and reasoning in the conversation history (continued via
     conversation_id below), so there's no need to re-send document_type or
     reasoning back to it. Only genuinely new information (Extraction's
-    objection) needs to be said explicitly.
+    objection, or its suggested type when the prior classification was
+    "unrecognised" — see extraction_prompts.KNOWN_DOCUMENT_TYPES) needs to
+    be said explicitly.
     """
-    query = f"Extraction judged your classification incorrect: {reason}"
+    if suggested_document_type:
+        query = (
+            f"Extraction thinks this document may actually be a "
+            f"{suggested_document_type}: {reason}"
+        )
+    else:
+        query = f"Extraction judged your classification incorrect: {reason}"
     if evidence:
         bullets = "\n".join(f"- {line}" for line in evidence)
         query += f"\n\nEvidence from the document text:\n{bullets}"
@@ -287,6 +303,7 @@ async def _run_intake_coordinator(
     *,
     conversation_id: str | None = None,
     query: str = "Classify this document",
+    escalation_context: dict | None = None,
 ) -> dict:
     signed_url = await asyncio.to_thread(
         storage_service.create_signed_url,
@@ -296,6 +313,12 @@ async def _run_intake_coordinator(
     )
 
     inputs = {"document_id": document_id, "extracted_text": raw_text}
+    # The Classifier chatflow's Start node still only takes a plain string
+    # here (a Code node on the Dify side unpacks it with json.loads) — the
+    # conversation_id continuation above is a separate, additive mechanism,
+    # not a replacement for this input.
+    if escalation_context is not None:
+        inputs["escalation_reason"] = json.dumps(escalation_context)
 
     result = await dify_client.run_chatflow_with_retry(
         settings.DIFY_CLASSIFIER_API_KEY,
@@ -485,9 +508,7 @@ def _is_below_threshold(confidence: float | None) -> bool:
     return confidence is None or confidence < settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
 
 
-async def _finalise_classification(
-    document_id: str, case_id: str | None, classification: dict
-) -> bool:
+async def _finalise_classification(document_id: str, case_id: str | None, classification: dict) -> None:
     """
     Records the classification-stage result (type, confidence, outcome) and
     enforces the confidence threshold as a system-level gate rather than
@@ -501,33 +522,36 @@ async def _finalise_classification(
     overall requirement coverage) actually changes — both a document's
     first classification and a /retry reclassification land here.
 
-    Returns True if extraction should run — either because classification was
-    accepted outright, or because it came back "unrecognised", in which case
-    Extraction still runs but against a general, loan-application-relevant
-    field list rather than a type-specific one (see build_extraction_prompt)
-    so a reviewer has something pulled out instead of nothing. classification
-    is still recorded as MANUAL_REVIEW in that case — this only changes
-    whether Extraction runs, not whether the document reads as confidently
-    classified. Returns False only for a *typed* classification that's below
-    the confidence threshold or explicitly flagged for manual review, where
-    FAILED has already been recorded.
+    Extraction always runs after this, regardless of outcome: a classification
+    that isn't accepted (no type, below the confidence threshold, or flagged
+    for manual review) is normalised to "unrecognised" and still goes to
+    Extraction under the general/loan-application field list (see
+    build_extraction_prompt) rather than failing the document outright — if
+    Extraction can actually tell what the document is from its content, it
+    escalates back to the Classifier (see extraction_prompts.
+    KNOWN_DOCUMENT_TYPES / _reconsideration_query) instead of the document
+    being permanently stuck on a bad first guess. classification_outcome
+    still records MANUAL_REVIEW for anything not accepted — this only
+    changes whether Extraction gets a chance to run, not whether the
+    document reads as confidently classified.
     """
     document_type = classification.get("document_type")
     confidence = classification.get("confidence")
-    unrecognised = _is_unrecognised(document_type)
-    if unrecognised:
-        # Normalise Dify's various ways of saying "no type" (None, "", or the
-        # literal words null/none/n/a already folded to None by
-        # _parse_chatflow_answer) to the explicit "unrecognised" sentinel so
-        # it's what actually lands in Supabase/the frontend, not NULL. Written
-        # back into the classification dict (not just this local variable) so
-        # the caller's later `classification["document_type"]` reads — used to
-        # build the Extraction prompt — see the normalised value too, rather
-        # than the original None.
+    accepted = (
+        not _is_unrecognised(document_type)
+        and not _is_below_threshold(confidence)
+        and not classification.get("needs_manual_review")
+    )
+    if not accepted:
+        # Normalise every non-accepted outcome (no type at all, low
+        # confidence, or the classifier's own manual-review flag) to the
+        # same "unrecognised" sentinel, so it's what actually lands in
+        # Supabase/the frontend and what Extraction builds its prompt
+        # against. Written back into the classification dict (not just this
+        # local variable) so the caller's later `classification["document_type"]`
+        # reads see the normalised value too.
         document_type = "unrecognised"
         classification["document_type"] = document_type
-    below_threshold = _is_below_threshold(confidence)
-    accepted = not unrecognised and not below_threshold and not classification.get("needs_manual_review")
 
     outcome = ClassificationOutcome.ACCEPTED if accepted else ClassificationOutcome.MANUAL_REVIEW
     # Self-fulfilment only at this stage — individual_address isn't known
@@ -546,22 +570,6 @@ async def _finalise_classification(
 
     if case_id is not None:
         await asyncio.to_thread(case_status.sync_submission_finalized, case_id)
-
-    if accepted or unrecognised:
-        return True
-
-    if below_threshold:
-        reason = (
-            f"Classification confidence ({confidence}) is below the required "
-            f"threshold ({settings.CLASSIFICATION_CONFIDENCE_THRESHOLD})"
-        )
-    else:
-        reason = f"Classifier flagged for manual review (confidence {confidence})"
-        if classification.get("reasoning"):
-            reason += f": {classification['reasoning']}"
-
-    await _fail(document_id, reason, document_type=document_type)
-    return False
 
 
 async def _fail(document_id: str, reason: str, *, document_type: str | None = None) -> None:

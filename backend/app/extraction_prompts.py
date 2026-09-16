@@ -271,6 +271,21 @@ EXTRA_FIELD_GUIDANCE: dict[str, str] = {
 }
 
 
+# Hardcoded on purpose rather than derived from EXTRACTION_SCHEMAS.keys() —
+# this is what gets shown to the model when a document was classified
+# "unrecognised", asking it to suggest a specific canonical type if the
+# content actually looks like one of these. Keep in sync with
+# EXTRACTION_SCHEMAS's keys (minus "unrecognised" itself) by hand; a
+# mismatch here means the model could suggest a type orchestrator.py can't
+# actually build an extraction prompt for.
+KNOWN_DOCUMENT_TYPES = [
+    "bank_statement", "certificate_of_incorporation", "payslip", "id_document",
+    "fatca_crs_declaration", "certificate_of_incumbency", "company_constitution",
+    "proof_of_address", "source_of_wealth", "credit_report", "list_of_loans",
+    "notice_of_assessment",
+]
+
+
 def schema_field_names(document_type: str) -> list[str]:
     """
     Flat union of a document type's required + additional schema fields —
@@ -307,6 +322,7 @@ def build_extraction_prompt(document_type: str, raw_text: str) -> str:
 
     if document_type == "unrecognised":
         field_list = "\n".join(f"- {f}" for f in additional)
+        known_types_block = "\n".join(f"- {t}" for t in KNOWN_DOCUMENT_TYPES)
         return f"""This document could not be matched to any known KYC/onboarding category, so
 there is no fixed template for it. It will still be routed for manual
 review — your job here is only to pull out whatever of the following
@@ -324,15 +340,32 @@ relevant, using clear, descriptive snake_case keys.
 
 {_FIELD_WRAPPER_INSTRUCTIONS}
 
+While reading the text, also check whether it actually fits one of these
+known document categories — the classifier may simply have missed it:
+{known_types_block}
+
+If — and only if — you're confident the text genuinely matches one of these
+(not just superficially similar), include an escalation suggesting that
+type, using the exact category name from the list above as
+"suggested_document_type", plus a "reason" and an "evidence" list of
+verbatim lines from the text that support it. Otherwise leave escalation
+null — a low-confidence guess here is worse than none, since a wrong
+suggestion sends this document on another classification round-trip for
+nothing.
+
 Document text:
 {raw_text}
 
 Respond with ONLY a JSON object, no other text, of this shape:
 {{"extracted_fields": {{"<field_name>": {{"value": ..., "confidence": <float 0.0-1.0>}}, ...}}, "confidence": <float 0.0-1.0>, "escalation": null}}
+
+OR, if the text clearly matches one of the known categories above:
+{{"extracted_fields": {{"<field_name>": {{"value": ..., "confidence": <float 0.0-1.0>}}, ...}}, "confidence": <float 0.0-1.0>, "escalation": {{"suggested_document_type": "<one of the categories above>", "reason": "<why it matches>", "evidence": ["<verbatim line from the text>", ...]}}}}
 """
 
     required_block = "\n".join(f"- {f}" for f in required) or "(none — see additional fields below)"
     additional_block = "\n".join(f"- {f}" for f in additional) or "(none)"
+    known_types_block = "\n".join(f"- {t}" for t in KNOWN_DOCUMENT_TYPES if t != document_type)
 
     return f"""You are extracting structured data from a {document_type.replace('_', ' ')} for a KYC/onboarding pipeline.
 
@@ -368,11 +401,16 @@ description in mind rather than just being told "it doesn't match". Also
 include an "evidence" list of the specific lines or phrases copied
 verbatim from the document text above (not paraphrased) that led you to
 this conclusion, so the classifier can weigh the actual text rather than
-just your summary of it. You should also escalate (even without a
-confident alternative guess) if most or all of the REQUIRED fields above
-are genuinely absent from the text despite a careful read — that pattern
-is itself evidence the classification is wrong, separately from whether
-you can tell what the document actually is.
+just your summary of it. If — and only if — you're confident it's actually
+one of these other known categories, also name it as
+"suggested_document_type" (using the exact category name below); otherwise
+omit that key rather than guessing weakly:
+{known_types_block}
+You should also escalate (even without a confident alternative guess) if
+most or all of the REQUIRED fields above are genuinely absent from the
+text despite a careful read — that pattern is itself evidence the
+classification is wrong, separately from whether you can tell what the
+document actually is.
 
 Document text:
 {raw_text}
@@ -381,5 +419,5 @@ Respond with ONLY a JSON object, no other text, of this shape:
 {{"extracted_fields": {{"<field_name>": {{"value": ..., "confidence": <float 0.0-1.0>}}, ...}}, "confidence": <float 0.0-1.0>, "escalation": null}}
 
 OR, if the document doesn't match:
-{{"extracted_fields": {{}}, "confidence": 0.0, "escalation": {{"reason": "<what the document actually looks like>", "evidence": ["<verbatim line from the text>", ...]}}}}
+{{"extracted_fields": {{}}, "confidence": 0.0, "escalation": {{"reason": "<what the document actually looks like>", "evidence": ["<verbatim line from the text>", ...], "suggested_document_type": "<one of the categories above, or omit>"}}}}
 """

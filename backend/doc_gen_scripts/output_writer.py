@@ -55,7 +55,8 @@ def write_document(
         matrix = pymupdf.Matrix(zoom, zoom)
         multi_page = doc.page_count > 1
         written: list[Path] = []
-        for page_index, page in enumerate(doc, start=1):
+        for page_number in range(doc.page_count):
+            page = doc[page_number]
             # alpha=False: JPEG has no alpha channel, and it also gives PNGs a
             # plain white background instead of a checkerboard/transparent one,
             # which is what a real scan or camera photo would look like.
@@ -64,7 +65,7 @@ def write_document(
                 pix.tobytes("png") if ext == "png" else pix.tobytes("jpeg", jpg_quality=88)
             )
             page_path = (
-                out.with_name(f"{out.stem}_page{page_index}{out.suffix}") if multi_page else out
+                out.with_name(f"{out.stem}_page{page_number + 1}{out.suffix}") if multi_page else out
             )
             page_path.write_bytes(img_bytes)
             written.append(page_path)
