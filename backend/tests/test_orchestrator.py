@@ -384,7 +384,7 @@ async def test_intake_coordinator_uploads_signed_url_of_the_document() -> None:
 
 
 @pytest.mark.asyncio
-async def test_typed_low_confidence_classification_fails_before_extraction() -> None:
+async def test_typed_low_confidence_classification_still_runs_general_extraction() -> None:
     with (
         patch("app.orchestrator.document_repository") as mock_repo,
         patch("app.orchestrator.extracted_fields_repository") as mock_fields_repo,
@@ -399,20 +399,33 @@ async def test_typed_low_confidence_classification_fails_before_extraction() -> 
         mock_dify.run_chatflow_with_retry = AsyncMock(
             return_value=_chat_output(document_type="payslip", confidence=0.2, needs_manual_review=False)
         )
-        mock_dify.run_workflow_with_retry = AsyncMock()
+        mock_dify.run_workflow_with_retry = AsyncMock(
+            return_value=_extraction_output(extracted_fields={"company_name": "Acme"}, confidence=0.4)
+        )
 
         await orchestrator.process_document("doc-1")
 
-        # A real type guess that's just below the confidence threshold still
-        # fails before Extraction ever runs — unlike "unrecognised" (see
-        # test_unrecognised_classification_still_runs_general_extraction),
-        # there's no fallback field list to fall back to here.
+        # A real type guess that's just below the confidence threshold is no
+        # longer a dead end: it's normalised to "unrecognised" (same as no
+        # type guess at all -- see test_unrecognised_classification_still_
+        # runs_general_extraction) and Extraction still runs against the
+        # general field list, rather than failing the document outright.
+        # If Extraction can actually tell what it is, it escalates back to
+        # the Classifier (see the escalation tests) instead of the document
+        # being stuck on a bad first guess.
         assert mock_dify.run_chatflow_with_retry.await_count == 1
-        mock_dify.run_workflow_with_retry.assert_not_called()
-        args, kwargs = mock_repo.update_status.call_args
-        assert args[0] == "doc-1"
-        assert args[1] == DocumentStatus.FAILED
-        assert kwargs["document_type"] == "payslip"
+        assert mock_dify.run_workflow_with_retry.await_count == 1
+        mock_repo.record_classification.assert_called_once_with(
+            "doc-1",
+            document_type="unrecognised",
+            confidence=0.2,
+            classification_outcome="manual_review",
+            evidence=[],
+            fulfilled_requirements=[],
+        )
+        mock_repo.update_status.assert_called_once_with(
+            "doc-1", DocumentStatus.ANALYZED, document_type="unrecognised"
+        )
 
 
 @pytest.mark.asyncio
