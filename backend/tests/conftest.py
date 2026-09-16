@@ -138,19 +138,33 @@ def _write_sample_png(path: Path) -> None:
     doc.close()
 
 
-@pytest.fixture
-def isolated_injection_templates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Use generated PDF/PNG fixtures instead of document_templates/."""
-    templates = tmp_path / "document_templates"
-    generated = tmp_path / "documents_generated"
-    templates.mkdir()
-    generated.mkdir()
-
+@pytest.fixture(scope="session")
+def _injection_template_files(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """
+    Session-scoped so the PDF/PNG live at a stable path for the whole test
+    run. app.injection.pdf.discover_fields_from_image caches OCR results by
+    (path, mtime, size) — with a fresh tmp_path (and therefore a fresh OCR
+    run) on every single test, that cache never hit, and RapidOCR ran once
+    per test (~5-14s each, dominating test_fraud_injections.py's runtime).
+    Reusing the same files across the session lets the existing cache do
+    its job: only the first test pays the OCR cost.
+    """
+    templates = tmp_path_factory.mktemp("document_templates")
     _write_sample_pdf(templates / f"{PDF_DOC_ID}.pdf")
     _write_sample_png(templates / f"{IMAGE_DOC_ID}.png")
-
-    monkeypatch.setattr("app.injection.pdf.TEMPLATES_DIR", templates)
-    monkeypatch.setattr("app.injection.pdf.DOCUMENTS_GENERATED_DIR", generated)
-    monkeypatch.setattr("app.injection.store.TEMPLATES_DIR", templates)
-    monkeypatch.setattr("app.injection.store.DOCUMENTS_GENERATED_DIR", generated)
     return templates
+
+
+@pytest.fixture
+def isolated_injection_templates(
+    tmp_path: Path, _injection_template_files: Path, monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    """Use generated PDF/PNG fixtures instead of document_templates/."""
+    generated = tmp_path / "documents_generated"
+    generated.mkdir()
+
+    monkeypatch.setattr("app.injection.pdf.TEMPLATES_DIR", _injection_template_files)
+    monkeypatch.setattr("app.injection.pdf.DOCUMENTS_GENERATED_DIR", generated)
+    monkeypatch.setattr("app.injection.store.TEMPLATES_DIR", _injection_template_files)
+    monkeypatch.setattr("app.injection.store.DOCUMENTS_GENERATED_DIR", generated)
+    return _injection_template_files

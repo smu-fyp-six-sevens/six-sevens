@@ -371,7 +371,7 @@ def test_update_extracted_fields_success() -> None:
         "doc-1",
         {"individual_name": "Jane Tan (corrected)"},
         default_confidence=1.0,
-        required_field_names={"individual_name", "company_name", "net_pay"},
+        required_field_names={"individual_name", "company_name", "net_pay", "company_address"},
     )
     # A manual correction can change requirement coverage (e.g. adding an
     # address that was missing) just as much as the automated pipeline can.

@@ -27,24 +27,23 @@ def _chat_output(
     needs_manual_review: bool | None = None,
     reasoning: str = "",
     evidence: list[str] | None = None,
+    conversation_id: str = "conv-1",
 ) -> dict:
     """
-    Wraps outputs the way the Classifier chatflow actually replies — labelled
-    markdown fields, not JSON (see _unwrap_chatflow_output).
+    Wraps outputs the way the Classifier chatflow actually replies — a JSON
+    object as the chat `answer` (see the "Validate Output" node), plus
+    Dify's own top-level conversation_id (see _unwrap_chatflow_output).
     """
     if needs_manual_review is None:
         needs_manual_review = document_type is None
-    lines = [
-        f"**Document type:** {document_type if document_type is not None else 'null'}",
-        f"**Confidence:** {confidence}",
-        f"**Needs manual review:** {needs_manual_review}",
-    ]
-    if reasoning:
-        lines.append(f"**Reasoning:** {reasoning}")
-    if evidence:
-        lines.append("**Evidence:**")
-        lines.extend(f"- {item}" for item in evidence)
-    return {"answer": "\n".join(lines)}
+    payload = {
+        "document_type": document_type,
+        "confidence": confidence,
+        "needs_manual_review": needs_manual_review,
+        "reasoning": reasoning,
+        "evidence": evidence or [],
+    }
+    return {"answer": json.dumps(payload), "conversation_id": conversation_id}
 
 
 def _workflow_output(**outputs) -> dict:
@@ -153,7 +152,7 @@ async def test_no_escalation_marks_analyzed() -> None:
             {"individual_name": "Jane Tan"},
             field_confidences={"individual_name": 0.95},
             default_confidence=0.95,
-            required_field_names={"individual_name", "company_name", "net_pay"},
+            required_field_names={"individual_name", "company_name", "net_pay", "company_address"},
         )
 
 
@@ -259,15 +258,19 @@ async def test_accepted_classification_syncs_case_submission_finalized() -> None
     with (
         patch("app.orchestrator.document_repository") as mock_repo,
         patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
         patch("app.orchestrator.dify_client") as mock_dify,
         patch("app.orchestrator.case_status") as mock_case_status,
     ):
         mock_repo.get_document.return_value = _make_document()  # case_id="case-1"
         mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest)
         mock_dify.run_chatflow_with_retry = AsyncMock(
             return_value=_chat_output(document_type="payslip", confidence=0.9, needs_manual_review=False)
         )
-        mock_dify.run_workflow_with_retry = AsyncMock(return_value=_workflow_output(document_type="payslip"))
+        mock_dify.run_workflow_with_retry = AsyncMock(
+            return_value=_extraction_output(extracted_fields={"individual_name": "Jane Tan"})
+        )
 
         await orchestrator.process_document("doc-1")
 
@@ -284,11 +287,13 @@ async def test_manual_review_classification_still_syncs_case_submission_finalize
     with (
         patch("app.orchestrator.document_repository") as mock_repo,
         patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
         patch("app.orchestrator.dify_client") as mock_dify,
         patch("app.orchestrator.case_status") as mock_case_status,
     ):
         mock_repo.get_document.return_value = _make_document()  # case_id="case-1"
         mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest)
         mock_dify.run_chatflow_with_retry = AsyncMock(
             return_value=_chat_output(document_type="payslip", confidence=0.9, needs_manual_review=True)
         )
@@ -306,11 +311,13 @@ async def test_unassigned_document_does_not_sync_submission_finalized() -> None:
     with (
         patch("app.orchestrator.document_repository") as mock_repo,
         patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
         patch("app.orchestrator.dify_client") as mock_dify,
         patch("app.orchestrator.case_status") as mock_case_status,
     ):
         mock_repo.get_document.return_value = document
         mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest)
         mock_dify.run_chatflow_with_retry = AsyncMock(
             return_value=_chat_output(document_type="payslip", confidence=0.9, needs_manual_review=False)
         )
@@ -353,7 +360,7 @@ async def test_intake_coordinator_uploads_signed_url_of_the_document() -> None:
         )
         args, kwargs = mock_dify.run_chatflow_with_retry.call_args
         assert args[0] == orchestrator.settings.DIFY_CLASSIFIER_API_KEY
-        assert args[1] == {"document_id": "doc-1"}
+        assert args[1] == {"document_id": "doc-1", "extracted_text": "sample document text"}
         assert kwargs["query"] == "Classify this document"
         assert kwargs["user"] == "doc-1"
         assert kwargs["files"] == [
@@ -382,11 +389,13 @@ async def test_typed_low_confidence_classification_fails_before_extraction() -> 
         patch("app.orchestrator.document_repository") as mock_repo,
         patch("app.orchestrator.extracted_fields_repository") as mock_fields_repo,
         patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
         patch("app.orchestrator.dify_client") as mock_dify,
         patch("app.orchestrator.case_status"),
     ):
         mock_repo.get_document.return_value = _make_document()
         mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest)
         mock_dify.run_chatflow_with_retry = AsyncMock(
             return_value=_chat_output(document_type="payslip", confidence=0.2, needs_manual_review=False)
         )
@@ -544,10 +553,12 @@ async def test_intake_coordinator_invocation_failure_marks_failed() -> None:
         patch("app.orchestrator.document_repository") as mock_repo,
         patch("app.orchestrator.extracted_fields_repository") as mock_fields_repo,
         patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
         patch("app.orchestrator.dify_client") as mock_dify,
     ):
         mock_repo.get_document.return_value = _make_document()
         mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest)
         mock_dify.run_chatflow_with_retry = AsyncMock(side_effect=DifyInvocationError("network blip"))
 
         await orchestrator.process_document("doc-1")
@@ -621,21 +632,28 @@ def test_parse_extraction_output_falls_back_for_unwrapped_field() -> None:
     assert result["field_confidences"] == {"bank_name": None}
 
 
-def test_unwrap_chatflow_output_parses_real_dify_markdown_reply() -> None:
-    # Actual shape observed from the Classifier chatflow in Dify.
-    answer = (
-        "**Document type:** payslip\n"
-        "**Confidence:** 1.0\n"
-        "**Needs manual review:** False\n\n"
-        "**Reasoning:** All three classification methods independently and "
-        "unanimously identified the document as a payslip with high confidence.\n\n"
-        "**Evidence:**\n"
-        "- Rule-based matched patterns: 'pay slip', 'net pay', 'basic salary'\n"
-        "- LLM identified employee name, pay period December 2025\n"
-        "- Vision model confirmed employee name Tan Wei Jun, net pay SGD 3,346.04\n"
+def test_unwrap_chatflow_output_parses_real_dify_json_reply() -> None:
+    # Actual shape observed from the Classifier chatflow's "Validate Output"
+    # node — a single JSON object as the chat answer, plus Dify's own
+    # top-level conversation_id.
+    answer = json.dumps(
+        {
+            "document_type": "payslip",
+            "confidence": 1.0,
+            "needs_manual_review": False,
+            "reasoning": (
+                "All three classification methods independently and "
+                "unanimously identified the document as a payslip with high confidence."
+            ),
+            "evidence": [
+                "Rule-based matched patterns: 'pay slip', 'net pay', 'basic salary'",
+                "LLM identified employee name, pay period December 2025",
+                "Vision model confirmed employee name Tan Wei Jun, net pay SGD 3,346.04",
+            ],
+        }
     )
 
-    result = orchestrator._unwrap_chatflow_output({"answer": answer})
+    result = orchestrator._unwrap_chatflow_output({"answer": answer, "conversation_id": "conv-1"})
 
     assert result["document_type"] == "payslip"
     assert result["confidence"] == 1.0
@@ -646,10 +664,13 @@ def test_unwrap_chatflow_output_parses_real_dify_markdown_reply() -> None:
         "LLM identified employee name, pay period December 2025",
         "Vision model confirmed employee name Tan Wei Jun, net pay SGD 3,346.04",
     ]
+    assert result["conversation_id"] == "conv-1"
 
 
 def test_unwrap_chatflow_output_normalises_multi_word_document_type() -> None:
-    answer = "**Document type:** Certificate of Incorporation\n**Confidence:** 0.8\n**Needs manual review:** False\n"
+    answer = json.dumps(
+        {"document_type": "Certificate of Incorporation", "confidence": 0.8, "needs_manual_review": False}
+    )
 
     result = orchestrator._unwrap_chatflow_output({"answer": answer})
 
@@ -657,7 +678,7 @@ def test_unwrap_chatflow_output_normalises_multi_word_document_type() -> None:
 
 
 def test_unwrap_chatflow_output_treats_null_document_type_as_none() -> None:
-    answer = "**Document type:** null\n**Confidence:** 0.0\n**Needs manual review:** True\n"
+    answer = json.dumps({"document_type": None, "confidence": 0.0, "needs_manual_review": True})
 
     result = orchestrator._unwrap_chatflow_output({"answer": answer})
 
@@ -666,9 +687,9 @@ def test_unwrap_chatflow_output_treats_null_document_type_as_none() -> None:
 
 
 def test_unwrap_chatflow_output_defaults_needs_manual_review_when_field_missing() -> None:
-    # No "**Needs manual review:**" field at all — falls back to
-    # "no document type found" rather than crashing on a missing field.
-    result = orchestrator._unwrap_chatflow_output({"answer": "**Confidence:** 0.5\n"})
+    # No "needs_manual_review" key at all — falls back to "no document type
+    # found" rather than crashing on a missing field.
+    result = orchestrator._unwrap_chatflow_output({"answer": json.dumps({"confidence": 0.5})})
 
     assert result["document_type"] is None
     assert result["needs_manual_review"] is True
@@ -690,10 +711,8 @@ def test_finalise_classification_records_self_fulfilment_only() -> None:
     """
     result = orchestrator._unwrap_chatflow_output(
         {
-            "answer": (
-                "**Document type:** id_document\n"
-                "**Confidence:** 0.95\n"
-                "**Needs manual review:** False\n"
+            "answer": json.dumps(
+                {"document_type": "id_document", "confidence": 0.95, "needs_manual_review": False}
             )
         }
     )

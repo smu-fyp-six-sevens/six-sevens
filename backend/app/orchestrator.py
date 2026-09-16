@@ -9,7 +9,7 @@ import re
 from . import case_status, document_repository, extracted_fields_repository, storage_service
 from .config import settings
 from .dify_client import dify_client, DifyInvocationError
-from .extraction_prompts import EXTRACTION_SCHEMAS, build_extraction_prompt
+from .extraction_prompts import build_extraction_prompt, schema_field_names
 from .ingestion.ingestion_service import ingest_document
 from .models import ClassificationOutcome, DocumentStatus, compute_fulfilled_requirements
 
@@ -75,7 +75,13 @@ async def _process_document(document_id: str) -> None:
         return
 
     try:
-        classification = await _run_intake_coordinator(document_id, document)
+        raw_text = await _ingest_document_text(document_id, document)
+    except OrchestrationError as exc:
+        await _fail(document_id, str(exc))
+        return
+
+    try:
+        classification = await _run_intake_coordinator(document_id, document, raw_text)
     except DifyInvocationError as exc:
         await _fail(document_id, f"Intake Coordinator invocation failed: {exc}")
         return
@@ -83,10 +89,15 @@ async def _process_document(document_id: str) -> None:
     if not await _finalise_classification(document_id, document.case_id, classification):
         return
 
-    try:
-        raw_text = await _extract_raw_text(document_id, document)
-    except OrchestrationError as exc:
-        await _fail(document_id, str(exc), document_type=classification["document_type"])
+    if not raw_text.strip():
+        # Extraction has no vision fallback (unlike Classifier's
+        # vision_classify tool), so an image-only document that made it
+        # through classification via vision still can't be extracted today.
+        await _fail(
+            document_id,
+            "Extraction produced no usable text",
+            document_type=classification["document_type"],
+        )
         return
 
     try:
@@ -119,7 +130,13 @@ async def _process_document(document_id: str) -> None:
 
         try:
             classification = await _run_intake_coordinator(
-                document_id, document, escalation_reason=escalation.get("reason")
+                document_id,
+                document,
+                raw_text,
+                conversation_id=classification.get("conversation_id"),
+                query=_reconsideration_query(
+                    escalation.get("reason", ""), escalation.get("evidence") or []
+                ),
             )
         except DifyInvocationError as exc:
             await _fail(document_id, f"Re-classification invocation failed: {exc}")
@@ -176,7 +193,7 @@ async def _process_document(document_id: str) -> None:
         extracted_fields,
         field_confidences=field_confidences,
         default_confidence=extraction_confidence,
-        required_field_names=set(EXTRACTION_SCHEMAS.get(classification["document_type"], [])),
+        required_field_names=set(schema_field_names(classification["document_type"])),
     )
 
     await asyncio.to_thread(
@@ -194,7 +211,19 @@ async def _process_document(document_id: str) -> None:
     logger.info("Document %s: classification+extraction complete", document_id)
 
 
-async def _extract_raw_text(document_id: str, document) -> str:
+async def _ingest_document_text(document_id: str, document) -> str:
+    """
+    Runs text extraction (native PDF text, or OCR for scans/images) once, up
+    front — before classification, not just before Extraction — so the
+    Classifier chatflow's `extracted_text` input is populated and its Agent
+    can decide for itself (via has_text) whether to fall back to the
+    vision_classify tool. Deliberately does NOT raise when raw_text comes
+    back empty: an image-only document with nothing OCR can read is exactly
+    the case the vision path exists for, so classification must still be
+    allowed to run. Extraction (which has no vision fallback yet) still
+    checks for empty text itself, right before it runs — see
+    _process_document.
+    """
     try:
         file_bytes = await asyncio.to_thread(
             storage_service.download_file, document.storage_path
@@ -220,9 +249,6 @@ async def _extract_raw_text(document_id: str, document) -> str:
             document_repository.update_metadata, document_id, ingestion_result["metadata"]
         )
 
-    if not ingestion_result["raw_text"].strip():
-        raise OrchestrationError("Extraction produced no usable text")
-
     if ingestion_result["needs_review"]:
         logger.warning(
             "Document %s: extraction flagged needs_review (method=%s)",
@@ -237,8 +263,30 @@ def _content_type_from_filename(filename: str) -> str:
     return guessed or "application/octet-stream"
 
 
+def _reconsideration_query(reason: str, evidence: list[str]) -> str:
+    """
+    Built as the *next chat turn* in the same Dify conversation, rather than
+    a Start-node input — the agent already has its own prior classification
+    and reasoning in the conversation history (continued via
+    conversation_id below), so there's no need to re-send document_type or
+    reasoning back to it. Only genuinely new information (Extraction's
+    objection) needs to be said explicitly.
+    """
+    query = f"Extraction judged your classification incorrect: {reason}"
+    if evidence:
+        bullets = "\n".join(f"- {line}" for line in evidence)
+        query += f"\n\nEvidence from the document text:\n{bullets}"
+    query += "\n\nPlease reconsider your classification given this."
+    return query
+
+
 async def _run_intake_coordinator(
-    document_id: str, document, *, escalation_reason: str | None = None
+    document_id: str,
+    document,
+    raw_text: str,
+    *,
+    conversation_id: str | None = None,
+    query: str = "Classify this document",
 ) -> dict:
     signed_url = await asyncio.to_thread(
         storage_service.create_signed_url,
@@ -247,16 +295,14 @@ async def _run_intake_coordinator(
         document.filename,
     )
 
-    inputs = {"document_id": document_id}
-    if escalation_reason:
-        inputs["escalation_reason"] = escalation_reason
-        inputs["prior_classification"] = None
+    inputs = {"document_id": document_id, "extracted_text": raw_text}
 
     result = await dify_client.run_chatflow_with_retry(
         settings.DIFY_CLASSIFIER_API_KEY,
         inputs,
-        query="Classify this document",
+        query=query,
         user=document_id,
+        conversation_id=conversation_id,
         files=[
             {
                 "type": _dify_file_type(document.filename),
@@ -384,55 +430,50 @@ def _unwrap_chatflow_output(result: dict) -> dict:
     except (KeyError, TypeError):
         logger.error("Unexpected Dify chatflow response shape: %s", result)
         return {"needs_manual_review": True}
-    return _parse_chatflow_answer(answer)
-
-
-def _answer_field(answer: str, label: str) -> str | None:
-    match = re.search(rf"\*\*{re.escape(label)}:\*\*\s*(.+)", answer, re.IGNORECASE)
-    return match.group(1).strip() or None if match else None
-
-
-def _answer_section(answer: str, label: str) -> str | None:
-    match = re.search(
-        rf"\*\*{re.escape(label)}:\*\*\s*(.+?)(?=\n\s*\*\*[^*]+:\*\*|\Z)",
-        answer, re.IGNORECASE | re.DOTALL,
-    )
-    return match.group(1).strip() or None if match else None
+    parsed = _parse_chatflow_answer(answer)
+    # Dify's own conversation_id (top-level, not the chatflow-authored
+    # "convo_id" echoed inside the answer) — carried through so a
+    # reclassification retry can continue the same Dify conversation
+    # instead of starting a fresh one each time.
+    parsed["conversation_id"] = result.get("conversation_id")
+    return parsed
 
 
 def _parse_chatflow_answer(answer: str) -> dict:
-    document_type = _answer_field(answer, "Document type")
-    if document_type is not None:
-        normalised = document_type.strip().lower()
-        document_type = None if normalised in ("null", "none", "n/a") else normalised.replace(" ", "_")
-
-    confidence_raw = _answer_field(answer, "Confidence")
+    """
+    The Classifier chatflow's Answer node emits a single JSON object (see
+    the "Validate Output" code node) — not markdown, so this is a plain
+    json.loads, with a fallback to the old failure shape if that ever isn't
+    true (e.g. a Dify Studio edit regresses the Answer node's template).
+    """
     try:
-        confidence = float(confidence_raw) if confidence_raw is not None else 0.0
-    except ValueError:
+        parsed = json.loads(answer)
+    except (json.JSONDecodeError, TypeError):
+        logger.error("Chatflow answer was not valid JSON: %s", answer)
+        return {"needs_manual_review": True}
+
+    document_type = parsed.get("document_type")
+    if document_type is not None:
+        normalised = str(document_type).strip().lower()
+        document_type = None if normalised in ("null", "none", "n/a", "") else normalised.replace(" ", "_")
+
+    try:
+        confidence = float(parsed.get("confidence", 0.0))
+    except (TypeError, ValueError):
         confidence = 0.0
 
-    needs_manual_review_raw = _answer_field(answer, "Needs manual review")
-    needs_manual_review = (
-        needs_manual_review_raw.lower() == "true"
-        if needs_manual_review_raw is not None
-        else document_type is None
-    )
-
-    reasoning = _answer_section(answer, "Reasoning") or ""
-    evidence_block = _answer_section(answer, "Evidence") or ""
-    evidence = [
-        line.lstrip("-* ").strip()
-        for line in evidence_block.splitlines()
-        if line.strip().startswith(("-", "*"))
-    ]
+    needs_manual_review = parsed.get("needs_manual_review")
+    if needs_manual_review is None:
+        needs_manual_review = document_type is None
+    else:
+        needs_manual_review = bool(needs_manual_review)
 
     return {
         "document_type": document_type,
         "confidence": confidence,
         "needs_manual_review": needs_manual_review,
-        "reasoning": reasoning,
-        "evidence": evidence,
+        "reasoning": parsed.get("reasoning") or "",
+        "evidence": parsed.get("evidence") or [],
     }
 
 

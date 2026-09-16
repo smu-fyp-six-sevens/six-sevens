@@ -125,6 +125,7 @@ class DifyClient:
         user: str,
         *,
         files: list[dict] | None = None,
+        conversation_id: str | None = None,
     ) -> dict:
         payload: dict = {
             "inputs": inputs,
@@ -134,6 +135,8 @@ class DifyClient:
         }
         if files:
             payload["files"] = files
+        if conversation_id:
+            payload["conversation_id"] = conversation_id
 
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -162,9 +165,13 @@ class DifyClient:
         user: str,
         *,
         files: list[dict] | None = None,
+        conversation_id: str | None = None,
     ) -> dict:
         return await self._with_retry(
-            "Chatflow", lambda: self.run_chatflow(api_key, inputs, query, user, files=files)
+            "Chatflow",
+            lambda: self.run_chatflow(
+                api_key, inputs, query, user, files=files, conversation_id=conversation_id
+            ),
         )
 
     async def _with_retry(self, label: str, call: Callable[[], Awaitable[dict]]) -> dict:

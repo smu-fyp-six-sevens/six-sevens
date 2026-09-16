@@ -1,5 +1,5 @@
 import pytest
-from app.extraction_prompts import build_extraction_prompt, EXTRACTION_SCHEMAS
+from app.extraction_prompts import build_extraction_prompt, schema_field_names, EXTRACTION_SCHEMAS
 
 
 def test_known_document_type_builds_prompt():
@@ -18,7 +18,7 @@ def test_unknown_document_type_raises():
 def test_every_category_builds_a_prompt(document_type):
     prompt = build_extraction_prompt(document_type, "sample document text")
     assert len(prompt) > 0
-    for field in EXTRACTION_SCHEMAS[document_type]:
+    for field in schema_field_names(document_type):
         assert field in prompt
 
 
@@ -52,7 +52,7 @@ def test_id_document_fields():
 
 def test_unrecognised_document_type_builds_general_prompt():
     prompt = build_extraction_prompt("unrecognised", "sample text")
-    for field in EXTRACTION_SCHEMAS["unrecognised"]:
+    for field in schema_field_names("unrecognised"):
         assert field in prompt
     # There's no expected type here to escalate against, so the general
     # prompt shouldn't ask the model to judge a mismatch — just extract.

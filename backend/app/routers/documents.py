@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from .. import case_status, document_repository, extracted_fields_repository, storage_service
 from ..config import settings
-from ..extraction_prompts import EXTRACTION_SCHEMAS
+from ..extraction_prompts import schema_field_names
 from ..models import (
     DocumentDownloadResponse,
     DocumentRecord,
@@ -125,7 +125,7 @@ async def update_extracted_fields(
             document_id,
             request.extracted_fields,
             default_confidence=1.0,
-            required_field_names=set(EXTRACTION_SCHEMAS.get(document.document_type or "", [])),
+            required_field_names=set(schema_field_names(document.document_type or "")),
         )
     except Exception as exc:
         logger.exception("Failed to update extracted fields for document %s", document_id)
