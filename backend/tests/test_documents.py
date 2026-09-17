@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -10,12 +11,19 @@ from postgrest.exceptions import APIError
 from starlette.datastructures import Headers
 
 from app.config import settings
+from app.fraud_detection.font_consistency_v2 import ExtractedField
 from app.main import app
 from app.models import CaseRecord, DocumentRecord, DocumentStatus
 from app.routers.upload import _ingest_one
 
 
 client = TestClient(app)
+
+# A fixed timestamp built as a real datetime (not a string literal) so it
+# satisfies DocumentRecord/CaseRecord's `datetime`-typed fields for static
+# type checkers, while still being what Pydantic would parse from the
+# equivalent ISO string at runtime.
+_TIMESTAMP = datetime.fromisoformat("2026-08-26T00:00:00+00:00")
 
 
 def _make_document(document_id: str = "doc-1") -> DocumentRecord:
@@ -25,7 +33,7 @@ def _make_document(document_id: str = "doc-1") -> DocumentRecord:
         filename="statement.pdf",
         storage_path=f"case-1/{document_id}_statement.pdf",
         status=DocumentStatus.UPLOADED,
-        uploaded_at="2026-08-26T00:00:00Z",
+        uploaded_at=_TIMESTAMP,
     )
 
 
@@ -36,8 +44,8 @@ def _make_case(case_id: str = "case-1", greenlink_case_id: str = "GLDB-1") -> Ca
         status="open",
         submission_finalized=False,
         recommended_additional_documents=[],
-        created_at="2026-08-26T00:00:00Z",
-        updated_at="2026-08-26T00:00:00Z",
+        created_at=_TIMESTAMP,
+        updated_at=_TIMESTAMP,
     )
 
 
@@ -342,7 +350,7 @@ def test_update_extracted_fields_success() -> None:
             document_type="payslip",
             storage_path="case-1/doc-1_payslip.pdf",
             status=DocumentStatus.ANALYZED,
-            uploaded_at="2026-08-26T00:00:00Z",
+            uploaded_at=_TIMESTAMP,
         )
         updated = original.model_copy(
             update={
@@ -351,6 +359,22 @@ def test_update_extracted_fields_success() -> None:
             }
         )
         mock_repo.get_document.side_effect = [original, updated]
+        # First call is the handler's own existing-fields lookup (used to
+        # decide which fields were "editable"/human-verified); the field is
+        # new here (empty existing set), so it's treated as verified with
+        # confidence 1.0. Second call is the final get_document() refetch,
+        # which is what actually populates the response body.
+        mock_fields_repo.get_extracted_fields.side_effect = [
+            [],
+            [
+                ExtractedField(
+                    field_name="individual_name",
+                    field_type="scalar",
+                    field_value="Jane Tan (corrected)",
+                    confidence=1.0,
+                )
+            ],
+        ]
 
         response = client.patch(
             "/documents/doc-1/extracted-fields",
@@ -359,7 +383,9 @@ def test_update_extracted_fields_success() -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["extracted_fields"] == {"individual_name": "Jane Tan (corrected)"}
+    assert body["extracted_fields"] == {
+        "individual_name": {"value": "Jane Tan (corrected)", "confidence": 1.0}
+    }
     assert body["extraction_confidence"] == 1.0
 
     # fulfilled_requirements recomputed from the corrected fields (see
@@ -370,11 +396,15 @@ def test_update_extracted_fields_success() -> None:
     )
     # required_field_names drawn from the document's own document_type
     # ("payslip") so field_category reflects the same required/additional
-    # split as the automated pipeline's own save.
+    # split as the automated pipeline's own save. field_confidences is 1.0
+    # for "individual_name" because it has no prior extracted value (new
+    # field added during manual review), per update_extracted_fields's
+    # was_editable logic.
     mock_fields_repo.replace_extracted_fields.assert_called_once_with(
         "doc-1",
         {"individual_name": "Jane Tan (corrected)"},
-        default_confidence=1.0,
+        field_confidences={"individual_name": 1.0},
+        default_confidence=None,
         required_field_names={"individual_name", "company_name", "net_pay", "company_address"},
     )
     # A manual correction can change requirement coverage (e.g. adding an

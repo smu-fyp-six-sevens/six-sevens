@@ -42,7 +42,7 @@ async def test_extraction(file: UploadFile = File(...)) -> ExtractionTestRespons
         )
     if len(file_bytes) > settings.MAX_FILE_SIZE_BYTES:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=f"File exceeds {settings.MAX_FILE_SIZE_BYTES} byte limit",
         )
 
@@ -53,7 +53,7 @@ async def test_extraction(file: UploadFile = File(...)) -> ExtractionTestRespons
     except Exception as exc:
         logger.exception("Extraction test failed for %s", file.filename)
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"Extraction failed: {exc}",
         ) from exc
 

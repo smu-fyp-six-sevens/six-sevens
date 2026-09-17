@@ -1166,15 +1166,25 @@ def test_match_font_to_crop_fallbacks() -> None:
 
 
 def test_fit_truetype_to_ink_if_system_font_exists() -> None:
+    # Prefer a real system font when available, but fall back to a TTF
+    # bundled in the repo (doc_gen_scripts) so this test runs the same way
+    # on every platform/CI runner instead of skipping when none match.
+    repo_font = (
+        Path(__file__).resolve().parents[1]
+        / "doc_gen_scripts"
+        / "assets"
+        / "fonts"
+        / "DancingScript.ttf"
+    )
     path = pdf_mod._first_existing_font(
         (
             "/System/Library/Fonts/Supplemental/Arial.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            str(repo_font),
         )
     )
-    if not path:
-        pytest.skip("no system TTF available")
+    assert path is not None
     font = pdf_mod._fit_truetype_to_ink(
         path,
         0,

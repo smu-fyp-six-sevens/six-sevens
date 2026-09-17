@@ -39,7 +39,7 @@ async def _ingest_one(case_id: str | None, file: UploadFile) -> DocumentRecord:
     file_bytes = await file.read()
     if len(file_bytes) > settings.MAX_FILE_SIZE_BYTES:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=f"File exceeds {settings.MAX_FILE_SIZE_BYTES} byte limit",
         )
 
@@ -146,7 +146,7 @@ async def upload_documents_batch(
 
     if len(files) > settings.MAX_BULK_FILES:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=f"Batch exceeds {settings.MAX_BULK_FILES} file limit",
         )
 

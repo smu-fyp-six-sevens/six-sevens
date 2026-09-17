@@ -178,7 +178,7 @@ async def update_extracted_fields(
             document_repository.update_extracted_fields,
             document_id,
             request.extracted_fields,
-            document.extraction_confidence,
+            1.0,
             fulfilled_requirements,
         )
 
