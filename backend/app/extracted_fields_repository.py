@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import Optional
 
 from .supabase_client import supabase_client
@@ -80,3 +81,27 @@ def get_extracted_fields(document_id: str) -> list[ExtractedField]:
         .execute()
     )
     return [ExtractedField(**row) for row in result.data]
+
+
+def get_extracted_fields_for_documents(
+    document_ids: list[str],
+) -> dict[str, list[ExtractedField]]:
+    """
+    Same data as get_extracted_fields, batched across a whole case's
+    documents in one query — used by the case status WebSocket
+    (routers/ws.py), which re-fetches every connected case on each poll
+    tick and would otherwise issue one query per document per tick.
+    """
+    if not document_ids:
+        return {}
+
+    result = (
+        supabase_client.table("extracted_fields")
+        .select("*")
+        .in_("document_id", document_ids)
+        .execute()
+    )
+    by_document: dict[str, list[ExtractedField]] = defaultdict(list)
+    for row in result.data:
+        by_document[row["document_id"]].append(ExtractedField(**row))
+    return by_document

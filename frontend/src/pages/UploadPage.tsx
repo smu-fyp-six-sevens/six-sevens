@@ -2,20 +2,18 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CaseRecord } from '../App';
 import DropZone from '../components/DropZone';
 import FileRow from '../components/FileRow';
+import { subscribeToCaseStatus } from '../services/caseSocket';
+import type { CaseStatusSubscription } from '../services/caseSocket';
 import {
   REQUIRED_DOCUMENT_TYPES,
   EXTRACTION_CONFIDENCE_THRESHOLD,
-  getCaseRequirementCoverage,
-  getDocument,
   updateExtractedFields,
-  listDocuments,
   uploadDocuments,
 } from '../services/uploadService';
 import type { BulkUploadItemResult, DocumentRecord } from '../services/uploadService';
 
 
 const TERMINAL_STATUSES = new Set(['analyzed', 'failed']);
-const POLL_INTERVAL_MS = 2000;
 import {
   MAX_BULK_FILES,
   MAX_FILE_SIZE_BYTES,
@@ -153,86 +151,28 @@ export default function UploadPage({
 
   const hasOutcome = results.length > 0 || rejections.length > 0;
 
-  // Fetched from the backend rather than unioned client-side from each
-  // document's own fulfilled_requirements — proof_of_address specifically
-  // requires every identified individual (every id_document) to have an
-  // address on file, not just one anywhere in the case, and that
-  // identity-matching logic lives in case_status.py, not here. See
-  // getCaseRequirementCoverage's docstring in uploadService.ts.
-  async function refreshRequirementCoverage() {
-    try {
-      const coverage = await getCaseRequirementCoverage(selectedCase.id);
-      if (isMountedRef.current) {
-        setFulfilledRequirements(new Set(coverage.fulfilled_requirements));
-        setProofOfAddressCoverage(coverage.proof_of_address_coverage);
-      }
-    } catch {
-      // best-effort refresh — leave the last-known checklist state on screen
-    }
-  }
-
-  async function pollDocument(documentId: string) {
-    // No attempt cap — how long classification actually takes depends on
-    // how many other documents are ahead of it (the classifier serializes
-    // calls, see DIFY_CLASSIFIER_MAX_CONCURRENCY on the backend), so a
-    // fixed timeout just goes stale under load instead of ever being
-    // "long enough". Keeps polling for as long as this page stays mounted.
-    while (isMountedRef.current) {
-      let document: DocumentRecord | null = null;
-
-      try {
-        document = await getDocument(documentId);
-      } catch {
-        // transient fetch failure — skip this cycle rather than giving up
-        // on the document for the rest of the session
-      }
-
+  // One WebSocket per case (see caseSocket.ts / backend routers/ws.py)
+  // replaces the old per-document poll loop: the backend pushes every
+  // document's status plus the case-level requirement checklist together
+  // whenever anything changes, including documents uploaded after this
+  // subscription opened — no separate per-upload poll kickoff needed.
+  // Kept in a ref (rather than just returned from the effect) so
+  // handleSubmit can call .refresh() after a successful upload — see its
+  // docstring in caseSocket.ts for why that matters once a case goes idle.
+  const caseSocketRef = useRef<CaseStatusSubscription | null>(null);
+  useEffect(() => {
+    const subscription = subscribeToCaseStatus(selectedCase.id, ({ documents, caseSummary }) => {
       if (!isMountedRef.current) return;
 
-      if (document) {
-        setDocumentDetails(
-          (current) => new Map(current).set(documentId, document as DocumentRecord),
-        );
-
-        if (TERMINAL_STATUSES.has(document.status)) {
-          // Requirement coverage (esp. proof_of_address) can only be known
-          // for certain once this document reaches a terminal status.
-          void refreshRequirementCoverage();
-          return;
-        }
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-    }
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadExistingDocuments() {
-      try {
-        const documents = await listDocuments(selectedCase.id);
-        if (cancelled) return;
-
-        setDocumentDetails(
-          new Map(documents.map((document) => [document.id, document])),
-        );
-
-        documents.forEach((document) => {
-          if (!TERMINAL_STATUSES.has(document.status)) {
-            void pollDocument(document.id);
-          }
-        });
-      } catch {
-        // best-effort load — leave the page in its empty state if this fails
-      }
-    }
-
-    void loadExistingDocuments();
-    void refreshRequirementCoverage();
+      setDocumentDetails(new Map(documents.map((document) => [document.id, document])));
+      setFulfilledRequirements(new Set(caseSummary.fulfilled_requirements));
+      setProofOfAddressCoverage(caseSummary.proof_of_address_coverage);
+    });
+    caseSocketRef.current = subscription;
 
     return () => {
-      cancelled = true;
+      caseSocketRef.current = null;
+      subscription.unsubscribe();
     };
   }, [selectedCase.id]);
 
@@ -284,11 +224,16 @@ export default function UploadPage({
         if (result.success) {
           recordUploadedHash(selectedCase.id, ok[index].hash);
         }
-
-        if (result.success && result.document_id) {
-          void pollDocument(result.document_id);
-        }
       });
+
+      // Wakes the backend's poll loop immediately instead of waiting out
+      // its idle interval (up to 30s once a case has nothing in flight —
+      // see IDLE_POLL_INTERVAL_SECONDS in routers/ws.py) — otherwise the
+      // moment someone's most likely to be watching for feedback could be
+      // the one moment it's slowest to arrive.
+      if (response.results.some((result) => result.success)) {
+        caseSocketRef.current?.refresh();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed.');
     } finally {

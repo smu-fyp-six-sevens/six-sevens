@@ -70,6 +70,17 @@ def _verify_token(token: str) -> bool:
     return time.time() < exp
 
 
+def verify_token(token: str) -> bool:
+    """
+    Public entry point for verifying a token passed outside the
+    Authorization header — a browser's native WebSocket API can't set
+    custom headers on the handshake, so the WS route (see routers/ws.py)
+    takes the token as a query param and checks it here instead of via
+    require_auth.
+    """
+    return _verify_token(token)
+
+
 def require_auth(authorization: str | None = Header(default=None)) -> None:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(

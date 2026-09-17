@@ -10,7 +10,7 @@ from .auth import require_auth
 from .config import settings
 from .health import check_db_connection
 from .queue_service import document_queue
-from .routers import auth, extraction, injection, cases, detection, documents, monitoring, upload
+from .routers import auth, extraction, injection, cases, detection, documents, monitoring, upload, ws
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +49,10 @@ app.include_router(monitoring.router, dependencies=_protected)
 app.include_router(detection.router, dependencies=_protected)
 app.include_router(injection.router, dependencies=_protected)
 app.include_router(extraction.router, dependencies=_protected)
+# Not in _protected: WebSocket handshakes can't carry an Authorization
+# header from the browser, so this route checks its own token query param
+# (see routers/ws.py) instead of require_auth.
+app.include_router(ws.router)
 
 
 @app.get("/health")

@@ -91,7 +91,15 @@ def sync_submission_finalized(case_id: str) -> None:
     case_repository.set_submission_finalized(case_id, finalized=not missing)
 
 
-def _build_summary(case, documents: list[DocumentRecord]) -> CaseSummary:
+def build_summary(case, documents: list[DocumentRecord]) -> CaseSummary:
+    """
+    Public (not module-private) because routers/ws.py needs it too: it
+    already has to fetch a case's documents itself (to enrich them with
+    extracted_fields before pushing them over the socket), so calling
+    get_case_summary there would fetch the same document list a second
+    time. Calling this directly with the documents it already has avoids
+    that duplicate query on every poll tick.
+    """
     fulfilled, missing = compute_requirement_coverage(documents)
     covered, total = compute_identity_proof_of_address_progress(documents)
     unmatched_names = compute_unmatched_proof_of_address_names(documents)
@@ -112,7 +120,7 @@ def get_case_summary(case_id: str) -> Optional[CaseSummary]:
     if case is None:
         return None
     documents = document_repository.list_documents(case_id=case_id)
-    return _build_summary(case, documents)
+    return build_summary(case, documents)
 
 
 def list_case_summaries() -> list[CaseSummary]:
@@ -127,4 +135,4 @@ def list_case_summaries() -> list[CaseSummary]:
         if doc.case_id is not None:
             documents_by_case[doc.case_id].append(doc)
 
-    return [_build_summary(case, documents_by_case.get(case.id, [])) for case in cases]
+    return [build_summary(case, documents_by_case.get(case.id, [])) for case in cases]
