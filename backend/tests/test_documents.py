@@ -412,6 +412,145 @@ def test_update_extracted_fields_success() -> None:
     mock_case_status.sync_submission_finalized.assert_called_once_with("case-1")
 
 
+def test_update_extracted_fields_preserves_confidence_for_already_reviewed_field() -> None:
+    # A field that already had a real (non-blank) value and high confidence
+    # wasn't part of this manual review — its saved value happens to equal
+    # what's already there, so its original per-field confidence should be
+    # kept rather than bumped to 1.0.
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+        patch("app.routers.documents.case_status"),
+    ):
+        original = DocumentRecord(
+            id="doc-1",
+            case_id="case-1",
+            filename="payslip.pdf",
+            document_type="payslip",
+            storage_path="case-1/doc-1_payslip.pdf",
+            status=DocumentStatus.ANALYZED,
+            uploaded_at=_TIMESTAMP,
+        )
+        mock_repo.get_document.side_effect = [original, original]
+        mock_fields_repo.get_extracted_fields.side_effect = [
+            [
+                ExtractedField(
+                    field_name="individual_name",
+                    field_type="scalar",
+                    field_value="Jane Tan",
+                    confidence=0.98,
+                )
+            ],
+            [],
+        ]
+
+        response = client.patch(
+            "/documents/doc-1/extracted-fields",
+            json={"extracted_fields": {"individual_name": "Jane Tan"}},
+        )
+
+    assert response.status_code == 200
+    mock_fields_repo.replace_extracted_fields.assert_called_once_with(
+        "doc-1",
+        {"individual_name": "Jane Tan"},
+        field_confidences={"individual_name": 0.98},
+        default_confidence=None,
+        required_field_names={"individual_name", "company_name", "net_pay", "company_address"},
+    )
+
+
+def test_update_extracted_fields_bumps_confidence_for_low_confidence_existing_field() -> None:
+    # A field extraction was unsure about (below EXTRACTION_CONFIDENCE_THRESHOLD)
+    # is treated as human-reviewed once it comes through this endpoint, even
+    # if the officer just re-saved the same value.
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+        patch("app.routers.documents.case_status"),
+    ):
+        original = DocumentRecord(
+            id="doc-1",
+            case_id="case-1",
+            filename="payslip.pdf",
+            document_type="payslip",
+            storage_path="case-1/doc-1_payslip.pdf",
+            status=DocumentStatus.ANALYZED,
+            uploaded_at=_TIMESTAMP,
+        )
+        mock_repo.get_document.side_effect = [original, original]
+        mock_fields_repo.get_extracted_fields.side_effect = [
+            [
+                ExtractedField(
+                    field_name="net_pay",
+                    field_type="scalar",
+                    field_value=5000,
+                    confidence=0.4,
+                )
+            ],
+            [],
+        ]
+
+        response = client.patch(
+            "/documents/doc-1/extracted-fields",
+            json={"extracted_fields": {"net_pay": "5000"}},
+        )
+
+    assert response.status_code == 200
+    mock_fields_repo.replace_extracted_fields.assert_called_once_with(
+        "doc-1",
+        {"net_pay": "5000"},
+        field_confidences={"net_pay": 1.0},
+        default_confidence=None,
+        required_field_names={"individual_name", "company_name", "net_pay", "company_address"},
+    )
+
+
+def test_update_extracted_fields_treats_blank_existing_value_as_editable() -> None:
+    # old_value normalises to "" (the field was previously extracted as
+    # None) — that alone should make it editable/reviewable regardless of
+    # its recorded confidence.
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+        patch("app.routers.documents.case_status"),
+    ):
+        original = DocumentRecord(
+            id="doc-1",
+            case_id="case-1",
+            filename="payslip.pdf",
+            document_type="payslip",
+            storage_path="case-1/doc-1_payslip.pdf",
+            status=DocumentStatus.ANALYZED,
+            uploaded_at=_TIMESTAMP,
+        )
+        mock_repo.get_document.side_effect = [original, original]
+        mock_fields_repo.get_extracted_fields.side_effect = [
+            [
+                ExtractedField(
+                    field_name="company_address",
+                    field_type="scalar",
+                    field_value=None,
+                    confidence=0.99,
+                )
+            ],
+            [],
+        ]
+
+        response = client.patch(
+            "/documents/doc-1/extracted-fields",
+            json={"extracted_fields": {"company_address": "1 Raffles Place"}},
+        )
+
+    assert response.status_code == 200
+    mock_fields_repo.replace_extracted_fields.assert_called_once_with(
+        "doc-1",
+        {"company_address": "1 Raffles Place"},
+        field_confidences={"company_address": 1.0},
+        default_confidence=None,
+        required_field_names={"individual_name", "company_name", "net_pay", "company_address"},
+    )
+
+
 def test_update_extracted_fields_not_found() -> None:
     with (
         patch("app.routers.documents.document_repository") as mock_repo,
@@ -429,8 +568,6 @@ def test_update_extracted_fields_not_found() -> None:
 
 
 def test_get_document_attaches_extracted_fields() -> None:
-    from app.fraud_detection.font_consistency_v2 import ExtractedField
-
     document = _make_document("doc-1")
     with (
         patch("app.routers.documents.document_repository") as mock_repo,

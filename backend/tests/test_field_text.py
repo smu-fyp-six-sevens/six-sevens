@@ -1,7 +1,10 @@
 from app.injection.field_text import (
+    _is_label_phrase,
+    _looks_like_label,
     field_value_text,
     is_label_only,
     replace_value,
+    require_value,
     split_label_and_value,
 )
 
@@ -71,3 +74,43 @@ def test_replace_value_preserves_label() -> None:
 
 def test_replace_value_replaces_header_entirely() -> None:
     assert replace_value("Opening Balance", "Openign Balance") == "Openign Balance"
+
+
+def test_split_label_and_value_empty_string_returns_empty_pair() -> None:
+    assert split_label_and_value("") == ("", "")
+
+
+def test_is_label_phrase_whitespace_only_is_not_a_label() -> None:
+    assert _is_label_phrase("   ") is False
+    # Falls through to the separator search below, which finds none —
+    # whitespace-only text ends up classified as (empty label, the text).
+    assert split_label_and_value("   ") == ("", "   ")
+
+
+def test_looks_like_label_false_when_no_alpha_tokens() -> None:
+    # Punctuation-only text has no words at all to judge as label-like.
+    assert _looks_like_label("***") is False
+
+
+def test_looks_like_label_false_when_only_stopwords() -> None:
+    # Every token is a stopword ("to", "the") — no actual content word to
+    # judge as a label term, so this shouldn't be treated as a label.
+    assert _looks_like_label("to the") is False
+
+
+def test_require_value_returns_value_portion_when_present() -> None:
+    assert require_value("account_no", "Account No. XXXX-0472") == "XXXX-0472"
+
+
+def test_require_value_falls_back_to_full_text_for_header_only_field() -> None:
+    assert require_value("opening_balance", "Opening Balance") == "Opening Balance"
+
+
+def test_split_label_and_value_absorbs_extra_whitespace_after_separator() -> None:
+    # " No. " already consumes one trailing space — extra whitespace beyond
+    # that (a common OCR artifact) should still end up in the label, not
+    # leak into the value.
+    assert split_label_and_value("Account No.   XXXX-0472") == (
+        "Account No.   ",
+        "XXXX-0472",
+    )

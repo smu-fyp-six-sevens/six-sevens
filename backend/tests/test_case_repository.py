@@ -93,3 +93,23 @@ def test_list_cases_returns_all_rows() -> None:
 
         assert len(results) == 2
         assert {c.id for c in results} == {"case-1", "case-2"}
+
+
+def test_set_submission_finalized_true_sets_finalized_at() -> None:
+    with patch("app.case_repository.supabase_client") as mock_client:
+        case_repository.set_submission_finalized("case-1", True)
+
+        update_payload = mock_client.table.return_value.update.call_args[0][0]
+        assert update_payload["submission_finalized"] is True
+        assert update_payload["finalized_at"] is not None
+        mock_client.table.return_value.update.return_value.eq.assert_called_once_with(
+            "id", "case-1"
+        )
+
+
+def test_set_submission_finalized_false_clears_finalized_at() -> None:
+    with patch("app.case_repository.supabase_client") as mock_client:
+        case_repository.set_submission_finalized("case-1", False)
+
+        update_payload = mock_client.table.return_value.update.call_args[0][0]
+        assert update_payload == {"submission_finalized": False, "finalized_at": None}

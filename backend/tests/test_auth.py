@@ -59,3 +59,18 @@ def test_verify_token_rejects_tampered_signature():
     token = auth.create_token()
     payload_b64, _sig = token.split(".", 1)
     assert auth._verify_token(f"{payload_b64}.tampered") is False
+
+
+def test_verify_token_rejects_correctly_signed_but_non_json_payload():
+    # A validly-signed token whose payload isn't the expected {"exp": ...}
+    # JSON shape at all — distinct from a tampered signature (which fails
+    # earlier) or a malformed "a.b" structure (which fails on split).
+    payload_b64 = auth._b64encode(b"not json")
+    token = f"{payload_b64}.{auth._sign(payload_b64)}"
+    assert auth._verify_token(token) is False
+
+
+def test_verify_token_rejects_correctly_signed_payload_missing_exp():
+    payload_b64 = auth._b64encode(b'{"foo": 1}')
+    token = f"{payload_b64}.{auth._sign(payload_b64)}"
+    assert auth._verify_token(token) is False

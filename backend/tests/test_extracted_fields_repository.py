@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from app import extracted_fields_repository
+from app.fraud_detection.font_consistency_v2 import ExtractedField
 
 
 def test_replace_extracted_fields_deletes_then_inserts_one_row_per_field() -> None:
@@ -86,3 +87,46 @@ def test_replace_extracted_fields_infers_types_for_lists_dicts_and_null() -> Non
         assert by_name["metadata_blob"]["field_type"] == "object"
         assert by_name["missing_field"]["field_type"] == "null"
         assert by_name["is_verified"]["field_type"] == "boolean"
+
+
+def test_get_extracted_fields_queries_by_document_id_and_wraps_rows() -> None:
+    with patch("app.extracted_fields_repository.supabase_client") as mock_client:
+        result = MagicMock()
+        result.data = [
+            {
+                "field_name": "individual_name",
+                "field_type": "string",
+                "field_value": "Jane Tan",
+                "confidence": 0.95,
+            },
+            {
+                "field_name": "net_pay",
+                "field_type": "number",
+                "field_value": 5000,
+                "confidence": 0.9,
+            },
+        ]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = result
+
+        fields = extracted_fields_repository.get_extracted_fields("doc-1")
+
+        mock_client.table.assert_called_once_with("extracted_fields")
+        mock_client.table.return_value.select.assert_called_once_with("*")
+        mock_client.table.return_value.select.return_value.eq.assert_called_once_with(
+            "document_id", "doc-1"
+        )
+        assert fields == [
+            ExtractedField(
+                field_name="individual_name", field_type="string", field_value="Jane Tan", confidence=0.95
+            ),
+            ExtractedField(field_name="net_pay", field_type="number", field_value=5000, confidence=0.9),
+        ]
+
+
+def test_get_extracted_fields_returns_empty_list_when_none_stored() -> None:
+    with patch("app.extracted_fields_repository.supabase_client") as mock_client:
+        result = MagicMock()
+        result.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = result
+
+        assert extracted_fields_repository.get_extracted_fields("doc-1") == []

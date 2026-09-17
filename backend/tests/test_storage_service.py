@@ -30,6 +30,19 @@ def test_upload_file_uses_unassigned_folder_when_no_case_id() -> None:
         assert storage_path.startswith("unassigned/")
 
 
+def test_download_file_returns_bytes_from_bucket() -> None:
+    with patch("app.storage_service.supabase_client") as mock_client:
+        mock_client.storage.from_.return_value.download.return_value = b"%PDF-1.4 bytes"
+
+        content = storage_service.download_file("case-1/uuid_statement.pdf")
+
+        assert content == b"%PDF-1.4 bytes"
+        mock_client.storage.from_.assert_called_once_with(settings.SUPABASE_STORAGE_BUCKET)
+        mock_client.storage.from_.return_value.download.assert_called_once_with(
+            "case-1/uuid_statement.pdf"
+        )
+
+
 def test_delete_file_removes_by_path() -> None:
     with patch("app.storage_service.supabase_client") as mock_client:
         storage_service.delete_file("case-1/uuid_statement.pdf")

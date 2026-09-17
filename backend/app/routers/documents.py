@@ -113,7 +113,7 @@ async def update_extracted_fields(
         fulfilled_requirements = compute_fulfilled_requirements(
             document.document_type, request.extracted_fields
         )
-                 # Get the original per-field values and confidence scores
+        # Get the original per-field values and confidence scores
         # before replacing the extracted fields.
         existing_fields = await asyncio.to_thread(
             extracted_fields_repository.get_extracted_fields,

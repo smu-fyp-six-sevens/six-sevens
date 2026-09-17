@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from app.dify_client import DifyClient, DifyInvocationError
+from app.dify_client import DifyClient, DifyInvocationError, _response_body
 
 
 def _mock_async_client(post_return=None, post_side_effect=None) -> MagicMock:
@@ -176,6 +176,44 @@ async def test_run_chatflow_omits_files_key_when_none_given() -> None:
 
 
 @pytest.mark.asyncio
+async def test_run_chatflow_includes_conversation_id_when_given() -> None:
+    client = DifyClient()
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()
+    mock_response.json.return_value = {"answer": "{}", "conversation_id": "conv-1"}
+
+    with patch("app.dify_client.httpx.AsyncClient") as mock_async_client_cls:
+        mock_async_client_cls.return_value = _mock_async_client(post_return=mock_response)
+
+        await client.run_chatflow(
+            "chat-api-key",
+            {},
+            "Classify this document",
+            "doc-1",
+            conversation_id="conv-1",
+        )
+
+        posted_kwargs = mock_async_client_cls.return_value.post.call_args
+        assert posted_kwargs.kwargs["json"]["conversation_id"] == "conv-1"
+
+
+@pytest.mark.asyncio
+async def test_run_chatflow_omits_conversation_id_when_none_given() -> None:
+    client = DifyClient()
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()
+    mock_response.json.return_value = {"answer": "{}"}
+
+    with patch("app.dify_client.httpx.AsyncClient") as mock_async_client_cls:
+        mock_async_client_cls.return_value = _mock_async_client(post_return=mock_response)
+
+        await client.run_chatflow("chat-api-key", {}, "Classify this document", "doc-1")
+
+        posted_kwargs = mock_async_client_cls.return_value.post.call_args
+        assert "conversation_id" not in posted_kwargs.kwargs["json"]
+
+
+@pytest.mark.asyncio
 async def test_run_chatflow_raises_dify_error_on_http_status_error() -> None:
     client = DifyClient()
     mock_response = MagicMock()
@@ -237,3 +275,37 @@ async def test_run_chatflow_with_retry_raises_after_exhausting_all_attempts() ->
         assert mock_sleep.await_count == 2
         assert "after 3 attempts" in str(exc_info.value)
         assert "persistent failure" in str(exc_info.value)
+
+
+def test_response_body_notes_timeout_when_no_response_available() -> None:
+    # httpx.TimeoutException's own str() is often empty, and a client-side
+    # timeout never gets a response object to read a body from — this is
+    # the one case that still needs to say *something* useful.
+    exc = httpx.ConnectTimeout("timed out")
+
+    assert _response_body(exc) == " (request timed out)"
+
+
+def test_response_body_returns_empty_string_for_non_timeout_request_error() -> None:
+    exc = httpx.ConnectError("connection refused")
+
+    assert _response_body(exc) == ""
+
+
+def test_response_body_includes_response_text_when_present() -> None:
+    exc = Exception("bad request")
+    exc.response = MagicMock(text='{"code": "invalid_param", "message": "Run failed"}')
+
+    assert _response_body(exc) == ' | Dify response: {"code": "invalid_param", "message": "Run failed"}'
+
+
+def test_response_body_returns_empty_string_when_reading_response_text_fails() -> None:
+    class _ExplodingResponse:
+        @property
+        def text(self) -> str:
+            raise RuntimeError("body already consumed")
+
+    exc = Exception("bad request")
+    exc.response = _ExplodingResponse()
+
+    assert _response_body(exc) == ""

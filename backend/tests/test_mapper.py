@@ -53,6 +53,27 @@ def test_progress_counts_covered_and_total_identities() -> None:
     assert compute_identity_proof_of_address_progress(documents) == (1, 2)
 
 
+def test_progress_skips_id_document_with_no_name_or_id_number() -> None:
+    # An accepted id_document where extraction found neither individual_name
+    # nor id_number contributes no identity at all — it shouldn't crash or
+    # be counted as some kind of anonymous identity.
+    documents = [
+        _make_document(
+            "doc-1",
+            document_type="id_document",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"individual_address": "1 Main St"},
+        ),
+        _make_document(
+            "doc-2",
+            document_type="id_document",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"individual_name": "Amanda Koh", "individual_address": "2 Main St"},
+        ),
+    ]
+    assert compute_identity_proof_of_address_progress(documents) == (1, 1)
+
+
 def test_progress_tolerates_non_string_individual_name() -> None:
     """
     Real observed failure: a company_constitution naming several directors

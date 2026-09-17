@@ -169,6 +169,49 @@ def test_update_extracted_fields_includes_fulfilled_requirements_when_given() ->
         }
 
 
+def test_record_classification_sends_fields_with_defaults() -> None:
+    with patch("app.document_repository.supabase_client") as mock_client:
+        document_repository.record_classification(
+            "doc-1",
+            document_type="payslip",
+            confidence=0.9,
+            classification_outcome="accepted",
+        )
+
+        update_payload = mock_client.table.return_value.update.call_args[0][0]
+        assert update_payload == {
+            "document_type": "payslip",
+            "confidence": 0.9,
+            "classification_outcome": "accepted",
+            "evidence": [],
+            "fulfilled_requirements": [],
+        }
+        mock_client.table.return_value.update.return_value.eq.assert_called_once_with(
+            "id", "doc-1"
+        )
+
+
+def test_record_classification_includes_evidence_and_fulfilled_requirements() -> None:
+    with patch("app.document_repository.supabase_client") as mock_client:
+        document_repository.record_classification(
+            "doc-1",
+            document_type="unrecognised",
+            confidence=0.2,
+            classification_outcome="manual_review",
+            evidence=["reads like a shipping manifest"],
+            fulfilled_requirements=["id_document"],
+        )
+
+        update_payload = mock_client.table.return_value.update.call_args[0][0]
+        assert update_payload == {
+            "document_type": "unrecognised",
+            "confidence": 0.2,
+            "classification_outcome": "manual_review",
+            "evidence": ["reads like a shipping manifest"],
+            "fulfilled_requirements": ["id_document"],
+        }
+
+
 def test_record_escalation_sends_reason() -> None:
     with patch("app.document_repository.supabase_client") as mock_client:
         document_repository.record_escalation("doc-1", "reads like a shipping manifest")

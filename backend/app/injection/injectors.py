@@ -36,7 +36,7 @@ class DefectInjector(ABC):
         field_name: str,
         overrides: InjectOverrides | None = None,
     ) -> InjectedDefect:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover — abstract, every subclass overrides it
 
 
 def _snapshot(field: FieldValue) -> dict:

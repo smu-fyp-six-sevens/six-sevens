@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -628,6 +629,18 @@ def test_parse_extraction_output_splits_value_and_confidence_per_field() -> None
     assert result["confidence"] == 0.8
 
 
+def test_parse_extraction_output_strips_markdown_code_fence() -> None:
+    # Real LLM output sometimes wraps the JSON in a ```json ... ``` fence
+    # despite the prompt asking for raw JSON — this should be stripped
+    # rather than failing to parse.
+    payload = json.dumps({"extracted_fields": {}, "confidence": 0.7, "escalation": None})
+    llm_output = f"```json\n{payload}\n```"
+
+    result = orchestrator._parse_extraction_output(llm_output)
+
+    assert result["confidence"] == 0.7
+
+
 def test_parse_extraction_output_falls_back_for_unwrapped_field() -> None:
     # Defensive case: the LLM didn't follow the {"value", "confidence"}
     # shape for one field — its bare value should still come through, just
@@ -643,6 +656,30 @@ def test_parse_extraction_output_falls_back_for_unwrapped_field() -> None:
 
     assert result["extracted_fields"] == {"bank_name": "OCBC"}
     assert result["field_confidences"] == {"bank_name": None}
+
+
+def test_parse_extraction_output_malformed_json_returns_escalation() -> None:
+    # A refusal/prose reply instead of JSON (e.g. the LLM declined to
+    # extract) shouldn't crash the pipeline — it should read as an
+    # escalation like any other extraction-side objection.
+    result = orchestrator._parse_extraction_output("Sorry, I cannot process this document.")
+
+    assert result["extracted_fields"] == {}
+    assert result["escalation"] is not None
+
+
+def test_parse_extraction_output_strips_reasoning_model_think_block() -> None:
+    # DeepSeek-style reasoning models prepend a <think>...</think> block of
+    # chain-of-thought before the actual JSON answer.
+    llm_output = (
+        "<think>some reasoning</think>"
+        '{"extracted_fields": {"individual_name": {"value": "Jane Tan", "confidence": 0.98}}, '
+        '"confidence": 0.98, "escalation": null}'
+    )
+
+    result = orchestrator._parse_extraction_output(llm_output)
+
+    assert result["extracted_fields"] == {"individual_name": "Jane Tan"}
 
 
 def test_unwrap_chatflow_output_parses_real_dify_json_reply() -> None:
@@ -731,3 +768,241 @@ def test_finalise_classification_records_self_fulfilment_only() -> None:
     )
 
     assert "fulfilled_requirements" not in result
+
+
+@pytest.mark.asyncio
+async def test_unhandled_error_is_swallowed_even_when_recording_failure_also_fails() -> None:
+    # process_document's own last-line-of-defence: an exception _process_document
+    # doesn't translate itself (e.g. a Supabase read blowing up before
+    # classification even starts) must never propagate out of process_document,
+    # even if the attempt to record FAILED status *also* raises.
+    with patch("app.orchestrator.document_repository") as mock_repo:
+        mock_repo.get_document.side_effect = RuntimeError("db unreachable")
+        mock_repo.update_status.side_effect = RuntimeError("also unreachable")
+
+        await orchestrator.process_document("doc-1")
+
+        mock_repo.update_status.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_download_failure_marks_failed() -> None:
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository"),
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document"),
+        patch("app.orchestrator.dify_client") as mock_dify,
+    ):
+        mock_repo.get_document.return_value = _make_document()
+        mock_storage.download_file.side_effect = RuntimeError("bucket unreachable")
+
+        await orchestrator.process_document("doc-1")
+
+        args, kwargs = mock_repo.update_status.call_args
+        assert args[1] == DocumentStatus.FAILED
+        assert "Failed to download document for extraction" in kwargs["failure_reason"]
+        mock_dify.run_chatflow_with_retry.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_text_extraction_failure_marks_failed() -> None:
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository"),
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
+        patch("app.orchestrator.dify_client") as mock_dify,
+    ):
+        mock_repo.get_document.return_value = _make_document()
+        mock_storage.download_file.return_value = b"%PDF-1.4 fake bytes"
+        mock_ingest.side_effect = RuntimeError("ocr engine crashed")
+
+        await orchestrator.process_document("doc-1")
+
+        args, kwargs = mock_repo.update_status.call_args
+        assert args[1] == DocumentStatus.FAILED
+        assert "Text extraction failed" in kwargs["failure_reason"]
+        mock_dify.run_chatflow_with_retry.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_ingestion_needs_review_logs_warning(caplog: pytest.LogCaptureFixture) -> None:
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository"),
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
+        patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status"),
+    ):
+        mock_repo.get_document.return_value = _make_document()
+        mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest)
+        mock_ingest.return_value["needs_review"] = True
+        mock_ingest.return_value["extraction_method"] = "ocr"
+        mock_dify.run_chatflow_with_retry = AsyncMock(
+            return_value=_chat_output(document_type="payslip", confidence=0.9, needs_manual_review=False)
+        )
+        mock_dify.run_workflow_with_retry = AsyncMock(
+            return_value=_extraction_output(extracted_fields={"individual_name": "Jane Tan"})
+        )
+
+        with caplog.at_level(logging.WARNING, logger="classifier_pipeline.orchestrator"):
+            await orchestrator.process_document("doc-1")
+
+        assert any("needs_review" in record.message for record in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_empty_extracted_text_after_classification_marks_failed() -> None:
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository"),
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
+        patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status"),
+    ):
+        mock_repo.get_document.return_value = _make_document()
+        mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest, raw_text="   ")
+        mock_dify.run_chatflow_with_retry = AsyncMock(
+            return_value=_chat_output(document_type="payslip", confidence=0.9, needs_manual_review=False)
+        )
+
+        await orchestrator.process_document("doc-1")
+
+        args, kwargs = mock_repo.update_status.call_args
+        assert args[1] == DocumentStatus.FAILED
+        assert kwargs["failure_reason"] == "Extraction produced no usable text"
+        assert kwargs["document_type"] == "payslip"
+        mock_dify.run_workflow_with_retry.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_escalation_reclassification_invocation_failure_marks_failed() -> None:
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository"),
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
+        patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status"),
+    ):
+        mock_repo.get_document.return_value = _make_document()
+        mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest)
+        mock_dify.run_chatflow_with_retry = AsyncMock(
+            side_effect=[
+                _chat_output(document_type="payslip", confidence=0.9, needs_manual_review=False),
+                DifyInvocationError("network blip"),
+            ]
+        )
+        mock_dify.run_workflow_with_retry = AsyncMock(
+            return_value=_extraction_output(escalation={"reason": "doesn't fit"})
+        )
+
+        await orchestrator.process_document("doc-1")
+
+        args, kwargs = mock_repo.update_status.call_args
+        assert args[1] == DocumentStatus.FAILED
+        assert "Re-classification invocation failed" in kwargs["failure_reason"]
+
+
+@pytest.mark.asyncio
+async def test_escalation_extraction_invocation_failure_marks_failed() -> None:
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository"),
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
+        patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status"),
+    ):
+        mock_repo.get_document.return_value = _make_document()
+        mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest)
+        mock_dify.run_chatflow_with_retry = AsyncMock(
+            side_effect=[
+                _chat_output(document_type="payslip", confidence=0.9, needs_manual_review=False),
+                _chat_output(document_type="list_of_loans", confidence=0.85, needs_manual_review=False),
+            ]
+        )
+        mock_dify.run_workflow_with_retry = AsyncMock(
+            side_effect=[
+                _extraction_output(escalation={"reason": "doesn't fit"}),
+                DifyInvocationError("network blip"),
+            ]
+        )
+
+        await orchestrator.process_document("doc-1")
+
+        args, kwargs = mock_repo.update_status.call_args
+        assert args[1] == DocumentStatus.FAILED
+        assert "Extraction invocation failed" in kwargs["failure_reason"]
+        assert kwargs["document_type"] == "list_of_loans"
+
+
+@pytest.mark.asyncio
+async def test_run_extraction_unknown_schema_returns_escalation() -> None:
+    # document_type made it past classification (e.g. the Classifier
+    # returned some string outside KNOWN_DOCUMENT_TYPES with high
+    # confidence) but there's no extraction schema for it — this shouldn't
+    # crash, it should escalate back to the classifier like any other
+    # extraction-side objection.
+    document = _make_document()
+
+    with patch("app.orchestrator.storage_service") as mock_storage:
+        mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+
+        result = await orchestrator._run_extraction("doc-1", document, "not_a_real_type", "some text")
+
+    assert result["extracted_fields"] == {}
+    assert result["field_confidences"] == {}
+    assert result["confidence"] == 0.0
+    assert "No extraction schema defined" in result["escalation"]["reason"]
+
+
+def test_unwrap_workflow_output_malformed_shape_falls_back() -> None:
+    result = orchestrator._unwrap_workflow_output({"unexpected": "shape"})
+
+    assert result == {"needs_manual_review": True}
+
+
+def test_unwrap_chatflow_output_invalid_json_answer_falls_back_to_manual_review() -> None:
+    result = orchestrator._unwrap_chatflow_output(
+        {"answer": "not json at all", "conversation_id": "conv-9"}
+    )
+
+    assert result == {"needs_manual_review": True, "conversation_id": "conv-9"}
+
+
+def test_unwrap_chatflow_output_invalid_confidence_defaults_to_zero() -> None:
+    answer = json.dumps(
+        {"document_type": "payslip", "confidence": "very confident", "needs_manual_review": False}
+    )
+
+    result = orchestrator._unwrap_chatflow_output({"answer": answer})
+
+    assert result["confidence"] == 0.0
+
+
+def test_reconsideration_query_default_phrasing() -> None:
+    query = orchestrator._reconsideration_query("looks off", [])
+
+    assert query.startswith("Extraction judged your classification incorrect: looks off")
+    assert "Evidence" not in query
+
+
+def test_reconsideration_query_with_suggested_document_type() -> None:
+    query = orchestrator._reconsideration_query("reads like a loan letter", [], "list_of_loans")
+
+    assert "may actually be a list_of_loans" in query
+
+
+def test_reconsideration_query_with_evidence_lists_bullets() -> None:
+    query = orchestrator._reconsideration_query("doesn't fit", ["Term Loan", "Facility Details"])
+
+    assert "- Term Loan" in query
+    assert "- Facility Details" in query

@@ -42,6 +42,36 @@ def test_stuck_documents_includes_uploaded_status() -> None:
     assert DocumentStatus.UPLOADED in called_statuses
 
 
+def test_stuck_documents_skips_candidates_not_yet_over_threshold() -> None:
+    # get_documents_in_status returns every UPLOADED/QUEUED/PROCESSING
+    # document regardless of age — get_stuck_documents itself is what
+    # filters out ones that just haven't crossed STUCK_THRESHOLD_SECONDS yet.
+    stuck = DocumentRecord(
+        id="doc-stuck",
+        filename="statement.pdf",
+        storage_path="case-1/doc-stuck_statement.pdf",
+        status=DocumentStatus.PROCESSING,
+        uploaded_at=_old_timestamp(3600),
+    )
+    fresh = DocumentRecord(
+        id="doc-fresh",
+        filename="statement.pdf",
+        storage_path="case-1/doc-fresh_statement.pdf",
+        status=DocumentStatus.PROCESSING,
+        uploaded_at=_old_timestamp(1),
+    )
+
+    with patch("app.monitoring.document_repository") as mock_repo:
+        mock_repo.get_documents_in_status.return_value = [fresh, stuck]
+
+        response = client.get("/documents/monitoring/stuck")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["id"] == "doc-stuck"
+
+
 def test_stuck_documents_db_failure_returns_502() -> None:
     with patch("app.monitoring.document_repository") as mock_repo:
         mock_repo.get_documents_in_status.side_effect = RuntimeError("connection refused")
