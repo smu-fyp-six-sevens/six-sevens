@@ -9,7 +9,7 @@ import {
 } from 'react-router-dom';
 
 import CaseQueuePage from './pages/CaseQueuePage';
-import ExtractionTestPage from './pages/ExtractionTestPage';
+import SpellingAnomalyTestPage from './pages/SpellingAnomalyTestPage';
 import UploadPage from './pages/UploadPage';
 import CreateCasePage from './pages/CreateCasePage';
 import DocumentDetailsPage from './pages/DocumentDetailsPage';
@@ -65,7 +65,7 @@ function CaseQueueRoute({
       onOpenCase={(selectedCase) =>
         navigate(`/cases/${selectedCase.caseNumber ?? selectedCase.id}`)
       }
-      onOpenExtractionTest={() => navigate('/test-extraction')}
+      onOpenSpellingAnomalyTest={() => navigate('/test-spelling-anomalies')}
       onCreateCase={() => navigate('/create-case')}
     />
   );
@@ -168,11 +168,11 @@ function CreateCaseRoute({
   );
 }
 
-function ExtractionTestRoute() {
+function SpellingAnomalyTestRoute() {
   const navigate = useNavigate();
 
   return (
-    <ExtractionTestPage
+    <SpellingAnomalyTestPage
       onBack={() => navigate('/cases')}
     />
   );
@@ -210,6 +210,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAuthed, setIsAuthed] = useState(() => getToken() !== null);
+  const [showSpellingAnomalyTest, setShowSpellingAnomalyTest] = useState(false);
 
   async function loadCases(signal?: AbortSignal) {
     setIsLoading(true);
@@ -270,6 +271,11 @@ export default function App() {
 
     return () => controller.abort();
   }, [isAuthed]);
+
+  if (showSpellingAnomalyTest) {
+    return <SpellingAnomalyTestPage onBack={() => setShowSpellingAnomalyTest(false)} />;
+  }
+
 
   return (
     <BrowserRouter>
@@ -341,10 +347,10 @@ export default function App() {
         />
 
         <Route
-          path="/test-extraction"
+          path="/test-spelling-anomalies"
           element={
             <RequireAuth isAuthed={isAuthed}>
-              <ExtractionTestRoute />
+              <SpellingAnomalyTestRoute />
             </RequireAuth>
           }
         />

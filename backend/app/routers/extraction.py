@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
 
 from ..config import settings
+from ..fraud_detection.spelling_anomaly import SpellingAnomalyResult, check_spelling_anomalies
 from ..ingestion.ingestion_service import ingest_document
 from ..models import ExtractionTestResponse
 
@@ -13,16 +15,7 @@ router = APIRouter(prefix="/extraction", tags=["extraction"])
 logger = logging.getLogger(__name__)
 
 
-@router.post("/test", response_model=ExtractionTestResponse)
-async def test_extraction(file: UploadFile = File(...)) -> ExtractionTestResponse:
-    """
-    Dev/QA endpoint: runs just the raw-text extraction step (native PDF
-    text, OCR fallback for scanned PDFs, or straight OCR for images) on an
-    uploaded file and returns the result directly. Bypasses Supabase
-    storage, the document queue, and Dify entirely — this exists so the
-    extraction stage can be eyeballed on its own before it ever reaches
-    classification/LLM extraction.
-    """
+async def _read_and_validate_upload(file: UploadFile) -> bytes:
     if file.content_type not in settings.ALLOWED_CONTENT_TYPES:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
@@ -46,6 +39,21 @@ async def test_extraction(file: UploadFile = File(...)) -> ExtractionTestRespons
             detail=f"File exceeds {settings.MAX_FILE_SIZE_BYTES} byte limit",
         )
 
+    return file_bytes
+
+
+@router.post("/test", response_model=ExtractionTestResponse)
+async def test_extraction(file: UploadFile = File(...)) -> ExtractionTestResponse:
+    """
+    Dev/QA endpoint: runs just the raw-text extraction step (native PDF
+    text, OCR fallback for scanned PDFs, or straight OCR for images) on an
+    uploaded file and returns the result directly. Bypasses Supabase
+    storage, the document queue, and Dify entirely — this exists so the
+    extraction stage can be eyeballed on its own before it ever reaches
+    classification/LLM extraction.
+    """
+    file_bytes = await _read_and_validate_upload(file)
+
     try:
         result = await asyncio.to_thread(
             ingest_document, file_bytes, file.filename, file.content_type
@@ -58,3 +66,23 @@ async def test_extraction(file: UploadFile = File(...)) -> ExtractionTestRespons
         ) from exc
 
     return ExtractionTestResponse(**result)
+
+
+@router.post("/test-spelling-anomaly", response_model=SpellingAnomalyResult)
+async def test_spelling_anomaly(file: UploadFile = File(...)) -> SpellingAnomalyResult:
+    """
+    Dev/QA endpoint, same spirit as /test above: runs the spelling-anomaly
+    check (see fraud_detection.spelling_anomaly) on an uploaded file and
+    returns the result directly — no case, no persisted document, and
+    (unlike the real GET /documents/{id}/detection/spelling-anomaly
+    endpoint) nothing written to the flags table, since there's no real
+    document_id/case_id to attach a flag to here. Also runs without any
+    extracted_fields to cross-reference against (there's no real document
+    to have extracted anything from), so it'll flag more proper nouns here
+    than the real endpoint would for the same file.
+    """
+    file_bytes = await _read_and_validate_upload(file)
+
+    # A random id purely for log messages inside check_spelling_anomalies —
+    # no document exists to key it to here.
+    return await check_spelling_anomalies(str(uuid.uuid4()), file_bytes, file.filename)
