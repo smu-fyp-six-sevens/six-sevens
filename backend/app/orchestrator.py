@@ -394,11 +394,21 @@ def _parse_extraction_output(llm_output: str) -> dict:
         parsed = json.loads(cleaned)
     except json.JSONDecodeError:
         logger.error("Extraction LLM returned non-JSON output: %r", llm_output[:500])
+        # The model's prose often still contains the real finding (e.g. "no
+        # individual_name present on this document") even though it failed
+        # to wrap that in the required JSON — surfacing an excerpt here
+        # (rather than a fixed, contentless message) is what actually
+        # reaches the reclassification retry via _reconsideration_query and
+        # the eventual FAILED reason, instead of both saying nothing more
+        # than "parsing failed".
+        excerpt = (cleaned or llm_output).strip()[:500]
         return {
             "extracted_fields": {},
             "field_confidences": {},
             "confidence": 0.0,
-            "escalation": {"reason": "Extraction produced unparsable output"},
+            "escalation": {
+                "reason": f"Extraction did not return valid JSON. Its response was: {excerpt}"
+            },
         }
 
     raw_fields = parsed.get("extracted_fields", {})

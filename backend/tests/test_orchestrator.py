@@ -668,6 +668,20 @@ def test_parse_extraction_output_malformed_json_returns_escalation() -> None:
     assert result["escalation"] is not None
 
 
+def test_parse_extraction_output_malformed_json_escalation_includes_model_text() -> None:
+    # The model's prose often still contains its actual finding (e.g. "no
+    # individual_name present") even when it fails to wrap that in JSON —
+    # the escalation reason needs to carry that excerpt through rather than
+    # a fixed, contentless message, since it's what the reclassification
+    # retry (_reconsideration_query) and the eventual FAILED reason both
+    # read from.
+    result = orchestrator._parse_extraction_output(
+        "Missing fields: individual_name is not present on this document."
+    )
+
+    assert "individual_name is not present" in result["escalation"]["reason"]
+
+
 def test_parse_extraction_output_strips_reasoning_model_think_block() -> None:
     # DeepSeek-style reasoning models prepend a <think>...</think> block of
     # chain-of-thought before the actual JSON answer.
