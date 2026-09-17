@@ -131,6 +131,25 @@ class ProofOfAddressCoverage(BaseModel):
     unmatched_names: list[str] = Field(default_factory=list)
 
 
+class IdDocumentCoverage(BaseModel):
+    """
+    How many of the case's identified individuals (grouped the same way as
+    proof_of_address_coverage — by id_number, falling back to name) have a
+    complete id_document (front+back matched by id_number, or a
+    self-contained single capture) on file, out of how many identities have
+    been identified at all. total=0 means no id_document has been accepted
+    yet — see mapper.compute_id_document_identity_progress.
+    """
+
+    covered: int
+    total: int
+    # "front" or "back" — whichever side is still missing — only populated
+    # when there's exactly one identity in the case; with more than one, a
+    # single hint can't describe each person's own gap. See
+    # mapper.compute_id_document_missing_side.
+    missing_side: Optional[str] = None
+
+
 class CaseSummary(CaseRecord):
     """
     documents_status and fulfilled_requirements are both computed live from
@@ -146,6 +165,9 @@ class CaseSummary(CaseRecord):
     fulfilled_requirements: list[str] = Field(default_factory=list)
     proof_of_address_coverage: ProofOfAddressCoverage = Field(
         default_factory=lambda: ProofOfAddressCoverage(covered=0, total=0)
+    )
+    id_document_coverage: IdDocumentCoverage = Field(
+        default_factory=lambda: IdDocumentCoverage(covered=0, total=0)
     )
 
 

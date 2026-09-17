@@ -59,7 +59,13 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # are rendered on both NRIC and passport, only address is subtype-
         # dependent.
         "required": ["individual_name", "id_number", "date_of_birth", "nationality"],
-        "additional": ["individual_address"],
+        # document_side isn't rendered by doc_gen_scripts (those only ever
+        # generate a single front-style page) — it's here for real-world
+        # uploads, where an NRIC's front and back are commonly two separate
+        # photos. See EXTRA_FIELD_GUIDANCE below: when this is "back", the
+        # required individual_name being absent is expected, not evidence
+        # the classification is wrong.
+        "additional": ["individual_address", "document_side"],
     },
     "fatca_crs_declaration": {
         # docgen_fatca_crs.py.build_personas hardcodes more than the
@@ -109,10 +115,17 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # powers, meeting procedures, etc.) — capturing a summary avoids
         # extraction reducing a whole constitution down to just its
         # identity/share fields and discarding everything else.
+        #
+        # "subscribers" (not individual_name/individual_address/id_number):
+        # the holders list is a list, always with at least one entry, often
+        # more — flat singular fields forced the model to either drop every
+        # subscriber but one or squash them into one joined string (e.g.
+        # "Ho Chloe; Vikram s/o Ramesh"), which then can't be matched back
+        # to either person's own id_document identity (see
+        # mapper._named_addresses_from_document, which reads this array).
         "required": [
             "company_name", "uen", "incorporation_date", "company_address",
-            "individual_name", "individual_address", "id_number",
-            "share_capital", "issued_shares",
+            "share_capital", "issued_shares", "subscribers",
         ],
         "additional": ["company_type", "notes"],
     },
@@ -137,10 +150,19 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # borrowings, share capital), each with an explanatory NOTE_DEFS
         # note — summarising the headline figures + notes avoids reducing a
         # whole financial statement down to just company_name/uen.
+        #
+        # Not doc_gen-verified: a personal brokerage/investment account
+        # statement (e.g. Moomoo, a margin account) is just as legitimate a
+        # source_of_wealth document as a company financial statement, but
+        # has no company_name/uen at all — see EXTRA_FIELD_GUIDANCE below,
+        # which tells the model not to escalate on that basis alone when
+        # it's clearly this individual-account variant instead.
         "required": ["company_name", "uen"],
         "additional": [
-            "individual_name", "revenue", "net_profit", "total_assets",
-            "total_liabilities", "share_capital", "notes",
+            "individual_name", "individual_address", "revenue", "net_profit",
+            "total_assets", "total_liabilities", "share_capital", "notes",
+            "broker_name", "account_number", "account_holder_name",
+            "cash_balance", "portfolio_value", "net_asset_value", "holdings",
         ],
     },
     "credit_report": {
@@ -219,6 +241,40 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
 # spells out the exact per-item keys for that field, grounded in what the
 # matching doc_gen_scripts generator actually renders.
 EXTRA_FIELD_GUIDANCE: dict[str, str] = {
+    "company_constitution": (
+        'For "subscribers", its "value" should be an array of objects — '
+        "one per subscriber/shareholder/director named in the "
+        'constitution — each with these keys: "name", "address" (their '
+        'residential address as shown, or null if not given), "id_number" '
+        '(their NRIC/passport number as shown, or null if not given), and '
+        '"shares" (numeric, the number of shares this subscriber holds, or '
+        "null if not shown). Extract each subscriber as a SEPARATE entry "
+        "in this array — never combine multiple people's names, addresses, "
+        'or id_numbers into one joined string (e.g. never "Jane Tan; John '
+        'Lim" as a single name value) — that makes it impossible to tell '
+        "the individuals apart afterwards. Include every subscriber you "
+        "can find, even if some of their fields are null."
+    ),
+    "id_document": (
+        'For "document_side", its "value" should be one of "front", '
+        '"back", "single", or "unknown". FRONT typically shows a face '
+        "photo and the person's name (plus usually date of birth); BACK "
+        "typically shows a residential address, thumbprint, and/or issue "
+        'date, with no name or photo. Use "single" instead when the '
+        "document is self-contained and has no separate other side to "
+        "expect at all — a passport's bio page, or a single image that "
+        "already shows both the identity details and the address in one "
+        "capture. Judge this from what's actually visible, not from which "
+        "fields happen to be present elsewhere in your answer.\n\n"
+        'If you determine document_side is "back", do NOT escalate '
+        "solely because individual_name (a REQUIRED field above) is "
+        "absent — a name not being visible on the back of an ID is "
+        "expected and normal, not evidence the classification is wrong. "
+        "Still escalate if the text doesn't look like any part of an ID "
+        "document at all, or if id_number is also absent on what you've "
+        "judged to be the back (id_number should still be present when "
+        "it's genuinely the back of a Singapore NRIC)."
+    ),
     "bank_statement": (
         'For "transactions", its "value" should be an array of objects — one per '
         'transaction line visible in the statement — each with these keys: "date" '
@@ -250,7 +306,23 @@ EXTRA_FIELD_GUIDANCE: dict[str, str] = {
         '"note_number" (as shown, e.g. "3"), "heading" (e.g. "PROPERTY, PLANT '
         'AND EQUIPMENT"), and "text" (the note\'s explanatory wording, not the '
         "figures already captured elsewhere). Include every numbered note you "
-        "can find."
+        "can find. Only applies to a company financial statement — see below "
+        "for the other kind of source_of_wealth document.\n\n"
+        "A personal brokerage/investment account statement (e.g. a margin "
+        "account, a securities portfolio statement) is just as legitimate a "
+        "source_of_wealth document as a company financial statement, but "
+        "belongs to an individual rather than a company — it will have no "
+        "company_name or uen at all, and that absence is expected, NOT "
+        "evidence the classification is wrong. If the text is clearly this "
+        "kind of document, do not escalate just because company_name/uen "
+        "(REQUIRED fields above) are missing; instead extract whichever of "
+        'these apply: "broker_name", "account_number", "account_holder_name" '
+        '(the individual\'s name), "cash_balance", "portfolio_value", '
+        '"net_asset_value". For "holdings", its "value" should be an array '
+        'of objects — one per position held — each with these keys: "name", '
+        '"symbol", "quantity", "closing_price", and "market_value" (in '
+        "whatever currency the statement shows — include a separate "
+        '"currency" key if stated). Include every holding you can find.'
     ),
     "list_of_loans": (
         'For "loan_terms", its "value" should be an array of objects — one per '

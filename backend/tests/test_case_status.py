@@ -120,7 +120,16 @@ def test_single_document_can_fulfil_multiple_requirements() -> None:
             classification_outcome=ClassificationOutcome.ACCEPTED,
             document_type="id_document",
             fulfilled_requirements=["id_document", "proof_of_address"],
-            extracted_fields={"individual_name": "Jane Tan", "individual_address": "1 Main St"},
+            extracted_fields={
+                "individual_name": "Jane Tan",
+                "individual_address": "1 Main St",
+                # Self-contained (a single combined capture) rather than
+                # "front"/"back" — this test is about one document fulfilling
+                # two *different* requirement types at once, not about the
+                # front/back completeness mechanic (see
+                # mapper.compute_id_document_side_coverage).
+                "document_side": "single",
+            },
         )
     ]
     fulfilled, missing = compute_requirement_coverage(documents)
@@ -154,12 +163,102 @@ def test_passport_does_not_fulfil_proof_of_address() -> None:
             classification_outcome=ClassificationOutcome.ACCEPTED,
             document_type="id_document",
             fulfilled_requirements=["id_document"],
-            extracted_fields={"individual_name": "Jane Tan", "individual_address": None},
+            extracted_fields={
+                "individual_name": "Jane Tan",
+                "individual_address": None,
+                # A passport's bio page is self-contained — there's no
+                # separate "back" to wait for, unlike an NRIC.
+                "document_side": "single",
+            },
         )
     ]
     fulfilled, missing = compute_requirement_coverage(documents)
     assert "id_document" in fulfilled
     assert "proof_of_address" in missing
+
+
+def test_id_document_back_only_does_not_fulfil_requirement() -> None:
+    """The back of an NRIC alone isn't a complete identity document."""
+    documents = [
+        _make_document(
+            "doc-1",
+            DocumentStatus.ANALYZED,
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            document_type="id_document",
+            fulfilled_requirements=["id_document"],
+            extracted_fields={"id_number": "S8905952H", "document_side": "back"},
+        )
+    ]
+    fulfilled, missing = compute_requirement_coverage(documents)
+    assert "id_document" not in fulfilled
+    assert "id_document" in missing
+
+
+def test_id_document_front_and_back_together_fulfil_requirement() -> None:
+    documents = [
+        _make_document(
+            "doc-1",
+            DocumentStatus.ANALYZED,
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            document_type="id_document",
+            fulfilled_requirements=["id_document"],
+            # Same id_number as doc-2 — same NRIC, two separate photos of
+            # the same identity. Without a matching id_number these would
+            # register as two different (each incomplete) identities — see
+            # test_id_document_two_different_people_half_complete_each_does_not_fulfil
+            # below for that exact case.
+            extracted_fields={
+                "individual_name": "Jane Tan",
+                "id_number": "S8905952H",
+                "document_side": "front",
+            },
+        ),
+        _make_document(
+            "doc-2",
+            DocumentStatus.ANALYZED,
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            document_type="id_document",
+            fulfilled_requirements=["id_document"],
+            extracted_fields={"id_number": "S8905952H", "document_side": "back"},
+        ),
+    ]
+    fulfilled, missing = compute_requirement_coverage(documents)
+    assert "id_document" in fulfilled
+    assert "id_document" not in missing
+
+
+def test_id_document_two_different_people_half_complete_each_does_not_fulfil() -> None:
+    """
+    Regression test for the reported bug: person A's back and person B's
+    front both being present must not combine into a false "complete" —
+    each is a distinct identity (different id_number) and neither one's
+    own ID document is actually complete.
+    """
+    documents = [
+        _make_document(
+            "doc-1",
+            DocumentStatus.ANALYZED,
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            document_type="id_document",
+            fulfilled_requirements=["id_document"],
+            extracted_fields={"id_number": "S8905952H", "document_side": "back"},
+        ),
+        _make_document(
+            "doc-2",
+            DocumentStatus.ANALYZED,
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            document_type="id_document",
+            fulfilled_requirements=["id_document"],
+            extracted_fields={
+                "individual_name": "Bryan Lim",
+                "id_number": "T0123456A",
+                "document_side": "front",
+            },
+        ),
+    ]
+    fulfilled, missing = compute_requirement_coverage(documents)
+    assert "id_document" not in fulfilled
+    assert "id_document" in missing
 
 
 def test_proof_of_address_requires_coverage_for_every_identity() -> None:
@@ -274,7 +373,11 @@ def _make_fully_covered_documents() -> list[DocumentRecord]:
             document_type=requirement,
             fulfilled_requirements=[requirement],
             extracted_fields=(
-                {"individual_name": "Jane Tan", "individual_address": "1 Main St"}
+                {
+                    "individual_name": "Jane Tan",
+                    "individual_address": "1 Main St",
+                    "document_side": "single",
+                }
                 if requirement == "id_document"
                 else None
             ),

@@ -3,6 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from app.mapper import (
+    compute_id_document_identity_coverage,
+    compute_id_document_identity_progress,
+    compute_id_document_missing_side,
     compute_identity_proof_of_address_progress,
     compute_unmatched_proof_of_address_names,
 )
@@ -374,3 +377,226 @@ def test_unmatched_names_ignores_manual_review_documents() -> None:
         ),
     ]
     assert compute_unmatched_proof_of_address_names(documents) == []
+
+
+def test_constitution_subscribers_match_each_persons_own_identity_separately() -> None:
+    """
+    Regression test: a company_constitution naming multiple subscribers
+    must match each person against their OWN id_document identity
+    individually — not get squashed into one joined name/address that
+    matches neither (the original bug: "Ho Chloe; Vikram s/o Ramesh" as one
+    string matched no one, even though both people had their own accepted
+    id_document on file).
+    """
+    documents = [
+        _make_document(
+            "doc-1",
+            document_type="id_document",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"individual_name": "Ho Chloe", "id_number": "S8905952H"},
+        ),
+        _make_document(
+            "doc-2",
+            document_type="id_document",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"individual_name": "Vikram s/o Ramesh", "id_number": "E8762066G"},
+        ),
+        _make_document(
+            "doc-3",
+            document_type="company_constitution",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={
+                "subscribers": [
+                    {
+                        "name": "Ho Chloe",
+                        "address": "33 Geylang East Avenue, #06-62, Singapore 843612",
+                        "id_number": "S8905952H",
+                        "shares": 6000,
+                    },
+                    {
+                        "name": "Vikram s/o Ramesh",
+                        "address": "39 Spottiswoode Park Road, #03-66, Singapore 737187",
+                        "id_number": "S8415726A",
+                        "shares": 4000,
+                    },
+                ],
+            },
+        ),
+    ]
+    assert compute_identity_proof_of_address_progress(documents) == (2, 2)
+    assert compute_unmatched_proof_of_address_names(documents) == []
+
+
+def test_constitution_subscriber_without_own_id_document_shows_as_unmatched() -> None:
+    documents = [
+        _make_document(
+            "doc-1",
+            document_type="id_document",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"individual_name": "Ho Chloe", "id_number": "S8905952H"},
+        ),
+        _make_document(
+            "doc-2",
+            document_type="company_constitution",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={
+                "subscribers": [
+                    {"name": "Ho Chloe", "address": "33 Geylang East Ave", "id_number": "S8905952H"},
+                    {"name": "Ow Fook Chuen", "address": "68 Circular Road", "id_number": "S1234567A"},
+                ],
+            },
+        ),
+    ]
+    # Ho Chloe matches her own id_document; Ow Fook Chuen has no
+    # id_document in the case at all, so surfaces as unmatched rather than
+    # silently vanishing or being conflated with Ho Chloe.
+    assert compute_unmatched_proof_of_address_names(documents) == ["Ow Fook Chuen"]
+
+
+def test_constitution_subscribers_never_create_a_new_identity() -> None:
+    """
+    Identities come only from id_document uploads — a constitution naming
+    someone (with their own id_number, even) must never itself count as
+    "1 identity" or as fulfilling id_document; it can only match an
+    identity an actual id_document already established.
+    """
+    documents = [
+        _make_document(
+            "doc-1",
+            document_type="company_constitution",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={
+                "subscribers": [
+                    {"name": "Ho Chloe", "address": "33 Geylang East Ave", "id_number": "S8905952H"},
+                ],
+            },
+        ),
+    ]
+    assert compute_identity_proof_of_address_progress(documents) == (0, 0)
+    assert compute_id_document_identity_progress(documents) == (0, 0)
+
+
+def test_id_document_identity_progress_zero_with_no_id_documents() -> None:
+    assert compute_id_document_identity_progress([]) == (0, 0)
+
+
+def test_id_document_identity_progress_one_identity_only_back_uploaded() -> None:
+    documents = [
+        _make_document(
+            "doc-1",
+            document_type="id_document",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"id_number": "S8905952H", "document_side": "back"},
+        ),
+    ]
+    assert compute_id_document_identity_progress(documents) == (0, 1)
+    assert compute_id_document_missing_side(documents) == "front"
+
+
+def test_id_document_identity_progress_covered_once_same_identity_has_both_sides() -> None:
+    """Front and back matched by the same id_number — same NRIC, two photos."""
+    documents = [
+        _make_document(
+            "doc-1",
+            document_type="id_document",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={
+                "individual_name": "Amanda Koh",
+                "id_number": "S8905952H",
+                "document_side": "front",
+            },
+        ),
+        _make_document(
+            "doc-2",
+            document_type="id_document",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"id_number": "S8905952H", "document_side": "back"},
+        ),
+    ]
+    assert compute_id_document_identity_progress(documents) == (1, 1)
+    assert compute_id_document_missing_side(documents) is None
+
+
+def test_id_document_two_different_identities_half_complete_each_does_not_combine() -> None:
+    """
+    The bug this was written to catch: person A's back and person B's front
+    both being present in the case must NOT read as one complete pair —
+    each is a distinct identity (different id_number), and neither one's
+    own ID document is complete on its own.
+    """
+    documents = [
+        _make_document(
+            "doc-1",
+            document_type="id_document",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"id_number": "S8905952H", "document_side": "back"},
+        ),
+        _make_document(
+            "doc-2",
+            document_type="id_document",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={
+                "individual_name": "Bryan Lim",
+                "id_number": "T0123456A",
+                "document_side": "front",
+            },
+        ),
+    ]
+    assert compute_id_document_identity_progress(documents) == (0, 2)
+    assert compute_id_document_identity_coverage(documents) is False
+    # More than one identity in play — a single hint can't describe both
+    # people's own gap, so this deliberately returns nothing rather than a
+    # misleading single answer.
+    assert compute_id_document_missing_side(documents) is None
+
+
+def test_id_document_two_backs_for_same_identity_still_incomplete() -> None:
+    documents = [
+        _make_document(
+            "doc-1",
+            document_type="id_document",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"id_number": "S8905952H", "document_side": "back"},
+        ),
+        _make_document(
+            "doc-2",
+            document_type="id_document",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"id_number": "S8905952H", "document_side": "back"},
+        ),
+    ]
+    assert compute_id_document_identity_progress(documents) == (0, 1)
+
+
+def test_id_document_identity_progress_ignores_manual_review_and_unknown_side() -> None:
+    documents = [
+        _make_document(
+            "doc-1",
+            document_type="id_document",
+            classification_outcome=ClassificationOutcome.MANUAL_REVIEW,
+            extracted_fields={"id_number": "S8905952H", "document_side": "front"},
+        ),
+        _make_document(
+            "doc-2",
+            document_type="id_document",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"id_number": "T0123456A", "document_side": "unknown"},
+        ),
+    ]
+    assert compute_id_document_identity_progress(documents) == (0, 1)
+
+
+def test_id_document_single_capture_is_immediately_complete() -> None:
+    """A passport bio page (or a combined single scan) needs no counterpart."""
+    documents = [
+        _make_document(
+            "doc-1",
+            document_type="id_document",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"individual_name": "Amanda Koh", "document_side": "single"},
+        ),
+    ]
+    assert compute_id_document_identity_progress(documents) == (1, 1)
+    assert compute_id_document_identity_coverage(documents) is True
+
+

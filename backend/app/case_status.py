@@ -5,6 +5,9 @@ from typing import Optional
 
 from . import case_repository, document_repository
 from .mapper import (
+    compute_id_document_identity_coverage,
+    compute_id_document_identity_progress,
+    compute_id_document_missing_side,
     compute_identity_proof_of_address_coverage,
     compute_identity_proof_of_address_progress,
     compute_unmatched_proof_of_address_names,
@@ -17,6 +20,7 @@ from .models import (
     DocumentRecord,
     DocumentStatus,
     DocumentType,
+    IdDocumentCoverage,
     ProofOfAddressCoverage,
 )
 from .monitoring import is_stuck
@@ -68,6 +72,17 @@ def compute_requirement_coverage(documents: list[DocumentRecord]) -> tuple[list[
     else:
         fulfilled.discard(proof_of_address)
 
+    # Same idea for id_document: it requires every identified individual's
+    # own ID to be complete (front+back, matched by id_number — not just
+    # any front and any back existing somewhere in the case), mirroring
+    # proof_of_address's own per-identity requirement above. See
+    # compute_id_document_identity_coverage.
+    id_document = DocumentType.ID_DOCUMENT.value
+    if compute_id_document_identity_coverage(documents):
+        fulfilled.add(id_document)
+    else:
+        fulfilled.discard(id_document)
+
     return (
         [req for req in REQUIRED_DOCUMENT_TYPES if req in fulfilled],
         [req for req in REQUIRED_DOCUMENT_TYPES if req not in fulfilled],
@@ -103,6 +118,8 @@ def build_summary(case, documents: list[DocumentRecord]) -> CaseSummary:
     fulfilled, missing = compute_requirement_coverage(documents)
     covered, total = compute_identity_proof_of_address_progress(documents)
     unmatched_names = compute_unmatched_proof_of_address_names(documents)
+    id_covered, id_total = compute_id_document_identity_progress(documents)
+    id_missing_side = compute_id_document_missing_side(documents)
     data = case.model_dump()
     data["recommended_additional_documents"] = missing
     return CaseSummary(
@@ -111,6 +128,9 @@ def build_summary(case, documents: list[DocumentRecord]) -> CaseSummary:
         fulfilled_requirements=fulfilled,
         proof_of_address_coverage=ProofOfAddressCoverage(
             covered=covered, total=total, unmatched_names=unmatched_names
+        ),
+        id_document_coverage=IdDocumentCoverage(
+            covered=id_covered, total=id_total, missing_side=id_missing_side
         ),
     )
 

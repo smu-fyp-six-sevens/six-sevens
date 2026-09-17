@@ -129,6 +129,11 @@ export default function UploadPage({
     total: number;
     unmatched_names: string[];
   }>({ covered: 0, total: 0, unmatched_names: [] });
+  const [idDocumentCoverage, setIdDocumentCoverage] = useState<{
+    covered: number;
+    total: number;
+    missing_side: string | null;
+  }>({ covered: 0, total: 0, missing_side: null });
   const [fieldDrafts, setFieldDrafts] = useState<Map<string, Record<string, string>>>(new Map());
   const [savingFields, setSavingFields] = useState<Set<string>>(new Set());
   const [saveFieldErrors, setSaveFieldErrors] = useState<Map<string, string>>(new Map());
@@ -167,6 +172,7 @@ export default function UploadPage({
       setDocumentDetails(new Map(documents.map((document) => [document.id, document])));
       setFulfilledRequirements(new Set(caseSummary.fulfilled_requirements));
       setProofOfAddressCoverage(caseSummary.proof_of_address_coverage);
+      setIdDocumentCoverage(caseSummary.id_document_coverage);
     });
     caseSocketRef.current = subscription;
 
@@ -749,6 +755,31 @@ export default function UploadPage({
                 ? proofOfAddressCoverage.unmatched_names
                 : [];
 
+              // id_document needs both a front and a back capture (see
+              // IdDocumentCoverage/compute_id_document_side_coverage) — an
+              // NRIC's back alone has no name or photo, so without this a
+              // back-only upload just silently sat unfulfilled with no
+              // indication why. Shown as a fraction once at least one side
+              // has been seen; the specific missing side is called out
+              // separately so it reads as "waiting on the front", not just
+              // "incomplete".
+              const isIdDocument = requirement.value === 'id_document';
+
+              const showIdProgress =
+                isIdDocument && idDocumentCoverage.total > 0;
+
+              // missing_side is only populated when there's exactly one
+              // identified individual in the case (see
+              // mapper.compute_id_document_missing_side) — with more than
+              // one identity, a single hint can't describe each person's
+              // own gap, so it falls back to just the fraction above.
+              const idDocumentHint =
+                isIdDocument && idDocumentCoverage.missing_side
+                  ? idDocumentCoverage.missing_side === 'front'
+                    ? 'Back photo present, front missing.'
+                    : 'Front photo present, back missing.'
+                  : null;
+
               return (
                 <li key={requirement.value}>
                   <div
@@ -767,6 +798,14 @@ export default function UploadPage({
                         {proofOfAddressCoverage.total})
                       </span>
                     )}
+
+                    {showIdProgress && (
+                      <span className="requirement-progress">
+                        {' '}
+                        ({idDocumentCoverage.covered}/
+                        {idDocumentCoverage.total})
+                      </span>
+                    )}
                   </div>
 
                   {unmatchedNames.length > 0 && (
@@ -774,6 +813,10 @@ export default function UploadPage({
                       Address on file but no matching ID uploaded:{' '}
                       {unmatchedNames.join(', ')}
                     </div>
+                  )}
+
+                  {idDocumentHint && (
+                    <div className="requirement-unmatched">{idDocumentHint}</div>
                   )}
                 </li>
               );

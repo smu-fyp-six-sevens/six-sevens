@@ -165,6 +165,14 @@ async def _process_document(document_id: str) -> None:
 
         attempts += 1
 
+    # Persisted regardless of whether the escalation above ever resolved:
+    # even when the document ends up FAILED, whatever fields Extraction
+    # actually found (address, name, amounts, ...) are real data pulled
+    # from the document — discarding them just because the *type* was
+    # never confidently resolved means manual review starts from a blank
+    # slate instead of what was already there. See _persist_extracted_fields.
+    await _persist_extracted_fields(document_id, classification["document_type"], extraction)
+
     if extraction.get("escalation"):
         await _fail(
             document_id,
@@ -174,18 +182,39 @@ async def _process_document(document_id: str) -> None:
         )
         return
 
-    # Persist extracted fields before marking ANALYZED — both the jsonb blob
-    # on documents (what the frontend currently reads) and the normalised
-    # one-row-per-field table (for querying/reporting on individual fields).
+    await asyncio.to_thread(
+        document_repository.update_status,
+        document_id,
+        DocumentStatus.ANALYZED,
+        document_type=classification["document_type"],
+    )
+    # A case's proof_of_address coverage can only become true once
+    # Extraction has run (see compute_fulfilled_requirements above), so this
+    # needs its own sync — the one in _finalise_classification runs too
+    # early to see it. Not needed on the FAILED path above: "unrecognised"
+    # (the only document_type a failed escalation can leave in place) isn't
+    # one of REQUIRED_DOCUMENT_TYPES, so it can never itself change case
+    # coverage regardless of what fields were extracted from it.
+    if document.case_id is not None:
+        await asyncio.to_thread(case_status.sync_submission_finalized, document.case_id)
+    logger.info("Document %s: classification+extraction complete", document_id)
+
+
+async def _persist_extracted_fields(document_id: str, document_type: str, extraction: dict) -> None:
+    """
+    Writes Extraction's output to both the jsonb blob on documents (what
+    the frontend currently reads) and the normalised one-row-per-field
+    table (for querying/reporting on individual fields) — shared by both
+    the ANALYZED and FAILED paths in _process_document, since a failed
+    escalation shouldn't discard whatever Extraction actually found.
+    """
     extracted_fields = extraction.get("extracted_fields", {})
     field_confidences = extraction.get("field_confidences", {})
     extraction_confidence = extraction.get("confidence", 0.0)
     # Recomputed here (not left as whatever Classification recorded) since
     # this is the point individual_address is actually known — an NRIC only
     # turns out to also fulfil proof_of_address once Extraction has run.
-    fulfilled_requirements = compute_fulfilled_requirements(
-        classification["document_type"], extracted_fields
-    )
+    fulfilled_requirements = compute_fulfilled_requirements(document_type, extracted_fields)
     await asyncio.to_thread(
         document_repository.update_extracted_fields,
         document_id,
@@ -199,22 +228,8 @@ async def _process_document(document_id: str) -> None:
         extracted_fields,
         field_confidences=field_confidences,
         default_confidence=extraction_confidence,
-        required_field_names=set(schema_field_names(classification["document_type"])),
+        required_field_names=set(schema_field_names(document_type)),
     )
-
-    await asyncio.to_thread(
-        document_repository.update_status,
-        document_id,
-        DocumentStatus.ANALYZED,
-        document_type=classification["document_type"],
-    )
-    # A case's proof_of_address coverage can only become true once
-    # Extraction has run (see compute_fulfilled_requirements above), so this
-    # needs its own sync — the one in _finalise_classification runs too
-    # early to see it.
-    if document.case_id is not None:
-        await asyncio.to_thread(case_status.sync_submission_finalized, document.case_id)
-    logger.info("Document %s: classification+extraction complete", document_id)
 
 
 async def _ingest_document_text(document_id: str, document) -> str:
@@ -532,34 +547,41 @@ async def _finalise_classification(document_id: str, case_id: str | None, classi
     overall requirement coverage) actually changes — both a document's
     first classification and a /retry reclassification land here.
 
-    Extraction always runs after this, regardless of outcome: a classification
-    that isn't accepted (no type, below the confidence threshold, or flagged
-    for manual review) is normalised to "unrecognised" and still goes to
-    Extraction under the general/loan-application field list (see
-    build_extraction_prompt) rather than failing the document outright — if
-    Extraction can actually tell what the document is from its content, it
-    escalates back to the Classifier (see extraction_prompts.
-    KNOWN_DOCUMENT_TYPES / _reconsideration_query) instead of the document
-    being permanently stuck on a bad first guess. classification_outcome
-    still records MANUAL_REVIEW for anything not accepted — this only
-    changes whether Extraction gets a chance to run, not whether the
-    document reads as confidently classified.
+    Extraction always runs after this, regardless of outcome. What type it
+    runs against depends on what the Classifier actually said: a genuinely
+    unnamed guess (no type at all) is normalised to "unrecognised" and goes
+    to Extraction under the general/loan-application field list (see
+    build_extraction_prompt) rather than failing the document outright.
+    But a *named*, just-unconfident guess (e.g. "source_of_wealth" at 0.6,
+    below CLASSIFICATION_CONFIDENCE_THRESHOLD) is kept as-is rather than
+    also being flattened to "unrecognised" — Extraction then runs against
+    that type's own specific schema straight away instead of the generic
+    one, which is both a better starting point than a blank guess and lets
+    the frontend show what the Classifier actually thinks this is instead
+    of a blanket "unrecognised". Either way, if Extraction can actually
+    tell what the document is from its content, it escalates back to the
+    Classifier (see extraction_prompts.KNOWN_DOCUMENT_TYPES /
+    _reconsideration_query) instead of the document being permanently
+    stuck on a bad first guess. classification_outcome still records
+    MANUAL_REVIEW for anything not accepted regardless of which of these
+    two cases it is — this only changes what Extraction has to work with,
+    not whether the document reads as confidently classified.
     """
     document_type = classification.get("document_type")
     confidence = classification.get("confidence")
+    unnamed = _is_unrecognised(document_type)
     accepted = (
-        not _is_unrecognised(document_type)
+        not unnamed
         and not _is_below_threshold(confidence)
         and not classification.get("needs_manual_review")
     )
-    if not accepted:
-        # Normalise every non-accepted outcome (no type at all, low
-        # confidence, or the classifier's own manual-review flag) to the
-        # same "unrecognised" sentinel, so it's what actually lands in
-        # Supabase/the frontend and what Extraction builds its prompt
-        # against. Written back into the classification dict (not just this
-        # local variable) so the caller's later `classification["document_type"]`
-        # reads see the normalised value too.
+    if unnamed:
+        # Only a genuinely typeless response gets normalised to the
+        # sentinel — see the docstring above for why a named-but-unconfident
+        # guess is deliberately left alone here instead. Written back into
+        # the classification dict (not just this local variable) so the
+        # caller's later `classification["document_type"]` reads see the
+        # normalised value too.
         document_type = "unrecognised"
         classification["document_type"] = document_type
 

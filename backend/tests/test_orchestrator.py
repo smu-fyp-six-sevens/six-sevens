@@ -385,7 +385,7 @@ async def test_intake_coordinator_uploads_signed_url_of_the_document() -> None:
 
 
 @pytest.mark.asyncio
-async def test_typed_low_confidence_classification_still_runs_general_extraction() -> None:
+async def test_typed_low_confidence_classification_keeps_its_type_for_extraction() -> None:
     with (
         patch("app.orchestrator.document_repository") as mock_repo,
         patch("app.orchestrator.extracted_fields_repository") as mock_fields_repo,
@@ -407,25 +407,41 @@ async def test_typed_low_confidence_classification_still_runs_general_extraction
         await orchestrator.process_document("doc-1")
 
         # A real type guess that's just below the confidence threshold is no
-        # longer a dead end: it's normalised to "unrecognised" (same as no
-        # type guess at all -- see test_unrecognised_classification_still_
-        # runs_general_extraction) and Extraction still runs against the
-        # general field list, rather than failing the document outright.
-        # If Extraction can actually tell what it is, it escalates back to
-        # the Classifier (see the escalation tests) instead of the document
-        # being stuck on a bad first guess.
+        # longer flattened to "unrecognised" the way a genuinely typeless
+        # guess is (see test_unrecognised_classification_still_runs_general_
+        # extraction) — the named type is kept so Extraction runs against
+        # payslip's own specific schema right away instead of the generic
+        # one, and so the frontend shows what the Classifier actually
+        # thinks this is. classification_outcome still records
+        # manual_review either way — only what Extraction has to work with
+        # changes, not whether the document reads as confidently
+        # classified. If Extraction can actually tell it's something else,
+        # it escalates back to the Classifier (see the escalation tests)
+        # instead of the document being stuck on a bad first guess.
         assert mock_dify.run_chatflow_with_retry.await_count == 1
         assert mock_dify.run_workflow_with_retry.await_count == 1
         mock_repo.record_classification.assert_called_once_with(
             "doc-1",
-            document_type="unrecognised",
+            document_type="payslip",
             confidence=0.2,
             classification_outcome="manual_review",
             evidence=[],
-            fulfilled_requirements=[],
+            # A self-report only — case_status.compute_requirement_coverage
+            # still ignores this since classification_outcome isn't
+            # ACCEPTED, so storing "payslip" here rather than [] doesn't
+            # let an unconfirmed guess retire a checklist item.
+            fulfilled_requirements=["payslip"],
         )
+        # Confirms Extraction actually ran against payslip's own specific
+        # prompt (REQUIRED fields, asks for net_pay) rather than the
+        # generic unrecognised one ("could not be matched to any known...
+        # category").
+        extraction_prompt = mock_dify.run_workflow_with_retry.call_args[0][1]["extraction_prompt"]
+        assert "REQUIRED fields" in extraction_prompt
+        assert "net_pay" in extraction_prompt
+        assert "could not be matched to any known" not in extraction_prompt
         mock_repo.update_status.assert_called_once_with(
-            "doc-1", DocumentStatus.ANALYZED, document_type="unrecognised"
+            "doc-1", DocumentStatus.ANALYZED, document_type="payslip"
         )
 
 
@@ -559,6 +575,61 @@ async def test_escalation_cap_routes_to_manual_review() -> None:
         # each one is a real re-run of Intake Coordinator.
         assert mock_repo.record_escalation.call_count == 2
         mock_repo.record_escalation.assert_called_with("doc-1", "still doesn't fit")
+
+
+async def test_escalation_cap_still_persists_whatever_extraction_found() -> None:
+    """
+    Regression test: a document that never resolves its escalation (routed
+    to FAILED) shouldn't lose whatever fields Extraction actually pulled
+    out along the way — discarding them just because the *type* was never
+    confidently resolved means manual review starts from nothing instead
+    of the real data that was already there.
+    """
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository") as mock_fields_repo,
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
+        patch("app.orchestrator.settings") as mock_settings,
+        patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status"),
+    ):
+        mock_settings.MAX_RECLASSIFICATION_ATTEMPTS = 1
+        mock_settings.CLASSIFICATION_CONFIDENCE_THRESHOLD = 0.6
+        mock_settings.SIGNED_URL_EXPIRY_SECONDS = 300
+        mock_settings.DIFY_CLASSIFIER_API_KEY = "classifier-key"
+        mock_repo.get_document.return_value = _make_document()
+        mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest)
+
+        classifying = _chat_output(document_type="unrecognised", confidence=0.5)
+        # Extraction found real values even though it couldn't resolve the
+        # document type — this is exactly what should survive onto the
+        # FAILED document instead of being thrown away.
+        escalating = _extraction_output(
+            extracted_fields={"account_number": "1008616304738692", "broker_address": "10 Marina Blvd"},
+            confidence=0.72,
+            escalation={"reason": "looks like a brokerage statement"},
+        )
+        mock_dify.run_chatflow_with_retry = AsyncMock(side_effect=[classifying, classifying])
+        mock_dify.run_workflow_with_retry = AsyncMock(side_effect=[escalating, escalating])
+
+        await orchestrator.process_document("doc-1")
+
+        # Persisted (not skipped) despite the document ending up FAILED.
+        mock_repo.update_extracted_fields.assert_called_once()
+        persisted_fields = mock_repo.update_extracted_fields.call_args[0][1]
+        persisted_confidence = mock_repo.update_extracted_fields.call_args[0][2]
+        assert persisted_fields == {
+            "account_number": "1008616304738692",
+            "broker_address": "10 Marina Blvd",
+        }
+        assert persisted_confidence == 0.72
+        mock_fields_repo.replace_extracted_fields.assert_called_once()
+
+        # Still correctly ends up FAILED, not silently ANALYZED.
+        args, kwargs = mock_repo.update_status.call_args
+        assert args[1] == DocumentStatus.FAILED
 
 
 @pytest.mark.asyncio
