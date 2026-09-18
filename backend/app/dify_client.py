@@ -42,10 +42,6 @@ def _response_body(exc: Exception) -> str:
 class DifyClient:
     def __init__(self) -> None:
         self._base_url = settings.DIFY_BASE_URL
-        self._headers = {
-            "Authorization": f"Bearer {settings.DIFY_API_KEY}",
-            "Content-Type": "application/json",
-        }
         # Caps simultaneous Classifier chatflow calls independently of how
         # many queue workers are running — see DIFY_CLASSIFIER_MAX_CONCURRENCY.
         self._chatflow_semaphore = asyncio.Semaphore(settings.DIFY_CLASSIFIER_MAX_CONCURRENCY)
@@ -56,7 +52,7 @@ class DifyClient:
         inputs: dict,
         user: str,
         *,
-        api_key: str | None = None,
+        api_key: str,
     ) -> dict:
         """
         Generic Dify workflow invocation — any workflow_id/inputs shape.
@@ -65,11 +61,11 @@ class DifyClient:
         Raises DifyInvocationError on any non-2xx response or network
         failure; callers decide how to handle that (retry, fail, etc).
 
-        `api_key` lets a caller target a different Dify app than the one
-        this client was constructed with (e.g. Extraction has its own
-        DIFY_EXTRACTION_API_KEY, distinct from the default DIFY_API_KEY) —
-        same idea as run_chatflow's api_key param. Falls back to
-        self._headers (built from settings.DIFY_API_KEY) when omitted.
+        `api_key` is required, not defaulted: a Dify app-scoped key only
+        authenticates requests to that one app, regardless of what
+        workflow_id is in the payload, so there's no meaningful "default app"
+        to fall back to — every real call site has always passed its own
+        (e.g. DIFY_EXTRACTION_API_KEY for Extraction).
         """
         payload = {
             "workflow_id": workflow_id,
@@ -77,11 +73,7 @@ class DifyClient:
             "response_mode": "blocking",
             "user": user,
         }
-        headers = (
-            {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-            if api_key is not None
-            else self._headers
-        )
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
         async with httpx.AsyncClient(timeout=settings.DIFY_REQUEST_TIMEOUT_SECONDS) as client:
             try:
@@ -98,7 +90,7 @@ class DifyClient:
                 ) from exc
 
     async def run_workflow_with_retry(
-        self, workflow_id: str, inputs: dict, user: str, *, api_key: str | None = None
+        self, workflow_id: str, inputs: dict, user: str, *, api_key: str
     ) -> dict:
         """
         AC3: same as run_workflow, but retries up to

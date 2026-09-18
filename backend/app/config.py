@@ -25,9 +25,6 @@ class Settings:
     Centralised config. All values come from environment variables so
     nothing sensitive (API keys, service role key) is hardcoded.
     """
-
-    DATABASE_URL: str = _env("DATABASE_URL")
-
     # Shared-credential auth for the public demo deployment (see app/auth.py).
     # AUTH_SECRET_KEY signs bearer tokens — must be set to a real random value
     # in any deployed environment (an empty/default secret makes tokens
@@ -77,14 +74,11 @@ class Settings:
     DIFY_REQUEST_TIMEOUT_SECONDS: float = 240.0
 
     DIFY_BASE_URL: str = _env("DIFY_BASE_URL", "https://api.dify.ai/v1")
-    DIFY_API_KEY: str = _env("DIFY_API_KEY")
     # Classifier (Intake Coordinator) is a Dify Chatflow app, not a Workflow
     # app — Dify identifies a chat app purely by its own API key (sent as
     # the Authorization header on /chat-messages), so there's no workflow_id
-    # to pass in the request body. DIFY_CLASSIFIER_WORKFLOW_ID is kept only
-    # for reference/documentation of which Dify app this is.
+    # to pass in the request body at all.
     DIFY_CLASSIFIER_API_KEY: str = _env("DIFY_CLASSIFIER_API_KEY")
-    DIFY_CLASSIFIER_WORKFLOW_ID: str = _env("DIFY_CLASSIFIER_WORKFLOW_ID")
     DIFY_EXTRACTION_WORKFLOW_ID: str = _env("DIFY_EXTRACTION_WORKFLOW_ID")
     DIFY_EXTRACTION_API_KEY: str = _env("DIFY_EXTRACTION_API_KEY")
 

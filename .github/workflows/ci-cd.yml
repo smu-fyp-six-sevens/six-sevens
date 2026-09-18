@@ -23,8 +23,6 @@ jobs:
       SUPABASE_PUBLISHABLE_KEY: placeholder-key
       SUPABASE_STORAGE_BUCKET: documents
       DIFY_BASE_URL: https://api.dify.ai/v1
-      DIFY_API_KEY: placeholder-key
-      DIFY_CLASSIFIER_WORKFLOW_ID: placeholder-workflow-id
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
