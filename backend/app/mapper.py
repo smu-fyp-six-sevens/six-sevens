@@ -29,14 +29,72 @@ def _normalize_id_number(id_number: object) -> Optional[str]:
     return "".join(id_number.strip().upper().split())
 
 
+class _Identity(NamedTuple):
+    names: set[str]
+    has_address: bool
+    # document_side values ("front"/"back"/"single") seen across this
+    # identity's own accepted id_document uploads — see
+    # compute_id_document_identity_progress, which is the reason this is
+    # tracked per identity rather than case-wide.
+    sides: set[str]
+
+
+class _NamedAddress(NamedTuple):
+    raw_name: str
+    normalized_name: str
+
+
 class _IdentityState(NamedTuple):
     # identity key (id_number, or name when no id_number was extracted) ->
-    # (normalized names seen under this identity, has its own address)
-    identities: dict[str, tuple[set[str], bool]]
-    # accepted documents (any type) carrying a non-empty individual_address
-    address_docs: list[DocumentRecord]
-    # normalized names drawn from address_docs
+    # _Identity
+    identities: dict[str, _Identity]
+    # One entry per person an accepted document ties an address to — a
+    # document can carry a single one (the common individual_name +
+    # individual_address shape) or several (a company_constitution's
+    # subscribers list) — see _named_addresses_from_document.
+    named_addresses: list[_NamedAddress]
+    # normalized names drawn from named_addresses
     names_with_address: set[str]
+
+
+def _named_addresses_from_document(doc: DocumentRecord) -> list[_NamedAddress]:
+    """
+    A document can carry one address (individual_name + individual_address,
+    the common single-person shape) or several (a company_constitution's
+    "subscribers" array, one entry per director/shareholder) — this yields
+    one entry per named person the document actually ties an address to,
+    regardless of which shape it came from, so callers don't need to care
+    which one they're looking at.
+
+    Deliberately does not create or feed into identities (see
+    _collect_identity_state) — a document naming people with addresses only
+    ever gets to match an identity an actual id_document established, never
+    to establish one itself, even when (like a constitution) it also
+    carries an id_number for each person.
+    """
+    fields = doc.extracted_fields or {}
+    entries: list[_NamedAddress] = []
+
+    raw_name = fields.get("individual_name")
+    if fields.get("individual_address") and isinstance(raw_name, str):
+        normalized = _normalize_name(raw_name)
+        if normalized is not None:
+            entries.append(_NamedAddress(raw_name.strip(), normalized))
+
+    subscribers = fields.get("subscribers")
+    if isinstance(subscribers, list):
+        for subscriber in subscribers:
+            if not isinstance(subscriber, dict) or not subscriber.get("address"):
+                continue
+            subscriber_name = subscriber.get("name")
+            if not isinstance(subscriber_name, str):
+                continue
+            normalized = _normalize_name(subscriber_name)
+            if normalized is None:
+                continue
+            entries.append(_NamedAddress(subscriber_name.strip(), normalized))
+
+    return entries
 
 
 def _collect_identity_state(documents: list[DocumentRecord]) -> _IdentityState:
@@ -44,7 +102,11 @@ def _collect_identity_state(documents: list[DocumentRecord]) -> _IdentityState:
         doc for doc in documents if doc.classification_outcome == ClassificationOutcome.ACCEPTED
     ]
 
-    identities: dict[str, tuple[set[str], bool]] = {}
+    # Identities come ONLY from id_document uploads — a constitution or
+    # incumbency-style document that merely names people (subscribers,
+    # officers) can match an identity an id_document already established,
+    # but never creates one on its own; see _named_addresses_from_document.
+    identities: dict[str, _Identity] = {}
     for doc in accepted:
         if doc.document_type != DocumentType.ID_DOCUMENT.value:
             continue
@@ -54,21 +116,22 @@ def _collect_identity_state(documents: list[DocumentRecord]) -> _IdentityState:
         key = id_number or name
         if key is None:
             continue
-        names, has_address = identities.get(key, (set(), False))
+        names, has_address, sides = identities.get(key, (set(), False, set()))
         if name:
             names.add(name)
         if fields.get("individual_address"):
             has_address = True
-        identities[key] = (names, has_address)
+        side = fields.get("document_side")
+        if isinstance(side, str) and side.strip().lower() in ("front", "back", "single"):
+            sides.add(side.strip().lower())
+        identities[key] = _Identity(names, has_address, sides)
 
-    address_docs = [doc for doc in accepted if (doc.extracted_fields or {}).get("individual_address")]
-    names_with_address = {
-        normalized
-        for doc in address_docs
-        if (normalized := _normalize_name((doc.extracted_fields or {}).get("individual_name"))) is not None
-    }
+    named_addresses: list[_NamedAddress] = [
+        entry for doc in accepted for entry in _named_addresses_from_document(doc)
+    ]
+    names_with_address = {entry.normalized_name for entry in named_addresses}
 
-    return _IdentityState(identities, address_docs, names_with_address)
+    return _IdentityState(identities, named_addresses, names_with_address)
 
 
 def compute_identity_proof_of_address_progress(documents: list[DocumentRecord]) -> tuple[int, int]:
@@ -110,7 +173,7 @@ def compute_identity_proof_of_address_progress(documents: list[DocumentRecord]) 
 
     covered = sum(
         1
-        for names, has_address in identities.values()
+        for names, has_address, _ in identities.values()
         if has_address or (names & names_with_address)
     )
     return covered, len(identities)
@@ -141,17 +204,70 @@ def compute_unmatched_proof_of_address_names(documents: list[DocumentRecord]) ->
     Returned as display-cased names (as extracted, not the uppercased join
     key), de-duplicated by normalized name, in first-seen order.
     """
-    identities, address_docs, _ = _collect_identity_state(documents)
+    identities, named_addresses, _ = _collect_identity_state(documents)
 
     matched_names: set[str] = set()
-    for names, _ in identities.values():
+    for names, _, _ in identities.values():
         matched_names |= names
 
     unmatched: dict[str, str] = {}
-    for doc in address_docs:
-        raw_name = (doc.extracted_fields or {}).get("individual_name")
-        normalized = _normalize_name(raw_name)
-        if normalized is None or normalized in matched_names or not isinstance(raw_name, str):
+    for entry in named_addresses:
+        if entry.normalized_name in matched_names:
             continue
-        unmatched.setdefault(normalized, raw_name.strip())
+        unmatched.setdefault(entry.normalized_name, entry.raw_name)
     return list(unmatched.values())
+
+
+def _is_identity_id_document_complete(sides: set[str]) -> bool:
+    """A "single" capture (passport, or a combined scan) needs no counterpart."""
+    return "single" in sides or ("front" in sides and "back" in sides)
+
+
+def compute_id_document_identity_progress(documents: list[DocumentRecord]) -> tuple[int, int]:
+    """
+    id_document is fulfilled only once EVERY identified individual's own ID
+    document is complete (front+back matched by id_number, or a
+    self-contained single capture) — mirrors
+    compute_identity_proof_of_address_progress's same "every identity"
+    requirement, for the same reason: a two-person case where person A's
+    back and person B's front were both uploaded must not read as complete
+    just because a front and a back both exist somewhere in the case — see
+    extraction_prompts.EXTRA_FIELD_GUIDANCE's "id_document" entry for how
+    document_side ("front" / "back" / "single") gets extracted.
+
+    Returns (covered, total) identities, same shape as the proof_of_address
+    equivalent — (0, 0) means no id_document has been accepted yet.
+    """
+    identities, _, _ = _collect_identity_state(documents)
+    covered = sum(
+        1 for identity in identities.values() if _is_identity_id_document_complete(identity.sides)
+    )
+    return covered, len(identities)
+
+
+def compute_id_document_identity_coverage(documents: list[DocumentRecord]) -> bool:
+    """Returns False when there are no accepted id_documents yet."""
+    covered, total = compute_id_document_identity_progress(documents)
+    return total > 0 and covered == total
+
+
+def compute_id_document_missing_side(documents: list[DocumentRecord]) -> Optional[str]:
+    """
+    "front" or "back" — whichever is missing — for the frontend's
+    human-readable hint ("Back photo present, front missing."). Only
+    populated when there's exactly one identity in the case and it's
+    incomplete: with more than one identity, a single hint can't describe
+    each person's own gap, so callers should fall back to just the
+    covered/total fraction in that case.
+    """
+    identities, _, _ = _collect_identity_state(documents)
+    if len(identities) != 1:
+        return None
+    (identity,) = identities.values()
+    if _is_identity_id_document_complete(identity.sides):
+        return None
+    if "front" in identity.sides:
+        return "back"
+    if "back" in identity.sides:
+        return "front"
+    return None

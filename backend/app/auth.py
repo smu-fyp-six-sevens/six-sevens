@@ -15,6 +15,7 @@ import base64
 import hashlib
 import hmac
 import json
+import secrets
 import time
 
 from fastapi import Header, HTTPException, status
@@ -22,6 +23,20 @@ from fastapi import Header, HTTPException, status
 from .config import settings
 
 TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days — shared demo credential, not a per-user session
+
+# Short-lived, single-use tickets for the case status WebSocket (see
+# routers/ws.py) — a browser's native WebSocket API can't set a custom
+# Authorization header on the handshake, so the long-lived TOKEN_TTL_SECONDS
+# bearer credential can't safely travel as a query param (Cloud Run's default
+# access logging captures full request URLs). A client with a valid bearer
+# token mints one of these via POST /ws/tickets (normal Authorization-header
+# auth) and puts only this in the WS URL instead — 10 seconds is generous for
+# "mint it, then immediately open the socket" but tight enough that a leaked
+# log line is worthless by the time anyone reads it. In-memory is fine: it
+# only has to survive the few seconds between minting and the handshake, and
+# doesn't need to survive a process restart.
+WS_TICKET_TTL_SECONDS = 10
+_ws_tickets: dict[str, float] = {}
 
 
 def _b64encode(data: bytes) -> str:
@@ -68,6 +83,31 @@ def _verify_token(token: str) -> bool:
         return False
 
     return time.time() < exp
+
+
+def create_ws_ticket() -> str:
+    """
+    Called from POST /ws/tickets, which sits behind require_auth — only
+    reachable with a valid bearer token already. Returns a random opaque
+    ticket, not tied to that token in any way beyond "someone with a valid
+    token asked for one" (no need to track which user/token minted it, since
+    this app has no concept of separate users).
+    """
+    ticket = secrets.token_urlsafe(32)
+    _ws_tickets[ticket] = time.time() + WS_TICKET_TTL_SECONDS
+    return ticket
+
+
+def consume_ws_ticket(ticket: str) -> bool:
+    """
+    Single-use by construction: whether this returns True or False, the
+    ticket is removed, so a captured ticket (e.g. via a log line) can't be
+    replayed even within its own TTL window.
+    """
+    expires_at = _ws_tickets.pop(ticket, None)
+    if expires_at is None:
+        return False
+    return time.time() < expires_at
 
 
 def require_auth(authorization: str | None = Header(default=None)) -> None:

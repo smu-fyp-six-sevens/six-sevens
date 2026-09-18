@@ -50,6 +50,45 @@ def test_id_document_fields():
     assert "nationality" in prompt
 
 
+def test_source_of_wealth_covers_personal_brokerage_statements_too():
+    """
+    A brokerage/investment account statement (e.g. Moomoo, a margin
+    account) is a legitimate source_of_wealth document for an individual,
+    not just a company financial statement — the prompt needs to ask for
+    account-holder fields and explicitly not treat a missing company_name/
+    uen as evidence of misclassification for this variant.
+    """
+    prompt = build_extraction_prompt("source_of_wealth", "sample text")
+    assert "broker_name" in prompt
+    assert "account_number" in prompt
+    assert "portfolio_value" in prompt
+    assert "holdings" in prompt
+    assert "do not escalate just because company_name/uen" in prompt
+
+
+def test_source_of_wealth_asks_for_individual_address():
+    # Bug fix: without this, a personal brokerage statement's address had
+    # nowhere "official" to go, so the model invented its own ad-hoc field
+    # name instead of the canonical individual_address the identity-
+    # matching logic (mapper.py) actually looks for.
+    prompt = build_extraction_prompt("source_of_wealth", "sample text")
+    assert "individual_address" in prompt
+
+
+def test_company_constitution_asks_for_subscribers_array_not_flat_fields():
+    """
+    Bug fix: a constitution's holders list is often more than one person —
+    the old flat individual_name/individual_address/id_number fields forced
+    the model to squash multiple subscribers into one joined string, which
+    then couldn't be matched back to anyone's own id_document identity.
+    """
+    prompt = build_extraction_prompt("company_constitution", "sample text")
+    assert "subscribers" in prompt
+    assert "SEPARATE entry" in prompt
+    assert "- individual_name" not in prompt
+    assert "- individual_address" not in prompt
+
+
 def test_unrecognised_document_type_builds_general_prompt():
     prompt = build_extraction_prompt("unrecognised", "sample text")
     for field in schema_field_names("unrecognised"):

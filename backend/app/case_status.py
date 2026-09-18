@@ -3,8 +3,11 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Optional
 
-from . import case_repository, document_repository
+from . import case_repository, document_repository, extracted_fields_repository
 from .mapper import (
+    compute_id_document_identity_coverage,
+    compute_id_document_identity_progress,
+    compute_id_document_missing_side,
     compute_identity_proof_of_address_coverage,
     compute_identity_proof_of_address_progress,
     compute_unmatched_proof_of_address_names,
@@ -17,6 +20,7 @@ from .models import (
     DocumentRecord,
     DocumentStatus,
     DocumentType,
+    IdDocumentCoverage,
     ProofOfAddressCoverage,
 )
 from .monitoring import is_stuck
@@ -68,6 +72,17 @@ def compute_requirement_coverage(documents: list[DocumentRecord]) -> tuple[list[
     else:
         fulfilled.discard(proof_of_address)
 
+    # Same idea for id_document: it requires every identified individual's
+    # own ID to be complete (front+back, matched by id_number — not just
+    # any front and any back existing somewhere in the case), mirroring
+    # proof_of_address's own per-identity requirement above. See
+    # compute_id_document_identity_coverage.
+    id_document = DocumentType.ID_DOCUMENT.value
+    if compute_id_document_identity_coverage(documents):
+        fulfilled.add(id_document)
+    else:
+        fulfilled.discard(id_document)
+
     return (
         [req for req in REQUIRED_DOCUMENT_TYPES if req in fulfilled],
         [req for req in REQUIRED_DOCUMENT_TYPES if req not in fulfilled],
@@ -91,10 +106,20 @@ def sync_submission_finalized(case_id: str) -> None:
     case_repository.set_submission_finalized(case_id, finalized=not missing)
 
 
-def _build_summary(case, documents: list[DocumentRecord]) -> CaseSummary:
+def build_summary(case, documents: list[DocumentRecord]) -> CaseSummary:
+    """
+    Public (not module-private) because routers/ws.py needs it too: it
+    already has to fetch a case's documents itself (to enrich them with
+    extracted_fields before pushing them over the socket), so calling
+    get_case_summary there would fetch the same document list a second
+    time. Calling this directly with the documents it already has avoids
+    that duplicate query on every poll tick.
+    """
     fulfilled, missing = compute_requirement_coverage(documents)
     covered, total = compute_identity_proof_of_address_progress(documents)
     unmatched_names = compute_unmatched_proof_of_address_names(documents)
+    id_covered, id_total = compute_id_document_identity_progress(documents)
+    id_missing_side = compute_id_document_missing_side(documents)
     data = case.model_dump()
     data["recommended_additional_documents"] = missing
     return CaseSummary(
@@ -104,7 +129,45 @@ def _build_summary(case, documents: list[DocumentRecord]) -> CaseSummary:
         proof_of_address_coverage=ProofOfAddressCoverage(
             covered=covered, total=total, unmatched_names=unmatched_names
         ),
+        id_document_coverage=IdDocumentCoverage(
+            covered=id_covered, total=id_total, missing_side=id_missing_side
+        ),
     )
+
+
+def _enrich_with_extracted_fields(documents: list[DocumentRecord]) -> list[DocumentRecord]:
+    fields_by_document = extracted_fields_repository.get_extracted_fields_for_documents(
+        [document.id for document in documents]
+    )
+    for document in documents:
+        fields = fields_by_document.get(document.id)
+        if fields:
+            document.extracted_fields = {
+                field.field_name: {"value": field.field_value, "confidence": field.confidence}
+                for field in fields
+            }
+    return documents
+
+
+def build_case_snapshot(case_id: str) -> Optional[dict]:
+    """
+    Assembles the exact payload pushed over the case status WebSocket (see
+    routers/ws.py) — both the immediate send on connect/refresh and the
+    Realtime-triggered push in realtime_listener.py call this, so the two
+    paths can't drift out of sync with each other. Runs on a worker thread
+    (supabase-py's sync client) wherever it's called from.
+    """
+    case = case_repository.get_case(case_id)
+    if case is None:
+        return None
+    documents = document_repository.list_documents(case_id=case_id)
+    summary = build_summary(case, documents)
+    enriched = _enrich_with_extracted_fields(documents)
+    return {
+        "type": "snapshot",
+        "case": summary.model_dump(mode="json"),
+        "documents": [document.model_dump(mode="json") for document in enriched],
+    }
 
 
 def get_case_summary(case_id: str) -> Optional[CaseSummary]:
@@ -112,7 +175,7 @@ def get_case_summary(case_id: str) -> Optional[CaseSummary]:
     if case is None:
         return None
     documents = document_repository.list_documents(case_id=case_id)
-    return _build_summary(case, documents)
+    return build_summary(case, documents)
 
 
 def list_case_summaries() -> list[CaseSummary]:
@@ -127,4 +190,4 @@ def list_case_summaries() -> list[CaseSummary]:
         if doc.case_id is not None:
             documents_by_case[doc.case_id].append(doc)
 
-    return [_build_summary(case, documents_by_case.get(case.id, [])) for case in cases]
+    return [build_summary(case, documents_by_case.get(case.id, [])) for case in cases]

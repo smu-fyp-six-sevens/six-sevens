@@ -79,6 +79,16 @@ export interface CaseRequirementCoverage {
   // bank_statement, ...) that don't match any identified id_document —
   // not counted in covered/total, so surfaced separately.
   proof_of_address_coverage: { covered: number; total: number; unmatched_names: string[] };
+  // How many of the case's identified individuals (grouped the same way as
+  // proof_of_address_coverage — by id_number, falling back to name) have a
+  // complete id_document (front+back matched by id_number, or a
+  // self-contained single capture) on file, out of how many identities
+  // have been identified at all. total=0 means no id_document has been
+  // accepted yet. missing_side ("front"/"back") is only populated when
+  // there's exactly one identity in the case — see
+  // mapper.compute_id_document_identity_progress /
+  // mapper.compute_id_document_missing_side.
+  id_document_coverage: { covered: number; total: number; missing_side: string | null };
 }
 
 export async function getCaseRequirementCoverage(caseId: string): Promise<CaseRequirementCoverage> {
