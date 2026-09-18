@@ -58,6 +58,10 @@ class Settings:
 
     SUPABASE_URL: str = _env("SUPABASE_URL")
     SUPABASE_PUBLISHABLE_KEY: str = _env("SUPABASE_PUBLISHABLE_KEY")
+    # Bypasses RLS — used only for the backend's own Realtime subscription
+    # (see realtime_listener.py), never sent to the frontend. Supabase's
+    # current replacement for the legacy "service_role" key.
+    SUPABASE_SECRET_KEY: str = _env("SUPABASE_SECRET_KEY")
     SUPABASE_STORAGE_BUCKET: str = _env("SUPABASE_STORAGE_BUCKET", "documents")
 
     # Dify workflow/chatflow calls have been observed taking ~20-90s under

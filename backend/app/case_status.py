@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Optional
 
-from . import case_repository, document_repository
+from . import case_repository, document_repository, extracted_fields_repository
 from .mapper import (
     compute_id_document_identity_coverage,
     compute_id_document_identity_progress,
@@ -133,6 +133,41 @@ def build_summary(case, documents: list[DocumentRecord]) -> CaseSummary:
             covered=id_covered, total=id_total, missing_side=id_missing_side
         ),
     )
+
+
+def _enrich_with_extracted_fields(documents: list[DocumentRecord]) -> list[DocumentRecord]:
+    fields_by_document = extracted_fields_repository.get_extracted_fields_for_documents(
+        [document.id for document in documents]
+    )
+    for document in documents:
+        fields = fields_by_document.get(document.id)
+        if fields:
+            document.extracted_fields = {
+                field.field_name: {"value": field.field_value, "confidence": field.confidence}
+                for field in fields
+            }
+    return documents
+
+
+def build_case_snapshot(case_id: str) -> Optional[dict]:
+    """
+    Assembles the exact payload pushed over the case status WebSocket (see
+    routers/ws.py) — both the immediate send on connect/refresh and the
+    Realtime-triggered push in realtime_listener.py call this, so the two
+    paths can't drift out of sync with each other. Runs on a worker thread
+    (supabase-py's sync client) wherever it's called from.
+    """
+    case = case_repository.get_case(case_id)
+    if case is None:
+        return None
+    documents = document_repository.list_documents(case_id=case_id)
+    summary = build_summary(case, documents)
+    enriched = _enrich_with_extracted_fields(documents)
+    return {
+        "type": "snapshot",
+        "case": summary.model_dump(mode="json"),
+        "documents": [document.model_dump(mode="json") for document in enriched],
+    }
 
 
 def get_case_summary(case_id: str) -> Optional[CaseSummary]:

@@ -137,6 +137,7 @@ export default function UploadPage({
   const [fieldDrafts, setFieldDrafts] = useState<Map<string, Record<string, string>>>(new Map());
   const [savingFields, setSavingFields] = useState<Set<string>>(new Set());
   const [saveFieldErrors, setSaveFieldErrors] = useState<Map<string, string>>(new Map());
+  const [wsConnected, setWsConnected] = useState(false);
 
   const flaggedDocuments = Array.from(documentDetails.values()).filter(
     (document) =>
@@ -166,14 +167,22 @@ export default function UploadPage({
   // docstring in caseSocket.ts for why that matters once a case goes idle.
   const caseSocketRef = useRef<CaseStatusSubscription | null>(null);
   useEffect(() => {
-    const subscription = subscribeToCaseStatus(selectedCase.id, ({ documents, caseSummary }) => {
-      if (!isMountedRef.current) return;
+    setWsConnected(false);
 
-      setDocumentDetails(new Map(documents.map((document) => [document.id, document])));
-      setFulfilledRequirements(new Set(caseSummary.fulfilled_requirements));
-      setProofOfAddressCoverage(caseSummary.proof_of_address_coverage);
-      setIdDocumentCoverage(caseSummary.id_document_coverage);
-    });
+    const subscription = subscribeToCaseStatus(
+      selectedCase.id,
+      ({ documents, caseSummary }) => {
+        if (!isMountedRef.current) return;
+
+        setDocumentDetails(new Map(documents.map((document) => [document.id, document])));
+        setFulfilledRequirements(new Set(caseSummary.fulfilled_requirements));
+        setProofOfAddressCoverage(caseSummary.proof_of_address_coverage);
+        setIdDocumentCoverage(caseSummary.id_document_coverage);
+      },
+      (connected) => {
+        if (isMountedRef.current) setWsConnected(connected);
+      },
+    );
     caseSocketRef.current = subscription;
 
     return () => {
@@ -488,7 +497,16 @@ export default function UploadPage({
                     Approve all eligible documents
                   </button>
 
-                  <span className="mock-badge live">LIVE</span>
+                  <span
+                    className={`mock-badge${wsConnected ? ' live' : ''}`}
+                    title={
+                      wsConnected
+                        ? 'Connected — updates push in real time'
+                        : 'Disconnected — reconnecting…'
+                    }
+                  >
+                    {wsConnected ? 'LIVE' : 'OFFLINE'}
+                  </span>
                 </div>
               </div>
 

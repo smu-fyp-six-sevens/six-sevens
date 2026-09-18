@@ -9,8 +9,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from app import auth
 from app.main import app
-from app.models import CaseDocumentsStatus, CaseRecord, DocumentRecord, DocumentStatus
-from app.routers.ws import _poll_interval_for, ACTIVE_POLL_INTERVAL_SECONDS, IDLE_POLL_INTERVAL_SECONDS
+from app.models import CaseRecord, DocumentRecord, DocumentStatus
 
 client = TestClient(app)
 
@@ -41,30 +40,84 @@ def _make_document(document_id: str = "doc-1") -> DocumentRecord:
     )
 
 
-def test_rejects_missing_token() -> None:
+def test_rejects_missing_ticket() -> None:
     with pytest.raises(WebSocketDisconnect):
         with client.websocket_connect("/ws/cases/case-1"):
             pass
 
 
-def test_rejects_invalid_token() -> None:
+def test_rejects_invalid_ticket() -> None:
     with pytest.raises(WebSocketDisconnect):
-        with client.websocket_connect("/ws/cases/case-1?token=not-a-real-token"):
+        with client.websocket_connect("/ws/cases/case-1?ticket=not-a-real-ticket"):
             pass
 
 
-def test_pushes_snapshot_on_connect() -> None:
-    token = auth.create_token()
+def test_ws_ticket_is_single_use() -> None:
+    ticket = auth.create_ws_ticket()
     with (
-        patch("app.routers.ws.case_repository") as mock_case_repo,
-        patch("app.routers.ws.document_repository") as mock_doc_repo,
-        patch("app.routers.ws.extracted_fields_repository") as mock_fields_repo,
+        patch("app.case_status.case_repository") as mock_case_repo,
+        patch("app.case_status.document_repository") as mock_doc_repo,
+        patch("app.case_status.extracted_fields_repository") as mock_fields_repo,
+    ):
+        mock_case_repo.get_case.return_value = _make_case("case-1")
+        mock_doc_repo.list_documents.return_value = []
+        mock_fields_repo.get_extracted_fields_for_documents.return_value = {}
+
+        with client.websocket_connect(f"/ws/cases/case-1?ticket={ticket}") as ws:
+            ws.receive_json()
+
+    # Same ticket again — already consumed by the connection above.
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect(f"/ws/cases/case-1?ticket={ticket}"):
+            pass
+
+
+def test_ws_ticket_expires(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(auth, "WS_TICKET_TTL_SECONDS", -1)
+    ticket = auth.create_ws_ticket()
+
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect(f"/ws/cases/case-1?ticket={ticket}"):
+            pass
+
+
+def test_issue_ws_ticket_returns_a_usable_ticket() -> None:
+    # conftest's autouse _bypass_auth override means this reaches the route
+    # regardless of the Authorization header — see test_auth.py for the
+    # real require_auth enforcement test on other routes; nothing route-
+    # specific to re-test here beyond "the endpoint hands back a ticket
+    # that actually works".
+    response = client.post("/ws/tickets")
+    assert response.status_code == 200
+    ticket = response.json()["ticket"]
+
+    with (
+        patch("app.case_status.case_repository") as mock_case_repo,
+        patch("app.case_status.document_repository") as mock_doc_repo,
+        patch("app.case_status.extracted_fields_repository") as mock_fields_repo,
+    ):
+        mock_case_repo.get_case.return_value = _make_case("case-1")
+        mock_doc_repo.list_documents.return_value = []
+        mock_fields_repo.get_extracted_fields_for_documents.return_value = {}
+
+        with client.websocket_connect(f"/ws/cases/case-1?ticket={ticket}") as ws:
+            payload = ws.receive_json()
+
+    assert payload["type"] == "snapshot"
+
+
+def test_pushes_snapshot_on_connect() -> None:
+    ticket = auth.create_ws_ticket()
+    with (
+        patch("app.case_status.case_repository") as mock_case_repo,
+        patch("app.case_status.document_repository") as mock_doc_repo,
+        patch("app.case_status.extracted_fields_repository") as mock_fields_repo,
     ):
         mock_case_repo.get_case.return_value = _make_case("case-1")
         mock_doc_repo.list_documents.return_value = [_make_document("doc-1")]
         mock_fields_repo.get_extracted_fields_for_documents.return_value = {}
 
-        with client.websocket_connect(f"/ws/cases/case-1?token={token}") as ws:
+        with client.websocket_connect(f"/ws/cases/case-1?ticket={ticket}") as ws:
             payload = ws.receive_json()
 
     assert payload["type"] == "snapshot"
@@ -78,63 +131,44 @@ def test_pushes_snapshot_on_connect() -> None:
 
 
 def test_closes_with_error_when_case_not_found() -> None:
-    token = auth.create_token()
-    with patch("app.routers.ws.case_repository") as mock_case_repo:
+    ticket = auth.create_ws_ticket()
+    with patch("app.case_status.case_repository") as mock_case_repo:
         mock_case_repo.get_case.return_value = None
 
-        with client.websocket_connect(f"/ws/cases/missing-case?token={token}") as ws:
+        with client.websocket_connect(f"/ws/cases/missing-case?ticket={ticket}") as ws:
             payload = ws.receive_json()
             assert payload == {"type": "error", "detail": "Case not found"}
             with pytest.raises(WebSocketDisconnect):
                 ws.receive_json()
 
 
-def test_poll_interval_is_active_for_statuses_needing_attention() -> None:
-    for status in (
-        CaseDocumentsStatus.IN_PROGRESS,
-        CaseDocumentsStatus.STUCK,
-        CaseDocumentsStatus.FAILED,
-    ):
-        assert _poll_interval_for(status) == ACTIVE_POLL_INTERVAL_SECONDS
-
-
-def test_poll_interval_is_idle_once_nothing_is_in_flight() -> None:
-    for status in (CaseDocumentsStatus.ANALYZED, CaseDocumentsStatus.NO_DOCUMENTS):
-        assert _poll_interval_for(status) == IDLE_POLL_INTERVAL_SECONDS
-
-
-def test_client_message_wakes_idle_poll_immediately() -> None:
+def test_refresh_frame_triggers_an_immediate_rebuilt_snapshot() -> None:
     """
-    Once a case is idle (ANALYZED here) the loop's wait_for uses the slow
-    30s IDLE_POLL_INTERVAL_SECONDS — without the wake-up path, a document
-    landing during that wait wouldn't show up until that full interval
-    elapsed. caseSocket.ts's refresh() sends a text frame right after a
-    successful upload specifically to avoid that; this asserts the second
-    snapshot arrives promptly (well under 30s) once that frame arrives,
-    rather than only after the idle interval times out.
+    caseSocket.ts's refresh() sends a bare text frame right after a
+    successful upload, independent of whatever the Realtime-driven
+    broadcaster push is doing — useful for the moment right after an
+    upload, before the new row's insert has necessarily propagated through
+    Realtime yet. Content of the frame is never inspected.
     """
-    token = auth.create_token()
+    ticket = auth.create_ws_ticket()
     case = _make_case("case-1")
-    analyzed_document = _make_document("doc-1")
-    analyzed_document.status = DocumentStatus.ANALYZED
+    existing_document = _make_document("doc-1")
     new_document = _make_document("doc-2")
 
     with (
-        patch("app.routers.ws.case_repository") as mock_case_repo,
-        patch("app.routers.ws.document_repository") as mock_doc_repo,
-        patch("app.routers.ws.extracted_fields_repository") as mock_fields_repo,
+        patch("app.case_status.case_repository") as mock_case_repo,
+        patch("app.case_status.document_repository") as mock_doc_repo,
+        patch("app.case_status.extracted_fields_repository") as mock_fields_repo,
     ):
         mock_case_repo.get_case.return_value = case
         mock_fields_repo.get_extracted_fields_for_documents.return_value = {}
-        mock_doc_repo.list_documents.return_value = [analyzed_document]
+        mock_doc_repo.list_documents.return_value = [existing_document]
 
-        with client.websocket_connect(f"/ws/cases/case-1?token={token}") as ws:
+        with client.websocket_connect(f"/ws/cases/case-1?ticket={ticket}") as ws:
             first = ws.receive_json()
-            assert first["case"]["documents_status"] == "analyzed"  # idle -> slow interval
+            assert [doc["id"] for doc in first["documents"]] == ["doc-1"]
 
-            # A new document lands (e.g. a fresh upload) while the socket is
-            # sitting on that slow interval.
-            mock_doc_repo.list_documents.return_value = [analyzed_document, new_document]
+            mock_doc_repo.list_documents.return_value = [existing_document, new_document]
             ws.send_text("refresh")
 
             second = ws.receive_json()
