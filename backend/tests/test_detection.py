@@ -128,7 +128,7 @@ def _make_document(document_id: str = "doc-1") -> DocumentRecord:
     )
 
 
-def test_get_spelling_anomaly_success_persists_and_returns_result() -> None:
+def test_get_spelling_anomaly_success_returns_result_with_no_persistence() -> None:
     result = SpellingAnomalyResult(
         document_id="doc-1",
         anomalies=[
@@ -144,7 +144,6 @@ def test_get_spelling_anomaly_success_persists_and_returns_result() -> None:
         patch("app.routers.detection.document_repository") as mock_repo,
         patch("app.routers.detection.storage_service") as mock_storage,
         patch("app.routers.detection.extracted_fields_repository") as mock_fields_repo,
-        patch("app.routers.detection.spelling_anomaly_repository") as mock_anomaly_repo,
         patch(
             "app.routers.detection.check_spelling_anomalies", new_callable=AsyncMock
         ) as mock_check,
@@ -162,9 +161,6 @@ def test_get_spelling_anomaly_success_persists_and_returns_result() -> None:
     assert body["unable_to_assess"] is False
 
     mock_check.assert_awaited_once_with("doc-1", b"%PDF-1.4 fake bytes", "statement.pdf", [])
-    mock_anomaly_repo.replace_spelling_anomalies.assert_called_once_with(
-        "doc-1", "case-1", result.anomalies
-    )
 
 
 def test_get_spelling_anomaly_document_not_found() -> None:
@@ -199,28 +195,4 @@ def test_get_spelling_anomaly_storage_failure_returns_502() -> None:
     mock_check.assert_not_called()
 
 
-def test_get_spelling_anomaly_still_returns_result_when_persistence_fails() -> None:
-    result = SpellingAnomalyResult(document_id="doc-1", anomalies=[], unable_to_assess=False)
-
-    with (
-        patch("app.routers.detection.document_repository") as mock_repo,
-        patch("app.routers.detection.storage_service") as mock_storage,
-        patch("app.routers.detection.extracted_fields_repository") as mock_fields_repo,
-        patch("app.routers.detection.spelling_anomaly_repository") as mock_anomaly_repo,
-        patch(
-            "app.routers.detection.check_spelling_anomalies", new_callable=AsyncMock
-        ) as mock_check,
-    ):
-        mock_repo.get_document.return_value = _make_document()
-        mock_storage.download_file.return_value = b"%PDF-1.4 fake bytes"
-        mock_fields_repo.get_extracted_fields.return_value = []
-        mock_check.return_value = result
-        mock_anomaly_repo.replace_spelling_anomalies.side_effect = RuntimeError("db down")
-
-        response = client.get("/documents/doc-1/detection/spelling-anomaly")
-
-    # Persistence is best-effort here — a storage hiccup shouldn't hide a
-    # check result the caller already has.
-    assert response.status_code == 200
-    assert response.json()["anomalies"] == []
 

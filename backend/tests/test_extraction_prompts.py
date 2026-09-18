@@ -43,11 +43,38 @@ def test_typed_prompt_marks_schema_fields_required_and_allows_extras():
     assert "loan application" in prompt.lower()
 
 
-def test_id_document_fields():
-    prompt = build_extraction_prompt("id_document", "sample text")
-    assert "id_number" in prompt
+def test_nric_fields():
+    prompt = build_extraction_prompt("nric", "sample text")
+    assert "nric_number" in prompt
     assert "date_of_birth" in prompt
     assert "nationality" in prompt
+    assert "individual_address" in prompt
+
+
+def test_passport_fields():
+    prompt = build_extraction_prompt("passport", "sample text")
+    assert "passport_number" in prompt
+    assert "nric_number" in prompt
+    assert "date_of_birth" in prompt
+    assert "nationality" in prompt
+
+
+def test_nric_document_side_guidance_uses_nric_number_not_id_number():
+    # Regression: EXTRA_FIELD_GUIDANCE used to be keyed "id_document", which
+    # never matched the real "nric"/"passport" document_type values, so
+    # this guidance silently never made it into any real prompt.
+    prompt = build_extraction_prompt("nric", "sample text")
+    assert "document_side" in prompt
+    assert '"front"' in prompt
+    assert '"back"' in prompt
+    assert "nric_number" in prompt
+    assert "id_number" not in prompt
+
+
+def test_passport_document_side_guidance_defaults_to_single():
+    prompt = build_extraction_prompt("passport", "sample text")
+    assert "document_side" in prompt
+    assert '"single"' in prompt
 
 
 def test_source_of_wealth_covers_personal_brokerage_statements_too():

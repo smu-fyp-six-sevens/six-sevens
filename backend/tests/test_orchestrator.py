@@ -177,7 +177,7 @@ async def test_extracted_address_adds_proof_of_address_fulfilment() -> None:
         mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
         _stub_ingestion(mock_storage, mock_ingest)
         mock_dify.run_chatflow_with_retry = AsyncMock(
-            return_value=_chat_output(document_type="id_document", confidence=0.95, needs_manual_review=False)
+            return_value=_chat_output(document_type="nric", confidence=0.95, needs_manual_review=False)
         )
         mock_dify.run_workflow_with_retry = AsyncMock(
             return_value=_extraction_output(
@@ -847,7 +847,7 @@ def test_finalise_classification_records_self_fulfilment_only() -> None:
     result = orchestrator._unwrap_chatflow_output(
         {
             "answer": json.dumps(
-                {"document_type": "id_document", "confidence": 0.95, "needs_manual_review": False}
+                {"document_type": "nric", "confidence": 0.95, "needs_manual_review": False}
             )
         }
     )

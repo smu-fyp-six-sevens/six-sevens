@@ -34,4 +34,8 @@ DOMAIN_TERMS: set[str] = {
     "trustee", "settlor", "grantor", "mortgagee", "mortgagor",
     # Document/field terminology used elsewhere in this codebase
     "constitution", "incumbency", "declarant",
+    "Maybank", "DBS", "OCBC", "UOB", "Citi", "HSBC", 
+    "StandardChartered", "StandardCharteredBank", "GLDB", "NFE", "NFFE", 
+    "FATCA", "GIIN", "IRS", "https","www","oecd",
+    
 }

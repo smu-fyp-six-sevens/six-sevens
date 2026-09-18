@@ -118,7 +118,7 @@ def test_single_document_can_fulfil_multiple_requirements() -> None:
             "doc-1",
             DocumentStatus.ANALYZED,
             classification_outcome=ClassificationOutcome.ACCEPTED,
-            document_type="id_document",
+            document_type="nric",
             fulfilled_requirements=["id_document", "proof_of_address"],
             extracted_fields={
                 "individual_name": "Jane Tan",
@@ -155,13 +155,13 @@ def test_manual_review_document_does_not_count_as_fulfilled() -> None:
 
 
 def test_passport_does_not_fulfil_proof_of_address() -> None:
-    """A passport is an id_document but carries no address, unlike an NRIC."""
+    """A passport is an identity document but carries no address, unlike an NRIC."""
     documents = [
         _make_document(
             "doc-1",
             DocumentStatus.ANALYZED,
             classification_outcome=ClassificationOutcome.ACCEPTED,
-            document_type="id_document",
+            document_type="passport",
             fulfilled_requirements=["id_document"],
             extracted_fields={
                 "individual_name": "Jane Tan",
@@ -184,9 +184,9 @@ def test_id_document_back_only_does_not_fulfil_requirement() -> None:
             "doc-1",
             DocumentStatus.ANALYZED,
             classification_outcome=ClassificationOutcome.ACCEPTED,
-            document_type="id_document",
+            document_type="nric",
             fulfilled_requirements=["id_document"],
-            extracted_fields={"id_number": "S8905952H", "document_side": "back"},
+            extracted_fields={"nric_number": "S8905952H", "document_side": "back"},
         )
     ]
     fulfilled, missing = compute_requirement_coverage(documents)
@@ -200,16 +200,16 @@ def test_id_document_front_and_back_together_fulfil_requirement() -> None:
             "doc-1",
             DocumentStatus.ANALYZED,
             classification_outcome=ClassificationOutcome.ACCEPTED,
-            document_type="id_document",
+            document_type="nric",
             fulfilled_requirements=["id_document"],
-            # Same id_number as doc-2 — same NRIC, two separate photos of
-            # the same identity. Without a matching id_number these would
+            # Same nric_number as doc-2 — same NRIC, two separate photos of
+            # the same identity. Without a matching nric_number these would
             # register as two different (each incomplete) identities — see
             # test_id_document_two_different_people_half_complete_each_does_not_fulfil
             # below for that exact case.
             extracted_fields={
                 "individual_name": "Jane Tan",
-                "id_number": "S8905952H",
+                "nric_number": "S8905952H",
                 "document_side": "front",
             },
         ),
@@ -217,9 +217,9 @@ def test_id_document_front_and_back_together_fulfil_requirement() -> None:
             "doc-2",
             DocumentStatus.ANALYZED,
             classification_outcome=ClassificationOutcome.ACCEPTED,
-            document_type="id_document",
+            document_type="nric",
             fulfilled_requirements=["id_document"],
-            extracted_fields={"id_number": "S8905952H", "document_side": "back"},
+            extracted_fields={"nric_number": "S8905952H", "document_side": "back"},
         ),
     ]
     fulfilled, missing = compute_requirement_coverage(documents)
@@ -231,7 +231,7 @@ def test_id_document_two_different_people_half_complete_each_does_not_fulfil() -
     """
     Regression test for the reported bug: person A's back and person B's
     front both being present must not combine into a false "complete" —
-    each is a distinct identity (different id_number) and neither one's
+    each is a distinct identity (different nric_number) and neither one's
     own ID document is actually complete.
     """
     documents = [
@@ -239,19 +239,19 @@ def test_id_document_two_different_people_half_complete_each_does_not_fulfil() -
             "doc-1",
             DocumentStatus.ANALYZED,
             classification_outcome=ClassificationOutcome.ACCEPTED,
-            document_type="id_document",
+            document_type="nric",
             fulfilled_requirements=["id_document"],
-            extracted_fields={"id_number": "S8905952H", "document_side": "back"},
+            extracted_fields={"nric_number": "S8905952H", "document_side": "back"},
         ),
         _make_document(
             "doc-2",
             DocumentStatus.ANALYZED,
             classification_outcome=ClassificationOutcome.ACCEPTED,
-            document_type="id_document",
+            document_type="nric",
             fulfilled_requirements=["id_document"],
             extracted_fields={
                 "individual_name": "Bryan Lim",
-                "id_number": "T0123456A",
+                "nric_number": "T0123456A",
                 "document_side": "front",
             },
         ),
@@ -272,14 +272,14 @@ def test_proof_of_address_requires_coverage_for_every_identity() -> None:
             "doc-1",
             DocumentStatus.ANALYZED,
             classification_outcome=ClassificationOutcome.ACCEPTED,
-            document_type="id_document",
+            document_type="nric",
             extracted_fields={"individual_name": "Jane Tan", "individual_address": "1 Main St"},
         ),
         _make_document(
             "doc-2",
             DocumentStatus.ANALYZED,
             classification_outcome=ClassificationOutcome.ACCEPTED,
-            document_type="id_document",
+            document_type="nric",
             extracted_fields={"individual_name": "John Lim", "individual_address": None},
         ),
     ]
@@ -299,7 +299,7 @@ def test_proof_of_address_satisfied_by_separate_document_matched_by_name() -> No
             "doc-1",
             DocumentStatus.ANALYZED,
             classification_outcome=ClassificationOutcome.ACCEPTED,
-            document_type="id_document",
+            document_type="nric",
             extracted_fields={"individual_name": "Jane Tan", "individual_address": None},
         ),
         _make_document(
@@ -321,14 +321,14 @@ def test_proof_of_address_with_multiple_identities_all_covered() -> None:
             "doc-1",
             DocumentStatus.ANALYZED,
             classification_outcome=ClassificationOutcome.ACCEPTED,
-            document_type="id_document",
+            document_type="nric",
             extracted_fields={"individual_name": "Jane Tan", "individual_address": "1 Main St"},
         ),
         _make_document(
             "doc-2",
             DocumentStatus.ANALYZED,
             classification_outcome=ClassificationOutcome.ACCEPTED,
-            document_type="id_document",
+            document_type="nric",
             extracted_fields={"individual_name": "John Lim", "individual_address": None},
         ),
         _make_document(
@@ -361,16 +361,19 @@ def test_proof_of_address_missing_when_no_identity_yet() -> None:
 
 def _make_fully_covered_documents() -> list[DocumentRecord]:
     """
-    One document per checklist requirement — the id_document entry also
-    carries its own individual_address so proof_of_address's identity-based
-    check (not just its own fulfilled_requirements) is satisfied too.
+    One document per checklist requirement. "id_document" isn't a
+    real document_type any document ever has (see
+    models.IDENTITY_DOCUMENT_REQUIREMENT) — fulfilled by an actual "nric"
+    document here, which also carries its own individual_address so
+    proof_of_address's identity-based check (not just its own
+    fulfilled_requirements) is satisfied too.
     """
     return [
         _make_document(
             f"doc-{i}",
             DocumentStatus.ANALYZED,
             classification_outcome=ClassificationOutcome.ACCEPTED,
-            document_type=requirement,
+            document_type="nric" if requirement == "id_document" else requirement,
             fulfilled_requirements=[requirement],
             extracted_fields=(
                 {
@@ -435,9 +438,9 @@ def test_sync_submission_finalized_reverses_when_coverage_drops() -> None:
         sync_submission_finalized("case-1")
         mock_case_repo.set_submission_finalized.assert_called_with("case-1", finalized=True)
 
-        # doc-0 (bank_statement, not id_document) is now reclassified away —
-        # its fulfilled_requirements goes empty, leaving id_document's own
-        # address-based proof_of_address coverage untouched.
+        # doc-0 (bank_statement, not the identity document) is now
+        # reclassified away — its fulfilled_requirements goes empty, leaving
+        # the NRIC's own address-based proof_of_address coverage untouched.
         dropped = _make_fully_covered_documents()
         dropped[0] = dropped[0].model_copy(update={"fulfilled_requirements": []})
         mock_doc_repo.list_documents.return_value = dropped

@@ -30,7 +30,7 @@ const formatDocumentType = (documentType?: string | null) => {
     .replace(/_/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
 
-  return formatted.replace(/\bId\b/g, "ID");
+  return formatted.replace(/\bId\b/g, "ID").replace(/\bNric\b/g, "NRIC");
 };
 
 const MAX_FILE_SIZE_MB = Math.floor(MAX_FILE_SIZE_BYTES / (1024 * 1024));
@@ -75,6 +75,41 @@ function displayableFieldEntries(fields: Record<string, unknown>): [string, unkn
   return Object.entries(fields).filter(([key]) => !NON_DISPLAYED_FIELD_KEYS.has(key));
 }
 
+// True for a value the LLM returned as an array or nested object rather
+// than a single scalar — e.g. multiple individual_name entries on a
+// document with co-borrowers. String(value) on these renders as
+// "[object Object]" (or a comma-joined run of them), so they need their
+// own formatting (see formatFieldValue) and can't be a plain text input.
+function isStructuredValue(value: unknown): boolean {
+  return Array.isArray(value) || (typeof value === 'object' && value !== null);
+}
+
+// Renders any field value — including an array of scalars, an array of
+// objects, or a single nested object — as a readable string instead of
+// relying on String(value), which stringifies each object element via its
+// default toString() ("[object Object]"). Recurses so an array of objects
+// (e.g. multiple {name, id_number} entries) reads as
+// "name: John Doe, id_number: S1234567A; name: Jane Doe, id_number: S7654321B".
+function formatFieldValue(value: unknown): string {
+  if (value === null || value === undefined) return '—';
+  if (Array.isArray(value)) {
+    return value.map((item) => formatFieldValue(item)).join('; ');
+  }
+  if (typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([key, nested]) => `${humanizeFieldKey(key)}: ${formatFieldValue(nested)}`)
+      .join(', ');
+  }
+  return String(value);
+}
+
+// Displayable fields whose value is structured (array/object) — shown
+// read-only even when the rest of the document's fields are editable,
+// since flattening them into a single text input would be lossy on save.
+function structuredFieldEntries(fields: Record<string, unknown>): [string, unknown][] {
+  return displayableFieldEntries(fields).filter(([, value]) => isStructuredValue(value));
+}
+
 function humanizeFieldKey(key: string): string {
   return key
     .split('_')
@@ -90,6 +125,7 @@ function humanizeFieldKey(key: string): string {
 function fieldsToDraft(fields: Record<string, unknown>): Record<string, string> {
   const draft: Record<string, string> = {};
   for (const [key, value] of displayableFieldEntries(fields)) {
+    if (isStructuredValue(value)) continue;
     draft[key] = value === null || value === undefined ? '' : String(value);
   }
   return draft;

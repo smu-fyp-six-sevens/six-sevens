@@ -5,7 +5,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, status
 
-from .. import document_repository, extracted_fields_repository, spelling_anomaly_repository, storage_service
+from .. import document_repository, extracted_fields_repository, storage_service
 from ..fraud_detection.font_consistency import FontConsistencyResult, check_font_consistency
 from ..fraud_detection.font_consistency_v2 import (
     ExtractedField,
@@ -81,10 +81,12 @@ async def get_font_consistency_v2(document_id: str) -> FontConsistencyResultV2:
 async def get_spelling_anomaly(document_id: str) -> SpellingAnomalyResult:
     """
     On-demand, like the font-consistency checks above — not part of the
-    automatic classification/extraction pipeline. Persists the result into
-    the shared flags table on every call (delete-then-replace, scoped to
-    this check's own rows — see spelling_anomaly_repository), since there's
-    no separate automatic trigger to hang storage off instead.
+    automatic classification/extraction pipeline, and a pure read/compute:
+    nothing is written to the database (no flags-table row, unlike an
+    earlier version of this endpoint). Takes just a document_id and returns
+    a plain JSON body (SpellingAnomalyResult, serialised automatically by
+    FastAPI's response_model) — safe for another service/agent to call
+    directly and repeatedly without side effects.
     """
     try:
         document = await asyncio.to_thread(document_repository.get_document, document_id)
@@ -100,18 +102,6 @@ async def get_spelling_anomaly(document_id: str) -> SpellingAnomalyResult:
 
     file_bytes = await _fetch_document_bytes(document_id)
     extracted_fields = await _fetch_extracted_fields(document_id)
-    result = await check_spelling_anomalies(
+    return await check_spelling_anomalies(
         document_id, file_bytes, document.filename, extracted_fields
     )
-
-    try:
-        await asyncio.to_thread(
-            spelling_anomaly_repository.replace_spelling_anomalies,
-            document_id,
-            document.case_id,
-            result.anomalies,
-        )
-    except Exception:
-        logger.exception("Failed to persist spelling anomalies for document %s", document_id)
-
-    return result

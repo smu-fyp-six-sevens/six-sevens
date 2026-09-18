@@ -8,7 +8,7 @@ list, since "expected but missing" means different things depending on
 which tier a field belongs to:
 
 - required: must be present for this to genuinely be the classified type
-  (e.g. id_document needs individual_name + id_number). Missing one is real
+  (e.g. nric needs individual_name + id_number). Missing one is real
   evidence the classification might be wrong.
 - additional: known, named fields for this type that legitimately vary by
   subtype (e.g. individual_address — present on an NRIC, absent on a
@@ -53,12 +53,25 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         "required": ["individual_name", "company_name", "net_pay"],
         "additional": ["company_address"],
     },
-    "id_document": {
-        # passport_generator.py's own comment: "unlike nric_generator.py,
-        # this page carries no address field" — date_of_birth/nationality
-        # are rendered on both NRIC and passport, only address is subtype-
-        # dependent.
-        "required": ["individual_name", "id_number", "date_of_birth", "nationality"],
+    # Split from a single former "id_document" type — passport and NRIC
+    # need separate schemas because passport_generator.py's own comment
+    # says it plainly: "unlike nric_generator.py, this page carries no
+    # address field". individual_name/id_number/date_of_birth/nationality
+    # are rendered on both (id_number holds the NRIC number even on a
+    # passport page — see passport_generator.py's national_id_no comment).
+    # They still fulfil the same case-checklist requirement though — see
+    # models.IDENTITY_DOCUMENT_TYPES/IDENTITY_DOCUMENT_REQUIREMENT.
+    "passport": {
+        "required": ["individual_name", "passport_number", "nric_number", "date_of_birth", "nationality"],
+        # document_side isn't rendered by doc_gen_scripts, same as nric's —
+        # here so a passport-only identity actually gets sides={"single"}
+        # set (see mapper._is_identity_id_document_complete), rather than
+        # silently never resolving document_side at all and reading as an
+        # incomplete id_document forever. See EXTRA_FIELD_GUIDANCE below.
+        "additional": ["document_side"],
+    },
+    "nric": {
+        "required": ["individual_name", "nric_number", "date_of_birth", "country", "date_of_issue", "date_of_expiry", "nationality"],
         # document_side isn't rendered by doc_gen_scripts (those only ever
         # generate a single front-style page) — it's here for real-world
         # uploads, where an NRIC's front and back are commonly two separate
@@ -255,25 +268,37 @@ EXTRA_FIELD_GUIDANCE: dict[str, str] = {
         "the individuals apart afterwards. Include every subscriber you "
         "can find, even if some of their fields are null."
     ),
-    "id_document": (
+    "nric": (
         'For "document_side", its "value" should be one of "front", '
         '"back", "single", or "unknown". FRONT typically shows a face '
         "photo and the person's name (plus usually date of birth); BACK "
         "typically shows a residential address, thumbprint, and/or issue "
         'date, with no name or photo. Use "single" instead when the '
         "document is self-contained and has no separate other side to "
-        "expect at all — a passport's bio page, or a single image that "
-        "already shows both the identity details and the address in one "
-        "capture. Judge this from what's actually visible, not from which "
-        "fields happen to be present elsewhere in your answer.\n\n"
+        "expect at all — a single image that already shows both the "
+        "identity details and the address in one capture. Judge this from "
+        "what's actually visible, not from which fields happen to be "
+        "present elsewhere in your answer.\n\n"
         'If you determine document_side is "back", do NOT escalate '
         "solely because individual_name (a REQUIRED field above) is "
-        "absent — a name not being visible on the back of an ID is "
+        "absent — a name not being visible on the back of an NRIC is "
         "expected and normal, not evidence the classification is wrong. "
-        "Still escalate if the text doesn't look like any part of an ID "
-        "document at all, or if id_number is also absent on what you've "
-        "judged to be the back (id_number should still be present when "
-        "it's genuinely the back of a Singapore NRIC)."
+        "Still escalate if the text doesn't look like any part of an NRIC "
+        "at all, or if nric_number is also absent on what you've judged "
+        "to be the back (nric_number should still be present when it's "
+        "genuinely the back of a Singapore NRIC)."
+    ),
+    "passport": (
+        'For "document_side", its "value" should almost always be '
+        '"single" — a passport bio page is self-contained (photo, name, '
+        "nric_number, dates, all in one capture), unlike an NRIC's "
+        'separate front/back. Only use "front" or "back" if the text '
+        "genuinely looks like just one side of a physical two-sided card "
+        "rather than a passport page at all — in which case also "
+        "reconsider whether this might actually be an NRIC instead (see "
+        'the escalation guidance below). Use "unknown" only if you '
+        "genuinely can't tell from what's visible; do not default to it "
+        "just to avoid committing to \"single\"."
     ),
     "bank_statement": (
         'For "transactions", its "value" should be an array of objects — one per '
@@ -351,7 +376,7 @@ EXTRA_FIELD_GUIDANCE: dict[str, str] = {
 # mismatch here means the model could suggest a type orchestrator.py can't
 # actually build an extraction prompt for.
 KNOWN_DOCUMENT_TYPES = [
-    "bank_statement", "certificate_of_incorporation", "payslip", "id_document",
+    "bank_statement", "certificate_of_incorporation", "payslip", "passport", "nric",
     "fatca_crs_declaration", "certificate_of_incumbency", "company_constitution",
     "proof_of_address", "source_of_wealth", "credit_report", "list_of_loans",
     "notice_of_assessment",

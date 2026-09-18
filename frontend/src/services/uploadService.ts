@@ -41,11 +41,14 @@ export interface DocumentRecord {
 // Mirrors REQUIRED_DOCUMENT_TYPES in backend/app/models.py — the fixed
 // checklist every case must satisfy. A single document can fulfil more
 // than one of these (see DocumentRecord.fulfilled_requirements).
+// 'id_document' (not itself a document_type — see
+// models.IDENTITY_DOCUMENT_REQUIREMENT) is satisfied by uploading EITHER a
+// passport or an NRIC, not both.
 export const REQUIRED_DOCUMENT_TYPES: { value: string; label: string }[] = [
   { value: 'bank_statement', label: 'Bank statement' },
   { value: 'certificate_of_incorporation', label: 'Certificate of incorporation' },
   { value: 'payslip', label: 'Payslip' },
-  { value: 'id_document', label: 'ID document' },
+  { value: 'id_document', label: 'Identity document (passport or NRIC)' },
   { value: 'fatca_crs_declaration', label: 'FATCA/CRS declaration' },
   { value: 'certificate_of_incumbency', label: 'Certificate of incumbency' },
   { value: 'company_constitution', label: 'Company constitution' },

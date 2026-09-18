@@ -21,6 +21,7 @@ from .models import (
     DocumentStatus,
     DocumentType,
     IdDocumentCoverage,
+    IDENTITY_DOCUMENT_REQUIREMENT,
     ProofOfAddressCoverage,
 )
 from .monitoring import is_stuck
@@ -73,11 +74,14 @@ def compute_requirement_coverage(documents: list[DocumentRecord]) -> tuple[list[
         fulfilled.discard(proof_of_address)
 
     # Same idea for id_document: it requires every identified individual's
-    # own ID to be complete (front+back, matched by id_number — not just
+    # own ID to be complete (front+back, matched by nric_number — not just
     # any front and any back existing somewhere in the case), mirroring
     # proof_of_address's own per-identity requirement above. See
-    # compute_id_document_identity_coverage.
-    id_document = DocumentType.ID_DOCUMENT.value
+    # compute_id_document_identity_coverage. id_document isn't a real
+    # DocumentType (passport/nric are the real classifiable types — see
+    # models.IDENTITY_DOCUMENT_TYPES), so it's not DocumentType.X.value
+    # like proof_of_address above, just the shared requirement string.
+    id_document = IDENTITY_DOCUMENT_REQUIREMENT
     if compute_id_document_identity_coverage(documents):
         fulfilled.add(id_document)
     else:

@@ -34,7 +34,15 @@ class DocumentType(str, Enum):
     BANK_STATEMENT = "bank_statement"
     CERTIFICATE_OF_INCORPORATION = "certificate_of_incorporation"
     PAYSLIP = "payslip"
-    ID_DOCUMENT = "id_document"  # NRIC / passport of directors, shareholders, UBO
+    # Split from a single former ID_DOCUMENT type — passport and NRIC have
+    # different extraction schemas (a passport carries no address field;
+    # see extraction_prompts.EXTRACTION_SCHEMAS) so classification needs to
+    # tell them apart. They still satisfy the same case-checklist slot
+    # though — see IDENTITY_DOCUMENT_TYPES/IDENTITY_DOCUMENT_REQUIREMENT
+    # below — a case needs one identity document per individual, whichever
+    # type they actually have, not both.
+    PASSPORT = "passport"
+    NRIC = "nric"
     FATCA_CRS_DECLARATION = "fatca_crs_declaration"
     CERTIFICATE_OF_INCUMBENCY = "certificate_of_incumbency"
     COMPANY_CONSTITUTION = "company_constitution"
@@ -48,14 +56,28 @@ class DocumentType(str, Enum):
     UNRECOGNISED = "unrecognised"
 
 
-# The fixed checklist every case is required to satisfy — every real
-# DocumentType is also a document requirement. A single document can fulfil
-# more than one of these (e.g. an NRIC also covers Proof of Address), which
-# is why fulfilment is tracked as its own list rather than assumed 1:1 with
-# a document's own document_type — see DocumentRecord.fulfilled_requirements.
+# Passport and NRIC are real, independently-classifiable document types
+# (different extraction schemas each), but both fulfil the same checklist
+# requirement below — never appears as a document's own document_type,
+# only in REQUIRED_DOCUMENT_TYPES/fulfilled_requirements.
+IDENTITY_DOCUMENT_REQUIREMENT = "id_document"
+IDENTITY_DOCUMENT_TYPES: set[str] = {DocumentType.PASSPORT.value, DocumentType.NRIC.value}
+
+
+# The fixed checklist every case is required to satisfy. Every DocumentType
+# is its own requirement EXCEPT passport/nric, which collapse into the
+# single shared IDENTITY_DOCUMENT_REQUIREMENT above — so this isn't quite
+# "every real DocumentType" any more, it's every DocumentType that isn't
+# itself part of an either/or group, plus one slot per such group. A single
+# document can fulfil more than one requirement (e.g. an NRIC also covers
+# Proof of Address), which is why fulfilment is tracked as its own list
+# rather than assumed 1:1 with a document's own document_type — see
+# DocumentRecord.fulfilled_requirements.
 REQUIRED_DOCUMENT_TYPES: list[str] = [
-    doc_type.value for doc_type in DocumentType if doc_type != DocumentType.UNRECOGNISED
-]
+    doc_type.value
+    for doc_type in DocumentType
+    if doc_type != DocumentType.UNRECOGNISED and doc_type.value not in IDENTITY_DOCUMENT_TYPES
+] + [IDENTITY_DOCUMENT_REQUIREMENT]
 
 
 def compute_fulfilled_requirements(
@@ -68,16 +90,19 @@ def compute_fulfilled_requirements(
     actually-extracted individual_address field, once Extraction has run.
     An NRIC (or any other document type whose schema happens to capture an
     address) fulfils proof_of_address for whoever individual_address names,
-    on top of fulfilling its own document_type.
+    on top of fulfilling its own requirement.
 
     Note: this only decides what a single document fulfils on its own —
     with multiple identities in a case (multiple ID documents), whether
     proof_of_address counts case-wide requires matching each identity to
     an address by name; see mapper.compute_identity_proof_of_address_coverage.
     """
-    if document_type not in REQUIRED_DOCUMENT_TYPES:
+    if document_type in IDENTITY_DOCUMENT_TYPES:
+        fulfilled = [IDENTITY_DOCUMENT_REQUIREMENT]
+    elif document_type in REQUIRED_DOCUMENT_TYPES:
+        fulfilled = [document_type]
+    else:
         return []
-    fulfilled = [document_type]
     has_address = bool((extracted_fields or {}).get("individual_address"))
     if has_address and document_type != DocumentType.PROOF_OF_ADDRESS.value:
         fulfilled.append(DocumentType.PROOF_OF_ADDRESS.value)

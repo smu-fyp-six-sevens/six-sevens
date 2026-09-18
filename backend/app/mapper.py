@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import NamedTuple, Optional
 
-from .models import ClassificationOutcome, DocumentRecord, DocumentType
+from .models import ClassificationOutcome, DocumentRecord, IDENTITY_DOCUMENT_TYPES
 
 
 def _normalize_name(name: object) -> Optional[str]:
@@ -45,8 +45,8 @@ class _NamedAddress(NamedTuple):
 
 
 class _IdentityState(NamedTuple):
-    # identity key (id_number, or name when no id_number was extracted) ->
-    # _Identity
+    # identity key (nric_number, or name when no nric_number was extracted)
+    # -> _Identity
     identities: dict[str, _Identity]
     # One entry per person an accepted document ties an address to — a
     # document can carry a single one (the common individual_name +
@@ -108,11 +108,18 @@ def _collect_identity_state(documents: list[DocumentRecord]) -> _IdentityState:
     # but never creates one on its own; see _named_addresses_from_document.
     identities: dict[str, _Identity] = {}
     for doc in accepted:
-        if doc.document_type != DocumentType.ID_DOCUMENT.value:
+        if doc.document_type not in IDENTITY_DOCUMENT_TYPES:
             continue
         fields = doc.extracted_fields or {}
         name = _normalize_name(fields.get("individual_name"))
-        id_number = _normalize_id_number(fields.get("id_number"))
+        # nric_number, not passport_number: a person's NRIC number is the
+        # one identifier that's actually shared between their NRIC and
+        # their passport (see extraction_prompts.EXTRACTION_SCHEMAS —
+        # "passport" extracts nric_number too, mirroring the "National ID
+        # No" field a real Singapore passport page prints). passport_number
+        # is the passport's own document serial, unrelated to the person's
+        # NRIC and useless for cross-document identity linking.
+        id_number = _normalize_id_number(fields.get("nric_number"))
         key = id_number or name
         if key is None:
             continue
@@ -143,31 +150,37 @@ def compute_identity_proof_of_address_progress(documents: list[DocumentRecord]) 
     either by its own ID document carrying an address, or by a separate
     document (e.g. a utility bill) whose extracted individual_name matches.
 
-    Identities are grouped by normalized id_number where an id_document
+    Identities are grouped by normalized nric_number where a document
     provides one, rather than by name alone. This matters because a single
     NRIC is often uploaded as two separate images (front/back) that get
-    extracted as two separate id_document rows — OCR on the back image can
-    garble or drop the name entirely, so name-matching alone would treat
-    them as two different people instead of recognising they share the same
-    id_number. Documents without an extracted id_number still fall back to
-    matching by normalized name, same as before.
+    extracted as two separate identity-document rows — OCR on the back
+    image can garble or drop the name entirely, so name-matching alone
+    would treat them as two different people instead of recognising they
+    share the same nric_number. It's also the field that links a passport
+    to its owner's NRIC (see extraction_prompts.EXTRACTION_SCHEMAS's
+    "passport" entry) — passport_number is the passport's own serial, not
+    a personal identifier, so it's deliberately not used here. Documents
+    without an extracted nric_number still fall back to matching by
+    normalized name, same as before.
 
     Coverage against proof_of_address is still joined by name, since a
-    proof_of_address document has no id_number field to join on at all
+    proof_of_address document has no nric_number field to join on at all
     (see extraction_prompts.EXTRACTION_SCHEMAS) — an identity counts as
-    covered if any name seen for it (across its id_number-linked documents)
-    matches a document carrying an address. Known limitation: this name
-    match is global, not scoped per identity, so two different people who
-    happen to share a name but have distinct id_numbers can both read as
-    covered once either one has an address on file — pre-existing behaviour
-    of name-based matching, not something id_number grouping fixes.
+    covered if any name seen for it (across its nric_number-linked
+    documents) matches a document carrying an address. Known limitation:
+    this name match is global, not scoped per identity, so two different
+    people who happen to share a name but have distinct nric_numbers can
+    both read as covered once either one has an address on file —
+    pre-existing behaviour of name-based matching, not something
+    nric_number grouping fixes.
 
     Returns (covered, total) identities — total is how many accepted
-    id_documents have been identified in the case at all, so (0, 0) means
-    there's nothing to report coverage against yet, distinct from (0, 2).
-    An address document (proof_of_address, bank_statement, ...) whose name
-    doesn't match any identified id_document isn't counted here at all — see
-    compute_unmatched_proof_of_address_names for surfacing those.
+    identity documents have been identified in the case at all, so (0, 0)
+    means there's nothing to report coverage against yet, distinct from
+    (0, 2). An address document (proof_of_address, bank_statement, ...)
+    whose name doesn't match any identified identity document isn't
+    counted here at all — see compute_unmatched_proof_of_address_names for
+    surfacing those.
     """
     identities, _, names_with_address = _collect_identity_state(documents)
 

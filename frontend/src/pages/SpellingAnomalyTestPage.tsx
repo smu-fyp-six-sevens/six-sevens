@@ -151,6 +151,11 @@ export default function SpellingAnomalyTestPage({ onBack }: SpellingAnomalyTestP
                 </div>
               </>
             )}
+
+            <div className="section-label" style={{ marginTop: 18 }}>
+              <span>Raw JSON response</span>
+            </div>
+            <pre className="extraction-text-panel">{JSON.stringify(result, null, 2)}</pre>
           </section>
         )}
       </section>

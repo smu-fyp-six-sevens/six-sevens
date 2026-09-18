@@ -42,13 +42,13 @@ def test_progress_counts_covered_and_total_identities() -> None:
     documents = [
         _make_document(
             "doc-1",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={"individual_name": "Amanda Koh", "individual_address": "1 Main St"},
         ),
         _make_document(
             "doc-2",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={"individual_name": "Bryan Lim", "individual_address": None},
         ),
@@ -56,20 +56,20 @@ def test_progress_counts_covered_and_total_identities() -> None:
     assert compute_identity_proof_of_address_progress(documents) == (1, 2)
 
 
-def test_progress_skips_id_document_with_no_name_or_id_number() -> None:
-    # An accepted id_document where extraction found neither individual_name
-    # nor id_number contributes no identity at all — it shouldn't crash or
-    # be counted as some kind of anonymous identity.
+def test_progress_skips_identity_document_with_no_name_or_nric_number() -> None:
+    # An accepted identity document where extraction found neither
+    # individual_name nor nric_number contributes no identity at all — it
+    # shouldn't crash or be counted as some kind of anonymous identity.
     documents = [
         _make_document(
             "doc-1",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={"individual_address": "1 Main St"},
         ),
         _make_document(
             "doc-2",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={"individual_name": "Amanda Koh", "individual_address": "2 Main St"},
         ),
@@ -86,7 +86,7 @@ def test_progress_tolerates_non_string_individual_name() -> None:
     documents = [
         _make_document(
             "doc-1",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={"individual_name": "Amanda Koh", "individual_address": None},
         ),
@@ -103,12 +103,98 @@ def test_progress_tolerates_non_string_individual_name() -> None:
     assert compute_identity_proof_of_address_progress(documents) == (0, 1)
 
 
+def test_progress_recognises_passport_as_an_identity_document() -> None:
+    """
+    passport and nric are two separate DocumentTypes (different extraction
+    schemas), but both must count as identity documents here — this guards
+    against passport being accidentally left out of IDENTITY_DOCUMENT_TYPES.
+    """
+    documents = [
+        _make_document(
+            "doc-1",
+            document_type="passport",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"individual_name": "Amanda Koh", "individual_address": None},
+        ),
+    ]
+    assert compute_identity_proof_of_address_progress(documents) == (0, 1)
+
+
+def test_progress_links_passport_to_nric_via_shared_nric_number() -> None:
+    """
+    A passport's own extraction schema includes nric_number (the "National
+    ID No" printed on a real Singapore passport page — see
+    extraction_prompts.EXTRACTION_SCHEMAS's "passport" entry), so a
+    passport and an NRIC for the same person should merge into one
+    identity via that shared number, even with mismatched names (garbled
+    OCR on one of them).
+    """
+    documents = [
+        _make_document(
+            "doc-passport",
+            document_type="passport",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={
+                "individual_name": "Amanda Koh",
+                "nric_number": "S1234567D",
+                "individual_address": None,
+            },
+        ),
+        _make_document(
+            "doc-nric",
+            document_type="nric",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={
+                "individual_name": "AMANDAKOH",
+                "nric_number": "s1234567d",
+                "individual_address": "1 Main St",
+            },
+        ),
+    ]
+    assert compute_identity_proof_of_address_progress(documents) == (1, 1)
+
+
+def test_progress_does_not_link_identities_by_passport_number() -> None:
+    """
+    passport_number is the passport document's own serial, not a personal
+    identifier shared with anything else — two passport rows that happen
+    to share a passport_number (shouldn't normally occur, but nothing
+    stops a re-extraction glitch from producing it) must NOT be treated as
+    the same identity just because of that, unlike nric_number.
+    """
+    documents = [
+        _make_document(
+            "doc-1",
+            document_type="passport",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={
+                "individual_name": "Amanda Koh",
+                "passport_number": "E1234567A",
+                "individual_address": None,
+            },
+        ),
+        _make_document(
+            "doc-2",
+            document_type="passport",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={
+                "individual_name": "Bryan Lim",
+                "passport_number": "E1234567A",
+                "individual_address": "1 Main St",
+            },
+        ),
+    ]
+    # Two distinct names, no nric_number to link them — passport_number
+    # alone must not merge these into one identity.
+    assert compute_identity_proof_of_address_progress(documents) == (1, 2)
+
+
 def test_progress_ignores_manual_review_documents() -> None:
     """An id_document not yet ACCEPTED isn't a confirmed identity."""
     documents = [
         _make_document(
             "doc-1",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.MANUAL_REVIEW,
             extracted_fields={"individual_name": "Amanda Koh", "individual_address": "1 Main St"},
         ),
@@ -126,14 +212,14 @@ def test_progress_with_three_identities_partial_coverage() -> None:
         # Amanda: self-covered, her own NRIC shows an address.
         _make_document(
             "doc-1",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={"individual_name": "Amanda Koh", "individual_address": "1 Main St"},
         ),
         # Bryan: NRIC has no address, but a separate utility bill covers him.
         _make_document(
             "doc-2",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={"individual_name": "Bryan Lim", "individual_address": None},
         ),
@@ -146,7 +232,7 @@ def test_progress_with_three_identities_partial_coverage() -> None:
         # Cheryl: nothing covers her at all.
         _make_document(
             "doc-4",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={"individual_name": "Cheryl Ong", "individual_address": None},
         ),
@@ -158,7 +244,7 @@ def test_progress_with_three_identities_all_covered() -> None:
     documents = [
         _make_document(
             f"doc-{i}",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={"individual_name": name, "individual_address": f"{i} Main St"},
         )
@@ -167,22 +253,23 @@ def test_progress_with_three_identities_all_covered() -> None:
     assert compute_identity_proof_of_address_progress(documents) == (3, 3)
 
 
-def test_progress_deduplicates_same_person_across_two_id_documents() -> None:
+def test_progress_deduplicates_same_person_across_passport_and_nric() -> None:
     """
     The same individual submitting both an NRIC and a passport is still
     one identity, not two — matched by normalized name, so this must not
-    double-count them just because there are two id_document rows.
+    double-count them just because there are two identity-document rows of
+    different types (both in IDENTITY_DOCUMENT_TYPES).
     """
     documents = [
         _make_document(
             "doc-1",
-            document_type="id_document",
+            document_type="passport",
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={"individual_name": "Amanda Koh", "individual_address": None},
         ),
         _make_document(
             "doc-2",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={"individual_name": "  amanda   koh ", "individual_address": "1 Main St"},
         ),
@@ -190,31 +277,32 @@ def test_progress_deduplicates_same_person_across_two_id_documents() -> None:
     assert compute_identity_proof_of_address_progress(documents) == (1, 1)
 
 
-def test_progress_deduplicates_same_id_number_despite_mismatched_names() -> None:
+def test_progress_deduplicates_same_nric_number_despite_mismatched_names() -> None:
     """
     An NRIC uploaded as two separate images (front/back) produces two
-    id_document rows. OCR on the back image can garble or drop the name
-    entirely, so name-matching alone would wrongly treat this as two
-    identities. Sharing the same id_number should still merge them into one.
+    identity-document rows. OCR on the back image can garble or drop the
+    name entirely, so name-matching alone would wrongly treat this as two
+    identities. Sharing the same nric_number should still merge them into
+    one.
     """
     documents = [
         _make_document(
             "doc-1",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={
                 "individual_name": "Amanda Koh",
-                "id_number": "S1234567D",
+                "nric_number": "S1234567D",
                 "individual_address": None,
             },
         ),
         _make_document(
             "doc-2",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={
                 "individual_name": "AMANDAKOH",  # garbled OCR from the back image
-                "id_number": "s1234567d",
+                "nric_number": "s1234567d",
                 "individual_address": "1 Main St",
             },
         ),
@@ -225,35 +313,36 @@ def test_progress_deduplicates_same_id_number_despite_mismatched_names() -> None
 def test_progress_links_nric_front_and_back_uploaded_as_separate_files() -> None:
     """
     Mirrors an actual Singapore NRIC (see doc_gen_scripts/nric_passport/
-    nric_generator.py): the front prints the name and id_number but no
-    address, and the back prints the id_number again alongside the address
-    but no name at all. Uploaded as two independent files, each becomes its
-    own DocumentRecord and is classified/extracted independently (there is
-    no grouping step anywhere in the upload pipeline — see
-    app/routers/upload.py's _ingest_one). Under the old name-only matching,
-    the back row's address would have been silently dropped entirely
-    (normalized name is None, so it can't join to anything) and this person
-    would incorrectly show as missing proof_of_address. Matching by
-    id_number instead links the two rows into one covered identity.
+    nric_generator.py): the front prints the name and nric_number but no
+    address, and the back prints the nric_number again alongside the
+    address but no name at all. Uploaded as two independent files, each
+    becomes its own DocumentRecord and is classified/extracted
+    independently (there is no grouping step anywhere in the upload
+    pipeline — see app/routers/upload.py's _ingest_one). Under the old
+    name-only matching, the back row's address would have been silently
+    dropped entirely (normalized name is None, so it can't join to
+    anything) and this person would incorrectly show as missing
+    proof_of_address. Matching by nric_number instead links the two rows
+    into one covered identity.
     """
     documents = [
         _make_document(
             "doc-front",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={
                 "individual_name": "Amanda Koh",
-                "id_number": "S1234567D",
+                "nric_number": "S1234567D",
                 "individual_address": None,
             },
         ),
         _make_document(
             "doc-back",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={
                 "individual_name": None,
-                "id_number": "S1234567D",
+                "nric_number": "S1234567D",
                 "individual_address": "2 Orchard Turn, #01-01, Singapore 238801",
             },
         ),
@@ -261,41 +350,41 @@ def test_progress_links_nric_front_and_back_uploaded_as_separate_files() -> None
     assert compute_identity_proof_of_address_progress(documents) == (1, 1)
 
 
-def test_progress_keeps_distinct_id_numbers_as_separate_identities() -> None:
+def test_progress_keeps_distinct_nric_numbers_as_separate_identities() -> None:
     """
-    Different id_numbers means different identities (not merged into one,
+    Different nric_numbers means different identities (not merged into one,
     the way pure name-matching would). Coverage is still checked by name,
-    since proof_of_address documents carry no id_number to join on — so two
-    different people who happen to share a name are both counted as
+    since proof_of_address documents carry no nric_number to join on — so
+    two different people who happen to share a name are both counted as
     covered here once either of them has an address on file. That's a
     known, pre-existing limitation of name-based address matching (the old
     purely-name-keyed code had the same blind spot, just via merging them
-    into a single identity outright instead), not something this id_number
-    grouping is expected to solve.
+    into a single identity outright instead), not something this
+    nric_number grouping is expected to solve.
     """
     documents = [
         _make_document(
             "doc-1",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={
                 "individual_name": "Amanda Koh",
-                "id_number": "S1234567D",
+                "nric_number": "S1234567D",
                 "individual_address": "1 Main St",
             },
         ),
         _make_document(
             "doc-2",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={
                 "individual_name": "Amanda Koh",
-                "id_number": "T7654321Z",
+                "nric_number": "T7654321Z",
                 "individual_address": None,
             },
         ),
     ]
-    # Two identities (distinct id_numbers) — both read as covered because
+    # Two identities (distinct nric_numbers) — both read as covered because
     # address-matching falls back to the shared name across identities.
     assert compute_identity_proof_of_address_progress(documents) == (2, 2)
 
@@ -304,7 +393,7 @@ def test_unmatched_names_is_empty_with_no_address_documents() -> None:
     documents = [
         _make_document(
             "doc-1",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={"individual_name": "Amanda Koh", "individual_address": None},
         ),
@@ -334,11 +423,11 @@ def test_unmatched_names_surfaces_a_proof_of_address_that_matches_no_identity() 
         ),
         _make_document(
             "doc-nric",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={
                 "individual_name": "LIM HUI LING",
-                "id_number": "S8523456B",
+                "nric_number": "S8523456B",
                 "individual_address": "28 BUKIT BATOK EAST AVENUE #04-47 SINGAPORE 278302",
             },
         ),
@@ -352,7 +441,7 @@ def test_unmatched_names_excludes_a_name_that_does_match_an_identity() -> None:
     documents = [
         _make_document(
             "doc-1",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={"individual_name": "Bryan Lim", "individual_address": None},
         ),
@@ -391,15 +480,15 @@ def test_constitution_subscribers_match_each_persons_own_identity_separately() -
     documents = [
         _make_document(
             "doc-1",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
-            extracted_fields={"individual_name": "Ho Chloe", "id_number": "S8905952H"},
+            extracted_fields={"individual_name": "Ho Chloe", "nric_number": "S8905952H"},
         ),
         _make_document(
             "doc-2",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
-            extracted_fields={"individual_name": "Vikram s/o Ramesh", "id_number": "E8762066G"},
+            extracted_fields={"individual_name": "Vikram s/o Ramesh", "nric_number": "E8762066G"},
         ),
         _make_document(
             "doc-3",
@@ -431,9 +520,9 @@ def test_constitution_subscriber_without_own_id_document_shows_as_unmatched() ->
     documents = [
         _make_document(
             "doc-1",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
-            extracted_fields={"individual_name": "Ho Chloe", "id_number": "S8905952H"},
+            extracted_fields={"individual_name": "Ho Chloe", "nric_number": "S8905952H"},
         ),
         _make_document(
             "doc-2",
@@ -484,9 +573,9 @@ def test_id_document_identity_progress_one_identity_only_back_uploaded() -> None
     documents = [
         _make_document(
             "doc-1",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
-            extracted_fields={"id_number": "S8905952H", "document_side": "back"},
+            extracted_fields={"nric_number": "S8905952H", "document_side": "back"},
         ),
     ]
     assert compute_id_document_identity_progress(documents) == (0, 1)
@@ -494,23 +583,23 @@ def test_id_document_identity_progress_one_identity_only_back_uploaded() -> None
 
 
 def test_id_document_identity_progress_covered_once_same_identity_has_both_sides() -> None:
-    """Front and back matched by the same id_number — same NRIC, two photos."""
+    """Front and back matched by the same nric_number — same NRIC, two photos."""
     documents = [
         _make_document(
             "doc-1",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={
                 "individual_name": "Amanda Koh",
-                "id_number": "S8905952H",
+                "nric_number": "S8905952H",
                 "document_side": "front",
             },
         ),
         _make_document(
             "doc-2",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
-            extracted_fields={"id_number": "S8905952H", "document_side": "back"},
+            extracted_fields={"nric_number": "S8905952H", "document_side": "back"},
         ),
     ]
     assert compute_id_document_identity_progress(documents) == (1, 1)
@@ -521,23 +610,23 @@ def test_id_document_two_different_identities_half_complete_each_does_not_combin
     """
     The bug this was written to catch: person A's back and person B's front
     both being present in the case must NOT read as one complete pair —
-    each is a distinct identity (different id_number), and neither one's
+    each is a distinct identity (different nric_number), and neither one's
     own ID document is complete on its own.
     """
     documents = [
         _make_document(
             "doc-1",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
-            extracted_fields={"id_number": "S8905952H", "document_side": "back"},
+            extracted_fields={"nric_number": "S8905952H", "document_side": "back"},
         ),
         _make_document(
             "doc-2",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={
                 "individual_name": "Bryan Lim",
-                "id_number": "T0123456A",
+                "nric_number": "T0123456A",
                 "document_side": "front",
             },
         ),
@@ -554,15 +643,15 @@ def test_id_document_two_backs_for_same_identity_still_incomplete() -> None:
     documents = [
         _make_document(
             "doc-1",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
-            extracted_fields={"id_number": "S8905952H", "document_side": "back"},
+            extracted_fields={"nric_number": "S8905952H", "document_side": "back"},
         ),
         _make_document(
             "doc-2",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
-            extracted_fields={"id_number": "S8905952H", "document_side": "back"},
+            extracted_fields={"nric_number": "S8905952H", "document_side": "back"},
         ),
     ]
     assert compute_id_document_identity_progress(documents) == (0, 1)
@@ -572,15 +661,15 @@ def test_id_document_identity_progress_ignores_manual_review_and_unknown_side() 
     documents = [
         _make_document(
             "doc-1",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.MANUAL_REVIEW,
-            extracted_fields={"id_number": "S8905952H", "document_side": "front"},
+            extracted_fields={"nric_number": "S8905952H", "document_side": "front"},
         ),
         _make_document(
             "doc-2",
-            document_type="id_document",
+            document_type="nric",
             classification_outcome=ClassificationOutcome.ACCEPTED,
-            extracted_fields={"id_number": "T0123456A", "document_side": "unknown"},
+            extracted_fields={"nric_number": "T0123456A", "document_side": "unknown"},
         ),
     ]
     assert compute_id_document_identity_progress(documents) == (0, 1)
@@ -591,7 +680,7 @@ def test_id_document_single_capture_is_immediately_complete() -> None:
     documents = [
         _make_document(
             "doc-1",
-            document_type="id_document",
+            document_type="passport",
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={"individual_name": "Amanda Koh", "document_side": "single"},
         ),
