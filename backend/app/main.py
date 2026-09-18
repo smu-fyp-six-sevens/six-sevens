@@ -6,6 +6,7 @@ from fastapi import Depends, FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from . import realtime_listener
 from .auth import require_auth
 from .config import settings
 from .health import check_db_connection
@@ -25,7 +26,19 @@ async def lifespan(app: FastAPI):
         # Deliberately non-fatal: a transient Supabase blip at boot shouldn't
         # crash-loop the whole app. GET /health/db surfaces ongoing status.
         logger.exception("Database connectivity check failed at startup — continuing anyway")
+
+    try:
+        await realtime_listener.start()
+    except Exception:
+        # Also non-fatal, same reasoning as above — the case status
+        # WebSocket degrades to "never pushes anything beyond the initial
+        # snapshot on connect" rather than taking the whole app down, e.g.
+        # if SUPABASE_SECRET_KEY isn't configured in a given environment yet.
+        logger.exception("Realtime listener failed to start — continuing anyway")
+
     yield
+
+    await realtime_listener.stop()
 
 
 app = FastAPI(title="fyp API", lifespan=lifespan)
@@ -49,9 +62,10 @@ app.include_router(monitoring.router, dependencies=_protected)
 app.include_router(detection.router, dependencies=_protected)
 app.include_router(injection.router, dependencies=_protected)
 app.include_router(extraction.router, dependencies=_protected)
-# Not in _protected: WebSocket handshakes can't carry an Authorization
-# header from the browser, so this route checks its own token query param
-# (see routers/ws.py) instead of require_auth.
+# Not in _protected as a whole: the WebSocket route can't carry an
+# Authorization header from the browser, so it checks its own short-lived
+# ticket query param instead (see routers/ws.py) — its sibling POST
+# /ws/tickets route applies require_auth itself, directly on that route.
 app.include_router(ws.router)
 
 

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import httpx
-from supabase import create_client, Client, ClientOptions
+from supabase import acreate_client, create_client, AsyncClient, Client, ClientOptions
 
 from .config import settings
 
@@ -37,3 +37,23 @@ def _build_client() -> Client:
 
 
 supabase_client: Client = _build_client()
+
+
+async def build_async_supabase_client() -> AsyncClient:
+    """
+    Separate from supabase_client above (which is sync, built eagerly at
+    import time, and used everywhere via asyncio.to_thread) — this is only
+    for realtime_listener.py's Realtime subscription, which needs the
+    async client and can't be constructed at import time since acreate_client
+    itself is a coroutine. Called once from main.py's lifespan.
+
+    Uses SUPABASE_SECRET_KEY (bypasses RLS), not SUPABASE_PUBLISHABLE_KEY —
+    this subscription is a trusted, backend-only context, never exposed to
+    the browser.
+    """
+    if not settings.SUPABASE_URL:
+        raise RuntimeError("SUPABASE_URL is not set")
+    if not settings.SUPABASE_SECRET_KEY:
+        raise RuntimeError("SUPABASE_SECRET_KEY is not set")
+
+    return await acreate_client(settings.SUPABASE_URL, settings.SUPABASE_SECRET_KEY)

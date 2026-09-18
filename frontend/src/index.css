@@ -705,11 +705,45 @@ h1 {
   border-radius: 10px;
   background: var(--amber-bg);
   color: var(--amber);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.mock-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--amber);
 }
 
 .mock-badge.live {
   background: var(--teal-bg);
   color: var(--teal);
+}
+
+.mock-badge.live::before {
+  background: var(--teal);
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.7);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mock-badge.live::before {
+    animation: none;
+  }
 }
 
 .mock-failure-reason {
