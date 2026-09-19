@@ -588,6 +588,53 @@ def test_proof_of_address_with_both_addresses_fulfils_both_items() -> None:
     assert set(fulfilled) == {"proof_of_address", "company_proof_of_address"}
 
 
+def test_only_nric_utility_bill_or_bank_statement_address_fulfils_proof_of_address() -> None:
+    fields = {"individual_name": "Jane Tan", "individual_address": "1 Main St"}
+    assert compute_fulfilled_requirements("nric", fields) == ["id_document", "proof_of_address"]
+    assert compute_fulfilled_requirements("bank_statement", fields) == ["proof_of_address"]
+    assert compute_fulfilled_requirements("proof_of_address", fields) == ["proof_of_address"]
+    # Company documents that merely list people's addresses aren't proof of address.
+    for document_type in ("certificate_of_incumbency", "company_constitution"):
+        assert compute_fulfilled_requirements(document_type, fields) == [document_type]
+
+
+def test_personal_bank_statement_fulfils_only_proof_of_address() -> None:
+    """The regression: a personal statement used to also tick the corporate bank_statement item."""
+    fulfilled = compute_fulfilled_requirements(
+        "bank_statement", {"individual_name": "Jane Tan", "individual_address": "1 Main St"}
+    )
+    assert fulfilled == ["proof_of_address"]
+
+
+def test_personal_bank_statement_without_address_fulfils_nothing() -> None:
+    fulfilled = compute_fulfilled_requirements("bank_statement", {"individual_name": "Jane Tan"})
+    assert fulfilled == []
+
+
+def test_corporate_bank_statement_fulfils_only_bank_statement() -> None:
+    fulfilled = compute_fulfilled_requirements(
+        "bank_statement", {"company_name": "Acme Pte Ltd", "account_number": "123"}
+    )
+    assert fulfilled == ["bank_statement"]
+
+
+def test_corporate_bank_statement_with_a_stray_individual_address_is_not_proof_of_address() -> None:
+    """company_name present means a company holds the account, whatever else was extracted."""
+    fulfilled = compute_fulfilled_requirements(
+        "bank_statement",
+        {
+            "company_name": "Acme Pte Ltd",
+            "individual_name": "Jane Tan",
+            "individual_address": "1 Main St",
+        },
+    )
+    assert fulfilled == ["bank_statement"]
+
+
+def test_bank_statement_before_extraction_is_corporate() -> None:
+    assert compute_fulfilled_requirements("bank_statement", None) == ["bank_statement"]
+
+
 def test_company_address_on_other_document_types_does_not_fulfil_company_proof() -> None:
     """Only a proof_of_address document counts (a bank statement also carries a company address)."""
     fulfilled = compute_fulfilled_requirements(
@@ -639,12 +686,12 @@ def test_personal_brokerage_statement_fulfils_only_the_personal_item() -> None:
     assert fulfilled == ["source_of_personal_wealth"]
 
 
-def test_personal_source_of_wealth_with_address_also_fulfils_proof_of_address() -> None:
+def test_personal_source_of_wealth_with_address_does_not_fulfil_proof_of_address() -> None:
     fulfilled = compute_fulfilled_requirements(
         "source_of_wealth",
         {"account_holder_name": "Nurul Hassan", "individual_address": "16 Eng Kong Terrace"},
     )
-    assert set(fulfilled) == {"source_of_personal_wealth", "proof_of_address"}
+    assert set(fulfilled) == {"source_of_personal_wealth"}
 
 
 def test_company_statement_naming_a_director_stays_corporate() -> None:

@@ -180,8 +180,14 @@ def test_progress_does_not_link_identities_by_passport_number() -> None:
             extracted_fields={
                 "individual_name": "Bryan Lim",
                 "passport_number": "E1234567A",
-                "individual_address": "1 Main St",
+                "individual_address": None,
             },
+        ),
+        _make_document(
+            "doc-poa",
+            document_type="proof_of_address",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"individual_name": "Bryan Lim", "individual_address": "1 Main St"},
         ),
     ]
     # Two distinct names, no nric_number to link them — passport_number
@@ -468,14 +474,11 @@ def test_unmatched_names_ignores_manual_review_documents() -> None:
     assert compute_unmatched_proof_of_address_names(documents) == []
 
 
-def test_constitution_subscribers_match_each_persons_own_identity_separately() -> None:
+def test_constitution_subscriber_addresses_do_not_cover_anyone() -> None:
     """
-    Regression test: a company_constitution naming multiple subscribers
-    must match each person against their OWN id_document identity
-    individually — not get squashed into one joined name/address that
-    matches neither (the original bug: "Ho Chloe; Vikram s/o Ramesh" as one
-    string matched no one, even though both people had their own accepted
-    id_document on file).
+    A company_constitution listing people's addresses isn't proof of address
+    for them, even when the names match an identity's id_document exactly —
+    and those ignored addresses don't surface as "unmatched" either.
     """
     documents = [
         _make_document(
@@ -496,27 +499,17 @@ def test_constitution_subscribers_match_each_persons_own_identity_separately() -
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={
                 "subscribers": [
-                    {
-                        "name": "Ho Chloe",
-                        "address": "33 Geylang East Avenue, #06-62, Singapore 843612",
-                        "id_number": "S8905952H",
-                        "shares": 6000,
-                    },
-                    {
-                        "name": "Vikram s/o Ramesh",
-                        "address": "39 Spottiswoode Park Road, #03-66, Singapore 737187",
-                        "id_number": "S8415726A",
-                        "shares": 4000,
-                    },
+                    {"name": "Ho Chloe", "address": "33 Geylang East Avenue", "id_number": "S8905952H"},
+                    {"name": "Ow Fook Chuen", "address": "68 Circular Road", "id_number": "S1234567A"},
                 ],
             },
         ),
     ]
-    assert compute_identity_proof_of_address_progress(documents) == (2, 2)
+    assert compute_identity_proof_of_address_progress(documents) == (0, 2)
     assert compute_unmatched_proof_of_address_names(documents) == []
 
 
-def test_constitution_subscriber_without_own_id_document_shows_as_unmatched() -> None:
+def test_incumbency_address_does_not_cover_anyone() -> None:
     documents = [
         _make_document(
             "doc-1",
@@ -526,20 +519,54 @@ def test_constitution_subscriber_without_own_id_document_shows_as_unmatched() ->
         ),
         _make_document(
             "doc-2",
-            document_type="company_constitution",
+            document_type="certificate_of_incumbency",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"individual_name": "Ho Chloe", "individual_address": "33 Geylang East Avenue"},
+        ),
+    ]
+    assert compute_identity_proof_of_address_progress(documents) == (0, 1)
+    assert compute_unmatched_proof_of_address_names(documents) == []
+
+
+def test_corporate_bank_statement_address_does_not_cover_identity() -> None:
+    documents = [
+        _make_document(
+            "doc-1",
+            document_type="nric",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"individual_name": "Amanda Koh"},
+        ),
+        _make_document(
+            "doc-2",
+            document_type="bank_statement",
             classification_outcome=ClassificationOutcome.ACCEPTED,
             extracted_fields={
-                "subscribers": [
-                    {"name": "Ho Chloe", "address": "33 Geylang East Ave", "id_number": "S8905952H"},
-                    {"name": "Ow Fook Chuen", "address": "68 Circular Road", "id_number": "S1234567A"},
-                ],
+                "company_name": "Acme Pte Ltd",
+                "individual_name": "Amanda Koh",
+                "individual_address": "1 Main St",
             },
         ),
     ]
-    # Ho Chloe matches her own id_document; Ow Fook Chuen has no
-    # id_document in the case at all, so surfaces as unmatched rather than
-    # silently vanishing or being conflated with Ho Chloe.
-    assert compute_unmatched_proof_of_address_names(documents) == ["Ow Fook Chuen"]
+    assert compute_identity_proof_of_address_progress(documents) == (0, 1)
+    assert compute_unmatched_proof_of_address_names(documents) == []
+
+
+def test_bank_statement_covers_identity_whose_nric_has_no_address() -> None:
+    documents = [
+        _make_document(
+            "doc-1",
+            document_type="nric",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"individual_name": "Amanda Koh"},
+        ),
+        _make_document(
+            "doc-2",
+            document_type="bank_statement",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"individual_name": "Amanda Koh", "individual_address": "1 Main St"},
+        ),
+    ]
+    assert compute_identity_proof_of_address_progress(documents) == (1, 1)
 
 
 def test_constitution_subscribers_never_create_a_new_identity() -> None:
@@ -565,12 +592,11 @@ def test_constitution_subscribers_never_create_a_new_identity() -> None:
     assert compute_id_document_identity_progress(documents) == (0, 0)
 
 
-def test_constitution_subscribers_skips_malformed_entries() -> None:
+def test_constitution_with_malformed_subscribers_does_not_crash() -> None:
     """
-    subscribers is LLM output, not a validated schema — an entry missing
-    address, missing/non-string name, or an unusable (empty) name must be
-    skipped individually rather than crashing the whole document's address
-    extraction. Only the one well-formed subscriber should surface.
+    subscribers is LLM output, not a validated schema — a constitution's
+    addresses are ignored for proof_of_address regardless, so malformed
+    entries must neither crash the mapper nor surface anything.
     """
     documents = [
         _make_document(
@@ -588,7 +614,7 @@ def test_constitution_subscribers_skips_malformed_entries() -> None:
             },
         ),
     ]
-    assert compute_unmatched_proof_of_address_names(documents) == ["Well Formed Person"]
+    assert compute_unmatched_proof_of_address_names(documents) == []
 
 
 def test_id_document_identity_progress_zero_with_no_id_documents() -> None:

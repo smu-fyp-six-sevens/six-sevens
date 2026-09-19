@@ -8,7 +8,12 @@ from __future__ import annotations
 
 from typing import NamedTuple, Optional
 
-from .models import ClassificationOutcome, DocumentRecord, IDENTITY_DOCUMENT_TYPES
+from .models import (
+    ClassificationOutcome,
+    DocumentRecord,
+    IDENTITY_DOCUMENT_TYPES,
+    counts_as_address_proof,
+)
 
 
 def _normalize_name(name: object) -> Optional[str]:
@@ -48,10 +53,8 @@ class _IdentityState(NamedTuple):
     # identity key (nric_number, or name when no nric_number was extracted)
     # -> _Identity
     identities: dict[str, _Identity]
-    # One entry per person an accepted document ties an address to — a
-    # document can carry a single one (the common individual_name +
-    # individual_address shape) or several (a company_constitution's
-    # subscribers list) — see _named_addresses_from_document.
+    # One entry per person an accepted NRIC / utility bill / bank statement
+    # ties an address to — see _named_addresses_from_document.
     named_addresses: list[_NamedAddress]
     # normalized names drawn from named_addresses
     names_with_address: set[str]
@@ -59,42 +62,27 @@ class _IdentityState(NamedTuple):
 
 def _named_addresses_from_document(doc: DocumentRecord) -> list[_NamedAddress]:
     """
-    A document can carry one address (individual_name + individual_address,
-    the common single-person shape) or several (a company_constitution's
-    "subscribers" array, one entry per director/shareholder) — this yields
-    one entry per named person the document actually ties an address to,
-    regardless of which shape it came from, so callers don't need to care
-    which one they're looking at.
+    The (individual_name, individual_address) pair a document ties together,
+    if it's a document type that counts as proof of address at all — the
+    NRIC, or a personal utility bill / bank statement
+    (models.counts_as_address_proof). An address on any other document
+    (e.g. a constitution/incumbency listing people) is ignored.
 
     Deliberately does not create or feed into identities (see
-    _collect_identity_state) — a document naming people with addresses only
-    ever gets to match an identity an actual id_document established, never
-    to establish one itself, even when (like a constitution) it also
-    carries an id_number for each person.
+    _collect_identity_state) — an address document only ever gets to match
+    an identity an actual id_document established, never to establish one.
     """
     fields = doc.extracted_fields or {}
-    entries: list[_NamedAddress] = []
+    if not counts_as_address_proof(doc.document_type, fields):
+        return []
 
     raw_name = fields.get("individual_name")
-    if fields.get("individual_address") and isinstance(raw_name, str):
-        normalized = _normalize_name(raw_name)
-        if normalized is not None:
-            entries.append(_NamedAddress(raw_name.strip(), normalized))
-
-    subscribers = fields.get("subscribers")
-    if isinstance(subscribers, list):
-        for subscriber in subscribers:
-            if not isinstance(subscriber, dict) or not subscriber.get("address"):
-                continue
-            subscriber_name = subscriber.get("name")
-            if not isinstance(subscriber_name, str):
-                continue
-            normalized = _normalize_name(subscriber_name)
-            if normalized is None:
-                continue
-            entries.append(_NamedAddress(subscriber_name.strip(), normalized))
-
-    return entries
+    if not fields.get("individual_address") or not isinstance(raw_name, str):
+        return []
+    normalized = _normalize_name(raw_name)
+    if normalized is None:
+        return []
+    return [_NamedAddress(raw_name.strip(), normalized)]
 
 
 def _collect_identity_state(documents: list[DocumentRecord]) -> _IdentityState:
@@ -102,10 +90,9 @@ def _collect_identity_state(documents: list[DocumentRecord]) -> _IdentityState:
         doc for doc in documents if doc.classification_outcome == ClassificationOutcome.ACCEPTED
     ]
 
-    # Identities come ONLY from id_document uploads — a constitution or
-    # incumbency-style document that merely names people (subscribers,
-    # officers) can match an identity an id_document already established,
-    # but never creates one on its own; see _named_addresses_from_document.
+    # Identities come ONLY from id_document uploads — an address document
+    # can match an identity an id_document already established, but never
+    # creates one on its own; see _named_addresses_from_document.
     identities: dict[str, _Identity] = {}
     for doc in accepted:
         if doc.document_type not in IDENTITY_DOCUMENT_TYPES:
@@ -126,7 +113,7 @@ def _collect_identity_state(documents: list[DocumentRecord]) -> _IdentityState:
         names, has_address, sides = identities.get(key, (set(), False, set()))
         if name:
             names.add(name)
-        if fields.get("individual_address"):
+        if fields.get("individual_address") and counts_as_address_proof(doc.document_type, fields):
             has_address = True
         side = fields.get("document_side")
         if isinstance(side, str) and side.strip().lower() in ("front", "back", "single"):
@@ -204,10 +191,9 @@ def compute_identity_proof_of_address_coverage(documents: list[DocumentRecord]) 
 
 def compute_unmatched_proof_of_address_names(documents: list[DocumentRecord]) -> list[str]:
     """
-    Names carrying an address (from an accepted proof_of_address,
-    bank_statement, or any other document type that happens to extract one)
-    that don't match any identified id_document identity in the case — e.g.
-    a proof_of_address uploaded for someone whose ID hasn't been uploaded
+    Names carrying an address (from an accepted proof_of_address or
+    bank_statement) that don't match any identified id_document identity in
+    the case — e.g. a proof_of_address uploaded for someone whose ID hasn't been uploaded
     yet, or for a different person entirely. These addresses sit unused:
     they don't count toward proof_of_address_coverage's total (which is
     id_document-driven) and don't cover anyone, so without surfacing them

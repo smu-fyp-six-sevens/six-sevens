@@ -30,8 +30,17 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # resolved via BANK_PROFILES; company_name/account_no are also set
         # unconditionally there, and transactions are always generated —
         # true across the DBS/UOB and OCBC templates alike.
-        "required": ["company_name", "bank_name", "account_number", "transactions"],
-        "additional": [],
+        #
+        # company_name is the account holder only on a CORPORATE statement
+        # (doc_gen_scripts/corporate_bank_statement). A PERSONAL statement
+        # (personal_proof_of_residence/docgen_bankstatement_ocbc_personal.py)
+        # names an individual account holder and their residential address
+        # instead, with no company at all — so company_name moved out of
+        # required, and individual_name/individual_address are here, since
+        # models.compute_fulfilled_requirements uses exactly this
+        # company-vs-individual split to tell the two apart.
+        "required": ["bank_name", "account_number", "transactions"],
+        "additional": ["company_name", "individual_name", "individual_address"],
     },
     "certificate_of_incorporation": {
         # generate_from_mastersheet.py actually calls coi_generator.py, not
@@ -308,7 +317,17 @@ EXTRA_FIELD_GUIDANCE: dict[str, str] = {
         "running balance after that transaction, if shown, else null). Include "
         "every transaction you can find in the text — do not summarise, truncate, "
         "or only include a sample. Its \"confidence\" should reflect your overall "
-        "confidence in the transaction list as a whole."
+        "confidence in the transaction list as a whole.\n\n"
+        "Bank statements come in two kinds, told apart by who holds the account. "
+        'For a CORPORATE statement (account held by a company), set "company_name" '
+        "to the account-holding company and leave \"individual_name\" and "
+        '"individual_address" null. For a PERSONAL statement (account held by a '
+        'named individual), set "individual_name" to the account holder and '
+        '"individual_address" to their address as printed in the statement\'s '
+        'customer block, and leave "company_name" null. "company_name" is never '
+        'the bank\'s own name — that belongs in "bank_name" — and the address '
+        "of the bank itself (e.g. in the letterhead or footer) is never the "
+        "account holder's \"individual_address\"."
     ),
     "credit_report": (
         'For "accounts", its "value" should be an array of objects — one per '

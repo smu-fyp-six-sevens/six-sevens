@@ -64,6 +64,48 @@ class DocumentType(str, Enum):
 IDENTITY_DOCUMENT_REQUIREMENT = "id_document"
 IDENTITY_DOCUMENT_TYPES: set[str] = {DocumentType.PASSPORT.value, DocumentType.NRIC.value}
 
+# The only document types whose individual_address counts as personal proof
+# of address: the NRIC (the primary one), supplemented by a personal utility
+# bill (proof_of_address) or personal bank statement. Any other document that
+# happens to print an address (a company's incumbency/constitution listing
+# officers or subscribers, ...) is ignored for proof_of_address, both here
+# and in mapper.py's name matching.
+ADDRESS_PROOF_DOCUMENT_TYPES: set[str] = {
+    DocumentType.NRIC.value,
+    DocumentType.PROOF_OF_ADDRESS.value,
+    DocumentType.BANK_STATEMENT.value,
+}
+
+
+def is_personal_bank_statement(document_type: str | None, fields: Optional[dict]) -> bool:
+    """
+    A bank_statement held by an individual rather than a company. The signal
+    is who the extracted account holder is: an individual_name with no
+    company_name (see extraction_prompts.EXTRACTION_SCHEMAS's
+    "bank_statement" entry and its guidance). Before extraction has run —
+    no fields yet — it stays the corporate default, matching how a
+    proof_of_address/source_of_wealth document is treated until its fields
+    are known.
+    """
+    fields = fields or {}
+    return (
+        document_type == DocumentType.BANK_STATEMENT.value
+        and bool(fields.get("individual_name"))
+        and not fields.get("company_name")
+    )
+
+
+def counts_as_address_proof(document_type: str | None, fields: Optional[dict]) -> bool:
+    """
+    Whether an individual_address on this document counts as personal proof
+    of address — see ADDRESS_PROOF_DOCUMENT_TYPES. A bank statement only
+    counts when it's a personal one: a corporate statement's address is the
+    company's, not any person's residence.
+    """
+    if document_type == DocumentType.BANK_STATEMENT.value:
+        return is_personal_bank_statement(document_type, fields)
+    return document_type in ADDRESS_PROOF_DOCUMENT_TYPES
+
 
 # The fixed checklist every case is required to satisfy. Every DocumentType
 # is its own requirement EXCEPT passport/nric, which collapse into the
@@ -114,9 +156,13 @@ def compute_fulfilled_requirements(
     via free-text ("Fulfils requirements" section, cross-checked against an
     "Address check: visible" evidence line) — decided here instead from the
     actually-extracted individual_address field, once Extraction has run.
-    An NRIC (or any other document type whose schema happens to capture an
-    address) fulfils proof_of_address for whoever individual_address names,
-    on top of fulfilling its own requirement.
+    An NRIC, utility bill or PERSONAL bank statement showing an
+    individual_address fulfils proof_of_address for whoever it names. No
+    other document type does (see ADDRESS_PROOF_DOCUMENT_TYPES) — an address
+    on an incumbency or constitution, for example, is not proof of address.
+    A personal bank statement fulfils only proof_of_address, never the
+    corporate "bank_statement" requirement; a corporate one fulfils only
+    "bank_statement".
 
     Note: this only decides what a single document fulfils on its own —
     with multiple identities in a case (multiple ID documents), whether
@@ -131,8 +177,16 @@ def compute_fulfilled_requirements(
         return []
     fields = extracted_fields or {}
     has_address = bool(fields.get("individual_address"))
-    if has_address and document_type != DocumentType.PROOF_OF_ADDRESS.value:
+    if (
+        has_address
+        and document_type != DocumentType.PROOF_OF_ADDRESS.value
+        and counts_as_address_proof(document_type, fields)
+    ):
         fulfilled.append(DocumentType.PROOF_OF_ADDRESS.value)
+    # A personal bank statement is proof of address only — it isn't the
+    # company's bank statement the corporate checklist item asks for.
+    if is_personal_bank_statement(document_type, fields):
+        fulfilled.remove(DocumentType.BANK_STATEMENT.value)
     # A proof_of_address document showing the company's address fulfils the
     # additional company_proof_of_address item. With no individual address on
     # it too, it says nothing about any person's residence, so it doesn't

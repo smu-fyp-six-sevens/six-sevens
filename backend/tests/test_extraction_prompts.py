@@ -29,6 +29,13 @@ def test_bank_statement_fields():
     assert "transactions" in prompt
 
 
+def test_bank_statement_schema_distinguishes_personal_from_corporate_account_holder():
+    prompt = build_extraction_prompt("bank_statement", "sample text")
+    for field in ("company_name", "individual_name", "individual_address"):
+        assert field in prompt
+    assert "PERSONAL" in prompt and "CORPORATE" in prompt
+
+
 def test_bank_statement_includes_transaction_structure_guidance():
     prompt = build_extraction_prompt("bank_statement", "sample text")
     assert "array of objects" in prompt
