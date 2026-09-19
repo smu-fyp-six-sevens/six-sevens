@@ -511,9 +511,22 @@ def _parse_extraction_output(llm_output: str) -> dict:
     return {
         "extracted_fields": extracted_fields,
         "field_confidences": field_confidences,
-        "confidence": parsed.get("confidence", 0.0),
+        # The document-level confidence is derived from the individual
+        # fields' own confidences (averaged), not the LLM's separate
+        # top-level self-report — a single overall number is easy for the
+        # model to phone in without actually reasoning about each field,
+        # whereas averaging the per-field numbers it already committed to
+        # ties the document score to the same judgements it made per field.
+        "confidence": _average_field_confidence(field_confidences),
         "escalation": parsed.get("escalation"),
     }
+
+
+def _average_field_confidence(field_confidences: dict) -> float:
+    values = [v for v in field_confidences.values() if isinstance(v, (int, float))]
+    if not values:
+        return 0.0
+    return sum(values) / len(values)
 
 
 def _split_field_confidences(raw_fields: dict) -> tuple[dict, dict]:

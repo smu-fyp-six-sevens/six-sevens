@@ -689,6 +689,10 @@ def test_parse_extraction_output_splits_value_and_confidence_per_field() -> None
             "bank_name": {"value": "OCBC", "confidence": 0.95},
             "account_number": {"value": None, "confidence": 0.2},
         },
+        # The top-level confidence (0.8 here) is deliberately NOT what
+        # result["confidence"] ends up as — see
+        # test_document_confidence_is_average_of_field_confidences below;
+        # it's the average of the per-field confidences (0.95, 0.2) instead.
         "confidence": 0.8,
         "escalation": None,
     })
@@ -697,19 +701,50 @@ def test_parse_extraction_output_splits_value_and_confidence_per_field() -> None
 
     assert result["extracted_fields"] == {"bank_name": "OCBC", "account_number": None}
     assert result["field_confidences"] == {"bank_name": 0.95, "account_number": 0.2}
-    assert result["confidence"] == 0.8
+    assert result["confidence"] == pytest.approx(0.575)
 
 
 def test_parse_extraction_output_strips_markdown_code_fence() -> None:
     # Real LLM output sometimes wraps the JSON in a ```json ... ``` fence
     # despite the prompt asking for raw JSON — this should be stripped
     # rather than failing to parse.
-    payload = json.dumps({"extracted_fields": {}, "confidence": 0.7, "escalation": None})
+    payload = json.dumps({
+        "extracted_fields": {"bank_name": {"value": "OCBC", "confidence": 0.7}},
+        "confidence": 0.99,
+        "escalation": None,
+    })
     llm_output = f"```json\n{payload}\n```"
 
     result = orchestrator._parse_extraction_output(llm_output)
 
+    assert result["extracted_fields"] == {"bank_name": "OCBC"}
     assert result["confidence"] == 0.7
+
+
+def test_document_confidence_is_average_of_field_confidences() -> None:
+    llm_output = json.dumps({
+        "extracted_fields": {
+            "a": {"value": "x", "confidence": 1.0},
+            "b": {"value": "y", "confidence": 0.5},
+            "c": {"value": "z", "confidence": 0.0},
+        },
+        "confidence": 0.99,  # ignored — the average (0.5) is what's used
+        "escalation": None,
+    })
+
+    result = orchestrator._parse_extraction_output(llm_output)
+
+    assert result["confidence"] == pytest.approx(0.5)
+
+
+def test_document_confidence_is_zero_when_no_fields_have_a_confidence() -> None:
+    # No extracted fields at all (e.g. an escalation-only response) — the
+    # average of nothing is 0.0, not the LLM's separate top-level number.
+    llm_output = json.dumps({"extracted_fields": {}, "confidence": 0.9, "escalation": None})
+
+    result = orchestrator._parse_extraction_output(llm_output)
+
+    assert result["confidence"] == 0.0
 
 
 def test_parse_extraction_output_falls_back_for_unwrapped_field() -> None:

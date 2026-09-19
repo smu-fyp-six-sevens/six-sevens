@@ -50,12 +50,63 @@ def test_typed_prompt_marks_schema_fields_required_and_allows_extras():
     assert "loan application" in prompt.lower()
 
 
+def test_additional_fields_are_told_to_omit_not_null_when_absent():
+    # An absent additional field should never appear on the frontend as a
+    # dangling "—" row — the LLM is told to just leave the key out rather
+    # than including it with a null value. Whitespace normalized since the
+    # prompt's own source line-wraps mid-sentence.
+    prompt = " ".join(build_extraction_prompt("payslip", "sample text").split())
+    assert "OMIT its key from extracted_fields entirely" in prompt
+    assert "do NOT include it with a null value" in prompt
+    # Required fields keep the opposite instruction — always present, null
+    # only when truly absent.
+    assert "must always appear as a key even when absent" in prompt
+
+
+def test_unrecognised_fields_are_also_told_to_omit_when_absent():
+    prompt = " ".join(build_extraction_prompt("unrecognised", "sample text").split())
+    assert "OMIT its key from extracted_fields entirely" in prompt
+
+
 def test_nric_fields():
     prompt = build_extraction_prompt("nric", "sample text")
     assert "nric_number" in prompt
     assert "date_of_birth" in prompt
-    assert "nationality" in prompt
+    assert "country" in prompt
     assert "individual_address" in prompt
+    assert "date_of_issue" in prompt
+    # nationality/date_of_expiry were dropped — nric_generator.py never
+    # actually renders either one on the card (front or back), so asking
+    # for them just guaranteed an always-null field. See EXTRACTION_SCHEMAS.
+    assert "nationality" not in prompt
+    assert "date_of_expiry" not in prompt
+
+
+def test_nric_only_nric_number_is_unconditionally_required():
+    """
+    Everything else (name/dob/country on front, address/date_of_issue on
+    back) legitimately depends on document_side — see
+    test_nric_document_side_guidance_is_conditional_on_side below for the
+    prose that makes that conditional-required behaviour explicit.
+    """
+    prompt = build_extraction_prompt("nric", "sample text")
+    required_section = prompt.split("ADDITIONAL fields")[0]
+    assert "- nric_number" in required_section
+    assert "- individual_name" not in required_section
+    assert "- individual_address" not in required_section
+
+
+def test_nric_document_side_guidance_is_conditional_on_side():
+    prompt = build_extraction_prompt("nric", "sample text")
+    assert '"front": individual_name, date_of_birth, and country' in prompt
+    assert '"back": individual_address and date_of_issue' in prompt
+
+
+def test_certificate_of_incumbency_treats_acra_business_profile_as_a_match():
+    prompt = build_extraction_prompt("certificate_of_incumbency", "sample text")
+    assert "ACRA Business Profile" in prompt
+    assert "BizFile" in prompt
+    assert "Do NOT escalate" in prompt
 
 
 def test_passport_fields():

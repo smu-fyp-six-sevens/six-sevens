@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
 import { subscribeToCaseStatus } from '../services/caseSocket';
@@ -119,6 +120,252 @@ function buildFieldDraft(
   }
 
   return draft;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+// A field like "line_items" — an array of {qty, price, ...} objects — reads
+// as unreadable JSON via valueToString. Detected separately so it can
+// render as an actual table in a modal instead (see ArrayFieldModal).
+function isArrayOfObjects(value: unknown): value is Record<string, unknown>[] {
+  return Array.isArray(value) && value.length > 0 && value.every(isPlainObject);
+}
+
+// Union of every key seen across the array's objects, first-seen order —
+// not just Object.keys(rows[0]), since a row here or there can legitimately
+// be missing a key (e.g. a line item with no discount applied).
+function arrayTableColumns(rows: Record<string, unknown>[]): string[] {
+  const seen = new Set<string>();
+  const columns: string[] = [];
+  for (const row of rows) {
+    for (const key of Object.keys(row)) {
+      if (!seen.has(key)) {
+        seen.add(key);
+        columns.push(key);
+      }
+    }
+  }
+  return columns;
+}
+
+function formatCellValue(value: unknown): string {
+  if (value === null || value === undefined) return '—';
+  if (typeof value === 'object') return valueToString(value);
+  return String(value);
+}
+
+// Shared by both the read-only "Extracted Information" preview and the
+// editable "Manual Review" cell (see ArrayValueCell / ArrayFieldEditButton
+// below) — a modal rather than a hover popover so it stays open while
+// you're actually reading/editing it, and rendered via a portal so it
+// isn't clipped by any ancestor's overflow:hidden.
+function ArrayFieldModal({
+  title,
+  columns,
+  rows: initialRows,
+  editable,
+  onClose,
+  onSave,
+}: {
+  title: string;
+  columns: string[];
+  rows: Record<string, unknown>[];
+  editable: boolean;
+  onClose: () => void;
+  onSave?: (rows: Record<string, unknown>[]) => void;
+}) {
+  const [rows, setRows] = useState(initialRows);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose();
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  function updateCell(rowIndex: number, column: string, value: string) {
+    setRows((current) =>
+      current.map((row, i) => (i === rowIndex ? { ...row, [column]: value } : row)),
+    );
+  }
+
+  function removeRow(rowIndex: number) {
+    setRows((current) => current.filter((_, i) => i !== rowIndex));
+  }
+
+  function addRow() {
+    const blank: Record<string, unknown> = {};
+    for (const column of columns) blank[column] = '';
+    setRows((current) => [...current, blank]);
+  }
+
+  return createPortal(
+    <div className="array-modal-backdrop" onClick={onClose}>
+      <div
+        className="array-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="array-modal-header">
+          <h3>{title}</h3>
+          <button type="button" className="array-modal-close" onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+        </div>
+
+        <div className="array-modal-body">
+          <table>
+            <thead>
+              <tr>
+                {columns.map((column) => (
+                  <th key={column}>{humanizeFieldKey(column)}</th>
+                ))}
+                {editable && <th aria-label="Row actions" />}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  {columns.map((column) => (
+                    <td key={column}>
+                      {editable ? (
+                        <input
+                          className="array-modal-input"
+                          value={row[column] === null || row[column] === undefined ? '' : String(row[column])}
+                          onChange={(event) => updateCell(rowIndex, column, event.target.value)}
+                        />
+                      ) : (
+                        formatCellValue(row[column])
+                      )}
+                    </td>
+                  ))}
+                  {editable && (
+                    <td>
+                      <button
+                        type="button"
+                        className="array-modal-remove-row"
+                        aria-label="Remove row"
+                        onClick={() => removeRow(rowIndex)}
+                      >
+                        ✕
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={columns.length + (editable ? 1 : 0)} className="array-modal-empty">
+                    No rows.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+
+          {editable && (
+            <button type="button" className="array-modal-add-row" onClick={addRow}>
+              + Add row
+            </button>
+          )}
+        </div>
+
+        {editable && (
+          <div className="array-modal-footer">
+            <button type="button" className="array-modal-cancel" onClick={onClose}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="array-modal-save"
+              onClick={() => {
+                onSave?.(rows);
+                onClose();
+              }}
+            >
+              Save
+            </button>
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// Read-only trigger for the "Extracted Information" overview table.
+function ArrayValueCell({ label, rows }: { label: string; rows: Record<string, unknown>[] }) {
+  const [open, setOpen] = useState(false);
+  const columns = useMemo(() => arrayTableColumns(rows), [rows]);
+
+  return (
+    <>
+      <button type="button" className="array-value-trigger" onClick={() => setOpen(true)}>
+        {rows.length} item{rows.length === 1 ? '' : 's'}
+        <span className="array-value-hint"> (view)</span>
+      </button>
+      {open && (
+        <ArrayFieldModal title={label} columns={columns} rows={rows} editable={false} onClose={() => setOpen(false)} />
+      )}
+    </>
+  );
+}
+
+// Editable trigger for the "Manual Review" table — replaces what used to be
+// a plain text input showing raw JSON.stringify(value), which was both
+// unreadable and, if hand-edited as text, extremely easy to corrupt into
+// invalid JSON. draftJson/onChange plug straight into the existing
+// fieldDraft state (see handleFieldChange) so saving goes through the same
+// path as every other field.
+function ArrayFieldEditButton({
+  label,
+  draftJson,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  draftJson: string;
+  disabled: boolean;
+  onChange: (json: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rows = useMemo<Record<string, unknown>[]>(() => {
+    try {
+      const parsed: unknown = JSON.parse(draftJson);
+      return isArrayOfObjects(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }, [draftJson]);
+  const columns = useMemo(() => arrayTableColumns(rows), [rows]);
+
+  return (
+    <>
+      <button
+        type="button"
+        className="array-modal-trigger-button"
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+      >
+        Edit {rows.length} item{rows.length === 1 ? '' : 's'}
+      </button>
+      {open && (
+        <ArrayFieldModal
+          title={label}
+          columns={columns}
+          rows={rows}
+          editable
+          onClose={() => setOpen(false)}
+          onSave={(newRows) => onChange(JSON.stringify(newRows))}
+        />
+      )}
+    </>
+  );
 }
 
 function formatDate(value: string): string {
@@ -329,9 +576,35 @@ export default function DocumentDetailsPage({
     setSaveError(null);
 
     try {
+      // fieldDraft is Record<string, string> — every field, including
+      // arrays/objects, was flattened via valueToString (JSON.stringify)
+      // so it can live in a text input's value. Sending that string
+      // straight through would store a doubly-encoded JSON *string* rather
+      // than a real array, which then fails isArrayOfObjects on the next
+      // load and silently loses its table/modal treatment. Restore the
+      // original shape for any field that was originally an array/object
+      // before sending, so a re-fetch still recognises it correctly.
+      const originalValueByKey = new Map(
+        extractedFields.map(([key, field]) => [key, field.value]),
+      );
+      const payload: Record<string, unknown> = {};
+      for (const [key, draftValue] of Object.entries(fieldDraft)) {
+        const original = originalValueByKey.get(key);
+        if (Array.isArray(original) || isPlainObject(original)) {
+          try {
+            payload[key] = JSON.parse(draftValue);
+            continue;
+          } catch {
+            // Malformed edit — fall back to the raw string rather than
+            // crashing the save; the backend will just store it as text.
+          }
+        }
+        payload[key] = draftValue;
+      }
+
       const updated = await updateExtractedFields(
         document.id,
-        fieldDraft,
+        payload,
       );
 
       setDocument(updated);
@@ -569,9 +842,13 @@ export default function DocumentDetailsPage({
                 </span>
 
                 <span className="field-value">
-                  {field.value === null || field.value === undefined
-                    ? '—'
-                    : valueToString(field.value)}
+                  {field.value === null || field.value === undefined ? (
+                    '—'
+                  ) : isArrayOfObjects(field.value) ? (
+                    <ArrayValueCell label={humanizeFieldKey(key)} rows={field.value} />
+                  ) : (
+                    valueToString(field.value)
+                  )}
                 </span>
 
                 <span>
@@ -660,22 +937,31 @@ export default function DocumentDetailsPage({
                     {humanizeFieldKey(key)}
                   </span>
 
-                  <input
-                    type="text"
-                    className={`manual-review-input ${
-                      !fieldDraft[key]?.trim()
-                        ? 'manual-review-input--empty'
-                        : ''
-                    }`}
-                    value={fieldDraft[key] ?? ''}
-                    disabled={isSaving || !canEditField}
-                    onChange={(event) =>
-                      handleFieldChange(
-                        key,
-                        event.target.value,
-                      )
-                    }
-                  />
+                  {isArrayOfObjects(field.value) ? (
+                    <ArrayFieldEditButton
+                      label={humanizeFieldKey(key)}
+                      draftJson={fieldDraft[key] ?? '[]'}
+                      disabled={isSaving || !canEditField}
+                      onChange={(json) => handleFieldChange(key, json)}
+                    />
+                  ) : (
+                    <input
+                      type="text"
+                      className={`manual-review-input ${
+                        !fieldDraft[key]?.trim()
+                          ? 'manual-review-input--empty'
+                          : ''
+                      }`}
+                      value={fieldDraft[key] ?? ''}
+                      disabled={isSaving || !canEditField}
+                      onChange={(event) =>
+                        handleFieldChange(
+                          key,
+                          event.target.value,
+                        )
+                      }
+                    />
+                  )}
 
                   <span>
                     {field.confidence != null ? (

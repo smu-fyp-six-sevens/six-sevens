@@ -52,6 +52,27 @@ def test_find_candidates_skips_domain_terms_and_correct_words() -> None:
     assert candidates == []
 
 
+def test_domain_terms_are_all_lowercase() -> None:
+    # Regression guard: spelling_anomaly.py only lowercases the word being
+    # checked, not DOMAIN_TERMS itself — a mixed-case entry added straight
+    # to the raw set (e.g. "DBS") would silently never match anything and
+    # just sit there doing nothing. DOMAIN_TERMS must stay fully lowercase
+    # for the domain-terms.py module's own "checked case-insensitively"
+    # claim to actually hold.
+    from app.fraud_detection.domain_terms import DOMAIN_TERMS
+
+    assert all(term == term.lower() for term in DOMAIN_TERMS)
+
+
+def test_find_candidates_skips_mixed_case_domain_term() -> None:
+    # "DBS" is stored mixed-case in domain_terms.py's raw seed list (for
+    # readability) — confirms it still matches regardless, via both casings
+    # as they'd actually appear in a real document.
+    pages = [{"page_number": 1, "elements": [{"text": "DBS Bank Ltd"}, {"text": "www.dbs.com"}]}]
+    candidates = _find_candidates(pages, known_terms=set())
+    assert candidates == []
+
+
 def test_find_candidates_skips_known_terms() -> None:
     pages = [{"page_number": 1, "elements": [{"text": "Signed by Kowalski"}]}]
     # Without a known_terms hit, "Kowalski" is a candidate (see the

@@ -10,7 +10,7 @@ Checked case-insensitively (see spelling_anomaly.py), so casing here doesn't
 matter beyond readability.
 """
 
-DOMAIN_TERMS: set[str] = {
+_RAW_DOMAIN_TERMS: set[str] = {
     # KYC / AML / regulatory acronyms
     "kyc", "aml", "cdd", "edd", "fatca", "crs", "tin", "uen", "nric", "fin",
     "gst", "sgd", "usd", "sfc", "mas", "acra",
@@ -34,8 +34,14 @@ DOMAIN_TERMS: set[str] = {
     "trustee", "settlor", "grantor", "mortgagee", "mortgagor",
     # Document/field terminology used elsewhere in this codebase
     "constitution", "incumbency", "declarant",
-    "Maybank", "DBS", "OCBC", "UOB", "Citi", "HSBC", 
-    "StandardChartered", "StandardCharteredBank", "GLDB", "NFE", "NFFE", 
-    "FATCA", "GIIN", "IRS", "https","www","oecd",
-    
+    "Maybank", "DBS", "OCBC", "UOB", "Citi", "HSBC",
+    "StandardChartered", "StandardCharteredBank", "GLDB", "NFE", "NFFE",
+    "FATCA", "GIIN", "IRS", "https", "www", "oecd",
 }
+
+# Lowercased once here rather than trusting every entry above to already be
+# lowercase — spelling_anomaly.py only lowercases the word it's checking,
+# not this set, so a mixed-case entry (e.g. "DBS") would silently never
+# match anything and just sit there doing nothing. This is what actually
+# makes the "checked case-insensitively" claim below true.
+DOMAIN_TERMS: set[str] = {term.lower() for term in _RAW_DOMAIN_TERMS}

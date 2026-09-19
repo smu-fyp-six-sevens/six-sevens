@@ -80,14 +80,30 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         "additional": ["document_side"],
     },
     "nric": {
-        "required": ["individual_name", "nric_number", "date_of_birth", "country", "date_of_issue", "date_of_expiry", "nationality"],
-        # document_side isn't rendered by doc_gen_scripts (those only ever
-        # generate a single front-style page) — it's here for real-world
-        # uploads, where an NRIC's front and back are commonly two separate
-        # photos. See EXTRA_FIELD_GUIDANCE below: when this is "back", the
-        # required individual_name being absent is expected, not evidence
-        # the classification is wrong.
-        "additional": ["individual_address", "document_side"],
+        # Grounded directly in nric_generator.py's _draw_front/_draw_back,
+        # not guessed: FRONT renders nric_number (the "IDENTITY CARD NO."
+        # strip), name, race, date_of_birth, sex, and country/place of
+        # birth; BACK renders nric_number again, date_of_issue, and the
+        # address (plus a fingerprint/barcode, neither extractable as
+        # text). date_of_expiry and nationality used to be listed here but
+        # neither is ever actually rendered on either side by the
+        # generator — a real Singapore NRIC has no printed expiry date at
+        # all — so asking for them just guaranteed an always-null field.
+        #
+        # Only nric_number is unconditionally required — front and back
+        # are near-always two separate uploads (see EXTRA_FIELD_GUIDANCE
+        # below), so nothing else is guaranteed present regardless of
+        # which side this is. individual_name/date_of_birth/country
+        # (front-only) and individual_address/date_of_issue (back-only)
+        # go in "additional" instead — genuinely subtype-varying by side,
+        # exactly what that tier is for — but EXTRA_FIELD_GUIDANCE makes
+        # them conditionally required once document_side is known: e.g. a
+        # front page missing individual_name is still worth escalating on.
+        "required": ["nric_number"],
+        "additional": [
+            "individual_name", "date_of_birth", "country",
+            "individual_address", "date_of_issue", "document_side",
+        ],
     },
     "fatca_crs_declaration": {
         # docgen_fatca_crs.py.build_personas hardcodes more than the
@@ -181,7 +197,7 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # it's clearly this individual-account variant instead.
         "required": ["company_name", "uen"],
         "additional": [
-            "individual_name", "individual_address", "revenue", "net_profit",
+            "individual_address", "revenue", "net_profit",
             "total_assets", "total_liabilities", "share_capital", "notes",
             "broker_name", "account_number", "account_holder_name",
             "cash_balance", "portfolio_value", "net_asset_value", "holdings",
@@ -277,25 +293,51 @@ EXTRA_FIELD_GUIDANCE: dict[str, str] = {
         "the individuals apart afterwards. Include every subscriber you "
         "can find, even if some of their fields are null."
     ),
+    "certificate_of_incumbency": (
+        "An ACRA Business Profile (also called a BizFile, or ACRA BizFile+ "
+        "extract) IS a certificate_of_incumbency for this pipeline's "
+        "purposes — Singapore companies don't typically issue a document "
+        'literally titled "Certificate of Incumbency"; an ACRA Business '
+        "Profile serves the same function (an official snapshot of the "
+        "company's registration, officers, and shareholders) and is what "
+        "this type's own generator (docgen_acra_profile.py) actually "
+        "produces. Do NOT escalate just because the document is titled "
+        '"ACRA Business Profile", "BizFile", "Business Profile", or '
+        'similar rather than "Certificate of Incumbency" — that\'s the '
+        "expected, normal title for this type in practice, not evidence "
+        "of a mismatch."
+    ),
     "nric": (
         'For "document_side", its "value" should be one of "front", '
         '"back", "single", or "unknown". FRONT typically shows a face '
-        "photo and the person's name (plus usually date of birth); BACK "
-        "typically shows a residential address, thumbprint, and/or issue "
-        'date, with no name or photo. Use "single" instead when the '
-        "document is self-contained and has no separate other side to "
-        "expect at all — a single image that already shows both the "
-        "identity details and the address in one capture. Judge this from "
-        "what's actually visible, not from which fields happen to be "
-        "present elsewhere in your answer.\n\n"
-        'If you determine document_side is "back", do NOT escalate '
-        "solely because individual_name (a REQUIRED field above) is "
-        "absent — a name not being visible on the back of an NRIC is "
-        "expected and normal, not evidence the classification is wrong. "
-        "Still escalate if the text doesn't look like any part of an NRIC "
-        "at all, or if nric_number is also absent on what you've judged "
-        "to be the back (nric_number should still be present when it's "
-        "genuinely the back of a Singapore NRIC)."
+        "photo and the person's name, race, date of birth, sex, and "
+        "country/place of birth; BACK typically shows a residential "
+        'address, thumbprint, and/or issue date, with no name or photo. '
+        'Use "single" instead when the document is self-contained and has '
+        "no separate other side to expect at all — a single image that "
+        "already shows both the identity details and the address in one "
+        "capture. Judge this from what's actually visible, not from which "
+        "fields happen to be present elsewhere in your answer.\n\n"
+        "Which of the ADDITIONAL fields above actually count as expected "
+        "depends on document_side — only extract, and only treat as "
+        "missing-is-suspicious, the fields that side actually shows:\n"
+        '- "front": individual_name, date_of_birth, and country are '
+        "expected — escalate if most of these are genuinely absent "
+        "despite a careful read, same as a REQUIRED field would. "
+        "individual_address and date_of_issue are NOT expected here — "
+        "leave them null without escalating on that basis.\n"
+        '- "back": individual_address and date_of_issue are expected — '
+        "escalate if both are genuinely absent. individual_name, "
+        "date_of_birth, and country are NOT expected here — a name not "
+        "being visible on the back of an NRIC is normal, not evidence the "
+        "classification is wrong.\n"
+        '- "single": all five (individual_name, date_of_birth, country, '
+        "individual_address, date_of_issue) are expected together, same "
+        "as a genuinely combined front+back capture would show.\n"
+        '- "unknown": treat none of the five as expected either way.\n\n'
+        "Regardless of side, still escalate if the text doesn't look like "
+        "any part of an NRIC at all, or if nric_number itself (the one "
+        "field REQUIRED above) is absent."
     ),
     "passport": (
         'For "document_side", its "value" should almost always be '
@@ -450,9 +492,11 @@ specific to any one type, so none of them are mandatory here.
 Fields to check for:
 {field_list}
 
-Use null as the value for any of the fields above that isn't present — do
-not guess or invent values. You may also add any other fields you find
-relevant, using clear, descriptive snake_case keys.
+Extract a field ONLY if you actually find it in the text — do not guess or
+invent values. If a field genuinely isn't present, OMIT its key from
+extracted_fields entirely rather than including it with a null value. You
+may also add any other fields you find relevant, using clear, descriptive
+snake_case keys.
 
 {_FIELD_WRAPPER_INSTRUCTIONS}
 
@@ -495,8 +539,11 @@ below), not just a gap to fill with null and move on.
 {required_block}
 
 ADDITIONAL fields — known fields for this document type that legitimately
-vary by subtype or format. Extract them if present; null is a normal,
-expected outcome for these, not a sign anything is wrong.
+vary by subtype or format. Extract a field ONLY if you actually find it in
+the text. If an additional field is genuinely not present, OMIT its key
+from extracted_fields entirely — do NOT include it with a null value just
+to acknowledge it was checked. This is different from REQUIRED fields
+above, which must always appear as a key even when absent.
 {additional_block}
 
 OPTIONAL — you may also include any OTHER fields you find in the document
