@@ -50,6 +50,7 @@ class DocumentType(str, Enum):
     SOURCE_OF_WEALTH = "source_of_wealth"
     CREDIT_REPORT = "credit_report"
     LIST_OF_LOANS = "list_of_loans"
+    NOTICE_OF_ASSESSMENT = "notice_of_assessment"
     # Not a real category — an explicit, queryable outcome for "this document
     # doesn't match any of the categories above", distinct from a low-
     # confidence guess among them. Always paired with needs_manual_review.
@@ -73,10 +74,18 @@ IDENTITY_DOCUMENT_TYPES: set[str] = {DocumentType.PASSPORT.value, DocumentType.N
 # Proof of Address), which is why fulfilment is tracked as its own list
 # rather than assumed 1:1 with a document's own document_type — see
 # DocumentRecord.fulfilled_requirements.
+#
+# OPTIONAL_DOCUMENT_TYPES are real, classifiable types that show up on the
+# case checklist once uploaded but never count toward it — they're left out
+# of REQUIRED_DOCUMENT_TYPES so a case can be finalised without them.
+OPTIONAL_DOCUMENT_TYPES: list[str] = [DocumentType.NOTICE_OF_ASSESSMENT.value]
+
 REQUIRED_DOCUMENT_TYPES: list[str] = [
     doc_type.value
     for doc_type in DocumentType
-    if doc_type != DocumentType.UNRECOGNISED and doc_type.value not in IDENTITY_DOCUMENT_TYPES
+    if doc_type != DocumentType.UNRECOGNISED
+    and doc_type.value not in IDENTITY_DOCUMENT_TYPES
+    and doc_type.value not in OPTIONAL_DOCUMENT_TYPES
 ] + [IDENTITY_DOCUMENT_REQUIREMENT]
 
 
@@ -99,7 +108,7 @@ def compute_fulfilled_requirements(
     """
     if document_type in IDENTITY_DOCUMENT_TYPES:
         fulfilled = [IDENTITY_DOCUMENT_REQUIREMENT]
-    elif document_type in REQUIRED_DOCUMENT_TYPES:
+    elif document_type in REQUIRED_DOCUMENT_TYPES or document_type in OPTIONAL_DOCUMENT_TYPES:
         fulfilled = [document_type]
     else:
         return []

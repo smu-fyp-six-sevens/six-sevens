@@ -681,6 +681,12 @@ h1 {
   font-variant-numeric: tabular-nums;
 }
 
+.requirement-optional-tag {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
 .requirement-unmatched {
   margin: 3px 0 0 16px;
   font-size: 11px;

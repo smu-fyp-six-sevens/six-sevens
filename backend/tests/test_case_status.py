@@ -154,6 +154,28 @@ def test_manual_review_document_does_not_count_as_fulfilled() -> None:
     assert "bank_statement" in missing
 
 
+def test_optional_notice_of_assessment_is_ticked_but_never_missing() -> None:
+    """NOA shows as fulfilled once accepted, and never blocks the checklist."""
+    assert "notice_of_assessment" not in REQUIRED_DOCUMENT_TYPES
+
+    fulfilled, missing = compute_requirement_coverage([])
+    assert "notice_of_assessment" not in fulfilled
+    assert "notice_of_assessment" not in missing
+
+    documents = [
+        _make_document(
+            "doc-1",
+            DocumentStatus.ANALYZED,
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            document_type="notice_of_assessment",
+            fulfilled_requirements=["notice_of_assessment"],
+        )
+    ]
+    fulfilled, missing = compute_requirement_coverage(documents)
+    assert "notice_of_assessment" in fulfilled
+    assert "notice_of_assessment" not in missing
+
+
 def test_passport_does_not_fulfil_proof_of_address() -> None:
     """A passport is an identity document but carries no address, unlike an NRIC."""
     documents = [

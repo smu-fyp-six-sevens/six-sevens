@@ -58,6 +58,12 @@ export const REQUIRED_DOCUMENT_TYPES: { value: string; label: string }[] = [
   { value: 'list_of_loans', label: 'List of loans' },
 ];
 
+// Mirrors OPTIONAL_DOCUMENT_TYPES in backend/app/models.py — shown on the
+// checklist (ticked once uploaded) but never counted toward it.
+export const OPTIONAL_DOCUMENT_TYPES: { value: string; label: string }[] = [
+  { value: 'notice_of_assessment', label: 'Notice of assessment' },
+];
+
 // Mirrors settings.EXTRACTION_CONFIDENCE_THRESHOLD in backend/app/config.py —
 // below this, the UI renders extracted fields as editable so a loan officer
 // can correct values the LLM wasn't confident about.

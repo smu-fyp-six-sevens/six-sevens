@@ -5,6 +5,7 @@ import FileRow from '../components/FileRow';
 import { subscribeToCaseStatus } from '../services/caseSocket';
 import type { CaseStatusSubscription } from '../services/caseSocket';
 import {
+  OPTIONAL_DOCUMENT_TYPES,
   REQUIRED_DOCUMENT_TYPES,
   EXTRACTION_CONFIDENCE_THRESHOLD,
   updateExtractedFields,
@@ -36,7 +37,10 @@ const formatDocumentType = (documentType?: string | null) => {
 const MAX_FILE_SIZE_MB = Math.floor(MAX_FILE_SIZE_BYTES / (1024 * 1024));
 
 const REQUIREMENT_LABELS = new Map(
-  REQUIRED_DOCUMENT_TYPES.map((requirement) => [requirement.value, requirement.label]),
+  [...REQUIRED_DOCUMENT_TYPES, ...OPTIONAL_DOCUMENT_TYPES].map((requirement) => [
+    requirement.value,
+    requirement.label,
+  ]),
 );
 
 interface UploadPageProps {
@@ -783,8 +787,12 @@ export default function UploadPage({
             <span>Document requirements</span>
 
             <span>
-              {fulfilledRequirements.size} /{' '}
-              {REQUIRED_DOCUMENT_TYPES.length}
+              {
+                REQUIRED_DOCUMENT_TYPES.filter((requirement) =>
+                  fulfilledRequirements.has(requirement.value),
+                ).length
+              }{' '}
+              / {REQUIRED_DOCUMENT_TYPES.length}
             </span>
           </div>
 
@@ -875,6 +883,24 @@ export default function UploadPage({
                 </li>
               );
             })}
+
+            {OPTIONAL_DOCUMENT_TYPES.map((requirement) => (
+              <li key={requirement.value}>
+                <div
+                  className={`requirement-row${
+                    fulfilledRequirements.has(requirement.value)
+                      ? ' fulfilled'
+                      : ''
+                  }`}
+                >
+                  <span className="requirement-dot" />
+
+                  {requirement.label}
+
+                  <span className="requirement-optional-tag">Optional</span>
+                </div>
+              </li>
+            ))}
           </ul>
         </aside>
       </div>

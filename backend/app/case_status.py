@@ -13,6 +13,7 @@ from .mapper import (
     compute_unmatched_proof_of_address_names,
 )
 from .models import (
+    OPTIONAL_DOCUMENT_TYPES,
     REQUIRED_DOCUMENT_TYPES,
     CaseDocumentsStatus,
     CaseSummary,
@@ -87,8 +88,10 @@ def compute_requirement_coverage(documents: list[DocumentRecord]) -> tuple[list[
     else:
         fulfilled.discard(id_document)
 
+    # Optional types are reported as fulfilled (so the UI can tick them) but
+    # never as missing, so they can't block submission_finalized.
     return (
-        [req for req in REQUIRED_DOCUMENT_TYPES if req in fulfilled],
+        [req for req in [*REQUIRED_DOCUMENT_TYPES, *OPTIONAL_DOCUMENT_TYPES] if req in fulfilled],
         [req for req in REQUIRED_DOCUMENT_TYPES if req not in fulfilled],
     )
 
