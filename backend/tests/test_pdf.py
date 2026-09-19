@@ -1456,3 +1456,342 @@ def test_glyph_ink_rect_and_rule_skips(tmp_path: Path) -> None:
         (255, 255, 255),
     )
     assert cover_px[2] > cover_px[0]
+
+
+# ---------------------------------------------------------------------------
+# Coverage top-ups for rarely reached branches
+# ---------------------------------------------------------------------------
+
+_REPO_FONT = str(
+    Path(__file__).resolve().parents[1] / "doc_gen_scripts" / "assets" / "fonts" / "DancingScript.ttf"
+)
+
+
+def test_find_template_path_direct_match(monkeypatch, tmp_path: Path) -> None:
+    (tmp_path / "doc123.pdf").write_bytes(b"%PDF-1.4")
+    monkeypatch.setattr(pdf_mod, "TEMPLATES_DIR", tmp_path)
+    assert find_template_path("doc123") == tmp_path / "doc123.pdf"
+
+
+def test_pil_font_candidate_exists_but_fails_to_load(monkeypatch) -> None:
+    target = "/System/Library/Fonts/Supplemental/Times New Roman.ttf"
+    calls: list[str] = []
+    fallback = SimpleNamespace(size=1)
+    monkeypatch.setattr(pdf_mod, "resolve_font_file", lambda name: None)
+    monkeypatch.setattr(pdf_mod.Path, "exists", lambda self: str(self).replace("\\", "/") == target)
+
+    def boom(path, size, *a, **k):
+        calls.append(str(path))
+        raise OSError("bad")
+
+    monkeypatch.setattr(pdf_mod.ImageFont, "truetype", boom)
+    monkeypatch.setattr(pdf_mod, "_iter_system_font_faces", lambda: [])
+    monkeypatch.setattr(pdf_mod.ImageFont, "load_default", lambda: fallback)
+    assert pdf_mod._pil_font("times", 12) is fallback
+    assert target in [c.replace("\\", "/") for c in calls]
+
+
+def test_iter_system_font_faces_adds_face_and_skips_duplicate(monkeypatch, tmp_path: Path) -> None:
+    font_path = tmp_path / "Custom.ttf"
+    font_path.write_bytes(b"x")
+    monkeypatch.setattr(pdf_mod, "_FONT_FACE_CANDIDATES", ((str(font_path), (0, 0)),))
+    monkeypatch.setattr(pdf_mod.Path, "exists", lambda self: str(self) == str(font_path))
+    monkeypatch.setattr(
+        pdf_mod,
+        "_load_truetype",
+        lambda *a, **k: SimpleNamespace(font=SimpleNamespace(style="Regular", family="T")),
+    )
+    assert pdf_mod._iter_system_font_faces() == [(str(font_path), 0)]
+
+
+def test_gray_ink_metrics_falls_back_to_full_span(monkeypatch) -> None:
+    image = _white_image((5, 5))
+    ImageDraw.Draw(image).point((2, 2), fill=(0, 0, 0))
+    monkeypatch.setattr(pdf_mod, "_primary_ink_row_span", lambda hits: (0, 0))
+    bbox, _fill, _aspect = pdf_mod._gray_ink_metrics(image, 128)
+    assert (bbox[1], bbox[3]) == (2, 3)
+
+
+def test_match_font_to_crop_scores_faces_and_handles_fit_errors(monkeypatch) -> None:
+    drawn = _draw_black_text(_white_image((160, 50)), "HELLO")
+    monkeypatch.setattr(
+        pdf_mod,
+        "_iter_system_font_faces",
+        lambda: [(_REPO_FONT, 0), ("/missing/font.ttf", 0)],
+    )
+    args = (drawn, [8, 6, 120, 40], "HELLO")
+    kwargs = dict(ink=(0, 0, 0), bg=(255, 255, 255), max_size=22)
+    assert pdf_mod._match_font_to_crop(*args, **kwargs) is not None
+
+    monkeypatch.setattr(
+        pdf_mod, "_fit_truetype_to_ink", lambda *a, **k: (_ for _ in ()).throw(OSError())
+    )
+    monkeypatch.setattr(pdf_mod, "_font_path_index", lambda font: (_REPO_FONT, 0))
+    assert pdf_mod._match_font_to_crop(*args, **kwargs) is not None
+
+
+def test_sample_and_glyph_rect_convert_non_rgb_pixmap(monkeypatch) -> None:
+    doc = pymupdf.open()
+    page = doc.new_page(width=200, height=200)
+    odd = SimpleNamespace(n=2, samples=bytes(8), width=2, height=2)
+    rgb = SimpleNamespace(n=3, samples=bytes([255] * 12), width=2, height=2)
+    monkeypatch.setattr(page, "get_pixmap", lambda **k: odd)
+    monkeypatch.setattr(pdf_mod.pymupdf, "Pixmap", lambda cs, p: rgb)
+    assert pdf_mod._sample_pdf_field_colors(page, [10, 10, 50, 50]) is not None
+    field = _field(rect=[10, 10, 50, 50])
+    assert pdf_mod._pdf_glyph_ink_rect(page, field) is None
+    tiny = SimpleNamespace(n=3, samples=bytes(3), width=1, height=1)
+    monkeypatch.setattr(page, "get_pixmap", lambda **k: tiny)
+    assert pdf_mod._pdf_glyph_ink_rect(page, field) is None
+    doc.close()
+
+
+def test_try_splice_guards(monkeypatch) -> None:
+    ink, bg = (0, 0, 0), (255, 255, 255)
+    image = _draw_black_text(_white_image((240, 70)), "HELLO")
+    field = _field(text="HELLO", rect=[8, 6, 140, 42], font_size=18)
+    matched = pdf_mod._pil_font("helv", 18)
+    full_ink = pdf_mod._ink_rect_in_image(image, field.rect, ink, bg)
+    kw = dict(ink=ink, bg=bg, matched=matched, full_ink=full_ink, align="left")
+
+    # no shared suffix -> forced full redraw
+    img2 = _draw_black_text(_white_image((260, 70)), "HELLO WORLD")
+    f2 = _field(text="HELLO WORLD", rect=[8, 6, 220, 50], font_size=18)
+    fi2 = pdf_mod._ink_rect_in_image(img2, f2.rect, ink, bg)
+    assert (
+        pdf_mod._try_splice_rewritten_text(
+            img2, f2, "HELLO XYZZY", ink=ink, bg=bg, matched=matched, full_ink=fi2, align="left"
+        )
+        is False
+    )
+
+    # fit failures and bold branch
+    with monkeypatch.context() as m:
+        m.setattr(pdf_mod, "_font_path_index", lambda font: ("/fake.ttf", 0))
+        m.setattr(pdf_mod, "_gray_ink_metrics", lambda *a, **k: ((0, 0, 1, 1), 0.5, 1.0))
+        m.setattr(pdf_mod, "_styled_face", lambda *a, **k: ("/fake-bold.ttf", 0))
+        m.setattr(
+            pdf_mod, "_fit_truetype_to_ink", lambda *a, **k: (_ for _ in ()).throw(OSError())
+        )
+        assert isinstance(pdf_mod._try_splice_rewritten_text(image, field, "HXLLO", **kw), bool)
+
+    # cut points cross
+    with monkeypatch.context() as m:
+        m.setattr(pdf_mod, "_mapped_span_xs", lambda *a, **k: (50.0, 50.0))
+        m.setattr(pdf_mod, "_snap_cut_x", lambda im, ink_, x, t: x)
+        assert pdf_mod._try_splice_rewritten_text(image, field, "HXLLO", **kw) is False
+
+    # middle ink too wide
+    with monkeypatch.context() as m:
+        m.setattr(pdf_mod, "_ink_rect_in_image", lambda *a, **k: list(full_ink))
+        assert pdf_mod._try_splice_rewritten_text(image, field, "HXLLO", **kw) is False
+
+
+def test_styled_font_path_no_sibling() -> None:
+    assert pdf_mod._styled_font_path("/tmp/NoMatch.ttf", "bold") is None
+
+
+def test_styled_face_sibling_and_italic_ttc(monkeypatch) -> None:
+    monkeypatch.setattr(pdf_mod, "_font_path_index", lambda font: ("/a/Reg.ttf", 0))
+    monkeypatch.setattr(pdf_mod, "_styled_font_path", lambda *a, **k: "/a/Bold.ttf")
+    assert pdf_mod._styled_face(SimpleNamespace(), "bold") == ("/a/Bold.ttf", 0)
+    monkeypatch.setattr(pdf_mod, "_styled_font_path", lambda *a, **k: None)
+
+    def load(path, size, index=0):
+        if index > 1:
+            raise OSError
+        style = "Italic" if index else "Regular"
+        return SimpleNamespace(font=SimpleNamespace(style=style, family="T"))
+
+    monkeypatch.setattr(pdf_mod, "_load_truetype", load)
+    assert pdf_mod._styled_face(SimpleNamespace(), "italic") == ("/a/Reg.ttf", 1)
+
+
+def test_image_mode_conversions(tmp_path: Path) -> None:
+    for mode in ("P", "LA"):
+        path = tmp_path / f"{mode}.png"
+        Image.new("RGB", (120, 60), (255, 255, 255)).convert(mode).save(path)
+        field = _field(text="Hi", rect=[8, 8, 80, 30], x=10, y=25)
+        replace_field_text(path, field, "Yo")
+        apply_text_emphasis(path, field, "underline")
+    gray = tmp_path / "g.png"
+    Image.new("L", (120, 60), 255).save(gray)
+    overlay_field_text(gray, _field(text="Hi", rect=[8, 8, 80, 30]), "Yo", x=10, y=25)
+
+
+def test_emphasis_image_styled_and_path_fonts(monkeypatch, tmp_path: Path) -> None:
+    png = _save(_draw_black_text(_white_image((180, 60)), "HELLO"), tmp_path / "sp.png")
+    field = _field(text="HELLO", rect=[8, 8, 120, 40])
+    monkeypatch.setattr(pdf_mod, "_styled_face", lambda *a, **k: ("/x.ttf", 0))
+    monkeypatch.setattr(pdf_mod, "_load_truetype", lambda *a, **k: ImageFont.load_default())
+    apply_text_emphasis(png, field, "bold")
+    monkeypatch.setattr(pdf_mod, "_font_path_index", lambda font: ("/some/path.ttf", 0))
+    apply_text_emphasis(png, field, "underline")
+
+
+def test_separate_stacked_boxes_skips_edge_midpoint() -> None:
+    upper = _field(text="A", rect=[0, 0, 40, 1.15])
+    lower = _field(text="B", rect=[0, 0.1, 40, 20])
+    pdf_mod._separate_stacked_ocr_boxes({"a": upper, "b": lower})
+    assert upper.rect == [0, 0, 40, 1.15]
+    assert lower.rect == [0, 0.1, 40, 20]
+
+
+def test_raster_image_filters_deterministic(monkeypatch) -> None:
+    image = _white_image((450, 450))
+    boxes = [(10, 10, 60, 60), (10, 70, 380, 100), (10, 120, 60, 170)]
+    fills = dict(zip(boxes, (0.05, 0.9, 0.9)))
+    monkeypatch.setattr(pdf_mod, "_connected_pixel_boxes", lambda mask, min_pixels=80: boxes)
+    monkeypatch.setattr(
+        pdf_mod, "_mask_fill_ratio", lambda m, x0, y0, x1, y1: fills[(x0, y0, x1, y1)]
+    )
+    monkeypatch.setattr(
+        pdf_mod, "_ocr_overlap_fraction", lambda box, rects: 0.9 if box[1] > 100 else 0.0
+    )
+    assert pdf_mod._discover_raster_image_fields(image, {}, metadata={}, page=0) == {}
+
+
+def test_horizontal_rule_helpers_edge_cases() -> None:
+    P, R = pymupdf.Point, pymupdf.Rect
+    page = SimpleNamespace(
+        get_drawings=lambda: [
+            {
+                "items": [
+                    None,
+                    ("l", P(0, 0), P(5, 5)),
+                    ("re", R(-100, -100, -90, -90)),
+                    ("re", R(-100, 0, -50, 1)),
+                ]
+            }
+        ]
+    )
+    assert pdf_mod._horizontal_rule_ys(page, R(0, 0, 50, 50)) == []
+    assert pdf_mod._horizontal_rule_ys_in_image(_white_image((2, 2)), [0, 0, 1, 1]) == []
+
+
+def test_overlay_cover_rects_collapse_and_fallback(monkeypatch) -> None:
+    doc = pymupdf.open()
+    page = doc.new_page(width=200, height=200)
+    field = _field(text="Hi", rect=[10, 40, 80, 60], x=12, y=58)
+    kw = {"fontname": "helv"}
+    blank = pdf_mod._overlay_cover_rect(page, field, "X", 14, (12, 58), kw)
+    assert not blank.is_empty
+    monkeypatch.setattr(pdf_mod, "_horizontal_rule_ys", lambda p, c: [57.95, 58.05])
+    assert not pdf_mod._overlay_cover_rect(page, field, "X", 14, (12, 58), kw).is_empty
+    doc.close()
+
+    monkeypatch.setattr(pdf_mod, "_horizontal_rule_ys_in_image", lambda i, c: [29.95, 30.05])
+    image = _white_image((100, 60))
+    box = pdf_mod._overlay_cover_rect_on_image(
+        image,
+        _field(rect=[10, 20, 80, 40]),
+        "X",
+        pdf_mod._pil_font("helv", 12),
+        (12, 30),
+        (0, 0, 0),
+        (255, 255, 255),
+    )
+    assert box[2] > box[0]
+
+
+def test_cover_slot_no_room_and_image_info_zero_union(monkeypatch, tmp_path: Path) -> None:
+    doc = pymupdf.open()
+    page = doc.new_page(width=100, height=100)
+    assert pdf_mod._cover_slot_with_nearby_paper(page, pymupdf.Rect(0, 10, 100, 40)) is False
+    doc.close()
+    fake = SimpleNamespace(get_image_info=lambda **k: [{"bbox": [5, 5, 5, 5], "xref": 1}])
+    assert pdf_mod._pdf_image_info_for_field(fake, _field(rect=[10, 10, 10, 10])) is None
+
+    host_page = SimpleNamespace(get_image_info=lambda: [{"bbox": [0, 0, 300, 300]}])
+    assert pdf_mod._host_image_rect(host_page, pymupdf.Rect(400, 400, 420, 420)) is None
+
+    pdf_path = _tiny_pdf(tmp_path / "s.pdf", with_image=True)
+    image_field = next(
+        f for f in discover_fields_from_pdf(pdf_path).values() if f.kind == "image"
+    )
+    monkeypatch.setattr(pdf_mod, "_cover_slot_with_nearby_paper", lambda *a, **k: False)
+    manipulate_field_region(pdf_path, image_field, "scaling_anomaly")
+
+
+def test_get_ocr_engine_lazy_and_image_cache(monkeypatch, tmp_path: Path) -> None:
+    import sys
+
+    monkeypatch.setattr(pdf_mod, "_ocr_engine", None)
+    monkeypatch.setitem(sys.modules, "rapidocr", SimpleNamespace(RapidOCR=lambda: "engine"))
+    assert pdf_mod._get_ocr_engine() == "engine"
+    assert pdf_mod._get_ocr_engine() == "engine"
+
+    path = _save(_white_image((80, 80)), tmp_path / "cache.png")
+    monkeypatch.setattr(pdf_mod, "_get_ocr_engine", lambda: (lambda _p: None))
+    pdf_mod._ocr_cache.clear()
+    first = discover_fields_from_image(path)
+    second = discover_fields_from_image(path)
+    assert first is not second and set(first) == set(second)
+
+
+def test_iter_system_font_faces_scans_usr_share_fonts(monkeypatch, tmp_path: Path) -> None:
+    fonts = tmp_path / "fonts"
+    fonts.mkdir()
+    (fonts / "Bogus.ttf").write_bytes(b"not-a-font")
+    real_path = Path
+
+    def fake_path(*args):
+        if args and str(args[0]).replace("\\", "/") == "/usr/share/fonts":
+            return fonts
+        return real_path(*args)
+
+    monkeypatch.setattr(pdf_mod, "Path", fake_path)
+    monkeypatch.setattr(pdf_mod, "_FONT_FACE_CANDIDATES", ())
+    monkeypatch.setattr(
+        pdf_mod, "_load_truetype", lambda *a, **k: (_ for _ in ()).throw(OSError())
+    )
+    assert pdf_mod._iter_system_font_faces() == []
+
+
+def _match_crop_with_metrics(monkeypatch, metrics_for_calls):
+    drawn = _draw_black_text(_white_image((160, 50)), "HELLO")
+    monkeypatch.setattr(pdf_mod, "_iter_system_font_faces", lambda: [(_REPO_FONT, 0)])
+    calls = {"n": 0}
+
+    def fake_metrics(image, threshold):
+        result = metrics_for_calls(calls["n"])
+        calls["n"] += 1
+        return result
+
+    monkeypatch.setattr(pdf_mod, "_gray_ink_metrics", fake_metrics)
+    return pdf_mod._match_font_to_crop(
+        drawn, [8, 6, 120, 40], "HELLO", ink=(0, 0, 0), bg=(255, 255, 255), max_size=22
+    )
+
+
+def test_match_font_to_crop_skips_render_without_ink(monkeypatch) -> None:
+    real = ((0, 0, 40, 20), 0.2, 2.0)
+    font = _match_crop_with_metrics(monkeypatch, lambda n: real if n == 0 else None)
+    assert font is not None
+
+
+def test_match_font_to_crop_penalises_bold_mismatch(monkeypatch) -> None:
+    metrics = ((0, 0, 40, 20), 0.5, 2.0)
+    font = _match_crop_with_metrics(monkeypatch, lambda n: metrics)
+    assert font is not None
+
+
+def test_try_splice_zeroes_width_target_for_wide_probe(monkeypatch) -> None:
+    ink, bg = (0, 0, 0), (255, 255, 255)
+    image = _draw_black_text(_white_image((240, 70)), "HELLO")
+    field = _field(text="HELLO", rect=[8, 6, 140, 42], font_size=18)
+    matched = pdf_mod._pil_font("helv", 18)
+    full_ink = pdf_mod._ink_rect_in_image(image, field.rect, ink, bg)
+    targets: list[float] = []
+
+    def fake_fit(path, index, text, *, target_width, **kwargs):
+        targets.append(target_width)
+        return matched
+
+    monkeypatch.setattr(pdf_mod, "_font_path_index", lambda font: ("/fake.ttf", 0))
+    monkeypatch.setattr(pdf_mod, "_glyph_ink_size", lambda font, text: (500.0, 10.0))
+    monkeypatch.setattr(pdf_mod, "_fit_truetype_to_ink", fake_fit)
+    pdf_mod._try_splice_rewritten_text(
+        image, field, "HXYZO", ink=ink, bg=bg, matched=matched, full_ink=full_ink, align="left"
+    )
+    assert targets and targets[0] == 0.0

@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -83,3 +83,24 @@ async def test_lifespan_tolerates_db_check_failure_at_startup() -> None:
             pass
 
     mock_queue.start.assert_called_once_with()
+
+
+async def test_lifespan_tolerates_realtime_listener_start_failure() -> None:
+    # Same non-fatal reasoning as the DB check above — e.g. SUPABASE_SECRET_KEY
+    # not being configured in a given environment shouldn't crash-loop the
+    # app, just degrade the case status WebSocket to "no live pushes".
+    with (
+        patch("app.main.document_queue") as mock_queue,
+        patch("app.main.check_db_connection") as mock_check,
+        patch("app.main.realtime_listener") as mock_realtime,
+    ):
+        mock_realtime.start = AsyncMock(side_effect=RuntimeError("SUPABASE_SECRET_KEY is not set"))
+        mock_realtime.stop = AsyncMock()
+
+        async with lifespan(app):
+            pass
+
+    mock_queue.start.assert_called_once_with()
+    mock_check.assert_called_once_with()
+    mock_realtime.start.assert_awaited_once_with()
+    mock_realtime.stop.assert_awaited_once_with()

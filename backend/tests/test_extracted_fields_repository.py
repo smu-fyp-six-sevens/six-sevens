@@ -130,3 +130,55 @@ def test_get_extracted_fields_returns_empty_list_when_none_stored() -> None:
         mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = result
 
         assert extracted_fields_repository.get_extracted_fields("doc-1") == []
+
+
+def test_get_extracted_fields_for_documents_returns_empty_dict_without_querying() -> None:
+    with patch("app.extracted_fields_repository.supabase_client") as mock_client:
+        result = extracted_fields_repository.get_extracted_fields_for_documents([])
+
+        assert result == {}
+        mock_client.table.assert_not_called()
+
+
+def test_get_extracted_fields_for_documents_groups_rows_by_document_id() -> None:
+    with patch("app.extracted_fields_repository.supabase_client") as mock_client:
+        result = MagicMock()
+        result.data = [
+            {
+                "document_id": "doc-1",
+                "field_name": "individual_name",
+                "field_type": "string",
+                "field_value": "Jane Tan",
+                "confidence": 0.95,
+            },
+            {
+                "document_id": "doc-1",
+                "field_name": "net_pay",
+                "field_type": "number",
+                "field_value": 5000,
+                "confidence": 0.9,
+            },
+            {
+                "document_id": "doc-2",
+                "field_name": "bank_name",
+                "field_type": "string",
+                "field_value": "OCBC",
+                "confidence": 0.8,
+            },
+        ]
+        mock_client.table.return_value.select.return_value.in_.return_value.execute.return_value = result
+
+        by_document = extracted_fields_repository.get_extracted_fields_for_documents(
+            ["doc-1", "doc-2"]
+        )
+
+        mock_client.table.assert_called_once_with("extracted_fields")
+        mock_client.table.return_value.select.assert_called_once_with("*")
+        mock_client.table.return_value.select.return_value.in_.assert_called_once_with(
+            "document_id", ["doc-1", "doc-2"]
+        )
+        assert set(by_document.keys()) == {"doc-1", "doc-2"}
+        assert len(by_document["doc-1"]) == 2
+        assert by_document["doc-2"] == [
+            ExtractedField(field_name="bank_name", field_type="string", field_value="OCBC", confidence=0.8)
+        ]

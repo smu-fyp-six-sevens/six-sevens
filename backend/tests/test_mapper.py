@@ -565,6 +565,32 @@ def test_constitution_subscribers_never_create_a_new_identity() -> None:
     assert compute_id_document_identity_progress(documents) == (0, 0)
 
 
+def test_constitution_subscribers_skips_malformed_entries() -> None:
+    """
+    subscribers is LLM output, not a validated schema — an entry missing
+    address, missing/non-string name, or an unusable (empty) name must be
+    skipped individually rather than crashing the whole document's address
+    extraction. Only the one well-formed subscriber should surface.
+    """
+    documents = [
+        _make_document(
+            "doc-1",
+            document_type="company_constitution",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={
+                "subscribers": [
+                    "not even a dict",
+                    {"name": "No Address Person"},
+                    {"name": None, "address": "1 Somewhere Road"},
+                    {"name": "", "address": "2 Somewhere Road"},
+                    {"name": "Well Formed Person", "address": "3 Somewhere Road"},
+                ],
+            },
+        ),
+    ]
+    assert compute_unmatched_proof_of_address_names(documents) == ["Well Formed Person"]
+
+
 def test_id_document_identity_progress_zero_with_no_id_documents() -> None:
     assert compute_id_document_identity_progress([]) == (0, 0)
 
@@ -580,6 +606,35 @@ def test_id_document_identity_progress_one_identity_only_back_uploaded() -> None
     ]
     assert compute_id_document_identity_progress(documents) == (0, 1)
     assert compute_id_document_missing_side(documents) == "front"
+
+
+def test_id_document_missing_side_is_back_when_only_front_uploaded() -> None:
+    documents = [
+        _make_document(
+            "doc-1",
+            document_type="nric",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"nric_number": "S8905952H", "document_side": "front"},
+        ),
+    ]
+    assert compute_id_document_missing_side(documents) == "back"
+
+
+def test_id_document_missing_side_is_none_when_side_was_never_extracted() -> None:
+    """
+    A single identity that's incomplete but has neither "front" nor "back"
+    recorded (document_side missing/unrecognised on its one document) can't
+    be described as "X missing" — there's nothing to name.
+    """
+    documents = [
+        _make_document(
+            "doc-1",
+            document_type="nric",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"nric_number": "S8905952H"},
+        ),
+    ]
+    assert compute_id_document_missing_side(documents) is None
 
 
 def test_id_document_identity_progress_covered_once_same_identity_has_both_sides() -> None:

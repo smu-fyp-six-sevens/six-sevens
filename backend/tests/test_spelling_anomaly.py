@@ -72,6 +72,14 @@ def test_find_candidates_flags_misspelling_with_suggestion() -> None:
     assert candidates[0].surrounding_text == "Helllo there"
 
 
+def test_find_candidates_deduplicates_the_same_misspelling_repeated_in_one_span() -> None:
+    pages = [{"page_number": 1, "elements": [{"text": "Helllo Helllo there"}]}]
+    candidates = _find_candidates(pages, known_terms=set())
+    # "Helllo" appears twice in the same (page, section) span — only the
+    # first occurrence should surface, not one candidate per repetition.
+    assert len([c for c in candidates if c.word == "Helllo"]) == 1
+
+
 def test_find_candidates_flags_unrecognised_word_with_no_suggestion() -> None:
     pages = [{"page_number": 1, "elements": [{"text": "Mr Kowalski signed"}]}]
     candidates = _find_candidates(pages, known_terms=set())

@@ -4,10 +4,12 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from app.case_status import (
+    _enrich_with_extracted_fields,
     compute_documents_status,
     compute_requirement_coverage,
     sync_submission_finalized,
 )
+from app.fraud_detection.font_consistency_v2 import ExtractedField
 from app.config import settings
 from app.models import (
     ADDITIONAL_DOCUMENT_TYPES,
@@ -53,6 +55,39 @@ def _make_document(
         fulfilled_requirements=fulfilled_requirements or [],
         extracted_fields=extracted_fields,
     )
+
+
+def test_enrich_with_extracted_fields_fills_in_fields_for_matching_documents() -> None:
+    doc_with_fields = _make_document("doc-1", DocumentStatus.ANALYZED)
+    doc_without_fields = _make_document("doc-2", DocumentStatus.ANALYZED)
+
+    with patch("app.case_status.extracted_fields_repository") as mock_repo:
+        mock_repo.get_extracted_fields_for_documents.return_value = {
+            "doc-1": [
+                ExtractedField(
+                    field_name="individual_name",
+                    field_type="string",
+                    field_value="Jane Tan",
+                    confidence=0.95,
+                ),
+            ],
+        }
+
+        enriched = _enrich_with_extracted_fields([doc_with_fields, doc_without_fields])
+
+    mock_repo.get_extracted_fields_for_documents.assert_called_once_with(["doc-1", "doc-2"])
+    assert enriched[0].extracted_fields == {
+        "individual_name": {"value": "Jane Tan", "confidence": 0.95}
+    }
+    # No matching row for doc-2 — left as whatever it already had (None here).
+    assert enriched[1].extracted_fields is None
+
+
+def test_enrich_with_extracted_fields_handles_empty_document_list() -> None:
+    with patch("app.case_status.extracted_fields_repository") as mock_repo:
+        mock_repo.get_extracted_fields_for_documents.return_value = {}
+
+        assert _enrich_with_extracted_fields([]) == []
 
 
 def test_no_documents_returns_no_documents_status() -> None:

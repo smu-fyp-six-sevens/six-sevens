@@ -163,6 +163,21 @@ def test_get_spelling_anomaly_success_returns_result_with_no_persistence() -> No
     mock_check.assert_awaited_once_with("doc-1", b"%PDF-1.4 fake bytes", "statement.pdf", [])
 
 
+def test_get_spelling_anomaly_fetch_document_failure_returns_502() -> None:
+    with (
+        patch("app.routers.detection.document_repository") as mock_repo,
+        patch(
+            "app.routers.detection.check_spelling_anomalies", new_callable=AsyncMock
+        ) as mock_check,
+    ):
+        mock_repo.get_document.side_effect = RuntimeError("Supabase table access failed")
+
+        response = client.get("/documents/doc-1/detection/spelling-anomaly")
+
+    assert response.status_code == 502
+    mock_check.assert_not_called()
+
+
 def test_get_spelling_anomaly_document_not_found() -> None:
     with (
         patch("app.routers.detection.document_repository") as mock_repo,

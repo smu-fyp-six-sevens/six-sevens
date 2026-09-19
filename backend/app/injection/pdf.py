@@ -346,10 +346,6 @@ def resolve_emphasis_font_file(
         return _first_existing_font(
             _SANS_BOLD_CANDIDATES if key == "bold" else _SANS_ITALIC_CANDIDATES
         )
-    if _builtin_fallback_font(font_name) == BUILTIN_FONT_TIMES:
-        return _first_existing_font(
-            _SERIF_BOLD_CANDIDATES if key == "bold" else _SERIF_ITALIC_CANDIDATES
-        )
     return None
 
 
@@ -1026,24 +1022,12 @@ def _value_redraw_span(old: str, new: str) -> tuple[int, int, int, int] | None:
     if old != new:
         span = _changed_middle(old, new)
         if span is not None:
-            old_start, old_end, new_start, new_end = span
-            if label_len and old_start < label_len and new.startswith(label):
-                old_start = label_len
-                new_start = label_len
-            return old_start, old_end, new_start, new_end
+            return span
 
     if not (label and value):
         return None
     if new.startswith(label):
         return label_len, len(old), label_len, len(new)
-    new_label, new_value = split_label_and_value(new)
-    if new_label == label and new_value:
-        return (
-            label_len,
-            label_len + len(value),
-            len(new_label),
-            len(new_label) + len(new_value),
-        )
     return None
 
 
@@ -1196,8 +1180,6 @@ def _keep_pixel_span(old: str, new: str) -> tuple[int, int, int, int] | None:
     while old_i > prefix and new_i > prefix and old[old_i - 1] == new[new_i - 1]:
         old_i -= 1
         new_i -= 1
-    if old_i <= prefix and new_i <= prefix:
-        return None
     kept = prefix + (len(old) - old_i)
     if kept < 1:
         return None
@@ -1288,8 +1270,6 @@ def _try_splice_rewritten_text(
     prefix = field.text[:old_start]
     suffix = field.text[old_end:]
     new_mid = new_text[new_start:new_end]
-    if not prefix and not suffix:
-        return False
 
     threshold = _ink_threshold(ink, bg)
     prefix_x1 = _mapped_span_xs(full_ink, matched, field.text, 0, old_start)[1]
@@ -1395,8 +1375,6 @@ def _replace_field_text_on_image(
     y: float | None = None,
 ) -> None:
     image = _open_raster_image(image_path)
-    if image.mode not in {"RGB", "RGBA", "L"}:
-        image = image.convert("RGB")
     draw = ImageDraw.Draw(image)
 
     font_name = font or field.font
@@ -1643,17 +1621,12 @@ def _styled_font_path(font_path: str | None, style: str) -> str | None:
             (".ttf", "-Oblique.ttf"),
             (".otf", " Italic.otf"),
         )
-    tried: set[str] = set()
     for old, new in replacements:
         if old not in name:
             continue
         candidate = path.with_name(name.replace(old, new, 1))
-        key = str(candidate)
-        if key in tried or candidate == path:
-            continue
-        tried.add(key)
         if candidate.exists():
-            return key
+            return str(candidate)
     return None
 
 
@@ -1926,8 +1899,6 @@ def _apply_emphasis_on_pdf(pdf_path: Path, field: FieldValue, style: str) -> Non
 
 def _apply_emphasis_on_image(image_path: Path, field: FieldValue, style: str) -> None:
     image = _open_raster_image(image_path)
-    if image.mode not in {"RGB", "RGBA", "L"}:
-        image = image.convert("RGB")
     draw = ImageDraw.Draw(image)
 
     if len(field.rect) != 4:

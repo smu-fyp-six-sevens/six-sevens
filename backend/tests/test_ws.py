@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from app import auth
+from app.case_broadcaster import broadcaster
 from app.main import app
 from app.models import CaseRecord, DocumentRecord, DocumentStatus
+from app.routers.ws import case_status_socket
 
 client = TestClient(app)
 
@@ -174,3 +177,69 @@ def test_refresh_frame_triggers_an_immediate_rebuilt_snapshot() -> None:
             second = ws.receive_json()
 
     assert {doc["id"] for doc in second["documents"]} == {"doc-1", "doc-2"}
+
+
+@pytest.mark.asyncio
+async def test_socket_pushes_a_broadcaster_message_ahead_of_a_client_disconnect() -> None:
+    """
+    Drives case_status_socket directly (not via TestClient) so the
+    broadcaster.publish() call below runs on the same event loop as the
+    socket coroutine's `queue.get()` await — exercising the queue_task
+    branch of the FIRST_COMPLETED race (routers/ws.py line ~75), which the
+    TestClient-based tests above never hit since nothing in them publishes
+    to the broadcaster while a connection is open.
+    """
+    ticket = auth.create_ws_ticket()
+    sent: list[dict] = []
+    mock_ws = AsyncMock()
+    mock_ws.send_json = AsyncMock(side_effect=lambda payload: sent.append(payload))
+
+    async def fake_receive_text() -> str:
+        await asyncio.sleep(0.05)
+        raise WebSocketDisconnect()
+
+    mock_ws.receive_text = AsyncMock(side_effect=fake_receive_text)
+
+    with patch(
+        "app.routers.ws.case_status.build_case_snapshot",
+        return_value={"type": "snapshot", "case": {}, "documents": []},
+    ):
+        task = asyncio.create_task(case_status_socket(mock_ws, "case-1", ticket))
+        await asyncio.sleep(0.01)
+        broadcaster.publish("case-1", {"type": "snapshot", "documents": ["pushed"]})
+        await task
+
+    assert {"type": "snapshot", "documents": ["pushed"]} in sent
+    mock_ws.close.assert_not_awaited()  # WebSocketDisconnect path — nothing left to close
+
+
+@pytest.mark.asyncio
+async def test_socket_logs_and_returns_on_unexpected_error() -> None:
+    ticket = auth.create_ws_ticket()
+    mock_ws = AsyncMock()
+    mock_ws.receive_text = AsyncMock(side_effect=RuntimeError("boom"))
+
+    with patch(
+        "app.routers.ws.case_status.build_case_snapshot",
+        return_value={"type": "snapshot", "case": {}, "documents": []},
+    ):
+        # Should not raise — the generic `except Exception` handler catches
+        # it, logs, and falls through to the trailing close() below.
+        await case_status_socket(mock_ws, "case-1", ticket)
+
+    mock_ws.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_socket_swallows_runtime_error_from_close_on_already_closed_connection() -> None:
+    ticket = auth.create_ws_ticket()
+    mock_ws = AsyncMock()
+    mock_ws.close = AsyncMock(side_effect=RuntimeError("Cannot call \"send\" once a close message has been sent."))
+
+    with patch("app.routers.ws.case_status.build_case_snapshot", return_value=None):
+        # "Case not found" path never enters the while loop, then hits the
+        # trailing close() below — which here raises RuntimeError, caught
+        # and swallowed rather than propagating out of the socket handler.
+        await case_status_socket(mock_ws, "case-1", ticket)
+
+    mock_ws.close.assert_awaited_once()
