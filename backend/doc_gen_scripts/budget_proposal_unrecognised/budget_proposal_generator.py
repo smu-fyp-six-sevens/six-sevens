@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Fill budget-proposal-template.pdf from the document mastersheet.
 
-Reads the Case Registry and Budget Proposal tabs out of
-``vN_document_mastersheet.xlsx``. The version digit is not hardcoded: with no
-path argument the latest ``vN_document_mastersheet.xlsx`` in this package is
-used, so v16 → v17 is just dropping in the new file.
+Reads the Case Registry and the tab whose name contains ``Budget Proposal``
+out of ``vN_document_mastersheet.xlsx``. Only rows on that tab are generated
+(Excel truncates long names, e.g. ``Budget Proposal (Unrecognised D``).
 
 Usage:
     python budget_proposal_generator.py
@@ -16,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import re
 import shutil
@@ -35,28 +35,38 @@ TEMPLATE_CANDIDATES = [
     WORKSPACE / "budget-proposal-template.pdf",
 ]
 MASTERSHEET_NAME = re.compile(r"^v(\d+)_document_mastersheet\.xlsx$", re.I)
-BUDGET_SHEET_NAMES = (
-    "Budget Proposal (Unrecognised Documents)",
-    "Budget Proposal (Unrecognised)",
-    "Budget Proposal",
+BUDGET_COLS = (
+    "Company Name (auto)",
+    "UEN (auto)",
+    "Proposal Purpose",
+    "Funder Type",
+    "Loan Amount Applied (SGD) (auto)",
+    "Owner Contribution (SGD)",
+    "Total Projected Income (SGD)",
+    "Working Capital (SGD)",
+    "Equipment & Renovation (SGD)",
+    "Marketing & Advertising (SGD)",
+    "Contingency Reserve (SGD)",
+    "Total Projected Expenses (SGD)",
 )
 OTHER_BANKS = ["DBS Bank", "OCBC Bank", "UOB", "HSBC", "Standard Chartered", "Maybank"]
 
 LEFT = {
     "label_x0": 54.0,
     "label_x1": 226.0,
-    "amount_x0": 227.1,
-    "amount_x1": 288.0,
+    "amount_x0": 230.0,
+    "amount_x1": 276.0,
 }
 RIGHT = {
     "label_x0": 401.2,
-    "label_x1": 601.1,
-    "amount_x0": 602.1,
-    "amount_x1": 663.0,
+    "label_x1": 590.0,
+    "amount_x0": 590.0,
+    "amount_x1": 650.0,
 }
-BODY_SIZE = 10.1
+BODY_SIZE = 10.0
 TITLE_SIZE = 13.0
 NOTE_WIDTH = 510.0
+_FONT_FILES: dict[str, str] = {}
 
 PROFILES = {
     "warehouse": {
@@ -157,6 +167,47 @@ def template_path() -> Path:
         if path.exists():
             return path
     raise SystemExit("budget-proposal-template.pdf was not found.")
+
+
+def _find_font_file(*names: str) -> str | None:
+    roots = [
+        Path("/System/Library/Fonts/Supplemental"),
+        Path("/Library/Fonts"),
+        Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts",
+        Path("/usr/share/fonts/truetype/msttcorefonts"),
+        Path("/usr/share/fonts/truetype/liberation"),
+    ]
+    for root in roots:
+        for name in names:
+            path = root / name
+            if path.exists():
+                return str(path)
+    return None
+
+
+def _font_files() -> dict[str, str]:
+    if not _FONT_FILES:
+        regular = _find_font_file("Arial.ttf", "arial.ttf", "LiberationSans-Regular.ttf")
+        bold = _find_font_file(
+            "Arial Bold.ttf", "arialbd.ttf", "Arial-Bold.ttf", "LiberationSans-Bold.ttf"
+        )
+        if regular:
+            _FONT_FILES["helv"] = regular
+        if bold:
+            _FONT_FILES["hebo"] = bold
+    return _FONT_FILES
+
+
+def _pdf_font(fontname: str) -> pymupdf.Font:
+    path = _font_files().get(fontname)
+    return pymupdf.Font(fontfile=path) if path else pymupdf.Font(fontname)
+
+
+def _insert_kwargs(fontname: str) -> dict:
+    path = _font_files().get(fontname)
+    if path:
+        return {"fontfile": path, "fontname": f"budget-{fontname}", "set_simple": True}
+    return {"fontname": fontname}
 
 
 def parse_money(value: str | None) -> int:
@@ -278,29 +329,63 @@ def _open_sheet(wb, *names: str):
     )
 
 
+def _open_sheet_containing(wb, needle: str):
+    """Find the tab whose name contains ``needle`` (Excel may truncate the rest)."""
+    matches = [name for name in wb.sheetnames if needle.lower() in name.lower()]
+    if not matches:
+        raise SystemExit(
+            f"Mastersheet has no tab containing {needle!r}. Found: {', '.join(wb.sheetnames)}"
+        )
+    preferred = [name for name in matches if "unrecognised" in name.lower()]
+    return wb[(preferred or matches)[0]]
+
+
 def load_mastersheet(xlsx: Path) -> tuple[list[dict[str, str]], dict[str, dict[str, str]]]:
     wb = openpyxl.load_workbook(xlsx, data_only=True)
-    cases = [
-        row
-        for row in _sheet_rows(_open_sheet(wb, "Case Registry"))
-        if row.get("Case ID") and row.get("Company Name")
-    ]
-    budget_ws = _open_sheet(wb, *BUDGET_SHEET_NAMES)
-    budget_rows = {
+    cases = {
         row["Case ID"]: row
-        for row in _sheet_rows(budget_ws)
+        for row in _sheet_rows(_open_sheet(wb, "Case Registry"))
         if row.get("Case ID")
     }
-    return cases, budget_rows
+    budget_rows = [
+        row
+        for row in _sheet_rows(_open_sheet_containing(wb, "Budget Proposal"))
+        if row.get("Case ID") and row.get("Company Name (auto)")
+    ]
+    return budget_rows, cases
 
 
-def fallback_budget(loan: int) -> dict[str, int]:
-    owner = round_step(loan * 0.15, 1_000)
-    total = loan + owner
-    working = round_step(total * 0.45, 500)
-    equipment = round_step(total * 0.30, 500)
-    marketing = round_step(total * 0.15, 500)
-    contingency = total - working - equipment - marketing
+def _sheet_value(row: dict[str, str], column: str) -> str:
+    value = (row.get(column) or "").strip()
+    if not value:
+        raise RuntimeError(
+            f"{row.get('Case ID') or '?'}: Budget Proposal tab is missing {column!r}"
+        )
+    return value
+
+
+def budget_from_sheet(row: dict[str, str]) -> dict[str, int | str]:
+    owner = parse_money(_sheet_value(row, "Owner Contribution (SGD)"))
+    total = parse_money(_sheet_value(row, "Total Projected Income (SGD)"))
+    working = parse_money(_sheet_value(row, "Working Capital (SGD)"))
+    equipment = parse_money(_sheet_value(row, "Equipment & Renovation (SGD)"))
+    marketing = parse_money(_sheet_value(row, "Marketing & Advertising (SGD)"))
+    contingency = parse_money(_sheet_value(row, "Contingency Reserve (SGD)"))
+    expenses = parse_money(_sheet_value(row, "Total Projected Expenses (SGD)"))
+    loan = parse_money(_sheet_value(row, "Loan Amount Applied (SGD) (auto)"))
+    if working + equipment + marketing + contingency != total:
+        raise RuntimeError(
+            f"{row.get('Case ID')}: expense lines "
+            f"{working + equipment + marketing + contingency} != Total Projected Income {total}"
+        )
+    if expenses != total:
+        raise RuntimeError(
+            f"{row.get('Case ID')}: Total Projected Expenses {expenses} != Total Projected Income {total}"
+        )
+    if loan + owner != total:
+        raise RuntimeError(
+            f"{row.get('Case ID')}: loan {loan} + owner {owner} != Total Projected Income {total}"
+        )
     return {
         "loan": loan,
         "owner": owner,
@@ -309,41 +394,8 @@ def fallback_budget(loan: int) -> dict[str, int]:
         "equipment": equipment,
         "marketing": marketing,
         "contingency": contingency,
-        "purpose": "Business Expansion & Working Capital",
-    }
-
-
-def budget_from_sheet(row: dict[str, str], loan: int) -> dict[str, int | str]:
-    owner = parse_money(row.get("Owner Contribution (SGD)"))
-    total = parse_money(row.get("Total Projected Income (SGD)"))
-    working = parse_money(row.get("Working Capital (SGD)"))
-    equipment = parse_money(row.get("Equipment & Renovation (SGD)"))
-    marketing = parse_money(row.get("Marketing & Advertising (SGD)"))
-    contingency = parse_money(row.get("Contingency Reserve (SGD)"))
-    expenses = parse_money(row.get("Total Projected Expenses (SGD)"))
-    sheet_loan = parse_money(row.get("Loan Amount Applied (SGD) (auto)")) or loan
-    if not total:
-        total = sheet_loan + owner
-    if expenses and expenses != total:
-        total = expenses
-    if working + equipment + marketing + contingency != total:
-        raise RuntimeError(
-            f"{row.get('Case ID')}: expense lines "
-            f"{working + equipment + marketing + contingency} != total {total}"
-        )
-    if sheet_loan + owner != total:
-        raise RuntimeError(
-            f"{row.get('Case ID')}: loan {sheet_loan} + owner {owner} != total {total}"
-        )
-    return {
-        "loan": sheet_loan,
-        "owner": owner,
-        "total": total,
-        "working_capital": working,
-        "equipment": equipment,
-        "marketing": marketing,
-        "contingency": contingency,
-        "purpose": row.get("Proposal Purpose") or "Business Expansion & Working Capital",
+        "purpose": _sheet_value(row, "Proposal Purpose"),
+        "funder_type": _sheet_value(row, "Funder Type"),
     }
 
 
@@ -374,16 +426,15 @@ def other_bank(bank: str, rng: random.Random) -> str:
     return rng.choice(choices or OTHER_BANKS)
 
 
-def build_record(case: dict[str, str], budget_rows: dict[str, dict[str, str]]) -> dict:
-    case_id = case["Case ID"]
-    company = case["Company Name"].strip()
+def build_record(row: dict[str, str], cases: dict[str, dict[str, str]]) -> dict:
+    case_id = row["Case ID"]
+    for column in BUDGET_COLS:
+        _sheet_value(row, column)
+    case = cases.get(case_id, {})
+    company = _sheet_value(row, "Company Name (auto)")
+    uen = _sheet_value(row, "UEN (auto)")
     rng = random.Random(int(case_id[1:]))
-    loan = parse_money(case.get("Loan Amount Applied (SGD)"))
-    budget = (
-        budget_from_sheet(budget_rows[case_id], loan)
-        if case_id in budget_rows
-        else fallback_budget(loan)
-    )
+    budget = budget_from_sheet(row)
     profile_name = infer_profile(company, case.get("Case Label") or "")
     profile = PROFILES[profile_name]
     expenses = split_expenses(budget, profile_name)
@@ -408,7 +459,7 @@ def build_record(case: dict[str, str], budget_rows: dict[str, dict[str, str]]) -
     return {
         "case_id": case_id,
         "company": company,
-        "uen": case.get("Company UEN / Reg No.", ""),
+        "uen": uen,
         "address": case.get("Registered Address", ""),
         "applicant": case.get("Applicant Name (Director & UBO)", ""),
         "bank": bank,
@@ -416,6 +467,7 @@ def build_record(case: dict[str, str], budget_rows: dict[str, dict[str, str]]) -
         "profile": profile_name,
         "project": project,
         "purpose": budget["purpose"],
+        "funder_type": budget["funder_type"],
         "loan": budget["loan"],
         "owner": budget["owner"],
         "total": budget["total"],
@@ -437,7 +489,7 @@ def build_record(case: dict[str, str], budget_rows: dict[str, dict[str, str]]) -
             "Shareholder loan",
             f"Trade / WC line - {alt_bank}",
         ],
-        "fraud_case": case.get("Fraud Case? (Y/N)", "N"),
+        "fraud_case": row.get("Fraud Injected? (Y/N)") or case.get("Fraud Case? (Y/N)", "N"),
     }
 
 
@@ -455,7 +507,7 @@ def _cover_rect(hit: pymupdf.Rect, x0: float, x1: float, y1: float | None = None
 
 
 def _fit_size(text: str, width: float, fontsize: float, fontname: str, min_size: float = 6.5) -> float:
-    font = pymupdf.Font(fontname)
+    font = _pdf_font(fontname)
     size = fontsize
     while size > min_size and font.text_length(text, fontsize=size) > width - 1:
         size -= 0.3
@@ -463,7 +515,7 @@ def _fit_size(text: str, width: float, fontsize: float, fontname: str, min_size:
 
 
 def _wrap_lines(text: str, width: float, fontsize: float, fontname: str = "helv") -> list[str]:
-    font = pymupdf.Font(fontname)
+    font = _pdf_font(fontname)
     words = text.split()
     lines: list[str] = []
     current = ""
@@ -484,17 +536,17 @@ def _draw_left(page: pymupdf.Page, rect: pymupdf.Rect, text: str, *, fontsize: f
     if not text:
         return
     size = _fit_size(text, rect.width, fontsize, fontname)
-    baseline = rect.y0 + size * 0.82
-    page.insert_text((rect.x0, baseline), text, fontsize=size, fontname=fontname, color=(0, 0, 0))
+    baseline = rect.y0 + size * 0.90
+    page.insert_text((rect.x0, baseline), text, fontsize=size, color=(0, 0, 0), **_insert_kwargs(fontname))
 
 
 def _draw_right(page: pymupdf.Page, rect: pymupdf.Rect, text: str, *, fontsize: float, fontname: str = "helv") -> None:
     if not text:
         return
-    size = _fit_size(text, rect.width - 2, fontsize, fontname)
-    width = pymupdf.Font(fontname).text_length(text, fontsize=size)
-    baseline = rect.y0 + size * 0.82
-    page.insert_text((rect.x1 - width - 1.0, baseline), text, fontsize=size, fontname=fontname, color=(0, 0, 0))
+    size = _fit_size(text, rect.width - 1, fontsize, fontname)
+    width = _pdf_font(fontname).text_length(text, fontsize=size)
+    baseline = rect.y0 + size * 0.90
+    page.insert_text((rect.x1 - width, baseline), text, fontsize=size, color=(0, 0, 0), **_insert_kwargs(fontname))
 
 
 def _label_amount_pair(hit: pymupdf.Rect, column: dict[str, float]) -> tuple[pymupdf.Rect, pymupdf.Rect]:
@@ -530,7 +582,7 @@ def fill_pdf(template: Path, record: dict, dest: Path) -> None:
 
         replace_plain(
             "Proposal Budget - BCF as sole funder example",
-            "Proposal Budget - Term loan as sole facility",
+            f"Proposal Budget - {record['funder_type']}",
             0,
             size=TITLE_SIZE,
             fontname="hebo",
@@ -548,7 +600,7 @@ def fill_pdf(template: Path, record: dict, dest: Path) -> None:
         )
         for index in (0, 1):
             replace_plain("Scallop Beach Art Gallery", record["company"], index, size=BODY_SIZE, fontname="helv", x1=(226.0 if index == 0 else 601.0))
-            replace_plain("Snails & Scales Exhibit", record["project"], index, size=BODY_SIZE, fontname="helv", x1=(226.0 if index == 0 else 601.0))
+            replace_plain("Snails & Scales Exhibit", record["purpose"], index, size=BODY_SIZE, fontname="helv", x1=(226.0 if index == 0 else 601.0))
 
         sole_income_amounts = [
             replace_label("Exhibition Sales", record["sole_income_labels"][0], 0, LEFT),
@@ -659,7 +711,13 @@ def fill_pdf(template: Path, record: dict, dest: Path) -> None:
                 lines = _wrap_lines(text, NOTE_WIDTH, size)
                 y = rect.y0 + size * 0.82
                 for line in lines:
-                    page.insert_text((rect.x0 + 3.0, y), line, fontsize=size, fontname=fontname, color=(0, 0, 0))
+                    page.insert_text(
+                        (rect.x0 + 3.0, y),
+                        line,
+                        fontsize=size,
+                        color=(0, 0, 0),
+                        **_insert_kwargs(fontname),
+                    )
                     y += 14.1
 
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -676,7 +734,7 @@ def write_index(output_dir: Path, records: list[dict]) -> None:
             f"<td><a href=\"{rec['filename']}\">{rec['filename']}</a></td>"
             f"<td>{rec['case_id']}</td>"
             f"<td>{rec['company']}</td>"
-            f"<td>{rec['project']}</td>"
+            f"<td>{rec['purpose']}</td>"
             f"<td>{fmt_money(rec['loan'])}</td>"
             f"<td>{fmt_money(rec['owner'])}</td>"
             f"<td>{fmt_money(rec['total'])}</td>"
@@ -728,12 +786,12 @@ def generate(
     cases: list[str] | None = None,
 ) -> list[dict]:
     mastersheet = find_mastersheet(xlsx)
-    case_rows, budget_rows = load_mastersheet(mastersheet)
+    budget_rows, registry = load_mastersheet(mastersheet)
     if cases:
         wanted = {item.strip() for item in cases}
-        case_rows = [row for row in case_rows if row.get("Case ID") in wanted]
-    if not case_rows:
-        raise SystemExit(f"No completed cases found in {mastersheet.name}.")
+        budget_rows = [row for row in budget_rows if row.get("Case ID") in wanted]
+    if not budget_rows:
+        raise SystemExit(f"No Budget Proposal rows found in {mastersheet.name}.")
     source = template_path()
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -749,8 +807,8 @@ def generate(
         shutil.rmtree(work_dir)
 
     records: list[dict] = []
-    for case in case_rows:
-        record = build_record(case, budget_rows)
+    for row in budget_rows:
+        record = build_record(row, registry)
         if sum(record["sole_income"]) != record["total"]:
             raise RuntimeError(f"{record['case_id']}: sole income does not match total")
         if sum(record["multi_income"]) != record["total"]:
@@ -798,7 +856,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--cases",
         nargs="*",
-        help="Case IDs to include; default is every Case Registry row with a company name.",
+        help="Case IDs to include; default is every row on the Budget Proposal tab.",
     )
     return parser.parse_args()
 

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import re
 import sys
 import warnings
@@ -63,14 +64,14 @@ SHIPPING = [
 
 # Data-row bands between the table grid lines.
 ROW_BANDS = [
-    (321.46, 340.90),
-    (341.38, 361.06),
-    (361.54, 381.00),
-    (381.48, 400.92),
-    (401.40, 421.08),
-    (421.56, 441.00),
-    (441.48, 460.94),
-    (461.42, 481.10),
+    (324.17, 343.73),
+    (344.21, 363.77),
+    (364.25, 383.69),
+    (384.17, 403.73),
+    (404.21, 423.79),
+    (424.27, 443.71),
+    (444.19, 463.75),
+    (464.23, 483.79),
 ]
 COLS = {
     "name": (85.0, 268.0, 0),
@@ -81,11 +82,11 @@ COLS = {
 }
 # Template ships with 4 sample line items. Only those rows have text to erase.
 SAMPLE_ROWS = 4
-TABLE_GRID_X = (82.58, 269.86, 323.88, 374.30, 410.30, 529.15)
-TABLE_GRID_Y = (320.98, 340.90, 361.06, 381.00, 400.92, 421.08, 441.00, 460.94, 481.10)
+TABLE_GRID_X = (82.58, 269.81, 323.83, 374.23, 410.23, 529.06)
+TABLE_GRID_Y = (323.69, 343.73, 363.77, 383.69, 403.73, 423.79, 443.71, 463.75, 483.79)
 TABLE_GRID_THICK = 0.48
 TABLE_GRID_GREY = (0.667, 0.667, 0.667)
-TABLE_TOTAL_X = 410.54
+TABLE_TOTAL_X = 410.23
 YELLOW = (0.984, 0.910, 0.722)
 BODY = 9.6
 SMALL = 7.9
@@ -239,8 +240,7 @@ def fmt_percent(value: float) -> str:
 
 
 def fmt_template_money(value: float) -> str:
-    """Match the template's European-style amounts, e.g. 1,080.00$."""
-    return f"{value:,.2f}$"
+    return f"${value:,.2f}"
 
 
 def split_sg_address(address: str) -> tuple[str, str]:
@@ -280,14 +280,28 @@ def parse_items(summary: str, po_number: str) -> list[dict]:
     return items
 
 
+LEGAL_SUFFIX = re.compile(
+    r"\b(pte\.?\s*ltd\.?|private\s+limited|ltd\.?|inc\.?|llc|llp|co\.?)\b",
+    re.I,
+)
+GENERIC_VENDOR_WORDS = {
+    "and", "agri", "business", "equipment", "facility", "food", "freight",
+    "industrial", "it", "marine", "materials", "scientific", "solutions",
+    "supplies", "supply", "trading", "wellness",
+}
+VENDOR_LOCAL_PARTS = ("sales", "orders", "info", "procurement", "enquiries", "contact")
+
+
 def vendor_email(vendor: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "", vendor.lower())[:18] or "supplier"
-    return f"sales@{slug}.com.sg"
-
-
-def vendor_phone(case_id: str) -> str:
-    n = int(case_id[1:])
-    return f"+65 {6200 + (n * 17) % 700:04d} {1000 + (n * 91) % 9000:04d}"
+    """Stable-random sales-style address derived from the vendor's trading name."""
+    cleaned = LEGAL_SUFFIX.sub("", vendor).replace("&", " ")
+    tokens = [part for part in re.split(r"[^a-z0-9]+", cleaned.lower()) if part]
+    brand = [part for part in tokens if part not in GENERIC_VENDOR_WORDS] or tokens
+    domain = "".join(brand[:2]) or "supplier"
+    rng = random.Random(vendor)
+    local = rng.choice(VENDOR_LOCAL_PARTS)
+    tld = rng.choice((".com.sg", ".com.sg", ".sg"))
+    return f"{local}@{domain}{tld}"
 
 
 def shipping_for(case_id: str) -> tuple[str, str]:
@@ -317,11 +331,9 @@ def build_record(row: dict[str, str], cases: dict[str, dict[str, str]]) -> dict:
     company = row["Company Name (auto)"].strip()
     address = case.get("Registered Address") or ""
     street, city = split_sg_address(address)
-    phone = (case.get("Company Contact No.") or row.get("Client Contact No. (auto)") or "").strip()
     bank = (case.get("Bank Name") or "DBS Bank").strip()
     method, carrier = shipping_for(case_id)
     arrival = po_date + timedelta(days=14)
-    contact = (row.get("Client Contact Person (auto)") or "Purchasing").strip()
     vendor = row["Vendor Name"].strip()
     return {
         "case_id": case_id,
@@ -329,13 +341,10 @@ def build_record(row: dict[str, str], cases: dict[str, dict[str, str]]) -> dict:
         "uen": row.get("UEN (auto)", ""),
         "street": street,
         "city": city,
-        "phone": phone,
-        "vendor_phone": vendor_phone(case_id),
-        "vendor_email": vendor_email(vendor),
-        "contact": contact,
         "bank": bank,
         "supplier": vendor,
         "supplier_address": row["Vendor Address"].strip(),
+        "vendor_email": vendor_email(vendor),
         "po_number": po_number,
         "po_date": fmt_long_date(po_date),
         "po_date_iso": po_date.isoformat(),
@@ -460,16 +469,17 @@ def fill_pdf(template: Path, record: dict, dest: Path) -> None:
         replace("FASHION QUEEN", record["company"], size=HEADER, fontname="hebo", x1=330.0)
         replace("108 Waldorf Street", record["street"], x1=330.0)
         replace("Coventry, 25448 IL", record["city"], x1=330.0)
-        replace("(000) 1234 56789", record["phone"], x1=330.0)
         replace("123456/22", record["po_number"], x1=575.0)
         replace("22ND SEPTEMBER, 2022", record["po_date"], x1=575.0)
 
-        name_rect = pymupdf.Rect(97.0, 181.0, 565.0, 192.5)
+        name_hits = _hits(page, "FASHION ITEMS INC Attn. Sam Martin (Chief of Finance)")
+        name_rect = pymupdf.Rect(97.0, name_hits[0].y0 - 0.35, 565.0, name_hits[0].y1 + 0.35)
+        for hit in name_hits:
+            name_rect |= pymupdf.Rect(hit.x0, hit.y0 - 0.35, hit.x1 + 2.0, hit.y1 + 0.35)
         covers.append((name_rect, (1, 1, 1)))
-        draws.append(("left", name_rect, f"{record['supplier']}    Attn. {record['contact']}", BODY, "helv"))
+        draws.append(("left", name_rect, record["supplier"], BODY, "helv"))
         replace("211 Arrow Bay, Westminster, 21656 Los Angeles", record["supplier_address"], x1=565.0)
-        replace("info@fashionitems.com", record["vendor_email"], x1=290.0)
-        replace("(555) 1234 56789", record["vendor_phone"], x1=500.0)
+        replace("info@fashionitems.com", record["vendor_email"], x1=565.0)
 
         _cover_sample_table_text(page, covers, yellow)
         for line, (y0, y1) in zip(record["lines"], ROW_BANDS):
@@ -493,6 +503,17 @@ def fill_pdf(template: Path, record: dict, dest: Path) -> None:
         replace("75.00$", fmt_template_money(record["shipping"]), x1=500.0)
         replace("Credit Card", record["payment"], x1=560.0)
         replace("3,604.35$", fmt_template_money(record["grand_total"]), size=10.6, fontname="hebo", x1=500.0)
+        note = (
+            "The amount of the Purchase Order is the agreed fixed price and shall not be "
+            "exceeded without advanced written consent."
+        )
+        note_hits = _hits(page, note)
+        note_rect = note_hits[0]
+        for hit in note_hits:
+            note_rect |= hit
+        note_rect = pymupdf.Rect(49.5, note_rect.y0 - 0.4, 560.0, note_rect.y1 + 8.0)
+        covers.append((note_rect, (1, 1, 1)))
+        draws.append(("note", note_rect, note, BODY, "helv"))
 
         for rect, fill in covers:
             page.add_redact_annot(rect, fill=fill, cross_out=False)
@@ -501,6 +522,8 @@ def fill_pdf(template: Path, record: dict, dest: Path) -> None:
         for kind, rect, text, size, extra in draws:
             if kind == "left":
                 _draw_left(page, rect, text, fontsize=size, fontname=extra)
+            elif kind == "note":
+                page.insert_textbox(rect, text, fontsize=size, fontname=extra, color=(0, 0, 0))
             else:
                 _draw_aligned(page, rect, text, fontsize=size, align=extra)
 
