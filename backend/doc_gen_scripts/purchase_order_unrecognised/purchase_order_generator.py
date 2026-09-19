@@ -1,64 +1,59 @@
 #!/usr/bin/env python3
-"""Fill the no-logo purchase-order PDF for every purchase-order case."""
+"""Fill Fashion-Purchase-Order-Template.pdf from the document mastersheet.
+
+Reads the Case Registry and Purchase Order tabs out of
+``vN_document_mastersheet.xlsx``. The version digit is not hardcoded: with no
+path argument the latest ``vN_document_mastersheet.xlsx`` in this package is
+used, so v16 → v17 is just dropping in the new file.
+
+Usage:
+    python purchase_order_generator.py
+    python purchase_order_generator.py ../v16_document_mastersheet.xlsx
+    python purchase_order_generator.py ../v16_document_mastersheet.xlsx --cases C001 C002
+"""
 
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import re
 import sys
+import warnings
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+
+warnings.filterwarnings("ignore", message="Data Validation extension is not supported")
 
 _DEPS = Path(__file__).resolve().parent / ".pydeps"
 if _DEPS.exists():
     sys.path.insert(0, str(_DEPS))
 
 try:
-    from pypdf import PdfReader, PdfWriter
+    import openpyxl
+    import pymupdf
 except ImportError as exc:
     raise SystemExit(
-        "pypdf is required. Install it with:\n"
-        "  pip install pypdf --target \".pydeps\"\n"
+        "openpyxl and pymupdf are required. Install them with:\n"
+        "  pip install openpyxl pymupdf --target \".pydeps\"\n"
     ) from exc
 
 
 WORKSPACE = Path(__file__).resolve().parent.parent
 TEMPLATE_CANDIDATES = [
-    WORKSPACE / "Fashion-Purchase-Order-No-Logo.pdf",
-    WORKSPACE / "Fashion-Purchase-Order-Phone-Only.pdf",
-    Path(__file__).resolve().parent / "Fashion-Purchase-Order-Phone-Only.pdf",
+    Path(__file__).resolve().parent / "Fashion-Purchase-Order-Template.pdf",
 ]
-PO_SHEET = WORKSPACE / (
-    "v8_document_mastersheet.xlsx - Purchase Order (Unrecognised Documents) (1).csv"
+MASTERSHEET_NAME = re.compile(r"^v(\d+)_document_mastersheet\.xlsx$", re.I)
+PO_SHEET_NAMES = (
+    "Purchase Order (Unrecognised Documents)",
+    "Purchase Order (Unrecognised)",
+    "Purchase Order",
 )
-CASE_REGISTRY = WORKSPACE / "v8_document_mastersheet.xlsx - Case Registry.csv"
-
-LINE_ROWS = [
-    (11, 12, 13, 14, 15, 16, 17),
-    (18, 19, 20, 21, 22, 23, 24),
-    (25, 26, 27, 28, 29, 30, 31),
-    (32, 33, 34, 35, 36, 37, 38),
-    (39, 40, 41, 42, 43, 44, 45),
-    (46, 47, 48, 49, 50, 51, 52),
-    (53, 54, 55, 56, 57, 58, 59),
-    (60, 61, 62, 63, 64, 65, 66),
-    (67, 68, 69, 70, 71, 72, 73),
-]
+ITEM_RE = re.compile(r"(.+?)\s+x(\d+)\s+@\s+\$([0-9,]+\.\d{2})$")
 MONTHS = [
     "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
     "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER",
 ]
-CLIENT_PHONE_RECT = [76.4, 524.1, 331.7, 542.3]
-# Client Name / Address / Phone values.
-VALUE_X = 96.0
-# Company header: same inset from the left edge as PO # / date from the right.
-HEADER_X = 42.0
-HEADER_FIELDS = {"Text3", "Text4", "Text5", "Text6"}
-CLIENT_FIELDS = {"Text7", "Text8"}
-ITEM_RE = re.compile(r"(.+?)\s+x(\d+)\s+@\s+\$([0-9,]+\.\d{2})$")
 SHIPPING = [
     ("Road", "YCH Transport"),
     ("Courier", "DHL Express"),
@@ -66,19 +61,122 @@ SHIPPING = [
     ("Road", "Toll Logistics"),
 ]
 
+# Data-row bands between the table grid lines.
+ROW_BANDS = [
+    (321.46, 340.90),
+    (341.38, 361.06),
+    (361.54, 381.00),
+    (381.48, 400.92),
+    (401.40, 421.08),
+    (421.56, 441.00),
+    (441.48, 460.94),
+    (461.42, 481.10),
+]
+COLS = {
+    "name": (85.0, 268.0, 0),
+    "sku": (270.0, 323.0, 1),
+    "price": (324.0, 373.0, 2),
+    "qty": (375.0, 409.0, 1),
+    "total": (412.0, 528.0, 2),
+}
+# Template ships with 4 sample line items. Only those rows have text to erase.
+SAMPLE_ROWS = 4
+TABLE_GRID_X = (82.58, 269.86, 323.88, 374.30, 410.30, 529.15)
+TABLE_GRID_Y = (320.98, 340.90, 361.06, 381.00, 400.92, 421.08, 441.00, 460.94, 481.10)
+TABLE_GRID_THICK = 0.48
+TABLE_GRID_GREY = (0.667, 0.667, 0.667)
+TABLE_TOTAL_X = 410.54
+YELLOW = (0.984, 0.910, 0.722)
+BODY = 9.6
+SMALL = 7.9
+HEADER = 13.0
+
 
 def template_path() -> Path:
     for path in TEMPLATE_CANDIDATES:
         if path.exists():
             return path
-    raise SystemExit("Fashion-Purchase-Order-No-Logo.pdf was not found.")
+    raise SystemExit("Fashion-Purchase-Order-Template.pdf was not found.")
 
 
-def read_csv(path: Path) -> list[dict[str, str]]:
-    if not path.exists():
-        raise SystemExit(f"CSV not found: {path}")
-    with path.open(newline="", encoding="utf-8-sig") as handle:
-        return list(csv.DictReader(handle))
+def find_mastersheet(explicit: str | Path | None = None) -> Path:
+    """Resolve a mastersheet path without baking in v16 vs v17."""
+    if explicit:
+        path = Path(explicit).expanduser().resolve()
+        if not path.exists():
+            raise SystemExit(f"Mastersheet not found: {path}")
+        return path
+    ranked: list[tuple[int, Path]] = []
+    for path in WORKSPACE.glob("v*_document_mastersheet.xlsx"):
+        match = MASTERSHEET_NAME.match(path.name)
+        if match:
+            ranked.append((int(match.group(1)), path))
+    if not ranked:
+        raise SystemExit(
+            f"No vN_document_mastersheet.xlsx found in {WORKSPACE}. "
+            "Pass the xlsx path explicitly."
+        )
+    ranked.sort()
+    return ranked[-1][1]
+
+
+def _cell_str(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value).strip()
+
+
+def _sheet_rows(ws) -> list[dict[str, str]]:
+    header = [_cell_str(cell.value) for cell in ws[1]]
+    rows: list[dict[str, str]] = []
+    for raw in ws.iter_rows(min_row=2, values_only=True):
+        if not any(raw):
+            continue
+        rows.append({key: _cell_str(value) for key, value in zip(header, raw) if key})
+    return rows
+
+
+def _open_sheet(wb, *names: str):
+    """Match a tab even when Excel truncates the name at 31 characters."""
+    for name in names:
+        if name in wb.sheetnames:
+            return wb[name]
+        truncated = name[:31]
+        matches = [
+            sheet
+            for sheet in wb.sheetnames
+            if sheet == truncated or sheet.startswith(name) or name.startswith(sheet)
+        ]
+        if len(matches) == 1:
+            return wb[matches[0]]
+        if truncated in matches:
+            return wb[truncated]
+        if matches:
+            return wb[max(matches, key=len)]
+    raise SystemExit(
+        f"Mastersheet is missing one of {names!r}. Found: {', '.join(wb.sheetnames)}"
+    )
+
+
+def load_mastersheet(xlsx: Path) -> tuple[list[dict[str, str]], dict[str, dict[str, str]]]:
+    wb = openpyxl.load_workbook(xlsx, data_only=True)
+    po_rows = [
+        row
+        for row in _sheet_rows(_open_sheet(wb, *PO_SHEET_NAMES))
+        if row.get("Case ID") and row.get("Company Name (auto)")
+    ]
+    cases = {
+        row["Case ID"]: row
+        for row in _sheet_rows(_open_sheet(wb, "Case Registry"))
+        if row.get("Case ID")
+    }
+    return po_rows, cases
 
 
 def parse_money(value: str | None) -> float:
@@ -93,11 +191,23 @@ def parse_money(value: str | None) -> float:
 def parse_percent(value: str | None) -> float:
     if value is None:
         return 0.0
-    return float(str(value).strip().replace("%", "") or 0)
+    n = float(str(value).strip().replace("%", "") or 0)
+    if 0 < n <= 1:
+        return n * 100.0
+    return n
 
 
 def parse_date(value: str) -> date:
-    return datetime.strptime(value.strip(), "%Y-%m-%d").date()
+    text = (value or "").strip()
+    try:
+        return datetime.strptime(text, "%Y-%m-%d").date()
+    except ValueError:
+        pass
+    try:
+        serial = float(text)
+    except ValueError as exc:
+        raise ValueError(f"Cannot parse date: {value!r}") from exc
+    return date(1899, 12, 30) + timedelta(days=int(serial))
 
 
 def ordinal(day: int) -> str:
@@ -128,6 +238,11 @@ def fmt_percent(value: float) -> str:
     return f"{value:.2f}%"
 
 
+def fmt_template_money(value: float) -> str:
+    """Match the template's European-style amounts, e.g. 1,080.00$."""
+    return f"{value:,.2f}$"
+
+
 def split_sg_address(address: str) -> tuple[str, str]:
     text = (address or "").strip()
     marker = ", Singapore "
@@ -156,25 +271,18 @@ def parse_items(summary: str, po_number: str) -> list[dict]:
             "sku": f"{letters}{digits}{index}",
             "price": price,
             "qty": qty,
-            "size": "*",
-            "colour": "*",
             "total": round(qty * price, 2),
         })
     if not items:
         raise RuntimeError("Order has no line items.")
-    if len(items) > len(LINE_ROWS):
-        raise RuntimeError(f"Order has {len(items)} lines; template holds {len(LINE_ROWS)}.")
+    if len(items) > len(ROW_BANDS):
+        raise RuntimeError(f"Order has {len(items)} lines; template holds {len(ROW_BANDS)}.")
     return items
 
 
-def load_cases() -> dict[str, dict[str, str]]:
-    if not CASE_REGISTRY.exists():
-        return {}
-    return {
-        row["Case ID"]: row
-        for row in read_csv(CASE_REGISTRY)
-        if row.get("Case ID")
-    }
+def vendor_email(vendor: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "", vendor.lower())[:18] or "supplier"
+    return f"sales@{slug}.com.sg"
 
 
 def vendor_phone(case_id: str) -> str:
@@ -215,12 +323,6 @@ def build_record(row: dict[str, str], cases: dict[str, dict[str, str]]) -> dict:
     arrival = po_date + timedelta(days=14)
     contact = (row.get("Client Contact Person (auto)") or "Purchasing").strip()
     vendor = row["Vendor Name"].strip()
-    notes = (
-        f"This purchase is to be financed under {bank} corporate facility "
-        f"{bank.split()[0].upper()}/{po_date.year}/{int(case_id[1:]):05d}. "
-        "The amount of the Purchase Order is the agreed fixed price and shall not be "
-        "exceeded without prior written consent of the buyer and the financing bank."
-    )
     return {
         "case_id": case_id,
         "company": company,
@@ -229,6 +331,7 @@ def build_record(row: dict[str, str], cases: dict[str, dict[str, str]]) -> dict:
         "city": city,
         "phone": phone,
         "vendor_phone": vendor_phone(case_id),
+        "vendor_email": vendor_email(vendor),
         "contact": contact,
         "bank": bank,
         "supplier": vendor,
@@ -247,217 +350,166 @@ def build_record(row: dict[str, str], cases: dict[str, dict[str, str]]) -> dict:
         "tax_pct": tax_pct,
         "shipping": shipping,
         "grand_total": total,
-        "notes": notes,
     }
 
 
-def field_values(record: dict) -> dict[str, str]:
-    fields = {
-        "Text1": record["po_number"],
-        "Text2": record["po_date"],
-        "Text3": record["company"],
-        "Text4": record["street"],
-        "Text5": record["city"],
-        "Text6": record["phone"],
-        "Text7": f"{record['supplier']}    Attn. Sales Desk",
-        "Text8": record["supplier_address"],
-        "Text74": record["method"],
-        "Text75": record["carrier"],
-        "Text76": record["track"],
-        "Text77": record["arrival"],
-        "Text78": fmt_amount(record["subtotal"]),
-        "Text79": fmt_percent(record["discount_pct"]),
-        "Text80": fmt_percent(record["tax_pct"]),
-        "Text81": fmt_amount(record["shipping"], cents=True),
-        "Text82": record["payment"],
-        "Text83": fmt_amount(record["grand_total"], cents=True),
-        "Text84": record["notes"],
-    }
-    for row_ids in LINE_ROWS:
-        for field_id in row_ids:
-            fields[f"Text{field_id}"] = ""
-    for line, row_ids in zip(record["lines"], LINE_ROWS):
-        name_id, sku_id, price_id, qty_id, size_id, colour_id, total_id = row_ids
-        fields[f"Text{name_id}"] = line["name"]
-        fields[f"Text{sku_id}"] = line["sku"]
-        fields[f"Text{price_id}"] = fmt_amount(line["price"]).replace(",", "")
-        fields[f"Text{qty_id}"] = str(line["qty"])
-        fields[f"Text{size_id}"] = line["size"]
-        fields[f"Text{colour_id}"] = line["colour"]
-        fields[f"Text{total_id}"] = fmt_amount(line["total"]).replace(",", "")
-    return fields
+def _hits(page: pymupdf.Page, text: str, count: int | None = None) -> list[pymupdf.Rect]:
+    found = page.search_for(text)
+    if not found:
+        raise KeyError(f"Template text not found: {text!r}")
+    if count is not None and len(found) < count:
+        raise KeyError(f"Template text {text!r} found {len(found)} time(s), expected {count}.")
+    return found
 
 
-def pdf_escape(text: str) -> str:
-    return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+def _fit_size(text: str, width: float, fontsize: float, fontname: str, min_size: float = 6.0) -> float:
+    font = pymupdf.Font(fontname)
+    size = fontsize
+    while size > min_size and font.text_length(text, fontsize=size) > width - 1:
+        size -= 0.3
+    return size
 
 
-def text_width(text: str, size: float) -> float:
-    return size * 0.52 * len(text)
-
-
-def wrap_lines(text: str, width: float, size: float) -> list[str]:
+def _draw_left(page: pymupdf.Page, rect: pymupdf.Rect, text: str, *, fontsize: float, fontname: str) -> None:
     if not text:
-        return []
-    max_chars = max(4, int((width - 4) / max(size * 0.52, 1)))
-    words = text.split()
-    lines: list[str] = []
-    current = ""
-    for word in words:
-        trial = f"{current} {word}".strip()
-        if len(trial) <= max_chars:
-            current = trial
-            continue
-        if current:
-            lines.append(current)
-        current = word
-    if current:
-        lines.append(current)
-    return lines or [text]
-
-
-def fit_lines(text: str, width: float, height: float, size: float) -> tuple[list[str], float]:
-    size = min(size, max(6.0, height - 2))
-    while size >= 6.0:
-        leading = size * 1.18
-        allowed = max(1, int(height / leading))
-        lines = wrap_lines(text, width, size)
-        if len(lines) <= allowed and all(text_width(line, size) <= width - 2 for line in lines):
-            return lines, size
-        if allowed == 1 and text_width(text, size) <= width - 2:
-            return [text], size
-        size -= 0.4
-    lines = wrap_lines(text, width, 6.0)
-    allowed = max(1, int(height / (6.0 * 1.18)))
-    if len(lines) > allowed:
-        lines = lines[:allowed]
-        if lines:
-            lines[-1] = lines[-1].rstrip(".,;:") + "..."
-    return lines, 6.0
-
-
-def widget_specs(reader: PdfReader, values: dict[str, str]) -> list[dict]:
-    specs = []
-    annots = reader.pages[0].get("/Annots") or []
-    for annot in annots:
-        obj = annot.get_object()
-        name = str(obj.get("/T") or "")
-        if name not in values:
-            continue
-        rect = [float(item) for item in obj.get("/Rect")]
-        da = str(obj.get("/DA") or "")
-        match = re.search(r"(\d+(?:\.\d+)?)\s+Tf", da)
-        size = float(match.group(1)) if match else 8.0
-        align = int(obj.get("/Q") or 0)
-        # Long buyer names overflow the left header if kept centered like the sample.
-        if name in HEADER_FIELDS:
-            align = 0
-            width = rect[2] - rect[0]
-            rect = [HEADER_X, rect[1], HEADER_X + width, rect[3]]
-        elif name in CLIENT_FIELDS:
-            align = 0
-            rect = [VALUE_X, rect[1], rect[2], rect[3]]
-        specs.append({
-            "name": name,
-            "text": values[name],
-            "rect": rect,
-            "size": size,
-            "align": align,
-            "cover": False,
-            "text_x": HEADER_X if name in HEADER_FIELDS else (
-                VALUE_X if name in CLIENT_FIELDS else None
-            ),
-        })
-    return specs
-
-
-def overlay_commands(specs: list[dict]) -> str:
-    chunks = ["q"]
-    for spec in specs:
-        text = spec["text"]
-        x1, y1, x2, y2 = spec["rect"]
-        width, height = x2 - x1, y2 - y1
-        if spec.get("cover"):
-            chunks.append(f"1 1 1 rg {x1:.3f} {y1:.3f} {width:.3f} {height:.3f} re f")
-            chunks.append("0 0 0 rg")
-        if not text:
-            continue
-        lines, size = fit_lines(text, width, height, spec["size"])
-        leading = size * 1.18
-        block = leading * len(lines)
-        y = y2 - ((height - block) / 2) - size
-        y = min(y, y2 - size - 0.5)
-        y = max(y, y1 + 0.5)
-        for index, line in enumerate(lines):
-            line_y = y - index * leading
-            if spec["align"] == 2:
-                x = max(x1 + 1, x2 - 3 - text_width(line, size))
-            elif spec["align"] == 1:
-                x = x1 + max(1, (width - text_width(line, size)) / 2)
-            else:
-                x = spec.get("text_x") or (x1 + 2)
-            chunks.append(
-                f"BT /helv {size:.1f} Tf 0 0 0 rg {x:.3f} {line_y:.3f} Td "
-                f"({pdf_escape(line)}) Tj ET"
-            )
-    chunks.append("Q")
-    return "\n".join(chunks) + "\n"
-
-
-def append_page_content(writer: PdfWriter, page, commands: str) -> None:
-    from pypdf.generic import ArrayObject, DecodedStreamObject, NameObject
-
-    stream = DecodedStreamObject()
-    stream.set_data(commands.encode("latin-1"))
-    ref = writer._add_object(stream)
-    contents = page.get("/Contents")
-    if contents is None:
-        page[NameObject("/Contents")] = ref
         return
-    raw = contents.get_object() if hasattr(contents, "get_object") else contents
-    if isinstance(raw, ArrayObject):
-        raw.append(ref)
+    size = _fit_size(text, rect.width, fontsize, fontname)
+    baseline = rect.y0 + size * 0.82
+    page.insert_text((rect.x0, baseline), text, fontsize=size, fontname=fontname, color=(0, 0, 0))
+
+
+def _draw_aligned(page: pymupdf.Page, rect: pymupdf.Rect, text: str, *, fontsize: float, align: int, fontname: str = "helv") -> None:
+    if not text:
+        return
+    size = _fit_size(text, rect.width - 2, fontsize, fontname)
+    width = pymupdf.Font(fontname).text_length(text, fontsize=size)
+    baseline = rect.y0 + (rect.height + size * 0.55) / 2
+    if align == 2:
+        x = rect.x1 - width - 2
+    elif align == 1:
+        x = rect.x0 + max(1, (rect.width - width) / 2)
     else:
-        page[NameObject("/Contents")] = ArrayObject([contents, ref])
+        x = rect.x0 + 2
+    page.insert_text((x, baseline), text, fontsize=size, fontname=fontname, color=(0, 0, 0))
+
+
+def _cover_sample_table_text(page: pymupdf.Page, covers: list, yellow: tuple[float, float, float]) -> None:
+    """Redact only the sample cell glyphs so the grid lines stay intact."""
+    y_top = TABLE_GRID_Y[0]
+    y_bot = TABLE_GRID_Y[SAMPLE_ROWS]
+    for block in page.get_text("dict")["blocks"]:
+        if block.get("type") != 0:
+            continue
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                if not span.get("text", "").strip():
+                    continue
+                rect = pymupdf.Rect(span["bbox"])
+                if rect.y0 < y_top or rect.y1 > y_bot or rect.x0 < TABLE_GRID_X[0] or rect.x0 > TABLE_GRID_X[-1]:
+                    continue
+                padded = pymupdf.Rect(rect.x0 - 1.0, rect.y0 - 0.5, rect.x1 + 1.0, rect.y1 + 0.5)
+                fill = yellow if rect.x0 >= TABLE_TOTAL_X else (1, 1, 1)
+                covers.append((padded, fill))
+
+
+def _redraw_table_grid(page: pymupdf.Page, rows: int = SAMPLE_ROWS) -> None:
+    """Restore the grey cell borders that redaction can wipe out."""
+    y_top = TABLE_GRID_Y[0] + TABLE_GRID_THICK
+    y_bot = TABLE_GRID_Y[rows]
+    for x in TABLE_GRID_X:
+        page.draw_rect(
+            pymupdf.Rect(x, y_top, x + TABLE_GRID_THICK, y_bot),
+            color=None,
+            fill=TABLE_GRID_GREY,
+            width=0,
+        )
+    left = TABLE_GRID_X[0]
+    right = TABLE_GRID_X[-1] + TABLE_GRID_THICK
+    for y in TABLE_GRID_Y[: rows + 1]:
+        page.draw_rect(
+            pymupdf.Rect(left, y, right, y + TABLE_GRID_THICK),
+            color=None,
+            fill=TABLE_GRID_GREY,
+            width=0,
+        )
 
 
 def fill_pdf(template: Path, record: dict, dest: Path) -> None:
-    reader = PdfReader(str(template))
-    writer = PdfWriter(clone_from=reader)
-    available = set(reader.get_fields() or {})
-    values = {key: value for key, value in field_values(record).items() if key in available}
-    specs = widget_specs(reader, values)
-    phone_rect = [70.0, CLIENT_PHONE_RECT[1], CLIENT_PHONE_RECT[2], CLIENT_PHONE_RECT[3]]
-    specs.append({
-        "name": "Text10",
-        "text": record["vendor_phone"],
-        "rect": phone_rect,
-        "size": 11.0,
-        "align": 0,
-        "cover": True,
-        "text_x": VALUE_X,
-    })
-    specs.append({
-        "name": "Text10-old",
-        "text": "",
-        "rect": [408.0, 524.1, 566.3, 542.3],
-        "size": 11.0,
-        "align": 0,
-        "cover": True,
-    })
-    writer.update_page_form_field_values(
-        writer.pages[0],
-        values,
-        auto_regenerate=True,
-        flatten=False,
-    )
-    page = writer.pages[0]
-    append_page_content(writer, page, overlay_commands(specs))
-    if "/Annots" in page:
-        del page["/Annots"]
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    with dest.open("wb") as handle:
-        writer.write(handle)
+    doc = pymupdf.open(template)
+    try:
+        page = doc[0]
+        covers: list[tuple[pymupdf.Rect, tuple[float, float, float]]] = []
+        draws: list[tuple] = []
+        yellow = YELLOW
+
+        def cover_hit(text: str, index: int = 0, x1: float | None = None, x0: float | None = None) -> pymupdf.Rect:
+            hit = _hits(page, text)[index]
+            rect = pymupdf.Rect(
+                x0 if x0 is not None else hit.x0,
+                hit.y0 - 0.35,
+                x1 if x1 is not None else hit.x1 + 2.0,
+                hit.y1 + 0.35,
+            )
+            covers.append((rect, (1, 1, 1)))
+            return rect
+
+        def replace(text: str, new: str, *, index: int = 0, size: float = BODY, fontname: str = "helv", x1: float | None = None, x0: float | None = None) -> None:
+            rect = cover_hit(text, index, x1=x1, x0=x0)
+            draws.append(("left", rect, new, size, fontname))
+
+        replace("FASHION QUEEN", record["company"], size=HEADER, fontname="hebo", x1=330.0)
+        replace("108 Waldorf Street", record["street"], x1=330.0)
+        replace("Coventry, 25448 IL", record["city"], x1=330.0)
+        replace("(000) 1234 56789", record["phone"], x1=330.0)
+        replace("123456/22", record["po_number"], x1=575.0)
+        replace("22ND SEPTEMBER, 2022", record["po_date"], x1=575.0)
+
+        name_rect = pymupdf.Rect(97.0, 181.0, 565.0, 192.5)
+        covers.append((name_rect, (1, 1, 1)))
+        draws.append(("left", name_rect, f"{record['supplier']}    Attn. {record['contact']}", BODY, "helv"))
+        replace("211 Arrow Bay, Westminster, 21656 Los Angeles", record["supplier_address"], x1=565.0)
+        replace("info@fashionitems.com", record["vendor_email"], x1=290.0)
+        replace("(555) 1234 56789", record["vendor_phone"], x1=500.0)
+
+        _cover_sample_table_text(page, covers, yellow)
+        for line, (y0, y1) in zip(record["lines"], ROW_BANDS):
+            values = {
+                "name": line["name"],
+                "sku": line["sku"],
+                "price": fmt_template_money(line["price"]),
+                "qty": str(line["qty"]),
+                "total": fmt_template_money(line["total"]),
+            }
+            for key, (x0, x1, align) in COLS.items():
+                draws.append(("cell", pymupdf.Rect(x0, y0, x1, y1), values[key], SMALL, align))
+
+        replace("Courier", record["method"], x1=270.0)
+        replace("FedEx", record["carrier"], x1=270.0)
+        replace("1222052520000680", record["track"], x1=270.0)
+        replace("29/09/2022", record["arrival"], x1=270.0)
+        replace("3,565.00$", fmt_template_money(record["subtotal"]), x1=420.0)
+        replace("10%", fmt_percent(record["discount_pct"]), index=0, x1=530.0)
+        replace("10%", fmt_percent(record["tax_pct"]), index=1, x1=370.0)
+        replace("75.00$", fmt_template_money(record["shipping"]), x1=500.0)
+        replace("Credit Card", record["payment"], x1=560.0)
+        replace("3,604.35$", fmt_template_money(record["grand_total"]), size=10.6, fontname="hebo", x1=500.0)
+
+        for rect, fill in covers:
+            page.add_redact_annot(rect, fill=fill, cross_out=False)
+        page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE)
+
+        for kind, rect, text, size, extra in draws:
+            if kind == "left":
+                _draw_left(page, rect, text, fontsize=size, fontname=extra)
+            else:
+                _draw_aligned(page, rect, text, fontsize=size, align=extra)
+
+        _redraw_table_grid(page)
+
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        doc.save(dest, garbage=3, deflate=True)
+    finally:
+        doc.close()
 
 
 def write_index(output_dir: Path, records: list[dict]) -> None:
@@ -490,7 +542,7 @@ def write_index(output_dir: Path, records: list[dict]) -> None:
 </head>
 <body>
     <h1>Corporate Loan Purchase Orders</h1>
-    <p>{len(records)} POs generated from Fashion-Purchase-Order-No-Logo.pdf</p>
+    <p>{len(records)} POs generated from Fashion-Purchase-Order-Template.pdf</p>
     <table>
         <thead>
             <tr>
@@ -514,11 +566,18 @@ def write_index(output_dir: Path, records: list[dict]) -> None:
     (output_dir / "index.html").write_text(html, encoding="utf-8")
 
 
-def generate(output_dir: Path) -> list[dict]:
-    rows = [row for row in read_csv(PO_SHEET) if (row.get("Company Name (auto)") or "").strip()]
+def generate(
+    output_dir: Path,
+    xlsx: str | Path | None = None,
+    cases: list[str] | None = None,
+) -> list[dict]:
+    mastersheet = find_mastersheet(xlsx)
+    rows, case_registry = load_mastersheet(mastersheet)
+    if cases:
+        wanted = {item.strip() for item in cases}
+        rows = [row for row in rows if row.get("Case ID") in wanted]
     if not rows:
-        raise SystemExit("No purchase-order rows found in the mastersheet.")
-    cases = load_cases()
+        raise SystemExit(f"No purchase-order rows found in {mastersheet.name}.")
     template = template_path()
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -531,7 +590,7 @@ def generate(output_dir: Path) -> list[dict]:
 
     records: list[dict] = []
     for row in rows:
-        record = build_record(row, cases)
+        record = build_record(row, case_registry)
         filename = f"{record['case_id']}_PurchaseOrder.pdf"
         record["filename"] = filename
         fill_pdf(template, record, output_dir / filename)
@@ -547,7 +606,12 @@ def generate(output_dir: Path) -> list[dict]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate purchase orders for every mastersheet row."
+        description="Generate purchase orders from the document mastersheet."
+    )
+    parser.add_argument(
+        "xlsx",
+        nargs="?",
+        help="Mastersheet path. Default: latest vN_document_mastersheet.xlsx next to this package.",
     )
     parser.add_argument(
         "-o", "--out",
@@ -555,12 +619,17 @@ def parse_args() -> argparse.Namespace:
         default=Path(__file__).resolve().parent / "output",
         help="Output directory (default: ./output)",
     )
+    parser.add_argument(
+        "--cases",
+        nargs="*",
+        help="Case IDs to include; default is every Purchase Order row.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    records = generate(args.out)
+    records = generate(args.out, xlsx=args.xlsx, cases=args.cases)
     print(f"Generated {len(records)} purchase orders in {args.out}")
     print(f"Open {args.out / 'index.html'} to browse them.")
 
