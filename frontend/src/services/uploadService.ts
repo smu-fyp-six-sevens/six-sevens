@@ -76,6 +76,47 @@ export const ADDITIONAL_DOCUMENT_TYPES: { value: string; label: string }[] = [
 // can correct values the LLM wasn't confident about.
 export const EXTRACTION_CONFIDENCE_THRESHOLD = 0.95;
 
+// Display label for DocumentRecord.classification_outcome (view only — the
+// underlying value stays 'manual_review' / 'accepted').
+export function formatClassificationOutcome(
+  outcome: string | null | undefined,
+): string {
+  switch (outcome) {
+    case 'accepted':
+      return 'Accepted';
+    case 'manual_review':
+      return 'Manual Review';
+    default:
+      return '—';
+  }
+}
+
+// Mirrors settings.CLASSIFICATION_CONFIDENCE_THRESHOLD in backend/app/config.py —
+// below this, the officer can correct the document type (the backend enforces
+// the same gate).
+export const CLASSIFICATION_CONFIDENCE_THRESHOLD = 0.8;
+
+// Mirrors KNOWN_DOCUMENT_TYPES in backend/app/extraction_prompts.py — the real
+// document_type values, so passport/nric stay separate (unlike
+// REQUIRED_DOCUMENT_TYPES above, whose 'id_document' is only a checklist
+// slot). 'unrecognised' is the backend's "Other" catch-all.
+export const DOCUMENT_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'bank_statement', label: 'Bank statement' },
+  { value: 'certificate_of_incorporation', label: 'Certificate of incorporation' },
+  { value: 'payslip', label: 'Payslip' },
+  { value: 'passport', label: 'Passport' },
+  { value: 'nric', label: 'NRIC' },
+  { value: 'fatca_crs_declaration', label: 'FATCA/CRS declaration' },
+  { value: 'certificate_of_incumbency', label: 'Certificate of incumbency' },
+  { value: 'company_constitution', label: 'Company constitution' },
+  { value: 'proof_of_address', label: 'Proof of address' },
+  { value: 'source_of_wealth', label: 'Source of wealth' },
+  { value: 'credit_report', label: 'Credit report' },
+  { value: 'list_of_loans', label: 'List of loans' },
+  { value: 'notice_of_assessment', label: 'Notice of assessment' },
+  { value: 'unrecognised', label: 'Other' },
+];
+
 
 // Mirrors the subset of CaseSummary in backend/app/models.py this page
 // needs. fulfilled_requirements here is NOT just a union of each document's
@@ -156,6 +197,27 @@ export async function updateExtractedFields(
   if (!response.ok) {
     const detail = await response.text();
     throw new Error(`Failed to update extracted fields (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as DocumentRecord;
+}
+
+// Mirrors UpdateDocumentTypeRequest in backend/app/models.py. Saving also
+// kicks off a background extraction rerun against the new type — the
+// returned record already reads status 'processing'.
+export async function updateDocumentType(
+  documentId: string,
+  documentType: string,
+): Promise<DocumentRecord> {
+  const response = await authFetch(`/documents/${documentId}/document-type`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ document_type: documentType }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to update document type (${response.status}): ${detail}`);
   }
 
   return (await response.json()) as DocumentRecord;

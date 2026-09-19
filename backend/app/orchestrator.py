@@ -200,6 +200,83 @@ async def _process_document(document_id: str) -> None:
     logger.info("Document %s: classification+extraction complete", document_id)
 
 
+async def rerun_extraction(document_id: str) -> None:
+    """
+    Re-runs Extraction only, against the document's already-stored
+    document_type (set by an officer's manual correction — see
+    routers/documents.py's PATCH .../document-type). Deliberately skips the
+    Intake Coordinator and the reclassification loop: the officer's type is
+    authoritative (confidence 1.0), so there is nothing to escalate back to.
+
+    Same terminal contract as process_document: always leaves the document
+    at ANALYZED or FAILED, never stuck at PROCESSING. The caller is
+    expected to have already flipped status to PROCESSING.
+    """
+    try:
+        await _rerun_extraction(document_id)
+    except Exception as exc:  # noqa: BLE001 — last line of defence against a stuck document
+        logger.exception("Document %s: unhandled error during extraction rerun", document_id)
+        try:
+            await _fail(document_id, f"Unhandled orchestration error: {exc}")
+        except Exception:
+            logger.exception(
+                "Document %s: failed to record FAILED status after unhandled error", document_id
+            )
+
+
+async def _rerun_extraction(document_id: str) -> None:
+    document = await asyncio.to_thread(document_repository.get_document, document_id)
+    if document is None:
+        logger.error("Document %s not found; cannot rerun extraction", document_id)
+        return
+
+    document_type = document.document_type or "unrecognised"
+
+    try:
+        raw_text = await _ingest_document_text(document_id, document)
+    except OrchestrationError as exc:
+        await _fail(document_id, str(exc), document_type=document_type)
+        return
+
+    if not raw_text.strip():
+        await _fail(
+            document_id, "Extraction produced no usable text", document_type=document_type
+        )
+        return
+
+    try:
+        extraction = await _run_extraction(document_id, document, document_type, raw_text)
+    except DifyInvocationError as exc:
+        await _fail(
+            document_id, f"Extraction invocation failed: {exc}", document_type=document_type
+        )
+        return
+
+    await _persist_extracted_fields(document_id, document_type, extraction)
+
+    if extraction.get("escalation"):
+        await _fail(
+            document_id,
+            f"Extraction could not process this as {document_type}: "
+            f"{extraction['escalation'].get('reason')}",
+            document_type=document_type,
+        )
+        return
+
+    # failure_reason="" clears a stale reason left by whatever FAILED run
+    # this rerun is recovering from (update_status skips None, not "").
+    await asyncio.to_thread(
+        document_repository.update_status,
+        document_id,
+        DocumentStatus.ANALYZED,
+        document_type=document_type,
+        failure_reason="",
+    )
+    if document.case_id is not None:
+        await asyncio.to_thread(case_status.sync_submission_finalized, document.case_id)
+    logger.info("Document %s: extraction rerun complete as %s", document_id, document_type)
+
+
 async def _persist_extracted_fields(document_id: str, document_type: str, extraction: dict) -> None:
     """
     Writes Extraction's output to both the jsonb blob on documents (what

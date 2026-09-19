@@ -1,8 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CaseRecord } from '../App';
+import AppHeader from '../components/AppHeader';
+import { subscribeToCaseStatus } from '../services/caseSocket';
 import {
+  CLASSIFICATION_CONFIDENCE_THRESHOLD,
+  DOCUMENT_TYPE_OPTIONS,
   EXTRACTION_CONFIDENCE_THRESHOLD,
+  formatClassificationOutcome,
   getDocument,
+  updateDocumentType,
   updateExtractedFields,
 } from '../services/uploadService';
 import type { DocumentRecord } from '../services/uploadService';
@@ -103,6 +109,18 @@ function valueToString(value: unknown): string {
   return String(value);
 }
 
+function buildFieldDraft(
+  fields: Record<string, unknown> | null,
+): Record<string, string> {
+  const draft: Record<string, string> = {};
+
+  for (const [key, field] of displayableFieldEntries(fields)) {
+    draft[key] = valueToString(field.value);
+  }
+
+  return draft;
+}
+
 function formatDate(value: string): string {
   return new Date(value).toLocaleString('en-SG', {
     day: 'numeric',
@@ -127,6 +145,15 @@ export default function DocumentDetailsPage({
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  const [selectedType, setSelectedType] = useState('');
+  const [isSavingType, setIsSavingType] = useState(false);
+  const [typeError, setTypeError] = useState<string | null>(null);
+
+  // Last extracted_fields the draft was built from — lets a live update reset
+  // the draft only when the fields really changed (e.g. a rerun finishing),
+  // not wipe an officer's in-progress edits on every unrelated case update.
+  const extractedFieldsJsonRef = useRef('');
+
   useEffect(() => {
     let cancelled = false;
 
@@ -142,16 +169,10 @@ export default function DocumentDetailsPage({
         }
 
         setDocument(result);
-
-        const nextDraft: Record<string, string> = {};
-
-        for (const [key, field] of displayableFieldEntries(
-          result.extracted_fields,
-        )) {
-          nextDraft[key] = valueToString(field.value);
-        }
-
-        setFieldDraft(nextDraft);
+        extractedFieldsJsonRef.current = JSON.stringify(
+          result.extracted_fields ?? null,
+        );
+        setFieldDraft(buildFieldDraft(result.extracted_fields));
       } catch (error) {
         if (cancelled) {
           return;
@@ -193,6 +214,82 @@ export default function DocumentDetailsPage({
       field.confidence != null &&
       field.confidence < EXTRACTION_CONFIDENCE_THRESHOLD,
   );
+
+  // The type can only be corrected once the pipeline has finished with the
+  // document, and only while classification confidence is still below the
+  // threshold — the backend enforces both. Saving sets confidence to 1.0, so
+  // the dropdown goes away afterwards.
+  const canCorrectType =
+    (document?.status === 'analyzed' || document?.status === 'failed') &&
+    !(
+      document.confidence != null &&
+      document.confidence >= CLASSIFICATION_CONFIDENCE_THRESHOLD
+    );
+
+  // Saving a corrected type re-runs extraction in the background; this page
+  // only fetched once on load, so listen for the result while it's in flight.
+  const caseId = document?.case_id ?? null;
+  const isInFlight =
+    document?.status === 'uploaded' ||
+    document?.status === 'queued' ||
+    document?.status === 'processing';
+
+  useEffect(() => {
+    if (!caseId || !isInFlight) {
+      return;
+    }
+
+    const subscription = subscribeToCaseStatus(caseId, (snapshot) => {
+      const updated = snapshot.documents.find(
+        (candidate) => candidate.id === documentId,
+      );
+
+      if (!updated) {
+        return;
+      }
+
+      const nextJson = JSON.stringify(updated.extracted_fields ?? null);
+
+      if (nextJson !== extractedFieldsJsonRef.current) {
+        extractedFieldsJsonRef.current = nextJson;
+        setFieldDraft(buildFieldDraft(updated.extracted_fields));
+      }
+
+      setDocument(updated);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [caseId, isInFlight, documentId]);
+
+  async function handleSaveType() {
+    if (!document || !selectedType) {
+      return;
+    }
+
+    setIsSavingType(true);
+    setTypeError(null);
+
+    try {
+      const updated = await updateDocumentType(document.id, selectedType);
+
+      extractedFieldsJsonRef.current = JSON.stringify(
+        updated.extracted_fields ?? null,
+      );
+      setDocument(updated);
+      setFieldDraft(buildFieldDraft(updated.extracted_fields));
+      setSelectedType('');
+      setSaveMessage(null);
+      setSaveError(null);
+    } catch (error) {
+      setTypeError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to update the document type.',
+      );
+    } finally {
+      setIsSavingType(false);
+    }
+  }
 
   function handleFieldChange(key: string, value: string) {
     setFieldDraft((current) => ({
@@ -261,10 +358,7 @@ export default function DocumentDetailsPage({
   if (isLoading) {
     return (
       <div className="shell shell--upload">
-        <header className="app-header">
-          <div className="brand">GLDB Fraud Review</div>
-          <div className="officer-tag">Loan Officer · J. Tan</div>
-        </header>
+        <AppHeader />
 
         <button type="button" className="back-link" onClick={onBack}>
           ← Back to case
@@ -280,10 +374,7 @@ export default function DocumentDetailsPage({
   if (loadError || !document) {
     return (
       <div className="shell shell--upload">
-        <header className="app-header">
-          <div className="brand">GLDB Fraud Review</div>
-          <div className="officer-tag">Loan Officer · J. Tan</div>
-        </header>
+        <AppHeader />
 
         <button type="button" className="back-link" onClick={onBack}>
           ← Back to case
@@ -298,10 +389,7 @@ export default function DocumentDetailsPage({
 
   return (
     <div className="shell shell--upload document-details-page">
-      <header className="app-header">
-        <div className="brand">GLDB Fraud Review</div>
-        <div className="officer-tag">Loan Officer · J. Tan</div>
-      </header>
+      <AppHeader />
 
       <button type="button" className="back-link" onClick={onBack}>
         ← Back to case
@@ -362,9 +450,51 @@ export default function DocumentDetailsPage({
         <div className="details-info">
           <div>
             <span className="details-label">Document Type</span>
-            <strong>
-              {formatDocumentType(document.document_type)}
-            </strong>
+            {canCorrectType ? (
+              <div className="details-type-editor">
+                <select
+                  className="details-type-select"
+                  value={selectedType || document.document_type || ''}
+                  disabled={isSavingType}
+                  onChange={(event) => {
+                    setSelectedType(event.target.value);
+                    setTypeError(null);
+                  }}
+                >
+                  {!document.document_type && (
+                    <option value="" disabled>
+                      Select a type…
+                    </option>
+                  )}
+                  {DOCUMENT_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  className="details-save-button"
+                  disabled={
+                    isSavingType ||
+                    !selectedType ||
+                    selectedType === document.document_type
+                  }
+                  onClick={() => void handleSaveType()}
+                >
+                  {isSavingType ? 'Saving…' : 'Save & re-run extraction'}
+                </button>
+
+                {typeError && (
+                  <span className="save-error">{typeError}</span>
+                )}
+              </div>
+            ) : (
+              <strong>
+                {formatDocumentType(document.document_type)}
+              </strong>
+            )}
           </div>
 
           <div>
@@ -381,7 +511,7 @@ export default function DocumentDetailsPage({
           <div>
             <span className="details-label">Routing Outcome</span>
             <strong>
-              {document.classification_outcome ?? '—'}
+              {formatClassificationOutcome(document.classification_outcome)}
             </strong>
           </div>
         </div>

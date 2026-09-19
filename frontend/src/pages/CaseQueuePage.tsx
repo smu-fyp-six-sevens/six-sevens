@@ -13,8 +13,26 @@ interface CaseQueuePageProps {
   onCreateCase: () => void;
 }
 
+// One colour per status label (see mapStatus in App.tsx); anything else
+// falls back to neutral.
+const STATUS_CHIP_CLASS: Record<string, string> = {
+  'Ready for review': 'status-chip--green',
+  'In progress': 'status-chip--blue',
+  'Documents failed': 'status-chip--red',
+  'Processing stuck': 'status-chip--amber',
+  'Documents pending': 'status-chip--grey',
+};
+
 function displayCaseNumber(caseRecord: CaseRecord): string {
   return caseRecord.caseNumber || caseRecord.id;
+}
+
+function creationTime(caseRecord: CaseRecord): number | null {
+  if (!caseRecord.created_at) return null;
+
+  const time = Date.parse(caseRecord.created_at);
+
+  return Number.isNaN(time) ? null : time;
 }
 
 export default function CaseQueuePage({
@@ -27,7 +45,9 @@ export default function CaseQueuePage({
   onCreateCase,
 }: CaseQueuePageProps) {
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [activeStatuses, setActiveStatuses] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   const statusOptions = useMemo(() => {
@@ -38,6 +58,20 @@ export default function CaseQueuePage({
     return Array.from(new Set(statuses));
   }, [cases]);
 
+  function toggleStatus(status: string) {
+    setActiveStatuses((current) => {
+      const next = new Set(current);
+
+      if (next.has(status)) {
+        next.delete(status);
+      } else {
+        next.add(status);
+      }
+
+      return next;
+    });
+  }
+
   const matches = useMemo(() => {
     const query = search.trim().toLowerCase();
 
@@ -47,30 +81,27 @@ export default function CaseQueuePage({
         [displayCaseNumber(item), item.applicant]
           .some((value) => value.toLowerCase().includes(query));
 
+      // No chip active = no status filter; otherwise a case matches if its
+      // status is any of the active ones.
       const matchesStatus =
-        statusFilter === 'all' ||
-        item.status === statusFilter;
+        activeStatuses.size === 0 ||
+        activeStatuses.has(item.status);
 
       return matchesSearch && matchesStatus;
     });
 
     return [...filteredCases].sort((a, b) => {
-      const caseNumberA = displayCaseNumber(a);
-      const caseNumberB = displayCaseNumber(b);
+      const timeA = creationTime(a);
+      const timeB = creationTime(b);
 
-      return sortOrder === 'asc'
-        ? caseNumberA.localeCompare(
-            caseNumberB,
-            undefined,
-            { numeric: true },
-          )
-        : caseNumberB.localeCompare(
-            caseNumberA,
-            undefined,
-            { numeric: true },
-          );
+      // Cases with no creation date sink to the bottom in either direction.
+      if (timeA === null && timeB === null) return 0;
+      if (timeA === null) return 1;
+      if (timeB === null) return -1;
+
+      return sortOrder === 'asc' ? timeA - timeB : timeB - timeA;
     });
-  }, [cases, search, statusFilter, sortOrder]);
+  }, [cases, search, activeStatuses, sortOrder]);
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -132,45 +163,47 @@ export default function CaseQueuePage({
 
         <div className="queue-filters">
           <div className="filter-row">
-            <label htmlFor="status-filter">
-              Filter by status
-            </label>
+            <span className="filter-label">Filter by status</span>
 
-            <select
-              id="status-filter"
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-            >
-              <option value="all">All statuses</option>
+            <div className="status-chips">
+              {statusOptions.map((status) => {
+                const isActive = activeStatuses.has(status);
 
-              {statusOptions.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
+                return (
+                  <button
+                    key={status}
+                    type="button"
+                    aria-pressed={isActive}
+                    className={`status-chip ${
+                      STATUS_CHIP_CLASS[status] ?? 'status-chip--grey'
+                    } ${isActive ? 'status-chip--active' : ''}`}
+                    onClick={() => toggleStatus(status)}
+                  >
+                    {status}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="filter-row">
-            <label htmlFor="case-sort">
-              Sort by case number
-            </label>
+            <span className="filter-label">Creation date</span>
 
-            <select
-              id="case-sort"
-              value={sortOrder}
-              onChange={(event) =>
-                setSortOrder(event.target.value as 'asc' | 'desc')
+            <button
+              type="button"
+              className="sort-arrow-btn"
+              aria-label={
+                sortOrder === 'asc'
+                  ? 'Sorted by creation date, oldest first. Click for newest first.'
+                  : 'Sorted by creation date, newest first. Click for oldest first.'
+              }
+              title={sortOrder === 'asc' ? 'Oldest first' : 'Newest first'}
+              onClick={() =>
+                setSortOrder((current) => (current === 'asc' ? 'desc' : 'asc'))
               }
             >
-              <option value="asc">
-                Ascending (ASC)
-              </option>
-
-              <option value="desc">
-                Descending (DESC)
-              </option>
-            </select>
+              {sortOrder === 'asc' ? '↑' : '↓'}
+            </button>
           </div>
         </div>
 

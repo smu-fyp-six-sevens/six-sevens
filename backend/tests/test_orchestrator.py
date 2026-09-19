@@ -1091,3 +1091,186 @@ def test_reconsideration_query_with_evidence_lists_bullets() -> None:
 
     assert "- Term Loan" in query
     assert "- Facility Details" in query
+
+
+def _typed_document(document_type: str | None = "nric", **overrides) -> DocumentRecord:
+    return _make_document().model_copy(update={"document_type": document_type, **overrides})
+
+
+@pytest.mark.asyncio
+async def test_rerun_extraction_skips_classification_and_marks_analyzed() -> None:
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository") as mock_fields_repo,
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
+        patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status") as mock_case_status,
+    ):
+        mock_repo.get_document.return_value = _typed_document("nric")
+        mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest)
+        mock_dify.run_chatflow_with_retry = AsyncMock()
+        mock_dify.run_workflow_with_retry = AsyncMock(
+            return_value=_extraction_output(extracted_fields={"individual_name": "Jane Tan"})
+        )
+
+        await orchestrator.rerun_extraction("doc-1")
+
+        mock_dify.run_chatflow_with_retry.assert_not_called()
+        assert mock_dify.run_workflow_with_retry.await_count == 1
+        mock_fields_repo.replace_extracted_fields.assert_called_once()
+        mock_repo.update_status.assert_called_once_with(
+            "doc-1", DocumentStatus.ANALYZED, document_type="nric", failure_reason=""
+        )
+        mock_case_status.sync_submission_finalized.assert_called_once_with("case-1")
+
+
+@pytest.mark.asyncio
+async def test_rerun_extraction_falls_back_to_unrecognised_and_skips_sync_without_case() -> None:
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository"),
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
+        patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status") as mock_case_status,
+    ):
+        mock_repo.get_document.return_value = _typed_document(None, case_id=None)
+        mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest)
+        mock_dify.run_workflow_with_retry = AsyncMock(return_value=_extraction_output())
+
+        await orchestrator.rerun_extraction("doc-1")
+
+        mock_repo.update_status.assert_called_once_with(
+            "doc-1", DocumentStatus.ANALYZED, document_type="unrecognised", failure_reason=""
+        )
+        mock_case_status.sync_submission_finalized.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_rerun_extraction_document_not_found_does_nothing() -> None:
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.dify_client") as mock_dify,
+    ):
+        mock_repo.get_document.return_value = None
+
+        await orchestrator.rerun_extraction("missing-doc")
+
+        mock_repo.update_status.assert_not_called()
+        mock_dify.run_workflow_with_retry.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_rerun_extraction_download_failure_marks_failed() -> None:
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.dify_client") as mock_dify,
+    ):
+        mock_repo.get_document.return_value = _typed_document("nric")
+        mock_storage.download_file.side_effect = RuntimeError("bucket unreachable")
+
+        await orchestrator.rerun_extraction("doc-1")
+
+        args, kwargs = mock_repo.update_status.call_args
+        assert args[1] == DocumentStatus.FAILED
+        assert "Failed to download document" in kwargs["failure_reason"]
+        assert kwargs["document_type"] == "nric"
+        mock_dify.run_workflow_with_retry.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_rerun_extraction_empty_text_marks_failed() -> None:
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
+        patch("app.orchestrator.dify_client") as mock_dify,
+    ):
+        mock_repo.get_document.return_value = _typed_document("nric")
+        _stub_ingestion(mock_storage, mock_ingest, raw_text="   ")
+
+        await orchestrator.rerun_extraction("doc-1")
+
+        args, kwargs = mock_repo.update_status.call_args
+        assert args[1] == DocumentStatus.FAILED
+        assert kwargs["failure_reason"] == "Extraction produced no usable text"
+        mock_dify.run_workflow_with_retry.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_rerun_extraction_dify_failure_marks_failed() -> None:
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
+        patch("app.orchestrator.dify_client") as mock_dify,
+    ):
+        mock_repo.get_document.return_value = _typed_document("nric")
+        mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest)
+        mock_dify.run_workflow_with_retry = AsyncMock(side_effect=DifyInvocationError("network blip"))
+
+        await orchestrator.rerun_extraction("doc-1")
+
+        args, kwargs = mock_repo.update_status.call_args
+        assert args[1] == DocumentStatus.FAILED
+        assert "Extraction invocation failed" in kwargs["failure_reason"]
+        assert kwargs["document_type"] == "nric"
+
+
+@pytest.mark.asyncio
+async def test_rerun_extraction_escalation_persists_fields_then_marks_failed() -> None:
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository") as mock_fields_repo,
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
+        patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status"),
+    ):
+        mock_repo.get_document.return_value = _typed_document("payslip")
+        mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest)
+        mock_dify.run_workflow_with_retry = AsyncMock(
+            return_value=_extraction_output(
+                extracted_fields={"holder": "X"}, escalation={"reason": "reads like a manifest"}
+            )
+        )
+
+        await orchestrator.rerun_extraction("doc-1")
+
+        mock_fields_repo.replace_extracted_fields.assert_called_once()
+        args, kwargs = mock_repo.update_status.call_args
+        assert args[1] == DocumentStatus.FAILED
+        assert "reads like a manifest" in kwargs["failure_reason"]
+
+
+@pytest.mark.asyncio
+async def test_rerun_extraction_unhandled_error_marks_failed() -> None:
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch(
+            "app.orchestrator._rerun_extraction", new=AsyncMock(side_effect=RuntimeError("boom"))
+        ),
+    ):
+        await orchestrator.rerun_extraction("doc-1")
+
+        args, kwargs = mock_repo.update_status.call_args
+        assert args[1] == DocumentStatus.FAILED
+        assert "Unhandled orchestration error: boom" in kwargs["failure_reason"]
+
+
+@pytest.mark.asyncio
+async def test_rerun_extraction_survives_failure_to_record_failed_status() -> None:
+    with (
+        patch(
+            "app.orchestrator._rerun_extraction", new=AsyncMock(side_effect=RuntimeError("boom"))
+        ),
+        patch("app.orchestrator._fail", new=AsyncMock(side_effect=RuntimeError("db down"))),
+    ):
+        # Must not raise — nothing else is left to catch it in a background task.
+        await orchestrator.rerun_extraction("doc-1")

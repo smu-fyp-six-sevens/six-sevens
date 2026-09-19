@@ -281,6 +281,15 @@ class UpdateExtractedFieldsRequest(BaseModel):
     evidence: list[str] = Field(default_factory=list)
 
 
+class UpdateDocumentTypeRequest(BaseModel):
+    """
+    A loan officer's manual correction of a low-confidence document_type.
+    "unrecognised" is the "Other" catch-all — see extraction_prompts.
+    """
+
+    document_type: str
+
+
 class UploadResponse(BaseModel):
     document_id: str
     status: DocumentStatus

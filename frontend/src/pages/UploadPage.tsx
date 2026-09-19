@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CaseRecord } from '../App';
+import AppHeader from '../components/AppHeader';
 import DropZone from '../components/DropZone';
 import FileRow from '../components/FileRow';
 import { subscribeToCaseStatus } from '../services/caseSocket';
@@ -8,6 +9,7 @@ import {
   ADDITIONAL_DOCUMENT_TYPES,
   REQUIRED_DOCUMENT_TYPES,
   EXTRACTION_CONFIDENCE_THRESHOLD,
+  formatClassificationOutcome,
   updateExtractedFields,
   uploadDocuments,
 } from '../services/uploadService';
@@ -51,17 +53,6 @@ interface UploadPageProps {
 
 function isExtractionNotConfiguredFailure(reason: string | null | undefined): boolean {
   return Boolean(reason?.startsWith('Extraction invocation failed'));
-}
-
-function formatRoutingOutcome(outcome: string | null | undefined): string {
-  switch (outcome) {
-    case 'accepted':
-      return 'Proceed to fraud detection';
-    case 'manual_review':
-      return 'Flagged for manual review';
-    default:
-      return '—';
-  }
 }
 
 // Extracted field keys are snake_case identifiers (e.g. "bank_name",
@@ -445,13 +436,7 @@ export default function UploadPage({
 
   return (
     <main className="shell shell--upload">
-      <header className="app-header">
-        <div className="brand">
-          GLDB <span>Fraud Review</span>
-        </div>
-
-        <div className="officer-tag">Loan Officer · J. Tan</div>
-      </header>
+      <AppHeader />
 
       <div className="upload-view">
         <section className="upload-main">
@@ -606,7 +591,6 @@ export default function UploadPage({
                   <span>Status</span>
                   <span>Classification Confidence</span>
                   <span>Routing Outcome</span>
-                  <span>Action</span>
                 </div>
 
                 {Array.from(documentDetails.values())
@@ -620,7 +604,17 @@ export default function UploadPage({
                     return (
                       <div
                         key={document.id}
-                        className="documents-table-row"
+                        className="documents-table-row documents-table-row--clickable"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`View ${document.filename}`}
+                        onClick={() => onOpenDocument(document.id)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            onOpenDocument(document.id);
+                          }
+                        }}
                       >
                         <span className="document-filename">
                           {document.classification_outcome ===
@@ -665,18 +659,10 @@ export default function UploadPage({
                         </span>
 
                         <span className="document-routing">
-                          {document.classification_outcome ?? '—'}
+                          {formatClassificationOutcome(
+                            document.classification_outcome,
+                          )}
                         </span>
-
-                        <button
-                          type="button"
-                          className="document-view-link"
-                          onClick={() =>
-                            onOpenDocument(document.id)
-                          }
-                        >
-                          View
-                        </button>
                       </div>
                     );
                   })}

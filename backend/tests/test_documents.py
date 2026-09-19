@@ -748,3 +748,127 @@ def test_upload_batch_rejects_too_many_files() -> None:
             ],
         )
     assert response.status_code == 413
+
+
+def _typed_document(**overrides) -> DocumentRecord:
+    fields = {
+        "status": DocumentStatus.ANALYZED,
+        "document_type": "payslip",
+        "confidence": 0.5,
+        **overrides,
+    }
+    return _make_document().model_copy(update=fields)
+
+
+def test_update_document_type_records_type_and_reruns_extraction() -> None:
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+        patch("app.routers.documents.case_status") as mock_case_status,
+        patch("app.routers.documents.orchestrator") as mock_orchestrator,
+    ):
+        mock_repo.get_document.return_value = _typed_document()
+        mock_fields_repo.get_extracted_fields.return_value = []
+        mock_orchestrator.rerun_extraction = AsyncMock()
+
+        response = client.patch("/documents/doc-1/document-type", json={"document_type": " NRIC "})
+
+    assert response.status_code == 200
+    mock_repo.record_classification.assert_called_once_with(
+        "doc-1",
+        document_type="nric",
+        confidence=1.0,
+        classification_outcome="accepted",
+        evidence=[],
+        fulfilled_requirements=["id_document"],
+    )
+    args, kwargs = mock_repo.update_status.call_args
+    assert args == ("doc-1", DocumentStatus.PROCESSING)
+    assert "processing_started_at" in kwargs
+    mock_case_status.sync_submission_finalized.assert_called_once_with("case-1")
+    mock_orchestrator.rerun_extraction.assert_awaited_once_with("doc-1")
+
+
+def test_update_document_type_allows_unclassified_failed_document_without_case() -> None:
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+        patch("app.routers.documents.case_status") as mock_case_status,
+        patch("app.routers.documents.orchestrator") as mock_orchestrator,
+    ):
+        mock_repo.get_document.return_value = _typed_document(
+            status=DocumentStatus.FAILED, confidence=None, document_type=None, case_id=None
+        )
+        mock_fields_repo.get_extracted_fields.return_value = []
+        mock_orchestrator.rerun_extraction = AsyncMock()
+
+        response = client.patch(
+            "/documents/doc-1/document-type", json={"document_type": "unrecognised"}
+        )
+
+    assert response.status_code == 200
+    mock_case_status.sync_submission_finalized.assert_not_called()
+    mock_orchestrator.rerun_extraction.assert_awaited_once_with("doc-1")
+
+
+def test_update_document_type_rejects_unknown_type() -> None:
+    with patch("app.routers.documents.document_repository") as mock_repo:
+        response = client.patch("/documents/doc-1/document-type", json={"document_type": "id_document"})
+
+    assert response.status_code == 422
+    mock_repo.get_document.assert_not_called()
+
+
+def test_update_document_type_not_found() -> None:
+    with patch("app.routers.documents.document_repository") as mock_repo:
+        mock_repo.get_document.return_value = None
+
+        response = client.patch("/documents/missing/document-type", json={"document_type": "nric"})
+
+    assert response.status_code == 404
+
+
+def test_update_document_type_fetch_failure_returns_502() -> None:
+    with patch("app.routers.documents.document_repository") as mock_repo:
+        mock_repo.get_document.side_effect = RuntimeError("db down")
+
+        response = client.patch("/documents/doc-1/document-type", json={"document_type": "nric"})
+
+    assert response.status_code == 502
+
+
+def test_update_document_type_conflicts_while_pipeline_is_running() -> None:
+    with patch("app.routers.documents.document_repository") as mock_repo:
+        mock_repo.get_document.return_value = _typed_document(status=DocumentStatus.PROCESSING)
+
+        response = client.patch("/documents/doc-1/document-type", json={"document_type": "nric"})
+
+    assert response.status_code == 409
+    mock_repo.record_classification.assert_not_called()
+
+
+def test_update_document_type_rejects_confident_classification() -> None:
+    with patch("app.routers.documents.document_repository") as mock_repo:
+        mock_repo.get_document.return_value = _typed_document(
+            confidence=settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
+        )
+
+        response = client.patch("/documents/doc-1/document-type", json={"document_type": "nric"})
+
+    assert response.status_code == 400
+    mock_repo.record_classification.assert_not_called()
+
+
+def test_update_document_type_write_failure_returns_502_without_rerun() -> None:
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.orchestrator") as mock_orchestrator,
+    ):
+        mock_repo.get_document.return_value = _typed_document()
+        mock_repo.record_classification.side_effect = RuntimeError("db down")
+        mock_orchestrator.rerun_extraction = AsyncMock()
+
+        response = client.patch("/documents/doc-1/document-type", json={"document_type": "nric"})
+
+    assert response.status_code == 502
+    mock_orchestrator.rerun_extraction.assert_not_called()

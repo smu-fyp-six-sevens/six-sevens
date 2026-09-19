@@ -2,20 +2,38 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 
-from .. import case_status, document_repository, extracted_fields_repository, storage_service
+from .. import (
+    case_status,
+    document_repository,
+    extracted_fields_repository,
+    orchestrator,
+    storage_service,
+)
 from ..config import settings
-from ..extraction_prompts import schema_field_names
+from ..extraction_prompts import KNOWN_DOCUMENT_TYPES, schema_field_names
 from ..models import (
+    ClassificationOutcome,
     DocumentDownloadResponse,
     DocumentRecord,
     DocumentStatus,
+    UpdateDocumentTypeRequest,
     UpdateExtractedFieldsRequest,
     compute_fulfilled_requirements,
 )
 from ..queue_service import document_queue
+
+# "unrecognised" is the "Other" catch-all: Extraction has a generic schema for it.
+_SETTABLE_DOCUMENT_TYPES = {*KNOWN_DOCUMENT_TYPES, "unrecognised"}
+# A pipeline run is already in flight for these — correcting the type now would race it.
+_TYPE_OVERRIDE_BLOCKED_STATUSES = {
+    DocumentStatus.UPLOADED,
+    DocumentStatus.QUEUED,
+    DocumentStatus.PROCESSING,
+}
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 logger = logging.getLogger(__name__)
@@ -204,6 +222,91 @@ async def update_extracted_fields(
 
     updated = await get_document(document_id)
     return updated
+
+
+@router.patch("/{document_id}/document-type", response_model=DocumentRecord)
+async def update_document_type(
+    document_id: str,
+    request: UpdateDocumentTypeRequest,
+    background_tasks: BackgroundTasks,
+) -> DocumentRecord:
+    """
+    A loan officer correcting a low-confidence document_type (the frontend
+    only offers this below settings.CLASSIFICATION_CONFIDENCE_THRESHOLD —
+    enforced here too, so it can't be scripted around). Records the type as
+    officer-confirmed (confidence 1.0, ACCEPTED), then re-runs Extraction
+    only, in the background, against the new type — Extraction from the
+    wrong schema is what made the old fields wrong in the first place. The
+    response already reads PROCESSING; the result arrives via the case
+    status WebSocket like any other status change.
+    """
+    document_type = request.document_type.strip().lower()
+    if document_type not in _SETTABLE_DOCUMENT_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown document_type: {request.document_type}",
+        )
+
+    try:
+        document = await asyncio.to_thread(document_repository.get_document, document_id)
+    except Exception as exc:
+        logger.exception("Failed to fetch document %s", document_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch the document. Check Supabase table access.",
+        ) from exc
+
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    if document.status in _TYPE_OVERRIDE_BLOCKED_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Document is still being processed; try again once it finishes.",
+        )
+
+    if (
+        document.confidence is not None
+        and document.confidence >= settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Classification confidence is above the threshold; the type can't be overridden.",
+        )
+
+    try:
+        # Self-fulfilment only, like _finalise_classification's first write:
+        # the existing extracted_fields came from the wrong schema, so they
+        # shouldn't be used to claim e.g. proof_of_address for the new type
+        # — rerun_extraction recomputes this from the real re-extracted fields.
+        await asyncio.to_thread(
+            document_repository.record_classification,
+            document_id,
+            document_type=document_type,
+            confidence=1.0,
+            classification_outcome=ClassificationOutcome.ACCEPTED.value,
+            evidence=[],
+            fulfilled_requirements=compute_fulfilled_requirements(document_type, None),
+        )
+        await asyncio.to_thread(
+            document_repository.update_status,
+            document_id,
+            DocumentStatus.PROCESSING,
+            processing_started_at=datetime.now(timezone.utc),
+        )
+    except Exception as exc:
+        logger.exception("Failed to update document type for document %s", document_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to save the document type. Check Supabase table access.",
+        ) from exc
+
+    if document.case_id is not None:
+        await asyncio.to_thread(case_status.sync_submission_finalized, document.case_id)
+
+    background_tasks.add_task(orchestrator.rerun_extraction, document_id)
+
+    return await get_document(document_id)
 
 
 @router.post("/{document_id}/retry", response_model=DocumentRecord)
