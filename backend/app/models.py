@@ -75,17 +75,34 @@ IDENTITY_DOCUMENT_TYPES: set[str] = {DocumentType.PASSPORT.value, DocumentType.N
 # rather than assumed 1:1 with a document's own document_type — see
 # DocumentRecord.fulfilled_requirements.
 #
-# OPTIONAL_DOCUMENT_TYPES are real, classifiable types that show up on the
-# case checklist once uploaded but never count toward it — they're left out
-# of REQUIRED_DOCUMENT_TYPES so a case can be finalised without them.
-OPTIONAL_DOCUMENT_TYPES: list[str] = [DocumentType.NOTICE_OF_ASSESSMENT.value]
+# ADDITIONAL_DOCUMENT_TYPES are the checklist's "Additional" tier: documents
+# that may be required depending on the case. They show up on the checklist
+# once uploaded but never count toward completion — they're left out of
+# REQUIRED_DOCUMENT_TYPES so a case can be finalised without them.
+#
+# company_proof_of_address is, like id_document above, a requirement and not
+# a document_type: it's a proof_of_address document whose extracted address
+# is the company's rather than an individual's (see
+# compute_fulfilled_requirements). Personal proof of address stays the
+# required "proof_of_address" item.
+COMPANY_PROOF_OF_ADDRESS_REQUIREMENT = "company_proof_of_address"
+# Same idea for source of wealth: personal source of wealth (e.g. a brokerage
+# statement in an individual's own name) is a source_of_wealth document whose
+# subject is a person rather than a company. Corporate source of wealth stays
+# the required "source_of_wealth" item.
+PERSONAL_SOURCE_OF_WEALTH_REQUIREMENT = "source_of_personal_wealth"
+ADDITIONAL_DOCUMENT_TYPES: list[str] = [
+    DocumentType.LIST_OF_LOANS.value,
+    COMPANY_PROOF_OF_ADDRESS_REQUIREMENT,
+    PERSONAL_SOURCE_OF_WEALTH_REQUIREMENT,
+]
 
 REQUIRED_DOCUMENT_TYPES: list[str] = [
     doc_type.value
     for doc_type in DocumentType
     if doc_type != DocumentType.UNRECOGNISED
     and doc_type.value not in IDENTITY_DOCUMENT_TYPES
-    and doc_type.value not in OPTIONAL_DOCUMENT_TYPES
+    and doc_type.value not in ADDITIONAL_DOCUMENT_TYPES
 ] + [IDENTITY_DOCUMENT_REQUIREMENT]
 
 
@@ -108,13 +125,33 @@ def compute_fulfilled_requirements(
     """
     if document_type in IDENTITY_DOCUMENT_TYPES:
         fulfilled = [IDENTITY_DOCUMENT_REQUIREMENT]
-    elif document_type in REQUIRED_DOCUMENT_TYPES or document_type in OPTIONAL_DOCUMENT_TYPES:
+    elif document_type in REQUIRED_DOCUMENT_TYPES or document_type in ADDITIONAL_DOCUMENT_TYPES:
         fulfilled = [document_type]
     else:
         return []
-    has_address = bool((extracted_fields or {}).get("individual_address"))
+    fields = extracted_fields or {}
+    has_address = bool(fields.get("individual_address"))
     if has_address and document_type != DocumentType.PROOF_OF_ADDRESS.value:
         fulfilled.append(DocumentType.PROOF_OF_ADDRESS.value)
+    # A proof_of_address document showing the company's address fulfils the
+    # additional company_proof_of_address item. With no individual address on
+    # it too, it says nothing about any person's residence, so it doesn't
+    # fulfil personal proof_of_address.
+    if document_type == DocumentType.PROOF_OF_ADDRESS.value and fields.get("company_address"):
+        fulfilled.append(COMPANY_PROOF_OF_ADDRESS_REQUIREMENT)
+        if not has_address:
+            fulfilled.remove(DocumentType.PROOF_OF_ADDRESS.value)
+    # A source_of_wealth document in a person's name with no UEN on it is
+    # personal source of wealth. The UEN (not company_name) is the corporate
+    # signal: a personal brokerage statement still prints the broker's own
+    # "Pte. Ltd." name, which must not make it read as a company document.
+    if (
+        document_type == DocumentType.SOURCE_OF_WEALTH.value
+        and (fields.get("account_holder_name") or fields.get("individual_name"))
+        and not fields.get("uen")
+    ):
+        fulfilled.remove(DocumentType.SOURCE_OF_WEALTH.value)
+        fulfilled.append(PERSONAL_SOURCE_OF_WEALTH_REQUIREMENT)
     return fulfilled
 
 

@@ -5,7 +5,7 @@ import FileRow from '../components/FileRow';
 import { subscribeToCaseStatus } from '../services/caseSocket';
 import type { CaseStatusSubscription } from '../services/caseSocket';
 import {
-  OPTIONAL_DOCUMENT_TYPES,
+  ADDITIONAL_DOCUMENT_TYPES,
   REQUIRED_DOCUMENT_TYPES,
   EXTRACTION_CONFIDENCE_THRESHOLD,
   updateExtractedFields,
@@ -37,7 +37,7 @@ const formatDocumentType = (documentType?: string | null) => {
 const MAX_FILE_SIZE_MB = Math.floor(MAX_FILE_SIZE_BYTES / (1024 * 1024));
 
 const REQUIREMENT_LABELS = new Map(
-  [...REQUIRED_DOCUMENT_TYPES, ...OPTIONAL_DOCUMENT_TYPES].map((requirement) => [
+  [...REQUIRED_DOCUMENT_TYPES, ...ADDITIONAL_DOCUMENT_TYPES].map((requirement) => [
     requirement.value,
     requirement.label,
   ]),
@@ -135,6 +135,50 @@ function fieldsToDraft(fields: Record<string, unknown>): Record<string, string> 
   return draft;
 }
 
+// The case snapshot wraps each extracted field as {value, confidence}.
+function extractedFieldValue(
+  fields: Record<string, unknown> | null,
+  key: string,
+): unknown {
+  const field = fields?.[key];
+  if (field && typeof field === 'object' && 'value' in field) {
+    return (field as { value: unknown }).value;
+  }
+  return field;
+}
+
+// Names of the individuals whose NRIC/passport has been accepted, one per
+// person — an NRIC's front and back (or the same person's NRIC and passport)
+// group by nric_number, falling back to name, like mapper.py's identities.
+// A back capture carries no name, so it adds nothing until its front is in.
+function acceptedIdentityNames(documents: DocumentRecord[]): string[] {
+  const namesByIdentity = new Map<string, string>();
+
+  for (const document of documents) {
+    if (
+      document.status !== 'analyzed' ||
+      document.classification_outcome !== 'accepted' ||
+      (document.document_type !== 'nric' && document.document_type !== 'passport')
+    ) {
+      continue;
+    }
+
+    const name = extractedFieldValue(document.extracted_fields, 'individual_name');
+    const idNumber = extractedFieldValue(document.extracted_fields, 'nric_number');
+    const displayName = typeof name === 'string' ? name.trim() : '';
+    const identityKey =
+      (typeof idNumber === 'string' ? idNumber.replace(/\s+/g, '').toUpperCase() : '') ||
+      displayName.toUpperCase().replace(/\s+/g, ' ');
+    if (!identityKey) continue;
+
+    if (displayName || !namesByIdentity.has(identityKey)) {
+      namesByIdentity.set(identityKey, namesByIdentity.get(identityKey) || displayName);
+    }
+  }
+
+  return Array.from(namesByIdentity.values()).filter(Boolean);
+}
+
 function describeIssue(issue: FileIssue): string {
   switch (issue.type) {
     case 'empty':
@@ -184,6 +228,11 @@ export default function UploadPage({
       document.classification_outcome === 'manual_review' ||
       (document.extraction_confidence != null &&
         document.extraction_confidence < EXTRACTION_CONFIDENCE_THRESHOLD),
+  );
+
+  const identityNames = useMemo(
+    () => acceptedIdentityNames(Array.from(documentDetails.values())),
+    [documentDetails],
   );
 
   const isMountedRef = useRef(true);
@@ -784,7 +833,7 @@ export default function UploadPage({
 
         <aside className="upload-sidebar">
           <div className="section-label">
-            <span>Document requirements</span>
+            <span>Required documents</span>
 
             <span>
               {
@@ -795,6 +844,8 @@ export default function UploadPage({
               / {REQUIRED_DOCUMENT_TYPES.length}
             </span>
           </div>
+
+          <p className="requirements-note">Present in every case</p>
 
           <ul className="requirements-list">
             {REQUIRED_DOCUMENT_TYPES.map((requirement) => {
@@ -877,14 +928,30 @@ export default function UploadPage({
                     </div>
                   )}
 
+                  {isIdDocument && identityNames.length > 0 && (
+                    <ul className="requirement-identities">
+                      {identityNames.map((name) => (
+                        <li key={name}>{name}</li>
+                      ))}
+                    </ul>
+                  )}
+
                   {idDocumentHint && (
                     <div className="requirement-unmatched">{idDocumentHint}</div>
                   )}
                 </li>
               );
             })}
+          </ul>
 
-            {OPTIONAL_DOCUMENT_TYPES.map((requirement) => (
+          <div className="section-label">
+            <span>Additional documents</span>
+          </div>
+
+          <p className="requirements-note">May be required depending on the case</p>
+
+          <ul className="requirements-list">
+            {ADDITIONAL_DOCUMENT_TYPES.map((requirement) => (
               <li key={requirement.value}>
                 <div
                   className={`requirement-row${
@@ -896,9 +963,8 @@ export default function UploadPage({
                   <span className="requirement-dot" />
 
                   {requirement.label}
-
-                  <span className="requirement-optional-tag">Optional</span>
                 </div>
+
               </li>
             ))}
           </ul>

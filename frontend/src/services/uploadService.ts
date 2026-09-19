@@ -45,23 +45,30 @@ export interface DocumentRecord {
 // models.IDENTITY_DOCUMENT_REQUIREMENT) is satisfied by uploading EITHER a
 // passport or an NRIC, not both.
 export const REQUIRED_DOCUMENT_TYPES: { value: string; label: string }[] = [
-  { value: 'bank_statement', label: 'Bank statement' },
+  { value: 'id_document', label: 'Identity document (NRIC/Passport)' },
+  { value: 'bank_statement', label: 'Corporate bank statement' },
+  { value: 'proof_of_address', label: 'Personal proof of address' },
+  { value: 'fatca_crs_declaration', label: 'FATCA/CRS' },
   { value: 'certificate_of_incorporation', label: 'Certificate of incorporation' },
-  { value: 'payslip', label: 'Payslip' },
-  { value: 'id_document', label: 'Identity document (passport or NRIC)' },
-  { value: 'fatca_crs_declaration', label: 'FATCA/CRS declaration' },
   { value: 'certificate_of_incumbency', label: 'Certificate of incumbency' },
   { value: 'company_constitution', label: 'Company constitution' },
-  { value: 'proof_of_address', label: 'Proof of address' },
-  { value: 'source_of_wealth', label: 'Source of wealth' },
   { value: 'credit_report', label: 'Credit report' },
-  { value: 'list_of_loans', label: 'List of loans' },
+  { value: 'payslip', label: 'Payslip(s)' },
+  { value: 'source_of_wealth', label: 'Source of (corporate) wealth' },
+  { value: 'notice_of_assessment', label: 'NOA' },
 ];
 
-// Mirrors OPTIONAL_DOCUMENT_TYPES in backend/app/models.py — shown on the
-// checklist (ticked once uploaded) but never counted toward it.
-export const OPTIONAL_DOCUMENT_TYPES: { value: string; label: string }[] = [
-  { value: 'notice_of_assessment', label: 'Notice of assessment' },
+// Mirrors ADDITIONAL_DOCUMENT_TYPES in backend/app/models.py — documents that
+// may be required depending on the case. Shown on the checklist (ticked once
+// uploaded) but never counted toward it. 'company_proof_of_address' (not
+// itself a document_type — see models.COMPANY_PROOF_OF_ADDRESS_REQUIREMENT)
+// is ticked by a proof-of-address document showing the company's address.
+// 'source_of_personal_wealth' is likewise a requirement, not a document_type:
+// a source_of_wealth document in a person's name with no UEN on it.
+export const ADDITIONAL_DOCUMENT_TYPES: { value: string; label: string }[] = [
+  { value: 'company_proof_of_address', label: 'Company proof of address' },
+  { value: 'list_of_loans', label: 'List of loans' },
+  { value: 'source_of_personal_wealth', label: 'Source of (personal) wealth' },
 ];
 
 // Mirrors settings.EXTRACTION_CONFIDENCE_THRESHOLD in backend/app/config.py —

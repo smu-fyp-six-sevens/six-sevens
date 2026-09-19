@@ -10,11 +10,13 @@ from app.case_status import (
 )
 from app.config import settings
 from app.models import (
+    ADDITIONAL_DOCUMENT_TYPES,
     REQUIRED_DOCUMENT_TYPES,
     CaseDocumentsStatus,
     ClassificationOutcome,
     DocumentRecord,
     DocumentStatus,
+    compute_fulfilled_requirements,
 )
 
 
@@ -154,26 +156,26 @@ def test_manual_review_document_does_not_count_as_fulfilled() -> None:
     assert "bank_statement" in missing
 
 
-def test_optional_notice_of_assessment_is_ticked_but_never_missing() -> None:
-    """NOA shows as fulfilled once accepted, and never blocks the checklist."""
-    assert "notice_of_assessment" not in REQUIRED_DOCUMENT_TYPES
+def test_additional_list_of_loans_is_ticked_but_never_missing() -> None:
+    """An additional item shows as fulfilled once accepted, and never blocks the checklist."""
+    assert "list_of_loans" not in REQUIRED_DOCUMENT_TYPES
 
     fulfilled, missing = compute_requirement_coverage([])
-    assert "notice_of_assessment" not in fulfilled
-    assert "notice_of_assessment" not in missing
+    assert "list_of_loans" not in fulfilled
+    assert "list_of_loans" not in missing
 
     documents = [
         _make_document(
             "doc-1",
             DocumentStatus.ANALYZED,
             classification_outcome=ClassificationOutcome.ACCEPTED,
-            document_type="notice_of_assessment",
-            fulfilled_requirements=["notice_of_assessment"],
+            document_type="list_of_loans",
+            fulfilled_requirements=["list_of_loans"],
         )
     ]
     fulfilled, missing = compute_requirement_coverage(documents)
-    assert "notice_of_assessment" in fulfilled
-    assert "notice_of_assessment" not in missing
+    assert "list_of_loans" in fulfilled
+    assert "list_of_loans" not in missing
 
 
 def test_passport_does_not_fulfil_proof_of_address() -> None:
@@ -469,3 +471,168 @@ def test_sync_submission_finalized_reverses_when_coverage_drops() -> None:
 
         sync_submission_finalized("case-1")
         mock_case_repo.set_submission_finalized.assert_called_with("case-1", finalized=False)
+
+
+def test_required_and_additional_requirements_are_distinct() -> None:
+    """AC1: the checklist tells required and additional requirements apart."""
+    assert ADDITIONAL_DOCUMENT_TYPES == [
+        "list_of_loans",
+        "company_proof_of_address",
+        "source_of_personal_wealth",
+    ]
+    assert not set(ADDITIONAL_DOCUMENT_TYPES) & set(REQUIRED_DOCUMENT_TYPES)
+    # NOA is a required item (see the document requirements table).
+    assert "notice_of_assessment" in REQUIRED_DOCUMENT_TYPES
+
+
+def test_case_finalizes_without_additional_document() -> None:
+    """AC2: a case with every required document is complete, additional or not."""
+    documents = _make_fully_covered_documents()
+    assert not any(doc.document_type in ADDITIONAL_DOCUMENT_TYPES for doc in documents)
+
+    with (
+        patch("app.case_status.document_repository") as mock_doc_repo,
+        patch("app.case_status.case_repository") as mock_case_repo,
+    ):
+        mock_doc_repo.list_documents.return_value = documents
+        sync_submission_finalized("case-1")
+        mock_case_repo.set_submission_finalized.assert_called_once_with("case-1", finalized=True)
+
+    _, missing = compute_requirement_coverage(documents)
+    assert missing == []
+
+
+def test_additional_document_maps_to_its_own_requirement() -> None:
+    """AC3: an uploaded additional document fulfils its own requirement."""
+    assert compute_fulfilled_requirements("list_of_loans", None) == ["list_of_loans"]
+
+
+def test_uploaded_additional_document_does_not_change_completeness() -> None:
+    """AC3/AC4: an additional item shows as fulfilled but neither hides a missing required item nor adds one."""
+    documents = [
+        _make_document(
+            "doc-1",
+            DocumentStatus.ANALYZED,
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            document_type="list_of_loans",
+            fulfilled_requirements=["list_of_loans"],
+        )
+    ]
+    fulfilled, missing = compute_requirement_coverage(documents)
+    assert fulfilled == ["list_of_loans"]
+    assert missing == REQUIRED_DOCUMENT_TYPES
+
+
+def test_proof_of_address_before_extraction_is_personal() -> None:
+    """Classification runs before extraction, so with no fields yet it stays the personal item."""
+    assert compute_fulfilled_requirements("proof_of_address", None) == ["proof_of_address"]
+
+
+def test_personal_proof_of_address_fulfils_only_personal_item() -> None:
+    fulfilled = compute_fulfilled_requirements(
+        "proof_of_address",
+        {"individual_name": "Jane Tan", "individual_address": "1 Main St"},
+    )
+    assert fulfilled == ["proof_of_address"]
+
+
+def test_company_proof_of_address_fulfils_only_the_company_item() -> None:
+    """A company address says nothing about any person's residence."""
+    fulfilled = compute_fulfilled_requirements(
+        "proof_of_address",
+        {"company_name": "Acme Pte Ltd", "company_address": "10 Robinson Rd"},
+    )
+    assert fulfilled == ["company_proof_of_address"]
+
+
+def test_proof_of_address_with_both_addresses_fulfils_both_items() -> None:
+    fulfilled = compute_fulfilled_requirements(
+        "proof_of_address",
+        {"individual_address": "1 Main St", "company_address": "10 Robinson Rd"},
+    )
+    assert set(fulfilled) == {"proof_of_address", "company_proof_of_address"}
+
+
+def test_company_address_on_other_document_types_does_not_fulfil_company_proof() -> None:
+    """Only a proof_of_address document counts (a bank statement also carries a company address)."""
+    fulfilled = compute_fulfilled_requirements(
+        "bank_statement", {"company_address": "10 Robinson Rd"}
+    )
+    assert fulfilled == ["bank_statement"]
+
+
+def test_accepted_company_proof_of_address_is_ticked_but_never_missing() -> None:
+    documents = [
+        _make_document(
+            "doc-1",
+            DocumentStatus.ANALYZED,
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            document_type="proof_of_address",
+            fulfilled_requirements=["company_proof_of_address"],
+            extracted_fields={"company_address": "10 Robinson Rd"},
+        )
+    ]
+    fulfilled, missing = compute_requirement_coverage(documents)
+    assert "company_proof_of_address" in fulfilled
+    assert "company_proof_of_address" not in missing
+    # It doesn't count as anyone's personal proof of address.
+    assert "proof_of_address" not in fulfilled
+    assert "proof_of_address" in missing
+
+
+def test_source_of_wealth_before_extraction_is_corporate() -> None:
+    assert compute_fulfilled_requirements("source_of_wealth", None) == ["source_of_wealth"]
+
+
+def test_corporate_source_of_wealth_with_uen_fulfils_only_the_corporate_item() -> None:
+    fulfilled = compute_fulfilled_requirements(
+        "source_of_wealth", {"company_name": "Golden Harvest Trading Pte Ltd", "uen": "201812345A"}
+    )
+    assert fulfilled == ["source_of_wealth"]
+
+
+def test_personal_brokerage_statement_fulfils_only_the_personal_item() -> None:
+    """The broker's own Pte. Ltd. name must not make a personal statement read as corporate."""
+    fulfilled = compute_fulfilled_requirements(
+        "source_of_wealth",
+        {
+            "account_holder_name": "Nurul Hassan",
+            "broker_name": "Moomoo Financial Singapore Pte. Ltd.",
+            "company_name": "Moomoo Financial Singapore Pte. Ltd.",
+        },
+    )
+    assert fulfilled == ["source_of_personal_wealth"]
+
+
+def test_personal_source_of_wealth_with_address_also_fulfils_proof_of_address() -> None:
+    fulfilled = compute_fulfilled_requirements(
+        "source_of_wealth",
+        {"account_holder_name": "Nurul Hassan", "individual_address": "16 Eng Kong Terrace"},
+    )
+    assert set(fulfilled) == {"source_of_personal_wealth", "proof_of_address"}
+
+
+def test_company_statement_naming_a_director_stays_corporate() -> None:
+    """A UEN marks it corporate even if a person (e.g. a director) is named on it."""
+    fulfilled = compute_fulfilled_requirements(
+        "source_of_wealth", {"individual_name": "Tan Wei Ming", "uen": "201812345A"}
+    )
+    assert fulfilled == ["source_of_wealth"]
+
+
+def test_accepted_personal_source_of_wealth_is_ticked_but_never_missing() -> None:
+    documents = [
+        _make_document(
+            "doc-1",
+            DocumentStatus.ANALYZED,
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            document_type="source_of_wealth",
+            fulfilled_requirements=["source_of_personal_wealth"],
+            extracted_fields={"account_holder_name": "Nurul Hassan"},
+        )
+    ]
+    fulfilled, missing = compute_requirement_coverage(documents)
+    assert "source_of_personal_wealth" in fulfilled
+    assert "source_of_personal_wealth" not in missing
+    # It doesn't retire the required corporate source of wealth item.
+    assert "source_of_wealth" in missing
