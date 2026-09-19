@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AppHeader from '../components/AppHeader';
 import CaseCard from '../components/CaseCard';
 import type { CaseRecord } from '../App';
@@ -23,6 +23,45 @@ const STATUS_CHIP_CLASS: Record<string, string> = {
   'Documents pending': 'status-chip--grey',
 };
 
+const PREFS_STORAGE_KEY = 'caseQueue.prefs';
+
+interface QueuePrefs {
+  statuses: string[];
+  sortOrder: 'asc' | 'desc';
+}
+
+// Per-browser (localStorage), not per-account — enough to stop having to
+// re-apply the same filters and sort on every visit. Wrapped in try/catch
+// since storage can throw (private mode, blocked site data) or hold junk.
+function loadPrefs(): QueuePrefs {
+  const defaults: QueuePrefs = { statuses: [], sortOrder: 'asc' };
+
+  try {
+    const raw = localStorage.getItem(PREFS_STORAGE_KEY);
+
+    if (!raw) return defaults;
+
+    const parsed = JSON.parse(raw) as Partial<QueuePrefs>;
+
+    return {
+      statuses: Array.isArray(parsed.statuses)
+        ? parsed.statuses.filter((item) => typeof item === 'string')
+        : [],
+      sortOrder: parsed.sortOrder === 'desc' ? 'desc' : 'asc',
+    };
+  } catch {
+    return defaults;
+  }
+}
+
+function savePrefs(prefs: QueuePrefs) {
+  try {
+    localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(prefs));
+  } catch {
+    // Not persisting is fine — the filters still work for this visit.
+  }
+}
+
 function displayCaseNumber(caseRecord: CaseRecord): string {
   return caseRecord.caseNumber || caseRecord.id;
 }
@@ -45,10 +84,16 @@ export default function CaseQueuePage({
   onCreateCase,
 }: CaseQueuePageProps) {
   const [search, setSearch] = useState('');
-  const [activeStatuses, setActiveStatuses] = useState<Set<string>>(
-    () => new Set(),
+  const [savedStatuses, setSavedStatuses] = useState<Set<string>>(
+    () => new Set(loadPrefs().statuses),
   );
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(
+    () => loadPrefs().sortOrder,
+  );
+
+  useEffect(() => {
+    savePrefs({ statuses: Array.from(savedStatuses), sortOrder });
+  }, [savedStatuses, sortOrder]);
 
   const statusOptions = useMemo(() => {
     const statuses = cases
@@ -58,18 +103,24 @@ export default function CaseQueuePage({
     return Array.from(new Set(statuses));
   }, [cases]);
 
+  // A saved status no case has right now (e.g. nothing is "stuck" today)
+  // has no chip to switch it off, so it must not filter anything — only
+  // statuses that currently exist count as active.
+  const activeStatuses = useMemo(
+    () => new Set(statusOptions.filter((status) => savedStatuses.has(status))),
+    [statusOptions, savedStatuses],
+  );
+
   function toggleStatus(status: string) {
-    setActiveStatuses((current) => {
-      const next = new Set(current);
+    const next = new Set(activeStatuses);
 
-      if (next.has(status)) {
-        next.delete(status);
-      } else {
-        next.add(status);
-      }
+    if (next.has(status)) {
+      next.delete(status);
+    } else {
+      next.add(status);
+    }
 
-      return next;
-    });
+    setSavedStatuses(next);
   }
 
   const matches = useMemo(() => {

@@ -226,6 +226,11 @@ export default function DocumentDetailsPage({
       document.confidence >= CLASSIFICATION_CONFIDENCE_THRESHOLD
     );
 
+  // What the dropdown currently shows: the officer's pick, else the existing
+  // type. Saving is allowed even when it's unchanged — that's how an officer
+  // confirms a low-confidence classification was actually right.
+  const chosenType = selectedType || document?.document_type || '';
+
   // Saving a corrected type re-runs extraction in the background; this page
   // only fetched once on load, so listen for the result while it's in flight.
   const caseId = document?.case_id ?? null;
@@ -262,7 +267,7 @@ export default function DocumentDetailsPage({
   }, [caseId, isInFlight, documentId]);
 
   async function handleSaveType() {
-    if (!document || !selectedType) {
+    if (!document || !chosenType) {
       return;
     }
 
@@ -270,7 +275,7 @@ export default function DocumentDetailsPage({
     setTypeError(null);
 
     try {
-      const updated = await updateDocumentType(document.id, selectedType);
+      const updated = await updateDocumentType(document.id, chosenType);
 
       extractedFieldsJsonRef.current = JSON.stringify(
         updated.extracted_fields ?? null,
@@ -454,7 +459,7 @@ export default function DocumentDetailsPage({
               <div className="details-type-editor">
                 <select
                   className="details-type-select"
-                  value={selectedType || document.document_type || ''}
+                  value={chosenType}
                   disabled={isSavingType}
                   onChange={(event) => {
                     setSelectedType(event.target.value);
@@ -476,14 +481,14 @@ export default function DocumentDetailsPage({
                 <button
                   type="button"
                   className="details-save-button"
-                  disabled={
-                    isSavingType ||
-                    !selectedType ||
-                    selectedType === document.document_type
-                  }
+                  disabled={isSavingType || !chosenType}
                   onClick={() => void handleSaveType()}
                 >
-                  {isSavingType ? 'Saving…' : 'Save & re-run extraction'}
+                  {isSavingType
+                    ? 'Saving…'
+                    : chosenType === document.document_type
+                      ? 'Confirm & re-run extraction'
+                      : 'Save & re-run extraction'}
                 </button>
 
                 {typeError && (

@@ -161,6 +161,98 @@ def _parse_date(v):
             return None
 
 
+def generate_proof_of_address(case_id: str, out: Path, only_individuals=None) -> None:
+    """Section 8. only_individuals (set of Individual IDs) restricts output to those rows."""
+    util_df = _read_sheet("Proof of Address") if (MASTERSHEET.exists()) else pd.DataFrame()
+    if not util_df.empty:
+        for _, r in util_df.iterrows():
+            if str(r.get("Case ID (auto)")).strip() != str(case_id):
+                continue
+            template = str(r.get("Template") or "").lower()
+            individual = str(r.get("Individual ID") or r.get("Filename") or f"{case_id}-proof")
+            if only_individuals is not None and individual not in only_individuals:
+                continue
+
+            if "utility" in template:
+                try:
+                    util_path = out / str(r.get("Filename") or f"utility_bill_{case_id}.pdf")
+                    # Proof of Address carries no address/provider/account/amount
+                    # columns of its own -- the address comes from the Individuals
+                    # tab (same join the bank-statement branch below uses), and
+                    # every other field is synthesized (see synthesize_utility_bill_data).
+                    person = next(
+                        (p for p in _openpyxl_case_rows("Individuals", case_id)
+                         if str(p.get("Individual ID")) == individual),
+                        {},
+                    )
+                    address = str(person.get("Residential Address") or "")
+                    address_lines = [p.strip() for p in address.split(",") if p.strip()] or [address]
+                    application_date = as_date(_openpyxl_case_row("Case Registry", case_id).get("Application Date"))
+                    synth = synthesize_utility_bill_data(individual, application_date=application_date)
+                    generate_utility_bill(
+                        str(util_path),
+                        customer_name=r.get("Individual Name (auto)") or r.get("Company Name (auto)") or "",
+                        address_lines=address_lines,
+                        invoice_address_lines=address_lines,
+                        **synth,
+                    )
+                    print("Wrote", util_path)
+                except Exception as e:
+                    print("Utility bill generation failed:", e)
+
+            elif "bank statement" in template:
+                # Renders a personal OCBC "Statement of Account" for whichever
+                # individual THIS row names — load_bank_case() always defaults
+                # "director" to the first person on the Individuals tab, so a case
+                # with a "Bank Statement" Proof of Address row for a non-first
+                # individual needs that overridden here, or the statement would show
+                # the wrong person's name/address (and, since build_personal_blocks/
+                # render_ocbc_personal seed on ctx["director"], the wrong person's
+                # transaction history and account number too).
+                try:
+                    pa_path = out / str(r.get("Filename") or f"{individual}_ProofAddress.pdf")
+                    ctx = load_bank_case(MASTERSHEET, case_id, bank_override="OCBC Personal")
+                    person = next(
+                        (p for p in _openpyxl_case_rows("Individuals", case_id)
+                         if str(p.get("Individual ID")) == individual),
+                        None,
+                    )
+                    if person:
+                        ctx["director"] = person
+
+                    # If this individual is also this case's Payslip subject, the
+                    # statement's PAYROLL CREDIT line should show their exact net pay,
+                    # not an unrelated random amount -- same computation as section 6
+                    # above, seeded identically, so the two documents agree.
+                    known_salary = None
+                    payslip_row = next(
+                        (p for p in _openpyxl_case_rows("Payslips", case_id, key="Case ID (auto)")
+                         if str(p.get("Individual ID")) == individual),
+                        None,
+                    )
+                    if payslip_row:
+                        payslip_template = str(payslip_row.get("Template") or "")
+                        application_date = as_date(_openpyxl_case_row("Case Registry", case_id).get("Application Date"))
+                        payslip_data = synthesize_payslip_data(
+                            individual,
+                            employee_name=payslip_row.get("Individual Name (auto)") or "Employee",
+                            employer_name=payslip_row.get("Employer Name") or "Employer",
+                            role=payslip_row.get("Role (auto)") or "",
+                            application_date=application_date,
+                            company_address=str(payslip_row.get("Employer Address") or ""),
+                        )
+                        known_salary = compute_net_pay(payslip_data, payslip_template)
+
+                    blocks = build_personal_blocks(ctx, known_salary=known_salary)
+                    render_ocbc_personal(ctx, blocks, pa_path)
+                    print("Wrote", pa_path)
+                except Exception as e:
+                    print("Personal bank statement (proof of address) generation failed:", e)
+
+            elif "nric" in template:
+                pass
+
+
 def generate_for_case(case_id: str) -> None:
     out = _ensure_out(case_id)
 
@@ -336,92 +428,7 @@ def generate_for_case(case_id: str) -> None:
     # 8) Proof of Address — Template varies per individual row: Utility Bill,
     # Bank Statement, or NRIC (the last is a no-op here: that individual's address is
     # already evidenced by the NRIC/Passport document generated in section 4).
-    util_df = _read_sheet("Proof of Address") if (MASTERSHEET.exists()) else pd.DataFrame()
-    if not util_df.empty:
-        for _, r in util_df.iterrows():
-            if str(r.get("Case ID (auto)")).strip() != str(case_id):
-                continue
-            template = str(r.get("Template") or "").lower()
-            individual = str(r.get("Individual ID") or r.get("Filename") or f"{case_id}-proof")
-
-            if "utility" in template:
-                try:
-                    util_path = out / str(r.get("Filename") or f"utility_bill_{case_id}.pdf")
-                    # Proof of Address carries no address/provider/account/amount
-                    # columns of its own -- the address comes from the Individuals
-                    # tab (same join the bank-statement branch below uses), and
-                    # every other field is synthesized (see synthesize_utility_bill_data).
-                    person = next(
-                        (p for p in _openpyxl_case_rows("Individuals", case_id)
-                         if str(p.get("Individual ID")) == individual),
-                        {},
-                    )
-                    address = str(person.get("Residential Address") or "")
-                    address_lines = [p.strip() for p in address.split(",") if p.strip()] or [address]
-                    application_date = as_date(_openpyxl_case_row("Case Registry", case_id).get("Application Date"))
-                    synth = synthesize_utility_bill_data(individual, application_date=application_date)
-                    generate_utility_bill(
-                        str(util_path),
-                        customer_name=r.get("Individual Name (auto)") or r.get("Company Name (auto)") or "",
-                        address_lines=address_lines,
-                        invoice_address_lines=address_lines,
-                        **synth,
-                    )
-                    print("Wrote", util_path)
-                except Exception as e:
-                    print("Utility bill generation failed:", e)
-
-            elif "bank statement" in template:
-                # Renders a personal OCBC "Statement of Account" for whichever
-                # individual THIS row names — load_bank_case() always defaults
-                # "director" to the first person on the Individuals tab, so a case
-                # with a "Bank Statement" Proof of Address row for a non-first
-                # individual needs that overridden here, or the statement would show
-                # the wrong person's name/address (and, since build_personal_blocks/
-                # render_ocbc_personal seed on ctx["director"], the wrong person's
-                # transaction history and account number too).
-                try:
-                    pa_path = out / str(r.get("Filename") or f"{individual}_ProofAddress.pdf")
-                    ctx = load_bank_case(MASTERSHEET, case_id, bank_override="OCBC Personal")
-                    person = next(
-                        (p for p in _openpyxl_case_rows("Individuals", case_id)
-                         if str(p.get("Individual ID")) == individual),
-                        None,
-                    )
-                    if person:
-                        ctx["director"] = person
-
-                    # If this individual is also this case's Payslip subject, the
-                    # statement's PAYROLL CREDIT line should show their exact net pay,
-                    # not an unrelated random amount -- same computation as section 6
-                    # above, seeded identically, so the two documents agree.
-                    known_salary = None
-                    payslip_row = next(
-                        (p for p in _openpyxl_case_rows("Payslips", case_id, key="Case ID (auto)")
-                         if str(p.get("Individual ID")) == individual),
-                        None,
-                    )
-                    if payslip_row:
-                        payslip_template = str(payslip_row.get("Template") or "")
-                        application_date = as_date(_openpyxl_case_row("Case Registry", case_id).get("Application Date"))
-                        payslip_data = synthesize_payslip_data(
-                            individual,
-                            employee_name=payslip_row.get("Individual Name (auto)") or "Employee",
-                            employer_name=payslip_row.get("Employer Name") or "Employer",
-                            role=payslip_row.get("Role (auto)") or "",
-                            application_date=application_date,
-                            company_address=str(payslip_row.get("Employer Address") or ""),
-                        )
-                        known_salary = compute_net_pay(payslip_data, payslip_template)
-
-                    blocks = build_personal_blocks(ctx, known_salary=known_salary)
-                    render_ocbc_personal(ctx, blocks, pa_path)
-                    print("Wrote", pa_path)
-                except Exception as e:
-                    print("Personal bank statement (proof of address) generation failed:", e)
-
-            elif "nric" in template:
-                pass
+    generate_proof_of_address(case_id, out)
 
     # 9) Certificate of Incumbency
     incumbency_df = _read_sheet("Cert of Incumbency") if (MASTERSHEET.exists()) else pd.DataFrame()
