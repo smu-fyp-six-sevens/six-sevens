@@ -1,31 +1,62 @@
 #!/usr/bin/env python3
-"""Fill budget-proposal-template.docx for every case in the registry."""
+"""Fill budget-proposal-template.pdf from the document mastersheet.
+
+Reads the Case Registry and Budget Proposal tabs out of
+``vN_document_mastersheet.xlsx``. The version digit is not hardcoded: with no
+path argument the latest ``vN_document_mastersheet.xlsx`` in this package is
+used, so v16 → v17 is just dropping in the new file.
+
+Usage:
+    python budget_proposal_generator.py
+    python budget_proposal_generator.py ../v16_document_mastersheet.xlsx
+    python budget_proposal_generator.py ../v16_document_mastersheet.xlsx --cases C001 C002
+"""
 
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import random
 import re
-import subprocess
-import tempfile
-import xml.etree.ElementTree as ET
+import shutil
+import warnings
+from datetime import date, datetime
 from pathlib import Path
-from zipfile import ZipFile
+
+import openpyxl
+import pymupdf
+
+warnings.filterwarnings("ignore", message="Data Validation extension is not supported")
 
 
 WORKSPACE = Path(__file__).resolve().parent.parent
 TEMPLATE_CANDIDATES = [
-    WORKSPACE / "budget-proposal-template.docx",
-    Path(__file__).resolve().parent / "budget-proposal-template.docx",
+    Path(__file__).resolve().parent / "budget-proposal-template.pdf",
+    WORKSPACE / "budget-proposal-template.pdf",
 ]
-CASE_REGISTRY = WORKSPACE / "v8_document_mastersheet.xlsx - Case Registry.csv"
-BUDGET_SHEET = WORKSPACE / (
-    "v8_document_mastersheet.xlsx - Budget Proposal (Unrecognised Documents).csv"
+MASTERSHEET_NAME = re.compile(r"^v(\d+)_document_mastersheet\.xlsx$", re.I)
+BUDGET_SHEET_NAMES = (
+    "Budget Proposal (Unrecognised Documents)",
+    "Budget Proposal (Unrecognised)",
+    "Budget Proposal",
 )
-W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 OTHER_BANKS = ["DBS Bank", "OCBC Bank", "UOB", "HSBC", "Standard Chartered", "Maybank"]
+
+LEFT = {
+    "label_x0": 54.0,
+    "label_x1": 226.0,
+    "amount_x0": 227.1,
+    "amount_x1": 288.0,
+}
+RIGHT = {
+    "label_x0": 401.2,
+    "label_x1": 601.1,
+    "amount_x0": 602.1,
+    "amount_x1": 663.0,
+}
+BODY_SIZE = 10.1
+TITLE_SIZE = 13.0
+NOTE_WIDTH = 510.0
 
 PROFILES = {
     "warehouse": {
@@ -120,28 +151,12 @@ PROFILES = {
     },
 }
 
-# Amount cells: (table, row, cell)
-SOLE_INCOME = [(0, 2, 1), (0, 3, 1)]
-SOLE_INCOME_TOTAL = (0, 4, 1)
-SOLE_EXPENSES = [
-    (0, 5, 1), (0, 7, 1), (0, 8, 1), (0, 9, 1), (0, 10, 1),
-    (0, 11, 1), (0, 12, 1), (0, 13, 1), (0, 15, 1),
-]
-SOLE_EXPENSE_TOTAL = (0, 16, 1)
-MULTI_INCOME = [(1, 2, 1), (1, 3, 1), (1, 4, 1), (1, 5, 1)]
-MULTI_INCOME_TOTAL = (1, 6, 1)
-MULTI_EXPENSES = [
-    (1, 7, 1), (1, 9, 1), (1, 10, 1), (1, 11, 1), (1, 12, 1),
-    (1, 13, 1), (1, 14, 1), (1, 15, 1), (1, 17, 1),
-]
-MULTI_EXPENSE_TOTAL = (1, 18, 1)
-
 
 def template_path() -> Path:
     for path in TEMPLATE_CANDIDATES:
         if path.exists():
             return path
-    raise SystemExit("budget-proposal-template.docx was not found.")
+    raise SystemExit("budget-proposal-template.pdf was not found.")
 
 
 def parse_money(value: str | None) -> int:
@@ -175,10 +190,6 @@ def fmt_money(value: int) -> str:
     return f"${value:,}"
 
 
-def slug(name: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
-
-
 def infer_profile(company: str, label: str) -> str:
     text = f"{company} {label}".lower()
     if any(key in text for key in [
@@ -202,17 +213,85 @@ def infer_profile(company: str, label: str) -> str:
     return "warehouse"
 
 
-def read_csv(path: Path) -> list[dict[str, str]]:
-    if not path.exists():
-        raise SystemExit(f"CSV not found: {path}")
-    with path.open(newline="", encoding="utf-8-sig") as handle:
-        return list(csv.DictReader(handle))
+def find_mastersheet(explicit: str | Path | None = None) -> Path:
+    """Resolve a mastersheet path without baking in v16 vs v17."""
+    if explicit:
+        path = Path(explicit).expanduser().resolve()
+        if not path.exists():
+            raise SystemExit(f"Mastersheet not found: {path}")
+        return path
+    ranked: list[tuple[int, Path]] = []
+    for path in WORKSPACE.glob("v*_document_mastersheet.xlsx"):
+        match = MASTERSHEET_NAME.match(path.name)
+        if match:
+            ranked.append((int(match.group(1)), path))
+    if not ranked:
+        raise SystemExit(
+            f"No vN_document_mastersheet.xlsx found in {WORKSPACE}. "
+            "Pass the xlsx path explicitly."
+        )
+    ranked.sort()
+    return ranked[-1][1]
 
 
-def load_budget_rows() -> dict[str, dict[str, str]]:
-    if not BUDGET_SHEET.exists():
-        return {}
-    return {row["Case ID"]: row for row in read_csv(BUDGET_SHEET) if row.get("Case ID")}
+def _cell_str(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value).strip()
+
+
+def _sheet_rows(ws) -> list[dict[str, str]]:
+    header = [_cell_str(cell.value) for cell in ws[1]]
+    rows: list[dict[str, str]] = []
+    for raw in ws.iter_rows(min_row=2, values_only=True):
+        if not any(raw):
+            continue
+        rows.append({key: _cell_str(value) for key, value in zip(header, raw) if key})
+    return rows
+
+
+def _open_sheet(wb, *names: str):
+    """Match a tab even when Excel truncates the name at 31 characters."""
+    for name in names:
+        if name in wb.sheetnames:
+            return wb[name]
+        truncated = name[:31]
+        matches = [
+            sheet
+            for sheet in wb.sheetnames
+            if sheet == truncated or sheet.startswith(name) or name.startswith(sheet)
+        ]
+        if len(matches) == 1:
+            return wb[matches[0]]
+        if truncated in matches:
+            return wb[truncated]
+        if matches:
+            return wb[max(matches, key=len)]
+    raise SystemExit(
+        f"Mastersheet is missing one of {names!r}. Found: {', '.join(wb.sheetnames)}"
+    )
+
+
+def load_mastersheet(xlsx: Path) -> tuple[list[dict[str, str]], dict[str, dict[str, str]]]:
+    wb = openpyxl.load_workbook(xlsx, data_only=True)
+    cases = [
+        row
+        for row in _sheet_rows(_open_sheet(wb, "Case Registry"))
+        if row.get("Case ID") and row.get("Company Name")
+    ]
+    budget_ws = _open_sheet(wb, *BUDGET_SHEET_NAMES)
+    budget_rows = {
+        row["Case ID"]: row
+        for row in _sheet_rows(budget_ws)
+        if row.get("Case ID")
+    }
+    return cases, budget_rows
 
 
 def fallback_budget(loan: int) -> dict[str, int]:
@@ -362,192 +441,231 @@ def build_record(case: dict[str, str], budget_rows: dict[str, dict[str, str]]) -
     }
 
 
-def register_namespaces(xml: str) -> None:
-    start = xml.find("<w:document")
-    if start < 0:
-        start = xml.find("<")
-    end = xml.find(">", start) + 1
-    head = xml[start:end]
-    for prefix, uri in re.findall(r'xmlns:([A-Za-z0-9]+)="([^"]+)"', head):
-        ET.register_namespace(prefix, uri)
-    default = re.search(r'\sxmlns="([^"]+)"', head)
-    if default:
-        ET.register_namespace("", default.group(1))
-    ET.register_namespace("w", "http://schemas.openxmlformats.org/wordprocessingml/2006/main")
+def _hits(page: pymupdf.Page, text: str, count: int | None = None) -> list[pymupdf.Rect]:
+    found = page.search_for(text)
+    if not found:
+        raise KeyError(f"Template text not found: {text!r}")
+    if count is not None and len(found) < count:
+        raise KeyError(f"Template text {text!r} found {len(found)} time(s), expected {count}.")
+    return found
 
 
-def set_cell_text(tables: list[ET.Element], loc: tuple[int, int, int], text: str) -> None:
-    table_i, row_i, cell_i = loc
-    cell = tables[table_i].findall(f"{W}tr")[row_i].findall(f"{W}tc")[cell_i]
-    nodes = list(cell.iter(f"{W}t"))
-    if not nodes:
-        para = cell.find(f"{W}p")
-        if para is None:
-            para = ET.SubElement(cell, f"{W}p")
-        run = ET.SubElement(para, f"{W}r")
-        node = ET.SubElement(run, f"{W}t")
-        node.text = text
+def _cover_rect(hit: pymupdf.Rect, x0: float, x1: float, y1: float | None = None) -> pymupdf.Rect:
+    return pymupdf.Rect(x0, hit.y0 - 0.35, x1, (y1 if y1 is not None else hit.y1) + 0.35)
+
+
+def _fit_size(text: str, width: float, fontsize: float, fontname: str, min_size: float = 6.5) -> float:
+    font = pymupdf.Font(fontname)
+    size = fontsize
+    while size > min_size and font.text_length(text, fontsize=size) > width - 1:
+        size -= 0.3
+    return size
+
+
+def _wrap_lines(text: str, width: float, fontsize: float, fontname: str = "helv") -> list[str]:
+    font = pymupdf.Font(fontname)
+    words = text.split()
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        trial = f"{current} {word}".strip()
+        if font.text_length(trial, fontsize=fontsize) <= width:
+            current = trial
+            continue
+        if current:
+            lines.append(current)
+        current = word
+    if current:
+        lines.append(current)
+    return lines or [text]
+
+
+def _draw_left(page: pymupdf.Page, rect: pymupdf.Rect, text: str, *, fontsize: float, fontname: str) -> None:
+    if not text:
         return
-    nodes[0].text = text
-    if text[:1] == " " or text.endswith(" "):
-        nodes[0].set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
-    for extra in nodes[1:]:
-        extra.text = ""
+    size = _fit_size(text, rect.width, fontsize, fontname)
+    baseline = rect.y0 + size * 0.82
+    page.insert_text((rect.x0, baseline), text, fontsize=size, fontname=fontname, color=(0, 0, 0))
 
 
-def replace_text_once(root: ET.Element, old: str, new: str) -> None:
-    for node in root.iter(f"{W}t"):
-        if node.text and old in node.text:
-            node.text = node.text.replace(old, new, 1)
-            return
-    raise KeyError(f"Template text not found: {old!r}")
-
-
-def replace_text_all(root: ET.Element, old: str, new: str) -> int:
-    count = 0
-    for node in root.iter(f"{W}t"):
-        if node.text and old in node.text:
-            node.text = node.text.replace(old, new)
-            count += 1
-    return count
-
-
-def fill_document(template_xml: str, record: dict) -> bytes:
-    register_namespaces(template_xml)
-    root = ET.fromstring(template_xml)
-    tables = list(root.iter(f"{W}tbl"))
-    if len(tables) < 2:
-        raise RuntimeError("Template does not contain both budget tables.")
-
-    replace_text_all(root, "Scallop Beach Art Gallery", record["company"])
-    replace_text_all(root, "Snails & Scales Exhibit", record["project"])
-    replace_text_once(root, "Proposal Budget - BCF as sole funder example", "Proposal Budget - Term loan as sole facility")
-    replace_text_once(root, "Proposal Budget - Multiple funder example", "Proposal Budget - Combined funding sources")
-    replace_text_once(root, "Exhibition Sales", record["sole_income_labels"][0])
-    replace_text_once(root, "Community Foundation Grant", record["sole_income_labels"][1])
-    replace_text_once(root, "Exhibition Sales", record["multi_income_labels"][0])
-    replace_text_once(root, "Community Foundation Grant", record["multi_income_labels"][1])
-    replace_text_once(root, "Patron donations", record["multi_income_labels"][2])
-    replace_text_once(root, "Corporate sponsors", record["multi_income_labels"][3])
-
-    labels = record["expense_labels"]
-    for original, label in [
-        ("Exhibition coordination", labels[0]),
-        ("Installation", labels[1]),
-        ("Curatorial support", labels[2]),
-        ("Registration", labels[3]),
-        ("Publicity & Advertising", labels[4]),
-        ("Display", labels[5]),
-        ("Rent", labels[6]),
-        ("Supplies", labels[7]),
-        ("Consignment payment to", labels[8][0]),
-        ("artists", labels[8][1]),
-    ]:
-        replace_text_once(root, original, label)
-        replace_text_once(root, original, label)
-
-    replace_text_all(
-        root,
-        "We request that you use a spreadsheet in this format.  Of course, your line items will differ from the sample.",
-        "",
-    )
-    replace_text_all(
-        root,
-        'You may find it helpful to use the "actual expense" column to track your expenses during the grant period.',
-        "",
-    )
-    replace_text_all(
-        root,
-        "This will be required in submitting your Grant Final Report.",
-        "",
-    )
-    replace_text_all(
-        root,
-        "If during the grant period, any actual expense differs from the budgeted expense by 10%",
-        "If during the facility period, any actual expense differs from the budgeted expense by 10%",
-    )
-    replace_text_all(
-        root,
-        "you must notify BCF's Grant Manager as soon as possible since this may indicate a change in the purpose of the grant, and may require BCF Board approval.",
-        f"you must notify {record['bank']}'s relationship manager as soon as possible since this may indicate a change in the purpose of the facility, and may require credit committee approval.",
-    )
-
-    for loc, amount in zip(SOLE_INCOME, record["sole_income"]):
-        set_cell_text(tables, loc, fmt_money(amount))
-    set_cell_text(tables, SOLE_INCOME_TOTAL, fmt_money(record["total"]))
-    for loc, amount in zip(SOLE_EXPENSES, record["expenses"]):
-        set_cell_text(tables, loc, fmt_money(amount))
-    set_cell_text(tables, SOLE_EXPENSE_TOTAL, fmt_money(record["total"]))
-
-    for loc, amount in zip(MULTI_INCOME, record["multi_income"]):
-        set_cell_text(tables, loc, fmt_money(amount))
-    set_cell_text(tables, MULTI_INCOME_TOTAL, fmt_money(record["total"]))
-    for loc, amount in zip(MULTI_EXPENSES, record["expenses"]):
-        set_cell_text(tables, loc, fmt_money(amount))
-    set_cell_text(tables, MULTI_EXPENSE_TOTAL, fmt_money(record["total"]))
-
-    body = ET.tostring(root, encoding="unicode")
-    if body.startswith("<?xml"):
-        body = body.split(">", 1)[1].lstrip()
-    return (
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' + body
-    ).encode("utf-8")
-
-
-def write_docx(src: Path, dest: Path, document_xml: bytes) -> None:
-    with ZipFile(src, "r") as zin, ZipFile(dest, "w") as zout:
-        for info in zin.infolist():
-            data = document_xml if info.filename == "word/document.xml" else zin.read(info.filename)
-            zout.writestr(info, data)
-
-
-def _applescript_posix(path: Path) -> str:
-    return str(path.resolve()).replace("\\", "\\\\").replace('"', '\\"')
-
-
-def convert_docx_to_pdf(pairs: list[tuple[Path, Path]]) -> None:
-    if not pairs:
+def _draw_right(page: pymupdf.Page, rect: pymupdf.Rect, text: str, *, fontsize: float, fontname: str = "helv") -> None:
+    if not text:
         return
-    word_app = Path("/Applications/Microsoft Word.app")
-    if not word_app.exists():
-        raise SystemExit("Microsoft Word.app is required to save the proposals as PDF.")
+    size = _fit_size(text, rect.width - 2, fontsize, fontname)
+    width = pymupdf.Font(fontname).text_length(text, fontsize=size)
+    baseline = rect.y0 + size * 0.82
+    page.insert_text((rect.x1 - width - 1.0, baseline), text, fontsize=size, fontname=fontname, color=(0, 0, 0))
 
-    lines = [
-        'tell application "Microsoft Word"',
-        "    launch",
-        "    delay 1",
-    ]
-    for docx, pdf in pairs:
-        pdf.parent.mkdir(parents=True, exist_ok=True)
-        if pdf.exists():
-            pdf.unlink()
-        lines.extend(
-            [
-                f'    set inputPath to POSIX file "{_applescript_posix(docx)}"',
-                f'    set outputPath to POSIX file "{_applescript_posix(pdf)}"',
-                "    open inputPath",
-                "    delay 0.4",
-                "    save as active document file name (outputPath as text) file format 17",
-                "    close active document saving no",
-            ]
-        )
-    lines.append("end tell")
 
-    result = subprocess.run(
-        ["osascript", "-"],
-        input="\n".join(lines),
-        capture_output=True,
-        text=True,
-    )
-    missing = [pdf for _, pdf in pairs if not pdf.exists()]
-    if result.returncode != 0 or missing:
-        detail = (result.stderr or result.stdout or "").strip()
-        names = ", ".join(path.name for path in missing[:5])
-        raise SystemExit(
-            "Word failed to export PDF"
-            + (f" for {names}" if names else "")
-            + (f". {detail}" if detail else ".")
+def _label_amount_pair(hit: pymupdf.Rect, column: dict[str, float]) -> tuple[pymupdf.Rect, pymupdf.Rect]:
+    label = _cover_rect(hit, column["label_x0"], column["label_x1"])
+    amount = _cover_rect(hit, column["amount_x0"], column["amount_x1"])
+    return label, amount
+
+
+def fill_pdf(template: Path, record: dict, dest: Path) -> None:
+    doc = pymupdf.open(template)
+    try:
+        page = doc[0]
+        covers: list[pymupdf.Rect] = []
+        draws: list[tuple] = []
+
+        def replace_label(text: str, new: str, index: int, column: dict[str, float], *, size: float = BODY_SIZE, fontname: str = "helv") -> pymupdf.Rect:
+            hit = _hits(page, text)[index]
+            label, amount = _label_amount_pair(hit, column)
+            covers.append(label)
+            draw = pymupdf.Rect(hit.x0, hit.y0, column["label_x1"], hit.y1)
+            draws.append(("left", draw, new, size, fontname))
+            return amount
+
+        def amount_on(text: str, index: int, column: dict[str, float]) -> pymupdf.Rect:
+            hit = _hits(page, text)[index]
+            return _cover_rect(hit, column["amount_x0"], column["amount_x1"])
+
+        def replace_plain(text: str, new: str, index: int, *, size: float, fontname: str, x1: float | None = None, y1: float | None = None) -> None:
+            hit = _hits(page, text)[index]
+            rect = pymupdf.Rect(hit.x0, hit.y0 - 0.2, x1 if x1 is not None else hit.x1 + 2, y1 if y1 is not None else hit.y1)
+            covers.append(rect)
+            draws.append(("left", rect, new, size, fontname))
+
+        replace_plain(
+            "Proposal Budget - BCF as sole funder example",
+            "Proposal Budget - Term loan as sole facility",
+            0,
+            size=TITLE_SIZE,
+            fontname="hebo",
+            x1=359.0,
+            y1=41.7,
         )
+        replace_plain(
+            "Proposal Budget - Multiple funder example",
+            "Proposal Budget - Combined funding sources",
+            0,
+            size=TITLE_SIZE,
+            fontname="hebo",
+            x1=683.0,
+            y1=41.7,
+        )
+        for index in (0, 1):
+            replace_plain("Scallop Beach Art Gallery", record["company"], index, size=BODY_SIZE, fontname="helv", x1=(226.0 if index == 0 else 601.0))
+            replace_plain("Snails & Scales Exhibit", record["project"], index, size=BODY_SIZE, fontname="helv", x1=(226.0 if index == 0 else 601.0))
+
+        sole_income_amounts = [
+            replace_label("Exhibition Sales", record["sole_income_labels"][0], 0, LEFT),
+            replace_label("Community Foundation Grant", record["sole_income_labels"][1], 0, LEFT),
+        ]
+        sole_income_total = amount_on("TOTAL INCOME", 0, LEFT)
+        multi_income_amounts = [
+            replace_label("Exhibition Sales", record["multi_income_labels"][0], 1, RIGHT),
+            replace_label("Community Foundation Grant", record["multi_income_labels"][1], 1, RIGHT),
+            replace_label("Patron donations", record["multi_income_labels"][2], 0, RIGHT),
+            replace_label("Corporate sponsors", record["multi_income_labels"][3], 0, RIGHT),
+        ]
+        multi_income_total = amount_on("TOTAL INCOME", 1, RIGHT)
+
+        expense_originals = [
+            "Exhibition coordination",
+            "Installation",
+            "Curatorial support",
+            "Registration",
+            "Publicity & Advertising",
+            "Display",
+            "Rent",
+            "Supplies",
+        ]
+        labels = record["expense_labels"]
+        sole_expense_amounts: list[pymupdf.Rect] = []
+        multi_expense_amounts: list[pymupdf.Rect] = []
+        for original, label in zip(expense_originals, labels):
+            sole_expense_amounts.append(replace_label(original, label, 0, LEFT))
+            multi_expense_amounts.append(replace_label(original, label, 1, RIGHT))
+
+        last_left, last_right = labels[8] if isinstance(labels[8], tuple) else (labels[8], "")
+        first_left = _hits(page, "Consignment payment to")[0]
+        first_right = _hits(page, "Consignment payment to")[1]
+        second_left = _hits(page, "artists")[0]
+        second_right = _hits(page, "artists")[1]
+        covers.extend([
+            _cover_rect(first_left, LEFT["label_x0"], LEFT["label_x1"]),
+            _cover_rect(second_left, LEFT["label_x0"], LEFT["label_x1"]),
+            _cover_rect(first_right, RIGHT["label_x0"], RIGHT["label_x1"]),
+            _cover_rect(second_right, RIGHT["label_x0"], RIGHT["label_x1"]),
+        ])
+        draws.append(("left", pymupdf.Rect(first_left.x0, first_left.y0, LEFT["label_x1"], first_left.y1), last_left, BODY_SIZE, "helv"))
+        draws.append(("left", pymupdf.Rect(second_left.x0, second_left.y0, LEFT["label_x1"], second_left.y1), last_right, BODY_SIZE, "helv"))
+        draws.append(("left", pymupdf.Rect(first_right.x0, first_right.y0, RIGHT["label_x1"], first_right.y1), last_left, BODY_SIZE, "helv"))
+        draws.append(("left", pymupdf.Rect(second_right.x0, second_right.y0, RIGHT["label_x1"], second_right.y1), last_right, BODY_SIZE, "helv"))
+        sole_expense_amounts.append(_cover_rect(second_left, LEFT["amount_x0"], LEFT["amount_x1"]))
+        multi_expense_amounts.append(_cover_rect(second_right, RIGHT["amount_x0"], RIGHT["amount_x1"]))
+        covers.append(sole_expense_amounts[-1])
+        covers.append(multi_expense_amounts[-1])
+
+        sole_expense_total = amount_on("TOTAL EXPENSES", 0, LEFT)
+        multi_expense_total = amount_on("TOTAL EXPENSES", 1, RIGHT)
+
+        for rect, amount in zip(sole_income_amounts, record["sole_income"]):
+            covers.append(rect)
+            draws.append(("right", rect, fmt_money(amount), BODY_SIZE, "helv"))
+        covers.append(sole_income_total)
+        draws.append(("right", sole_income_total, fmt_money(record["total"]), BODY_SIZE, "helv"))
+        for rect, amount in zip(sole_expense_amounts, record["expenses"]):
+            covers.append(rect)
+            draws.append(("right", rect, fmt_money(amount), BODY_SIZE, "helv"))
+        covers.append(sole_expense_total)
+        draws.append(("right", sole_expense_total, fmt_money(record["total"]), BODY_SIZE, "helv"))
+
+        for rect, amount in zip(multi_income_amounts, record["multi_income"]):
+            covers.append(rect)
+            draws.append(("right", rect, fmt_money(amount), BODY_SIZE, "helv"))
+        covers.append(multi_income_total)
+        draws.append(("right", multi_income_total, fmt_money(record["total"]), BODY_SIZE, "helv"))
+        for rect, amount in zip(multi_expense_amounts, record["expenses"]):
+            covers.append(rect)
+            draws.append(("right", rect, fmt_money(amount), BODY_SIZE, "helv"))
+        covers.append(multi_expense_total)
+        draws.append(("right", multi_expense_total, fmt_money(record["total"]), BODY_SIZE, "helv"))
+
+        for snippet in (
+            "We request that you use a spreadsheet in this format",
+            'You may find it helpful to use the "actual expense" column',
+            "This will be required in submitting your Grant Final Report",
+        ):
+            hit = _hits(page, snippet)[0]
+            covers.append(pymupdf.Rect(54.0, hit.y0 - 0.4, 570.0, hit.y1 + 0.4))
+
+        note_start = _hits(page, "PLEASE NOTE")[0]
+        note_end = _hits(page, "BCF Board approval")[0]
+        note_rect = pymupdf.Rect(54.0, note_start.y0 - 0.4, 570.0, note_end.y1 + 18.0)
+        covers.append(note_rect)
+        note = (
+            "PLEASE NOTE: If during the facility period, any actual expense differs from the "
+            "budgeted expense by 10% or more, you must notify "
+            f"{record['bank']}'s relationship manager as soon as possible since this may "
+            "indicate a change in the purpose of the facility, and may require credit "
+            "committee approval."
+        )
+        draws.append(("note", note_rect, note, BODY_SIZE, "helv"))
+
+        for rect in covers:
+            page.add_redact_annot(rect, fill=(1, 1, 1), cross_out=False)
+        page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE)
+
+        for kind, rect, text, size, fontname in draws:
+            if kind == "left":
+                _draw_left(page, rect, text, fontsize=size, fontname=fontname)
+            elif kind == "right":
+                _draw_right(page, rect, text, fontsize=size, fontname=fontname)
+            else:
+                lines = _wrap_lines(text, NOTE_WIDTH, size)
+                y = rect.y0 + size * 0.82
+                for line in lines:
+                    page.insert_text((rect.x0 + 3.0, y), line, fontsize=size, fontname=fontname, color=(0, 0, 0))
+                    y += 14.1
+
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        doc.save(dest, garbage=3, deflate=True)
+    finally:
+        doc.close()
 
 
 def write_index(output_dir: Path, records: list[dict]) -> None:
@@ -580,7 +698,7 @@ def write_index(output_dir: Path, records: list[dict]) -> None:
 </head>
 <body>
     <h1>Corporate Loan Budget Proposals</h1>
-    <p>{len(records)} use-of-proceeds budgets saved as PDF from budget-proposal-template.docx</p>
+    <p>{len(records)} use-of-proceeds budgets saved as PDF from budget-proposal-template.pdf</p>
     <table>
         <thead>
             <tr>
@@ -604,16 +722,19 @@ def write_index(output_dir: Path, records: list[dict]) -> None:
     (output_dir / "index.html").write_text(html, encoding="utf-8")
 
 
-def generate(output_dir: Path) -> list[dict]:
-    cases = [
-        row for row in read_csv(CASE_REGISTRY)
-        if (row.get("Company Name") or "").strip()
-    ]
-    if not cases:
-        raise SystemExit("No completed cases found in the Case Registry.")
-    budget_rows = load_budget_rows()
+def generate(
+    output_dir: Path,
+    xlsx: str | Path | None = None,
+    cases: list[str] | None = None,
+) -> list[dict]:
+    mastersheet = find_mastersheet(xlsx)
+    case_rows, budget_rows = load_mastersheet(mastersheet)
+    if cases:
+        wanted = {item.strip() for item in cases}
+        case_rows = [row for row in case_rows if row.get("Case ID") in wanted]
+    if not case_rows:
+        raise SystemExit(f"No completed cases found in {mastersheet.name}.")
     source = template_path()
-    template_xml = ZipFile(source).read("word/document.xml").decode("utf-8")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     for pattern in ("C*_BudgetProposal.docx", "C*_BudgetProposal.pdf"):
@@ -623,28 +744,24 @@ def generate(output_dir: Path) -> list[dict]:
         stale = output_dir / stale_name
         if stale.exists():
             stale.unlink()
+    work_dir = output_dir / "_work"
+    if work_dir.exists():
+        shutil.rmtree(work_dir)
 
     records: list[dict] = []
-    pdf_pairs: list[tuple[Path, Path]] = []
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp_dir = Path(tmp)
-        for case in cases:
-            record = build_record(case, budget_rows)
-            if sum(record["sole_income"]) != record["total"]:
-                raise RuntimeError(f"{record['case_id']}: sole income does not match total")
-            if sum(record["multi_income"]) != record["total"]:
-                raise RuntimeError(f"{record['case_id']}: combined funding does not match total")
-            if sum(record["expenses"]) != record["total"]:
-                raise RuntimeError(f"{record['case_id']}: expenses do not match total")
+    for case in case_rows:
+        record = build_record(case, budget_rows)
+        if sum(record["sole_income"]) != record["total"]:
+            raise RuntimeError(f"{record['case_id']}: sole income does not match total")
+        if sum(record["multi_income"]) != record["total"]:
+            raise RuntimeError(f"{record['case_id']}: combined funding does not match total")
+        if sum(record["expenses"]) != record["total"]:
+            raise RuntimeError(f"{record['case_id']}: expenses do not match total")
 
-            filename = f"{record['case_id']}_BudgetProposal.pdf"
-            record["filename"] = filename
-            docx_path = tmp_dir / f"{record['case_id']}_BudgetProposal.docx"
-            pdf_path = output_dir / filename
-            write_docx(source, docx_path, fill_document(template_xml, record))
-            pdf_pairs.append((docx_path, pdf_path))
-            records.append(record)
-        convert_docx_to_pdf(pdf_pairs)
+        filename = f"{record['case_id']}_BudgetProposal.pdf"
+        record["filename"] = filename
+        fill_pdf(source, record, output_dir / filename)
+        records.append(record)
 
     public = []
     skip = {"expense_labels", "sole_income_labels", "multi_income_labels"}
@@ -665,7 +782,12 @@ def generate(output_dir: Path) -> list[dict]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate corporate-loan budget proposals for every Case Registry row."
+        description="Generate corporate-loan budget proposals from the document mastersheet."
+    )
+    parser.add_argument(
+        "xlsx",
+        nargs="?",
+        help="Mastersheet path. Default: latest vN_document_mastersheet.xlsx next to this package.",
     )
     parser.add_argument(
         "-o", "--out",
@@ -673,12 +795,17 @@ def parse_args() -> argparse.Namespace:
         default=Path(__file__).resolve().parent / "output",
         help="Output directory (default: ./output)",
     )
+    parser.add_argument(
+        "--cases",
+        nargs="*",
+        help="Case IDs to include; default is every Case Registry row with a company name.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    records = generate(args.out)
+    records = generate(args.out, xlsx=args.xlsx, cases=args.cases)
     print(f"Generated {len(records)} budget proposals in {args.out}")
     print(f"Open {args.out / 'index.html'} to browse them.")
 
