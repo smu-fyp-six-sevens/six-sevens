@@ -9,14 +9,13 @@ import {
   ADDITIONAL_DOCUMENT_TYPES,
   REQUIRED_DOCUMENT_TYPES,
   EXTRACTION_CONFIDENCE_THRESHOLD,
+  TERMINAL_DOCUMENT_STATUSES,
+  formatDocumentStatus,
   formatRoutingOutcome,
   updateExtractedFields,
   uploadDocuments,
 } from '../services/uploadService';
 import type { BulkUploadItemResult, DocumentRecord } from '../services/uploadService';
-
-
-const TERMINAL_STATUSES = new Set(['analyzed', 'failed']);
 import {
   MAX_BULK_FILES,
   MAX_FILE_SIZE_BYTES,
@@ -34,23 +33,6 @@ const formatDocumentType = (documentType?: string | null) => {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 
   return formatted.replace(/\bId\b/g, "ID").replace(/\bNric\b/g, "NRIC");
-};
-
-const formatDocumentStatus = (status: string): string => {
-  switch (status) {
-    case 'uploaded':
-      return 'Uploaded';
-    case 'queued':
-      return 'Queued';
-    case 'processing':
-      return 'Classifying';
-    case 'analyzed':
-      return 'Extracted';
-    case 'failed':
-      return 'Failed';
-    default:
-      return status;
-  }
 };
 
 const MAX_FILE_SIZE_MB = Math.floor(MAX_FILE_SIZE_BYTES / (1024 * 1024));
@@ -616,7 +598,7 @@ export default function UploadPage({
                   )
                   .map((document) => {
                     const status = document.status;
-                    const isTerminal = TERMINAL_STATUSES.has(status);
+                    const isTerminal = TERMINAL_DOCUMENT_STATUSES.has(status);
 
                     return (
                       <div

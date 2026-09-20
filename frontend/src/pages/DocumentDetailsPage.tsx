@@ -7,6 +7,8 @@ import {
   CLASSIFICATION_CONFIDENCE_THRESHOLD,
   DOCUMENT_TYPE_OPTIONS,
   EXTRACTION_CONFIDENCE_THRESHOLD,
+  TERMINAL_DOCUMENT_STATUSES,
+  formatDocumentStatus,
   formatRoutingOutcome,
   getDocument,
   updateDocumentType,
@@ -368,6 +370,35 @@ function ArrayFieldEditButton({
   );
 }
 
+// The raw failure_reason straight from the backend is developer-facing —
+// e.g. "Extraction invocation failed: Workflow 142b7edf-... invocation
+// failed after 3 attempts: ... (request timed out)" — meaningful to
+// whoever's debugging the pipeline, not to a loan officer trying to decide
+// what to do next. Maps the handful of known message shapes (see
+// orchestrator.py's _fail call sites) to a short, human title; the raw
+// text is still shown underneath for anyone who needs the specifics (e.g.
+// escalating to support), just de-emphasised rather than being the only
+// thing on screen.
+function describeFailureReason(reason: string): { title: string; detail: string } {
+  const patterns: [RegExp, string][] = [
+    [/^Intake Coordinator invocation failed:/, 'Classification service error'],
+    [/^Re-classification invocation failed:/, 'Reclassification service error'],
+    [/^Extraction invocation failed:/, 'Data extraction service error'],
+    [/^Unresolved after \d+ reclassification attempt\(s\):/, 'Document type could not be confirmed'],
+    [/^Extraction produced no usable text$/, 'No readable text found in this document'],
+    [/^Extraction could not process this as/, "Document didn't match the expected type"],
+    [/^Unhandled orchestration error:/, 'Unexpected system error'],
+  ];
+
+  for (const [pattern, title] of patterns) {
+    if (pattern.test(reason)) {
+      return { title, detail: reason };
+    }
+  }
+
+  return { title: 'Processing failed', detail: reason };
+}
+
 function formatDate(value: string): string {
   return new Date(value).toLocaleString('en-SG', {
     day: 'numeric',
@@ -452,6 +483,11 @@ export default function DocumentDetailsPage({
   const isUnrecognisedDocument =
     !document?.document_type ||
     document.document_type.toLowerCase() === 'unrecognised';
+
+  const failureReason =
+    document?.status === 'failed' && document.failure_reason
+      ? describeFailureReason(document.failure_reason)
+      : null;
 
   const needsManualReview =
   (document?.extraction_confidence != null &&
@@ -716,12 +752,15 @@ export default function DocumentDetailsPage({
           >
             <span
               className={`status-dot ${
-                document.status === 'failed'
-                  ? 'status-dot--failed'
-                  : ''
+                document.status === 'analyzed'
+                  ? 'status-dot--success'
+                  : document.status === 'failed'
+                    ? 'status-dot--failed'
+                    : ''
               }`}
             />
-            {document.status}
+            {formatDocumentStatus(document.status)}
+            {!TERMINAL_DOCUMENT_STATUSES.has(document.status) && '…'}
           </div>
         </div>
 
@@ -793,6 +832,20 @@ export default function DocumentDetailsPage({
             </strong>
           </div>
         </div>
+
+        {failureReason && (
+          <div className="review-message review-message--error details-failure-reason">
+            <div>
+              <strong>{failureReason.title}</strong>
+              <div>{failureReason.detail}</div>
+              {canCorrectType && (
+                <div className="details-failure-reason-hint">
+                  You can correct the document type above and re-run extraction.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </section>
 
       {/* =====================================================

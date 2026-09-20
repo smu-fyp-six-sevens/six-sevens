@@ -2003,6 +2003,16 @@ h1 {
 .review-message--error div {
   color: #b91c1c;
 }
+
+.details-failure-reason {
+  margin-top: 16px;
+}
+
+.review-message--error .details-failure-reason-hint {
+  margin-top: 8px;
+  color: #52627a;
+  font-style: italic;
+}
 /* Approve / reject */
 
 .document-actions {

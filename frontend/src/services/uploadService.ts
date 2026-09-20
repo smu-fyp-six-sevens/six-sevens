@@ -105,6 +105,32 @@ export function formatRoutingOutcome(
   return '—';
 }
 
+// Statuses that no longer change on their own — a document sitting in any
+// other status is still actively moving through the pipeline (see the "…"
+// suffix formatDocumentStatus's callers append for non-terminal statuses).
+export const TERMINAL_DOCUMENT_STATUSES = new Set(['analyzed', 'failed']);
+
+// Single source of truth for how a raw backend DocumentStatus reads in the
+// UI — shared by the case's document table and the document details page,
+// which previously drifted (the details page just showed the raw
+// lowercase status string with no label at all).
+export function formatDocumentStatus(status: string): string {
+  switch (status) {
+    case 'uploaded':
+      return 'Uploaded';
+    case 'queued':
+      return 'Queued';
+    case 'processing':
+      return 'Classifying';
+    case 'analyzed':
+      return 'Extracted';
+    case 'failed':
+      return 'Failed';
+    default:
+      return status;
+  }
+}
+
 // Mirrors settings.CLASSIFICATION_CONFIDENCE_THRESHOLD in backend/app/config.py —
 // below this, the officer can correct the document type (the backend enforces
 // the same gate).
