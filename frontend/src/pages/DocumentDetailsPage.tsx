@@ -520,7 +520,8 @@ export default function DocumentDetailsPage({
   const isInFlight =
     document?.status === 'uploaded' ||
     document?.status === 'queued' ||
-    document?.status === 'processing';
+    document?.status === 'processing' ||
+    document?.status === 'extracting';
 
   useEffect(() => {
     if (!caseId || !isInFlight) {
@@ -861,7 +862,7 @@ export default function DocumentDetailsPage({
             <span className="extraction-confidence">
               Extraction confidence:{' '}
               <strong>
-                {document.extraction_confidence.toFixed(2)}
+                {document.extraction_confidence.toFixed(3)}
               </strong>
             </span>
           )}

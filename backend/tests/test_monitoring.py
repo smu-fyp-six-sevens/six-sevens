@@ -42,6 +42,26 @@ def test_stuck_documents_includes_uploaded_status() -> None:
     assert DocumentStatus.UPLOADED in called_statuses
 
 
+def test_stuck_documents_includes_extracting_status() -> None:
+    stuck_extraction = DocumentRecord(
+        id="doc-stuck-extraction",
+        filename="statement.pdf",
+        storage_path="case-1/doc-stuck-extraction_statement.pdf",
+        status=DocumentStatus.EXTRACTING,
+        uploaded_at=_old_timestamp(60),
+    )
+
+    with patch("app.monitoring.document_repository") as mock_repo:
+        mock_repo.get_documents_in_status.return_value = [stuck_extraction]
+
+        response = client.get("/documents/monitoring/stuck")
+
+    assert response.status_code == 200
+    assert [doc["id"] for doc in response.json()] == ["doc-stuck-extraction"]
+    queried = mock_repo.get_documents_in_status.call_args[0][0]
+    assert DocumentStatus.EXTRACTING in queried
+
+
 def test_stuck_documents_skips_candidates_not_yet_over_threshold() -> None:
     # get_documents_in_status returns every UPLOADED/QUEUED/PROCESSING
     # document regardless of age — get_stuck_documents itself is what

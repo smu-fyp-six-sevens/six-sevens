@@ -114,6 +114,10 @@ export const TERMINAL_DOCUMENT_STATUSES = new Set(['analyzed', 'failed']);
 // UI — shared by the case's document table and the document details page,
 // which previously drifted (the details page just showed the raw
 // lowercase status string with no label at all).
+//
+// 'processing' is the classification stage; the backend moves a document to
+// 'extracting' once classification is recorded (and back to 'processing'
+// during the re-classification an extraction can trigger).
 export function formatDocumentStatus(status: string): string {
   switch (status) {
     case 'uploaded':
@@ -122,6 +126,8 @@ export function formatDocumentStatus(status: string): string {
       return 'Queued';
     case 'processing':
       return 'Classifying';
+    case 'extracting':
+      return 'Extracting';
     case 'analyzed':
       return 'Extracted';
     case 'failed':
@@ -244,7 +250,7 @@ export async function updateExtractedFields(
 
 // Mirrors UpdateDocumentTypeRequest in backend/app/models.py. Saving also
 // kicks off a background extraction rerun against the new type — the
-// returned record already reads status 'processing'.
+// returned record already reads status 'extracting'.
 export async function updateDocumentType(
   documentId: string,
   documentType: string,

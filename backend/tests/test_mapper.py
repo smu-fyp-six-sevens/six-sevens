@@ -617,6 +617,19 @@ def test_constitution_with_malformed_subscribers_does_not_crash() -> None:
     assert compute_unmatched_proof_of_address_names(documents) == []
 
 
+def test_address_document_with_blank_name_is_ignored() -> None:
+    """A name that's a string but empty normalises to nothing, so it can't name anyone."""
+    documents = [
+        _make_document(
+            "doc-1",
+            document_type="proof_of_address",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"individual_name": "", "individual_address": "1 Main St"},
+        ),
+    ]
+    assert compute_unmatched_proof_of_address_names(documents) == []
+
+
 def test_id_document_identity_progress_zero_with_no_id_documents() -> None:
     assert compute_id_document_identity_progress([]) == (0, 0)
 

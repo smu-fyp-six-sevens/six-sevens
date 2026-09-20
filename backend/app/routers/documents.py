@@ -33,6 +33,7 @@ _TYPE_OVERRIDE_BLOCKED_STATUSES = {
     DocumentStatus.UPLOADED,
     DocumentStatus.QUEUED,
     DocumentStatus.PROCESSING,
+    DocumentStatus.EXTRACTING,
 }
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -237,7 +238,7 @@ async def update_document_type(
     officer-confirmed (confidence 1.0, ACCEPTED), then re-runs Extraction
     only, in the background, against the new type — Extraction from the
     wrong schema is what made the old fields wrong in the first place. The
-    response already reads PROCESSING; the result arrives via the case
+    response already reads EXTRACTING; the result arrives via the case
     status WebSocket like any other status change.
     """
     document_type = request.document_type.strip().lower()
@@ -291,7 +292,7 @@ async def update_document_type(
         await asyncio.to_thread(
             document_repository.update_status,
             document_id,
-            DocumentStatus.PROCESSING,
+            DocumentStatus.EXTRACTING,
             processing_started_at=datetime.now(timezone.utc),
         )
     except Exception as exc:

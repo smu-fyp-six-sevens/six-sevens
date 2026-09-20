@@ -783,7 +783,7 @@ def test_update_document_type_records_type_and_reruns_extraction() -> None:
         fulfilled_requirements=["id_document"],
     )
     args, kwargs = mock_repo.update_status.call_args
-    assert args == ("doc-1", DocumentStatus.PROCESSING)
+    assert args == ("doc-1", DocumentStatus.EXTRACTING)
     assert "processing_started_at" in kwargs
     mock_case_status.sync_submission_finalized.assert_called_once_with("case-1")
     mock_orchestrator.rerun_extraction.assert_awaited_once_with("doc-1")

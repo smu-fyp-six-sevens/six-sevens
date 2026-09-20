@@ -757,7 +757,7 @@ export default function UploadPage({
                             <span>
                               Extraction confidence:{' '}
                               {document.extraction_confidence.toFixed(
-                                2,
+                                3,
                               )}
                             </span>
                           )}

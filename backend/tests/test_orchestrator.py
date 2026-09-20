@@ -139,7 +139,7 @@ async def test_no_escalation_marks_analyzed() -> None:
 
         assert mock_dify.run_chatflow_with_retry.await_count == 1
         assert mock_dify.run_workflow_with_retry.await_count == 1
-        mock_repo.update_status.assert_called_once_with(
+        mock_repo.update_status.assert_called_with(
             "doc-1", DocumentStatus.ANALYZED, document_type="payslip"
         )
         mock_repo.update_extracted_fields.assert_called_once_with(
@@ -440,7 +440,7 @@ async def test_typed_low_confidence_classification_keeps_its_type_for_extraction
         assert "REQUIRED fields" in extraction_prompt
         assert "net_pay" in extraction_prompt
         assert "could not be matched to any known" not in extraction_prompt
-        mock_repo.update_status.assert_called_once_with(
+        mock_repo.update_status.assert_called_with(
             "doc-1", DocumentStatus.ANALYZED, document_type="payslip"
         )
 
@@ -482,7 +482,7 @@ async def test_unrecognised_classification_still_runs_general_extraction() -> No
             evidence=[],
             fulfilled_requirements=[],
         )
-        mock_repo.update_status.assert_called_once_with(
+        mock_repo.update_status.assert_called_with(
             "doc-1", DocumentStatus.ANALYZED, document_type="unrecognised"
         )
 
@@ -523,7 +523,7 @@ async def test_escalation_resolves_on_reclassification() -> None:
         assert mock_dify.run_workflow_with_retry.await_count == 2
         # document_type reflects the FINAL (post-escalation) classification,
         # not the original "payslip" guess that got escalated away.
-        mock_repo.update_status.assert_called_once_with(
+        mock_repo.update_status.assert_called_with(
             "doc-1", DocumentStatus.ANALYZED, document_type="list_of_loans"
         )
         # Persisted so the frontend can show "classification was re-run" even
@@ -1309,3 +1309,68 @@ async def test_rerun_extraction_survives_failure_to_record_failed_status() -> No
     ):
         # Must not raise — nothing else is left to catch it in a background task.
         await orchestrator.rerun_extraction("doc-1")
+
+
+def _statuses(mock_repo) -> list[DocumentStatus]:
+    return [call.args[1] for call in mock_repo.update_status.call_args_list]
+
+
+@pytest.mark.asyncio
+async def test_status_moves_to_extracting_after_classification() -> None:
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository"),
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
+        patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status"),
+    ):
+        mock_repo.get_document.return_value = _make_document()
+        mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest)
+        mock_dify.run_chatflow_with_retry = AsyncMock(
+            return_value=_chat_output(document_type="payslip", confidence=0.9, needs_manual_review=False)
+        )
+        mock_dify.run_workflow_with_retry = AsyncMock(
+            return_value=_extraction_output(extracted_fields={"individual_name": "Jane Tan"})
+        )
+
+        await orchestrator.process_document("doc-1")
+
+        assert _statuses(mock_repo) == [DocumentStatus.EXTRACTING, DocumentStatus.ANALYZED]
+
+
+@pytest.mark.asyncio
+async def test_status_returns_to_processing_during_reclassification() -> None:
+    with (
+        patch("app.orchestrator.document_repository") as mock_repo,
+        patch("app.orchestrator.extracted_fields_repository"),
+        patch("app.orchestrator.storage_service") as mock_storage,
+        patch("app.orchestrator.ingest_document") as mock_ingest,
+        patch("app.orchestrator.dify_client") as mock_dify,
+        patch("app.orchestrator.case_status"),
+    ):
+        mock_repo.get_document.return_value = _make_document()
+        mock_storage.create_signed_url.return_value = "https://signed.example/doc.pdf"
+        _stub_ingestion(mock_storage, mock_ingest)
+        mock_dify.run_chatflow_with_retry = AsyncMock(
+            side_effect=[
+                _chat_output(document_type="payslip", confidence=0.9, needs_manual_review=False),
+                _chat_output(document_type="list_of_loans", confidence=0.85, needs_manual_review=False),
+            ]
+        )
+        mock_dify.run_workflow_with_retry = AsyncMock(
+            side_effect=[
+                _extraction_output(escalation={"reason": "reads like a shipping manifest"}),
+                _extraction_output(extracted_fields={"loan_amount": "SGD 10,000"}, confidence=0.85),
+            ]
+        )
+
+        await orchestrator.process_document("doc-1")
+
+        assert _statuses(mock_repo) == [
+            DocumentStatus.EXTRACTING,
+            DocumentStatus.PROCESSING,
+            DocumentStatus.EXTRACTING,
+            DocumentStatus.ANALYZED,
+        ]

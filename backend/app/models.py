@@ -10,7 +10,8 @@ from pydantic import BaseModel, Field
 class DocumentStatus(str, Enum):
     UPLOADED = "uploaded"       # stored, not yet queued
     QUEUED = "queued"           # AC1: sitting in the background task queue
-    PROCESSING = "processing"   # AC2: Classifier workflow invoked
+    PROCESSING = "processing"   # AC2: Classifier workflow invoked (shown as "Classifying")
+    EXTRACTING = "extracting"   # classification recorded; Extraction workflow invoked
     ANALYZED = "analyzed"       # Classifier (and downstream agents) finished
     FAILED = "failed"           # AC3: retries exhausted, needs manual review
 

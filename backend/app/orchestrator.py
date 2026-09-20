@@ -99,6 +99,8 @@ async def _process_document(document_id: str) -> None:
         )
         return
 
+    await _set_status(document_id, DocumentStatus.EXTRACTING)
+
     try:
         extraction = await _run_extraction(
             document_id, document, classification["document_type"], raw_text
@@ -126,6 +128,7 @@ async def _process_document(document_id: str) -> None:
         await asyncio.to_thread(
             document_repository.record_escalation, document_id, escalation.get("reason", "")
         )
+        await _set_status(document_id, DocumentStatus.PROCESSING)
 
         try:
             classification = await _run_intake_coordinator(
@@ -150,6 +153,7 @@ async def _process_document(document_id: str) -> None:
             return
 
         await _finalise_classification(document_id, document.case_id, classification)
+        await _set_status(document_id, DocumentStatus.EXTRACTING)
 
         try:
             extraction = await _run_extraction(
@@ -209,8 +213,8 @@ async def rerun_extraction(document_id: str) -> None:
     authoritative (confidence 1.0), so there is nothing to escalate back to.
 
     Same terminal contract as process_document: always leaves the document
-    at ANALYZED or FAILED, never stuck at PROCESSING. The caller is
-    expected to have already flipped status to PROCESSING.
+    at ANALYZED or FAILED, never stuck at EXTRACTING. The caller is
+    expected to have already flipped status to EXTRACTING.
     """
     try:
         await _rerun_extraction(document_id)
@@ -275,6 +279,11 @@ async def _rerun_extraction(document_id: str) -> None:
     if document.case_id is not None:
         await asyncio.to_thread(case_status.sync_submission_finalized, document.case_id)
     logger.info("Document %s: extraction rerun complete as %s", document_id, document_type)
+
+
+async def _set_status(document_id: str, status: DocumentStatus) -> None:
+    """Moves a document between the classifying (PROCESSING) and EXTRACTING stages of a run."""
+    await asyncio.to_thread(document_repository.update_status, document_id, status)
 
 
 async def _persist_extracted_fields(document_id: str, document_type: str, extraction: dict) -> None:

@@ -10,12 +10,13 @@ _STUCK_ELIGIBLE_STATUSES = (
     DocumentStatus.UPLOADED,
     DocumentStatus.QUEUED,
     DocumentStatus.PROCESSING,
+    DocumentStatus.EXTRACTING,
 )
 
 
 def is_stuck(doc: DocumentRecord) -> bool:
     """
-    True if `doc` is in UPLOADED, QUEUED, or PROCESSING longer than
+    True if `doc` is in UPLOADED, QUEUED, PROCESSING, or EXTRACTING longer than
     STUCK_THRESHOLD_SECONDS with no status update. UPLOADED counts because a
     document can be stored but fail to enqueue, leaving it stuck there
     indefinitely otherwise. Shared with case_status.py's aggregate rollup —
