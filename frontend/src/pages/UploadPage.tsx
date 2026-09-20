@@ -36,6 +36,23 @@ const formatDocumentType = (documentType?: string | null) => {
   return formatted.replace(/\bId\b/g, "ID").replace(/\bNric\b/g, "NRIC");
 };
 
+const formatDocumentStatus = (status: string): string => {
+  switch (status) {
+    case 'uploaded':
+      return 'Uploaded';
+    case 'queued':
+      return 'Queued';
+    case 'processing':
+      return 'Classifying';
+    case 'analyzed':
+      return 'Extracted';
+    case 'failed':
+      return 'Failed';
+    default:
+      return status;
+  }
+};
+
 const MAX_FILE_SIZE_MB = Math.floor(MAX_FILE_SIZE_BYTES / (1024 * 1024));
 
 const REQUIREMENT_LABELS = new Map(
@@ -647,9 +664,9 @@ export default function UploadPage({
                           />
 
                           <span>
-                            {status}
-                            {!isTerminal && '…'}
-                          </span>
+                          {formatDocumentStatus(status)}
+                          {!isTerminal && '…'}
+                        </span>
                         </span>
 
                         <span className="document-confidence">
