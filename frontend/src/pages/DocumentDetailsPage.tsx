@@ -7,7 +7,7 @@ import {
   CLASSIFICATION_CONFIDENCE_THRESHOLD,
   DOCUMENT_TYPE_OPTIONS,
   EXTRACTION_CONFIDENCE_THRESHOLD,
-  formatClassificationOutcome,
+  formatRoutingOutcome,
   getDocument,
   updateDocumentType,
   updateExtractedFields,
@@ -789,7 +789,7 @@ export default function DocumentDetailsPage({
           <div>
             <span className="details-label">Routing Outcome</span>
             <strong>
-              {formatClassificationOutcome(document.classification_outcome)}
+              {formatRoutingOutcome(document)}
             </strong>
           </div>
         </div>

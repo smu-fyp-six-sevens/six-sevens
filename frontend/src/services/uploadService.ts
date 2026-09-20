@@ -76,19 +76,33 @@ export const ADDITIONAL_DOCUMENT_TYPES: { value: string; label: string }[] = [
 // can correct values the LLM wasn't confident about.
 export const EXTRACTION_CONFIDENCE_THRESHOLD = 0.95;
 
-// Display label for DocumentRecord.classification_outcome (view only — the
-// underlying value stays 'manual_review' / 'accepted').
-export function formatClassificationOutcome(
-  outcome: string | null | undefined,
+// Overall routing outcome shown in the UI (view only). classification_outcome
+// alone only records the classifier's decision — documents are always sent on
+// to extraction, so an 'accepted' classification can still end up needing
+// manual review. This folds in the later stages: a failed document or one
+// with low extraction confidence reads as Manual Review (same rule as the
+// flagged-documents list), and an accepted one reads as Pending until
+// extraction has finished.
+export function formatRoutingOutcome(
+  document: Pick<
+    DocumentRecord,
+    'status' | 'classification_outcome' | 'extraction_confidence'
+  >,
 ): string {
-  switch (outcome) {
-    case 'accepted':
-      return 'Accepted';
-    case 'manual_review':
-      return 'Manual Review';
-    default:
-      return '—';
+  if (
+    document.status === 'failed' ||
+    document.classification_outcome === 'manual_review' ||
+    (document.extraction_confidence != null &&
+      document.extraction_confidence < EXTRACTION_CONFIDENCE_THRESHOLD)
+  ) {
+    return 'Manual Review';
   }
+
+  if (document.classification_outcome === 'accepted') {
+    return document.status === 'analyzed' ? 'Accepted' : 'Pending';
+  }
+
+  return '—';
 }
 
 // Mirrors settings.CLASSIFICATION_CONFIDENCE_THRESHOLD in backend/app/config.py —

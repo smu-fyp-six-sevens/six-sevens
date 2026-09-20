@@ -9,7 +9,7 @@ import {
   ADDITIONAL_DOCUMENT_TYPES,
   REQUIRED_DOCUMENT_TYPES,
   EXTRACTION_CONFIDENCE_THRESHOLD,
-  formatClassificationOutcome,
+  formatRoutingOutcome,
   updateExtractedFields,
   uploadDocuments,
 } from '../services/uploadService';
@@ -617,8 +617,8 @@ export default function UploadPage({
                         }}
                       >
                         <span className="document-filename">
-                          {document.classification_outcome ===
-                            'manual_review' && (
+                          {formatRoutingOutcome(document) ===
+                            'Manual Review' && (
                             <span
                               className="document-manual-review-icon"
                               title="Requires manual review"
@@ -659,9 +659,7 @@ export default function UploadPage({
                         </span>
 
                         <span className="document-routing">
-                          {formatClassificationOutcome(
-                            document.classification_outcome,
-                          )}
+                          {formatRoutingOutcome(document)}
                         </span>
                       </div>
                     );
