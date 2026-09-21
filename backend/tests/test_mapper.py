@@ -77,6 +77,28 @@ def test_progress_skips_identity_document_with_no_name_or_nric_number() -> None:
     assert compute_identity_proof_of_address_progress(documents) == (1, 1)
 
 
+def test_progress_ignores_address_document_with_empty_string_name() -> None:
+    # An empty-string individual_name (still `isinstance(..., str)`, so it
+    # passes that check, but normalizes to nothing) must not blow up the
+    # proof-of-address matching — the address document should just
+    # contribute nothing, same as if the name were missing outright.
+    documents = [
+        _make_document(
+            "doc-1",
+            document_type="nric",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"individual_name": "Amanda Koh", "individual_address": None},
+        ),
+        _make_document(
+            "doc-2",
+            document_type="proof_of_address",
+            classification_outcome=ClassificationOutcome.ACCEPTED,
+            extracted_fields={"individual_name": "", "individual_address": "1 Main St"},
+        ),
+    ]
+    assert compute_identity_proof_of_address_progress(documents) == (0, 1)
+
+
 def test_progress_tolerates_non_string_individual_name() -> None:
     """
     Real observed failure: a company_constitution naming several directors

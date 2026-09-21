@@ -31,8 +31,6 @@ const formatDocumentType = (documentType?: string | null) => {
 
   return formatted.replace(/\bId\b/g, "ID");
 };
-const NON_DISPLAYED_FIELD_KEYS = new Set(['transactions']);
-
 const FIELD_KEY_ACRONYMS = new Set([
   'id',
   'uen',
@@ -65,7 +63,6 @@ function displayableFieldEntries(
   }
 
   return Object.entries(fields)
-    .filter(([key]) => !NON_DISPLAYED_FIELD_KEYS.has(key))
     .map(([key, rawField]) => {
       if (
         rawField &&
