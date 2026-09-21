@@ -792,13 +792,18 @@ def test_id_document_identity_progress_ignores_manual_review_and_unknown_side() 
 
 
 def test_id_document_single_capture_is_immediately_complete() -> None:
-    """A passport bio page (or a combined single scan) needs no counterpart."""
+    """
+    A passport bio page needs no counterpart — its side is hardcoded to
+    "single" by document_type (see mapper._collect_identity_state), not
+    read from extracted_fields, since a passport is never genuinely split
+    into a separate front/back upload the way an NRIC is.
+    """
     documents = [
         _make_document(
             "doc-1",
             document_type="passport",
             classification_outcome=ClassificationOutcome.ACCEPTED,
-            extracted_fields={"individual_name": "Amanda Koh", "document_side": "single"},
+            extracted_fields={"individual_name": "Amanda Koh"},
         ),
     ]
     assert compute_id_document_identity_progress(documents) == (1, 1)

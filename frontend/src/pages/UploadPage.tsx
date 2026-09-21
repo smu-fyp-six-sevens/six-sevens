@@ -12,6 +12,7 @@ import {
   TERMINAL_DOCUMENT_STATUSES,
   formatDocumentStatus,
   formatRoutingOutcome,
+  lowestFieldConfidence,
   updateExtractedFields,
   uploadDocuments,
 } from '../services/uploadService';
@@ -213,12 +214,13 @@ export default function UploadPage({
   const [saveFieldErrors, setSaveFieldErrors] = useState<Map<string, string>>(new Map());
   const [wsConnected, setWsConnected] = useState(false);
 
-  const flaggedDocuments = Array.from(documentDetails.values()).filter(
-    (document) =>
+  const flaggedDocuments = Array.from(documentDetails.values()).filter((document) => {
+    const lowestConfidence = lowestFieldConfidence(document.extracted_fields);
+    return (
       document.classification_outcome === 'manual_review' ||
-      (document.extraction_confidence != null &&
-        document.extraction_confidence < EXTRACTION_CONFIDENCE_THRESHOLD),
-  );
+      (lowestConfidence != null && lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD)
+    );
+  });
 
   const identityNames = useMemo(
     () => acceptedIdentityNames(Array.from(documentDetails.values())),
@@ -724,10 +726,9 @@ export default function UploadPage({
             ) : (
               <div className="flagged-list">
                 {flaggedDocuments.map((document) => {
+                  const lowestConfidence = lowestFieldConfidence(document.extracted_fields);
                   const lowExtractionConfidence =
-                    document.extraction_confidence != null &&
-                    document.extraction_confidence <
-                      EXTRACTION_CONFIDENCE_THRESHOLD;
+                    lowestConfidence != null && lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD;
 
                   const reason =
                     document.classification_outcome === 'manual_review'
@@ -753,12 +754,10 @@ export default function UploadPage({
                               'Unknown document type'}
                           </span>
 
-                          {document.extraction_confidence != null && (
+                          {lowestConfidence != null && (
                             <span>
-                              Extraction confidence:{' '}
-                              {document.extraction_confidence.toFixed(
-                                3,
-                              )}
+                              Lowest field confidence:{' '}
+                              {lowestConfidence.toFixed(3)}
                             </span>
                           )}
 

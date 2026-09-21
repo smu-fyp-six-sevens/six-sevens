@@ -129,10 +129,37 @@ def test_nric_document_side_guidance_uses_nric_number_not_id_number():
     assert "id_number" not in prompt
 
 
-def test_passport_document_side_guidance_defaults_to_single():
+def test_passport_prompt_has_no_document_side():
+    # A passport bio page is always self-contained — never uploaded as a
+    # separate front/back pair like an NRIC — so there's nothing for the
+    # LLM to judge here; mapper.py hardcodes "single" for every accepted
+    # passport instead (see extraction_prompts.EXTRACTION_SCHEMAS's
+    # "passport" entry).
     prompt = build_extraction_prompt("passport", "sample text")
-    assert "document_side" in prompt
-    assert '"single"' in prompt
+    assert "document_side" not in prompt
+
+
+def test_credit_report_requires_default_and_bankruptcy_records():
+    # Both sections (Default Records / Bankruptcy Proceedings) are
+    # unconditionally rendered in the real report even though their row
+    # content is usually empty — grounded in
+    # credit_bureau_report_generator.py's build_persona(), which always
+    # passes a default_records/bankruptcy_rows list (often just []).
+    assert "defaults" in EXTRACTION_SCHEMAS["credit_report"]["required"]
+    assert "bankruptcy_proceedings" in EXTRACTION_SCHEMAS["credit_report"]["required"]
+    prompt = build_extraction_prompt("credit_report", "sample text")
+    assert "REQUIRED" in prompt
+    assert "bankruptcy_proceedings" in prompt
+
+
+def test_credit_report_bankruptcy_guidance_is_array_style_and_allows_empty():
+    prompt = build_extraction_prompt("credit_report", "sample text")
+    assert '"bankruptcy_number"' in prompt
+    assert '"order_date"' in prompt
+    assert '"petition_date"' in prompt
+    assert '"original_order_date"' in prompt
+    assert '"gazette_date"' in prompt
+    assert "An empty array is correct if the section shows no rows" in prompt
 
 
 def test_source_of_wealth_covers_personal_brokerage_statements_too():

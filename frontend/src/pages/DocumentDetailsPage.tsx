@@ -132,6 +132,62 @@ function isArrayOfObjects(value: unknown): value is Record<string, unknown>[] {
   return Array.isArray(value) && value.length > 0 && value.every(isPlainObject);
 }
 
+// A flat array like statement_periods (["01-Jun-2026 to 30-Jun-2026", ...])
+// fails isArrayOfObjects (its entries aren't objects) and would otherwise
+// fall through to valueToString's JSON.stringify — shown as a readable
+// comma-separated list instead.
+function isArrayOfPrimitives(value: unknown): value is (string | number | boolean)[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((item) => typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean')
+  );
+}
+
+// An array of primitive strings that are actually "Label: Value" pairs
+// packed into a single string each — e.g. funding_sources:
+// ["Owner contribution: $112,000", "Term loan - OCBC Bank: $750,000", ...].
+// Conceptually the same shape as budget_line_items below, just serialized
+// as strings instead of a JSON object — which also lets a label repeat
+// (e.g. two separate "Term loan - OCBC Bank" draws), something a plain
+// object couldn't represent at all. Checked ahead of the generic
+// isArrayOfPrimitives so this more specific shape gets the table treatment
+// instead of one long comma-separated line.
+function isArrayOfLabelValueStrings(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((item) => typeof item === 'string' && item.includes(': '))
+  );
+}
+
+function labelValueStringRows(items: string[]): Record<string, unknown>[] {
+  return items.map((item) => {
+    const separatorIndex = item.indexOf(': ');
+    return {
+      label: item.slice(0, separatorIndex),
+      value: item.slice(separatorIndex + 2),
+    };
+  });
+}
+
+// A field like "budget_line_items" — a flat {"category": "$amount", ...}
+// map rather than an array at all — fails both array checks above (it isn't
+// an array, so Array.isArray is false) and would otherwise fall through to
+// valueToString's JSON.stringify. Non-empty check excludes {} (nothing
+// meaningful to show as rows).
+function isPlainKeyValueObject(value: unknown): value is Record<string, unknown> {
+  return isPlainObject(value) && Object.keys(value).length > 0;
+}
+
+// Reuses the same two-column table/modal treatment as an array of objects
+// (see ArrayValueCell/ArrayFieldModal) by turning each key into its own row
+// — "label"/"value" as the two columns — rather than a bespoke renderer for
+// what's otherwise the same "click to view details" shape.
+function keyValueObjectRows(value: Record<string, unknown>): Record<string, unknown>[] {
+  return Object.entries(value).map(([label, entryValue]) => ({ label, value: entryValue }));
+}
+
 // Union of every key seen across the array's objects, first-seen order —
 // not just Object.keys(rows[0]), since a row here or there can legitimately
 // be missing a key (e.g. a line item with no discount applied).
@@ -149,10 +205,30 @@ function arrayTableColumns(rows: Record<string, unknown>[]): string[] {
   return columns;
 }
 
+// Thousands-grouped for readability (10000000 -> "10,000,000"). Only ever
+// applied to genuine JSON numbers, never numeric-looking strings — an
+// account/UEN/NRIC number extracted as a string is meant to be read
+// verbatim, not grouped like a monetary amount. maximumFractionDigits is
+// raised well past the locale default (3) so a precise decimal value isn't
+// silently rounded for display.
+function formatNumberWithCommas(value: number): string {
+  return value.toLocaleString('en-US', { maximumFractionDigits: 20 });
+}
+
 function formatCellValue(value: unknown): string {
   if (value === null || value === undefined) return '—';
+  if (typeof value === 'number') return formatNumberWithCommas(value);
   if (typeof value === 'object') return valueToString(value);
   return String(value);
+}
+
+// Read-only display for a scalar field value — same as valueToString except
+// it comma-groups a genuine number. Kept separate from valueToString itself
+// since that one also seeds the editable Manual Review draft, where the
+// comma-free raw value must round-trip back to the backend unchanged.
+function formatFieldDisplayValue(value: unknown): string {
+  if (typeof value === 'number') return formatNumberWithCommas(value);
+  return valueToString(value);
 }
 
 // Shared by both the read-only "Extracted Information" preview and the
@@ -367,6 +443,129 @@ function ArrayFieldEditButton({
   );
 }
 
+// Same editable modal as ArrayFieldEditButton, but for a plain key-value
+// object field (see isPlainKeyValueObject) rather than an array of objects.
+// Round-trips through keyValueObjectRows' {label, value} row shape for the
+// shared table UI, then rebuilds a plain object on save — an array of
+// {label, value} rows would silently change the field's actual shape.
+// Blank labels are dropped rather than saved as a "" key, and a later
+// duplicate label overwrites an earlier one, same as any object literal.
+function ObjectFieldEditButton({
+  label,
+  draftJson,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  draftJson: string;
+  disabled: boolean;
+  onChange: (json: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rows = useMemo<Record<string, unknown>[]>(() => {
+    try {
+      const parsed: unknown = JSON.parse(draftJson);
+      return isPlainKeyValueObject(parsed) ? keyValueObjectRows(parsed) : [];
+    } catch {
+      return [];
+    }
+  }, [draftJson]);
+  const columns = useMemo(() => arrayTableColumns(rows), [rows]);
+
+  return (
+    <>
+      <button
+        type="button"
+        className="array-modal-trigger-button"
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+      >
+        Edit {rows.length} item{rows.length === 1 ? '' : 's'}
+      </button>
+      {open && (
+        <ArrayFieldModal
+          title={label}
+          columns={columns}
+          rows={rows}
+          editable
+          onClose={() => setOpen(false)}
+          onSave={(newRows) => {
+            const rebuilt: Record<string, unknown> = {};
+            for (const row of newRows) {
+              const rowLabel = typeof row.label === 'string' ? row.label.trim() : '';
+              if (!rowLabel) continue;
+              rebuilt[rowLabel] = row.value ?? '';
+            }
+            onChange(JSON.stringify(rebuilt));
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+// Same editable modal again, for an array of "Label: Value" strings (see
+// isArrayOfLabelValueStrings) — rebuilds an array of strings on save, NOT
+// an object, since a repeated label (e.g. two separate "Term loan - OCBC
+// Bank" draws) is valid here and an object would silently collapse it to
+// one entry.
+function LabelValueArrayEditButton({
+  label,
+  draftJson,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  draftJson: string;
+  disabled: boolean;
+  onChange: (json: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rows = useMemo<Record<string, unknown>[]>(() => {
+    try {
+      const parsed: unknown = JSON.parse(draftJson);
+      return isArrayOfLabelValueStrings(parsed) ? labelValueStringRows(parsed) : [];
+    } catch {
+      return [];
+    }
+  }, [draftJson]);
+  const columns = useMemo(() => arrayTableColumns(rows), [rows]);
+
+  return (
+    <>
+      <button
+        type="button"
+        className="array-modal-trigger-button"
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+      >
+        Edit {rows.length} item{rows.length === 1 ? '' : 's'}
+      </button>
+      {open && (
+        <ArrayFieldModal
+          title={label}
+          columns={columns}
+          rows={rows}
+          editable
+          onClose={() => setOpen(false)}
+          onSave={(newRows) => {
+            const rebuilt = newRows
+              .map((row) => {
+                const rowLabel = typeof row.label === 'string' ? row.label.trim() : '';
+                const rowValue =
+                  typeof row.value === 'string' ? row.value.trim() : valueToString(row.value);
+                if (!rowLabel && !rowValue) return null;
+                return `${rowLabel}: ${rowValue}`;
+              })
+              .filter((entry): entry is string => entry !== null);
+            onChange(JSON.stringify(rebuilt));
+          }}
+        />
+      )}
+    </>
+  );
+}
+
 // The raw failure_reason straight from the backend is developer-facing —
 // e.g. "Extraction invocation failed: Workflow 142b7edf-... invocation
 // failed after 3 attempts: ... (request timed out)" — meaningful to
@@ -486,14 +685,20 @@ export default function DocumentDetailsPage({
       ? describeFailureReason(document.failure_reason)
       : null;
 
+  // Manual review is driven by the lowest confidence among this document's
+  // own extracted fields — not a single document-wide extraction_confidence
+  // number, which could still read as confident even when one specific
+  // field (e.g. a garbled account number) was actually a low-confidence
+  // guess. See uploadService.lowestFieldConfidence, which UploadPage.tsx's
+  // flagged-documents list uses the same way for consistency.
+  const fieldConfidenceValues = extractedFields
+    .map(([, field]) => field.confidence)
+    .filter((confidence): confidence is number => confidence != null);
+  const lowestConfidence =
+    fieldConfidenceValues.length > 0 ? Math.min(...fieldConfidenceValues) : null;
+
   const needsManualReview =
-  (document?.extraction_confidence != null &&
-    document.extraction_confidence < EXTRACTION_CONFIDENCE_THRESHOLD) ||
-  extractedFields.some(
-    ([, field]) =>
-      field.confidence != null &&
-      field.confidence < EXTRACTION_CONFIDENCE_THRESHOLD,
-  );
+    lowestConfidence != null && lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD;
 
   // The type can only be corrected once the pipeline has finished with the
   // document, and only while classification confidence is still below the
@@ -855,11 +1060,11 @@ export default function DocumentDetailsPage({
           <span className="details-section-icon">▣</span>
           <span>Extracted Information</span>
 
-          {document.extraction_confidence != null && (
+          {lowestConfidence != null && (
             <span className="extraction-confidence">
-              Extraction confidence:{' '}
+              Lowest field confidence:{' '}
               <strong>
-                {document.extraction_confidence.toFixed(3)}
+                {lowestConfidence.toFixed(2)}
               </strong>
             </span>
           )}
@@ -897,8 +1102,16 @@ export default function DocumentDetailsPage({
                     '—'
                   ) : isArrayOfObjects(field.value) ? (
                     <ArrayValueCell label={humanizeFieldKey(key)} rows={field.value} />
+                  ) : isArrayOfLabelValueStrings(field.value) ? (
+                    <ArrayValueCell label={humanizeFieldKey(key)} rows={labelValueStringRows(field.value)} />
+                  ) : isArrayOfPrimitives(field.value) ? (
+                    field.value
+                      .map((item) => (typeof item === 'number' ? formatNumberWithCommas(item) : String(item)))
+                      .join(', ')
+                  ) : isPlainKeyValueObject(field.value) ? (
+                    <ArrayValueCell label={humanizeFieldKey(key)} rows={keyValueObjectRows(field.value)} />
                   ) : (
-                    valueToString(field.value)
+                    formatFieldDisplayValue(field.value)
                   )}
                 </span>
 
@@ -935,7 +1148,7 @@ export default function DocumentDetailsPage({
           </div>
 
           <p className="review-description">
-            This document has low extraction confidence or empty fields. Review and
+            One or more extracted fields have low confidence, or are empty. Review and
             correct the extracted fields below before approving the
             document.
           </p>
@@ -992,6 +1205,20 @@ export default function DocumentDetailsPage({
                     <ArrayFieldEditButton
                       label={humanizeFieldKey(key)}
                       draftJson={fieldDraft[key] ?? '[]'}
+                      disabled={isSaving || !canEditField}
+                      onChange={(json) => handleFieldChange(key, json)}
+                    />
+                  ) : isArrayOfLabelValueStrings(field.value) ? (
+                    <LabelValueArrayEditButton
+                      label={humanizeFieldKey(key)}
+                      draftJson={fieldDraft[key] ?? '[]'}
+                      disabled={isSaving || !canEditField}
+                      onChange={(json) => handleFieldChange(key, json)}
+                    />
+                  ) : isPlainKeyValueObject(field.value) ? (
+                    <ObjectFieldEditButton
+                      label={humanizeFieldKey(key)}
+                      draftJson={fieldDraft[key] ?? '{}'}
                       disabled={isSaving || !canEditField}
                       onChange={(json) => handleFieldChange(key, json)}
                     />

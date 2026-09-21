@@ -76,24 +76,51 @@ export const ADDITIONAL_DOCUMENT_TYPES: { value: string; label: string }[] = [
 // can correct values the LLM wasn't confident about.
 export const EXTRACTION_CONFIDENCE_THRESHOLD = 0.95;
 
+// The single source of truth for "does this document's extraction quality
+// need a human to look at it" — the lowest confidence across its own
+// extracted fields, unwrapping each field's {value, confidence} shape (see
+// DocumentDetailsPage's displayableFieldEntries for the same unwrap done
+// there). Deliberately NOT the document-level extraction_confidence the LLM
+// used to report for the run as a whole: a single document-wide number
+// could still read as confident even when one specific field (e.g. a
+// garbled account number) was actually a low-confidence guess — the
+// per-field minimum is the more honest signal for a loan officer deciding
+// whether to trust what's on screen. Returns null when there are no fields
+// with a numeric confidence to compare at all.
+export function lowestFieldConfidence(fields: Record<string, unknown> | null): number | null {
+  if (!fields) {
+    return null;
+  }
+
+  let lowest: number | null = null;
+  for (const raw of Object.values(fields)) {
+    if (!raw || typeof raw !== 'object' || !('confidence' in raw)) {
+      continue;
+    }
+    const confidence = (raw as { confidence?: unknown }).confidence;
+    if (typeof confidence === 'number' && (lowest === null || confidence < lowest)) {
+      lowest = confidence;
+    }
+  }
+  return lowest;
+}
+
 // Overall routing outcome shown in the UI (view only). classification_outcome
 // alone only records the classifier's decision — documents are always sent on
 // to extraction, so an 'accepted' classification can still end up needing
 // manual review. This folds in the later stages: a failed document or one
-// with low extraction confidence reads as Manual Review (same rule as the
+// with a low-confidence field reads as Manual Review (same rule as the
 // flagged-documents list), and an accepted one reads as Pending until
 // extraction has finished.
 export function formatRoutingOutcome(
-  document: Pick<
-    DocumentRecord,
-    'status' | 'classification_outcome' | 'extraction_confidence'
-  >,
+  document: Pick<DocumentRecord, 'status' | 'classification_outcome' | 'extracted_fields'>,
 ): string {
+  const lowestConfidence = lowestFieldConfidence(document.extracted_fields);
+
   if (
     document.status === 'failed' ||
     document.classification_outcome === 'manual_review' ||
-    (document.extraction_confidence != null &&
-      document.extraction_confidence < EXTRACTION_CONFIDENCE_THRESHOLD)
+    (lowestConfidence != null && lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD)
   ) {
     return 'Manual Review';
   }

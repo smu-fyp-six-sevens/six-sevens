@@ -115,9 +115,15 @@ def _collect_identity_state(documents: list[DocumentRecord]) -> _IdentityState:
             names.add(name)
         if fields.get("individual_address") and counts_as_address_proof(doc.document_type, fields):
             has_address = True
-        side = fields.get("document_side")
-        if isinstance(side, str) and side.strip().lower() in ("front", "back", "single"):
-            sides.add(side.strip().lower())
+        # A passport bio page is always self-contained — never split into a
+        # separate front/back upload — nric is the
+        # only type where front/back/single is genuinely extracted.
+        if doc.document_type == "passport":
+            sides.add("single")
+        else:
+            side = fields.get("document_side")
+            if isinstance(side, str) and side.strip().lower() in ("front", "back", "single"):
+                sides.add(side.strip().lower())
         identities[key] = _Identity(names, has_address, sides)
 
     named_addresses: list[_NamedAddress] = [
@@ -231,8 +237,11 @@ def compute_id_document_identity_progress(documents: list[DocumentRecord]) -> tu
     requirement, for the same reason: a two-person case where person A's
     back and person B's front were both uploaded must not read as complete
     just because a front and a back both exist somewhere in the case — see
-    extraction_prompts.EXTRA_FIELD_GUIDANCE's "id_document" entry for how
-    document_side ("front" / "back" / "single") gets extracted.
+    extraction_prompts.EXTRA_FIELD_GUIDANCE's "nric" entry for how
+    document_side ("front" / "back" / "single") gets extracted there; a
+    passport's side is hardcoded to "single" in _collect_identity_state
+    instead, since it's never genuinely split (see EXTRACTION_SCHEMAS's
+    "passport" entry).
 
     Returns (covered, total) identities, same shape as the proof_of_address
     equivalent — (0, 0) means no id_document has been accepted yet.

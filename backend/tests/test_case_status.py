@@ -225,9 +225,9 @@ def test_passport_does_not_fulfil_proof_of_address() -> None:
             extracted_fields={
                 "individual_name": "Jane Tan",
                 "individual_address": None,
-                # A passport's bio page is self-contained — there's no
-                # separate "back" to wait for, unlike an NRIC.
-                "document_side": "single",
+                # No document_side here — a passport's bio page is always
+                # self-contained, so mapper.py hardcodes "single" by
+                # document_type rather than reading it from extracted_fields.
             },
         )
     ]

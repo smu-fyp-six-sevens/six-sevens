@@ -50,7 +50,7 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # overridden by the caller, so it's always present. former_names is
         # genuinely probabilistic there (rng.random() >= 0.4 -> no former
         # name ~60% of the time), a real subtype-dependent field.
-        "required": ["company_name", "uen", "incorporation_date", "company_type"],
+        "required": ["company_name", "uen", "incorporation_date", "company_type", "company_former_name", "incorporating_act", "certificate_date"],
         "additional": ["company_former_name"],
     },
     "payslip": {
@@ -71,13 +71,14 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
     # They still fulfil the same case-checklist requirement though — see
     # models.IDENTITY_DOCUMENT_TYPES/IDENTITY_DOCUMENT_REQUIREMENT.
     "passport": {
-        "required": ["individual_name", "passport_number", "nric_number", "date_of_birth", "nationality"],
-        # document_side isn't rendered by doc_gen_scripts, same as nric's —
-        # here so a passport-only identity actually gets sides={"single"}
-        # set (see mapper._is_identity_id_document_complete), rather than
-        # silently never resolving document_side at all and reading as an
-        # incomplete id_document forever. See EXTRA_FIELD_GUIDANCE below.
-        "additional": ["document_side"],
+        "required": ["individual_name", "passport_number", "nric_number", "date_of_birth", "nationality", "mrz"],
+        # No document_side here, unlike nric's — a passport bio page is
+        # always self-contained (never split into a separate front/back
+        # upload), so there's nothing genuinely variable for the LLM to
+        # judge from the text; mapper._collect_identity_state hardcodes
+        # sides={"single"} for every accepted passport instead of relying
+        # on an extracted field for a fact that's structurally always true.
+        "additional": [],
     },
     "nric": {
         # Grounded directly in nric_generator.py's _draw_front/_draw_back,
@@ -206,16 +207,29 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
     "credit_report": {
         # credit_bureau_report_generator.py: all five identity fields are
         # unconditional (address falls back to the case's registered company
-        # address rather than ever being left blank). accounts/defaults
-        # (additional): real content that's always rendered, BUT build_
-        # persona never actually supplies case-specific values for these —
-        # they fall back to fixed SAMPLE_ACCOUNTS/SAMPLE_DEFAULT_RECORDS, so
-        # today every generated report has identical boilerplate here, not
-        # case-varying. Still worth extracting (a real forged report could
-        # show inconsistent figures), just flagging it isn't a discriminating
-        # signal against the current synthetic dataset.
-        "required": ["individual_name", "id_number", "date_of_birth", "nationality", "individual_address"],
-        "additional": ["accounts", "defaults"],
+        # address rather than ever being left blank).
+        #
+        # "accounts" stays additional: _pick_accounts(rng) always returns at
+        # least one row from SAMPLE_ACCOUNTS (never genuinely empty), but
+        # it's a random-sized subset each case, not a fixed list to check
+        # off — nothing about its count or membership is itself meaningful.
+        #
+        # "defaults"/"bankruptcy_proceedings" are REQUIRED despite usually
+        # having zero rows: build_persona()'s PDF always renders both
+        # section headers/tables (_section_bar("Default Records") /
+        # _section_bar("Bankruptcy Proceedings") are unconditional calls,
+        # not behind an if-branch), but only actually populates a case's
+        # rows for a small per-case chance — default_records only when
+        # rng.random() < 0.15, bankruptcy_rows only when < 0.08, else `[]`
+        # for that case. So the KEY should always appear in extracted_fields
+        # even though an empty array is the normal, expected value most of
+        # the time (see EXTRA_FIELD_GUIDANCE below) — same "always present,
+        # content genuinely varies" grounding as any other required field.
+        "required": [
+            "individual_name", "id_number", "date_of_birth", "nationality",
+            "individual_address", "defaults", "bankruptcy_proceedings",
+        ],
+        "additional": ["accounts"],
     },
     "list_of_loans": {
         # All three loan-letter templates (efs/overdraft/term_loan_facility_
@@ -251,7 +265,7 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # capturing as its own structured field rather than only the two
         # headline figures.
         "required": [
-            "company_name", "uen", "company_address", "year_of_assessment",
+            "company_name", "tax_reference_number", "company_address", "year_of_assessment",
             "noa_date", "eci", "tax_payable",
         ],
         "additional": ["tax_computation"],
@@ -355,18 +369,6 @@ EXTRA_FIELD_GUIDANCE: dict[str, str] = {
         "any part of an NRIC at all, or if nric_number itself (the one "
         "field REQUIRED above) is absent."
     ),
-    "passport": (
-        'For "document_side", its "value" should almost always be '
-        '"single" — a passport bio page is self-contained (photo, name, '
-        "nric_number, dates, all in one capture), unlike an NRIC's "
-        'separate front/back. Only use "front" or "back" if the text '
-        "genuinely looks like just one side of a physical two-sided card "
-        "rather than a passport page at all — in which case also "
-        "reconsider whether this might actually be an NRIC instead (see "
-        'the escalation guidance below). Use "unknown" only if you '
-        "genuinely can't tell from what's visible; do not default to it "
-        "just to avoid committing to \"single\"."
-    ),
     "bank_statement": (
         'For "transactions", its "value" should be an array of objects — one per '
         'transaction line visible in the statement — each with these keys: "date" '
@@ -400,7 +402,16 @@ EXTRA_FIELD_GUIDANCE: dict[str, str] = {
         '"grantor", "date_loaded", "original_amount" (numeric), "balance" '
         '(numeric), and "status" (e.g. "Negotiated Settlement"). An empty '
         "array is correct if the report's Default Records section shows none — "
-        "that's the normal case, not a sign anything was missed."
+        "that's the normal case, not a sign anything was missed.\n\n"
+        'For "bankruptcy_proceedings", its "value" should be an array of '
+        'objects — one per row listed in the Bankruptcy Proceedings section — '
+        'each with these keys: "bankruptcy_number", "order_date", '
+        '"petition_date", "original_order_date", and "gazette_date". Extract '
+        "each column verbatim as shown — the last column sometimes holds a "
+        'status phrase like "Bankruptcy Order" instead of an actual date, '
+        "which is normal for this report, not a sign of misreading. An empty "
+        "array is correct if the section shows no rows — most applicants have "
+        "none, so that's the normal case, not a sign anything was missed."
     ),
     "source_of_wealth": (
         'For "notes", its "value" should be an array of objects — one per '
