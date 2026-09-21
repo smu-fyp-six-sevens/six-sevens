@@ -316,8 +316,24 @@ EXTRA_FIELD_GUIDANCE: dict[str, str] = {
         'Use "single" instead when the document is self-contained and has '
         "no separate other side to expect at all — a single image that "
         "already shows both the identity details and the address in one "
-        "capture. Judge this from what's actually visible, not from which "
-        "fields happen to be present elsewhere in your answer.\n\n"
+        "capture.\n\n"
+        "You only have OCR text, not the image, so you cannot see a face "
+        "photo or thumbprint — decide the side from which text is "
+        "present in the OCR text itself, using these rules:\n"
+        '- "front": the text contains the person\'s name and date of '
+        "birth (or race/sex) and NO residential address.\n"
+        '- "back": the text contains a residential address and/or a date '
+        "of issue and NO person's name.\n"
+        '- "single": the text contains both the person\'s name and a '
+        "residential address.\n"
+        '- "unknown": none of the above fits, or the text is too '
+        "fragmentary to tell.\n"
+        'When exactly one of these rules clearly matches, report the '
+        '"document_side" confidence as 0.95 or higher — a clean match '
+        "against these rules IS strong evidence, so do not hedge just "
+        "because you cannot see the photo or thumbprint. Report lower "
+        "only when the signals genuinely conflict or the text is "
+        "garbled or partial.\n\n"
         "Which of the ADDITIONAL fields above actually count as expected "
         "depends on document_side — only extract, and only treat as "
         "missing-is-suspicious, the fields that side actually shows:\n"
