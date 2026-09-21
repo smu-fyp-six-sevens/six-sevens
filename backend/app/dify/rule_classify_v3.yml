@@ -1,0 +1,446 @@
+app:
+  description: 'Regex rule classifier (filename + text). Returns top_candidates: up
+    to 3 ranked document-type options, each with confidence (relative share, sums
+    to 1 across candidates), match_strength (absolute 0-1 fit), reasoning and evidence.
+    Treat as options to weigh, not a final answer.'
+  icon: 🤖
+  icon_background: '#FFEAD5'
+  icon_type: emoji
+  mode: workflow
+  name: rule_classify_v3
+  use_icon_as_answer_icon: false
+dependencies: []
+kind: app
+version: 0.7.0
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      allowed_file_extensions:
+      - .JPG
+      - .JPEG
+      - .PNG
+      - .GIF
+      - .WEBP
+      - .SVG
+      allowed_file_types:
+      - image
+      allowed_file_upload_methods:
+      - local_file
+      - remote_url
+      enabled: false
+      fileUploadConfig:
+        attachment_image_file_size_limit: 2
+        audio_file_size_limit: 50
+        batch_count_limit: 5
+        file_size_limit: 15
+        file_upload_limit: 50
+        image_file_batch_limit: 10
+        image_file_size_limit: 10
+        knowledge_file_size_limit: 50
+        single_chunk_attachment_limit: 10
+        skill_file_size_limit: 50
+        video_file_size_limit: 100
+        workflow_file_upload_limit: 10
+      image:
+        enabled: false
+        number_limits: 3
+        transfer_methods:
+        - local_file
+        - remote_url
+      number_limits: 3
+    opening_statement: ''
+    retriever_resource:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: start
+        targetType: code
+      id: 1788025388339-source-1788025450709-target
+      source: '1788025388339'
+      sourceHandle: source
+      target: '1788025450709'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: code
+        targetType: end
+      id: 1788025450709-source-1788025491604-target
+      source: '1788025450709'
+      sourceHandle: source
+      target: '1788025491604'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    nodes:
+    - data:
+        selected: false
+        title: User Input
+        type: start
+        variables:
+        - default: ''
+          hint: ''
+          label: extracted_text
+          max_length: 999999999
+          options: []
+          placeholder: ''
+          required: false
+          type: paragraph
+          variable: extracted_text
+        - default: ''
+          hint: ''
+          label: filename
+          max_length: 256
+          options: []
+          placeholder: ''
+          required: true
+          type: text-input
+          variable: filename
+        - default: ''
+          hint: ''
+          label: confidence_threshold
+          options: []
+          placeholder: ''
+          required: true
+          type: number
+          variable: confidence_threshold
+      height: 161
+      id: '1788025388339'
+      position:
+        x: 81.43018036268643
+        y: 282
+      positionAbsolute:
+        x: 81.43018036268643
+        y: 282
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        code: "\"\"\"\nrule_classify — Dify Code node (layers 1 + 2).\n\nv3 changes\
+          \ (top-3 candidates):\n  1. Scores EVERY document type across filename +\
+          \ text layers instead of\n     keeping only the single best. Output is `top_candidates`:\
+          \ up to 3\n     ranked options, each with its own reasoning and evidence.\n\
+          \  2. Each candidate carries two numbers:\n       - confidence     : share\
+          \ of the rule layer's belief across the returned\n                     \
+          \     candidates. Sums to exactly 1.0. RELATIVE.\n       - match_strength\
+          \ : absolute rule score 0-1 (the old `confidence`).\n                  \
+          \        Needed because normalising hides weak matches — a\n           \
+          \               lone 0.4 filename hit would otherwise read as 1.0.\n  3.\
+          \ Per type, filename + text scores combine as\n     max(f, t) + min(f, t)\
+          \ * TEXT_AGREEMENT_BOOST (capped at 1.0) — the old\n     \"layers agree\"\
+          \ boost, generalised to every type.\n  4. Evidence now shows the matched\
+          \ wording (e.g. text: \"opening balance\")\n     instead of raw regex source,\
+          \ so the agent can read it.\n  5. Residential-address check moved from `evidence`\
+          \ to `notes` (document-\n     level, independent of type).\n  6. needs_manual_review\
+          \ uses the TOP candidate's match_strength vs\n     confidence_threshold\
+          \ (normalised confidence would always pass).\n  7. No rule fired -> top_candidates\
+          \ is [] (cannot sum to 1 with no\n     evidence) and needs_manual_review\
+          \ is True.\n\nEarlier changes (v2): lowercase keys matching DocumentType.<X>.value,\
+          \ ACRA\nBizFile+ patterns under certificate_of_incumbency, single regex\
+          \ evaluation,\nextracted_text truncation, residential-address check.\n\n\
+          After editing: Publish, then publish as tool again. The tool serves the\
+          \ last\npublished version, so an unpublished edit changes nothing for the\
+          \ agent.\n\"\"\"\n\nimport re\n\nMAX_TEXT_CHARS = 60000\nTEXT_AGREEMENT_BOOST\
+          \ = 0.5\n\n_FILENAME_RULES = {\n    \"notice_of_assessment\": [\n      \
+          \  (r\"notice\\s*of\\s*assessment\", 0.95),\n        (r\"\\bnoa\\b\", 0.8),\n\
+          \        (r\"\\bassessment\\b\", 0.4),\n        (r\"\\biras\\b\", 0.7),\n\
+          \        (r\"income\\s*tax\", 0.7),\n    ],\n\n    \"bank_statement\": [\n\
+          \        (r\"bank\\s*statement\", 0.9),\n        (r\"\\bstatement\\b\",\
+          \ 0.4),\n        (r\"\\b(dbs|ocbc|uob|hsbc|citibank|maybank|cimb)\\b\",\
+          \ 0.3),\n    ],\n    \"certificate_of_incorporation\": [\n        (r\"certificate\\\
+          s*of\\s*incorporation\", 0.9),\n        (r\"\\bincorporation\\b\", 0.5),\n\
+          \    ],\n    \"payslip\": [\n        (r\"pay\\s*slip\", 0.9),\n        (r\"\
+          salary\\s*slip\", 0.9),\n        (r\"\\bpayroll\\b\", 0.4),\n    ],\n  \
+          \  \"nric\": [\n        (r\"\\bnric\\b\", 0.9),\n        (r\"identity\\\
+          s*card\", 0.9),\n    ],\n    \"passport\": [\n        (r\"\\bpassport\\\
+          b\", 0.9),\n    ],\n    \"fatca_crs_declaration\": [\n        (r\"\\bfatca\\\
+          b\", 0.9),\n        (r\"\\bcrs\\b\", 0.6),\n        (r\"self[\\s-]?declaration\"\
+          , 0.5),\n    ],\n    \"certificate_of_incumbency\": [\n        (r\"certificate\\\
+          s*of\\s*incumbency\", 0.95),\n        (r\"\\bincumbency\\b\", 0.7),\n  \
+          \      (r\"\\bbizfile\\b\", 0.7),\n        (r\"business\\s*profile\", 0.7),\n\
+          \        (r\"\\bacra\\b\", 0.7),\n    ],\n    \"company_constitution\":\
+          \ [\n        (r\"\\bconstitution\\b\", 0.8),\n        (r\"memorandum\\s*and\\\
+          s*articles\", 0.8),\n        (r\"articles\\s*of\\s*association\", 0.8),\n\
+          \        (r\"\\bm\\s*&?\\s*aa\\b\", 0.5),\n    ],\n    \"proof_of_address\"\
+          : [\n        (r\"proof\\s*of\\s*address\", 0.9),\n        (r\"utility\\\
+          s*bill\", 0.7),\n        (r\"residential\\s*address\", 0.6),\n    ],\n \
+          \    \"source_of_wealth\": [\n                (r\"source\\s*(of\\s*)?wealth\"\
+          , 0.9),\n        (r\"\\bsow\\b\", 0.5),\n        (r\"\\bwealth\\b\", 0.5),\n\
+          \        (r\"financial\\s*statements?\", 0.6),\n        (r\"balance\\s*sheet\"\
+          , 0.6),\n        (r\"income\\s*statement\", 0.6),\n    ],\n    \"credit_report\"\
+          : [\n        (r\"credit\\s*report\", 0.9),\n        (r\"credit\\s*bureau\"\
+          , 0.7),\n        (r\"\\bccris\\b\", 0.6),\n    ],\n    \"list_of_loans\"\
+          : [\n        (r\"list\\s*of\\s*loans\", 0.9),\n        (r\"loan\\s*(list|schedule)\"\
+          , 0.8),\n        (r\"outstanding\\s*loans\", 0.7),\n        (r\"facility\\\
+          s*(offer|letter|agreement)\", 0.7),\n        (r\"overdraft\\s*facility\"\
+          , 0.7),\n        (r\"credit\\s*facility\", 0.7),\n        (r\"\\b(loan|overdraft)s?\\\
+          b\", 0.7),\n    ],\n}\n\n_TEXT_RULES = {\n    \"notice_of_assessment\":\
+          \ [\n        (r\"notice\\s*of\\s*assessment\", 0.95),\n        (r\"year\\\
+          s*of\\s*assessment\", 0.7),\n        (r\"comptroller\\s*of\\s*income\\s*tax\"\
+          , 0.8),\n        (r\"inland\\s*revenue\\s*authority\", 0.7),\n        (r\"\
+          \\biras\\.gov\\.sg\\b\", 0.4),\n        (r\"\\bmytax\\b\", 0.3),\n     \
+          \   (r\"estimated\\s*chargeable\\s*income\", 0.7),\n        (r\"\\btax\\\
+          s*assessed\\b\", 0.7),\n        (r\"\\btax\\s*(payable|rebate)\\b\", 0.3),\n\
+          \        (r\"\\bexempt\\s*amount\\b\", 0.3),\n        (r\"tax\\s*reference\\\
+          s*number\", 0.3),\n    ],\n    \n\n    \"bank_statement\": [\n        (r\"\
+          bank\\s*statement\", 0.95),\n        (r\"opening\\s*balance\", 0.7),\n \
+          \       (r\"closing\\s*balance\", 0.7),\n        (r\"\\btransaction\\s*history\\\
+          b\", 0.5),\n    ],\n    \"certificate_of_incorporation\": [\n        (r\"\
+          certificate\\s*of\\s*incorporation\", 0.95),\n        (r\"company\\s*registration\\\
+          s*number\", 0.3),\n        (r\"incorporated\\s*(under|in)\\b\", 0.5),\n\
+          \    ],\n    \"payslip\": [\n        (r\"pay\\s*slip\", 0.9),\n        (r\"\
+          salary\\s*slip\", 0.9),\n        (r\"\\bnet\\s*pay\\b\", 0.7),\n       \
+          \ (r\"\\bgross\\s*pay\\b\", 0.7),\n        (r\"\\bbasic\\s*salary\\b\",\
+          \ 0.7),\n    ],\n    \"nric\": [\n        (r\"\\bnric\\b\", 0.4),\n    \
+          \    (r\"identity\\s*card\\s*no\", 0.9),\n        (r\"identity\\s*card\"\
+          , 0.7),\n        (r\"\\brace\\b\", 0.3),\n        (r\"\\b(finger|thumb)\\\
+          s*print\", 0.2),\n        (r\"\\bdate\\s*of\\s*birth\\b\", 0.2),\n     \
+          \   # --- back face ---\n        (r\"\\bnric\\s*no\\b\", 0.1),\n       \
+          \ (r\"\\bdate\\s*of\\s*issue\\b\", 0.1),\n        # both labels on the same\
+          \ page, either order: the back-face signature\n        (r\"(?s)\\bnric\\\
+          s*no\\b.{0,1500}?\\bdate\\s*of\\s*issue\\b\"\n        r\"|\\bdate\\s*of\\\
+          s*issue\\b.{0,1500}?\\bnric\\s*no\\b\", 0.3),\n    ],\n    \"passport\"\
+          : [\n        (r\"\\bpassport\\s*no\\.?\\b\", 0.9),\n        (r\"\\bP<[A-Z]{3}\"\
+          , 0.9),\n        (r\"\\bpassport\\b\", 0.8),\n        (r\"country\\s*code\"\
+          , 0.5),\n        (r\"date\\s*of\\s*expiry\", 0.3),\n        (r\"\\bnationality\\\
+          b\", 0.2),\n        (r\"\\bdate\\s*of\\s*birth\\b\", 0.2),\n    ],\n   \
+          \ \"fatca_crs_declaration\": [\n        (r\"\\bfatca\\b\", 0.9),\n     \
+          \   (r\"\\bcrs\\b\", 0.6),\n        (r\"self[\\s-]?certification\", 0.7),\n\
+          \        (r\"tax\\s*residency\", 0.8),\n    ],\n    \"certificate_of_incumbency\"\
+          : [\n        (r\"certificate\\s*of\\s*incumbency\", 0.95),\n        (r\"\
+          accounting\\s*and\\s*corporate\\s*regulatory\\s*authority\", 0.9),\n   \
+          \     (r\"business\\s*profile\", 0.8),\n        (r\"\\bbizfile\\b\", 0.7),\n\
+          \        (r\"\\bincumbency\\b\", 0.6),\n        (r\"duly\\s*incorporated\\\
+          s*and\\s*validly\\s*existing\", 0.4),\n        (r\"\\buen\\b\", 0.2),\n\
+          \    ],\n    \"company_constitution\": [\n        (r\"memorandum\\s*and\\\
+          s*articles\", 0.85),\n        (r\"articles\\s*of\\s*association\", 0.85),\n\
+          \        (r\"\\bconstitution\\b\", 0.85),\n    ],\n    \"proof_of_address\"\
+          : [\n        (r\"proof\\s*of\\s*address\", 0.9),\n        (r\"utility\\\
+          s*bill\", 0.7),\n        (r\"billing\\s*address\", 0.5),\n        (r\"residential\\\
+          s*address\", 0.5),\n    ],\n    \"source_of_wealth\": [\n        (r\"source\\\
+          s*of\\s*wealth\", 0.9),\n        (r\"\\bsow\\b\", 0.4),\n        (r\"wealth\\\
+          s*(declaration|summary)\", 0.5),\n        (r\"statements?\\s*of\\s*comprehensive\\\
+          s*income\", 0.7),\n        (r\"statements?\\s*of\\s*financial\\s*position\"\
+          , 0.7),\n        (r\"notes\\s*to\\s*the\\s*financial\\s*statements\", 0.6),\n\
+          \        (r\"\\bbalance\\s*sheet\\b\", 0.5),\n        (r\"\\bincome\\s*statement\\\
+          b\", 0.5),\n        (r\"\\bmargin\\s*account\\b\", 0.6),\n        (r\"\\\
+          bnet\\s*asset\\s*value\\b\", 0.5),\n        (r\"\\bportfolio\\s*value\\\
+          b\", 0.4),\n    ],\n    \"credit_report\": [\n        (r\"credit\\s*report\"\
+          , 0.9),\n        (r\"credit\\s*bureau\", 0.9),\n        (r\"\\bccris\\b\"\
+          , 0.6),\n        (r\"credit\\s*score\", 0.6),\n    ],\n    \"list_of_loans\"\
+          : [\n        (r\"list\\s*of\\s*loans\", 0.9),\n        (r\"loan\\s*(list|schedule)\"\
+          , 0.8),\n        (r\"outstanding\\s*loans\", 0.6),\n        (r\"facility\\\
+          s*(offer|letter|agreement)\", 0.6),\n        (r\"overdraft\\s*facility\"\
+          , 0.6),\n        (r\"credit\\s*facility\", 0.5),\n        (r\"\\b(loan|overdraft)s?\\\
+          b\", 0.4),\n    ],\n}\n\n# Singapore-specific residential-address heuristics\
+          \ — deliberately separate\n# from _TEXT_RULES, since \"does this show a\
+          \ residential address\" is\n# orthogonal to document_type (an id_document\
+          \ or bank_statement can carry\n# this signal without it being their primary\
+          \ category). Each tuple is\n# (pattern, weight, human-readable label) —\
+          \ the label is what actually\n# reaches the chatflow, appended as a plain\
+          \ sentence in `evidence`, rather\n# than a raw regex source.\n_ADDRESS_POSITIVE_RULES\
+          \ = [\n    \n    (r\"#\\s*\\d{1,3}\\s*-\\s*\\d{1,5}\", 0.6, \"unit number\
+          \ format (e.g. #12-345)\"),\n    (r\"\\bblk\\.?\\s*\\d+\\b\", 0.4, \"HDB\
+          \ block number\"),\n    (r\"\\bblock\\s*\\d+\\b\", 0.4, \"HDB block number\"\
+          ),\n    (r\"\\bsingapore\\s*\\d{6}\\b\", 0.5, \"Singapore postal code\"\
+          ),\n    (r\"\\bresidential\\s*address\\b\", 0.7, \"explicit 'residential\
+          \ address' label\"),\n    (r\"\\bhome\\s*address\\b\", 0.6, \"explicit 'home\
+          \ address' label\"),\n    (\n        r\"\\b\\d{1,4}\\s+\\w+\\s+\"\n    \
+          \    r\"(road|street|avenue|ave|drive|lane|close|crescent|walk|way|terrace|grove)\\\
+          b\",\n        0.3,\n        \"street address format\",\n    ),\n]\n\n# Disqualifying\
+          \ signals — an address block near these is a business/office\n# address,\
+          \ not the person's residence, even if it otherwise looks addressy.\n# Weighted\
+          \ high enough to override the generic unit-number/postal-code\n# matches\
+          \ on their own (those alone are only 0.6+0.5=1.1, capped to 1.0) —\n# a\
+          \ registered-office disclaimer should decisively cancel that out, not\n\
+          # just dent it, since a corporate statement's office address will always\n\
+          # incidentally match the generic SG-address-format patterns.\n_ADDRESS_NEGATIVE_RULES\
+          \ = [\n    (r\"registered\\s*office\", 1.0, \"'registered office' wording\"\
+          ),\n    (r\"\\bbusiness\\s*address\\b\", 0.9, \"'business address' wording\"\
+          ),\n    (r\"\\bcompany'?s?\\s*(registered\\s*)?address\\b\", 0.9, \"company\
+          \ address wording\"),\n    (r\"\\bcorporate\\s*address\\b\", 0.9, \"'corporate\
+          \ address' wording\"),\n    (r\"\\boffice\\s*address\\b\", 0.9, \"'office\
+          \ address' wording\"),\n]\n\n\ndef _compile(rules):\n    return {\n    \
+          \    doc_type: [(re.compile(pattern, re.IGNORECASE), weight) for pattern,\
+          \ weight in patterns]\n        for doc_type, patterns in rules.items()\n\
+          \    }\n\n\ndef _compile_flat(rules):\n    return [(re.compile(pattern,\
+          \ re.IGNORECASE), weight, label) for pattern, weight, label in rules]\n\n\
+          \n_COMPILED_FILENAME_RULES = _compile(_FILENAME_RULES)\n_COMPILED_TEXT_RULES\
+          \ = _compile(_TEXT_RULES)\n_COMPILED_ADDRESS_POSITIVE = _compile_flat(_ADDRESS_POSITIVE_RULES)\n\
+          _COMPILED_ADDRESS_NEGATIVE = _compile_flat(_ADDRESS_NEGATIVE_RULES)\n\n\n\
+          def _residential_address_evidence(text):\n    \"\"\"\n    Returns 0-1 plain-language\
+          \ sentences describing whether `text` appears\n    to show a residential\
+          \ address — returned in the `notes`\n    output (document-level, independent\
+          \ of document_type).  The agent\n    reads `notes` alongside top_candidates.\n\
+          \    \"\"\"\n    positive_hits = [(w, label) for regex, w, label in _COMPILED_ADDRESS_POSITIVE\
+          \ if regex.search(text)]\n    negative_hits = [(w, label) for regex, w,\
+          \ label in _COMPILED_ADDRESS_NEGATIVE if regex.search(text)]\n\n    positive_score\
+          \ = min(1.0, sum(w for w, _ in positive_hits))\n    negative_score = min(1.0,\
+          \ sum(w for w, _ in negative_hits))\n    net_score = max(0.0, positive_score\
+          \ - negative_score)\n\n    if not positive_hits and not negative_hits:\n\
+          \        return []\n\n    # Deliberately conservative: some positive signal\
+          \ AND net score clears\n    # a bar, so a stray \"Road\" match alone doesn't\
+          \ count, and a\n    # registered-office disclaimer can cancel out a real-looking\
+          \ match.\n    has_residential_address = positive_score > 0 and net_score\
+          \ >= 0.4\n    matched_labels = \", \".join(label for _, label in positive_hits)\
+          \ or \"none\"\n\n    if has_residential_address:\n        return [f\"Proof\
+          \ of address check: appears to show a residential address ({matched_labels})\"\
+          ]\n    if negative_hits:\n        return [\"Proof of address check: address\
+          \ present but appears to be a business/office address, not residential\"\
+          ]\n    return [\"Proof of address check: no residential address detected\"\
+          ]\n\n\ndef _normalise_filename(filename):\n    stem = filename.rsplit(\"\
+          .\", 1)[0]\n    stem = re.sub(r\"(?<=[a-z0-9])(?=[A-Z])\", \" \", stem)\n\
+          \    return stem.replace(\"_\", \" \").replace(\"-\", \" \")\n\n\nTOP_K\
+          \ = 3\n\n\ndef _score_all(text, compiled_rules):\n    \"\"\"{doc_type: (score,\
+          \ [matched wording, ...])} for every type with >=1 hit.\"\"\"\n    scores\
+          \ = {}\n    for doc_type, patterns in compiled_rules.items():\n        hits\
+          \ = []\n        for regex, weight in patterns:\n            m = regex.search(text)\n\
+          \            if m:\n                hits.append((\" \".join(m.group(0).split()).lower(),\
+          \ weight))\n        if hits:\n            score = min(1.0, sum(weight for\
+          \ _, weight in hits))\n            scores[doc_type] = (score, list(dict.fromkeys(w\
+          \ for w, _ in hits)))\n    return scores\n\n\ndef _combine(f_score, t_score):\n\
+          \    if f_score and t_score:\n        return min(1.0, max(f_score, t_score)\
+          \ + min(f_score, t_score) * TEXT_AGREEMENT_BOOST)\n    return f_score or\
+          \ t_score\n\n\ndef _reasoning(f_score, t_score, strength, has_text):\n \
+          \   if f_score and t_score:\n        return (f\"Filename and text rules\
+          \ both point to this type \"\n                f\"(filename {f_score:.2f},\
+          \ text {t_score:.2f}); combined strength {strength:.2f}.\")\n    if f_score:\n\
+          \        tail = \"no text rules fired for it\" if has_text else \"no extracted\
+          \ text was supplied\"\n        return f\"Filename rules only (strength {f_score:.2f});\
+          \ {tail}.\"\n    return f\"Text rules only (strength {t_score:.2f}); filename\
+          \ gave no signal for this type.\"\n\n\ndef _normalise(candidates):\n   \
+          \ \"\"\"Adds rank + confidence (relative share, sums to exactly 1.0).\"\"\
+          \"\n    if not candidates:\n        return candidates\n    total = sum(c[\"\
+          match_strength\"] for c in candidates)\n    if total > 0:\n        shares\
+          \ = [c[\"match_strength\"] / total for c in candidates]\n    else:\n   \
+          \     shares = [1.0 / len(candidates)] * len(candidates)\n    rounded =\
+          \ [round(s, 4) for s in shares]\n    rounded[0] = round(rounded[0] + (1.0\
+          \ - sum(rounded)), 4)  # absorb rounding drift\n    out = []\n    for i,\
+          \ (c, conf) in enumerate(zip(candidates, rounded)):\n        out.append({\n\
+          \            \"rank\": i + 1,\n            \"document_type\": c[\"document_type\"\
+          ],\n            \"confidence\": conf,\n            \"match_strength\": round(c[\"\
+          match_strength\"], 4),\n            \"reasoning\": c[\"reasoning\"],\n \
+          \           \"evidence\": c[\"evidence\"],\n        })\n    return out\n\
+          \n\ndef main(filename: str, extracted_text: str = \"\", confidence_threshold:\
+          \ float = 0.6) -> dict:\n    threshold = float(confidence_threshold)\n \
+          \   text = (extracted_text or \"\")[:MAX_TEXT_CHARS]\n\n    f_scores = _score_all(_normalise_filename(filename),\
+          \ _COMPILED_FILENAME_RULES)\n    t_scores = _score_all(text, _COMPILED_TEXT_RULES)\
+          \ if text else {}\n\n    candidates = []\n    for doc_type in set(f_scores)\
+          \ | set(t_scores):\n        f_score, f_hits = f_scores.get(doc_type, (0.0,\
+          \ []))\n        t_score, t_hits = t_scores.get(doc_type, (0.0, []))\n  \
+          \      strength = _combine(f_score, t_score)\n        candidates.append({\n\
+          \            \"document_type\": doc_type,\n            \"match_strength\"\
+          : strength,\n            \"reasoning\": _reasoning(f_score, t_score, strength,\
+          \ bool(text)),\n            \"evidence\": [f'filename: \"{h}\"' for h in\
+          \ f_hits] + [f'text: \"{h}\"' for h in t_hits],\n        })\n\n    # prefer\
+          \ more distinct hits\n    candidates.sort(key=lambda c: (-c[\"match_strength\"\
+          ], -len(c[\"evidence\"]), c[\"document_type\"]))\n    top = _normalise(candidates[:TOP_K])\n\
+          \n    notes = []\n    if not top:\n        notes.append(\"No filename or\
+          \ text rule matched any document type.\")\n    if text:\n        notes +=\
+          \ _residential_address_evidence(text)\n\n\n    return {\n        \"top_candidates\"\
+          : top,\n        \"needs_manual_review\": (not top) or top[0][\"match_strength\"\
+          ] < threshold,\n        \"notes\": notes,\n    }\n"
+        code_language: python3
+        outputs:
+          needs_manual_review:
+            children: null
+            type: boolean
+          notes:
+            children: null
+            type: array[string]
+          top_candidates:
+            children: null
+            type: array[object]
+        selected: true
+        title: Rule Classify (top 3)
+        type: code
+        variables:
+        - value_selector:
+          - '1788025388339'
+          - filename
+          value_type: string
+          variable: filename
+        - value_selector:
+          - '1788025388339'
+          - extracted_text
+          value_type: string
+          variable: extracted_text
+        - value_selector:
+          - '1788025388339'
+          - confidence_threshold
+          value_type: number
+          variable: confidence_threshold
+      height: 52
+      id: '1788025450709'
+      position:
+        x: 380.015463231681
+        y: 330.54491070954737
+      positionAbsolute:
+        x: 380.015463231681
+        y: 330.54491070954737
+      selected: true
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        outputs:
+        - value_selector:
+          - '1788025450709'
+          - top_candidates
+          value_type: array[object]
+          variable: top_candidates
+        - value_selector:
+          - '1788025450709'
+          - needs_manual_review
+          value_type: boolean
+          variable: needs_manual_review
+        - value_selector:
+          - '1788025450709'
+          - notes
+          value_type: array[string]
+          variable: notes
+        selected: false
+        title: Output
+        type: end
+      height: 140
+      id: '1788025491604'
+      position:
+        x: 685.0121668078511
+        y: 286.54596099101263
+      positionAbsolute:
+        x: 685.0121668078511
+        y: 286.54596099101263
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    viewport:
+      x: -356.56984638021163
+      y: 59.65618615970203
+      zoom: 0.9503645517747787
+  rag_pipeline_variables: []

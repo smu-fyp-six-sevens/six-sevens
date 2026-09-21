@@ -1,0 +1,1223 @@
+app:
+  description: ''
+  icon: 🤖
+  icon_background: '#FFEAD5'
+  icon_type: emoji
+  mode: advanced-chat
+  name: Classifier (Chatflow)
+  use_icon_as_answer_icon: false
+dependencies: []
+kind: app
+version: 0.7.0
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      allowed_file_extensions:
+      - .JPG
+      - .JPEG
+      - .PNG
+      - .GIF
+      - .WEBP
+      - .SVG
+      allowed_file_types:
+      - image
+      - document
+      allowed_file_upload_methods:
+      - remote_url
+      - local_file
+      enabled: true
+      fileUploadConfig:
+        attachment_image_file_size_limit: 2
+        audio_file_size_limit: 50
+        batch_count_limit: 5
+        file_size_limit: 15
+        file_upload_limit: 50
+        image_file_batch_limit: 10
+        image_file_size_limit: 10
+        knowledge_file_size_limit: 50
+        single_chunk_attachment_limit: 10
+        skill_file_size_limit: 50
+        video_file_size_limit: 100
+        workflow_file_upload_limit: 10
+      image:
+        enabled: false
+        number_limits: 3
+        transfer_methods:
+        - local_file
+        - remote_url
+      number_limits: 3
+    opening_statement: ''
+    retriever_resource:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: code
+        targetType: answer
+      id: 1788026130551-source-1787587136023-target
+      selected: false
+      source: '1788026130551'
+      sourceHandle: source
+      target: '1787587136023'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: agent
+        targetType: code
+      id: 1788506383349-source-1788026130551-target
+      selected: false
+      source: '1788506383349'
+      sourceHandle: source
+      target: '1788026130551'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: start
+        targetType: code
+      id: 1787587117474-source-1790000000001-target
+      source: '1787587117474'
+      sourceHandle: source
+      target: '1790000000001'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: code
+        targetType: if-else
+      id: 1790000000001-source-1789545138242-target
+      source: '1790000000001'
+      sourceHandle: source
+      target: '1789545138242'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: code
+        targetType: variable-aggregator
+      id: 1789544765544-source-1789545182266-target
+      source: '1789544765544'
+      sourceHandle: source
+      target: '1789545182266'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: variable-aggregator
+        targetType: agent
+      id: 1789545182266-source-1788506383349-target
+      source: '1789545182266'
+      sourceHandle: source
+      target: '1788506383349'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: if-else
+        targetType: code
+      id: 1789545138242-false-1789545205304-target
+      source: '1789545138242'
+      sourceHandle: 'false'
+      target: '1789545205304'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: code
+        targetType: variable-aggregator
+      id: 1789545205304-source-1789545182266-target
+      source: '1789545205304'
+      sourceHandle: source
+      target: '1789545182266'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: if-else
+        targetType: tool
+      id: 1789545138242-true-1789800794333-target
+      source: '1789545138242'
+      sourceHandle: 'true'
+      target: '1789800794333'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: tool
+        targetType: tool
+      id: 1789800794333-source-1789800805480-target
+      source: '1789800794333'
+      sourceHandle: source
+      target: '1789800805480'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: tool
+        targetType: code
+      id: 1789800805480-source-1789544765544-target
+      source: '1789800805480'
+      sourceHandle: source
+      target: '1789544765544'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    nodes:
+    - data:
+        selected: false
+        title: Start
+        type: start
+        variables:
+        - default: ''
+          hint: ''
+          label: document_id
+          options: []
+          placeholder: ''
+          required: true
+          type: text-input
+          variable: document_id
+        - default: ''
+          hint: ''
+          label: extracted_text
+          options: []
+          placeholder: ''
+          required: false
+          type: paragraph
+          variable: extracted_text
+        - default: ''
+          hint: ''
+          label: escalation_reason
+          options: []
+          placeholder: ''
+          required: false
+          type: text-input
+          variable: escalation_reason
+      height: 161
+      id: '1787587117474'
+      position:
+        x: -192.9813236395017
+        y: -26.882823896589535
+      positionAbsolute:
+        x: -192.9813236395017
+        y: -26.882823896589535
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        answer: '{{#1788026130551.output#}}'
+        selected: false
+        title: Answer
+        type: answer
+        variables: []
+      height: 103
+      id: '1787587136023'
+      position:
+        x: 3634
+        y: 63.64098133558353
+      positionAbsolute:
+        x: 3634
+        y: 63.64098133558353
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        code: "import json\n\n# Document types the Classifier may emit. passport/nric\
+          \ are real types;\n# \"id_document\" is deliberately NOT here — it's only\
+          \ a checklist slot (see\n# REQUIREMENT_FOR_TYPE below), never a document's\
+          \ own type.\nVALID_TYPES = {\n    \"bank_statement\", \"certificate_of_incorporation\"\
+          , \"payslip\",\n    \"passport\", \"nric\", \"fatca_crs_declaration\", \"\
+          certificate_of_incumbency\",\n    \"company_constitution\", \"proof_of_address\"\
+          , \"source_of_wealth\",\n    \"credit_report\", \"list_of_loans\", \"notice_of_assessment\"\
+          , \"unrecognised\"\n}\n\n# The prompt's \"no match\" answer is \"other\"\
+          ; the backend's sentinel for the\n# same thing is \"unrecognised\".\nTYPE_ALIASES\
+          \ = {\"other\": \"unrecognised\"}\n\n# passport and nric both fill the single\
+          \ id_document checklist slot; every\n# other type is its own requirement.\n\
+          REQUIREMENT_FOR_TYPE = {\"passport\": \"id_document\", \"nric\": \"id_document\"\
+          }\n\n# Fulfilled requirements are checklist items, not document_type guesses\
+          \ —\n# \"unrecognised\" is a sentinel for \"couldn't classify\" and is never\
+          \ itself\n# a real requirement. passport/nric aren't requirements either\
+          \ (they map to\n# id_document above), while id_document is a requirement\
+          \ but not a type.\nVALID_REQUIREMENTS = (VALID_TYPES - {\"unrecognised\"\
+          , \"passport\", \"nric\"}) | {\"id_document\"}\n\ndef main(agent_output:\
+          \ str, convo_id: str) -> dict:\n    doc_type, confidence, evidence, reasoning\
+          \ = \"\", 0.0, [], \"\"\n    fulfilled_requirements = []\n    flagged =\
+          \ True\n\n    try:\n        raw = agent_output or \"\"\n        parsed =\
+          \ json.loads(raw[raw.find(\"{\"): raw.rfind(\"}\") + 1])\n        candidate\
+          \ = (parsed.get(\"document_type\") or \"\").strip().lower()\n        candidate\
+          \ = TYPE_ALIASES.get(candidate, candidate)\n        doc_type = candidate\
+          \ if candidate in VALID_TYPES else \"\"\n        confidence = max(0.0, min(1.0,\
+          \ float(parsed.get(\"confidence\", 0.0))))\n        evidence = [str(item)\
+          \ for item in parsed.get(\"evidence\", [])]\n        reasoning = str(parsed.get(\"\
+          reasoning\", \"\"))\n        flagged = bool(parsed.get(\"needs_manual_review\"\
+          , True))\n\n        raw_requirements = parsed.get(\"fulfilled_requirements\"\
+          , [])\n        if isinstance(raw_requirements, list):\n            fulfilled_requirements\
+          \ = [\n                str(item) for item in raw_requirements if str(item)\
+          \ in VALID_REQUIREMENTS\n            ]\n\n        # Self-fulfilment fallback\
+          \ — mirrors the backend's own fallback for\n        # when this section\
+          \ is missing entirely: a document always at least\n        # satisfies its\
+          \ own primary type (passport/nric via id_document),\n        # even if the\
+          \ agent didn't say so explicitly.\n        own_requirement = REQUIREMENT_FOR_TYPE.get(doc_type,\
+          \ doc_type)\n        if not fulfilled_requirements and own_requirement in\
+          \ VALID_REQUIREMENTS:\n            fulfilled_requirements = [own_requirement]\n\
+          \n        if candidate and not doc_type:\n            reasoning = f\"Agent\
+          \ returned unknown type '{candidate}'. {reasoning}\"\n            flagged\
+          \ = True\n    except (ValueError, TypeError, AttributeError):\n        reasoning\
+          \ = \"Could not parse agent output as JSON.\"\n\n    evidence_markdown =\
+          \ \"\\n\".join(f\"- {item}\" for item in evidence) if evidence else \"-\
+          \ (none)\"\n    fulfilled_requirements_markdown = (\n        \"\\n\".join(f\"\
+          - {item}\" for item in fulfilled_requirements)\n        if fulfilled_requirements\n\
+          \        else \"- (none)\"\n    )\n\n    output =  {\n        \"document_type\"\
+          : doc_type,\n        \"confidence\": round(confidence, 4),\n        \"evidence\"\
+          : evidence,\n        \"evidence_markdown\": evidence_markdown,\n       \
+          \ \"fulfilled_requirements\": fulfilled_requirements,\n        \"fulfilled_requirements_md\"\
+          : fulfilled_requirements_markdown,\n        \"needs_manual_review\": flagged\
+          \ or not doc_type,\n        \"reasoning\": reasoning,\n        \"convo_id\"\
+          : convo_id\n    }\n    return {\"output\": json.dumps(output)}\n"
+        code_language: python3
+        outputs:
+          output:
+            children: null
+            type: string
+        selected: false
+        title: Validate Output
+        type: code
+        variables:
+        - value_selector:
+          - '1788506383349'
+          - text
+          value_type: string
+          variable: agent_output
+        - value_selector:
+          - sys
+          - conversation_id
+          value_type: string
+          variable: convo_id
+      height: 52
+      id: '1788026130551'
+      position:
+        x: 3294.2628501078166
+        y: 158.23716477673344
+      positionAbsolute:
+        x: 3294.2628501078166
+        y: 158.23716477673344
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        code: "import json\nimport re\nimport unicodedata\n \n \n\n_NONCHARACTERS\
+          \ = re.compile(\n    \"[\\uFDD0-\\uFDEF\\uFFFE\\uFFFF]\"\n)\n \n# Other\
+          \ stray control characters worth stripping (keep \\n, \\t)\n_CONTROL_CHARS\
+          \ = re.compile(r\"[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]\")\n \n \ndef\
+          \ sanitize_text(raw: str, *, collapse_to_single_line: bool = True) -> str:\n\
+          \    \"\"\"\n    raw: the extracted text, however mangled.\n    collapse_to_single_line:\
+          \ if True, all line breaks become single spaces\n        instead of \\n\
+          \ (use this if you genuinely want one continuous line;\n        default\
+          \ False just normalizes line endings, which is usually more\n        useful\
+          \ for field-by-field extraction downstream).\n    \"\"\"\n    text = raw\n\
+          \n    if \"\\\\r\\\\n\" in text or \"\\\\n\" in text:\n        text = text.replace(\"\
+          \\\\r\\\\n\", \"\\n\").replace(\"\\\\r\", \"\\n\").replace(\"\\\\n\", \"\
+          \\n\")\n\n    text = text.replace(\"\\r\\n\", \"\\n\").replace(\"\\r\",\
+          \ \"\\n\")\n\n    text = _NONCHARACTERS.sub(\"\", text)\n    text = _CONTROL_CHARS.sub(\"\
+          \", text)\n\n    text = unicodedata.normalize(\"NFKC\", text)\n\n    # ---\
+          \ Neutralize characters that are structurally significant to JSON\n    #\
+          \ and to this pipeline's own template interpolation ({{#node.var#}}).\n\
+          \    # This pipeline builds JSON-shaped payloads via string interpolation\n\
+          \    # rather than proper JSON-safe escaping in several places, so a\n \
+          \   # literal one of these characters occurring naturally in the SOURCE\n\
+          \    # document (a quoted phrase, a stray backslash, a bracketed note) can\n\
+          \    # corrupt whatever JSON structure it lands inside further downstream\
+          \ —\n    # this is what broke C028_CreditReport.pdf ('...refer to the \"\
+          Credit\n    # Report Explanation\" section...'). Replaced rather than escaped:\
+          \ an\n    # escape only survives one more interpolation layer before it\
+          \ risks\n    # being double-escaped or stripped by whichever layer handles\
+          \ it next.\n    text = text.replace('\"', \"'\")\n    text = text.replace(\"\
+          \\\\\", \"/\")\n    text = text.replace(\"{\", \"(\").replace(\"}\", \"\
+          )\")\n\n    if collapse_to_single_line:\n        text = re.sub(r\"\\s*\\\
+          n\\s*\", \" \", text)\n        text = re.sub(r\" {2,}\", \" \", text)\n\
+          \    else:\n        text = re.sub(r\"[ \\t]+\\n\", \"\\n\", text)\n    \
+          \    text = re.sub(r\"\\n{3,}\", \"\\n\\n\", text)\n\n    return text.strip()\n\
+          \ndef main(files, extracted_text) -> dict:\n    # filename: always available,\
+          \ images included\n    name = \"\"\n    if files:\n        first = files[0]\n\
+          \        if isinstance(first, dict):\n            name = first.get(\"filename\"\
+          ) or first.get(\"name\") or \"\"\n        else:\n            name = str(first)\n\
+          \n    # extracted_text arrives from the Variable Aggregator, so it is\n\
+          \    # array[string] on the document branch and [\"\"] on the image branch.\n\
+          \    # Tolerate None / str / empty list rather than indexing blindly.\n\
+          \    if extracted_text is None:\n        raw = \"\"\n    elif isinstance(extracted_text,\
+          \ list):\n        raw = \"\\n\".join(str(t) for t in extracted_text if t)\n\
+          \    else:\n        raw = str(extracted_text)\n\n    text = sanitize_text(raw)\
+          \ if raw.strip() else \"\"\n\n    # Signal for the agent: below MIN_USABLE_CHARS\
+          \ the extraction is\n    # treated as failed. Catches both the image branch\
+          \ (empty by\n    # construction) and scanned PDFs where the extractor returned\
+          \ a\n    # handful of junk characters.\n    MIN_USABLE_CHARS = 50\n\n  \
+          \  return {\n        \"filename\": str(name),\n        \"processed_extracted_text\"\
+          : text,\n        \"has_text\": \"yes\" if len(text) >= MIN_USABLE_CHARS\
+          \ else \"no\",\n        \"text_chars\": len(text),\n    }\n"
+        code_language: python3
+        outputs:
+          filename:
+            children: null
+            type: string
+          has_text:
+            children: null
+            type: string
+          processed_extracted_text:
+            children: null
+            type: string
+          text_chars:
+            children: null
+            type: number
+        selected: false
+        title: Extract Filename
+        type: code
+        variables:
+        - value_selector:
+          - sys
+          - files
+          value_type: array[file]
+          variable: files
+        - value_selector:
+          - '1787587117474'
+          - extracted_text
+          value_type: string
+          variable: extracted_text
+      height: 52
+      id: '1790000000001'
+      position:
+        x: 81.57608490372036
+        y: -5.882823896589535
+      positionAbsolute:
+        x: 81.57608490372036
+        y: -5.882823896589535
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        agent_parameters:
+          files:
+            type: variable
+            value:
+            - sys
+            - files
+          instruction:
+            type: constant
+            value: '{{#1789545182266.output#}}'
+          model:
+            type: constant
+            value:
+              completion_params: {}
+              mode: chat
+              model: claude-sonnet-4-6
+              model_type: llm
+              provider: langgenius/anthropic/anthropic
+              type: model-selector
+          query:
+            type: constant
+            value: '{{#sys.query#}}'
+          tools:
+            type: constant
+            value:
+            - enabled: true
+              extra:
+                description: 'Regex rule classifier (filename + text). Returns top_candidates:
+                  up to 3 ranked document-type options, each with confidence (relative
+                  share, sums to 1 across candidates), match_strength (absolute 0-1
+                  fit), reasoning and evidence. Treat as options to weigh, not a final
+                  answer.'
+              parameters: {}
+              plugin_id: null
+              provider_name: 1fcf34c6-522a-405b-9305-2a0082231b3d
+              provider_show_name: ' rule_classify_v3'
+              settings:
+                confidence_threshold:
+                  value:
+                    type: constant
+                    value: 0.8
+                extracted_text:
+                  value:
+                    type: mixed
+                    value: '{{#1790000000001.processed_extracted_text#}}'
+                filename:
+                  value:
+                    type: mixed
+                    value: '{{#1790000000001.filename#}}'
+              tool_description: 'Regex rule classifier (filename + text). Returns
+                top_candidates: up to 3 ranked document-type options, each with confidence
+                (relative share, sums to 1 across candidates), match_strength (absolute
+                0-1 fit), reasoning and evidence. Treat as options to weigh, not a
+                final answer.'
+              tool_label: ' rule_classify_v3'
+              tool_name: classify_rule_based
+              type: workflow
+            - enabled: true
+              extra:
+                description: 'LLM (DeepSeek) semantic classifier over extracted text.
+                  Returns top_candidates: up to 3 ranked document-type options, each
+                  with confidence (relative share, sums to 1 across candidates), match_strength
+                  (absolute 0-1 fit), reasoning and evidence. Treat as options to
+                  weigh, not a final answer.'
+              parameters: {}
+              plugin_id: null
+              provider_name: 55caa202-5f88-469d-b226-62c82f005f92
+              provider_show_name: 'LLM layer classification v2 '
+              settings:
+                extracted_text:
+                  value:
+                    type: mixed
+                    value: '{{#1790000000001.processed_extracted_text#}}'
+              tool_description: 'LLM (DeepSeek) semantic classifier over extracted
+                text. Returns top_candidates: up to 3 ranked document-type options,
+                each with confidence (relative share, sums to 1 across candidates),
+                match_strength (absolute 0-1 fit), reasoning and evidence. Treat as
+                options to weigh, not a final answer.'
+              tool_label: 'LLM layer classification v2 '
+              tool_name: class_llm
+              type: workflow
+            - enabled: true
+              extra:
+                description: 'Vision classifier over the rendered document, resolved
+                  from document_id via Supabase. Returns top_candidates: up to 3 ranked
+                  document-type options, each with confidence (relative share, sums
+                  to 1 across candidates), match_strength (absolute 0-1 fit), reasoning
+                  and evidence. Treat as options to weigh, not a final answer.'
+              parameters: {}
+              plugin_id: null
+              provider_name: a6ecbad2-51a1-4deb-b5c4-4a357874dcba
+              provider_show_name: vision_llm
+              settings:
+                document_id:
+                  value:
+                    type: mixed
+                    value: '{{#1787587117474.document_id#}}'
+                prompt_type:
+                  value:
+                    type: mixed
+                    value: classify
+              tool_description: 'Vision (Claude Sonnet) classifier over the rendered
+                document, resolved from document_id via Supabase. Returns top_candidates:
+                up to 3 ranked document-type options, each with confidence (relative
+                share, sums to 1 across candidates), match_strength (absolute 0-1
+                fit), reasoning and evidence. Treat as options to weigh, not a final
+                answer.'
+              tool_label: vision_llm
+              tool_name: vision_llm
+              type: workflow
+        agent_strategy_label: FunctionCalling
+        agent_strategy_name: function_calling
+        agent_strategy_provider_name: langgenius/agent/agent
+        meta:
+          minimum_dify_version: 1.7.0
+          version: 0.0.2
+        output_schema: {}
+        plugin_unique_identifier: langgenius/agent:0.0.47@b14b5a5259094510a272e5b7facd09aa63352511c13fabcde36a4cac57d1da94
+        selected: false
+        title: Agent 3
+        tool_node_version: '2'
+        type: agent
+      height: 188
+      id: '1788506383349'
+      position:
+        x: 2951.090286211185
+        y: 55.66666666666666
+      positionAbsolute:
+        x: 2951.090286211185
+        y: 55.66666666666666
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        code: "import json\n\n# First-round prompt only. The escalation (second-round)\
+          \ prompt is built in a\n# separate code node.\n\n_SHARED_BODY = \"\"\"##\
+          \ Inputs\nYou are given, already computed — do not call these, they already\
+          \ ran:\n- rule_result, llm_result: each has top_candidates (up to 3, ranked)\
+          \ + notes.\n  Provided below, after this instruction block.\n- text_available:\
+          \ whether a text layer existed for rule_result/llm_result to work from.\n\
+          - address_check: visible | not_visible | unknown — already computed from\
+          \ rule_result's address note (see \"Proof of address\").\n\nconfidence is\
+          \ RELATIVE (sums to 1 per source, never copy into output). match_strength\
+          \ is ABSOLUTE (0-1) — use this for your own confidence. A source's \"pick\"\
+          \ = its rank-1. \"No match\" = empty candidates or rank-1 match_strength\
+          \ < 0.3. \"Close\" = rank-1/rank-2 confidence differ by < 0.15. If a source's\
+          \ notes say it failed/couldn't parse, it is ABSENT — never treat that as\
+          \ a no-match.\n\n## Your job\nCollate rule_result + llm_result. Your only\
+          \ tool to call is vision_llm (reads the document image) — expensive, call\
+          \ it only if:\n  a. rule_result and llm_result disagree on rank-1.\n  b.\
+          \ Either is no match / absent / close.\n  c. Agreed type is nric or bank_statement\
+          \ and address_check is \"unknown\".\n  d. Agreed match_strength < 0.8.\n\
+          Otherwise stop — do not call vision_llm to double-check an already-confident\
+          \ agreement. Never call vision_llm twice.\n\nclassify_rule_based and class_llm\
+          \ are also attached to you, but they are the tools that already produced\
+          \ rule_result and llm_result for this document. Do not call them — use the\
+          \ results provided below.\n\n## Categories\nbank_statement, certificate_of_incorporation,\
+          \ payslip, passport, nric, fatca_crs_declaration, certificate_of_incumbency,\
+          \ company_constitution, proof_of_address, source_of_wealth, credit_report,\
+          \ list_of_loans, notice_of_assessment, other\n\n## bank_statement vs source_of_wealth\n\
+          - bank_statement: a statement for a bank ACCOUNT (current/savings/deposit)\
+          \ — account-level transaction history with balances, credits and debits.\n\
+          - source_of_wealth: margin, securities, brokerage or investment statements\
+          \ (holdings, positions, portfolio valuation), or any financial document\
+          \ evidencing net worth or its history.\n- The issuer does not decide it:\
+          \ a bank-issued securities/investment/wealth statement is source_of_wealth,\
+          \ not bank_statement.\n- Mixed content → classify by the primary content:\
+          \ deposit-account transactions → bank_statement; holdings/positions/net-worth\
+          \ valuation → source_of_wealth.\n- If rule_result and llm_result split between\
+          \ these two, apply this rule when judging which is strongest-supported,\
+          \ and name the distinguishing feature in evidence.\n\n## passport vs nric\n\
+          Both are identity documents; never output \"id_document\".\n- nric: Singapore\
+          \ Identity Card. Front: \"REPUBLIC OF SINGAPORE\", \"IDENTITY CARD NO.\"\
+          , portrait, Race, Sex, Country/Place of birth. Back: residential address\
+          \ block, fingerprint area, Date of issue, usually no name or photo. Front\
+          \ and back are often uploaded as separate files — classify each as nric,\
+          \ even when one side alone looks sparse.\n- passport: biodata page with\
+          \ \"PASSPORT\" heading, Type / Country Code / Passport No row, Nationality,\
+          \ Date of expiry, Authority, and a two-line machine-readable zone (capitals,\
+          \ digits, \"<\" filler). No residential address. It may print a \"National\
+          \ ID No\" in NRIC format — that does not make it an nric.\n- Tie-breakers:\
+          \ \"IDENTITY CARD NO.\" or an address block on a card layout -> nric. MRZ,\
+          \ \"Passport No\" or Type/Country Code -> passport.\n- Identity document\
+          \ but genuinely can't tell which: pick the likelier one, cap confidence\
+          \ at 0.6, set needs_manual_review, and name the runner-up in evidence.\n\
+          \n## Deciding the type + confidence\nAgreement = rank-1 picks matching,\
+          \ among sources with a usable result (rule_result, llm_result, and vision_llm\
+          \ if you called it). A rank-2/3 match is partial support, not agreement.\n\
+          \n| Situation | document_type | confidence |\n|---|---|---|\n| rule+llm\
+          \ usable, agree, vision not needed | that type | avg match_strength, cap\
+          \ 0.95 |\n| rule+llm usable, agree, vision called anyway and agrees | that\
+          \ type | avg of all agreeing, cap 0.95 |\n| rule+llm disagree, vision called,\
+          \ vision matches one of them | that type | avg of the 2 agreeing, cap 0.85\
+          \ |\n| rule+llm disagree, vision called, all 3 differ | strongest-supported\
+          \ (rank-1 > runner-up; higher match_strength wins) | its own match_strength,\
+          \ cap 0.6 — set needs_manual_review |\n| rule+llm both no-match, vision\
+          \ called and matches | vision's type | its own match_strength, cap 0.8 |\n\
+          | rule+llm both no-match, vision also no-match | \"other\" | low — never\
+          \ high-confidence an absence |\n| rule+llm usable, agree, but address_check\
+          \ \"unknown\" triggers vision (rule c) and vision disagrees | apply the\
+          \ \"disagree\" row above | — |\n\nIf the chosen type is \"close\" in the\
+          \ sources that picked it: keep it, but set needs_manual_review true and\
+          \ name the runner-up. If only vision produced a usable result, say so explicitly\
+          \ in reasoning and cap confidence at 0.8 (uncorroborated).\n\nWhen needs_manual_review\
+          \ is true, state why: (a) not one of the listed categories, (b) ambiguous\
+          \ between categories, or (c) vision-only and unresolved.\n\n## Proof of\
+          \ address\nDepends on THIS document actually showing a legible residential\
+          \ address — never inferred from type alone.\n- certificate_of_incumbency:\
+          \ if it is a Singapore company, take note that the ACRA BizProfile also\
+          \ covers this category.\n- nric: only satisfies it if a residential address\
+          \ is visibly populated (not missing/cropped/illegible).\n- bank_statement:\
+          \ only if the address is residential, not a registered office/business address.\n\
+          - source_of_wealth: never adds proof_of_address, even if an address is shown.\n\
+          - No confident confirmation → leave it out (under-claim, don't over-claim).\n\
+          - Conflicting sources → \"not visible\" AND set needs_manual_review, name\
+          \ the conflict.\n- Evidence sources: rule_result's address note; any source's\
+          \ evidence at any rank. A proof_of_address candidate alone isn't enough\
+          \ — needs actual address evidence.\n\naddress_check is given in the inputs\
+          \ below, already computed from rule_result's address note:\n- visible →\
+          \ the address is confirmed. Include proof_of_address (nric/bank_statement\
+          \ only). Do NOT call vision_llm just to re-confirm it.\n- not_visible →\
+          \ no residential address on this document (e.g. an NRIC front, or a business/office\
+          \ address). Do not include proof_of_address. Do NOT call vision_llm for\
+          \ this.\n- unknown → not settled by the text layer. Rule (c) applies: call\
+          \ vision_llm and let what it sees decide; only in this case may vision's\
+          \ finding replace address_check.\n\nFor every nric/bank_statement, add one\
+          \ evidence entry (counts toward the 4-entry max):\n`\"Address check: visible\
+          \ — <location>\"` or `\"Address check: not visible — <why>\"`\nTake it from\
+          \ address_check (or from vision's finding when address_check was \"unknown\"\
+          ).\n\nThis result is mechanical: \"visible\" → must include proof_of_address\
+          \ in fulfilled_requirements; \"not visible\" → must not. Re-check before\
+          \ finalizing — never contradict your own Address check line.\n\n## fulfilled_requirements\n\
+          Default: exactly one entry — the document_type itself, except passport and\
+          \ nric, which both use \"id_document\" (the case-checklist slot they fill).\
+          \ Address check is the only thing that ever adds a second entry (proof_of_address),\
+          \ and only for nric/bank_statement.\n\n## Evidence\nExplains why it's THIS\
+          \ TYPE, never document content/values.\n- Name what's PRESENT, never its\
+          \ VALUE (\"contains a TIN field\", not \"TIN 201812345A\").\n- Titles/headings\
+          \ may be quoted verbatim (type signal, not a field value).\n- No names,\
+          \ numbers, dates, amounts, addresses, identifiers.\n- Max 4 entries, one\
+          \ line each. Restate rule/llm evidence without values — never copy through\
+          \ verbatim.\n\n## Output\nJSON only, nothing else:\n{\"document_type\":\
+          \ \"...\", \"confidence\": 0.0, \"evidence\": [\"...\"], \"reasoning\":\
+          \ \"...\", \"needs_manual_review\": true, \"fulfilled_requirements\": [\"\
+          ...\"]}\"\"\"\n\n_INTRO = \"You classify documents for a KYC/corporate onboarding\
+          \ pipeline.\\n\\n\"\n\n# Only this template goes through .format().\n# CHANGED:\
+          \ added address_check.\n_INPUTS_BLOCK = \"\"\"\n\n## Classification inputs\
+          \ for this document\n\ntext_available: {text_available}\n\naddress_check:\
+          \ {address_check}\n\nrule_result:\n{rule_result}\n\nllm_result:\n{llm_result}\"\
+          \"\"\n\n# Keep in sync with MIN_USABLE_CHARS in the Extract Filename node.\n\
+          MIN_USABLE_CHARS = 50\n\n_ABSENT_RESULT = {\n    \"top_candidates\": [],\n\
+          \    \"notes\": \"tool output unparseable - treat as absent\",\n}\n\n# NEW:\
+          \ substrings of the notes emitted by rule_classify_v3's\n# _residential_address_evidence\
+          \ — keep in sync with that node.\n_ADDRESS_VISIBLE = \"appears to show a\
+          \ residential address\"\n_ADDRESS_NOT_RESIDENTIAL = \"not residential\"\n\
+          \n\ndef _parse_json_input(value) -> dict:\n    \"\"\"Dict or JSON string\
+          \ in; anything unusable becomes an 'absent' result.\"\"\"\n    if isinstance(value,\
+          \ dict):\n        return value\n    if not value or not isinstance(value,\
+          \ str):\n        return dict(_ABSENT_RESULT)\n\n    attempts = (\n     \
+          \   lambda: json.loads(value),\n        # Escaped inner JSON body ({\\\"\
+          ...\\\": ...}): decode as a JSON string\n        # literal first, then as\
+          \ JSON.\n        lambda: json.loads(json.loads(f'\"{value}\"')),\n    )\n\
+          \    for attempt in attempts:\n        try:\n            parsed = attempt()\n\
+          \        except (ValueError, TypeError):\n            continue\n       \
+          \ if isinstance(parsed, dict):\n            return parsed\n    return dict(_ABSENT_RESULT)\n\
+          \n\ndef _has_usable_text(extracted_text) -> bool:\n    if extracted_text\
+          \ is None:\n        return False\n    if isinstance(extracted_text, list):\n\
+          \        raw = \"\\n\".join(str(t) for t in extracted_text if t)\n    else:\n\
+          \        raw = str(extracted_text)\n    return len(raw.strip()) >= MIN_USABLE_CHARS\n\
+          \n\n# NEW\ndef _notes_text(rule: dict) -> str:\n    notes = rule.get(\"\
+          notes\") or []\n    if isinstance(notes, str):\n        notes = [notes]\n\
+          \    return \" \".join(str(n) for n in notes).lower()\n\n\n# NEW\ndef _is_nric_front(rule:\
+          \ dict) -> bool:\n    \"\"\"The NRIC front carries \"IDENTITY CARD NO.\"\
+          \ and never an address.\"\"\"\n    for candidate in rule.get(\"top_candidates\"\
+          ) or []:\n        if candidate.get(\"document_type\") == \"nric\":\n   \
+          \         return any(\n                \"identity card no\" in str(e).lower()\n\
+          \                for e in candidate.get(\"evidence\") or []\n          \
+          \  )\n    return False\n\ndef _address_check(rule: dict, text_available:\
+          \ bool) -> str:\n    \"\"\"\n    visible     — rule layer found a residential\
+          \ address in the text\n    not_visible — rule layer flagged it as a business/office\
+          \ address, or this\n                  is an NRIC front (no address expected)\n\
+          \    unknown     — text layer can't settle it (no text, or no signal either\
+          \ way)\n    \"\"\"\n    if not text_available:\n        return \"unknown\"\
+          \n    notes = _notes_text(rule)\n    if _ADDRESS_VISIBLE in notes:\n   \
+          \     return \"visible\"\n    if _ADDRESS_NOT_RESIDENTIAL in notes or _is_nric_front(rule):\n\
+          \        return \"not_visible\"\n    return \"unknown\"\n\ndef _build_inputs_block(rule_result,\
+          \ llm_result, text_available: bool) -> str:\n    rule = _parse_json_input(rule_result)\n\
+          \    llm = _parse_json_input(llm_result)\n    return _INPUTS_BLOCK.format(\n\
+          \        text_available=str(text_available).lower(),\n        address_check=_address_check(rule,\
+          \ text_available),\n        rule_result=json.dumps(rule, indent=2),\n  \
+          \      llm_result=json.dumps(llm, indent=2),\n    )\n\n\ndef main(rule_result=None,\
+          \ llm_result=None, extracted_text=None) -> dict:\n    inputs_block = _build_inputs_block(\n\
+          \        rule_result, llm_result, _has_usable_text(extracted_text)\n   \
+          \ )\n    return {\"prompt\": _INTRO + _SHARED_BODY + inputs_block}"
+        code_language: python3
+        outputs:
+          prompt:
+            children: null
+            type: string
+        selected: true
+        title: Code 3
+        type: code
+        variables:
+        - value_selector:
+          - '1789800794333'
+          - text
+          value_type: string
+          variable: rule_result
+        - value_selector:
+          - '1789800805480'
+          - text
+          value_type: string
+          variable: llm_result
+        - value_selector:
+          - '1790000000001'
+          - processed_extracted_text
+          value_type: string
+          variable: extracted_text
+      height: 52
+      id: '1789544765544'
+      position:
+        x: 2070.521473432299
+        y: -5.882823896589535
+      positionAbsolute:
+        x: 2070.521473432299
+        y: -5.882823896589535
+      selected: true
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        cases:
+        - case_id: 'true'
+          conditions:
+          - comparison_operator: empty
+            id: 55a30552-57ec-4205-96da-515f0ba19ba9
+            value: ''
+            varType: string
+            variable_selector:
+            - '1787587117474'
+            - escalation_reason
+          id: 'true'
+          logical_operator: and
+        selected: false
+        title: IF/ELSE
+        type: if-else
+      height: 140
+      id: '1789545138242'
+      position:
+        x: 468.00340901634786
+        y: -5.882823896589535
+      positionAbsolute:
+        x: 468.00340901634786
+        y: -5.882823896589535
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        output_type: string
+        selected: false
+        title: Variable Aggregator
+        type: variable-aggregator
+        variables:
+        - - '1789544765544'
+          - prompt
+        - - '1789545205304'
+          - prompt
+      height: 135
+      id: '1789545182266'
+      position:
+        x: 2470.4542428884383
+        y: 258.48788899717607
+      positionAbsolute:
+        x: 2470.4542428884383
+        y: 258.48788899717607
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        code: "import json\n\n# Second-round (escalation) prompt only. The first-round\
+          \ prompt is built in\n# the Code 3 node. On this branch the rule/LLM tools\
+          \ have NOT been run yet, so\n# the agent calls them itself.\n\n_SHARED_BODY\
+          \ = \"\"\"## Tools\n- classify_rule_based: regex over filename/text. Notes\
+          \ include an address check.\n- class_llm: LLM reading extracted text.\n\
+          - vision_llm: multimodal LLM reading the document image. Expensive — call\
+          \ only when cheap tools can't settle it.\n\nEach tool returns up to 3 ranked\
+          \ candidates + notes. confidence is RELATIVE (sums to 1 per tool, never\
+          \ copy into output). match_strength is ABSOLUTE (0-1, use this for your\
+          \ own confidence). A tool's \"pick\" = its rank-1. \"No match\" = empty\
+          \ candidates or rank-1 match_strength < 0.3. \"Close\" = rank-1/rank-2 confidence\
+          \ differ by < 0.15. A failed/unparseable tool is ABSENT — never count it\
+          \ as agreeing or disagreeing.\n\n## Tool-calling\n`text_available` is given\
+          \ below — follow it exactly, never guess.\n\n**yes:** Call classify_rule_based\
+          \ + class_llm first. Then call vision_llm only if: (a) they disagree on\
+          \ rank-1, (b) either gives no match/absent/close, (c) agreed type is nric/bank_statement\
+          \ and Address check isn't \"visible\", or (d) agreed match_strength < 0.8.\
+          \ Otherwise stop.\n\n**no:** Call vision_llm only — the text tools have\
+          \ nothing to work on.\n\nNever call the same tool twice.\n\n## Categories\n\
+          bank_statement, certificate_of_incorporation, payslip, passport, nric, fatca_crs_declaration,\
+          \ certificate_of_incumbency, company_constitution, proof_of_address, source_of_wealth,\
+          \ credit_report, list_of_loans, notice_of_assessment, other\n\n## bank_statement\
+          \ vs source_of_wealth\n- bank_statement: a statement for a bank ACCOUNT\
+          \ (current/savings/deposit) — account-level transaction history with balances,\
+          \ credits and debits.\n- source_of_wealth: margin, securities, brokerage\
+          \ or investment statements (holdings, positions, portfolio valuation), or\
+          \ any financial document evidencing net worth or its history.\n- The issuer\
+          \ does not decide it: a bank-issued securities/investment/wealth statement\
+          \ is source_of_wealth, not bank_statement.\n- Mixed content → classify by\
+          \ the primary content: deposit-account transactions → bank_statement; holdings/positions/net-worth\
+          \ valuation → source_of_wealth.\n- If the tools split between these two,\
+          \ apply this rule when judging which is strongest-supported, and name the\
+          \ distinguishing feature in evidence.\n\n## passport vs nric\nBoth are identity\
+          \ documents; never output \"id_document\".\n- nric: Singapore Identity Card.\
+          \ Front: \"REPUBLIC OF SINGAPORE\", \"IDENTITY CARD NO.\", portrait, Race,\
+          \ Sex, Country/Place of birth. Back: residential address block, fingerprint\
+          \ area, Date of issue, usually no name or photo. Front and back are often\
+          \ uploaded as separate files — classify each as nric, even when one side\
+          \ alone looks sparse.\n- passport: biodata page with \"PASSPORT\" heading,\
+          \ Type / Country Code / Passport No row, Nationality, Date of expiry, Authority,\
+          \ and a two-line machine-readable zone (capitals, digits, \"<\" filler).\
+          \ No residential address. It may print a \"National ID No\" in NRIC format\
+          \ — that does not make it an nric.\n- Tie-breakers: \"IDENTITY CARD NO.\"\
+          \ or an address block on a card layout -> nric. MRZ, \"Passport No\" or\
+          \ Type/Country Code -> passport.\n- Identity document but genuinely can't\
+          \ tell which: pick the likelier one, cap confidence at 0.6, set needs_manual_review,\
+          \ and name the runner-up in evidence.\n\n\n## Deciding the type + confidence\n\
+          Agreement = rank-1 picks matching, among tools that actually ran and returned\
+          \ a result. A rank-2/3 match is partial support, not agreement.\n\n| Situation\
+          \ | document_type | confidence |\n|---|---|---|\n| All 3 ran, all agree\
+          \ | that type | avg match_strength, cap 0.95 |\n| All 3 ran, 2 agree | that\
+          \ type | avg of the 2 agreeing, cap 0.85 |\n| All 3 ran, none agree | strongest-supported\
+          \ (rank-1 > runner-up; higher match_strength wins) | its own match_strength,\
+          \ cap 0.6 — set needs_manual_review |\n| All 3 ran, all no-match | \"other\"\
+          \ | low — never high-confidence an absence |\n| 2 ran, agree | that type\
+          \ | avg match_strength, cap 0.85 |\n| 2 ran, disagree | strongest-supported\
+          \ | its own match_strength, cap 0.6 — set needs_manual_review |\n| Only\
+          \ vision ran | its rank-1 | its match_strength, cap 0.8 (uncorroborated)\
+          \ |\n| Only vision ran, no match | \"other\" | — set needs_manual_review\
+          \ (weaker signal than 3-tool no-match) |\n| Only vision ran, failed | \"\
+          other\" | — set needs_manual_review |\n\nIf the chosen type is \"close\"\
+          \ in the tools that picked it: keep it, but set needs_manual_review true\
+          \ and name the runner-up. If vision-only, say so explicitly in reasoning.\n\
+          \nWhen needs_manual_review is true, state why: (a) not one of the LISTED\
+          \ categories, (b) ambiguous between categories, or (c) vision-only and unresolved.\n\
+          \n## Proof of address\nDepends on THIS document actually showing a legible\
+          \ residential address — never inferred from type alone.\n- certificate_of_incumbency:\
+          \ if it is a Singapore company, take note that the ACRA BizProfile also\
+          \ covers this category.\n- nric: only satisfies it if a residential address\
+          \ is visibly populated (not missing/cropped/illegible).\n- bank_statement:\
+          \ only if the address is residential, not a registered office/business address.\n\
+          - source_of_wealth: never adds proof_of_address, even if an address is shown.\n\
+          - No confident confirmation → leave it out (under-claim, don't over-claim).\n\
+          - Conflicting sources → \"not visible\" AND set needs_manual_review, name\
+          \ the conflict.\n- Evidence sources: classify_rule_based's address note;\
+          \ any tool's evidence at any rank. A proof_of_address candidate alone isn't\
+          \ enough — needs actual address evidence.\n\nFor every nric/bank_statement,\
+          \ add one evidence entry (counts toward the 4-entry max):\n`\"Address check:\
+          \ visible — <location>\"` or `\"Address check: not visible — <why>\"`\n\n\
+          This result is mechanical: \"visible\" → must include proof_of_address in\
+          \ fulfilled_requirements; \"not visible\" → must not. Re-check before finalizing\
+          \ — never contradict your own Address check line.\n\n## fulfilled_requirements\n\
+          Default: exactly one entry — the document_type itself, except passport and\
+          \ nric, which both use \"id_document\" (the case-checklist slot they fill).\
+          \ Address check is the only thing that ever adds a second entry (proof_of_address),\
+          \ and only for nric/bank_statement.\n\n## Evidence\nExplains why it's THIS\
+          \ TYPE, never document content/values.\n- Name what's PRESENT, never its\
+          \ VALUE (\"contains a TIN field\", not \"TIN 201812345A\").\n- Titles/headings\
+          \ may be quoted verbatim (type signal, not a field value).\n- No names,\
+          \ numbers, dates, amounts, addresses, identifiers.\n- Max 4 entries, one\
+          \ line each. Restate tool evidence without values — never copy through verbatim.\n\
+          \n## Output\nJSON only, nothing else:\n{\"document_type\": \"...\", \"confidence\"\
+          : 0.0, \"evidence\": [\"...\"], \"reasoning\": \"...\", \"needs_manual_review\"\
+          : true, \"fulfilled_requirements\": [\"...\"]}\"\"\"\n\n_INTRO = \"You classify\
+          \ documents for a KYC/corporate onboarding pipeline.\\n\\n\"\n\n# Only these\
+          \ two templates go through .format().\n_SECOND_ROUND_HEADER = \"\"\"This\
+          \ document was already classified once as `{prior_document_type}`, but the\n\
+          Extraction Agent — which reads the full document content in depth, not just\
+          \ a\nquick pass — found this doesn't fit:\n\n  Reason: {reason}\n{suggestion_line}\
+          \  Evidence Extraction actually found on the page:\n{evidence_lines}\n\n\
+          This evidence came from a deeper read than your first pass. Treat it as\n\
+          strong, not merely a suggestion to double-check. Only keep `{prior_document_type}`\n\
+          if you have a concrete reason the Extraction finding doesn't actually\n\
+          contradict it — state that reason explicitly. Do not keep the prior type\n\
+          just because your original tool calls supported it; that support is exactly\n\
+          what's being challenged here.\n\nThis is the only retry — after this classification,\
+          \ no further escalation\nwill occur. If you are still genuinely unsure,\
+          \ set needs_manual_review true\nper the normal rules rather than guessing.\n\
+          \n\"\"\"\n\n_INPUTS_BLOCK = \"\"\"\n\n## Inputs for this document\n\ntext_available:\
+          \ {text_available}\"\"\"\n\n# Keep in sync with MIN_USABLE_CHARS in the\
+          \ Extract Filename node.\nMIN_USABLE_CHARS = 50\n\n\ndef _parse_escalation(value)\
+          \ -> dict:\n    \"\"\"Dict or JSON string in; anything unusable becomes\
+          \ {} (header falls back to defaults).\"\"\"\n    if isinstance(value, dict):\n\
+          \        return value\n    if not value or not isinstance(value, str):\n\
+          \        return {}\n\n    attempts = (\n        lambda: json.loads(value),\n\
+          \        # Escaped inner JSON body ({\\\"reason\\\": ...}): decode as a\
+          \ JSON string\n        # literal first, then as JSON.\n        lambda: json.loads(json.loads(f'\"\
+          {value}\"')),\n    )\n    for attempt in attempts:\n        try:\n     \
+          \       parsed = attempt()\n        except (ValueError, TypeError):\n  \
+          \          continue\n        if isinstance(parsed, dict):\n            return\
+          \ parsed\n    return {}\n\n\ndef _has_usable_text(extracted_text) -> bool:\n\
+          \    if extracted_text is None:\n        return False\n    if isinstance(extracted_text,\
+          \ list):\n        raw = \"\\n\".join(str(t) for t in extracted_text if t)\n\
+          \    else:\n        raw = str(extracted_text)\n    return len(raw.strip())\
+          \ >= MIN_USABLE_CHARS\n\n\ndef _build_header(data: dict) -> str:\n    evidence\
+          \ = data.get(\"evidence\") or []\n    if isinstance(evidence, str):\n  \
+          \      evidence = [evidence]\n    evidence_lines = \"\\n\".join(f\"    -\
+          \ {item}\" for item in evidence)\n\n    suggested_type = data.get(\"suggested_document_type\"\
+          )\n    suggestion_line = (\n        f\"  Extraction's own read suggests\
+          \ this is actually a `{suggested_type}`.\\n\"\n        if suggested_type\n\
+          \        else \"\"\n    )\n    return _SECOND_ROUND_HEADER.format(\n   \
+          \     prior_document_type=data.get(\"prior_document_type\") or \"unknown\"\
+          ,\n        reason=data.get(\"reason\") or \"(not provided)\",\n        suggestion_line=suggestion_line,\n\
+          \        evidence_lines=evidence_lines,\n    )\n\n\ndef main(escalation_reason_json=None,\
+          \ extracted_text=None) -> dict:\n    header = _build_header(_parse_escalation(escalation_reason_json))\n\
+          \    inputs_block = _INPUTS_BLOCK.format(\n        text_available=\"yes\"\
+          \ if _has_usable_text(extracted_text) else \"no\"\n    )\n    return {\"\
+          prompt\": _INTRO + header + _SHARED_BODY + inputs_block}\n"
+        code_language: python3
+        outputs:
+          prompt:
+            children: null
+            type: string
+        selected: false
+        title: Second Round
+        type: code
+        variables:
+        - value_selector:
+          - '1787587117474'
+          - escalation_reason
+          value_type: string
+          variable: escalation_reason_json
+        - value_selector:
+          - '1790000000001'
+          - processed_extracted_text
+          value_type: string
+          variable: extracted_text
+      height: 52
+      id: '1789545205304'
+      position:
+        x: 1470.5214734322988
+        y: 286.7919933261565
+      positionAbsolute:
+        x: 1470.5214734322988
+        y: 286.7919933261565
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        is_team_authorization: true
+        paramSchemas:
+        - auto_generate: null
+          default: ''
+          form: form
+          human_description:
+            en_US: Extracted Text
+            ja_JP: Extracted Text
+            pt_BR: Extracted Text
+            zh_Hans: Extracted Text
+          input_schema: null
+          label:
+            en_US: extracted_text
+            ja_JP: extracted_text
+            pt_BR: extracted_text
+            zh_Hans: extracted_text
+          llm_description: Extracted Text
+          max: null
+          min: null
+          multiple: false
+          name: extracted_text
+          options: []
+          placeholder:
+            en_US: ''
+            ja_JP: ''
+            pt_BR: ''
+            zh_Hans: ''
+          precision: null
+          required: false
+          scope: null
+          template: null
+          type: string
+        - auto_generate: null
+          default: ''
+          form: form
+          human_description:
+            en_US: FileName
+            ja_JP: FileName
+            pt_BR: FileName
+            zh_Hans: FileName
+          input_schema: null
+          label:
+            en_US: filename
+            ja_JP: filename
+            pt_BR: filename
+            zh_Hans: filename
+          llm_description: FileName
+          max: null
+          min: null
+          multiple: false
+          name: filename
+          options: []
+          placeholder:
+            en_US: ''
+            ja_JP: ''
+            pt_BR: ''
+            zh_Hans: ''
+          precision: null
+          required: true
+          scope: null
+          template: null
+          type: string
+        - auto_generate: null
+          default: ''
+          form: form
+          human_description:
+            en_US: Confidence
+            ja_JP: Confidence
+            pt_BR: Confidence
+            zh_Hans: Confidence
+          input_schema: null
+          label:
+            en_US: confidence_threshold
+            ja_JP: confidence_threshold
+            pt_BR: confidence_threshold
+            zh_Hans: confidence_threshold
+          llm_description: Confidence
+          max: null
+          min: null
+          multiple: false
+          name: confidence_threshold
+          options: []
+          placeholder:
+            en_US: ''
+            ja_JP: ''
+            pt_BR: ''
+            zh_Hans: ''
+          precision: null
+          required: true
+          scope: null
+          template: null
+          type: number
+        params:
+          confidence_threshold: ''
+          extracted_text: ''
+          filename: ''
+        plugin_id: null
+        plugin_unique_identifier: null
+        provider_icon:
+          background: '#FFEAD5'
+          content: 🤖
+        provider_id: 1fcf34c6-522a-405b-9305-2a0082231b3d
+        provider_name: ' rule_classify_v3'
+        provider_show_name: ' rule_classify_v3'
+        provider_type: workflow
+        selected: false
+        title: ' rule_classify_v3'
+        tool_configurations:
+          confidence_threshold:
+            type: constant
+            value: 0.8
+          extracted_text:
+            type: mixed
+            value: '{{#1790000000001.processed_extracted_text#}}'
+          filename:
+            type: mixed
+            value: '{{#1790000000001.filename#}}'
+        tool_description: 'Regex rule classifier (filename + text). Returns top_candidates:
+          up to 3 ranked document-type options, each with confidence (relative share,
+          sums to 1 across candidates), match_strength (absolute 0-1 fit), reasoning
+          and evidence. Treat as options to weigh, not a final answer.'
+        tool_label: ' rule_classify_v3'
+        tool_name: classify_rule_based
+        tool_node_version: '2'
+        tool_parameters: {}
+        type: tool
+      height: 140
+      id: '1789800794333'
+      position:
+        x: 975.0386613670812
+        y: -5.882823896589535
+      positionAbsolute:
+        x: 975.0386613670812
+        y: -5.882823896589535
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        is_team_authorization: true
+        paramSchemas:
+        - auto_generate: null
+          default: ''
+          form: form
+          human_description:
+            en_US: Extracted text
+            ja_JP: Extracted text
+            pt_BR: Extracted text
+            zh_Hans: Extracted text
+          input_schema: null
+          label:
+            en_US: extracted_text
+            ja_JP: extracted_text
+            pt_BR: extracted_text
+            zh_Hans: extracted_text
+          llm_description: Extracted text
+          max: null
+          min: null
+          multiple: false
+          name: extracted_text
+          options: []
+          placeholder:
+            en_US: ''
+            ja_JP: ''
+            pt_BR: ''
+            zh_Hans: ''
+          precision: null
+          required: false
+          scope: null
+          template: null
+          type: string
+        params:
+          extracted_text: ''
+        plugin_id: null
+        plugin_unique_identifier: null
+        provider_icon:
+          background: '#FFEAD5'
+          content: 🤖
+        provider_id: 55caa202-5f88-469d-b226-62c82f005f92
+        provider_name: 'LLM layer classification v2 '
+        provider_show_name: 'LLM layer classification v2 '
+        provider_type: workflow
+        selected: false
+        title: 'LLM layer classification v2 '
+        tool_configurations:
+          extracted_text:
+            type: mixed
+            value: '{{#1790000000001.processed_extracted_text#}}'
+        tool_description: 'LLM (DeepSeek) semantic classifier over extracted text.
+          Returns top_candidates: up to 3 ranked document-type options, each with
+          confidence (relative share, sums to 1 across candidates), match_strength
+          (absolute 0-1 fit), reasoning and evidence. Treat as options to weigh, not
+          a final answer.'
+        tool_label: 'LLM layer classification v2 '
+        tool_name: class_llm
+        tool_node_version: '2'
+        tool_parameters: {}
+        type: tool
+      height: 88
+      id: '1789800805480'
+      position:
+        x: 1365.1264453789388
+        y: -5.882823896589535
+      positionAbsolute:
+        x: 1365.1264453789388
+        y: -5.882823896589535
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    viewport:
+      x: -637.8064737205566
+      y: 337.02134759548807
+      zoom: 0.49051605737691556
+  rag_pipeline_variables: []

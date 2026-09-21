@@ -1,0 +1,446 @@
+app:
+  description: 'LLM (DeepSeek) semantic classifier over extracted text. Returns top_candidates:
+    up to 3 ranked document-type options, each with confidence (relative share, sums
+    to 1 across candidates), match_strength (absolute 0-1 fit), reasoning and evidence.
+    Treat as options to weigh, not a final answer.'
+  icon: 🤖
+  icon_background: '#FFEAD5'
+  icon_type: emoji
+  mode: workflow
+  name: LLM classification v2
+  use_icon_as_answer_icon: false
+dependencies:
+- current_identifier: null
+  type: marketplace
+  value:
+    marketplace_plugin_unique_identifier: langgenius/deepseek:0.0.24@9e12eef09973667f0eaf4f082af883167e1de88740b22e71e71488d020c3778a
+    version: null
+kind: app
+version: 0.7.0
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      allowed_file_extensions:
+      - .JPG
+      - .JPEG
+      - .PNG
+      - .GIF
+      - .WEBP
+      - .SVG
+      allowed_file_types:
+      - image
+      allowed_file_upload_methods:
+      - local_file
+      - remote_url
+      enabled: false
+      fileUploadConfig:
+        attachment_image_file_size_limit: 2
+        audio_file_size_limit: 50
+        batch_count_limit: 5
+        file_size_limit: 15
+        file_upload_limit: 50
+        image_file_batch_limit: 10
+        image_file_size_limit: 10
+        knowledge_file_size_limit: 50
+        single_chunk_attachment_limit: 10
+        skill_file_size_limit: 50
+        video_file_size_limit: 100
+        workflow_file_upload_limit: 10
+      image:
+        enabled: false
+        number_limits: 3
+        transfer_methods:
+        - local_file
+        - remote_url
+      number_limits: 3
+    opening_statement: ''
+    retriever_resource:
+      enabled: true
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: start
+        targetType: llm
+      id: 1788025388339-source-1788170694868-target
+      source: '1788025388339'
+      sourceHandle: source
+      target: '1788170694868'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: llm
+        targetType: code
+      id: 1788170694868-source-1788170800001-target
+      source: '1788170694868'
+      sourceHandle: source
+      target: '1788170800001'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: code
+        targetType: end
+      id: 1788170800001-source-1788025491604-target
+      source: '1788170800001'
+      sourceHandle: source
+      target: '1788025491604'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    nodes:
+    - data:
+        selected: false
+        title: User Input
+        type: start
+        variables:
+        - default: ''
+          hint: ''
+          label: extracted_text
+          options: []
+          placeholder: ''
+          required: false
+          type: paragraph
+          variable: extracted_text
+      height: 109
+      id: '1788025388339'
+      position:
+        x: 80
+        y: 283.8562929663795
+      positionAbsolute:
+        x: 80
+        y: 283.8562929663795
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        context:
+          enabled: false
+          variable_selector: []
+        default_value:
+        - key: text
+          type: string
+          value: LLM call tool failed.
+        error_strategy: default-value
+        model:
+          completion_params:
+            temperature: 0
+          mode: chat
+          name: deepseek-v4-flash
+          provider: langgenius/deepseek/deepseek
+        prompt_template:
+        - id: 5aca350c-db77-40df-b5c6-52d225cf8f54
+          role: system
+          text: 'You are a document classifier for a KYC/onboarding pipeline. Given
+            the extracted text of a document, return the THREE most likely categories
+            it could belong to, ranked from most to least likely.
+
+
+            Judge by meaning, not just keyword matches. The text may come from noisy
+            OCR or use different phrasing than the category name.
+
+
+            A document that merely mentions or lists other document types (e.g. a
+            cover letter or email saying documents are attached) is NOT itself one
+            of those types. Classify what the text actually is, not what it refers
+            to.
+
+
+            Categories:
+
+            - bank_statement (a statement for a bank ACCOUNT — current, savings or
+            deposit — with transaction history, balances, credits and debits; NOT
+            a brokerage, margin or securities statement)
+
+            - source_of_wealth (either a company''s financial statements — Statement
+            of Comprehensive Income, Statement of Financial Position and notes, a
+            balance sheet or income statement — or an individual''s own evidence of
+            wealth, such as a brokerage or margin-account securities statement showing
+            net asset value, portfolio value and holdings, dividend statements, or
+            business valuation reports; NOT an IRAS Notice of Assessment, which is
+            notice_of_assessment)
+
+            - certificate_of_incorporation
+
+            - payslip
+
+            - passport (a passport biodata page)
+
+            - nric (an Identity Card, front or back)
+
+            - fatca_crs_declaration
+
+            - certificate_of_incumbency (includes ACRA BizFile+ business profiles
+            and similar registry extracts)
+
+            - company_constitution
+
+            - proof_of_address
+
+            - credit_report
+
+            - list_of_loans (loan or facility offer letters, overdraft/credit facility
+            agreements, loan schedules, drawdown notices, or other documents describing
+            an existing or offered lending facility)
+
+            - notice_of_assessment (an IRAS Income Tax Notice of Assessment: "Year
+            of Assessment", chargeable income, exempt amount, tax assessed/payable,
+            tax rebate, issued by the Comptroller of Income Tax)
+
+
+            Distinguishing passport from nric (both are identity documents; never
+            output "id_document"):
+
+            - nric: the card shows "REPUBLIC OF SINGAPORE" and "IDENTITY CARD NO.",
+            with Name, Race, Date of birth, Sex and Country/Place of birth on the
+            front. The back shows a residential address, a fingerprint/thumbprint
+            area and Date of issue, often with no name at all. Front and back are
+            often uploaded as separate files; a sparse back with an address block
+            and date of issue is still an nric.
+
+            - passport: a biodata page with a "PASSPORT" heading, a Type / Country
+            Code / Passport No row, Nationality, Place of birth, Date of issue, Date
+            of expiry, Authority, and a machine-readable zone at the foot (two lines
+            of capitals, digits and "<" filler, e.g. "P<SGP..."). It has no residential
+            address. It may print a "National ID No" in NRIC format; that does not
+            make it an nric.
+
+            - Merely mentioning "NRIC" or "Passport" as a field label (e.g. an "ID
+            type: NRIC" row in a credit report, or an "NRIC/Passport No." form field)
+            does not make the document an nric or passport.
+
+            - If it is clearly an identity document but you cannot tell which, list
+            both passport and nric as candidates with modest match_strength rather
+            than guessing high on one.
+
+
+
+            Distinguishing notice_of_assessment from other tax-related documents:
+
+            - notice_of_assessment is an assessment issued BY the tax authority (IRAS)
+            for a given Year of Assessment, with a computation from chargeable income
+            through exempt amounts and rebate to tax payable. A payslip, a bank statement
+            showing a tax payment, or a FATCA/CRS tax residency form is not one, even
+            if it mentions income tax.
+
+
+            Distinguishing bank_statement from source_of_wealth:
+
+            - bank_statement: account-level transaction history for a current, savings
+            or deposit account (balances, credits and debits).
+
+            - source_of_wealth: margin, brokerage, securities or investment statements
+            (holdings, positions, portfolio value, net asset value), company financial
+            statements, or other documents evidencing net worth.
+
+            - The issuer does not decide it: a bank- or broker-issued investment or
+            securities statement is source_of_wealth, even though it is a periodic
+            "Statement".
+
+            - Mixed content: classify by the primary content — deposit-account transactions
+            are bank_statement; holdings and valuations are source_of_wealth.
+
+
+            For each of the 3 candidates provide:
+
+            - document_type: one of the category values above. All 3 must be different.
+
+            - match_strength: a number from 0.0 to 1.0 for how well the document fits
+            THIS category on its own, judged independently of the other candidates.
+            Runner-up candidates will usually be low. If nothing fits well, all three
+            may be low. Do not force the three values to add up to 1.
+
+            - evidence: short phrases from the text that support (or weigh against)
+            this category.
+
+            - reasoning: one short sentence on why this category is plausible and,
+            for ranks 2 and 3, what makes it less likely than the one above.
+
+
+            Respond with ONLY a JSON object, no other text, of this shape:
+
+            {"top_candidates": [{"document_type": "<category>", "match_strength":
+            <float 0.0-1.0>, "evidence": ["short phrase", ...], "reasoning": "<one
+            short sentence>"}, <candidate 2>, <candidate 3>]}'
+        - id: 9de01bd5-7dde-4f97-bce6-9b34be015f6e
+          role: user
+          text: '{{#1788025388339.extracted_text#}}'
+        reasoning_format: separated
+        retry_config:
+          max_retries: 3
+          retry_enabled: false
+          retry_interval: 1000
+        selected: true
+        structured_output_enabled: false
+        title: LLM (top 3)
+        type: llm
+        vision:
+          enabled: false
+      height: 124
+      id: '1788170694868'
+      position:
+        x: 385.3090096146102
+        y: 282
+      positionAbsolute:
+        x: 385.3090096146102
+        y: 282
+      selected: true
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        code: "\"\"\"\nllm_classify — Parse & Normalise (Dify Code node after the\
+          \ LLM node).\n\nWhy this node exists: LLMs do not reliably return valid\
+          \ JSON, distinct\ncategories, or confidences that sum to 1. This node enforces\
+          \ the contract\ninstead of trusting the prompt:\n  - strips <think> traces\
+          \ / ``` fences, extracts the JSON object\n  - drops categories outside the\
+          \ allowed list, dedupes, keeps top 3\n  - match_strength = LLM's absolute\
+          \ fit score (0-1), clamped\n  - confidence     = match_strength / sum(match_strength)\
+          \ -> sums to 1.0\n  - never raises: parse failure -> top_candidates [] +\
+          \ explanatory note\n\nOutput contract matches rule_classify v3 (top_candidates\
+          \ + notes).\nAfter editing: Publish, then publish as tool again.\n\"\"\"\
+          \n\nimport json\nimport re\n\nTOP_K = 3\nALLOWED_TYPES = {\n    \"bank_statement\"\
+          ,\n    \"certificate_of_incorporation\",\n    \"payslip\",\n    \"passport\"\
+          ,\n    \"nric\",\n    \"fatca_crs_declaration\",\n    \"certificate_of_incumbency\"\
+          ,\n    \"company_constitution\",\n    \"proof_of_address\",\n    \"source_of_wealth\"\
+          ,\n    \"credit_report\",\n    \"list_of_loans\",\n    \"notice_of_assessment\"\
+          ,\n}\n\n\ndef _extract_json(raw):\n    s = re.sub(r\"<think>.*?</think>\"\
+          , \"\", raw or \"\", flags=re.DOTALL).strip()\n    start, end = s.find(\"\
+          {\"), s.rfind(\"}\")\n    if start == -1 or end <= start:\n        raise\
+          \ ValueError(\"no JSON object found\")\n    return json.loads(s[start:end\
+          \ + 1])\n\n\ndef _clamp(value):\n    try:\n        v = float(value)\n  \
+          \  except (TypeError, ValueError):\n        return 0.0\n    return max(0.0,\
+          \ min(1.0, v))\n\n\ndef _as_str_list(value):\n    if value is None:\n  \
+          \      return []\n    if isinstance(value, str):\n        return [value]\n\
+          \    if isinstance(value, list):\n        return [str(v) for v in value\
+          \ if v is not None]\n    return [str(value)]\n\n\ndef _normalise(candidates):\n\
+          \    if not candidates:\n        return candidates\n    total = sum(c[\"\
+          match_strength\"] for c in candidates)\n    if total > 0:\n        shares\
+          \ = [c[\"match_strength\"] / total for c in candidates]\n    else:\n   \
+          \     shares = [1.0 / len(candidates)] * len(candidates)\n    rounded =\
+          \ [round(s, 4) for s in shares]\n    rounded[0] = round(rounded[0] + (1.0\
+          \ - sum(rounded)), 4)  # absorb rounding drift\n    out = []\n    for i,\
+          \ (c, conf) in enumerate(zip(candidates, rounded)):\n        out.append({\n\
+          \            \"rank\": i + 1,\n            \"document_type\": c[\"document_type\"\
+          ],\n            \"confidence\": conf,\n            \"match_strength\": round(c[\"\
+          match_strength\"], 4),\n            \"reasoning\": c[\"reasoning\"],\n \
+          \           \"evidence\": c[\"evidence\"],\n        })\n    return out\n\
+          \n\ndef main(llm_text: str) -> dict:\n    notes = [\"llm noa added version\"\
+          ]\n    raw_text = llm_text or \"\"\n\n    if raw_text.strip().startswith(\"\
+          LLM call tool failed\"):\n        return {\"top_candidates\": [], \"notes\"\
+          : [\"LLM call failed; no classification produced.\"]}\n\n    try:\n    \
+          \    data = _extract_json(raw_text)\n    except Exception as exc:\n    \
+          \    return {\"top_candidates\": [], \"notes\": [f\"LLM output could not\
+          \ be parsed as JSON ({exc}).\"]}\n\n    raw_candidates = data.get(\"top_candidates\"\
+          ) if isinstance(data, dict) else None\n    if raw_candidates is None and\
+          \ isinstance(data, dict) and \"document_type\" in data:\n        raw_candidates\
+          \ = [data]  # tolerate the old single-answer shape\n        notes.append(\"\
+          LLM returned a single answer instead of 3 candidates.\")\n    if not isinstance(raw_candidates,\
+          \ list):\n        raw_candidates = []\n\n    seen, candidates = set(), []\n\
+          \    for c in raw_candidates:\n        if not isinstance(c, dict):\n   \
+          \         continue\n        doc_type = str(c.get(\"document_type\") or \"\
+          \").strip().lower()\n        if doc_type not in ALLOWED_TYPES:\n       \
+          \     if doc_type and doc_type != \"null\":\n                notes.append(f\"\
+          Dropped unknown category '{doc_type}' returned by the LLM.\")\n        \
+          \    continue\n        if doc_type in seen:\n            continue\n    \
+          \    seen.add(doc_type)\n        candidates.append({\n            \"document_type\"\
+          : doc_type,\n            \"match_strength\": _clamp(c.get(\"match_strength\"\
+          , c.get(\"confidence\", 0))),\n            \"reasoning\": str(c.get(\"reasoning\"\
+          ) or \"\"),\n            \"evidence\": _as_str_list(c.get(\"evidence\")),\n\
+          \        })\n\n    # Stable sort keeps the LLM's own order for ties.\n \
+          \   candidates.sort(key=lambda c: -c[\"match_strength\"])\n    top = _normalise(candidates[:TOP_K])\n\
+          \n    if not top:\n        notes.append(\"LLM returned no valid candidates.\"\
+          )\n    elif len(top) < TOP_K:\n        notes.append(f\"Only {len(top)} valid\
+          \ candidate(s) returned.\")\n    if top and sum(c[\"match_strength\"] for\
+          \ c in top) == 0:\n        notes.append(\"LLM gave zero match_strength to\
+          \ every candidate; confidence split evenly — treat as unclassified.\")\n\
+          \n    return {\"top_candidates\": top, \"notes\": notes}\n"
+        code_language: python3
+        outputs:
+          notes:
+            children: null
+            type: array[string]
+          top_candidates:
+            children: null
+            type: array[object]
+        selected: false
+        title: Parse & Normalise
+        type: code
+        variables:
+        - value_selector:
+          - '1788170694868'
+          - text
+          value_type: string
+          variable: llm_text
+      height: 52
+      id: '1788170800001'
+      position:
+        x: 687.2156285093279
+        y: 282
+      positionAbsolute:
+        x: 687.2156285093279
+        y: 282
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        outputs:
+        - value_selector:
+          - '1788170800001'
+          - top_candidates
+          value_type: array[object]
+          variable: top_candidates
+        - value_selector:
+          - '1788170800001'
+          - notes
+          value_type: array[string]
+          variable: notes
+        selected: false
+        title: Output
+        type: end
+      height: 114
+      id: '1788025491604'
+      position:
+        x: 989.0602385994938
+        y: 282
+      positionAbsolute:
+        x: 989.0602385994938
+        y: 282
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    viewport:
+      x: -208.77566101198022
+      y: 218.79367944383858
+      zoom: 0.628339401280232
+  rag_pipeline_variables: []
