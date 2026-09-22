@@ -232,6 +232,30 @@ export async function getCaseRequirementCoverage(caseId: string): Promise<CaseRe
   return (await response.json()) as CaseRequirementCoverage;
 }
 
+// Mirrors UpdateCaseRequest in backend/app/models.py. Only company_name is
+// officer-editable today — status, submission_finalized and
+// greenlink_case_id are system-managed and not exposed here.
+export interface UpdatedCase {
+  id: string;
+  greenlink_case_id: string;
+  company_name: string | null;
+}
+
+export async function updateCase(caseId: string, companyName: string): Promise<UpdatedCase> {
+  const response = await authFetch(`/cases/${caseId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ company_name: companyName }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to update case (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as UpdatedCase;
+}
+
 export async function getDocument(documentId: string): Promise<DocumentRecord> {
   const response = await authFetch(`/documents/${documentId}`);
 

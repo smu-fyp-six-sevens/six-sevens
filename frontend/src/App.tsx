@@ -73,8 +73,10 @@ function CaseQueueRoute({
 
 function CaseDetailsRoute({
   cases,
+  onCaseUpdated,
 }: {
   cases: CaseRecord[];
+  onCaseUpdated: (caseId: string, companyName: string) => void;
 }) {
   const { caseNumber } = useParams();
   const navigate = useNavigate();
@@ -105,6 +107,7 @@ function CaseDetailsRoute({
           `/cases/${selectedCase.caseNumber ?? selectedCase.id}/documents/${documentId}`
         )
       }
+      onCaseUpdated={(companyName) => onCaseUpdated(selectedCase.id, companyName)}
     />
   );
 }
@@ -313,7 +316,16 @@ export default function App() {
                   <p>Loading case...</p>
                 </div>
               ) : (
-                <CaseDetailsRoute cases={cases} />
+                <CaseDetailsRoute
+                  cases={cases}
+                  onCaseUpdated={(caseId, companyName) =>
+                    setCases((current) =>
+                      current.map((item) =>
+                        item.id === caseId ? { ...item, applicant: companyName } : item
+                      )
+                    )
+                  }
+                />
               )}
             </RequireAuth>
           }

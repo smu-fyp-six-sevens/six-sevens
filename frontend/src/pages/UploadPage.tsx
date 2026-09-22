@@ -13,6 +13,7 @@ import {
   formatDocumentStatus,
   formatRoutingOutcome,
   lowestFieldConfidence,
+  updateCase,
   updateExtractedFields,
   uploadDocuments,
 } from '../services/uploadService';
@@ -49,6 +50,7 @@ interface UploadPageProps {
   selectedCase: CaseRecord;
   onBack: () => void;
   onOpenDocument: (documentId: string) => void;
+  onCaseUpdated: (companyName: string) => void;
 }
 
 function isExtractionNotConfiguredFailure(reason: string | null | undefined): boolean {
@@ -189,7 +191,44 @@ export default function UploadPage({
   selectedCase,
   onBack,
   onOpenDocument,
+  onCaseUpdated,
 }: UploadPageProps) {
+  const [isEditingCase, setIsEditingCase] = useState(false);
+  const [companyNameDraft, setCompanyNameDraft] = useState(selectedCase.applicant);
+  const [isSavingCase, setIsSavingCase] = useState(false);
+  const [saveCaseError, setSaveCaseError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCompanyNameDraft(selectedCase.applicant);
+  }, [selectedCase.applicant]);
+
+  async function handleSaveCase() {
+    const trimmed = companyNameDraft.trim();
+    if (!trimmed) {
+      setSaveCaseError('Company name is required.');
+      return;
+    }
+
+    setIsSavingCase(true);
+    setSaveCaseError(null);
+
+    try {
+      const updated = await updateCase(selectedCase.id, trimmed);
+      onCaseUpdated(updated.company_name ?? trimmed);
+      setIsEditingCase(false);
+    } catch (err) {
+      setSaveCaseError(err instanceof Error ? err.message : 'Failed to save case.');
+    } finally {
+      setIsSavingCase(false);
+    }
+  }
+
+  function handleCancelEditCase() {
+    setCompanyNameDraft(selectedCase.applicant);
+    setSaveCaseError(null);
+    setIsEditingCase(false);
+  }
+
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [countError, setCountError] = useState<string | null>(null);
   const [rejections, setRejections] = useState<{ file: File; issue: FileIssue }[]>([]);
@@ -445,10 +484,47 @@ export default function UploadPage({
             ← Back to case queue
           </button>
 
-          <p className="eyebrow">
-            Case #{selectedCase.caseNumber} · {selectedCase.type} —{' '}
-            {selectedCase.applicant}
-          </p>
+          {isEditingCase ? (
+            <div className="add-field-form">
+              <div className="add-field-form-row">
+                <label htmlFor="case-company-name">Company name</label>
+                <input
+                  id="case-company-name"
+                  type="text"
+                  value={companyNameDraft}
+                  onChange={(event) => setCompanyNameDraft(event.target.value)}
+                  disabled={isSavingCase}
+                  aria-invalid={saveCaseError ? true : undefined}
+                  aria-describedby={saveCaseError ? 'case-company-name-error' : undefined}
+                />
+              </div>
+
+              {saveCaseError && (
+                <p id="case-company-name-error" className="add-field-error" role="alert">
+                  {saveCaseError}
+                </p>
+              )}
+
+              <div className="add-field-form-actions">
+                <button type="button" onClick={handleCancelEditCase} disabled={isSavingCase}>
+                  Cancel
+                </button>
+                <button type="button" onClick={() => void handleSaveCase()} disabled={isSavingCase}>
+                  {isSavingCase ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="case-header-row">
+              <p className="eyebrow">
+                Case #{selectedCase.caseNumber} · {selectedCase.type} —{' '}
+                {selectedCase.applicant}
+              </p>
+              <button type="button" className="edit-case-button" onClick={() => setIsEditingCase(true)}>
+                ✎ Edit case details
+              </button>
+            </div>
+          )}
 
           <h1>Upload supporting documents</h1>
 

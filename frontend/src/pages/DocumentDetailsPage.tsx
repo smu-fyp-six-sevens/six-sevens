@@ -699,6 +699,14 @@ export default function DocumentDetailsPage({
       ? describeFailureReason(document.failure_reason)
       : null;
 
+  // Distinct from failureReason (a hard processing failure) and from
+  // needsManualReview below (extraction's per-field confidence) — this is
+  // the Classifier's own confidence in document_type, compared the same way
+  // the backend gates canCorrectType (see below).
+  const lowClassificationConfidence =
+    document?.confidence != null &&
+    document.confidence < CLASSIFICATION_CONFIDENCE_THRESHOLD;
+
   // Manual review is driven by the lowest confidence among this document's
   // own extracted fields — not a single document-wide extraction_confidence
   // number, which could still read as confident even when one specific
@@ -1056,6 +1064,25 @@ export default function DocumentDetailsPage({
               <strong>{failureReason.title}</strong>
               <div>{failureReason.detail}</div>
               {canCorrectType && (
+                <div className="details-failure-reason-hint">
+                  You can correct the document type above and re-run extraction.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {lowClassificationConfidence && (
+          <div className="review-message review-message--warning details-failure-reason">
+            <div>
+              <strong>Classification confidence below threshold</strong>
+              <div>
+                This document was classified as{' '}
+                {formatDocumentType(document.document_type)} with{' '}
+                {document.confidence!.toFixed(2)} confidence, below the
+                required {CLASSIFICATION_CONFIDENCE_THRESHOLD.toFixed(2)}.
+              </div>
+              {canCorrectType && !failureReason && (
                 <div className="details-failure-reason-hint">
                   You can correct the document type above and re-run extraction.
                 </div>

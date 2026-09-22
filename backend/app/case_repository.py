@@ -41,6 +41,23 @@ def list_cases() -> list[CaseRecord]:
     return [CaseRecord(**row) for row in result.data]
 
 
+def update_case(case_id: str, company_name: str) -> Optional[CaseRecord]:
+    """A loan officer editing the case's own details (currently just company_name)."""
+    update = {
+        "company_name": company_name,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    result = (
+        supabase_client.table("cases")
+        .update(update)
+        .eq("id", case_id)
+        .execute()
+    )
+    if not result.data:
+        return None
+    return CaseRecord(**result.data[0])
+
+
 def set_submission_finalized(case_id: str, finalized: bool) -> None:
     """
     Kept in sync with actual requirement coverage rather than being a

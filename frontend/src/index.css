@@ -1595,6 +1595,41 @@ h1 {
   cursor: pointer;
 }
 
+.case-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.case-header-row .eyebrow {
+  margin-bottom: 0;
+}
+
+.edit-case-button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: 1px solid var(--steel);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--steel);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  text-transform: none;
+  letter-spacing: normal;
+  cursor: pointer;
+}
+
+.edit-case-button:hover {
+  background: var(--steel);
+  color: #ffffff;
+}
+
 .add-field-button:hover {
   background: #f9fafb;
   border-color: #9ca3af;

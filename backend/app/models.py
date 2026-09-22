@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class DocumentStatus(str, Enum):
@@ -295,6 +295,26 @@ class CaseSummary(CaseRecord):
     id_document_coverage: IdDocumentCoverage = Field(
         default_factory=lambda: IdDocumentCoverage(covered=0, total=0)
     )
+
+
+class UpdateCaseRequest(BaseModel):
+    """
+    A loan officer updating the case's own identifying details. Only
+    company_name is officer-editable today — status, submission_finalized
+    and greenlink_case_id are system-managed (see case_status.py /
+    case_repository.set_submission_finalized) and deliberately excluded
+    here so they can't be overwritten through this endpoint.
+    """
+
+    company_name: str
+
+    @field_validator("company_name")
+    @classmethod
+    def company_name_must_not_be_blank(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("company_name is required")
+        return trimmed
 
 
 class DocumentRecord(BaseModel):
