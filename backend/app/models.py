@@ -335,6 +335,9 @@ class UpdateExtractedFieldsRequest(BaseModel):
     extracted_fields: dict
     evidence: list[str] = Field(default_factory=list)
 
+class AddExtractedFieldRequest(BaseModel):
+    field_name: str
+    field_value: object
 
 class UpdateDocumentTypeRequest(BaseModel):
     """

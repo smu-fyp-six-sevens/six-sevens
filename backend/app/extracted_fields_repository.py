@@ -105,3 +105,44 @@ def get_extracted_fields_for_documents(
     for row in result.data:
         by_document[row["document_id"]].append(ExtractedField(**row))
     return by_document
+
+def add_extracted_field(
+    document_id: str,
+    field_name: str,
+    field_value: object,
+    *,
+    required_field_names: set[str],
+) -> None:
+    """
+    Adds one manually entered extracted field.
+
+    Manually added fields are treated as human-verified,
+    so their confidence is always 1.0.
+    """
+    supabase_client.table("extracted_fields").insert({
+        "document_id": document_id,
+        "field_name": field_name,
+        "field_value": field_value,
+        "confidence": 1.0,
+        "field_category": (
+            "required" if field_name in required_field_names else "additional"
+        ),
+        "field_type": _infer_field_type(field_value),
+    }).execute()
+
+
+def delete_extracted_field(
+    document_id: str,
+    field_id: str,
+) -> None:
+    """
+    Deletes one extracted field belonging to the specified document.
+    """
+    (
+        supabase_client
+        .table("extracted_fields")
+        .delete()
+        .eq("id", field_id)
+        .eq("document_id", document_id)
+        .execute()
+    )

@@ -4,6 +4,8 @@ import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
 import { subscribeToCaseStatus } from '../services/caseSocket';
 import {
+  deleteExtractedField,
+  addExtractedField,
   CLASSIFICATION_CONFIDENCE_THRESHOLD,
   DOCUMENT_TYPE_OPTIONS,
   EXTRACTION_CONFIDENCE_THRESHOLD,
@@ -51,6 +53,7 @@ function humanizeFieldKey(key: string): string {
 }
 
 interface ExtractedField {
+  id?: string;
   value: unknown;
   confidence: number | null;
 }
@@ -70,6 +73,7 @@ function displayableFieldEntries(
         'value' in rawField
       ) {
         const field = rawField as {
+          id?: unknown;
           value?: unknown;
           confidence?: unknown;
         };
@@ -77,6 +81,7 @@ function displayableFieldEntries(
         return [
           key,
           {
+            id: typeof field.id === 'string' ? field.id : undefined,
             value: field.value ?? null,
             confidence:
               typeof field.confidence === 'number'
@@ -614,6 +619,15 @@ export default function DocumentDetailsPage({
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  const [isAddFieldOpen, setIsAddFieldOpen] = useState(false);
+  const [newFieldName, setNewFieldName] = useState('');
+  const [newFieldValue, setNewFieldValue] = useState('');
+  const [isAddingField, setIsAddingField] = useState(false);
+  const [addFieldError, setAddFieldError] = useState<string | null>(null);
+
+  const [deletingFieldId, setDeletingFieldId] = useState<string | null>(null);
+  const [deleteFieldError, setDeleteFieldError] = useState<string | null>(null);
+  
   const [fieldDraft, setFieldDraft] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -1068,7 +1082,114 @@ export default function DocumentDetailsPage({
               </strong>
             </span>
           )}
+
+          <button
+            type="button"
+            className="add-field-button"
+            onClick={() => {
+              setIsAddFieldOpen(true);
+              setAddFieldError(null);
+              setNewFieldName('');
+              setNewFieldValue('');
+            }}
+          >
+            + Add field
+          </button>
         </div>
+
+        {isAddFieldOpen && (
+          <div className="add-field-form">
+            <div className="add-field-form-row">
+              <label htmlFor="new-field-name">Field name</label>
+              <input
+                id="new-field-name"
+                type="text"
+                value={newFieldName}
+                onChange={(event) => setNewFieldName(event.target.value)}
+                placeholder="e.g. Company Address"
+                disabled={isAddingField}
+              />
+            </div>
+
+            <div className="add-field-form-row">
+              <label htmlFor="new-field-value">Field value</label>
+              <input
+                id="new-field-value"
+                type="text"
+                value={newFieldValue}
+                onChange={(event) => setNewFieldValue(event.target.value)}
+                placeholder="Enter the value"
+                disabled={isAddingField}
+              />
+            </div>
+
+            {addFieldError && (
+              <div className="add-field-error">
+                {addFieldError}
+              </div>
+            )}
+
+            <div className="add-field-form-actions">
+              <button
+                type="button"
+                onClick={() => setIsAddFieldOpen(false)}
+                disabled={isAddingField}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  const fieldName = newFieldName.trim();
+
+                  if (!fieldName) {
+                    setAddFieldError('Field name cannot be empty.');
+                    return;
+                  }
+
+                  if (!document) {
+                    setAddFieldError('Document is not loaded.');
+                    return;
+                  }
+
+                  setIsAddingField(true);
+                  setAddFieldError(null);
+
+                  try {
+                    const updated = await addExtractedField(
+                      document.id,
+                      fieldName,
+                      newFieldValue,
+                    );
+
+                    setDocument(updated);
+                    setIsAddFieldOpen(false);
+                    setNewFieldName('');
+                    setNewFieldValue('');
+                  } catch (error) {
+                    setAddFieldError(
+                      error instanceof Error
+                        ? error.message
+                        : 'Failed to add field.',
+                    );
+                  } finally {
+                    setIsAddingField(false);
+                  }
+                }}
+                disabled={isAddingField}
+              >
+                Add field
+              </button>
+            </div>
+          </div>
+        )}
+
+        {deleteFieldError && (
+          <div className="add-field-error">
+            {deleteFieldError}
+          </div>
+        )}
 
         {extractedFields.length === 0 ? (
           <div className="review-message review-message--error">
@@ -1115,7 +1236,7 @@ export default function DocumentDetailsPage({
                   )}
                 </span>
 
-                <span>
+                <span className="extracted-field-actions">
                   {field.confidence != null ? (
                     <span
                       className={
@@ -1128,6 +1249,58 @@ export default function DocumentDetailsPage({
                     </span>
                   ) : (
                     '—'
+                  )}
+
+                  {field.id && (
+                    <button
+                      type="button"
+                      className="delete-field-button"
+                      onClick={async () => {
+                        const confirmed = window.confirm(
+                          'Are you sure you want to delete this field? This field will not be recoverable.',
+                        );
+
+                        if (!confirmed) {
+                          return;
+                        }
+
+                        const fieldId = field.id;
+
+                        if (!fieldId) {
+                          return;
+                        }
+
+                        if (!document) {
+                          setDeleteFieldError('Document is not loaded.');
+                          return;
+                        }
+
+                        setDeletingFieldId(fieldId);
+                        setDeleteFieldError(null);
+
+                        try {
+                          const updated = await deleteExtractedField(
+                            document.id,
+                            fieldId,
+                          );
+
+                          setDocument(updated);
+                        } catch (error) {
+                          setDeleteFieldError(
+                            error instanceof Error
+                              ? error.message
+                              : 'Failed to delete field.',
+                          );
+                        } finally {
+                          setDeletingFieldId(null);
+                        }
+                      }}
+                      disabled={deletingFieldId === field.id}
+                      title="Delete field"
+                      aria-label={`Delete ${humanizeFieldKey(key)}`}
+                    >
+                      {deletingFieldId === field.id ? '…' : '×'}
+                    </button>
                   )}
                 </span>
               </div>

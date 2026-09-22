@@ -16,6 +16,7 @@ from .. import (
 from ..config import settings
 from ..extraction_prompts import KNOWN_DOCUMENT_TYPES, schema_field_names
 from ..models import (
+    AddExtractedFieldRequest,
     ClassificationOutcome,
     DocumentDownloadResponse,
     DocumentRecord,
@@ -92,6 +93,7 @@ async def get_document(document_id: str) -> DocumentRecord:
     if extracted_fields:
         document.extracted_fields = {
             field.field_name: {
+                "id": field.id,
                 "value": field.field_value,
                 "confidence": field.confidence,
             }
@@ -224,7 +226,200 @@ async def update_extracted_fields(
     updated = await get_document(document_id)
     return updated
 
+@router.post(
+    "/{document_id}/extracted-fields",
+    response_model=DocumentRecord,
+)
+async def add_extracted_field(
+    document_id: str,
+    request: AddExtractedFieldRequest,
+) -> DocumentRecord:
+    """
+    Adds one manually entered extracted field.
 
+    Manually added fields are considered human-verified,
+    so their confidence is automatically set to 1.0.
+    """
+    field_name = request.field_name.strip()
+
+    if not field_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Field name cannot be empty.",
+        )
+
+    try:
+        document = await asyncio.to_thread(
+            document_repository.get_document,
+            document_id,
+        )
+
+        if document is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Document not found",
+            )
+
+        existing_fields = await asyncio.to_thread(
+            extracted_fields_repository.get_extracted_fields,
+            document_id,
+        )
+
+        if any(field.field_name == field_name for field in existing_fields):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A field with this name already exists.",
+            )
+
+        required_field_names = set(
+            schema_field_names(document.document_type or "")
+        )
+
+        await asyncio.to_thread(
+            extracted_fields_repository.add_extracted_field,
+            document_id,
+            field_name,
+            request.field_value,
+            required_field_names=required_field_names,
+        )
+
+        # Re-fetch the fields so the documents.extracted_fields JSON
+        # and the normalized extracted_fields table stay in sync.
+        all_fields = await asyncio.to_thread(
+            extracted_fields_repository.get_extracted_fields,
+            document_id,
+        )
+
+        extracted_fields = {
+            field.field_name: field.field_value
+            for field in all_fields
+        }
+
+        fulfilled_requirements = compute_fulfilled_requirements(
+            document.document_type,
+            extracted_fields,
+        )
+
+        await asyncio.to_thread(
+            document_repository.update_extracted_fields,
+            document_id,
+            extracted_fields,
+            1.0,
+            fulfilled_requirements,
+        )
+
+        if document.case_id is not None:
+            await asyncio.to_thread(
+                case_status.sync_submission_finalized,
+                document.case_id,
+            )
+
+        return await get_document(document_id)
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception(
+            "Failed to add extracted field to document %s",
+            document_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to add extracted field. Check Supabase table access.",
+        ) from exc
+
+@router.delete(
+    "/{document_id}/extracted-fields/{field_id}",
+    response_model=DocumentRecord,
+)
+async def delete_extracted_field(
+    document_id: str,
+    field_id: str,
+) -> DocumentRecord:
+    """
+    Deletes one manually entered extracted field.
+
+    The field must belong to the specified document.
+    Fulfilled requirements are recalculated after deletion.
+    """
+    try:
+        document = await asyncio.to_thread(
+            document_repository.get_document,
+            document_id,
+        )
+
+        if document is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Document not found",
+            )
+
+        existing_fields = await asyncio.to_thread(
+            extracted_fields_repository.get_extracted_fields,
+            document_id,
+        )
+
+        field_to_delete = next(
+            (field for field in existing_fields if str(field.id) == field_id),
+            None,
+        )
+
+        if field_to_delete is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Extracted field not found",
+            )
+
+        await asyncio.to_thread(
+            extracted_fields_repository.delete_extracted_field,
+            document_id,
+            field_id,
+        )
+
+        remaining_fields = await asyncio.to_thread(
+            extracted_fields_repository.get_extracted_fields,
+            document_id,
+        )
+
+        extracted_fields = {
+            field.field_name: field.field_value
+            for field in remaining_fields
+        }
+
+        fulfilled_requirements = compute_fulfilled_requirements(
+            document.document_type,
+            extracted_fields,
+        )
+
+        await asyncio.to_thread(
+            document_repository.update_extracted_fields,
+            document_id,
+            extracted_fields,
+            document.extraction_confidence,
+            fulfilled_requirements,
+        )
+
+        if document.case_id is not None:
+            await asyncio.to_thread(
+                case_status.sync_submission_finalized,
+                document.case_id,
+            )
+
+        return await get_document(document_id)
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception(
+            "Failed to delete extracted field %s from document %s",
+            field_id,
+            document_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to delete extracted field. Check Supabase table access.",
+        ) from exc
+    
 @router.patch("/{document_id}/document-type", response_model=DocumentRecord)
 async def update_document_type(
     document_id: str,

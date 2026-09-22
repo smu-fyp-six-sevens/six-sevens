@@ -275,6 +275,49 @@ export async function updateExtractedFields(
   return (await response.json()) as DocumentRecord;
 }
 
+export async function addExtractedField(
+  documentId: string,
+  fieldName: string,
+  fieldValue: unknown,
+): Promise<DocumentRecord> {
+  const response = await authFetch(`/documents/${documentId}/extracted-fields`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      field_name: fieldName,
+      field_value: fieldValue,
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to add extracted field (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as DocumentRecord;
+}
+
+export async function deleteExtractedField(
+  documentId: string,
+  fieldId: string,
+): Promise<DocumentRecord> {
+  const response = await authFetch(
+    `/documents/${documentId}/extracted-fields/${fieldId}`,
+    {
+      method: 'DELETE',
+    },
+  );
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(
+      `Failed to delete extracted field (${response.status}): ${detail}`,
+    );
+  }
+
+  return (await response.json()) as DocumentRecord;
+}
+
 // Mirrors UpdateDocumentTypeRequest in backend/app/models.py. Saving also
 // kicks off a background extraction rerun against the new type — the
 // returned record already reads status 'extracting'.
