@@ -142,5 +142,22 @@ class Settings:
     # under concurrent load a single attempt alone has taken ~20-90s.
     SIGNED_URL_EXPIRY_SECONDS: int = 1800
 
+    # --- LangGraph experiment (langgraph-test branch, backend/app/langgraph) ---
+    # New to this backend: today Anthropic keys live only in Dify. Required
+    # once the langgraph pipeline is actually invoked; not read by anything
+    # on the Dify code path.
+    ANTHROPIC_API_KEY: str = _env("ANTHROPIC_API_KEY")
+    # Two-tier models (see LANGGRAPH_MIGRATION_PLAN.md section 5, "Models"):
+    # Sonnet for the classifier agent/vision/extraction/detection lead,
+    # Haiku for llm_classify/repair/specialists. Overridable per-tier so a
+    # model swap doesn't need a code change.
+    LANGGRAPH_SONNET_MODEL: str = _env("LANGGRAPH_SONNET_MODEL", "claude-sonnet-4-6")
+    LANGGRAPH_HAIKU_MODEL: str = _env("LANGGRAPH_HAIKU_MODEL", "claude-haiku-4-5-20251001")
+    # Router fast-path (see langgraph/router.py): skip the Sonnet agent
+    # entirely when rule_classify and llm_classify already agree this
+    # strongly — this is the "biggest saving" the migration plan calls out.
+    LANGGRAPH_ROUTER_AGREEMENT_THRESHOLD: float = 0.8
+    LANGGRAPH_RECURSION_LIMIT: int = 15
+
 
 settings = Settings()

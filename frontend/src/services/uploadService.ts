@@ -243,6 +243,38 @@ export async function getDocument(documentId: string): Promise<DocumentRecord> {
   return (await response.json()) as DocumentRecord;
 }
 
+// Dev-only window into the langgraph-test branch's pipeline (see
+// backend/app/langgraph/trace.py) — which route a document took (fast vs
+// Sonnet agent), rule/llm/vision results, escalation. Not persisted: 404s
+// once the backend process restarts, or for a document not yet processed
+// via langgraph. Informative only — not meant for production use.
+export interface LangGraphTraceStep {
+  step: string;
+  at: number;
+  [key: string]: unknown;
+}
+
+export interface LangGraphTrace {
+  document_id: string;
+  started_at: number;
+  steps: LangGraphTraceStep[];
+  [key: string]: unknown;
+}
+
+export async function getLangGraphTrace(documentId: string): Promise<LangGraphTrace | null> {
+  const response = await authFetch(`/documents/${documentId}/langgraph-trace`);
+
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to fetch langgraph trace (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as LangGraphTrace;
+}
+
 export async function listDocuments(caseId: string): Promise<DocumentRecord[]> {
   const response = await authFetch(`/documents?case_id=${encodeURIComponent(caseId)}`);
 

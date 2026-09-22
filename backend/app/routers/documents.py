@@ -24,6 +24,7 @@ from ..models import (
     UpdateExtractedFieldsRequest,
     compute_fulfilled_requirements,
 )
+from ..langgraph import trace as langgraph_trace
 from ..queue_service import document_queue
 
 # "unrecognised" is the "Other" catch-all: Extraction has a generic schema for it.
@@ -361,6 +362,24 @@ async def retry_document(document_id: str) -> DocumentRecord:
         ) from exc
 
     return await asyncio.to_thread(document_repository.get_document, document_id)
+
+
+@router.get("/{document_id}/langgraph-trace")
+async def get_document_langgraph_trace(document_id: str) -> dict:
+    """
+    Dev-only window into the langgraph pipeline (see app/langgraph/trace.py)
+    — which route a document took (fast vs Sonnet agent), what rule/llm/
+    vision each said, whether it escalated. Not persisted: only available
+    while this backend process has been running since that document was
+    processed. langgraph-test branch only; not meant for production use.
+    """
+    result = langgraph_trace.get(document_id)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No langgraph trace for this document (not processed via langgraph in this process yet).",
+        )
+    return result
 
 
 @router.get("/{document_id}/download", response_model=DocumentDownloadResponse)

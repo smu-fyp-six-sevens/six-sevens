@@ -11,10 +11,11 @@ import {
   formatDocumentStatus,
   formatRoutingOutcome,
   getDocument,
+  getLangGraphTrace,
   updateDocumentType,
   updateExtractedFields,
 } from '../services/uploadService';
-import type { DocumentRecord } from '../services/uploadService';
+import type { DocumentRecord, LangGraphTrace } from '../services/uploadService';
 
 interface DocumentDetailsPageProps {
   selectedCase: CaseRecord;
@@ -623,6 +624,12 @@ export default function DocumentDetailsPage({
   const [isSavingType, setIsSavingType] = useState(false);
   const [typeError, setTypeError] = useState<string | null>(null);
 
+  // langgraph-test branch debug aid (see backend/app/langgraph/trace.py) —
+  // shows which pipeline route this document actually took. Not present
+  // once a document went through the old Dify path or after a backend
+  // restart, so a missing trace is expected, not an error.
+  const [langGraphTrace, setLangGraphTrace] = useState<LangGraphTrace | null>(null);
+
   // Last extracted_fields the draft was built from — lets a live update reset
   // the draft only when the fields really changed (e.g. a rerun finishing),
   // not wipe an officer's in-progress edits on every unrelated case update.
@@ -751,6 +758,37 @@ export default function DocumentDetailsPage({
 
     return () => subscription.unsubscribe();
   }, [caseId, isInFlight, documentId]);
+
+  // Poll the langgraph trace while the pipeline is running (there's no
+  // websocket event for it), and once more right after it finishes so the
+  // final route/steps show up without a manual refresh.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTrace() {
+      try {
+        const result = await getLangGraphTrace(documentId);
+        if (!cancelled) {
+          setLangGraphTrace(result);
+        }
+      } catch {
+        // Dev-only aid — a fetch failure here shouldn't disturb the page.
+      }
+    }
+
+    void loadTrace();
+    if (!isInFlight) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const interval = window.setInterval(() => void loadTrace(), 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [documentId, isInFlight, document?.status]);
 
   async function handleSaveType() {
     if (!document || !chosenType) {
@@ -1288,6 +1326,31 @@ export default function DocumentDetailsPage({
           </div>
         </section>
       )}
+
+      {/* =====================================================
+          LangGraph trace (langgraph-test branch debug aid, not styled —
+          see backend/app/langgraph/trace.py)
+          ===================================================== */}
+
+      <section className="details-card" style={{ fontFamily: 'monospace', fontSize: '0.85em' }}>
+        <h2 style={{ marginTop: 0 }}>LangGraph trace (debug)</h2>
+        {!langGraphTrace ? (
+          <p>No langgraph trace yet for this document (not processed via langgraph in this backend process, or not started yet).</p>
+        ) : (
+          <>
+            <div>route: {String(langGraphTrace.route ?? '—')}</div>
+            <div>rule_top_type / strength: {String(langGraphTrace.rule_top_type ?? '—')} / {String(langGraphTrace.rule_top_strength ?? '—')}</div>
+            <div>llm_top_type / strength: {String(langGraphTrace.llm_top_type ?? '—')} / {String(langGraphTrace.llm_top_strength ?? '—')}</div>
+            <div>final_status: {String(langGraphTrace.final_status ?? '—')}</div>
+            <details style={{ marginTop: '0.5em' }}>
+              <summary>Full step log ({langGraphTrace.steps.length} steps)</summary>
+              <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                {JSON.stringify(langGraphTrace.steps, null, 2)}
+              </pre>
+            </details>
+          </>
+        )}
+      </section>
 
       {/* =====================================================
           Document actions

@@ -4,6 +4,24 @@
 inside the FastAPI backend, then build the fraud Detection team natively on it. DSL files: `backend/app/dify/`.
 This branch is an experiment: it will not go to prod, and the deployed cloud keeps running Dify until the workflow is run manually.
 
+## 0. Status
+
+**Phases 0-3 are built and wired live** (`backend/app/langgraph/`) — `queue_service.py` hard-switched to it, so every upload
+on this branch now runs through LangGraph, not Dify. See `LANGGRAPH_TESTING_SETUP.md` for how to run/test it.
+
+- Rule/LLM/vision classifiers, router, Sonnet agent + `vision_llm` tool, validate/repair, extraction — all ported and, where
+  it mattered (rule_classify's regex tables, the vision prompt, both parse steps), diffed against the exact Dify YAML source
+  rather than eyeballed. All three classifiers (`rule_classify`, `llm_classify`, `vision_llm`) return the same
+  `{top_candidates (top 3), notes}` shape, matching Dify.
+- Prompt caching (section 5) is done ahead of schedule: `cache_control` on every static prompt prefix, plus `cache_gate.py`
+  so concurrent workers don't all race the same cache write (the "run a batch's first document alone" mitigation).
+- A dev-only trace (`trace.py` + `GET /documents/{id}/langgraph-trace` + a debug panel on the document details page) shows
+  which route (`fast`/`agent`), tools, and models each document actually used — not part of the original plan, added for testing.
+- Model IDs confirmed against the account's live `/v1/models` list (not guessed): `claude-sonnet-4-6` and
+  `claude-haiku-4-5-20251001` — see `config.py`'s `LANGGRAPH_SONNET_MODEL`/`LANGGRAPH_HAIKU_MODEL` defaults.
+- **Not yet built:** the reclassify loop, Postgres checkpointing, `rerun_extraction` on this path (still Dify) — all Phase 4,
+  see section 6. An Extraction escalation today just fails the document with a clear reason instead of looping.
+
 ## 1. Decisions
 
 | Topic | Decision |
@@ -34,30 +52,37 @@ Only DeepSeek/Anthropic/Supabase are real remote APIs; the rule classifier is lo
 ## 3. Document graph (classify + extract)
 
 ```
-ingest -> classify_subgraph -> finalise_classification -> extract -+-> persist -> ANALYZED
-             ^                                                     |
-             +-- reclassify on escalation (max MAX_RECLASSIFICATION_ATTEMPTS) <--+
+ingest -> classify_subgraph -> finalise_classification -> check_text_available -> extract -> mark_analyzed / fail
 
-classify_subgraph:  rule_classify | llm_classify (parallel)  -> route
-   route: both usable, agree, match_strength >= 0.8, address check ok -> finalise (no Claude call)
+classify_subgraph:  rule_classify | llm_classify (parallel) -> join_classifiers -> route
+   route: both usable, agree, match_strength >= 0.8, address check ok -> finalise_fast (no Claude call)
           otherwise -> agent (Sonnet, only tool: vision_llm) -> validate -> repair -> finalise
 ```
 
+Built as-is in `graph.py`/`classify_graph.py`/`nodes.py`. **Reclassify loop not built yet** (Phase 4, see section 0/6):
+today, an Extraction escalation goes straight to `fail`, with a reason noting the loop isn't built, instead of looping
+back to reclassify. The dotted loop this diagram used to show is what Phase 4 adds.
+
 - **State (typed, small, PII-free):** ids, filename, storage path, `text_hash`, capped tool results, classification, extraction summary
-  (confidence + escalation), `attempts`, agent `messages`, `failure_reason`. Text and extracted fields are not in state.
-- `process_document` and `rerun_extraction` keep their signatures and the "always ends ANALYZED or FAILED" contract, so `queue_service` and the routers are unchanged.
-- **Loops (all capped):** classify<->extract cycle, ReAct tool loops inside agents (`recursion_limit`), lead<->specialists (section 4). Each ends in manual review or "unable to assess", never an unbounded retry.
+  (confidence + escalation), `attempts`, agent `messages`, `failure_reason`. Text (`text_cache.py`, run-scoped, keyed by `document_id`)
+  and extracted fields are not in state — never checkpointed once Phase 4 turns checkpointing on.
+- `pipeline.process_document` mirrors `orchestrator.process_document`'s signature and "always ends ANALYZED or FAILED, never raises"
+  contract, so `queue_service`'s worker loop needed only a one-line swap (done) and the routers are unchanged.
+- **Loops (all capped):** classify<->extract cycle (Phase 4, not yet), ReAct tool loop inside the classify agent (`LANGGRAPH_RECURSION_LIMIT`,
+  built), lead<->specialists (section 4, not yet). Each ends in manual review or "unable to assess", never an unbounded retry.
 
 ## 4. Approval gate and Detection team
 
-Document flow: `queued -> classifying -> extracting -> analysed (awaits officer approval) -> detecting -> analysed`.
-Detection also depends on approval, so it is a **second graph triggered by the approval endpoint**, not a pause inside the first graph.
-That gives human-in-the-loop with no `interrupt()`, no long-lived run, and no change to stuck-detection or queue draining.
-After detection there is nothing further this sprint, so the terminal status stays `analysed`; the per-case pipeline (waits for all documents) is next sprint.
+Document flow: `queued -> classifying -> extracting -> pending_review -> detecting -> analysed`.
+`pending_review` replaces the old overloaded `analysed` (extracted, awaiting officer approval); `analysed` now only means fully done (detected too).
+Detection depends on approval, so it is a **second graph triggered by the approval endpoint**, not a pause inside the first graph — human-in-the-loop
+with no `interrupt()`, no long-lived run, and no change to stuck-detection or queue draining. Nothing follows detection this sprint, so `analysed`
+is terminal for now; the per-case pipeline (waits for all documents) is next sprint.
 
 Consequences to handle:
-- **Two "analysed" moments.** Add an approval marker (`approved_at` or similar) to tell "extracted, awaiting approval" from "fully done"; the case gate should count documents that are approved and detected. New approve endpoint needed.
-- A detection failure must not undo extraction: it gets its own failure state and can be re-run alone.
+- Frontend/status-formatting (`formatDocumentStatus`, `TERMINAL_DOCUMENT_STATUSES`) and `monitoring._STUCK_ELIGIBLE_STATUSES` need `pending_review` and `detecting` added, same pattern as the earlier `extracting` addition.
+- New approve endpoint moves `pending_review -> detecting` and kicks off the detect graph.
+- A detection failure must not undo extraction: it gets its own failure state and can be re-run alone without re-extracting.
 
 ```
 detect(document_id)
@@ -99,9 +124,15 @@ the model sees (the Dify `tool_configurations` equivalent); test that the schema
 
 **Models.** Sonnet: classifier agent (only when needed), extraction, vision, detection lead. Haiku 4.5: llm_classify, repair, specialists. Names come from settings.
 
-**Prompt caching (high priority).** Static first, document text last, `cache_control` on the last static block; byte-stable prefixes (test it). Extraction: per-type schema first, `raw_text` last (13 prefixes).
-Classifier and extractor prompts differ, so they only share a cache via an identical leading block on the same model. Parallel identical requests can all miss, so consider running a batch's first document alone.
-Record cache read/creation tokens per node into Prometheus. Never vary tool lists per request (invalidates the cache); prune tools statically only.
+**Prompt caching (high priority) — built.** Static first, document text last, `cache_control` on the static block only; the classify agent's
+system message is split into a static block (cached) and a per-document inputs block (not) so concatenating them can't break the cache.
+Extraction: per-type schema first (`cache_control` there), `raw_text` last (13 possible prefixes, one per document type).
+Classifier and extractor prompts differ, so they only share a cache via an identical leading block on the same model.
+`cache_gate.py` solves "parallel identical requests can all miss": the first call for a given static prompt (`llm_classify`,
+`classify_agent`, `vision_llm`, `extract:{document_type}`) runs alone and warms the cache; concurrent siblings wait for it, then
+proceed warm. Once a key's been served once, `run()` never blocks for it again. **Not yet built:** recording cache read/creation
+tokens into Prometheus (needs Phase 6's observability work first). Never vary tool lists per request (invalidates the cache); prune
+tools statically only.
 
 **Other cost controls.** Router skips the agent when sources agree; vision at most once; whitespace/length capping of text sent to classification; `recursion_limit` and a tool-call cap.
 
@@ -123,16 +154,23 @@ New secrets: `ANTHROPIC_API_KEY` (new to this backend; today the keys live in Di
 
 ## 6. Phases
 
-0. **Spike:** install `langgraph`, `langchain-anthropic`, `langgraph-checkpoint-postgres`, `psycopg[binary,pool]`; one Sonnet node with `cache_control`; confirm cache reads; measure checkpoint size.
-1. **Skeleton:** typed state, deterministic nodes ported from `orchestrator.py` (ingest, finalise, persist, fail), tests adapted.
-2. **Classifier:** port rule code, Haiku node, parameter-bound vision tool, router, agent, validate/repair, prompt builders (`code3.py`, `secondround.py`).
-3. **Extractor:** node plus parse/repair.
-4. **Loop + persistence:** reclassify cycle, Postgres checkpointer with pruning, `rerun_extraction`.
+0. ✅ **Spike:** install `langgraph`, `langchain-anthropic`, `langgraph-checkpoint-postgres`, `psycopg[binary,pool]`; one Sonnet node with `cache_control`.
+   (Checkpoint-size measurement deferred to Phase 4, when checkpointing actually turns on.)
+1. ✅ **Skeleton:** typed state (`state.py`), deterministic nodes ported from `orchestrator.py` (`ingest`, `finalise_classification`,
+   `check_text_available`, `extract`, `mark_analyzed`, `fail` — `nodes.py`). Unit tests written (`test_langgraph.py`), not yet run
+   against installed deps.
+2. ✅ **Classifier:** rule code ported and diffed against source (`rule_classify.py`), Haiku node (`llm_classify.py`), parameter-bound
+   vision tool returning top-3 (`vision_tool.py`), deterministic router (`router.py`), Sonnet agent + validate/repair
+   (`classify_graph.py`, `classify_support.py`).
+3. ✅ **Extractor:** node plus parse (`extract.py`, reuses `orchestrator._parse_extraction_output`). Repair node for extraction not
+   built — only the classifier side has one so far.
+4. ⬜ **Loop + persistence:** reclassify cycle, Postgres checkpointer with pruning, `rerun_extraction` on this path.
    *Checkpoint to judge whether LangGraph fits before continuing.*
-4b. **Detection:** approval endpoint and marker, `detecting` status, tools wrapped, three specialists, lead, deterministic findings merge.
-5. **Concurrency and caching:** limiters, cache breakpoints, cache metrics.
-6. **Observability, guardrails, evals, CI.**
-7. **Learning/Store** last. Delete the Dify client, keys and DSL only when this branch is adopted.
+4b. ⬜ **Detection:** approval endpoint and marker, `detecting` status, tools wrapped, three specialists, lead, deterministic findings merge.
+5. 🟡 **Concurrency and caching:** cache breakpoints + `cache_gate.py` done (see section 5) — ahead of schedule, since testing needed
+   it. Per-provider rate limiters and cache-hit metrics still not built.
+6. ⬜ **Observability, guardrails, evals, CI.** (The dev-only trace panel is not this — it's a testing aid, not OTel/Prometheus.)
+7. ⬜ **Learning/Store** last. Delete the Dify client, keys and DSL only when this branch is adopted.
 
 ## 7. Settled and deferred
 

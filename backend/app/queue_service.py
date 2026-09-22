@@ -6,8 +6,9 @@ import time
 from collections import deque
 from datetime import datetime, timezone
 
-from . import document_repository, orchestrator
+from . import document_repository
 from .config import settings
+from .langgraph import pipeline as langgraph_pipeline
 from .models import DocumentStatus, ProcessingErrorEntry
 
 logger = logging.getLogger("classifier_pipeline.queue")
@@ -127,11 +128,12 @@ class DocumentQueue:
                 document_id, invoke_time_seconds, settings.DEQUEUE_TO_INVOKE_TARGET_SECONDS,
             )
 
-        # orchestrator.process_document owns classify -> extract -> escalate
-        # -> terminal status (ANALYZED/FAILED) from here. It catches its own
-        # DifyInvocationErrors and translates them into a FAILED status
-        # rather than raising, so no retry loop is needed at this layer.
-        await orchestrator.process_document(document_id)
+        # langgraph-test branch: hard-switched to the langgraph pipeline (see
+        # LANGGRAPH_MIGRATION_PLAN.md section 1, "Cutover") instead of
+        # orchestrator.process_document (Dify). Same contract: owns
+        # classify -> extract -> terminal status (ANALYZED/FAILED) from
+        # here, and never raises, so no retry loop is needed at this layer.
+        await langgraph_pipeline.process_document(document_id)
 
 
 document_queue = DocumentQueue()
