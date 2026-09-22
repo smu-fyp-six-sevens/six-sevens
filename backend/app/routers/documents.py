@@ -93,7 +93,7 @@ async def get_document(document_id: str) -> DocumentRecord:
     if extracted_fields:
         document.extracted_fields = {
             field.field_name: {
-                "id": field.id,
+                **({"id": field.id} if field.id is not None else {}),
                 "value": field.field_value,
                 "confidence": field.confidence,
             }
