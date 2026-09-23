@@ -1191,6 +1191,7 @@ export default function DocumentDetailsPage({
                     );
 
                     setDocument(updated);
+                    setFieldDraft(buildFieldDraft(updated.extracted_fields));
                     setIsAddFieldOpen(false);
                     setNewFieldName('');
                     setNewFieldValue('');
