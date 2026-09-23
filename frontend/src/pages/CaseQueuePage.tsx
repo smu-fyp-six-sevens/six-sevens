@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import AppHeader from '../components/AppHeader';
 import CaseCard from '../components/CaseCard';
+import { hideDevFeatures } from '../lib/api';
 import type { CaseRecord } from '../App';
 
 interface CaseQueuePageProps {
@@ -260,9 +261,11 @@ export default function CaseQueuePage({
 
         <div className="queue-label">
           Assigned to you ({matches.length})
-          <button type="button" className="dev-tool-link" onClick={onOpenSpellingAnomalyTest}>
-            Test spelling anomaly detection →
-          </button>
+          {!hideDevFeatures && (
+            <button type="button" className="dev-tool-link" onClick={onOpenSpellingAnomalyTest}>
+              Test spelling anomaly detection →
+            </button>
+          )}
         </div>
 
         {isLoading ? (

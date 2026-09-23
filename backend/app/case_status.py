@@ -4,6 +4,7 @@ from collections import defaultdict
 from typing import Optional
 
 from . import case_repository, document_repository, extracted_fields_repository
+from .config import settings
 from .mapper import (
     compute_id_document_identity_coverage,
     compute_id_document_identity_progress,
@@ -191,7 +192,7 @@ def list_case_summaries() -> list[CaseSummary]:
     N+1 as the case count grows. Fine at current scale; would need
     pagination/filtering if that stops being true.
     """
-    cases = case_repository.list_cases()
+    cases = case_repository.list_cases(include_dev=not settings.IS_CLOUD_DEPLOYMENT)
     documents_by_case: dict[str, list[DocumentRecord]] = defaultdict(list)
     for doc in document_repository.list_documents():
         if doc.case_id is not None:
