@@ -12,6 +12,7 @@ from ..fraud_detection.font_consistency_v2 import (
     FontConsistencyResultV2,
     check_font_consistency_v2,
 )
+from ..fraud_detection.metadata_analysis import MetadataAnalysisResult, check_metadata_anomalies
 from ..fraud_detection.spelling_anomaly import SpellingAnomalyResult, check_spelling_anomalies
 
 router = APIRouter(prefix="/documents", tags=["detection"])
@@ -105,3 +106,53 @@ async def get_spelling_anomaly(document_id: str) -> SpellingAnomalyResult:
     return await check_spelling_anomalies(
         document_id, file_bytes, document.filename, extracted_fields
     )
+
+
+@router.get(
+    "/{document_id}/detection/metadata-anomaly", response_model=MetadataAnalysisResult
+)
+async def get_metadata_anomaly(document_id: str) -> MetadataAnalysisResult:
+    """
+    Digital Authenticity Specialist. Unlike the checks above, this doesn't
+    download or re-process the file at all — file metadata (author,
+    creator, producer, dates, software) is already captured once, up
+    front, for every document by ingestion.metadata_extractor and sits on
+    document.metadata (see orchestrator._ingest_document_text); this just
+    reads that and runs the local pattern/rule checks in
+    fraud_detection.metadata_analysis over it.
+
+    AC6: unlike the read-only checks above (spelling-anomaly explicitly
+    writes nothing), this one persists its result — the user story asked
+    for it to be stored ready for a future lead-agent aggregator to pull.
+    Persistence is best-effort: a write failure is logged but doesn't fail
+    the request, since the officer viewing this page shouldn't lose the
+    result they can already see over a transient DB error.
+
+    document_type is passed through because some rules only apply to
+    documents an institution issued (see
+    metadata_analysis.INSTITUTION_ORIGINATED_DOCUMENT_TYPES). That assumes
+    the type is correct by the time this runs — the intended flow is that
+    an officer confirms classification before anomaly checks are run.
+    """
+    try:
+        document = await asyncio.to_thread(document_repository.get_document, document_id)
+    except Exception as exc:
+        logger.exception("Failed to fetch document %s", document_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch the document. Check Supabase table access.",
+        ) from exc
+
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    result = check_metadata_anomalies(document_id, document.metadata, document.document_type)
+
+    try:
+        await asyncio.to_thread(
+            document_repository.update_metadata_anomalies, document_id, result.model_dump()
+        )
+    except Exception:
+        logger.exception("Failed to persist metadata anomaly result for document %s", document_id)
+
+    return result

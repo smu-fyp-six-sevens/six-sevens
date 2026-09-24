@@ -182,3 +182,43 @@ def test_get_extracted_fields_for_documents_groups_rows_by_document_id() -> None
         assert by_document["doc-2"] == [
             ExtractedField(field_name="bank_name", field_type="string", field_value="OCBC", confidence=0.8)
         ]
+
+
+def test_add_extracted_field_inserts_human_verified_row() -> None:
+    with patch("app.extracted_fields_repository.supabase_client") as mock_client:
+        extracted_fields_repository.add_extracted_field(
+            "doc-1", "net_pay", 5000, required_field_names={"net_pay"}
+        )
+
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        assert row["document_id"] == "doc-1"
+        assert row["field_name"] == "net_pay"
+        assert row["field_value"] == 5000
+        # Manually entered, so human-verified by definition.
+        assert row["confidence"] == 1.0
+        # Named in the document type's schema, so it counts as required
+        # rather than a freeform addition.
+        assert row["field_category"] == "required"
+        assert row["field_type"] == "number"
+
+
+def test_add_extracted_field_marks_unschemad_field_as_additional() -> None:
+    with patch("app.extracted_fields_repository.supabase_client") as mock_client:
+        extracted_fields_repository.add_extracted_field(
+            "doc-1", "reference_no", "REF-9", required_field_names={"net_pay"}
+        )
+
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        assert row["field_category"] == "additional"
+        assert row["field_type"] == "string"
+
+
+def test_delete_extracted_field_scopes_delete_to_its_own_document() -> None:
+    # Both filters matter: keying on field_id alone would let a caller
+    # delete another document's row by guessing its id.
+    with patch("app.extracted_fields_repository.supabase_client") as mock_client:
+        extracted_fields_repository.delete_extracted_field("doc-1", "field-1")
+
+        delete_query = mock_client.table.return_value.delete.return_value
+        delete_query.eq.assert_called_once_with("id", "field-1")
+        delete_query.eq.return_value.eq.assert_called_once_with("document_id", "doc-1")

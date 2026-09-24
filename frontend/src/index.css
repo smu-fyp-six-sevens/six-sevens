@@ -1543,6 +1543,109 @@ h1 {
   opacity: 0.6;
 }
 
+/* Neutral sibling of .details-type-select — that one's warm border flags a
+   low-confidence classification the officer needs to correct, which would
+   read as a warning on a dev tool's plain dropdown. */
+.type-select {
+  width: 100%;
+  max-width: 380px;
+  min-width: 0;
+  box-sizing: border-box;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #17294d;
+  font: inherit;
+  font-size: 13px;
+}
+
+.type-select:disabled {
+  opacity: 0.6;
+}
+
+/* --- Anomaly test page (dev tool) -------------------------------------
+   Each check's result gets one .details-card; everything below keeps the
+   card's *inner* content from stacking up as further nested boxes, which
+   is what made this page read as a pile of unrelated panels. */
+
+/* Plain single column. This page used to borrow .upload-view, which is a
+   `1fr 240px` grid built for UploadPage's sticky sidebar — with no sidebar
+   to fill the second track, its children auto-placed into alternating
+   cells (heading left, intro right, dropzone left, empty-state right...),
+   which is what scattered the page. */
+.tool-view {
+  margin-top: 28px;
+}
+
+.anomaly-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.anomaly-card-head h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.anomaly-subhead {
+  margin-top: 16px;
+}
+
+/* Flat inside a card: the card already supplies the border and white
+   ground, so the grid only needs its row dividers. */
+.kv-grid--flush {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+
+.kv-grid--flush .kv-row {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.anomaly-empty {
+  margin: 8px 0 0;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+}
+
+.badge.warn {
+  background: var(--amber-bg);
+  color: var(--amber);
+}
+
+.severity-chip {
+  margin-right: 8px;
+}
+
+/* Raw JSON is a debugging aid, not the point of the page — collapsed by
+   default so it stops dominating the result it belongs to. */
+.raw-json {
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.raw-json > summary {
+  cursor: pointer;
+  font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.raw-json > summary:hover {
+  color: var(--ink);
+}
+
 .details-label {
   display: block;
   margin-bottom: 7px;

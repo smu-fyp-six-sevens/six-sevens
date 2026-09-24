@@ -348,6 +348,10 @@ class DocumentRecord(BaseModel):
     extraction_confidence: Optional[float] = None
     escalation_reason: Optional[str] = None
     metadata: Optional[dict] = None
+    # The Digital Authenticity Specialist's stored result (see
+    # fraud_detection.metadata_analysis.MetadataAnalysisResult) — set once
+    # GET .../detection/metadata-anomaly has run for this document.
+    metadata_anomalies: Optional[dict] = None
 
 
 class UpdateExtractedFieldsRequest(BaseModel):

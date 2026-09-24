@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.fraud_detection.font_consistency import FontConsistencyResult
 from app.fraud_detection.font_consistency_v2 import ExtractedField, FontConsistencyResultV2
+from app.fraud_detection.metadata_analysis import MetadataAnalysisResult
 from app.fraud_detection.spelling_anomaly import SpellingAnomaly, SpellingAnomalyResult
 from app.main import app
 from app.models import DocumentRecord, DocumentStatus
@@ -210,4 +211,110 @@ def test_get_spelling_anomaly_storage_failure_returns_502() -> None:
     mock_check.assert_not_called()
 
 
+def test_get_metadata_anomaly_success_persists_result() -> None:
+    result = MetadataAnalysisResult(
+        document_id="doc-1",
+        extracted_metadata={"author": "admin"},
+        anomalies=[
+            {"field": "author", "value": "admin", "reason": "placeholder", "severity": "low"}
+        ],
+        ai_generation_indicators=[],
+        unable_to_assess=False,
+    )
+
+    with (
+        patch("app.routers.detection.document_repository") as mock_repo,
+        patch(
+            "app.routers.detection.check_metadata_anomalies", return_value=result
+        ) as mock_check,
+    ):
+        mock_repo.get_document.return_value = _make_document()
+
+        response = client.get("/documents/doc-1/detection/metadata-anomaly")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["anomalies"][0]["field"] == "author"
+    mock_check.assert_called_once_with("doc-1", None, None)
+    mock_repo.update_metadata_anomalies.assert_called_once_with(
+        "doc-1", result.model_dump()
+    )
+
+
+def test_get_metadata_anomaly_passes_stored_metadata_and_document_type_through() -> None:
+    result = MetadataAnalysisResult(
+        document_id="doc-1",
+        extracted_metadata={},
+        anomalies=[],
+        ai_generation_indicators=[],
+        unable_to_assess=True,
+        unable_to_assess_reason="No metadata was captured for this document",
+    )
+    document = _make_document()
+    document.metadata = {"Author": "Jane Tan"}
+    # The officer-confirmed type decides which rules apply — see
+    # metadata_analysis.INSTITUTION_ORIGINATED_DOCUMENT_TYPES.
+    document.document_type = "bank_statement"
+
+    with (
+        patch("app.routers.detection.document_repository") as mock_repo,
+        patch(
+            "app.routers.detection.check_metadata_anomalies", return_value=result
+        ) as mock_check,
+    ):
+        mock_repo.get_document.return_value = document
+
+        response = client.get("/documents/doc-1/detection/metadata-anomaly")
+
+    assert response.status_code == 200
+    mock_check.assert_called_once_with("doc-1", {"Author": "Jane Tan"}, "bank_statement")
+
+
+def test_get_metadata_anomaly_still_returns_result_when_persistence_fails() -> None:
+    result = MetadataAnalysisResult(
+        document_id="doc-1",
+        extracted_metadata={},
+        anomalies=[],
+        ai_generation_indicators=[],
+        unable_to_assess=True,
+        unable_to_assess_reason="No metadata was captured for this document",
+    )
+
+    with (
+        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers.detection.check_metadata_anomalies", return_value=result),
+    ):
+        mock_repo.get_document.return_value = _make_document()
+        mock_repo.update_metadata_anomalies.side_effect = RuntimeError("db down")
+
+        response = client.get("/documents/doc-1/detection/metadata-anomaly")
+
+    assert response.status_code == 200
+    assert response.json()["unable_to_assess"] is True
+
+
+def test_get_metadata_anomaly_fetch_document_failure_returns_502() -> None:
+    with (
+        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers.detection.check_metadata_anomalies") as mock_check,
+    ):
+        mock_repo.get_document.side_effect = RuntimeError("Supabase table access failed")
+
+        response = client.get("/documents/doc-1/detection/metadata-anomaly")
+
+    assert response.status_code == 502
+    mock_check.assert_not_called()
+
+
+def test_get_metadata_anomaly_document_not_found() -> None:
+    with (
+        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers.detection.check_metadata_anomalies") as mock_check,
+    ):
+        mock_repo.get_document.return_value = None
+
+        response = client.get("/documents/missing-id/detection/metadata-anomaly")
+
+    assert response.status_code == 404
+    mock_check.assert_not_called()
 

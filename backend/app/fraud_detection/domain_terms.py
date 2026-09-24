@@ -33,10 +33,10 @@ _RAW_DOMAIN_TERMS: set[str] = {
     "director", "directorship", "signatory", "signatories", "custodian",
     "trustee", "settlor", "grantor", "mortgagee", "mortgagor",
     # Document/field terminology used elsewhere in this codebase
-    "constitution", "incumbency", "declarant",
-    "Maybank", "DBS", "OCBC", "UOB", "Citi", "HSBC",
+    "constitution", "incumbency", "declarant", "rtf",
+    "Maybank", "DBS", "OCBC", "UOB", "Citi", "HSBC","XXXX", "CIMB",
     "StandardChartered", "StandardCharteredBank", "GLDB", "NFE", "NFFE",
-    "FATCA", "GIIN", "IRS", "https", "www", "oecd",
+    "FATCA", "GIIN", "IRS", "https", "www", "oecd", "paynow","eStatements"
 }
 
 # Lowercased once here rather than trusting every entry above to already be

@@ -135,6 +135,21 @@ def update_metadata(document_id: str, metadata: dict) -> None:
     ).execute()
 
 
+def update_metadata_anomalies(document_id: str, result: dict) -> None:
+    """
+    Persists the Digital Authenticity Specialist's metadata-anomaly result
+    (see fraud_detection.metadata_analysis) as a single JSON blob shaped
+    exactly like the MetadataAnalysisResult response body — ready to hand to
+    a future lead-agent aggregator as-is rather than reconstructed from
+    several rows. Kept separate from `metadata` above (the raw exiftool
+    dict ingestion already stores) since this is a derived analysis of that
+    data, not the source data itself.
+    """
+    supabase_client.table("documents").update({"metadata_anomalies": result}).eq(
+        "id", document_id
+    ).execute()
+
+
 def get_document(document_id: str) -> Optional[DocumentRecord]:
     result = supabase_client.table("documents").select("*").eq("id", document_id).execute()
     if not result.data:

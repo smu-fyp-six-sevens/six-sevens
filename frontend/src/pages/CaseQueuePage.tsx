@@ -10,7 +10,7 @@ interface CaseQueuePageProps {
   error: string | null;
   onRetry: () => void;
   onOpenCase: (caseRecord: CaseRecord) => void;
-  onOpenSpellingAnomalyTest: () => void;
+  onOpenTestAnomaly: () => void;
   onCreateCase: () => void;
 }
 
@@ -81,7 +81,7 @@ export default function CaseQueuePage({
   error,
   onRetry,
   onOpenCase,
-  onOpenSpellingAnomalyTest,
+  onOpenTestAnomaly,
   onCreateCase,
 }: CaseQueuePageProps) {
   const [search, setSearch] = useState('');
@@ -262,8 +262,8 @@ export default function CaseQueuePage({
         <div className="queue-label">
           Assigned to you ({matches.length})
           {!hideDevFeatures && (
-            <button type="button" className="dev-tool-link" onClick={onOpenSpellingAnomalyTest}>
-              Test spelling anomaly detection →
+            <button type="button" className="dev-tool-link" onClick={onOpenTestAnomaly}>
+              Test anomaly detection →
             </button>
           )}
         </div>

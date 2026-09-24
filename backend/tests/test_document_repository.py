@@ -234,6 +234,25 @@ def test_update_metadata_sends_metadata() -> None:
         )
 
 
+def test_update_metadata_anomalies_sends_result() -> None:
+    with patch("app.document_repository.supabase_client") as mock_client:
+        document_repository.update_metadata_anomalies(
+            "doc-1", {"document_id": "doc-1", "anomalies": [], "unable_to_assess": False}
+        )
+
+        update_payload = mock_client.table.return_value.update.call_args[0][0]
+        assert update_payload == {
+            "metadata_anomalies": {
+                "document_id": "doc-1",
+                "anomalies": [],
+                "unable_to_assess": False,
+            }
+        }
+        mock_client.table.return_value.update.return_value.eq.assert_called_once_with(
+            "id", "doc-1"
+        )
+
+
 def test_list_documents_applies_case_id_and_status_filters() -> None:
     with patch("app.document_repository.supabase_client") as mock_client:
         query = mock_client.table.return_value.select.return_value
