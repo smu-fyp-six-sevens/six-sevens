@@ -132,6 +132,10 @@ _TEXT_RULES = {
     ],
     "certificate_of_incorporation": [
         (r"certificate\s*of\s*incorporation", 0.95),
+        # ACRA's own title is "Certificate Confirming Incorporation of
+        # Company" — "Confirming" sits between the two words, so the rule
+        # above never fires on the actual Singapore document.
+        (r"certificate\s*confirming\s*incorporation", 0.95),
         (r"company\s*registration\s*number", 0.3),
         (r"incorporated\s*(under|in)\b", 0.5),
     ],
@@ -176,7 +180,12 @@ _TEXT_RULES = {
     ],
     "certificate_of_incumbency": [
         (r"certificate\s*of\s*incumbency", 0.95),
-        (r"accounting\s*and\s*corporate\s*regulatory\s*authority", 0.9),
+        # Identifies ACRA as the ISSUER, not the document type — it appears
+        # on every ACRA-issued PDF, incorporation certificates included. At
+        # 0.9 it combined with `\buen\b` (0.2) to score a capped 1.0 for
+        # incumbency on any ACRA document, outranking the real type. Kept
+        # only as weak corroboration.
+        (r"accounting\s*and\s*corporate\s*regulatory\s*authority", 0.2),
         (r"business\s*profile", 0.8),
         (r"\bbizfile\b", 0.7),
         (r"\bincumbency\b", 0.6),
@@ -305,7 +314,10 @@ _CERTAIN_TEXT_RULES = {
     # alone — but neither of those documents is a form with "IDENTITY CARD
     # NO." on it, so requiring both nearby each other is decisive.
     "nric": [r"(?s)republic\s+of\s+singapore.{0,300}identity\s+card\s+no"],
-    "certificate_of_incorporation": [r"asst\.?\s*registrar\s*of\s*companies"],
+    # Title only — the "Asst Registrar of Companies" signature line is printed
+    # on the incumbency/business profile too (with or without the period,
+    # depending on the source), so it can't tell the two apart.
+    "certificate_of_incorporation": [r"certificate\s*confirming\s*incorporation", r"certificate\s*of\s*incorporation"],
     "certificate_of_incumbency": [r"business\s*profile\s*\(company\)\s*of"],
     # A one-word signal, exceptionally — verified against every other
     # generator's *rendered* text (not source comments) with none matching.

@@ -132,11 +132,17 @@ async def _classify_with_vision(storage_path: str, filename: str) -> VisionClass
         temperature=0,
         max_tokens=1024,
     )
+    # Static prompt FIRST, document second. A cache_control breakpoint caches
+    # everything up to and including its own block, so with the document
+    # first the cached prefix contained this document — unique per call,
+    # never re-readable, and still charged the 1.25x write premium. Ordering
+    # it this way makes the byte-stable prompt the cached prefix and leaves
+    # the document as the varying suffix, matching extract.py and agent_node.
     message = {
         "role": "user",
         "content": [
-            _build_image_block(file_bytes, filename),
             {"type": "text", "text": VISION_PROMPT, "cache_control": {"type": "ephemeral"}},
+            _build_image_block(file_bytes, filename),
         ],
     }
     try:
