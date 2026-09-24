@@ -8,6 +8,10 @@ from __future__ import annotations
 
 import json
 import re
+from typing import Annotated
+
+from langchain_core.tools import tool
+from langgraph.prebuilt import InjectedState
 
 from ..config import settings
 
@@ -203,3 +207,19 @@ async def classify_by_llm(extracted_text: str) -> dict:
     ]
     response = await cache_gate.run("llm_classify", lambda: model.ainvoke(messages))
     return parse_llm_classification(response.content if isinstance(response.content, str) else str(response.content))
+
+
+@tool
+async def llm_classify_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
+    """Runs an independent semantic classification pass over the document's extracted text (no image, no vision) and returns up to 3 ranked candidates with your own reasoning. Call this for a second opinion when the rule-based signal is weak, absent, or ambiguous — skip it when the rule-based result is already decisive."""
+    from . import text_cache, trace  # local import: avoids a module cycle at import time
+
+    raw_text = text_cache.get(document_id) or ""
+    result = await classify_by_llm(raw_text)
+    top = (result.get("top_candidates") or [None])[0]
+    trace.record(
+        document_id, "llm_classify_tool",
+        llm_top_type=top["document_type"] if top else None,
+        llm_top_strength=top["match_strength"] if top else None,
+    )
+    return result

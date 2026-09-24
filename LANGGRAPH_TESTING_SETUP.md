@@ -2,9 +2,11 @@
 
 `queue_service.py` now hard-switches every document upload to the new LangGraph pipeline
 (`backend/app/langgraph/`) instead of Dify (see `LANGGRAPH_MIGRATION_PLAN.md`). This is
-phases 0-3: classify (rule + Haiku + a Sonnet agent fallback) and extract (Sonnet), no
-reclassify loop and no persistence/checkpointing yet. Dify itself is untouched and still
-running in the cloud, just not called from this branch's upload path.
+phases 0-4: classify (a deterministic rule pass, then a Sonnet agent that decides itself
+whether to call the Haiku classifier and/or vision as tools), extract (Sonnet), and a bounded
+classify<->extract reclassify loop when Extraction disagrees with the classified type. No
+persistence/checkpointing yet. Dify itself is untouched and still running in the cloud, just
+not called from this branch's upload path.
 
 ## 1. Install the new Python dependencies
 
@@ -31,10 +33,9 @@ pipeline still reads/writes the same `documents`/`cases` tables and Supabase Sto
 Optional overrides, all default to sensible values (see `backend/app/config.py`):
 
 ```
-LANGGRAPH_SONNET_MODEL=claude-sonnet-5        # classifier agent, vision, extraction
+LANGGRAPH_SONNET_MODEL=claude-sonnet-4-6      # classifier agent, vision, extraction
 LANGGRAPH_HAIKU_MODEL=claude-haiku-4-5-20251001   # llm_classify (was DeepSeek in Dify)
-LANGGRAPH_ROUTER_AGREEMENT_THRESHOLD=0.8      # below this, the Sonnet agent gets called
-LANGGRAPH_RECURSION_LIMIT=15                  # caps the classify agent's tool-call loop
+LANGGRAPH_RECURSION_LIMIT=60                  # caps the classify/reclassify tool-call loops
 ```
 
 ## 3. Run the backend and frontend as usual
@@ -60,16 +61,23 @@ Open any document's detail page (`DocumentDetailsPage`) — there's a new **"Lan
 (debug)"** panel near the bottom (below the extracted fields, above Approve/Reject). It's
 intentionally plain (monospace, no styling) and shows, live while the document is processing:
 
-- **route** — `fast` (rule_classify + llm_classify agreed strongly enough that the Sonnet
-  agent was skipped entirely — this is the "biggest saving" the migration plan is about) or
-  `agent` (Sonnet was called, optionally with the `vision_llm` tool).
-- **rule_top_type / strength** and **llm_top_type / strength** — what the two cheap
-  classifiers independently landed on, so you can see *why* it went fast or agent.
+- **rule_top_type / strength** and **certain_type** — what the deterministic rule pass found
+  before the agent ever ran, and whether it was decisive enough to hand the agent a
+  `certain_type` hint.
+- **llm_top_type / strength** and **vision_top_type / strength** — only populated if the agent
+  actually chose to call that tool for this document; empty means it decided not to.
 - **final_status** — `analyzed` or `failed`.
 - A **"Full step log"** `<details>` you can expand for every step the graph took, in order,
-  with a timestamp relative to when the document started (`ingest`, `rule_classify`,
-  `llm_classify`, `route`, `agent_call` × N with which tools it called, `validate`,
-  `classification_finalised`, `extraction`, `done`).
+  with a timestamp relative to when the document started: `ingest`, `rule_classify`,
+  `agent_call` × N — each entry shows `offered_tools` (what it *could* call that turn:
+  `llm_classify_tool` only on the first call, `vision_llm` only from the second call onward —
+  this order is enforced in code, not just prompted, since vision sends the whole document
+  image and is by far the most expensive option) and `tool_calls` (what it actually called, if
+  anything) — then `validate`, `classification_finalised`, `extraction`, `done`. If Extraction
+  disagreed with the classified type, you'll also see `record_escalation` and `reclassify`
+  before another `agent_call`/`validate`/`classification_finalised`/`extraction` cycle.
+- **classification_reasoning** — the classifier's plain-language justification. Shown here
+  only for now; not written to Supabase yet (deliberate, see `LANGGRAPH_MIGRATION_PLAN.md`).
 
 This trace is **in-memory only** (`backend/app/langgraph/trace.py`) — it resets if you
 restart the backend, and only exists for documents actually processed via LangGraph in the
@@ -90,14 +98,9 @@ type) taking a little longer than the ones right after it — that's expected, n
 
 ## 6. What isn't wired up yet (by design, later phases)
 
-- **No reclassify loop.** If Extraction thinks the classified type is wrong, the document is
-  routed straight to `failed` with a clear reason, instead of looping back to reclassify
-  (that's Phase 4 — see `LANGGRAPH_MIGRATION_PLAN.md` section 6).
 - **No checkpointing/persistence.** Nothing here is saved to Postgres as graph state; a crash
   mid-run just fails the document the normal way (same as Dify does today).
-- **The manual "correct document type" action still uses Dify.** `PATCH
-  /documents/{id}/document-type` calls `orchestrator.rerun_extraction`, not the langgraph
-  pipeline — that's also Phase 4 scope.
+- **`classification_reasoning` isn't saved to Supabase yet** — deliberately, see section 4 above.
 - **Detection Agent isn't built at all yet** (separate, later work — see `CLAUDE.md`).
 
 ## 7. If something breaks

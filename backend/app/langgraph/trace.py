@@ -6,14 +6,27 @@ said, which model calls fired. Not persisted, not part of graph state
 testing the langgraph-test branch can see routing decisions without reading
 logs, via GET /documents/{id}/langgraph-trace.
 
-Deliberately a plain process-local dict — this is a debugging aid for the
-single-instance experiment stage, not a feature.
+The process-local dict is the write buffer; every start()/record() also
+saves the full trace snapshot (one row per document) to the Supabase
+`langgraph_trace` table on a single background thread, so traces survive
+restarts and can be shared. Best-effort: a failed write is logged and never
+affects the pipeline.
 """
 
 from __future__ import annotations
 
+import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
+
+from ..supabase_client import supabase_client
+
+logger = logging.getLogger("classifier_pipeline.langgraph.trace")
+
+# One worker so saves for a document land in order (each carries the full
+# snapshot, so the last write wins).
+_writer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="langgraph-trace")
 
 _traces: dict[str, dict[str, Any]] = {}
 _MAX_TRACES = 500  # bounded so a long-running dev process doesn't leak memory
@@ -23,6 +36,7 @@ def start(document_id: str) -> None:
     if len(_traces) >= _MAX_TRACES:
         _traces.pop(next(iter(_traces)))
     _traces[document_id] = {"document_id": document_id, "started_at": time.time(), "steps": []}
+    _persist(document_id)
 
 
 def _trace(document_id: str) -> dict[str, Any]:
@@ -33,7 +47,32 @@ def record(document_id: str, step: str, **fields: Any) -> None:
     trace = _trace(document_id)
     trace["steps"].append({"step": step, "at": round(time.time() - trace["started_at"], 3), **fields})
     trace.update(fields)  # also flatten onto the top level for easy reading
+    _persist(document_id)
 
 
 def get(document_id: str) -> dict[str, Any] | None:
     return _traces.get(document_id)
+
+
+def get_persisted(document_id: str) -> dict[str, Any] | None:
+    result = supabase_client.table("langgraph_trace").select("trace").eq("document_id", document_id).execute()
+    return result.data[0]["trace"] if result.data else None
+
+
+def _persist(document_id: str) -> None:
+    trace = _traces.get(document_id)
+    if trace is None:
+        return
+    _writer.submit(_write_row, {**trace, "steps": list(trace["steps"])})
+
+
+def _write_row(snapshot: dict[str, Any]) -> None:
+    document_id = snapshot["document_id"]
+    table = supabase_client.table("langgraph_trace")
+    try:
+        # No unique key on document_id, so update-then-insert instead of upsert.
+        updated = table.update({"trace": snapshot}).eq("document_id", document_id).execute()
+        if not updated.data:
+            table.insert({"document_id": document_id, "trace": snapshot}).execute()
+    except Exception as exc:  # noqa: BLE001 — debug aid must never break the pipeline
+        logger.warning("Failed to persist langgraph trace for %s: %s", document_id, exc)

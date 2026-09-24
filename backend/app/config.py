@@ -153,11 +153,13 @@ class Settings:
     # model swap doesn't need a code change.
     LANGGRAPH_SONNET_MODEL: str = _env("LANGGRAPH_SONNET_MODEL", "claude-sonnet-4-6")
     LANGGRAPH_HAIKU_MODEL: str = _env("LANGGRAPH_HAIKU_MODEL", "claude-haiku-4-5-20251001")
-    # Router fast-path (see langgraph/router.py): skip the Sonnet agent
-    # entirely when rule_classify and llm_classify already agree this
-    # strongly — this is the "biggest saving" the migration plan calls out.
-    LANGGRAPH_ROUTER_AGREEMENT_THRESHOLD: float = 0.8
-    LANGGRAPH_RECURSION_LIMIT: int = 15
+    # Bounds both the classify agent's own tool-call loop AND, now that
+    # Phase 4's classify<->extract reclassify loop exists, a full second
+    # pass through record_escalation -> reclassify agent -> validate/repair
+    # -> finalise -> extract — comfortably covers
+    # MAX_RECLASSIFICATION_ATTEMPTS full passes with room for a few tool
+    # calls each, while still being a real ceiling against a runaway loop.
+    LANGGRAPH_RECURSION_LIMIT: int = 60
 
 
 settings = Settings()

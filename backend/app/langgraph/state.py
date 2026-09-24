@@ -52,12 +52,11 @@ class DocumentGraphState(TypedDict, total=False):
     text_hash: Optional[str]
     text_available: bool
 
-    # Classify subgraph. rule_result/llm_result written by independent
-    # parallel nodes (no shared key, no reducer needed); route/agent state
-    # only populated when the fast path is skipped.
+    # Classify subgraph. rule_result is the only deterministically-computed
+    # input — llm_classify_tool/vision_llm results live only inside
+    # agent_messages (as ToolMessages), since the agent decides itself
+    # whether to call either, not a graph node.
     rule_result: Optional[dict]
-    llm_result: Optional[dict]
-    route: Optional[str]  # "fast" | "agent"
     agent_messages: Annotated[list[Any], add_messages]
 
     classification: Optional[ClassificationResult]

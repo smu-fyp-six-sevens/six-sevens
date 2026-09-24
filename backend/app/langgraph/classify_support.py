@@ -1,9 +1,22 @@
 """
-Shared classify-subgraph logic ported from the Classifier chatflow's "Code 3"
-(agent prompt builder) and "Validate Output" code nodes — see
-backend/app/dify/Classifier (Chatflow) (2).yml. `address_check` and
-`has_usable_text` are also used by router.py to decide the fast path,
-matching Agent 3's own escalation rules (a/b/c/d in the prompt below).
+Shared classify-subgraph logic. `validate_agent_output` is a straight port
+of the Classifier chatflow's "Validate Output" code node (see
+backend/app/dify/Classifier (Chatflow) (2).yml) — that contract (allowed
+types, id_document self-fulfilment, never-raises parsing) doesn't depend on
+how the classification was arrived at, so it's unchanged.
+
+The agent's system prompt (`AGENT_STATIC_PROMPT`/`agent_prompt_parts`) is
+NOT the Dify port anymore. Dify's Agent 3 was handed two already-computed
+results (rule_result, llm_result) and could only optionally call vision_llm;
+this graph only pre-computes rule_result deterministically (see
+LANGGRAPH_MIGRATION_PLAN.md — "only rule-based runs deterministically") and
+gives the agent two real tools, `llm_classify_tool` and `vision_llm`, to
+call zero, one, or both of as it judges necessary — including calling
+neither when rule_result already includes a decisive `certain_type` (see
+rule_classify.py), which is surfaced to the agent as a hint, not a
+hardcoded bypass: the agent still has to say so in its own output.
+`address_check` and `has_usable_text` are still computed the same way, from
+rule_result alone.
 """
 
 from __future__ import annotations
@@ -67,20 +80,19 @@ _INTRO = "You classify documents for a KYC/corporate onboarding pipeline.\n\n"
 # Only this template is ever .format()-ed; keep braces elsewhere literal.
 _SHARED_BODY = """## Inputs
 You are given, already computed:
-- rule_result, llm_result: each has top_candidates (up to 3, ranked) + notes.
-  Provided below, after this instruction block.
-- text_available: whether a text layer existed for rule_result/llm_result to work from.
+- rule_result: regex/keyword scoring against filename + extracted text. top_candidates (up to 3, ranked) + notes.
+  Provided below, after this instruction block. This is the ONLY source computed for you — nothing else has run yet.
+- text_available: whether a text layer existed for rule_result to work from.
 - address_check: visible | not_visible | unknown — already computed from rule_result's address note.
 
-confidence is RELATIVE (sums to 1 per source, never copy into output). match_strength is ABSOLUTE (0-1) — use this for your own confidence. A source's "pick" = its rank-1. "No match" = empty candidates or rank-1 match_strength < 0.3. "Close" = rank-1/rank-2 confidence differ by < 0.15. If a source's notes say it failed/couldn't parse, it is ABSENT — never treat that as a no-match.
+confidence is RELATIVE (sums to 1, never copy into your own output). match_strength is ABSOLUTE (0-1) — use this for your own confidence. rule_result's "pick" = its rank-1. "No match" = empty candidates or rank-1 match_strength < 0.3. "Close" = rank-1/rank-2 confidence differ by < 0.15.
 
-## Your job
-Collate rule_result + llm_result. Your only tool to call is vision_llm (reads the document image) — expensive, call it only if:
-  a. rule_result and llm_result disagree on rank-1.
-  b. Either is no match / absent / close.
-  c. Agreed type is nric or bank_statement and address_check is "unknown".
-  d. Agreed match_strength < 0.8.
-Otherwise stop — do not call vision_llm to double-check an already-confident agreement. Never call vision_llm twice.
+## Your tools
+You have two tools, offered to you one at a time, in a fixed order — you decide whether to actually use each one, but you cannot reach for vision before you've had your first turn, and it will never be offered alongside the text tool:
+- llm_classify_tool: offered first, on your very first turn only. An independent semantic read of the extracted text (no image). Cheap. Worth calling when rule_result is weak, absent, ambiguous ("close"), or you simply want a second opinion before committing to a low-evidence guess. Skip it when rule_result already gives you a confident, unambiguous answer — especially when rule_result includes a `certain_type` (a decisive, type-unique phrase was found; you may finalise on that alone, but you're not required to). You only get this one chance to call it.
+- vision_llm: your last resort, offered only from your second turn onward (whether or not you called llm_classify_tool) and only until you've used it once. Reads the document's actual image/page — by far the most expensive option, since it sends the whole document, not just text. Worth calling when: text-based signals (rule_result, and llm_classify_tool if you called it) disagree on the type; both are weak, absent, or close; the type you're leaning toward is nric or bank_statement and address_check is "unknown"; or you otherwise remain unsure after checking the text-based signals. Don't call it just to double-check an already-confident agreement.
+
+If you're confident enough after rule_result alone (or after also calling llm_classify_tool), answer immediately — you are never required to call vision just because it becomes available.
 
 ## Categories
 bank_statement, certificate_of_incorporation, payslip, passport, nric, fatca_crs_declaration, certificate_of_incumbency, company_constitution, proof_of_address, source_of_wealth, credit_report, list_of_loans, notice_of_assessment, other
@@ -98,18 +110,12 @@ Both are identity documents; never output "id_document".
 - Identity document but genuinely can't tell which: pick the likelier one, cap confidence at 0.6, set needs_manual_review, and name the runner-up in evidence.
 
 ## Deciding the type + confidence
-Agreement = rank-1 picks matching, among sources with a usable result (rule_result, llm_result, and vision_llm if you called it). A rank-2/3 match is partial support, not agreement.
+Agreement = rank-1 picks matching, among every source you actually consulted (rule_result always; llm_classify_tool/vision_llm only if you called them). A rank-2/3 match is partial support, not agreement.
 
-| Situation | document_type | confidence |
-|---|---|---|
-| rule+llm usable, agree, vision not needed | that type | avg match_strength, cap 0.95 |
-| rule+llm usable, agree, vision called anyway and agrees | that type | avg of all agreeing, cap 0.95 |
-| rule+llm disagree, vision called, vision matches one of them | that type | avg of the 2 agreeing, cap 0.85 |
-| rule+llm disagree, vision called, all 3 differ | strongest-supported (rank-1 > runner-up; higher match_strength wins) | its own match_strength, cap 0.6 — set needs_manual_review |
-| rule+llm both no-match, vision called and matches | vision's type | its own match_strength, cap 0.8 |
-| rule+llm both no-match, vision also no-match | "other" | low — never high-confidence an absence |
-
-If the chosen type is "close" in the sources that picked it: keep it, but set needs_manual_review true and name the runner-up. If only vision produced a usable result, say so explicitly in reasoning and cap confidence at 0.8 (uncorroborated).
+- All sources you consulted agree (or you only ever needed rule_result and it was decisive, e.g. `certain_type`) -> that type, confidence = average of their match_strength, capped at 0.97 for a `certain_type` match or 0.95 otherwise.
+- You consulted more than one source and they disagree -> prefer the type with more sources behind it; if it's still one-vs-one, pick the higher match_strength, cap confidence at 0.6, and set needs_manual_review true.
+- Every source you consulted came back no-match/absent -> "other", confidence low — never high-confidence an absence.
+- Only one source produced a usable result and you stopped there (e.g. you judged rule_result alone was enough) -> if it was a `certain_type` rule match, cap at 0.97; otherwise say so explicitly in reasoning and cap at 0.85 (uncorroborated) — lower still (cap 0.6, needs_manual_review) if that lone source's pick was itself "close".
 
 ## Proof of address
 Depends on THIS document actually showing a legible residential address — never inferred from type alone.
@@ -119,9 +125,9 @@ Depends on THIS document actually showing a legible residential address — neve
 - No confident confirmation -> leave it out (under-claim, don't over-claim).
 
 address_check is given in the inputs below:
-- visible -> the address is confirmed. Include proof_of_address (nric/bank_statement only). Do NOT call vision_llm just to re-confirm it.
-- not_visible -> no residential address on this document. Do not include proof_of_address. Do NOT call vision_llm for this.
-- unknown -> not settled by the text layer. Rule (c) applies: call vision_llm and let what it sees decide.
+- visible -> the address is confirmed. Include proof_of_address (nric/bank_statement only). No need to call vision_llm just to re-confirm it.
+- not_visible -> no residential address on this document. Do not include proof_of_address. No need to call vision_llm for this.
+- unknown -> not settled by the text layer alone — this is one of the reasons to consider calling vision_llm and letting what it sees decide.
 
 ## fulfilled_requirements
 Default: exactly one entry — the document_type itself, except passport and nric, which both use "id_document". Address check is the only thing that ever adds a second entry (proof_of_address), and only for nric/bank_statement.
@@ -142,10 +148,7 @@ text_available: {text_available}
 address_check: {address_check}
 
 rule_result:
-{rule_result}
-
-llm_result:
-{llm_result}"""
+{rule_result}"""
 
 
 #: Byte-stable across every document — the only part worth a cache_control
@@ -154,7 +157,7 @@ llm_result:
 AGENT_STATIC_PROMPT = _INTRO + _SHARED_BODY
 
 
-def agent_prompt_parts(rule_result: dict | None, llm_result: dict | None, extracted_text) -> tuple[str, str]:
+def agent_prompt_parts(rule_result: dict | None, extracted_text) -> tuple[str, str]:
     """
     Same content as build_agent_prompt, split into (static, per-document)
     so callers can put cache_control on just the static half — concatenating
@@ -166,14 +169,13 @@ def agent_prompt_parts(rule_result: dict | None, llm_result: dict | None, extrac
         text_available=str(text_available).lower(),
         address_check=address_check(rule_result, text_available),
         rule_result=json.dumps(rule_result or dict(_ABSENT_RESULT), indent=2),
-        llm_result=json.dumps(llm_result or dict(_ABSENT_RESULT), indent=2),
     )
     return AGENT_STATIC_PROMPT, inputs_block
 
 
-def build_agent_prompt(rule_result: dict | None, llm_result: dict | None, extracted_text) -> str:
-    """Port of Code 3's `main` — builds Agent 3's system prompt as one string."""
-    static, dynamic = agent_prompt_parts(rule_result, llm_result, extracted_text)
+def build_agent_prompt(rule_result: dict | None, extracted_text) -> str:
+    """Builds the agent's full system prompt as one string (mainly for tests)."""
+    static, dynamic = agent_prompt_parts(rule_result, extracted_text)
     return static + dynamic
 
 

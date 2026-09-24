@@ -278,6 +278,74 @@ _COMPILED_ADDRESS_POSITIVE = _compile_flat(_ADDRESS_POSITIVE_RULES)
 _COMPILED_ADDRESS_NEGATIVE = _compile_flat(_ADDRESS_NEGATIVE_RULES)
 
 
+# --- "Certain" tier (langgraph only — no Dify equivalent) ------------------
+#
+# Deliberately NOT "most likely" signals (that's what _TEXT_RULES above is
+# for) — each pattern here was checked against every generator under
+# backend/doc_gen_scripts/ (the actual synthetic corpus this classifier is
+# evaluated against) and only kept if it appears in exactly one document
+# type's *rendered output* there (source comments/docstrings mentioning a
+# word don't count — they never reach the PDF text a real document produces).
+# See LANGGRAPH_MIGRATION_PLAN.md section 2 for why this exists: a document
+# that trips one of these needs neither llm_classify nor the Sonnet agent —
+# rule_classify alone is enough, with a plain-language justification of
+# which decisive phrase matched (see classify_by_rules' "certain_type").
+#
+# Keep this tier small and load-bearing only for phrases that are exact
+# document titles/mastheads or fixed regulator wording — never a single
+# generic word, and never something a legal boilerplate clause in an
+# unrelated document could incidentally quote (see company_constitution's
+# note below for why "constitution" made the cut despite being one word).
+_CERTAIN_TEXT_RULES = {
+    # Machine-readable-zone line — a fixed-format artifact of passport
+    # biodata pages, not prose, so no other document type can produce it.
+    "passport": [r"\bP<[A-Z]{3}[A-Z0-9<]{20,}"],
+    # NRIC's own masthead ("REPUBLIC OF SINGAPORE") also appears on a
+    # passport and on a constitution's cover page, so it's not certain
+    # alone — but neither of those documents is a form with "IDENTITY CARD
+    # NO." on it, so requiring both nearby each other is decisive.
+    "nric": [r"(?s)republic\s+of\s+singapore.{0,300}identity\s+card\s+no"],
+    "certificate_of_incorporation": [r"asst\.?\s*registrar\s*of\s*companies"],
+    "certificate_of_incumbency": [r"business\s*profile\s*\(company\)\s*of"],
+    # A one-word signal, exceptionally — verified against every other
+    # generator's *rendered* text (not source comments) with none matching.
+    "company_constitution": [r"\bconstitution\b"],
+    "source_of_wealth": [
+        r"statement\s*of\s*comprehensive\s*income",
+        r"statement\s*of\s*financial\s*position",
+        r"notes\s*to\s*the\s*financial\s*statements",
+    ],
+    "credit_report": [r"enhanced\s*consumer\s*credit\s*report"],
+    "fatca_crs_declaration": [r"\bfatca\b"],
+    "list_of_loans": [r"letter\s*of\s*offer.{0,80}facility"],
+    "payslip": [r"payroll\s*statement"],
+    "bank_statement": [r"statement\s*of\s*account"],
+    "notice_of_assessment": [r"comptroller\s*of\s*income\s*tax"],
+}
+_COMPILED_CERTAIN_TEXT_RULES = {
+    doc_type: [re.compile(pattern, re.IGNORECASE) for pattern in patterns]
+    for doc_type, patterns in _CERTAIN_TEXT_RULES.items()
+}
+
+
+def _certain_signal(text):
+    """
+    Returns (document_type, [matched phrases]) if exactly one document type
+    tripped a certain-tier pattern, else None. More than one type matching
+    is treated as ambiguous on purpose (e.g. a document that quotes another
+    type's boilerplate) rather than guessing between them.
+    """
+    hits: dict[str, list[str]] = {}
+    for doc_type, patterns in _COMPILED_CERTAIN_TEXT_RULES.items():
+        matched = [" ".join(m.group(0).split()) for p in patterns if (m := p.search(text))]
+        if matched:
+            hits[doc_type] = matched
+    if len(hits) == 1:
+        ((doc_type, matched),) = hits.items()
+        return doc_type, matched
+    return None
+
+
 def _residential_address_evidence(text):
     """
     Returns 0-1 plain-language sentences describing whether `text` appears
@@ -404,8 +472,20 @@ def classify_by_rules(filename: str, extracted_text: str = "", confidence_thresh
     if text:
         notes += _residential_address_evidence(text)
 
+    certain_type: str | None = None
+    certain_evidence: list[str] = []
+    if text:
+        certain = _certain_signal(text)
+        if certain:
+            certain_type, certain_evidence = certain
+
     return {
         "top_candidates": top,
         "needs_manual_review": (not top) or top[0]["match_strength"] < threshold,
         "notes": notes,
+        # Set only when a langgraph-only "certain" pattern fired (see
+        # _CERTAIN_TEXT_RULES) — None for every Dify-equivalent path, so
+        # this key is additive and doesn't change rule_classify_v3 parity.
+        "certain_type": certain_type,
+        "certain_evidence": certain_evidence,
     }

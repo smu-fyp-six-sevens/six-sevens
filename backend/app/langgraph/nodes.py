@@ -1,14 +1,11 @@
 """
-Deterministic nodes (Phase 1 skeleton) — ingest, finalise classification,
-extract, persist, fail. Each reuses the matching helper already in
-orchestrator.py / the repositories rather than re-implementing repository
-writes, so both the Dify path and this one keep behaving identically until
-one of them is retired (see LANGGRAPH_MIGRATION_PLAN.md).
-
-The bounded classify<->extract reclassification loop (orchestrator's
-MAX_RECLASSIFICATION_ATTEMPTS cycle) is explicitly Phase 4, not here — an
-Extraction escalation in this graph currently ends the document at FAILED
-with a clear reason instead of looping back to reclassify.
+Deterministic nodes (Phases 1 + 4) — ingest, finalise classification,
+extract, persist, fail, and the bounded classify<->extract reclassification
+loop (record_escalation_node — mirrors orchestrator.MAX_RECLASSIFICATION_ATTEMPTS).
+Each reuses the matching helper already in orchestrator.py / the
+repositories rather than re-implementing repository writes, so both the
+Dify path and this one keep behaving identically until one of them is
+retired (see LANGGRAPH_MIGRATION_PLAN.md).
 """
 
 from __future__ import annotations
@@ -19,6 +16,7 @@ import logging
 from . import extract, text_cache, trace
 from .state import DocumentGraphState
 from .. import case_status, document_repository, orchestrator
+from ..config import settings
 from ..models import DocumentStatus
 
 logger = logging.getLogger("classifier_pipeline.langgraph.nodes")
@@ -35,11 +33,11 @@ async def ingest_node(state: DocumentGraphState) -> dict:
     try:
         raw_text = await orchestrator._ingest_document_text(document_id, document)
     except orchestrator.OrchestrationError as exc:
-        trace.record(document_id, "ingest", error=str(exc))
+        trace.record(document_id, "ingest", case_id=document.case_id, error=str(exc))
         return {"status": "failed", "failure_reason": str(exc)}
 
     text_hash = text_cache.put(document_id, raw_text)
-    trace.record(document_id, "ingest", filename=document.filename, text_available=bool(raw_text.strip()))
+    trace.record(document_id, "ingest", case_id=document.case_id, filename=document.filename, text_available=bool(raw_text.strip()))
     return {
         "case_id": document.case_id,
         "filename": document.filename,
@@ -61,6 +59,9 @@ async def finalise_classification_node(state: DocumentGraphState) -> dict:
         document_type=classification.get("document_type"),
         confidence=classification.get("confidence"),
         needs_manual_review=classification.get("needs_manual_review"),
+        # Shown in the langgraph debug trace only — not persisted to Supabase
+        # for now (see orchestrator._finalise_classification).
+        classification_reasoning=classification.get("reasoning"),
     )
     return {"classification": classification}
 
@@ -93,17 +94,50 @@ async def extract_node(state: DocumentGraphState) -> dict:
         "escalation": extraction.get("escalation"),
     }
     trace.record(document_id, "extraction", document_type=document_type, **summary)
-    if extraction.get("escalation"):
-        return {
-            "extraction": summary,
-            "status": "failed",
-            "failure_reason": (
-                "Extraction escalated classification "
-                f"({extraction['escalation'].get('reason')}); the reclassify loop is "
-                "Phase 4, not yet built, so this is routed to manual review."
-            ),
-        }
+    # Whether an escalation here triggers a reclassify or a final FAILED is
+    # graph.py's call (it also knows `attempts` vs MAX_RECLASSIFICATION_ATTEMPTS) —
+    # this node only ever reports what Extraction found.
     return {"extraction": summary}
+
+
+async def record_escalation_node(state: DocumentGraphState) -> dict:
+    """
+    Phase 4: Extraction judged the classified type wrong and there's still a
+    reclassify attempt left (see graph.py's decide_after_extract). Persisted
+    before the reclassify runs (not just logged) so the frontend can show
+    "classification was re-run" regardless of what it eventually resolves
+    to — mirrors orchestrator._process_document's escalation loop exactly.
+    """
+    document_id = state["document_id"]
+    escalation = (state.get("extraction") or {}).get("escalation") or {}
+    attempts = state.get("attempts", 0) + 1
+
+    await asyncio.to_thread(document_repository.record_escalation, document_id, escalation.get("reason", ""))
+    await orchestrator._set_status(document_id, DocumentStatus.PROCESSING)
+    logger.info(
+        "Document %s: Extraction escalated classification (%s) — attempt %d/%d",
+        document_id, escalation.get("reason"), attempts, settings.MAX_RECLASSIFICATION_ATTEMPTS,
+    )
+    trace.record(document_id, "record_escalation", attempts=attempts, reason=escalation.get("reason"))
+    return {"attempts": attempts}
+
+
+async def mark_unresolved_escalation_node(state: DocumentGraphState) -> dict:
+    """
+    The reclassify loop ran out of attempts (settings.MAX_RECLASSIFICATION_ATTEMPTS)
+    with Extraction still objecting to the classified type. Whatever fields
+    Extraction found are already persisted (extract_node always persists
+    them, escalation or not) — only the terminal status/reason is set here,
+    mirroring orchestrator._process_document's own final message.
+    """
+    escalation = (state.get("extraction") or {}).get("escalation") or {}
+    return {
+        "status": "failed",
+        "failure_reason": (
+            f"Unresolved after {settings.MAX_RECLASSIFICATION_ATTEMPTS} reclassification "
+            f"attempt(s): {escalation.get('reason')}"
+        ),
+    }
 
 
 async def mark_analyzed_node(state: DocumentGraphState) -> dict:

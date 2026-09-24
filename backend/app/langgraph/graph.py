@@ -1,21 +1,27 @@
 """
-Document graph (Phases 1-3): ingest -> classify -> finalise_classification ->
-extract -> ANALYZED/FAILED.
+Document graph (Phases 1-4): ingest -> classify -> finalise_classification ->
+extract -> ANALYZED/FAILED, with a bounded classify<->extract reclassify loop
+(settings.MAX_RECLASSIFICATION_ATTEMPTS) when Extraction judges the
+classified type wrong — mirrors orchestrator._process_document's escalation
+loop. The reclassify branch re-enters at the Sonnet agent directly (see
+classify_graph.prepare_reclassify_node), not the whole classify subgraph:
+a bare rule/LLM re-guess has nothing new to react to, whereas the agent can
+actually weigh Extraction's objection — same "continue the conversation"
+principle Dify used via conversation_id.
 
-No checkpointer yet (Phase 4) and no reclassify loop yet (also Phase 4) —
-see LANGGRAPH_MIGRATION_PLAN.md section 6. This is intentionally the
-smallest graph that reaches an equivalent terminal outcome to
-orchestrator.process_document for a document that classifies cleanly on the
-first pass, so Phase 4 can be judged against a working baseline.
+No checkpointer yet — that's the rest of Phase 4 (Postgres checkpointer with
+pruning, rerun_extraction), see LANGGRAPH_MIGRATION_PLAN.md section 6.
 """
 
 from __future__ import annotations
 
 from langgraph.graph import END, StateGraph
+from langgraph.prebuilt import ToolNode
 
-from . import nodes
+from . import classify_graph, nodes
 from .classify_graph import get_classify_graph
 from .state import DocumentGraphState
+from ..config import settings
 
 
 def _route_after_ingest(state: DocumentGraphState) -> str:
@@ -26,8 +32,13 @@ def _route_after_check_text(state: DocumentGraphState) -> str:
     return "fail" if state.get("status") == "failed" else "extract"
 
 
-def _route_after_extract(state: DocumentGraphState) -> str:
-    return "fail" if state.get("status") == "failed" else "mark_analyzed"
+def _decide_after_extract(state: DocumentGraphState) -> str:
+    escalation = (state.get("extraction") or {}).get("escalation")
+    if not escalation:
+        return "analyzed"
+    if state.get("attempts", 0) < settings.MAX_RECLASSIFICATION_ATTEMPTS:
+        return "reclassify"
+    return "unresolved"
 
 
 def build_document_graph():
@@ -38,7 +49,23 @@ def build_document_graph():
     graph.add_node("check_text_available", nodes.check_text_available)
     graph.add_node("extract", nodes.extract_node)
     graph.add_node("mark_analyzed", nodes.mark_analyzed_node)
+    graph.add_node("mark_unresolved_escalation", nodes.mark_unresolved_escalation_node)
     graph.add_node("fail", nodes.fail_node)
+
+    # --- Reclassify loop (Phase 4) ---
+    # Own nodes, not the "classify" subgraph reused wholesale: this always
+    # goes straight to the agent (see prepare_reclassify_node's docstring),
+    # skipping rule_classify/llm_classify/the certain/fast shortcuts, which
+    # only make sense on a document's first pass.
+    graph.add_node("record_escalation", nodes.record_escalation_node)
+    graph.add_node("prepare_reclassify", classify_graph.prepare_reclassify_node)
+    graph.add_node("reclassify_agent", classify_graph.agent_node)
+    graph.add_node(
+        "reclassify_tools",
+        ToolNode(classify_graph._TOOLS, messages_key="agent_messages", handle_tool_errors=True),
+    )
+    graph.add_node("reclassify_validate", classify_graph.validate_node)
+    graph.add_node("reclassify_repair", classify_graph.repair_node)
 
     graph.set_entry_point("ingest")
     graph.add_conditional_edges("ingest", _route_after_ingest, {"classify": "classify", "fail": "fail"})
@@ -48,10 +75,27 @@ def build_document_graph():
         "check_text_available", _route_after_check_text, {"extract": "extract", "fail": "fail"}
     )
     graph.add_conditional_edges(
-        "extract", _route_after_extract, {"mark_analyzed": "mark_analyzed", "fail": "fail"}
+        "extract",
+        _decide_after_extract,
+        {"analyzed": "mark_analyzed", "reclassify": "record_escalation", "unresolved": "mark_unresolved_escalation"},
     )
     graph.add_edge("mark_analyzed", END)
+    graph.add_edge("mark_unresolved_escalation", "fail")
     graph.add_edge("fail", END)
+
+    # record_escalation -> prepare_reclassify -> agent loop -> validate ->
+    # repair -> back into the shared finalise_classification/extract path,
+    # closing the loop (attempts was already incremented by record_escalation).
+    graph.add_edge("record_escalation", "prepare_reclassify")
+    graph.add_edge("prepare_reclassify", "reclassify_agent")
+    graph.add_conditional_edges(
+        "reclassify_agent",
+        classify_graph.should_continue_agent,
+        {"tools": "reclassify_tools", "validate": "reclassify_validate"},
+    )
+    graph.add_edge("reclassify_tools", "reclassify_agent")
+    graph.add_edge("reclassify_validate", "reclassify_repair")
+    graph.add_edge("reclassify_repair", "finalise_classification")
 
     return graph.compile(checkpointer=False)
 

@@ -6,21 +6,40 @@ This branch is an experiment: it will not go to prod, and the deployed cloud kee
 
 ## 0. Status
 
-**Phases 0-3 are built and wired live** (`backend/app/langgraph/`) — `queue_service.py` hard-switched to it, so every upload
-on this branch now runs through LangGraph, not Dify. See `LANGGRAPH_TESTING_SETUP.md` for how to run/test it.
+**Phases 0-4's core are built and wired live** (`backend/app/langgraph/`) — `queue_service.py` hard-switched to it, so
+every upload on this branch now runs through LangGraph, not Dify. See `LANGGRAPH_TESTING_SETUP.md` for how to run/test it.
 
-- Rule/LLM/vision classifiers, router, Sonnet agent + `vision_llm` tool, validate/repair, extraction — all ported and, where
-  it mattered (rule_classify's regex tables, the vision prompt, both parse steps), diffed against the exact Dify YAML source
-  rather than eyeballed. All three classifiers (`rule_classify`, `llm_classify`, `vision_llm`) return the same
-  `{top_candidates (top 3), notes}` shape, matching Dify.
+- **Classify architecture changed from a deterministic router to a mostly agent-owned one** (deliberate departure from
+  Dify, not a port): only `rule_classify` runs deterministically. `llm_classify` and `vision_llm` are both tools the
+  Sonnet agent calls itself — but not in whatever order: `llm_classify_tool` is only offered on the agent's first turn,
+  `vision_llm` only from the second turn onward (code-enforced, not just prompted — vision sends the whole document
+  image, easily the most expensive call in this pipeline). Within that ordering the agent still genuinely decides
+  whether to call either at all. See section 2/3.
+- Rule classifier, vision prompt, and both classify parse steps were diffed against the exact Dify YAML source rather
+  than eyeballed. `rule_classify`, `llm_classify_tool` and `vision_llm` all return the same `{top_candidates (top 3),
+  notes}` shape.
 - Prompt caching (section 5) is done ahead of schedule: `cache_control` on every static prompt prefix, plus `cache_gate.py`
   so concurrent workers don't all race the same cache write (the "run a batch's first document alone" mitigation).
 - A dev-only trace (`trace.py` + `GET /documents/{id}/langgraph-trace` + a debug panel on the document details page) shows
-  which route (`fast`/`agent`), tools, and models each document actually used — not part of the original plan, added for testing.
+  which tools each document's agent actually called and what each returned — not part of the original plan, added for
+  testing. `classification_reasoning` is intentionally left out of it for now (planned, not yet wired in).
 - Model IDs confirmed against the account's live `/v1/models` list (not guessed): `claude-sonnet-4-6` and
   `claude-haiku-4-5-20251001` — see `config.py`'s `LANGGRAPH_SONNET_MODEL`/`LANGGRAPH_HAIKU_MODEL` defaults.
-- **Not yet built:** the reclassify loop, Postgres checkpointing, `rerun_extraction` on this path (still Dify) — all Phase 4,
-  see section 6. An Extraction escalation today just fails the document with a clear reason instead of looping.
+- **The reclassify loop is built** (Phase 4's core): a bounded classify<->extract cycle
+  (`settings.MAX_RECLASSIFICATION_ATTEMPTS`), reusing the Sonnet agent as a conversation continuation (not a fresh
+  rule re-guess) when Extraction objects to the classified type — see section 3.
+- **A "certain" rule tier is a hint, not a bypass**: `rule_classify` can find a decisive, type-unique textual signal
+  (verified against every generator under `backend/doc_gen_scripts/`, not guessed) and surfaces it to the agent as
+  `certain_type`, but the agent still decides whether that's enough — see section 2.
+- **Classification reasoning is captured but deliberately not persisted yet**: every classify path produces a
+  `reasoning` string (previously parsed out of the LLM's JSON and silently dropped on both the Dify and langgraph
+  paths), and it now shows up in the langgraph debug trace — but `document_repository.record_classification` accepts
+  the field without it being wired to Supabase from either path for now, so `documents.classification_reasoning` stays
+  unused until that's turned on deliberately.
+- **Rerun-extraction is built for this path too**: the manual "correct document type" endpoint now calls this graph's
+  own extraction, not Dify's — and only actually re-runs Extraction when the officer changed the type; confirming an
+  unchanged type just marks it officer-confirmed (`document_repository.record_classification`, no re-extraction).
+- **Not yet built:** Postgres checkpointing/pruning — see section 6.
 
 ## 1. Decisions
 
@@ -37,31 +56,39 @@ on this branch now runs through LangGraph, not Dify. See `LANGGRAPH_TESTING_SETU
 
 | Dify piece | Really is | LangGraph |
 |---|---|---|
-| Classifier chatflow (Code 3, Agent 3, Validate Output) | One Sonnet agent that collates two pre-computed results and may call vision once | Classify subgraph: two parallel nodes, a router, an agent only when needed, then validate/repair |
-| `rule_classify_v3` | Python regex code node, no LLM | Plain Python function (port verbatim) |
-| `LLM classification v2` | DeepSeek call + parsing | One node, Haiku, structured output |
-| `vision_classify_v3` | Logs into our own backend, downloads the file, calls Sonnet vision | One tool reading storage directly (drops the login/download hops) |
+| Classifier chatflow (Code 3, Agent 3, Validate Output) | One Sonnet agent that collates two pre-computed results and may call vision once | Not a port — see below: the agent now owns routing itself, calling `llm_classify`/`vision_llm` as real tools rather than being handed pre-computed results |
+| `rule_classify_v3` | Python regex code node, no LLM | Same function, port verbatim, **plus** a langgraph-only "certain" tier (decisive, type-unique phrases verified against `doc_gen_scripts/`) surfaced to the agent as a hint |
+| `LLM classification v2` | DeepSeek call + parsing, always runs | Now `llm_classify_tool` — Haiku, structured output, called by the agent only when it decides to |
+| `vision_classify_v3` | Logs into our own backend, downloads the file, calls Sonnet vision | A tool reading storage directly (drops the login/download hops), called by the agent only when it decides to |
 | Extractor workflow | Single Sonnet call | One node (`build_extraction_prompt` stays) |
 | `orchestrator.py` | Ingest, classify, extract, bounded reclassify loop, persist, status writes | Graph with a conditional edge for the loop; repository writes stay inside nodes |
 | Dify `conversation_id` | Memory for the reclassify turn | Message history in graph state |
 | `DocumentQueue` (4 workers) | Concurrency | Unchanged |
 
 Only DeepSeek/Anthropic/Supabase are real remote APIs; the rule classifier is local.
-**Biggest saving:** the agent (2.8M tokens) runs even when rule and LLM already agree strongly. A deterministic router skips that Claude call.
+**Deliberately not a 1:1 port here:** Dify's Agent 3 was handed two already-computed results and could only optionally
+call vision. This graph only pre-computes `rule_result` deterministically; `llm_classify` and `vision_llm` are both real
+tools the agent calls itself, zero or more of either — routing is the agent's decision, not a hardcoded gate, which is
+the whole point of calling this "agentic" at all (see LANGGRAPH_MIGRATION_PLAN.md discussion history: a deterministic
+router that skips the agent whenever sources agree is efficient but stops feeling agentic).
 
 ## 3. Document graph (classify + extract)
 
 ```
-ingest -> classify_subgraph -> finalise_classification -> check_text_available -> extract -> mark_analyzed / fail
+ingest -> classify_subgraph -> finalise_classification -> check_text_available -> extract -+-> mark_analyzed
+                                        ^                                                   |
+                                        +-- record_escalation -> reclassify (agent only) <--+   (max MAX_RECLASSIFICATION_ATTEMPTS,
+                                                                                                  else -> mark_unresolved_escalation -> fail)
 
-classify_subgraph:  rule_classify | llm_classify (parallel) -> join_classifiers -> route
-   route: both usable, agree, match_strength >= 0.8, address check ok -> finalise_fast (no Claude call)
-          otherwise -> agent (Sonnet, only tool: vision_llm) -> validate -> repair -> finalise
+classify_subgraph:  rule_classify (deterministic) -> agent (Sonnet, tools: llm_classify_tool, vision_llm) -> [tools -> agent]* -> validate -> repair
 ```
 
-Built as-is in `graph.py`/`classify_graph.py`/`nodes.py`. **Reclassify loop not built yet** (Phase 4, see section 0/6):
-today, an Extraction escalation goes straight to `fail`, with a reason noting the loop isn't built, instead of looping
-back to reclassify. The dotted loop this diagram used to show is what Phase 4 adds.
+Built as-is in `graph.py`/`classify_graph.py`/`nodes.py`. The agent decides itself which of its two tools to call, if
+any — rule_result (including a `certain_type` hint when one fired) is the only thing computed for it in advance. The
+reclassify branch re-enters at the agent directly (never rule_classify again) and continues the same `agent_messages`
+conversation — matching Dify's `conversation_id` continuation. Since the agent now always runs at least once per
+document, `agent_messages` is never empty by the time a reclassify could happen, so this is always a continuation, not
+a fresh seed.
 
 - **State (typed, small, PII-free):** ids, filename, storage path, `text_hash`, capped tool results, classification, extraction summary
   (confidence + escalation), `attempts`, agent `messages`, `failure_reason`. Text (`text_cache.py`, run-scoped, keyed by `document_id`)
@@ -164,7 +191,7 @@ New secrets: `ANTHROPIC_API_KEY` (new to this backend; today the keys live in Di
    (`classify_graph.py`, `classify_support.py`).
 3. ✅ **Extractor:** node plus parse (`extract.py`, reuses `orchestrator._parse_extraction_output`). Repair node for extraction not
    built — only the classifier side has one so far.
-4. ⬜ **Loop + persistence:** reclassify cycle, Postgres checkpointer with pruning, `rerun_extraction` on this path.
+4. 🟡 **Loop + persistence:** reclassify cycle ✅ done. Postgres checkpointer with pruning, `rerun_extraction` on this path: not yet.
    *Checkpoint to judge whether LangGraph fits before continuing.*
 4b. ⬜ **Detection:** approval endpoint and marker, `detecting` status, tools wrapped, three specialists, lead, deterministic findings merge.
 5. 🟡 **Concurrency and caching:** cache breakpoints + `cache_gate.py` done (see section 5) — ahead of schedule, since testing needed

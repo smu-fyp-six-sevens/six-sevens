@@ -697,6 +697,10 @@ async def _finalise_classification(document_id: str, case_id: str | None, classi
         classification_outcome=outcome.value,
         evidence=classification.get("evidence", []),
         fulfilled_requirements=compute_fulfilled_requirements(document_type, None),
+        # reasoning intentionally not persisted for now — see
+        # nodes.finalise_classification_node, which puts it in the langgraph
+        # debug trace instead. document_repository.record_classification
+        # still accepts it (unused here) so this is a one-line flip later.
     )
 
     if case_id is not None:
