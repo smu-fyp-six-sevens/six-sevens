@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pymupdf
 import pytest
 
 from app.fraud_detection import layout_anomalies as lr
 from app.fraud_detection.layout_anomalies import (
     LayoutAnomaly,
+    PageMargins,
     _Block,
     _Line,
     _apply_table_roles,
@@ -175,6 +178,45 @@ def _margin_mismatch_pdf() -> bytes:
             for _ in range(3):
                 _textbox(page, pymupdf.Rect(left, y, right, y + 70), BODY, align=0)
                 y += 80
+
+    return _pdf_bytes(build)
+
+
+def _cover_then_clause_pages_pdf(*, inset_last: bool = False) -> bytes:
+    def build(doc):
+        cover = doc.new_page(width=612, height=792)
+        titles = [
+            "THE COMPANIES ACT 1967",
+            "PRIVATE COMPANY LIMITED BY SHARES",
+            "CONSTITUTION OF",
+            "ACME TRADING PTE LTD",
+            "(UEN 201234567A)",
+            "Incorporated on 30 May 2017",
+        ]
+        y = 80
+        for title in titles:
+            _textbox(cover, pymupdf.Rect(160, y, 450, y + 28), title, align=1)
+            y += 40
+        for page_index in range(2):
+            page = doc.new_page(width=612, height=792)
+            inset = 50 if inset_last and page_index == 1 else 0
+            left, top, right = 72 + inset, 90 + inset, 540 - inset
+            y = top
+            for _ in range(3):
+                _textbox(page, pymupdf.Rect(left, y, right, y + 70), BODY, align=0)
+                y += 80
+
+    return _pdf_bytes(build)
+
+
+def _heading_among_justified_pdf() -> bytes:
+    def build(doc):
+        page = doc.new_page(width=612, height=792)
+        _textbox(page, pymupdf.Rect(72, 90, 280, 112), "2. REGISTERED OFFICE", align=0)
+        y = 130
+        for _ in range(4):
+            _textbox(page, pymupdf.Rect(72, y, 540, y + 70), BODY, align=3)
+            y += 80
 
     return _pdf_bytes(build)
 
@@ -686,6 +728,57 @@ def test_signature_is_grouped_separately_from_body() -> None:
     assert all(a.text != sig.text for a in alignments)
 
 
+def test_clause_heading_is_not_compared_to_justified_body() -> None:
+    result = check_layout_anomalies("doc-1", _heading_among_justified_pdf())
+    types = {e.paragraph_type for e in result.elements}
+    assert "heading" in types
+    heading = next(e for e in result.elements if e.paragraph_type == "heading")
+    assert "REGISTERED OFFICE" in heading.text
+    alignments = [a for a in result.anomalies if "alignment" in _kinds(a)]
+    assert all("REGISTERED OFFICE" not in a.text for a in alignments)
+
+
+def test_cover_titles_are_grouped_separately_from_body() -> None:
+    result = check_layout_anomalies("doc-1", _cover_then_clause_pages_pdf())
+    types = {e.paragraph_type for e in result.elements}
+    assert "cover" in types
+    assert "body" in types
+    covers = [e for e in result.elements if e.paragraph_type == "cover"]
+    assert any("CONSTITUTION OF" in e.text for e in covers)
+    alignments = [a for a in result.anomalies if "alignment" in _kinds(a)]
+    assert all(a.page != 1 or "centre-shift" in _kinds(a) for a in alignments)
+
+
+def test_single_cover_page_is_not_flagged_against_inner_margins() -> None:
+    result = check_layout_anomalies("doc-1", _cover_then_clause_pages_pdf())
+    margins = [a for a in result.anomalies if a.anomaly_type == "Margin"]
+    assert all(a.page != 1 for a in margins)
+
+
+def test_inner_page_margin_mismatch_still_flags_when_cover_exists() -> None:
+    result = check_layout_anomalies(
+        "doc-1", _cover_then_clause_pages_pdf(inset_last=True)
+    )
+    margins = [a for a in result.anomalies if a.anomaly_type == "Margin"]
+    assert any(a.page == 3 for a in margins)
+    assert all(a.page != 1 for a in margins)
+
+
+def test_split_leading_headings_separates_clause_title() -> None:
+    block = _block(
+        [
+            _line((72, 100, 220, 114), text="2. REGISTERED OFFICE"),
+            _line((72, 118, 538, 132)),
+            _line((72, 136, 536, 150)),
+        ]
+    )
+    split = lr._split_leading_headings([block])
+    assert len(split) == 2
+    assert split[0].role == "heading"
+    assert "REGISTERED OFFICE" in split[0].text
+    assert split[1].role == "body"
+
+
 def test_looks_like_signature_requires_zone_and_keyword() -> None:
     sig = _block(
         [_line((320, 680, 540, 700), text="Signed by Jane Tan, Director")],
@@ -941,6 +1034,24 @@ def test_consecutive_indents_are_marked_as_a_local_pattern() -> None:
     assert all(a.evidence.get("kind") != "local-pattern" for a in result.anomalies)
 
 
+def test_short_cover_titles_are_not_a_consecutive_clause_stretch() -> None:
+    bbox = (200.0, 100.0, 380.0, 120.0)
+    finding = LayoutAnomaly(
+        anomaly_type="Alignment",
+        page=1,
+        location="Cover title near y=100",
+        bbox=bbox,
+        text="CONSTITUTION OF",
+        detected="Centre-aligned",
+        expected="Left-aligned",
+        deviation="1 paragraph",
+        confidence=0.7,
+        evidence={"kind": "centre-shift", "axis": "horizontal"},
+        summary="shifted",
+    )
+    assert lr._is_clause_stretch_finding(finding) is False
+
+
 def test_same_paragraph_signals_are_one_finding() -> None:
     bbox = (72.0, 412.0, 540.0, 460.0)
 
@@ -1071,5 +1182,513 @@ def test_clause_titles_in_header_band_at_the_same_y_are_not_shifts() -> None:
             )
         )
     findings, check = lr._check_chrome_position(blocks)
+    assert check.unable_to_assess is False
+    assert findings == []
+
+
+# ---------------------------------------------------------------------------
+# untested branches
+# ---------------------------------------------------------------------------
+
+
+def _finding(**kwargs) -> LayoutAnomaly:
+    values = dict(
+        anomaly_type="Alignment",
+        page=1,
+        location="Body paragraph near y=100",
+        bbox=(72.0, 100.0, 540.0, 160.0),
+        text=BODY,
+        detected="72 pt",
+        expected="72 pt",
+        deviation="+0 pt",
+        confidence=0.7,
+        evidence={},
+        summary="placeholder",
+    )
+    values.update(kwargs)
+    return LayoutAnomaly(**values)
+
+
+def _empty_line_block(text: str = BODY, **kwargs) -> _Block:
+    values = dict(
+        lines=[],
+        bbox=(72.0, 100.0, 540.0, 160.0),
+        page=0,
+        page_width=612.0,
+        page_height=792.0,
+        text=text,
+        role="body",
+    )
+    values.update(kwargs)
+    return _Block(**values)
+
+
+def test_extract_skips_broken_lines_and_table_finder_errors() -> None:
+    class Page:
+        rect = pymupdf.Rect(0, 0, 612, 792)
+
+        def get_text(self, _mode):
+            return {
+                "blocks": [
+                    {
+                        "type": 0,
+                        "bbox": (72, 90, 200, 140),
+                        "lines": [
+                            {"bbox": (1, 2), "spans": [{"text": "bad bbox"}]},
+                            {
+                                "bbox": (72, 100, 200, 114),
+                                "spans": [{"text": "   "}],
+                            },
+                            {
+                                "bbox": (72, 120, 300, 134),
+                                "spans": [
+                                    {"text": "  "},
+                                    {"text": "Visible", "font": "Helv", "size": 11},
+                                ],
+                            },
+                        ],
+                    },
+                    {
+                        "type": 0,
+                        "bbox": (72, 200, 200, 220),
+                        "lines": [{"bbox": None, "spans": [{"text": "skip me"}]}],
+                    },
+                ]
+            }
+
+        def find_tables(self):
+            raise RuntimeError("tables unavailable")
+
+    class Doc:
+        def __iter__(self):
+            yield Page()
+
+    blocks = lr._extract_blocks(Doc())
+    assert len(blocks) == 1
+    assert "Visible" in blocks[0].text
+
+
+def test_table_rects_skips_missing_bbox_and_keeps_valid() -> None:
+    class Page:
+        def find_tables(self):
+            return SimpleNamespace(
+                tables=[
+                    SimpleNamespace(bbox=None),
+                    SimpleNamespace(bbox=(70, 190, 540, 400)),
+                ]
+            )
+
+    rects = lr._table_rects(Page())
+    assert len(rects) == 1
+    assert rects[0] == pymupdf.Rect(70, 190, 540, 400)
+
+
+def test_apply_table_roles_skips_zero_area_block() -> None:
+    cell = _block([_line((80, 200, 80, 200), text="Amount")])
+    _apply_table_roles([cell], {0: [pymupdf.Rect(70, 190, 540, 400)]})
+    assert cell.role == "body"
+
+
+def test_heading_roles_from_uppercase_and_bold_short_lines() -> None:
+    upper = _block([_line((72, 100, 220, 114), text="CONSTITUTION OF")])
+    assert lr._is_heading_block(upper) is True
+    bold = _block(
+        [_line((72, 130, 240, 144), text="Registered office of the firm")],
+        font="LiberationSans-Bold",
+    )
+    assert lr._is_heading_block(bold) is True
+    header = _block([_line((72, 10, 200, 24), text="ACME PTE LTD")], role="header")
+    assert lr._is_heading_block(header) is False
+
+
+def test_assign_alignments_skips_page_without_a_content_column() -> None:
+    collapsed = _block([_line((200, 100, 200, 160), text=BODY)])
+    lr._assign_alignments([collapsed])
+    assert collapsed.alignment is None
+
+
+def test_horizontally_related_falls_back_to_midpoint() -> None:
+    left = _block([_line((72, 100, 72, 114), text="A")])
+    near = _block([_line((70, 116, 74, 130), text="B")])
+    assert lr._horizontally_related(left, near) is True
+    far = _block([_line((400, 116, 420, 130), text="C")])
+    assert lr._horizontally_related(left, far) is False
+
+
+def test_as_bbox_and_width_band_guards() -> None:
+    assert lr._as_bbox(None) is None
+    assert lr._as_bbox((1, 2, 3)) is None
+    block = _block([_line((72, 100, 200, 114))])
+    assert lr._width_band(block, 100.0, 100.0) == "short"
+    assert _content_column(
+        [
+            _block([_line((200, 100, 200, 160), text=BODY)]),
+            _block([_line((200, 180, 200, 240), text=BODY)]),
+        ]
+    ) is None
+
+
+def test_indentation_unable_when_no_full_width_column() -> None:
+    wide = _block([_line((72, 90, 540, 160), text=BODY)])
+    short = _block([_line((72, 180, 160, 250), text=BODY)])
+    findings, check = lr._check_indentation([wide, short])
+    assert findings == []
+    assert check.unable_to_assess is True
+    assert "full-width" in (check.unable_to_assess_reason or "")
+
+    collapsed_a = _block([_line((72, 90, 72, 160), text=BODY)])
+    collapsed_b = _block([_line((72, 180, 72, 250), text=BODY)])
+    findings, check = lr._check_indentation([collapsed_a, collapsed_b])
+    assert findings == []
+    assert check.unable_to_assess is True
+
+
+def test_right_edge_skips_tied_expected_and_missing_column() -> None:
+    def edged(x1: float, y0: float) -> _Block:
+        return _block(
+            [
+                _line((72, y0, x1, y0 + 12), text=BODY),
+                _line((72, y0 + 14, x1, y0 + 26), text=BODY),
+                _line((72, y0 + 28, 200, y0 + 40), text="Last line of the clause."),
+            ]
+        )
+
+    findings, check = lr._check_right_edge(
+        [edged(540, 80), edged(500, 160), edged(540, 240), edged(500, 320)]
+    )
+    assert check.unable_to_assess is False
+
+    collapsed = [
+        _block(
+            [
+                _line((72, 80, 72, 92), text=BODY),
+                _line((72, 94, 72, 106), text=BODY),
+            ]
+        ),
+        _block(
+            [
+                _line((72, 160, 72, 172), text=BODY),
+                _line((72, 174, 72, 186), text=BODY),
+            ]
+        ),
+    ]
+    findings, check = lr._check_right_edge(collapsed)
+    assert findings == []
+    assert check.unable_to_assess is True
+
+
+def test_line_spacing_unable_when_too_few_gaps() -> None:
+    findings, check = lr._check_line_spacing([_ml_block(90, [14]), _ml_block(200, [14])])
+    assert findings == []
+    assert check.unable_to_assess is True
+    assert "intra-paragraph" in (check.unable_to_assess_reason or "")
+
+
+def test_paragraph_spacing_skips_thin_or_overlapping_pages() -> None:
+    split_pages = [
+        _block([_line((72, 90, 540, 160), text=BODY, page=0)]),
+        _block([_line((72, 90, 540, 160), text=BODY, page=1)]),
+        _block([_line((72, 90, 540, 160), text=BODY, page=2)]),
+    ]
+    findings, check = lr._check_paragraph_spacing(split_pages)
+    assert findings == []
+    assert check.unable_to_assess is True
+
+    overlapping = [
+        _block([_line((72, 90, 540, 160), text=BODY)]),
+        _block([_line((72, 100, 540, 170), text=BODY)]),
+        _block([_line((72, 110, 540, 180), text=BODY)]),
+    ]
+    findings, check = lr._check_paragraph_spacing(overlapping)
+    assert findings == []
+    assert check.unable_to_assess is True
+
+
+def test_paragraph_spacing_ignores_section_break_gaps(monkeypatch) -> None:
+    monkeypatch.setattr(lr, "_PARA_SECTION_BREAK_MULT", 0.5)
+    blocks = [
+        _block([_line((72, 90, 540, 130), text=BODY)]),
+        _block([_line((72, 140, 540, 180), text=BODY)]),
+        _block([_line((72, 260, 540, 300), text=BODY)]),
+    ]
+    findings, check = lr._check_paragraph_spacing(blocks)
+    assert check.unable_to_assess is False
+    assert findings == []
+
+
+def test_signal_kind_and_summary_fallbacks() -> None:
+    assert lr._signal_kind(_finding(anomaly_type="Indentation", evidence={})) == "indentation"
+    assert lr._signal_kind(_finding(anomaly_type="Spacing", evidence={})) == "spacing"
+    assert lr._evidence_kind("Indentation", {}) == "indentation"
+    assert lr._evidence_kind("Spacing", {}) == "spacing"
+    assert lr._label_alignment("mixed-odd") == "mixed odd"
+    assert "unlike comparable" in lr._format_summary(
+        "Alignment", {"alignment": "centred"}, deviation="1 paragraph"
+    )
+    assert "gap around this paragraph" in lr._format_summary(
+        "Spacing", {"kind": "paragraph-spacing"}, deviation="+8 pt"
+    )
+    assert "unknown check" in lr._format_summary(
+        "Spacing", {"kind": "unknown-check"}, deviation="+3 pt"
+    )
+    assert lr._pct(1, 0) == "0%"
+    assert lr._majority_confidence(1, 0) == 0.5
+
+
+def test_alignment_unable_and_short_band_majority_guard() -> None:
+    empty = [_empty_line_block(), _empty_line_block(bbox=(72.0, 180.0, 540.0, 240.0))]
+    findings, check = lr._check_alignment(empty)
+    assert findings == []
+    assert check.unable_to_assess is True
+
+    collapsed = [
+        _block([_line((72, 90, 72, 160), text=BODY)]),
+        _block([_line((72, 180, 72, 250), text=BODY)]),
+    ]
+    findings, check = lr._check_alignment(collapsed)
+    assert findings == []
+    assert check.unable_to_assess is True
+
+    tied = [
+        _block([_line((72, 90, 540, 160), text=BODY)]),
+        _block(
+            [
+                _line((200, 180, 540, 194), text=BODY),
+                _line((250, 196, 540, 210), text=BODY),
+            ]
+        ),
+    ]
+    findings, check = lr._check_alignment(tied)
+    assert check.unable_to_assess is False
+    assert findings == []
+
+    shorts = [
+        _block([_line((72, 90, 540, 160), text=BODY)]),
+        _block([_line((72, 170, 540, 240), text=BODY)]),
+        _block([_line((72, 260, 180, 274), text="Date: 1 January 2020")]),
+        _block([_line((72, 280, 180, 294), text="Date: 2 January 2020")]),
+        _block([_line((200, 300, 412, 314), text="ACME HOLDINGS")]),
+    ]
+    findings, check = lr._check_alignment(shorts)
+    assert check.unable_to_assess is False
+    assert all(a.text != "ACME HOLDINGS" for a in findings)
+
+
+def test_alignment_flags_short_centred_paragraph_against_full_column() -> None:
+    full = [
+        _block([_line((72, 90, 540, 160), text=BODY)]),
+        _block([_line((72, 170, 540, 240), text=BODY)]),
+        _block([_line((72, 250, 540, 320), text=BODY)]),
+    ]
+    inserted = _block(
+        [
+            _line(
+                (190, 340, 410, 354),
+                text="Inserted centred clause line one is long enough.",
+            ),
+            _line(
+                (180, 356, 420, 370),
+                text="Inserted centred clause line two is long enough.",
+            ),
+        ]
+    )
+    findings, check = lr._check_alignment(full + [inserted])
+    assert check.unable_to_assess is False
+    assert findings
+    assert any(a.evidence.get("alignment") == "centred" for a in findings)
+
+
+def test_alignment_skips_unreliable_or_already_flagged_short_inserts() -> None:
+    justified = [
+        _block(
+            [
+                _line((72, 90, 538, 104), text=BODY),
+                _line((72, 106, 536, 120), text=BODY),
+                _line((72, 122, 240, 136), text="Short last line."),
+            ]
+        ),
+        _block(
+            [
+                _line((72, 160, 538, 174), text=BODY),
+                _line((72, 176, 536, 190), text=BODY),
+                _line((72, 192, 240, 206), text="Short last line."),
+            ]
+        ),
+    ]
+    one_liner = _block([_line((72, 230, 220, 244), text="The name of the Company is Acme.")])
+    findings, _ = lr._check_alignment(justified + [one_liner])
+    assert all("The name of the Company" not in a.text for a in findings)
+
+    full = [
+        _block([_line((72, 90, 540, 160), text=BODY)]),
+        _block([_line((72, 170, 540, 240), text=BODY)]),
+        _block([_line((72, 250, 540, 320), text=BODY)]),
+    ]
+    short_left = [
+        _block([_line((72, 340, 200, 354), text="Date: 1 January 2020")]),
+        _block([_line((72, 360, 200, 374), text="Date: 2 January 2020")]),
+        _block([_line((72, 380, 200, 394), text="Date: 3 January 2020")]),
+    ]
+    centred_short = _block(
+        [
+            _line((190, 410, 410, 424), text="Inserted centred clause line one is long enough."),
+            _line((180, 426, 420, 440), text="Inserted centred clause line two is long enough."),
+        ]
+    )
+    findings, _ = lr._check_alignment(full + short_left + [centred_short])
+    centred = [a for a in findings if a.evidence.get("alignment") == "centred"]
+    assert len(centred) == 1
+
+
+def test_row_alignment_skips_duplicate_pair(monkeypatch) -> None:
+    label = _block([_line((72, 200, 280, 214), text="Chargeable Income")])
+    amount = _block([_line((460, 212, 540, 226), text="316,800")])
+    monkeypatch.setattr(
+        lr, "_nearest_row_pairs", lambda _blocks: [(label, amount), (label, amount)]
+    )
+    findings = lr._check_row_alignment([label, amount])
+    assert len(findings) == 1
+
+
+def test_row_alignment_skips_partners_sharing_the_same_left_edge() -> None:
+    stacked = [
+        _block([_line((72, 200, 72, 214), text="Chargeable Income")]),
+        _block([_line((72, 202, 72, 216), text="316,800")]),
+    ]
+    assert lr._check_row_alignment(stacked) == []
+
+
+def test_wrapping_label_flags_when_neither_edge_lines_up() -> None:
+    label = _block(
+        [
+            _line((72, 200, 300, 214), text="Chargeable Income after"),
+            _line((72, 216, 280, 230), text="donations and reliefs"),
+        ]
+    )
+    amount = _block([_line((460, 222, 540, 236), text="316,800")])
+    findings = lr._check_row_alignment([label, amount])
+    assert findings
+    assert any(abs(a.evidence["top_delta_pt"]) >= 6 for a in findings)
+    assert any(abs(a.evidence["baseline_delta_pt"]) >= 6 for a in findings)
+
+
+def test_side_by_side_allows_partial_horizontal_overlap() -> None:
+    left = _block([_line((72, 200, 300, 214), text="Chargeable Income")])
+    right = _block([_line((250, 206, 400, 220), text="316,800")])
+    assert lr._side_by_side(left, right) is True
+    findings = lr._check_row_alignment([left, right])
+    assert findings
+
+
+def test_centre_shift_skips_tied_or_weak_axis() -> None:
+    pw, ph = 595.28, 841.89
+
+    def cover(bbox, text) -> _Block:
+        return _block(
+            [_line(bbox, text=text, page_width=pw, page_height=ph)], role="cover"
+        )
+
+    tied = [
+        cover((80, 100, 160, 114), "THE COMPANIES ACT 1967"),
+        cover((200, 140, 300, 154), "PRIVATE COMPANY LIMITED"),
+        cover((320, 180, 430, 194), "CONSTITUTION OF"),
+        cover((450, 220, 540, 234), "ACME PTE LTD"),
+    ]
+    assert lr._check_centre_shift(tied) == []
+
+    weak = [
+        cover((220, 100, 360, 114), "THE COMPANIES ACT 1967"),
+        cover((220, 140, 360, 154), "PRIVATE COMPANY LIMITED"),
+        cover((80, 180, 200, 194), "CONSTITUTION OF"),
+        cover((400, 220, 540, 234), "ACME PTE LTD"),
+    ]
+    assert lr._check_centre_shift(weak) == []
+
+    zero_width_page = [
+        _block([_line((72, 90 + i * 20, 200, 104 + i * 20), text=f"Title {i}", page_width=0)])
+        for i in range(4)
+    ]
+    assert lr._is_title_page(zero_width_page) is False
+
+
+def test_classify_alignment_guards_and_fallbacks() -> None:
+    block = _block([_line((72, 100, 300, 114))])
+    assert _classify_block_alignment(block, 100.0, 100.0) is None
+    assert _classify_block_alignment(_empty_line_block(), 72.0, 540.0) is None
+    assert _classify_line_alignment((72, 100, 300, 114), 100.0, 100.0) is None
+    assert (
+        _classify_line_alignment((92, 100, 500, 114), 72.0, 540.0) == "left-aligned"
+    )
+
+    right_wrap = _block(
+        [
+            _line((200, 100, 540, 114)),
+            _line((300, 118, 538, 132)),
+            _line((250, 136, 540, 150)),
+        ]
+    )
+    assert _classify_block_alignment(right_wrap, 72.0, 540.0) == "right-aligned"
+
+
+def test_margin_check_compares_cover_pages_to_each_other() -> None:
+    def titles(page: int, x0: float) -> list[_Block]:
+        labels = [
+            "THE COMPANIES ACT 1967",
+            "PRIVATE COMPANY LIMITED BY SHARES",
+            "CONSTITUTION OF",
+            "ACME HOLDINGS PTE LTD",
+        ]
+        return [
+            _block(
+                [
+                    _line(
+                        (x0, 80 + i * 24, x0 + 180, 94 + i * 24),
+                        text=label,
+                        page=page,
+                    )
+                ],
+                role="cover",
+            )
+            for i, label in enumerate(labels)
+        ]
+
+    pages = [
+        PageMargins(
+            page=1, left=120, right=72, top=80, bottom=80, page_width=612, page_height=792
+        ),
+        PageMargins(
+            page=2, left=72, right=72, top=80, bottom=80, page_width=612, page_height=792
+        ),
+    ]
+    findings, check = lr._check_margins(pages, titles(0, 200) + titles(1, 180))
+    assert check.unable_to_assess is False
+    assert any(a.page == 1 and a.evidence.get("side") == "left" for a in findings)
+
+
+def test_expected_margins_use_facing_page_pattern() -> None:
+    pages = [
+        PageMargins(
+            page=page,
+            left=72 if page % 2 else 96,
+            right=96 if page % 2 else 72,
+            top=72,
+            bottom=72,
+            page_width=612,
+            page_height=792,
+        )
+        for page in (1, 2, 3, 4)
+    ]
+    expected = lr._expected_margins(pages)
+    assert expected[1]["left"] == expected[3]["left"]
+    assert expected[2]["left"] == expected[4]["left"]
+    assert expected[1]["left"] != expected[2]["left"]
+
+
+def test_chrome_tie_is_assessed_without_a_false_shift() -> None:
+    headers = [
+        _block([_line((72, 18, 540, 32), text="HDR", page=0)], role="header"),
+        _block([_line((72, 48, 540, 62), text="HDR", page=1)], role="header"),
+    ]
+    findings, check = lr._check_chrome_position(headers)
     assert check.unable_to_assess is False
     assert findings == []

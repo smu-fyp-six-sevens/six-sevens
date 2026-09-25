@@ -14,7 +14,7 @@ logger = logging.getLogger("fraud_detection.layout_anomalies")
 BBox = tuple[float, float, float, float]
 Alignment = Literal["left-aligned", "centred", "right-aligned", "justified"]
 AnomalyType = Literal["Indentation", "Alignment", "Margin", "Spacing"]
-ParagraphType = Literal["body", "header", "footer", "table", "signature"]
+ParagraphType = Literal["body", "header", "footer", "table", "signature", "heading", "cover"]
 
 # A left/right indent this far (or further) from comparable neighbours is a
 # tamper signal, not typesetting noise. 12pt ≈ 4.2mm — below the 6–12mm
@@ -88,6 +88,9 @@ _SIGNATURE_RE = re.compile(
 _CLAUSE_HEADING_RE = re.compile(
     r"^\d+(?:\.\d+)*\.?\s+[A-Z0-9][A-Z0-9 ,/&'().:—–-]{1,}$"
 )
+# Neighbouring flags only count as a local insertion stretch when both
+# boxes are full-width clause columns, not short titles or cover lines.
+_CLAUSE_STRETCH_MIN_WIDTH_PT = 330.0
 
 
 class LayoutAnomaly(BaseModel):
@@ -96,7 +99,7 @@ class LayoutAnomaly(BaseModel):
 
     `anomaly_type` is the strongest check: Indentation, Alignment, Margin,
     or Spacing. Extra checks on the same area are `evidence.signals`, not
-    extra rows. Neighbouring flagged paragraphs set `local_pattern` and
+    extra rows.     Neighbouring full-width flagged clauses set `local_pattern` and
     `consecutive_run` on this finding; they need not share anomaly_type.
     `detected` / `expected` / `deviation` hold the measurements;
     `summary` is a single human-readable sentence (numbers live in the
@@ -288,7 +291,7 @@ def check_layout_anomalies(document_id: str, file_bytes: bytes) -> LayoutAnomaly
         centre_anomalies = _check_centre_shift(blocks)
         line_anomalies, line_check = _check_line_spacing(blocks)
         para_anomalies, para_check = _check_paragraph_spacing(blocks)
-        margin_anomalies, margin_check = _check_margins(page_margins)
+        margin_anomalies, margin_check = _check_margins(page_margins, blocks)
         chrome_anomalies, chrome_check = _check_chrome_position(blocks)
         spacing_check = _merge_spacing_assessment(line_check, para_check)
         if not indent_check.unable_to_assess or not right_edge_check.unable_to_assess:
@@ -381,7 +384,10 @@ def _extract_blocks(doc: pymupdf.Document) -> list[_Block]:
             )
     _apply_table_roles(blocks, table_rects_by_page)
     _apply_signature_roles(blocks)
-    return _merge_adjacent_blocks(blocks)
+    blocks = _merge_adjacent_blocks(blocks)
+    blocks = _split_leading_headings(blocks)
+    _apply_heading_and_cover_roles(blocks)
+    return blocks
 
 
 def _line_text_and_style(raw_line: dict) -> tuple[str, str | None, float | None]:
@@ -451,6 +457,81 @@ def _looks_like_signature(block: _Block) -> bool:
     if not in_zone:
         return False
     return bool(_SIGNATURE_RE.search(block.text))
+
+
+def _block_from_lines(
+    source: _Block, lines: list[_Line], *, role: ParagraphType | None = None
+) -> _Block:
+    fonts = [line.font for line in lines if line.font]
+    sizes = [line.size for line in lines if line.size is not None]
+    return _Block(
+        lines=lines,
+        bbox=_union_bbox(line.bbox for line in lines),
+        page=source.page,
+        page_width=source.page_width,
+        page_height=source.page_height,
+        text=" ".join(line.text for line in lines),
+        role=role or source.role,
+        font=_dominant(fonts) if fonts else None,  # type: ignore[arg-type]
+        size=float(median(sizes)) if sizes else None,
+        alignment=source.alignment,
+    )
+
+
+def _split_leading_headings(blocks: list[_Block]) -> list[_Block]:
+    """
+    PyMuPDF often glues '2. REGISTERED OFFICE' onto the first body line
+    of the clause. Split that heading off so it is not compared to
+    justified body copy.
+    """
+    split: list[_Block] = []
+    for block in blocks:
+        if block.role != "body" or len(block.lines) < 2:
+            split.append(block)
+            continue
+        first = block.lines[0]
+        rest = block.lines[1:]
+        if not _is_short_or_heading_line(first, block.page_width):
+            split.append(block)
+            continue
+        rest_text = " ".join(line.text for line in rest)
+        if len(rest_text.replace(" ", "")) < MIN_BLOCK_CHARS:
+            split.append(block)
+            continue
+        split.append(_block_from_lines(block, [first], role="heading"))
+        split.append(_block_from_lines(block, rest, role="body"))
+    return split
+
+
+def _is_heading_block(block: _Block) -> bool:
+    if block.role != "body":
+        return False
+    text = block.text.strip()
+    if _CLAUSE_HEADING_RE.match(text):
+        return True
+    short = block.width < block.page_width * _TITLE_PAGE_SHORT_RATIO
+    font = (block.font or "").lower()
+    bold = "bold" in font
+    if short and (_CLAUSE_HEADING_RE.match(text) or (text.isupper() and len(text) <= 80)):
+        return True
+    if short and bold and len(block.lines) <= 2:
+        return True
+    return False
+
+
+def _apply_heading_and_cover_roles(blocks: list[_Block]) -> None:
+    by_page: dict[int, list[_Block]] = {}
+    for block in blocks:
+        by_page.setdefault(block.page, []).append(block)
+    for page_blocks in by_page.values():
+        body = [b for b in page_blocks if b.role == "body"]
+        if _is_title_page(body):
+            for block in body:
+                if block.width < block.page_width * _TITLE_PAGE_SHORT_RATIO:
+                    block.role = "cover"
+        for block in page_blocks:
+            if _is_heading_block(block):
+                block.role = "heading"
 
 
 def _assign_alignments(blocks: list[_Block]) -> None:
@@ -596,9 +677,8 @@ def _page_margins(blocks: list[_Block]) -> list[PageMargins]:
 
 def _body_blocks(blocks: list[_Block]) -> list[_Block]:
     # Indentation and alignment only compare body to body. Headers,
-    # footers, table cells and signatures are different layout roles —
-    # a centred company name must not be scored against left-aligned
-    # clauses underneath it.
+    # footers, table cells, signatures, clause headings and cover titles
+    # are different layout roles.
     return [b for b in blocks if b.role == "body" and b.char_count >= MIN_BLOCK_CHARS]
 
 
@@ -730,8 +810,6 @@ def _consistent_right_edge(block: _Block) -> float | None:
     if len(block.lines) < 2:
         return None
     lines = block.lines[:-1]
-    if not lines:
-        return None
     rights = [line.bbox[2] for line in lines]
     if max(rights) - min(rights) > ALIGN_EDGE_TOLERANCE_PT:
         return None
@@ -1146,12 +1224,13 @@ def _coalesce_signals(anomalies: list[LayoutAnomaly]) -> list[LayoutAnomaly]:
 
 def _mark_local_consecutive(anomalies: list[LayoutAnomaly]) -> None:
     """
-    Adjacent flagged paragraphs on a page are a stronger insertion signal
-    than one stray line. Enrich those findings; do not emit a new type.
+    Adjacent flagged full-width clauses on a page are a stronger insertion
+    signal than one stray line. Short titles and cover lines do not count.
+    Enrich those findings; do not emit a new type.
     """
     by_page: dict[int, list[LayoutAnomaly]] = {}
     for anomaly in anomalies:
-        if not _is_paragraph_finding(anomaly):
+        if not _is_clause_stretch_finding(anomaly):
             continue
         by_page.setdefault(anomaly.page, []).append(anomaly)
 
@@ -1194,7 +1273,16 @@ def _is_paragraph_finding(anomaly: LayoutAnomaly) -> bool:
     kind = _signal_kind(anomaly)
     if kind.endswith("-margin") or kind.endswith("-position"):
         return False
+    if kind == "centre-shift":
+        return False
     return bool(anomaly.text)
+
+
+def _is_clause_stretch_finding(anomaly: LayoutAnomaly) -> bool:
+    if not _is_paragraph_finding(anomaly):
+        return False
+    width = anomaly.bbox[2] - anomaly.bbox[0]
+    return width >= _CLAUSE_STRETCH_MIN_WIDTH_PT
 
 
 def _check_alignment(blocks: list[_Block]) -> tuple[list[LayoutAnomaly], CheckAssessment]:
@@ -1452,14 +1540,17 @@ def _check_centre_shift(blocks: list[_Block]) -> list[LayoutAnomaly]:
     """
     by_page: dict[int, list[_Block]] = {}
     for block in blocks:
-        if block.role != "body" or not block.text.strip():
+        if block.role not in ("body", "cover") or not block.text.strip():
             continue
         by_page.setdefault(block.page, []).append(block)
 
     anomalies: list[LayoutAnomaly] = []
     for page_blocks in by_page.values():
-        if not _is_title_page(page_blocks):
+        covers = [b for b in page_blocks if b.role == "cover"]
+        group = covers if len(covers) >= 4 else page_blocks
+        if len(covers) < 4 and not _is_title_page(group):
             continue
+        page_blocks = group
         mids = [_mid_x(b) for b in page_blocks]
         bucketed = [_bucket_pt(mid, _CENTER_MID_BUCKET_PT) for mid in mids]
         expected_mid = _dominant(bucketed)
@@ -1657,6 +1748,7 @@ def _left_vs_justified_unreliable(
 
 def _check_margins(
     page_margins: list[PageMargins],
+    blocks: list[_Block] | None = None,
 ) -> tuple[list[LayoutAnomaly], CheckAssessment]:
     if len(page_margins) < 2:
         return [], CheckAssessment(
@@ -1667,6 +1759,26 @@ def _check_margins(
             ),
         )
 
+    title_pages = _title_page_numbers(blocks) if blocks else set()
+    inner = [p for p in page_margins if p.page not in title_pages]
+    titles = [p for p in page_margins if p.page in title_pages]
+    anomalies: list[LayoutAnomaly] = []
+    if len(inner) >= 2:
+        anomalies.extend(_margin_anomalies_for(inner))
+    if len(titles) >= 2:
+        anomalies.extend(_margin_anomalies_for(titles))
+    return anomalies, _assessed()
+
+
+def _title_page_numbers(blocks: list[_Block]) -> set[int]:
+    by_page: dict[int, list[_Block]] = {}
+    for block in blocks:
+        if block.role in {"body", "cover", "heading"}:
+            by_page.setdefault(block.page, []).append(block)
+    return {page + 1 for page, items in by_page.items() if _is_title_page(items)}
+
+
+def _margin_anomalies_for(page_margins: list[PageMargins]) -> list[LayoutAnomaly]:
     expected = _expected_margins(page_margins)
     anomalies: list[LayoutAnomaly] = []
     for record in page_margins:
@@ -1727,7 +1839,7 @@ def _check_margins(
                     ),
                 )
             )
-    return anomalies, _assessed()
+    return anomalies
 
 
 def _check_chrome_position(
@@ -1941,6 +2053,8 @@ _ROLE_LABEL = {
     "footer": "Footer",
     "table": "Table cell",
     "signature": "Signature block",
+    "heading": "Clause heading",
+    "cover": "Cover title",
 }
 
 
