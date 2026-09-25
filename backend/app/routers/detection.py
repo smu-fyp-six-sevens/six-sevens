@@ -5,7 +5,8 @@ import logging
 
 from fastapi import APIRouter, HTTPException, status
 
-from .. import document_repository, extracted_fields_repository, storage_service
+from .. import case_repository, document_repository, extracted_fields_repository, storage_service
+from ..case_match import DocumentCaseMatch, check_case_match
 from ..fraud_detection.font_consistency import FontConsistencyResult, check_font_consistency
 from ..fraud_detection.font_consistency_v2 import (
     ExtractedField,
@@ -156,3 +157,44 @@ async def get_metadata_anomaly(document_id: str) -> MetadataAnalysisResult:
         logger.exception("Failed to persist metadata anomaly result for document %s", document_id)
 
     return result
+
+
+@router.get("/{document_id}/detection/case-match", response_model=DocumentCaseMatch)
+async def get_case_match(document_id: str) -> DocumentCaseMatch:
+    """
+    Whether this document belongs to its case's company and individuals —
+    the gate before fraud detection (see case_match.py). The check needs
+    every document in the case (the certificate of incumbency is only
+    trusted once other documents corroborate it), so this runs the whole
+    case's check and returns this document's entry. Read-only.
+    """
+    try:
+        document = await asyncio.to_thread(document_repository.get_document, document_id)
+        case = (
+            await asyncio.to_thread(case_repository.get_case, document.case_id)
+            if document is not None and document.case_id
+            else None
+        )
+        documents = (
+            await asyncio.to_thread(document_repository.list_documents, case.id)
+            if case is not None
+            else []
+        )
+    except Exception as exc:
+        logger.exception("Failed to fetch document %s for case-match", document_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch the document. Check Supabase table access.",
+        ) from exc
+
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    if case is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document is not attached to a case"
+        )
+
+    if all(d.id != document.id for d in documents):
+        documents.append(document)
+    result = check_case_match(case, documents)
+    return next(m for m in result.documents if m.document_id == document_id)

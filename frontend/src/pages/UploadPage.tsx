@@ -17,7 +17,11 @@ import {
   updateExtractedFields,
   uploadDocuments,
 } from '../services/uploadService';
-import type { BulkUploadItemResult, DocumentRecord } from '../services/uploadService';
+import type {
+  BulkUploadItemResult,
+  DocumentCaseMatch,
+  DocumentRecord,
+} from '../services/uploadService';
 import {
   MAX_BULK_FILES,
   MAX_FILE_SIZE_BYTES,
@@ -252,11 +256,15 @@ export default function UploadPage({
   const [savingFields, setSavingFields] = useState<Set<string>>(new Set());
   const [saveFieldErrors, setSaveFieldErrors] = useState<Map<string, string>>(new Map());
   const [wsConnected, setWsConnected] = useState(false);
+  // Case-match result per document (see backend/app/case_match.py), pushed
+  // with every case snapshot — folded into the displayed routing outcome.
+  const [caseMatches, setCaseMatches] = useState<Map<string, DocumentCaseMatch>>(new Map());
 
   const flaggedDocuments = Array.from(documentDetails.values()).filter((document) => {
     const lowestConfidence = lowestFieldConfidence(document.extracted_fields);
     return (
       document.classification_outcome === 'manual_review' ||
+      caseMatches.get(document.id)?.status === 'manual_review' ||
       (lowestConfidence != null && lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD)
     );
   });
@@ -291,10 +299,13 @@ export default function UploadPage({
 
     const subscription = subscribeToCaseStatus(
       selectedCase.id,
-      ({ documents, caseSummary }) => {
+      ({ documents, caseSummary, caseMatch }) => {
         if (!isMountedRef.current) return;
 
         setDocumentDetails(new Map(documents.map((document) => [document.id, document])));
+        setCaseMatches(
+          new Map((caseMatch?.documents ?? []).map((match) => [match.document_id, match])),
+        );
         setFulfilledRequirements(new Set(caseSummary.fulfilled_requirements));
         setProofOfAddressCoverage(caseSummary.proof_of_address_coverage);
         setIdDocumentCoverage(caseSummary.id_document_coverage);
@@ -677,6 +688,12 @@ export default function UploadPage({
                   .map((document) => {
                     const status = document.status;
                     const isTerminal = TERMINAL_DOCUMENT_STATUSES.has(status);
+                    const caseMatch = caseMatches.get(document.id);
+                    const routingOutcome = formatRoutingOutcome(document, caseMatch);
+                    const manualReviewTitle =
+                      caseMatch?.status === 'manual_review'
+                        ? caseMatch.reason
+                        : 'Requires manual review';
 
                     return (
                       <div
@@ -694,12 +711,11 @@ export default function UploadPage({
                         }}
                       >
                         <span className="document-filename">
-                          {formatRoutingOutcome(document) ===
-                            'Manual Review' && (
+                          {routingOutcome === 'Manual Review' && (
                             <span
                               className="document-manual-review-icon"
-                              title="Requires manual review"
-                              aria-label="Requires manual review"
+                              title={manualReviewTitle}
+                              aria-label={manualReviewTitle}
                             >
                               ⚠
                             </span>
@@ -736,7 +752,7 @@ export default function UploadPage({
                         </span>
 
                         <span className="document-routing">
-                          {formatRoutingOutcome(document)}
+                          {routingOutcome}
                         </span>
                       </div>
                     );
@@ -805,9 +821,15 @@ export default function UploadPage({
                   const lowestConfidence = lowestFieldConfidence(document.extracted_fields);
                   const lowExtractionConfidence =
                     lowestConfidence != null && lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD;
+                  const caseMatch = caseMatches.get(document.id);
+                  const caseMatchReview = caseMatch?.status === 'manual_review';
 
+                  // Classification problems first — a case-match reason is
+                  // only meaningful once the document type is right.
                   const reason =
-                    document.classification_outcome === 'manual_review'
+                    document.classification_outcome !== 'manual_review' && caseMatchReview
+                      ? caseMatch.reason
+                      : document.classification_outcome === 'manual_review'
                       ? document.escalation_reason ??
                         (document.document_type === 'unrecognised'
                           ? 'Document type could not be confidently recognised.'
@@ -841,6 +863,12 @@ export default function UploadPage({
                             'manual_review' && (
                             <span className="flagged-status">
                               Manual review
+                            </span>
+                          )}
+
+                          {caseMatch?.case_mismatch && (
+                            <span className="flagged-status">
+                              Case mismatch
                             </span>
                           )}
                         </div>

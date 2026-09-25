@@ -13,10 +13,11 @@ import {
   formatDocumentStatus,
   formatRoutingOutcome,
   getDocument,
+  getDocumentCaseMatch,
   updateDocumentType,
   updateExtractedFields,
 } from '../services/uploadService';
-import type { DocumentRecord } from '../services/uploadService';
+import type { DocumentCaseMatch, DocumentRecord } from '../services/uploadService';
 
 interface DocumentDetailsPageProps {
   selectedCase: CaseRecord;
@@ -685,6 +686,40 @@ export default function DocumentDetailsPage({
     };
   }, [documentId]);
 
+  // Whether this document belongs to the case's company and individuals (see
+  // backend/app/case_match.py). Depends on every document in the case, so
+  // it's fetched on its own rather than carried on the document itself, and
+  // refetched whenever this document's own status or fields change.
+  const [caseMatch, setCaseMatch] = useState<DocumentCaseMatch | null>(null);
+  const hasCase = Boolean(document?.case_id);
+  const documentStatus = document?.status;
+  const extractedFieldsJson = JSON.stringify(document?.extracted_fields ?? null);
+
+  useEffect(() => {
+    if (!hasCase || documentStatus !== 'analyzed') {
+      setCaseMatch(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    getDocumentCaseMatch(documentId)
+      .then((result) => {
+        if (!cancelled) setCaseMatch(result);
+      })
+      .catch(() => {
+        // Informational only — the rest of the page works without it.
+        if (!cancelled) setCaseMatch(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [documentId, hasCase, documentStatus, extractedFieldsJson]);
+
+  const caseMatchMismatches =
+    caseMatch?.comparisons.filter((comparison) => comparison.outcome === 'mismatch') ?? [];
+
   const extractedFields = useMemo(
     () => displayableFieldEntries(document?.extracted_fields ?? null),
     [document?.extracted_fields],
@@ -1053,10 +1088,34 @@ export default function DocumentDetailsPage({
           <div>
             <span className="details-label">Routing Outcome</span>
             <strong>
-              {formatRoutingOutcome(document)}
+              {formatRoutingOutcome(document, caseMatch)}
             </strong>
           </div>
         </div>
+
+        {caseMatch?.status === 'manual_review' && (
+          <div className="review-message review-message--warning details-failure-reason">
+            <div>
+              <strong>
+                {caseMatch.case_mismatch
+                  ? 'Case mismatch — sent to manual review'
+                  : 'Sent to manual review'}
+              </strong>
+              {caseMatchMismatches.length > 0 ? (
+                caseMatchMismatches.map((comparison) => (
+                  <div key={`${comparison.document_field}:${comparison.document_value}`}>
+                    {comparison.reason}
+                    {comparison.case_value && (
+                      <> (certificate of incumbency: {comparison.case_value})</>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div>{caseMatch.reason}</div>
+              )}
+            </div>
+          </div>
+        )}
 
         {failureReason && (
           <div className="review-message review-message--error details-failure-reason">

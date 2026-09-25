@@ -5,7 +5,8 @@ import logging
 
 from fastapi import APIRouter, Body, HTTPException, status
 
-from .. import case_repository, case_status
+from .. import case_repository, case_status, document_repository
+from ..case_match import CaseMatchResult, check_case_match
 from ..models import CaseRecord, CaseSummary, UpdateCaseRequest
 
 router = APIRouter(prefix="/cases", tags=["cases"])
@@ -81,3 +82,29 @@ async def update_case(case_id: str, request: UpdateCaseRequest) -> CaseSummary:
     if updated is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
     return updated
+
+
+@router.get("/{case_id}/case-match", response_model=CaseMatchResult)
+async def get_case_match(case_id: str) -> CaseMatchResult:
+    """
+    Whether each of the case's documents belongs to the case's company and
+    individuals, checked against the certificate of incumbency — see
+    case_match.py. Computed live on every call; nothing is written.
+    """
+    try:
+        case = await asyncio.to_thread(case_repository.get_case, case_id)
+        documents = (
+            await asyncio.to_thread(document_repository.list_documents, case_id)
+            if case is not None
+            else []
+        )
+    except Exception as exc:
+        logger.exception("Failed to fetch case %s for case-match", case_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch the case. Check Supabase table access.",
+        ) from exc
+
+    if case is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+    return check_case_match(case, documents)
