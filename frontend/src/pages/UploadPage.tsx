@@ -6,16 +6,19 @@ import FileRow from '../components/FileRow';
 import { subscribeToCaseStatus } from '../services/caseSocket';
 import type { CaseStatusSubscription } from '../services/caseSocket';
 import {
+  approveDocument,
   ADDITIONAL_DOCUMENT_TYPES,
   REQUIRED_DOCUMENT_TYPES,
   EXTRACTION_CONFIDENCE_THRESHOLD,
   TERMINAL_DOCUMENT_STATUSES,
   formatDocumentStatus,
+  formatDocumentType,
   formatRoutingOutcome,
   lowestFieldConfidence,
   updateCase,
   updateExtractedFields,
   uploadDocuments,
+  CLASSIFICATION_CONFIDENCE_THRESHOLD,
 } from '../services/uploadService';
 import type { BulkUploadItemResult, DocumentRecord } from '../services/uploadService';
 import {
@@ -27,15 +30,6 @@ import {
 } from '../utils/fileValidation';
 import type { FileIssue } from '../utils/fileValidation';
 
-const formatDocumentType = (documentType?: string | null) => {
-  if (!documentType) return "—";
-
-  const formatted = documentType
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-
-  return formatted.replace(/\bId\b/g, "ID").replace(/\bNric\b/g, "NRIC");
-};
 
 const MAX_FILE_SIZE_MB = Math.floor(MAX_FILE_SIZE_BYTES / (1024 * 1024));
 
@@ -252,6 +246,9 @@ export default function UploadPage({
   const [savingFields, setSavingFields] = useState<Set<string>>(new Set());
   const [saveFieldErrors, setSaveFieldErrors] = useState<Map<string, string>>(new Map());
   const [wsConnected, setWsConnected] = useState(false);
+  const [approvingDocumentId, setApprovingDocumentId] = useState<string | null>(null);
+  const [approveError, setApproveError] = useState<string | null>(null);
+  const [isApprovingAll, setIsApprovingAll] = useState(false);
 
   const flaggedDocuments = Array.from(documentDetails.values()).filter((document) => {
     const lowestConfidence = lowestFieldConfidence(document.extracted_fields);
@@ -376,6 +373,85 @@ export default function UploadPage({
     }
   }
 
+  async function handleApproveDocument(documentId: string) {
+  setApprovingDocumentId(documentId);
+  setApproveError(null);
+
+  try {
+    const updated = await approveDocument(documentId);
+
+    if (!isMountedRef.current) {
+      return;
+    }
+
+    setDocumentDetails((current) => {
+      const next = new Map(current);
+      next.set(documentId, updated);
+      return next;
+    });
+  } catch (err) {
+    if (!isMountedRef.current) {
+      return;
+    }
+
+    setApproveError(
+      err instanceof Error
+        ? err.message
+        : 'Failed to approve document.',
+    );
+  } finally {
+    if (isMountedRef.current) {
+      setApprovingDocumentId(null);
+    }
+  }
+}
+
+async function handleApproveAllEligibleDocuments() {
+  const eligibleDocuments = extractedDocuments.filter(
+    (document) => document.status === 'analyzed',
+  );
+
+  if (eligibleDocuments.length === 0) {
+    return;
+  }
+
+  setIsApprovingAll(true);
+  setApproveError(null);
+
+  try {
+    const updatedDocuments = await Promise.all(
+      eligibleDocuments.map((document) => approveDocument(document.id)),
+    );
+
+    if (!isMountedRef.current) {
+      return;
+    }
+
+    setDocumentDetails((current) => {
+      const next = new Map(current);
+
+      for (const updated of updatedDocuments) {
+        next.set(updated.id, updated);
+      }
+
+      return next;
+    });
+  } catch (err) {
+    if (!isMountedRef.current) {
+      return;
+    }
+
+    setApproveError(
+      err instanceof Error
+        ? err.message
+        : 'Failed to approve eligible documents.',
+    );
+  } finally {
+    if (isMountedRef.current) {
+      setIsApprovingAll(false);
+    }
+  }
+}
   function getFieldDraft(
     documentId: string,
     extractedFields: Record<string, unknown>,
@@ -468,6 +544,18 @@ export default function UploadPage({
     setError(null);
     setJustSubmitted(false);
   }
+
+  const documents = Array.from(documentDetails.values()).sort((a, b) =>
+    a.uploaded_at.localeCompare(b.uploaded_at),
+  );
+
+  const extractedDocuments = documents.filter(
+    (document) => document.status !== 'approved',
+  );
+
+  const approvedDocuments = documents.filter(
+    (document) => document.status === 'approved',
+  );
 
   const completedCount = results.length + rejections.length;
   const successfulCount = results.filter((result) => result.success).length;
@@ -628,122 +716,195 @@ export default function UploadPage({
             </div>
           )}
 
-          {documentDetails.size > 0 && (
-            <section className="documents-card">
-              <div className="documents-card-header">
-                <div className="documents-card-title">
-                  <span className="documents-card-icon">▣</span>
-                  <span>Extracted Files</span>
-                </div>
+            {documents.length > 0 && (
+              <>
+                {/* EXTRACTED DOCUMENTS */}
+                {extractedDocuments.length > 0 && (
+                  <section className="documents-card">
+                    <div className="documents-card-header">
+                      <div className="documents-card-title">
+                        <span className="documents-card-icon">▣</span>
+                        <span>Extracted Files</span>
+                      </div>
 
-                <div className="documents-card-actions">
-                  <button
-                    type="button"
-                    className="approve-all-btn"
-                    onClick={() => {
-                      // Frontend-only for now.
-                      // Backend approval logic can be connected later.
-                    }}
-                  >
-                    Approve all eligible documents
-                  </button>
-
-                  <span
-                    className={`mock-badge${wsConnected ? ' live' : ''}`}
-                    title={
-                      wsConnected
-                        ? 'Connected — updates push in real time'
-                        : 'Disconnected — reconnecting…'
-                    }
-                  >
-                    {wsConnected ? 'LIVE' : 'OFFLINE'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="documents-table">
-                <div className="documents-table-header">
-                  <span>Filename</span>
-                  <span>Document Type</span>
-                  <span>Status</span>
-                  <span>Classification Confidence</span>
-                  <span>Routing Outcome</span>
-                </div>
-
-                {Array.from(documentDetails.values())
-                  .sort((a, b) =>
-                    a.uploaded_at.localeCompare(b.uploaded_at),
-                  )
-                  .map((document) => {
-                    const status = document.status;
-                    const isTerminal = TERMINAL_DOCUMENT_STATUSES.has(status);
-
-                    return (
-                      <div
-                        key={document.id}
-                        className="documents-table-row documents-table-row--clickable"
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`View ${document.filename}`}
-                        onClick={() => onOpenDocument(document.id)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            onOpenDocument(document.id);
+                      <div className="documents-card-actions">
+                        <button
+                          type="button"
+                          className="approve-all-btn"
+                          onClick={() => void handleApproveAllEligibleDocuments()}
+                          disabled={
+                            isApprovingAll ||
+                            !extractedDocuments.some((document) => document.status === 'analyzed')
                           }
-                        }}
-                      >
-                        <span className="document-filename">
-                          {formatRoutingOutcome(document) ===
-                            'Manual Review' && (
-                            <span
-                              className="document-manual-review-icon"
-                              title="Requires manual review"
-                              aria-label="Requires manual review"
-                            >
-                              ⚠
-                            </span>
-                          )}
-
-                          {document.filename}
-                        </span>
-
-                        <span className="document-type-cell">
-                          {formatDocumentType(document.document_type)}
-                        </span>
-
-                        <span className="document-status-cell">
-                          <span
-                            className={`status-dot ${
-                              status === 'analyzed'
-                                ? 'status-dot--success'
-                                : status === 'failed'
-                                  ? 'status-dot--failed'
-                                  : ''
-                            }`}
-                          />
-
-                          <span>
-                          {formatDocumentStatus(status)}
-                          {!isTerminal && '…'}
-                        </span>
-                        </span>
-
-                        <span className="document-confidence">
-                          {document.confidence != null
-                            ? document.confidence.toFixed(2)
-                            : '—'}
-                        </span>
-
-                        <span className="document-routing">
-                          {formatRoutingOutcome(document)}
+                        >
+                          {isApprovingAll
+                            ? 'Approving…'
+                            : 'Approve all eligible documents'}
+                        </button>
+                        <span
+                          className={`mock-badge${wsConnected ? ' live' : ''}`}
+                          title={
+                            wsConnected
+                              ? 'Connected — updates push in real time'
+                              : 'Disconnected — reconnecting…'
+                          }
+                        >
+                          {wsConnected ? 'LIVE' : 'OFFLINE'}
                         </span>
                       </div>
-                    );
-                  })}
-              </div>
-            </section>
-          )}
+                    </div>
+
+                    {approveError && (
+                      <div className="toast show mixed">⚠ {approveError}</div>
+                    )}
+
+                    <div className="documents-table">
+                      <div className="documents-table-header">
+                        <span>Filename</span>
+                        <span>Document Type</span>
+                        <span>Status</span>
+                        <span>Classification Confidence</span>
+                        <span>Routing Outcome</span>
+                      </div>
+
+                      {extractedDocuments.map((document) => {
+                        const status = document.status;
+                        const isTerminal = TERMINAL_DOCUMENT_STATUSES.has(status);
+                        const isApproving = approvingDocumentId === document.id;
+
+                        return (
+                          <div
+                            key={document.id}
+                            className="documents-table-row documents-table-row--clickable"
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`View ${document.filename}`}
+                            onClick={() => onOpenDocument(document.id)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                onOpenDocument(document.id);
+                              }
+                            }}
+                          >
+                            <span className="document-filename">
+                              {formatRoutingOutcome(document) === 'Manual Review' && (
+                                <span
+                                  className="document-manual-review-icon"
+                                  title="Requires manual review"
+                                  aria-label="Requires manual review"
+                                >
+                                  ⚠
+                                </span>
+                              )}
+
+                              {document.filename}
+                            </span>
+
+                            <span className="document-type-cell">
+                              {formatDocumentType(document.document_type)}
+                            </span>
+
+                            <span className="document-status-cell">
+                              <span
+                                className={`status-dot ${
+                                  status === 'analyzed'
+                                    ? 'status-dot--success'
+                                    : status === 'failed'
+                                      ? 'status-dot--failed'
+                                      : ''
+                                }`}
+                              />
+
+                              <span>
+                                {formatDocumentStatus(status)}
+                                {!isTerminal && '…'}
+                              </span>
+                            </span>
+
+                            <span className="document-confidence">
+                              {document.confidence != null
+                                ? document.confidence.toFixed(2)
+                                : '—'}
+                            </span>
+
+                            <span className="document-routing">
+                              {formatRoutingOutcome(document)}
+                            </span>
+
+                            
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
+
+                {/* APPROVED DOCUMENTS */}
+                {approvedDocuments.length > 0 && (
+                  <section className="documents-card approved-documents-card">
+                    <div className="documents-card-header">
+                      <div className="documents-card-title">
+                        <span className="documents-card-icon">✓</span>
+                        <span>Approved Documents</span>
+                      </div>
+                    </div>
+
+                    <div className="documents-table">
+                      <div className="documents-table-header">
+                        <span>Filename</span>
+                        <span>Document Type</span>
+                        <span>Status</span>
+                        <span>Classification Confidence</span>
+                        <span>Routing Outcome</span>
+                      </div>
+
+                      {approvedDocuments.map((document) => (
+                        <div
+                          key={document.id}
+                          className="documents-table-row documents-table-row--clickable"
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`View ${document.filename}`}
+                          onClick={() => onOpenDocument(document.id)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              onOpenDocument(document.id);
+                            }
+                          }}
+                        >
+                          <span className="document-filename">
+                            {document.filename}
+                          </span>
+
+                          <span className="document-type-cell">
+                            {formatDocumentType(document.document_type)}
+                          </span>
+
+                          <span className="document-status-cell">
+                            <span className="status-dot status-dot--success" />
+                            <span>Approved</span>
+                          </span>
+
+                          <span className="document-confidence">
+                            {document.confidence != null
+                              ? document.confidence.toFixed(2)
+                              : '—'}
+                          </span>
+
+                          <span className="document-routing">
+                            Approved
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </>
+            )}
+
+
 
           <section className="summary-card">
             <div className="summary-card-header">
@@ -808,14 +969,20 @@ export default function UploadPage({
 
                   const reason =
                     document.classification_outcome === 'manual_review'
-                      ? document.escalation_reason ??
-                        (document.document_type === 'unrecognised'
-                          ? 'Document type could not be confidently recognised.'
-                          : lowExtractionConfidence
-                            ? 'Extracted fields have low confidence and require review.'
-                            : 'Document requires manual review.')
-                      : 'Extracted fields have low confidence and require review.';
-
+                      ? document.document_type === 'unrecognised'
+                        ? 'Document type could not be confidently recognised. Please verify the document type before approving.'
+                        : document.confidence != null &&
+                            document.confidence < CLASSIFICATION_CONFIDENCE_THRESHOLD
+                          ? `Classification confidence (${document.confidence.toFixed(
+                              2,
+                            )}) is below the required threshold of ${CLASSIFICATION_CONFIDENCE_THRESHOLD.toFixed(
+                              2,
+                            )}. Please verify the document type before approving.`
+                          : document.escalation_reason ??
+                            'This document was routed to manual review during classification. Please verify the document before approving.'
+                      : lowExtractionConfidence
+                        ? 'One or more extracted fields have low confidence and require review.'
+                        : 'This document requires manual review.';
                   return (
                     <div
                       key={document.id}
@@ -826,21 +993,13 @@ export default function UploadPage({
 
                         <div className="flagged-item-meta">
                           <span>
-                            {document.document_type ??
-                              'Unknown document type'}
+                            {formatDocumentType(document.document_type)}
                           </span>
 
                           {lowestConfidence != null && (
                             <span>
                               Lowest field confidence:{' '}
                               {lowestConfidence.toFixed(3)}
-                            </span>
-                          )}
-
-                          {document.classification_outcome ===
-                            'manual_review' && (
-                            <span className="flagged-status">
-                              Manual review
                             </span>
                           )}
                         </div>

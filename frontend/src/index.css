@@ -2416,30 +2416,43 @@ h1 {
 
 .manual-review-row {
   min-height: 64px;
-  border-bottom: 1px solid #f0dddd;
+  border-bottom: 1px solid #e8ebef;
+  background: #ffffff;
 }
 
 .manual-review-row:last-child {
   border-bottom: 0;
 }
 
+.manual-review-row--needs-attention {
+  background: #fff5f5;
+}
+
 .manual-review-field {
-  color: #a33131;
+  color: #263753;
   font-size: 13px;
   font-weight: 600;
 }
 
+.manual-review-row--needs-attention .manual-review-field {
+  color: #b3402a;
+}
 .manual-review-input {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
   padding: 10px 12px;
-  border: 1px solid #e4a3a3;
+  border: 1px solid #d9dee6;
   border-radius: 7px;
   background: #ffffff;
   color: #17294d;
   font: inherit;
   font-size: 13px;
+}
+
+.manual-review-row--needs-attention .manual-review-input {
+  border-color: #d33b3b;
+  background: #fff8f8;
 }
 
 .manual-review-input:focus {
@@ -3073,4 +3086,28 @@ h1 {
   .login-heading h1 {
     font-size: 24px;
   }
+}
+
+.approve-document-btn {
+  border: 1px solid #1f7a4d;
+  background: #1f7a4d;
+  color: #ffffff;
+  border-radius: 6px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.approve-document-btn:hover {
+  background: #19643f;
+}
+
+.approve-document-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.approved-documents-card {
+  margin-top: 24px;
 }

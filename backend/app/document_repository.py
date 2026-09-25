@@ -51,6 +51,10 @@ def update_status(
 
     supabase_client.table("documents").update(update).eq("id", document_id).execute()
 
+def approve_document(document_id: str) -> None:
+    supabase_client.table("documents").update(
+        {"status": DocumentStatus.APPROVED.value}
+    ).eq("id", document_id).execute()
 
 def record_classification(
     document_id: str,

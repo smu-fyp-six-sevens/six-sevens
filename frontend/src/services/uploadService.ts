@@ -135,7 +135,11 @@ export function formatRoutingOutcome(
 // Statuses that no longer change on their own — a document sitting in any
 // other status is still actively moving through the pipeline (see the "…"
 // suffix formatDocumentStatus's callers append for non-terminal statuses).
-export const TERMINAL_DOCUMENT_STATUSES = new Set(['analyzed', 'failed']);
+export const TERMINAL_DOCUMENT_STATUSES = new Set([
+  'analyzed',
+  'approved',
+  'failed',
+]);
 
 // Single source of truth for how a raw backend DocumentStatus reads in the
 // UI — shared by the case's document table and the document details page,
@@ -157,6 +161,8 @@ export function formatDocumentStatus(status: string): string {
       return 'Extracting';
     case 'analyzed':
       return 'Extracted';
+    case 'approved':
+      return 'Approved';
     case 'failed':
       return 'Failed';
     default:
@@ -189,6 +195,38 @@ export const DOCUMENT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'notice_of_assessment', label: 'Notice of assessment' },
   { value: 'unrecognised', label: 'Other' },
 ];
+
+export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
+  bank_statement: 'Bank statement',
+  certificate_of_incorporation: 'Certificate of incorporation',
+  payslip: 'Payslip',
+  passport: 'Passport',
+  nric: 'NRIC',
+  fatca_crs_declaration: 'FATCA/CRS Declaration',
+  certificate_of_incumbency: 'Certificate of incumbency',
+  company_constitution: 'Company constitution',
+  proof_of_address: 'Proof of address',
+  source_of_wealth: 'Source of wealth',
+  credit_report: 'Credit report',
+  list_of_loans: 'List of loans',
+  notice_of_assessment: 'Notice of assessment',
+  unrecognised: 'Other',
+};
+
+export function formatDocumentType(
+  documentType: string | null | undefined,
+): string {
+  if (!documentType) {
+    return '—';
+  }
+
+  return (
+    DOCUMENT_TYPE_LABELS[documentType] ??
+    documentType
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (char) => char.toUpperCase())
+  );
+}
 
 
 // Mirrors the subset of CaseSummary in backend/app/models.py this page
@@ -342,6 +380,22 @@ export async function deleteExtractedField(
   return (await response.json()) as DocumentRecord;
 }
 
+export async function approveDocument(
+  documentId: string,
+): Promise<DocumentRecord> {
+  const response = await authFetch(`/documents/${documentId}/approve`, {
+    method: 'POST',
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(
+      `Failed to approve document (${response.status}): ${detail}`,
+    );
+  }
+
+  return (await response.json()) as DocumentRecord;
+}
 // Mirrors UpdateDocumentTypeRequest in backend/app/models.py. Saving also
 // kicks off a background extraction rerun against the new type — the
 // returned record already reads status 'extracting'.
@@ -363,9 +417,13 @@ export async function updateDocumentType(
   return (await response.json()) as DocumentRecord;
 }
 
-export async function uploadDocuments(caseId: string, files: File[]): Promise<BulkUploadResponse> {
+export async function uploadDocuments(
+  caseId: string,
+  files: File[],
+): Promise<BulkUploadResponse> {
   const formData = new FormData();
   formData.append('case_id', caseId);
+
   for (const file of files) {
     formData.append('files', file);
   }
