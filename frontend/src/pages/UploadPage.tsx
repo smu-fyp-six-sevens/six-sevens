@@ -29,6 +29,10 @@ import {
   validateFiles,
 } from '../utils/fileValidation';
 import type { FileIssue } from '../utils/fileValidation';
+import {
+  MAX_COMPANY_NAME_LENGTH,
+  validateCompanyName,
+} from '../utils/caseValidation';
 
 
 const MAX_FILE_SIZE_MB = Math.floor(MAX_FILE_SIZE_BYTES / (1024 * 1024));
@@ -198,8 +202,9 @@ export default function UploadPage({
 
   async function handleSaveCase() {
     const trimmed = companyNameDraft.trim();
-    if (!trimmed) {
-      setSaveCaseError('Company name is required.');
+    const validationError = validateCompanyName(companyNameDraft);
+    if (validationError) {
+      setSaveCaseError(validationError);
       return;
     }
 
@@ -583,6 +588,7 @@ async function handleApproveAllEligibleDocuments() {
                   type="text"
                   value={companyNameDraft}
                   onChange={(event) => setCompanyNameDraft(event.target.value)}
+                  maxLength={MAX_COMPANY_NAME_LENGTH}
                   disabled={isSavingCase}
                   aria-invalid={saveCaseError ? true : undefined}
                   aria-describedby={saveCaseError ? 'case-company-name-error' : undefined}
