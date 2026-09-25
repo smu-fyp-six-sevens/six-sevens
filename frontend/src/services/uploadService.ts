@@ -105,13 +105,66 @@ export function lowestFieldConfidence(fields: Record<string, unknown> | null): n
   return lowest;
 }
 
+// Mirrors DocumentCaseMatch / CaseMatchResult in backend/app/case_match.py —
+// whether a document belongs to the case's company and individuals, checked
+// against the certificate of incumbency. Computed live by the backend, never
+// stored.
+export interface CaseMatchComparison {
+  check: 'company_uen' | 'company_name' | 'individual_id' | 'individual_name';
+  outcome: 'match' | 'mismatch';
+  document_field: string;
+  document_value: string;
+  case_value: string | null;
+  reason: string;
+}
+
+export interface DocumentCaseMatch {
+  document_id: string;
+  filename: string;
+  document_type: string | null;
+  status: 'match' | 'manual_review' | 'pending';
+  can_proceed_to_fraud_detection: boolean;
+  // The company or an individual on the document doesn't match the case.
+  case_mismatch: boolean;
+  reason: string;
+  comparisons: CaseMatchComparison[];
+}
+
+export interface CaseMatchResult {
+  case_id: string;
+  incumbency: {
+    status: 'missing' | 'insufficient_evidence' | 'verified' | 'manual_review';
+    document_id: string | null;
+    uen: string | null;
+    company_name: string | null;
+    reasons: string[];
+  };
+  documents: DocumentCaseMatch[];
+  mismatched_document_ids: string[];
+}
+
+export async function getDocumentCaseMatch(documentId: string): Promise<DocumentCaseMatch> {
+  const response = await authFetch(`/documents/${documentId}/detection/case-match`);
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to fetch case match (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as DocumentCaseMatch;
+}
+
 // Overall routing outcome shown in the UI (view only). classification_outcome
 // alone only records the classifier's decision — documents are always sent on
 // to extraction, so an 'accepted' classification can still end up needing
 // manual review. This folds in the later stages: a failed document or one
 // with a low-confidence field reads as Manual Review (same rule as the
 // flagged-documents list), and an accepted one reads as Pending until
-// extraction has finished.
+// extraction has finished. caseMatch folds in the case-match check the same
+// way: a document it sends to manual review (it belongs to another
+// company/individual, or the certificate of incumbency itself is in doubt)
+// reads as Manual Review — without touching the stored
+// classification_outcome, which the checklist still relies on.
 export function formatRoutingOutcome(
   document: Pick<
     DocumentRecord,
