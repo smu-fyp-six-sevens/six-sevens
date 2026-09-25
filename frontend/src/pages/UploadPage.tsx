@@ -20,7 +20,11 @@ import {
   uploadDocuments,
   CLASSIFICATION_CONFIDENCE_THRESHOLD,
 } from '../services/uploadService';
-import type { BulkUploadItemResult, DocumentRecord } from '../services/uploadService';
+import type {
+  BulkUploadItemResult,
+  DocumentCaseMatch,
+  DocumentRecord,
+} from '../services/uploadService';
 import {
   MAX_BULK_FILES,
   MAX_FILE_SIZE_BYTES,
@@ -254,11 +258,21 @@ export default function UploadPage({
   const [approvingDocumentId, setApprovingDocumentId] = useState<string | null>(null);
   const [approveError, setApproveError] = useState<string | null>(null);
   const [isApprovingAll, setIsApprovingAll] = useState(false);
+  // Case-match result per document (see backend/app/case_match.py), pushed
+  // with every case snapshot — folded into the displayed routing outcome.
+  const [caseMatches, setCaseMatches] = useState<Map<string, DocumentCaseMatch>>(new Map());
+
+  // A case-match flag needs manual review until an officer approves the
+  // document — approving it is that review.
+  const caseMatchNeedsReview = (document: DocumentRecord) =>
+    document.status !== 'approved' &&
+    caseMatches.get(document.id)?.status === 'manual_review';
 
   const flaggedDocuments = Array.from(documentDetails.values()).filter((document) => {
     const lowestConfidence = lowestFieldConfidence(document.extracted_fields);
     return (
       document.classification_outcome === 'manual_review' ||
+      caseMatchNeedsReview(document) ||
       (lowestConfidence != null && lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD)
     );
   });
@@ -293,10 +307,13 @@ export default function UploadPage({
 
     const subscription = subscribeToCaseStatus(
       selectedCase.id,
-      ({ documents, caseSummary }) => {
+      ({ documents, caseSummary, caseMatch }) => {
         if (!isMountedRef.current) return;
 
         setDocumentDetails(new Map(documents.map((document) => [document.id, document])));
+        setCaseMatches(
+          new Map((caseMatch?.documents ?? []).map((match) => [match.document_id, match])),
+        );
         setFulfilledRequirements(new Set(caseSummary.fulfilled_requirements));
         setProofOfAddressCoverage(caseSummary.proof_of_address_coverage);
         setIdDocumentCoverage(caseSummary.id_document_coverage);
@@ -779,6 +796,12 @@ async function handleApproveAllEligibleDocuments() {
                         const status = document.status;
                         const isTerminal = TERMINAL_DOCUMENT_STATUSES.has(status);
                         const isApproving = approvingDocumentId === document.id;
+                        const caseMatch = caseMatches.get(document.id);
+                        const routingOutcome = formatRoutingOutcome(document, caseMatch);
+                        const manualReviewTitle =
+                          caseMatch?.status === 'manual_review'
+                            ? caseMatch.reason
+                            : 'Requires manual review';
 
                         return (
                           <div
@@ -796,11 +819,11 @@ async function handleApproveAllEligibleDocuments() {
                             }}
                           >
                             <span className="document-filename">
-                              {formatRoutingOutcome(document) === 'Manual Review' && (
+                              {routingOutcome === 'Manual Review' && (
                                 <span
                                   className="document-manual-review-icon"
-                                  title="Requires manual review"
-                                  aria-label="Requires manual review"
+                                  title={manualReviewTitle}
+                                  aria-label={manualReviewTitle}
                                 >
                                   ⚠
                                 </span>
@@ -837,7 +860,7 @@ async function handleApproveAllEligibleDocuments() {
                             </span>
 
                             <span className="document-routing">
-                              {formatRoutingOutcome(document)}
+                              {routingOutcome}
                             </span>
 
                             
@@ -974,9 +997,16 @@ async function handleApproveAllEligibleDocuments() {
                   const lowestConfidence = lowestFieldConfidence(document.extracted_fields);
                   const lowExtractionConfidence =
                     lowestConfidence != null && lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD;
+                  const caseMatch = caseMatches.get(document.id);
 
+                  // Classification problems first — a case-match reason is
+                  // only meaningful once the document type is right.
                   const reason =
-                    document.classification_outcome === 'manual_review'
+                    document.classification_outcome !== 'manual_review' &&
+                    caseMatch &&
+                    caseMatchNeedsReview(document)
+                      ? `${caseMatch.reason}. Please verify the document belongs to this case before approving.`
+                      : document.classification_outcome === 'manual_review'
                       ? document.document_type === 'unrecognised'
                         ? 'Document type could not be confidently recognised. Please verify the document type before approving.'
                         : document.confidence != null &&
@@ -1008,6 +1038,12 @@ async function handleApproveAllEligibleDocuments() {
                             <span>
                               Lowest field confidence:{' '}
                               {lowestConfidence.toFixed(3)}
+                            </span>
+                          )}
+
+                          {caseMatch?.case_mismatch && caseMatchNeedsReview(document) && (
+                            <span className="flagged-status">
+                              Case mismatch
                             </span>
                           )}
                         </div>
