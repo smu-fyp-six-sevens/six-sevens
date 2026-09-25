@@ -408,7 +408,9 @@ export default function UploadPage({
 
 async function handleApproveAllEligibleDocuments() {
   const eligibleDocuments = extractedDocuments.filter(
-    (document) => document.status === 'analyzed',
+    (document) =>
+      document.status === 'analyzed' &&
+      formatRoutingOutcome(document) === 'Accepted',
   );
 
   if (eligibleDocuments.length === 0) {

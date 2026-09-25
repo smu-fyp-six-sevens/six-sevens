@@ -7,6 +7,7 @@ import {
   deleteExtractedField,
   addExtractedField,
   approveDocument,
+  rejectDocument,
   CLASSIFICATION_CONFIDENCE_THRESHOLD,
   DOCUMENT_TYPE_OPTIONS,
   EXTRACTION_CONFIDENCE_THRESHOLD,
@@ -633,6 +634,9 @@ export default function DocumentDetailsPage({
 
   const [isApproving, setIsApproving] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
+
+  const [isRejecting, setIsRejecting] = useState(false);
+  const [rejectError, setRejectError] = useState<string | null>(null);
   // Last extracted_fields the draft was built from — lets a live update reset
   // the draft only when the fields really changed (e.g. a rerun finishing),
   // not wipe an officer's in-progress edits on every unrelated case update.
@@ -792,6 +796,28 @@ export default function DocumentDetailsPage({
       setIsApproving(false);
     }
   }
+
+  async function handleRejectDocument() {
+  if (!document) {
+    return;
+  }
+
+  setIsRejecting(true);
+  setRejectError(null);
+
+  try {
+    const updated = await rejectDocument(document.id);
+    setDocument(updated);
+  } catch (error) {
+    setRejectError(
+      error instanceof Error
+        ? error.message
+        : 'Failed to reject document.',
+    );
+  } finally {
+    setIsRejecting(false);
+  }
+}
 
   async function handleSaveType() {
     if (!document || !chosenType) {
@@ -991,7 +1017,10 @@ export default function DocumentDetailsPage({
                 ? 'document-status--success'
                 : document.status === 'failed'
                   ? 'document-status--failed'
-                  : ''
+                  : document.status === 'rejected'
+                    ? 'document-status--rejected'
+                    : ''
+                  
             }`}
           >
             <span
@@ -1000,7 +1029,9 @@ export default function DocumentDetailsPage({
                   ? 'status-dot--success'
                   : document.status === 'failed'
                     ? 'status-dot--failed'
-                    : ''
+                    : document.status === 'rejected'
+                      ? 'status-dot--rejected'
+                      : ''
               }`}
             />
             {formatDocumentStatus(document.status)}
@@ -1519,13 +1550,16 @@ export default function DocumentDetailsPage({
           <div className="save-error">{approveError}</div>
         )}
 
-        {document.status !== 'approved' && (
+        {document.status !== 'approved' && 
+        document.status !== 'rejected' && (
           <div className="document-actions">
             <button
               type="button"
               className="document-action--reject"
+              disabled={isRejecting || isApproving}
+              onClick={() => void handleRejectDocument()}
             >
-              ✕ Reject Document
+              {isRejecting ? 'Rejecting…' : '✕ Reject Document'}
             </button>
 
             <button

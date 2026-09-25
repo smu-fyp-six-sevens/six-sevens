@@ -113,14 +113,22 @@ export function lowestFieldConfidence(fields: Record<string, unknown> | null): n
 // flagged-documents list), and an accepted one reads as Pending until
 // extraction has finished.
 export function formatRoutingOutcome(
-  document: Pick<DocumentRecord, 'status' | 'classification_outcome' | 'extracted_fields'>,
+  document: Pick<
+    DocumentRecord,
+    'status' | 'classification_outcome' | 'extracted_fields'
+  >,
 ): string {
+  if (document.status === 'rejected') {
+    return 'Rejected';
+  }
+
   const lowestConfidence = lowestFieldConfidence(document.extracted_fields);
 
   if (
     document.status === 'failed' ||
     document.classification_outcome === 'manual_review' ||
-    (lowestConfidence != null && lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD)
+    (lowestConfidence != null &&
+      lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD)
   ) {
     return 'Manual Review';
   }
@@ -138,6 +146,7 @@ export function formatRoutingOutcome(
 export const TERMINAL_DOCUMENT_STATUSES = new Set([
   'analyzed',
   'approved',
+  'rejected',
   'failed',
 ]);
 
@@ -163,6 +172,8 @@ export function formatDocumentStatus(status: string): string {
       return 'Extracted';
     case 'approved':
       return 'Approved';
+    case 'rejected':
+      return 'Rejected';
     case 'failed':
       return 'Failed';
     default:
@@ -391,6 +402,26 @@ export async function approveDocument(
     const detail = await response.text();
     throw new Error(
       `Failed to approve document (${response.status}): ${detail}`,
+    );
+  }
+
+  return (await response.json()) as DocumentRecord;
+}
+
+export async function rejectDocument(
+  documentId: string,
+): Promise<DocumentRecord> {
+  const response = await authFetch(
+    `/documents/${documentId}/reject`,
+    {
+      method: 'POST',
+    },
+  );
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(
+      `Reject failed (${response.status}): ${detail}`,
     );
   }
 
