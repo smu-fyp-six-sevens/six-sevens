@@ -1364,6 +1364,10 @@ h1 {
   background: #dc2626;
 }
 
+.status-dot--rejected {
+  background: #dc2626;
+}
+
 
 .document-confidence {
   color: #17294d;
@@ -1376,6 +1380,11 @@ h1 {
 }
 
 .document-status--failed {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.document-status.document-status--rejected {
   background: #fef2f2;
   color: #dc2626;
 }

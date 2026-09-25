@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import AppHeader from '../components/AppHeader';
 import { authFetch } from '../lib/api';
+import {
+  MAX_COMPANY_NAME_LENGTH,
+  validateCompanyName,
+} from '../utils/caseValidation';
 
 interface CreateCasePageProps {
   onBack: () => void;
@@ -20,9 +24,9 @@ export default function CreateCasePage({
 
     const trimmedName = companyName.trim();
 
-    // Required-field validation
-    if (!trimmedName) {
-      setError('Company name is required.');
+    const validationError = validateCompanyName(companyName);
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
@@ -100,6 +104,7 @@ export default function CreateCasePage({
                 }
               }}
               placeholder="Enter company name"
+              maxLength={MAX_COMPANY_NAME_LENGTH}
               disabled={isSubmitting}
               aria-invalid={Boolean(error)}
               aria-describedby={error ? 'company-name-error' : undefined}

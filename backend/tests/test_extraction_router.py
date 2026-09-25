@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 
 from app.fraud_detection.metadata_analysis import MetadataAnalysisResult
+from app.fraud_detection.layout_anomalies import CheckAssessment, LayoutAnomalyResult
 from app.fraud_detection.spelling_anomaly import SpellingAnomaly, SpellingAnomalyResult
 from app.main import app
 
@@ -174,3 +175,31 @@ def test_test_metadata_anomaly_rejects_empty_file() -> None:
 
     assert response.status_code == 400
     mock_check.assert_not_called()
+    
+def test_test_layout_anomalies_success() -> None:
+    assessed = CheckAssessment(unable_to_assess=False)
+    result = LayoutAnomalyResult(
+        document_id="ignored",
+        anomalies=[],
+        elements=[],
+        page_margins=[],
+        elements_analysed=0,
+        indentation=assessed,
+        alignment=assessed,
+        margin=assessed,
+        spacing=assessed,
+        unable_to_assess=False,
+    )
+
+    with patch("app.routers.extraction.check_layout_anomalies", return_value=result) as mock_check:
+        response = client.post(
+            "/extraction/test-layout-anomalies",
+            files={
+                "file": ("C018_Constitution.pdf", io.BytesIO(b"%PDF-1.4 fake"), "application/pdf")
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["unable_to_assess"] is False
+    mock_check.assert_called_once()
+    assert mock_check.call_args[0][1] == b"%PDF-1.4 fake"
