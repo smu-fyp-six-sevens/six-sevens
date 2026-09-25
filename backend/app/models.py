@@ -13,6 +13,7 @@ class DocumentStatus(str, Enum):
     PROCESSING = "processing"   # AC2: Classifier workflow invoked (shown as "Classifying")
     EXTRACTING = "extracting"   # classification recorded; Extraction workflow invoked
     ANALYZED = "analyzed"       # Classifier (and downstream agents) finished
+    APPROVED = "approved"       # When loan officer manually approves a document
     FAILED = "failed"           # AC3: retries exhausted, needs manual review
 
 

@@ -419,7 +419,59 @@ async def delete_extracted_field(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to delete extracted field. Check Supabase table access.",
         ) from exc
-    
+
+@router.post("/{document_id}/approve", response_model=DocumentRecord)
+async def approve_document(document_id: str) -> DocumentRecord:
+    """
+    Approves a completed document after loan officer review.
+
+    Only documents that have finished extraction can be approved.
+    """
+    try:
+        document = await asyncio.to_thread(
+            document_repository.get_document,
+            document_id,
+        )
+    except Exception as exc:
+        logger.exception("Failed to fetch document %s", document_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch the document. Check Supabase table access.",
+        ) from exc
+
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
+        )
+
+    if document.status != DocumentStatus.ANALYZED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only completed documents can be approved.",
+        )
+
+    try:
+        await asyncio.to_thread(
+            document_repository.approve_document,
+            document_id,
+        )
+
+        if document.case_id is not None:
+            await asyncio.to_thread(
+                case_status.sync_submission_finalized,
+                document.case_id,
+            )
+
+        return await get_document(document_id)
+
+    except Exception as exc:
+        logger.exception("Failed to approve document %s", document_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to approve document.",
+        ) from exc
+
 @router.patch("/{document_id}/document-type", response_model=DocumentRecord)
 async def update_document_type(
     document_id: str,

@@ -6,11 +6,13 @@ import { subscribeToCaseStatus } from '../services/caseSocket';
 import {
   deleteExtractedField,
   addExtractedField,
+  approveDocument,
   CLASSIFICATION_CONFIDENCE_THRESHOLD,
   DOCUMENT_TYPE_OPTIONS,
   EXTRACTION_CONFIDENCE_THRESHOLD,
   TERMINAL_DOCUMENT_STATUSES,
   formatDocumentStatus,
+  formatDocumentType,
   formatRoutingOutcome,
   getDocument,
   getDocumentCaseMatch,
@@ -25,15 +27,7 @@ interface DocumentDetailsPageProps {
   onBack: () => void;
 }
 
-const formatDocumentType = (documentType?: string | null) => {
-  if (!documentType) return "—";
 
-  const formatted = documentType
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-
-  return formatted.replace(/\bId\b/g, "ID");
-};
 const FIELD_KEY_ACRONYMS = new Set([
   'id',
   'uen',
@@ -638,6 +632,8 @@ export default function DocumentDetailsPage({
   const [isSavingType, setIsSavingType] = useState(false);
   const [typeError, setTypeError] = useState<string | null>(null);
 
+  const [isApproving, setIsApproving] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
   // Last extracted_fields the draft was built from — lets a live update reset
   // the draft only when the fields really changed (e.g. a rerun finishing),
   // not wipe an officer's in-progress edits on every unrelated case update.
@@ -808,6 +804,29 @@ export default function DocumentDetailsPage({
 
     return () => subscription.unsubscribe();
   }, [caseId, isInFlight, documentId]);
+
+
+  async function handleApproveDocument() {
+    if (!document) {
+      return;
+    }
+
+    setIsApproving(true);
+    setApproveError(null);
+
+    try {
+      const updated = await approveDocument(document.id);
+      setDocument(updated);
+    } catch (error) {
+      setApproveError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to approve document.',
+      );
+    } finally {
+      setIsApproving(false);
+    }
+  }
 
   async function handleSaveType() {
     if (!document || !chosenType) {
@@ -1455,7 +1474,9 @@ export default function DocumentDetailsPage({
               return (
                 <div
                   key={key}
-                  className="manual-review-row"
+                  className={`manual-review-row${
+                    canEditField ? ' manual-review-row--needs-attention' : ''
+                  }`}
                 >
                   <span className="manual-review-field">
                     {humanizeFieldKey(key)}
@@ -1553,21 +1574,29 @@ export default function DocumentDetailsPage({
           Document actions
           ===================================================== */}
 
-      <div className="document-actions">
-        <button
-          type="button"
-          className="document-action--reject"
-        >
-          ✕ Reject Document
-        </button>
+        {approveError && (
+          <div className="save-error">{approveError}</div>
+        )}
 
-        <button
-          type="button"
-          className="document-action--approve"
-        >
-          ✓ Approve Document
-        </button>
-      </div>
+        {document.status !== 'approved' && (
+          <div className="document-actions">
+            <button
+              type="button"
+              className="document-action--reject"
+            >
+              ✕ Reject Document
+            </button>
+
+            <button
+              type="button"
+              className="document-action--approve"
+              disabled={isApproving || document.status !== 'analyzed'}
+              onClick={() => void handleApproveDocument()}
+            >
+              {isApproving ? 'Approving…' : '✓ Approve Document'}
+            </button>
+          </div>
+        )}
     </div>
   );
 }
