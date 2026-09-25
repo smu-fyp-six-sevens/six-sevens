@@ -13,6 +13,7 @@ from ..fraud_detection.font_consistency_v2 import (
     check_font_consistency_v2,
 )
 from ..fraud_detection.metadata_analysis import MetadataAnalysisResult, check_metadata_anomalies
+from ..fraud_detection.layout_anomalies import LayoutAnomalyResult, check_layout_anomalies
 from ..fraud_detection.spelling_anomaly import SpellingAnomalyResult, check_spelling_anomalies
 
 router = APIRouter(prefix="/documents", tags=["detection"])
@@ -74,6 +75,24 @@ async def get_font_consistency_v2(document_id: str) -> FontConsistencyResultV2:
     return await asyncio.to_thread(
         check_font_consistency_v2, document_id, file_bytes, extracted_fields
     )
+
+
+@router.get(
+    "/{document_id}/detection/layout-anomalies",
+    response_model=LayoutAnomalyResult,
+)
+async def get_layout_anomalies(document_id: str) -> LayoutAnomalyResult:
+    """
+    On-demand layout anomaly check (not part of the automatic pipeline).
+
+    Returns `LayoutAnomalyResult`. Several checks on the same area become
+    one finding with `evidence.signals`. Neighbouring flagged paragraphs
+    add `local_pattern` / `consecutive_run` enrichment, not a new type.
+    Empty `anomalies` with `unable_to_assess: false` means the checks ran
+    and nothing crossed a threshold — not that the document is clean.
+    """
+    file_bytes = await _fetch_document_bytes(document_id)
+    return await asyncio.to_thread(check_layout_anomalies, document_id, file_bytes)
 
 
 @router.get(

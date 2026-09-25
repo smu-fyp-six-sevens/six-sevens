@@ -9,6 +9,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
 from ..config import settings
 from ..fraud_detection.metadata_analysis import MetadataAnalysisResult, check_metadata_anomalies
+from ..fraud_detection.layout_anomalies import LayoutAnomalyResult, check_layout_anomalies
 from ..fraud_detection.spelling_anomaly import SpellingAnomalyResult, check_spelling_anomalies
 from ..ingestion.ingestion_service import ingest_document
 from ..ingestion.metadata_extractor import extract_metadata
@@ -113,3 +114,19 @@ async def test_metadata_anomaly(
     file_bytes = await _read_and_validate_upload(file)
     metadata = await asyncio.to_thread(extract_metadata, file_bytes, file.filename)
     return check_metadata_anomalies(str(uuid.uuid4()), metadata, document_type or None)
+    
+@router.post("/test-layout-anomalies", response_model=LayoutAnomalyResult)
+async def test_layout_anomalies(file: UploadFile = File(...)) -> LayoutAnomalyResult:
+    """
+    Dev/QA upload: same `LayoutAnomalyResult` as
+    GET /documents/{id}/detection/layout-anomalies. `document_id` is a
+    fresh UUID for this request, not a stored document.
+
+    Several checks on the same area become one finding with
+    `evidence.signals`. Neighbouring flagged paragraphs add
+    `local_pattern` / `consecutive_run` enrichment, not a new type.
+    """
+    file_bytes = await _read_and_validate_upload(file)
+    return await asyncio.to_thread(
+        check_layout_anomalies, str(uuid.uuid4()), file_bytes
+    )

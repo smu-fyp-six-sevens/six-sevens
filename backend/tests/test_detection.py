@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from app.fraud_detection.font_consistency import FontConsistencyResult
 from app.fraud_detection.font_consistency_v2 import ExtractedField, FontConsistencyResultV2
 from app.fraud_detection.metadata_analysis import MetadataAnalysisResult
+from app.fraud_detection.layout_anomalies import CheckAssessment, LayoutAnomalyResult
 from app.fraud_detection.spelling_anomaly import SpellingAnomaly, SpellingAnomalyResult
 from app.main import app
 from app.models import DocumentRecord, DocumentStatus
@@ -95,6 +96,40 @@ def test_font_consistency_v2_degrades_when_fields_fetch_fails() -> None:
 
     assert response.status_code == 200
     assert mock_check.call_args[0][2] == []
+
+
+def test_layout_anomalies_happy_path() -> None:
+    assessed = CheckAssessment(unable_to_assess=False)
+    result = LayoutAnomalyResult(
+        document_id="doc-1",
+        anomalies=[],
+        page_margins=[],
+        elements_analysed=4,
+        indentation=assessed,
+        alignment=assessed,
+        margin=CheckAssessment(
+            unable_to_assess=True,
+            unable_to_assess_reason="Need at least 2 pages",
+        ),
+        spacing=assessed,
+        unable_to_assess=False,
+    )
+    with (
+        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers.detection.storage_service") as mock_storage,
+        patch("app.routers.detection.check_layout_anomalies", return_value=result) as mock_check,
+    ):
+        mock_repo.get_document.return_value = _document()
+        mock_storage.download_file.return_value = b"%PDF-1.4"
+
+        response = client.get("/documents/doc-1/detection/layout-anomalies")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["document_id"] == "doc-1"
+    assert body["unable_to_assess"] is False
+    assert body["margin"]["unable_to_assess"] is True
+    mock_check.assert_called_once()
 
 
 def test_font_consistency_fetch_errors() -> None:
