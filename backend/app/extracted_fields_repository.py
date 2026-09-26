@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Optional
 
-from .supabase_client import supabase_client
+from .supabase_client import service_supabase_client, supabase_client
 from .fraud_detection.font_consistency_v2 import ExtractedField
 
 def _infer_field_type(value: object) -> str:
@@ -129,6 +129,13 @@ def add_extracted_field(
         ),
         "field_type": _infer_field_type(field_value),
     }).execute()
+
+
+def delete_fields_for_document(document_id: str) -> None:
+    """Removes every extracted-field row for a document that is being deleted."""
+    service_supabase_client().table("extracted_fields").delete().eq(
+        "document_id", document_id
+    ).execute()
 
 
 def delete_extracted_field(

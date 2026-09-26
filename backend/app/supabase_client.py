@@ -38,6 +38,33 @@ def _build_client() -> Client:
 
 supabase_client: Client = _build_client()
 
+_service_client: Client | None = None
+
+
+def service_supabase_client() -> Client:
+    """
+    Backend-only client. Uses the secret key, which bypasses row-level
+    security, same as the realtime client. The shared supabase_client above
+    uses the publishable key, so a delete that role is not allowed to make
+    comes back as a successful empty result and the row stays.
+    """
+    global _service_client
+    if _service_client is not None:
+        return _service_client
+
+    if not settings.SUPABASE_URL:
+        raise RuntimeError("SUPABASE_URL is not set")
+    if not settings.SUPABASE_SECRET_KEY:
+        raise RuntimeError("SUPABASE_SECRET_KEY is not set")
+
+    http_client = httpx.Client(http2=False, timeout=30.0)
+    _service_client = create_client(
+        settings.SUPABASE_URL,
+        settings.SUPABASE_SECRET_KEY,
+        options=ClientOptions(httpx_client=http_client),
+    )
+    return _service_client
+
 
 async def build_async_supabase_client() -> AsyncClient:
     """

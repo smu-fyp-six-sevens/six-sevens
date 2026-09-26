@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
+import ConfirmDialog from '../components/ConfirmDialog';
 import DropZone from '../components/DropZone';
 import FileRow from '../components/FileRow';
 import { subscribeToCaseStatus } from '../services/caseSocket';
 import type { CaseStatusSubscription } from '../services/caseSocket';
 import {
   approveDocument,
+  deleteCase,
+  deleteDocument,
   ADDITIONAL_DOCUMENT_TYPES,
   REQUIRED_DOCUMENT_TYPES,
   EXTRACTION_CONFIDENCE_THRESHOLD,
@@ -53,6 +56,7 @@ interface UploadPageProps {
   onBack: () => void;
   onOpenDocument: (documentId: string) => void;
   onCaseUpdated: (companyName: string) => void;
+  onCaseDeleted: () => void;
 }
 
 function isExtractionNotConfiguredFailure(reason: string | null | undefined): boolean {
@@ -189,11 +193,56 @@ function describeIssue(issue: FileIssue): string {
   }
 }
 
+function DocumentRowDelete({
+  filename,
+  isDeleting,
+  onDelete,
+}: {
+  filename: string;
+  isDeleting: boolean;
+  onDelete: () => void;
+}) {
+  return (
+    <span className="document-row-actions">
+      <button
+        type="button"
+        className={`delete-document-button${isDeleting ? ' is-visible' : ''}`}
+        aria-label={isDeleting ? `Deleting ${filename}` : `Delete ${filename}`}
+        disabled={isDeleting}
+        onClick={(event) => {
+          event.stopPropagation();
+          onDelete();
+        }}
+        onKeyDown={(event) => event.stopPropagation()}
+      >
+        <svg
+          viewBox="0 0 24 24"
+          width="24"
+          height="24"
+          aria-hidden="true"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M4 7h16" />
+          <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+          <path d="M7 7l1 12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-12" />
+          <path d="M10 11v6" />
+          <path d="M14 11v6" />
+        </svg>
+      </button>
+    </span>
+  );
+}
+
 export default function UploadPage({
   selectedCase,
   onBack,
   onOpenDocument,
   onCaseUpdated,
+  onCaseDeleted,
 }: UploadPageProps) {
   const [isEditingCase, setIsEditingCase] = useState(false);
   const [companyNameDraft, setCompanyNameDraft] = useState(selectedCase.applicant);
@@ -258,6 +307,11 @@ export default function UploadPage({
   const [approvingDocumentId, setApprovingDocumentId] = useState<string | null>(null);
   const [approveError, setApproveError] = useState<string | null>(null);
   const [isApprovingAll, setIsApprovingAll] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
+  const [isDeletingCase, setIsDeletingCase] = useState(false);
+  const [caseDeleteOpen, setCaseDeleteOpen] = useState(false);
+  const [documentToDelete, setDocumentToDelete] = useState<DocumentRecord | null>(null);
   // Case-match result per document (see backend/app/case_match.py), pushed
   // with every case snapshot — folded into the displayed routing outcome.
   const [caseMatches, setCaseMatches] = useState<Map<string, DocumentCaseMatch>>(new Map());
@@ -569,6 +623,49 @@ async function handleApproveAllEligibleDocuments() {
     setJustSubmitted(false);
   }
 
+  async function confirmDeleteCase() {
+    setIsDeletingCase(true);
+    setDeleteError(null);
+
+    try {
+      await deleteCase(selectedCase.id);
+      onCaseDeleted();
+    } catch (err) {
+      setCaseDeleteOpen(false);
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete case.');
+      setIsDeletingCase(false);
+    }
+  }
+
+  async function confirmDeleteDocument() {
+    if (!documentToDelete) return;
+
+    const document = documentToDelete;
+    setDeletingDocumentId(document.id);
+    setDeleteError(null);
+
+    try {
+      await deleteDocument(document.id);
+      setDocumentDetails((current) => {
+        const next = new Map(current);
+        next.delete(document.id);
+        return next;
+      });
+      setCaseMatches((current) => {
+        const next = new Map(current);
+        next.delete(document.id);
+        return next;
+      });
+      caseSocketRef.current?.refresh();
+      setDocumentToDelete(null);
+    } catch (err) {
+      setDocumentToDelete(null);
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete document.');
+    } finally {
+      setDeletingDocumentId(null);
+    }
+  }
+
   const documents = Array.from(documentDetails.values()).sort((a, b) =>
     a.uploaded_at.localeCompare(b.uploaded_at),
   );
@@ -633,9 +730,25 @@ async function handleApproveAllEligibleDocuments() {
                 Case #{selectedCase.caseNumber} · {selectedCase.type} —{' '}
                 {selectedCase.applicant}
               </p>
-              <button type="button" className="edit-case-button" onClick={() => setIsEditingCase(true)}>
-                ✎ Edit case details
-              </button>
+              <div className="case-header-actions">
+                <button type="button" className="edit-case-button" onClick={() => setIsEditingCase(true)}>
+                  ✎ Edit case details
+                </button>
+                <button
+                  type="button"
+                  className="delete-record-button"
+                  onClick={() => setCaseDeleteOpen(true)}
+                  disabled={isDeletingCase}
+                >
+                  {isDeletingCase ? 'Deleting…' : 'Delete case'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {deleteError && (
+            <div className="toast show mixed" role="alert">
+              ⚠ {deleteError}
             </div>
           )}
 
@@ -863,7 +976,11 @@ async function handleApproveAllEligibleDocuments() {
                               {routingOutcome}
                             </span>
 
-                            
+                            <DocumentRowDelete
+                              filename={document.filename}
+                              isDeleting={deletingDocumentId === document.id}
+                              onDelete={() => setDocumentToDelete(document)}
+                            />
                           </div>
                         );
                       })}
@@ -927,6 +1044,12 @@ async function handleApproveAllEligibleDocuments() {
                           <span className="document-routing">
                             Approved
                           </span>
+
+                          <DocumentRowDelete
+                            filename={document.filename}
+                            isDeleting={deletingDocumentId === document.id}
+                            onDelete={() => setDocumentToDelete(document)}
+                          />
                         </div>
                       ))}
                     </div>
@@ -1231,6 +1354,30 @@ async function handleApproveAllEligibleDocuments() {
           </ul>
         </aside>
       </div>
+
+      {caseDeleteOpen && (
+        <ConfirmDialog
+          title="Delete this case?"
+          message={`Case ${selectedCase.caseNumber || selectedCase.id} (${selectedCase.applicant}) and its documents will be removed and cannot be recovered.`}
+          isConfirming={isDeletingCase}
+          onCancel={() => {
+            if (!isDeletingCase) setCaseDeleteOpen(false);
+          }}
+          onConfirm={() => void confirmDeleteCase()}
+        />
+      )}
+
+      {documentToDelete && (
+        <ConfirmDialog
+          title="Delete this document?"
+          message={`${documentToDelete.filename} will be removed from this case and cannot be recovered.`}
+          isConfirming={deletingDocumentId === documentToDelete.id}
+          onCancel={() => {
+            if (deletingDocumentId === null) setDocumentToDelete(null);
+          }}
+          onConfirm={() => void confirmDeleteDocument()}
+        />
+      )}
     </main>
   );
 }

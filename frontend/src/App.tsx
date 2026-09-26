@@ -48,11 +48,13 @@ function CaseQueueRoute({
   isLoading,
   error,
   onRetry,
+  onCaseDeleted,
 }: {
   cases: CaseRecord[];
   isLoading: boolean;
   error: string | null;
   onRetry: () => void;
+  onCaseDeleted: (caseId: string) => void;
 }) {
   const navigate = useNavigate();
 
@@ -67,6 +69,7 @@ function CaseQueueRoute({
       }
       onOpenTestAnomaly={() => navigate('/test-anomalies')}
       onCreateCase={() => navigate('/create-case')}
+      onCaseDeleted={onCaseDeleted}
     />
   );
 }
@@ -74,9 +77,11 @@ function CaseQueueRoute({
 function CaseDetailsRoute({
   cases,
   onCaseUpdated,
+  onCaseDeleted,
 }: {
   cases: CaseRecord[];
   onCaseUpdated: (caseId: string, companyName: string) => void;
+  onCaseDeleted: (caseId: string) => void;
 }) {
   const { caseNumber } = useParams();
   const navigate = useNavigate();
@@ -108,6 +113,10 @@ function CaseDetailsRoute({
         )
       }
       onCaseUpdated={(companyName) => onCaseUpdated(selectedCase.id, companyName)}
+      onCaseDeleted={() => {
+        onCaseDeleted(selectedCase.id);
+        navigate('/cases');
+      }}
     />
   );
 }
@@ -142,6 +151,11 @@ function DocumentDetailsRoute({
       selectedCase={selectedCase}
       documentId={documentId}
       onBack={() =>
+        navigate(
+          `/cases/${selectedCase.caseNumber ?? selectedCase.id}`
+        )
+      }
+      onDocumentDeleted={() =>
         navigate(
           `/cases/${selectedCase.caseNumber ?? selectedCase.id}`
         )
@@ -296,6 +310,9 @@ export default function App() {
                 isLoading={isLoading}
                 error={error}
                 onRetry={() => void loadCases()}
+                onCaseDeleted={(caseId) =>
+                  setCases((current) => current.filter((item) => item.id !== caseId))
+                }
               />
             </RequireAuth>
           }
@@ -318,6 +335,9 @@ export default function App() {
                         item.id === caseId ? { ...item, applicant: companyName } : item
                       )
                     )
+                  }
+                  onCaseDeleted={(caseId) =>
+                    setCases((current) => current.filter((item) => item.id !== caseId))
                   }
                 />
               )}

@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { subscribeToCaseStatus } from '../services/caseSocket';
 import {
   deleteExtractedField,
+  deleteDocument,
   addExtractedField,
   approveDocument,
   rejectDocument,
@@ -26,6 +28,7 @@ interface DocumentDetailsPageProps {
   selectedCase: CaseRecord;
   documentId: string;
   onBack: () => void;
+  onDocumentDeleted: () => void;
 }
 
 
@@ -610,6 +613,7 @@ export default function DocumentDetailsPage({
   selectedCase,
   documentId,
   onBack,
+  onDocumentDeleted,
 }: DocumentDetailsPageProps) {
   const [document, setDocument] = useState<DocumentRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -638,6 +642,9 @@ export default function DocumentDetailsPage({
 
   const [isRejecting, setIsRejecting] = useState(false);
   const [rejectError, setRejectError] = useState<string | null>(null);
+  const [isDeletingDocument, setIsDeletingDocument] = useState(false);
+  const [deleteDocumentError, setDeleteDocumentError] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   // Last extracted_fields the draft was built from — lets a live update reset
   // the draft only when the fields really changed (e.g. a rerun finishing),
   // not wipe an officer's in-progress edits on every unrelated case update.
@@ -974,6 +981,24 @@ export default function DocumentDetailsPage({
     }
   }
 
+  async function confirmDeleteDocument() {
+    if (!document) return;
+
+    setIsDeletingDocument(true);
+    setDeleteDocumentError(null);
+
+    try {
+      await deleteDocument(document.id);
+      onDocumentDeleted();
+    } catch (error) {
+      setDeleteConfirmOpen(false);
+      setDeleteDocumentError(
+        error instanceof Error ? error.message : 'Failed to delete document.',
+      );
+      setIsDeletingDocument(false);
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="shell shell--upload">
@@ -1019,11 +1044,26 @@ export default function DocumentDetailsPage({
       </div>
 
       <div className="document-details-intro">
-        <h1>Document Details</h1>
+        <div className="document-details-title-row">
+          <h1>Document Details</h1>
+          <button
+            type="button"
+            className="delete-record-button"
+            onClick={() => setDeleteConfirmOpen(true)}
+            disabled={isDeletingDocument}
+          >
+            {isDeletingDocument ? 'Deleting…' : 'Delete document'}
+          </button>
+        </div>
         <p className="sub">
           View extracted data and review any fields that require
           manual correction.
         </p>
+        {deleteDocumentError && (
+          <div className="toast show mixed" role="alert">
+            ⚠ {deleteDocumentError}
+          </div>
+        )}
       </div>
 
       {/* =====================================================
@@ -1631,6 +1671,18 @@ export default function DocumentDetailsPage({
             </button>
           </div>
         )}
+
+      {deleteConfirmOpen && document && (
+        <ConfirmDialog
+          title="Delete this document?"
+          message={`${document.filename} will be removed from this case and cannot be recovered.`}
+          isConfirming={isDeletingDocument}
+          onCancel={() => {
+            if (!isDeletingDocument) setDeleteConfirmOpen(false);
+          }}
+          onConfirm={() => void confirmDeleteDocument()}
+        />
+      )}
     </div>
   );
 }

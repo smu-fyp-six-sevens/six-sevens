@@ -84,6 +84,38 @@ async def update_case(case_id: str, request: UpdateCaseRequest) -> CaseSummary:
     return updated
 
 
+@router.delete("/{case_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_case(case_id: str) -> None:
+    """
+    Removes a case from the active queue, along with every document that
+    belongs to it. A following GET /cases or GET /cases/{id} no longer
+    returns it.
+    """
+    try:
+        existing = await asyncio.to_thread(case_repository.get_case, case_id)
+    except Exception as exc:
+        logger.exception("Failed to fetch case %s", case_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch the case. Check Supabase table access.",
+        ) from exc
+
+    if existing is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+
+    try:
+        documents = await asyncio.to_thread(document_repository.list_documents, case_id)
+        for document in documents:
+            await asyncio.to_thread(document_repository.remove_document, document)
+        await asyncio.to_thread(case_repository.delete_case, case_id)
+    except Exception as exc:
+        logger.exception("Failed to delete case %s", case_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to delete the case. Check Supabase table access.",
+        ) from exc
+
+
 @router.get("/{case_id}/case-match", response_model=CaseMatchResult)
 async def get_case_match(case_id: str) -> CaseMatchResult:
     """

@@ -222,3 +222,14 @@ def test_delete_extracted_field_scopes_delete_to_its_own_document() -> None:
         delete_query = mock_client.table.return_value.delete.return_value
         delete_query.eq.assert_called_once_with("id", "field-1")
         delete_query.eq.return_value.eq.assert_called_once_with("document_id", "doc-1")
+
+
+def test_delete_fields_for_document_removes_every_row_for_that_document() -> None:
+    with patch("app.extracted_fields_repository.service_supabase_client") as mock_service:
+        mock_client = mock_service.return_value
+        extracted_fields_repository.delete_fields_for_document("doc-1")
+
+    mock_client.table.assert_called_with("extracted_fields")
+    mock_client.table.return_value.delete.return_value.eq.assert_called_once_with(
+        "document_id", "doc-1"
+    )

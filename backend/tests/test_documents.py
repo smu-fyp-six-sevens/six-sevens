@@ -1154,3 +1154,56 @@ def test_delete_extracted_field_write_failure_returns_502() -> None:
         response = client.delete("/documents/doc-1/extracted-fields/field-1")
 
     assert response.status_code == 502
+
+
+def test_delete_document_removes_it_and_resyncs_the_case() -> None:
+    document = _make_document()
+
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.case_status") as mock_case_status,
+    ):
+        mock_repo.get_document.return_value = document
+
+        response = client.delete("/documents/doc-1")
+
+    assert response.status_code == 204
+    assert response.content == b""
+    mock_repo.remove_document.assert_called_once_with(document)
+    mock_case_status.sync_submission_finalized.assert_called_once_with("case-1")
+
+
+def test_delete_document_not_found() -> None:
+    with patch("app.routers.documents.document_repository") as mock_repo:
+        mock_repo.get_document.return_value = None
+
+        response = client.delete("/documents/missing-id")
+
+    assert response.status_code == 404
+    mock_repo.remove_document.assert_not_called()
+
+
+def test_delete_document_without_a_case_skips_checklist_sync() -> None:
+    document = _make_document()
+    document.case_id = None
+
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.case_status") as mock_case_status,
+    ):
+        mock_repo.get_document.return_value = document
+
+        response = client.delete("/documents/doc-1")
+
+    assert response.status_code == 204
+    mock_case_status.sync_submission_finalized.assert_not_called()
+
+
+def test_delete_document_db_failure_returns_502() -> None:
+    with patch("app.routers.documents.document_repository") as mock_repo:
+        mock_repo.get_document.return_value = _make_document()
+        mock_repo.remove_document.side_effect = RuntimeError("db down")
+
+        response = client.delete("/documents/doc-1")
+
+    assert response.status_code == 502

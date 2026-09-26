@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app import case_repository
 
 
@@ -166,3 +168,27 @@ def test_update_case_returns_none_when_no_row_matched() -> None:
         )
 
         assert case_repository.update_case("missing-id", "Acme Pte Ltd") is None
+
+
+def test_delete_case_deletes_the_row() -> None:
+    with patch("app.case_repository.service_supabase_client") as mock_service:
+        mock_client = mock_service.return_value
+        mock_client.table.return_value.delete.return_value.eq.return_value.execute.return_value = (
+            _execute_result([_row()])
+        )
+
+        case_repository.delete_case("case-1")
+
+    mock_client.table.assert_called_with("cases")
+    mock_client.table.return_value.delete.return_value.eq.assert_called_once_with("id", "case-1")
+    mock_client.table.return_value.delete.return_value.eq.return_value.execute.assert_called_once()
+
+
+def test_delete_case_raises_when_no_row_was_removed() -> None:
+    with patch("app.case_repository.service_supabase_client") as mock_service:
+        mock_service.return_value.table.return_value.delete.return_value.eq.return_value.execute.return_value = (
+            _execute_result([])
+        )
+
+        with pytest.raises(RuntimeError, match="was not deleted"):
+            case_repository.delete_case("case-1")

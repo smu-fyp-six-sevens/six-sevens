@@ -103,6 +103,49 @@ async def get_document(document_id: str) -> DocumentRecord:
     return document
 
 
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_document(document_id: str) -> None:
+    """
+    Removes a document from its case. A following GET /documents/{id} or
+    a case document list no longer returns it.
+    """
+    try:
+        document = await asyncio.to_thread(document_repository.get_document, document_id)
+    except Exception as exc:
+        logger.exception("Failed to fetch document %s", document_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch the document. Check Supabase table access.",
+        ) from exc
+
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    try:
+        await asyncio.to_thread(document_repository.remove_document, document)
+    except Exception as exc:
+        logger.exception("Failed to delete document %s", document_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to delete the document. Check Supabase table access.",
+        ) from exc
+
+    if document.case_id is None:
+        return
+
+    try:
+        await asyncio.to_thread(case_status.sync_submission_finalized, document.case_id)
+    except Exception:
+        # The document row is already gone. The live case snapshot recomputes
+        # requirement coverage from the documents that remain, so a failed
+        # checklist write should not tell the officer the delete failed.
+        logger.exception(
+            "Deleted document %s but failed to resync case %s",
+            document_id,
+            document.case_id,
+        )
+
+
 @router.patch("/{document_id}/extracted-fields", response_model=DocumentRecord)
 async def update_extracted_fields(
     document_id: str, request: UpdateExtractedFieldsRequest

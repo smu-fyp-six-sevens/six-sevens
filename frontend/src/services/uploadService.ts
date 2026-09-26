@@ -343,6 +343,24 @@ export interface UpdatedCase {
   company_name: string | null;
 }
 
+export async function deleteCase(caseId: string): Promise<void> {
+  const response = await authFetch(`/cases/${caseId}`, { method: 'DELETE' });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to delete case (${response.status}): ${detail}`);
+  }
+}
+
+export async function deleteDocument(documentId: string): Promise<void> {
+  const response = await authFetch(`/documents/${documentId}`, { method: 'DELETE' });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to delete document (${response.status}): ${detail}`);
+  }
+}
+
 export async function updateCase(caseId: string, companyName: string): Promise<UpdatedCase> {
   const response = await authFetch(`/cases/${caseId}`, {
     method: 'PATCH',

@@ -6,7 +6,7 @@ from typing import Optional
 
 from .config import settings
 from .models import CaseRecord
-from .supabase_client import supabase_client
+from .supabase_client import service_supabase_client, supabase_client
 
 
 def create_case(company_name: Optional[str] = None) -> CaseRecord:
@@ -66,6 +66,19 @@ def update_case(case_id: str, company_name: str) -> Optional[CaseRecord]:
     if not result.data:
         return None
     return CaseRecord(**result.data[0])
+
+
+def delete_case(case_id: str) -> None:
+    """
+    Removes the case row. Callers delete its documents first.
+
+    Uses the service client so row-level security cannot turn this into a
+    no-op that still looks successful. An empty result means the row is
+    still there.
+    """
+    result = service_supabase_client().table("cases").delete().eq("id", case_id).execute()
+    if not result.data:
+        raise RuntimeError(f"Case {case_id} was not deleted")
 
 
 def set_submission_finalized(case_id: str, finalized: bool) -> None:
