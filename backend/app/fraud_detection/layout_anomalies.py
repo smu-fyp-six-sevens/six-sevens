@@ -482,7 +482,7 @@ def _split_leading_headings(blocks: list[_Block]) -> list[_Block]:
     """
     PyMuPDF often glues '2. REGISTERED OFFICE' onto the first body line
     of the clause. Split that heading off so it is not compared to
-    justified body copy.
+    justified body copy. Mixed-case form labels and amounts stay body.
     """
     split: list[_Block] = []
     for block in blocks:
@@ -491,7 +491,7 @@ def _split_leading_headings(blocks: list[_Block]) -> list[_Block]:
             continue
         first = block.lines[0]
         rest = block.lines[1:]
-        if not _is_short_or_heading_line(first, block.page_width):
+        if not _is_clause_heading_text(first.text):
             split.append(block)
             continue
         rest_text = " ".join(line.text for line in rest)
@@ -503,20 +503,30 @@ def _split_leading_headings(blocks: list[_Block]) -> list[_Block]:
     return split
 
 
+def _is_clause_heading_text(text: str) -> bool:
+    """Numbered section titles ('2. NAME') or short ALL-CAPS titles.
+    A line that merely starts with a digit (an address, a quantity) is not
+    a section heading unless it matches the numbered-title pattern."""
+    text = text.strip()
+    if not text:
+        return False
+    if _CLAUSE_HEADING_RE.match(text):
+        return True
+    if text[0].isdigit():
+        return False
+    letters = sum(1 for ch in text if ch.isalpha())
+    return text.isupper() and letters >= 8 and len(text) <= 80
+
+
 def _is_heading_block(block: _Block) -> bool:
     if block.role != "body":
         return False
     text = block.text.strip()
     if _CLAUSE_HEADING_RE.match(text):
         return True
-    short = block.width < block.page_width * _TITLE_PAGE_SHORT_RATIO
-    font = (block.font or "").lower()
-    bold = "bold" in font
-    if short and (_CLAUSE_HEADING_RE.match(text) or (text.isupper() and len(text) <= 80)):
-        return True
-    if short and bold and len(block.lines) <= 2:
-        return True
-    return False
+    if not _is_clause_heading_text(text):
+        return False
+    return block.width < block.page_width * _TITLE_PAGE_SHORT_RATIO
 
 
 def _apply_heading_and_cover_roles(blocks: list[_Block]) -> None:
@@ -707,6 +717,19 @@ def _width_band(block: _Block, content_left: float, content_right: float) -> Lit
     return "full" if block.width >= SHORT_WIDTH_RATIO * column_width else "short"
 
 
+def _reaches_column_right(block: _Block, content_right: float) -> bool:
+    """True when the block still meets the column edge — a reflowed wrap,
+    not a short title/label that merely starts further in."""
+    return content_right - block.x1 < INDENT_THRESHOLD_PT
+
+
+def _has_strong_majority(matching: int, comparable: int) -> bool:
+    """Enough peers share a pattern that an outlier is not a coin flip."""
+    if comparable < 2:
+        return False
+    return matching >= max(3, (comparable + 1) // 2 + 1)
+
+
 def _check_indentation(blocks: list[_Block]) -> tuple[list[LayoutAnomaly], CheckAssessment]:
     body = _body_blocks(blocks)
     if len(body) < 2:
@@ -748,6 +771,8 @@ def _check_indentation(blocks: list[_Block]) -> tuple[list[LayoutAnomaly], Check
                 else 0.0
             )
             if left_delta < INDENT_THRESHOLD_PT:
+                continue
+            if not _reaches_column_right(block, content_right):
                 continue
 
             matching = sum(
@@ -1331,18 +1356,15 @@ def _check_alignment(blocks: list[_Block]) -> tuple[list[LayoutAnomaly], CheckAs
             if expected is None:
                 continue
             matching = sum(1 for _, a in peers if a == expected)
+            if not _has_strong_majority(matching, len(peers)):
+                continue
             for block, alignment in peers:
                 if alignment == expected:
                     continue
-                if _left_vs_justified_unreliable(block, alignment, expected):
+                if _alignment_mismatch_unreliable(
+                    block, alignment, expected, content_left
+                ):
                     continue
-                # A short centred heading next to short left-aligned labels
-                # is a common legitimate mix — only flag short-band
-                # mismatches when the block is clearly the odd one out
-                # against a strong majority (not a 2-vs-1 coin flip).
-                if band == "short":
-                    if matching < max(3, (len(peers) + 1) // 2 + 1):
-                        continue
                 anomalies.append(
                     _alignment_anomaly(block, alignment, expected, peers)
                 )
@@ -1352,13 +1374,18 @@ def _check_alignment(blocks: list[_Block]) -> tuple[list[LayoutAnomaly], CheckAs
         # never enters the full-band comparison above. Flag it against
         # the full-band majority when it looks like a paragraph, not a
         # one-line heading or date.
-        if full_expected is not None:
+        if full_expected is not None and _has_strong_majority(
+            sum(1 for _, a in full_peers if a == full_expected),
+            len(full_peers),
+        ):
             classified_any = True
             already = {(a.page, a.bbox) for a in anomalies}
             for block, alignment in short_peers:
                 if alignment == full_expected:
                     continue
-                if _left_vs_justified_unreliable(block, alignment, full_expected):
+                if _alignment_mismatch_unreliable(
+                    block, alignment, full_expected, content_left
+                ):
                     continue
                 if not (len(block.lines) >= 2 or block.char_count >= 80):
                     continue
@@ -1609,7 +1636,12 @@ def _is_title_page(blocks: list[_Block]) -> bool:
     page_width = blocks[0].page_width
     if page_width <= 0:
         return False
-    short = sum(1 for b in blocks if b.width < page_width * _TITLE_PAGE_SHORT_RATIO)
+    cut = page_width * _TITLE_PAGE_SHORT_RATIO
+    # Covers are stacked short lines. One full-width block means body copy,
+    # a form, or an instruction page — not a title stack.
+    if any(b.width >= cut for b in blocks):
+        return False
+    short = sum(1 for b in blocks if b.width < cut)
     return short / len(blocks) >= _TITLE_PAGE_SHORT_FRACTION
 
 
@@ -1734,16 +1766,24 @@ def _alignment_lines(
     return lines
 
 
-def _left_vs_justified_unreliable(
-    block: _Block, alignment: Alignment, expected: Alignment
+def _alignment_mismatch_unreliable(
+    block: _Block,
+    alignment: Alignment,
+    expected: Alignment,
+    content_left: float,
 ) -> bool:
     """
-    A short one-line clause looks left-aligned even when the rest of the
-    page is justified — there is not enough line length to tell.
+    Alignment here means where the box sits, not how far the text fills.
+
+    Left vs justified is a fill-ratio difference (ragged vs flush right)
+    when both start on the same column edge. Left vs right-aligned is only
+    a placement change when the box itself has moved off that edge.
     """
-    if {alignment, expected} != {"left-aligned", "justified"}:
-        return False
-    return len(block.lines) < 2
+    pair = {alignment, expected}
+    if pair == {"left-aligned", "justified"}:
+        return True
+    left_flush = abs(block.x0 - content_left) <= ALIGN_EDGE_TOLERANCE_PT
+    return pair == {"left-aligned", "right-aligned"} and left_flush
 
 
 def _check_margins(

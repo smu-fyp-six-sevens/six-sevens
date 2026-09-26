@@ -1289,16 +1289,89 @@ def test_apply_table_roles_skips_zero_area_block() -> None:
     assert cell.role == "body"
 
 
-def test_heading_roles_from_uppercase_and_bold_short_lines() -> None:
+def test_heading_roles_from_section_titles_not_labels_or_amounts() -> None:
     upper = _block([_line((72, 100, 220, 114), text="CONSTITUTION OF")])
     assert lr._is_heading_block(upper) is True
-    bold = _block(
-        [_line((72, 130, 240, 144), text="Registered office of the firm")],
+    clause = _block([_line((72, 90, 280, 112), text="2. REGISTERED OFFICE")])
+    assert lr._is_heading_block(clause) is True
+    mixed_label = _block(
+        [
+            _line(
+                (51, 426, 357, 440),
+                text="Account balance carried forward from the previous period",
+            )
+        ],
+        font="Helvetica-Bold",
+    )
+    assert lr._is_heading_block(mixed_label) is False
+    amount = _block(
+        [_line((519, 420, 555, 432), text="316,800")],
         font="LiberationSans-Bold",
     )
-    assert lr._is_heading_block(bold) is True
+    assert lr._is_heading_block(amount) is False
+    numbered_line = _block(
+        [
+            _line(
+                (51.02, 137.31, 175.3, 180.71),
+                text="42 ORCHARD ROAD #01-02 SINGAPORE 238801",
+            )
+        ]
+    )
+    assert lr._is_heading_block(numbered_line) is False
     header = _block([_line((72, 10, 200, 24), text="ACME PTE LTD")], role="header")
     assert lr._is_heading_block(header) is False
+
+
+def test_bold_noa_amount_stays_body_and_flags_vertical_shift() -> None:
+    clauses = [
+        _block([_line((51, 90 + i * 50, 540, 130 + i * 50), text=BODY)])
+        for i in range(3)
+    ]
+    label = _block(
+        [
+            _line(
+                (51.02, 426.93, 357.19, 440.7),
+                text="Estimated Chargeable Income before deducting Exempt Amount",
+            )
+        ],
+        font="Helvetica-Bold",
+    )
+    amount = _block(
+        [_line((519.45, 420.95, 555.58, 432.11), text="316,800")],
+        font="LiberationSans-Bold",
+    )
+    blocks = clauses + [label, amount]
+    lr._apply_heading_and_cover_roles(blocks)
+    assert label.role == "body"
+    assert amount.role == "body"
+    findings = lr._check_row_alignment(blocks)
+    assert any("316,800" in a.text for a in findings)
+
+
+def test_short_line_that_does_not_reach_the_column_is_not_an_indent() -> None:
+    blocks = [
+        _block([_line((72, 90, 540, 160), text=BODY)]),
+        _block([_line((72, 180, 540, 250), text=BODY)]),
+        _block([_line((86, 260, 340, 278), text="Document title sitting inset from the column")]),
+        _block([_line((72, 310, 540, 380), text=BODY)]),
+    ]
+    findings, check = lr._check_indentation(blocks)
+    assert check.unable_to_assess is False
+    assert not any("Document title" in a.text for a in findings)
+
+
+def test_shared_left_edge_is_fill_not_an_alignment_change() -> None:
+    ragged = [
+        _block([_line((72, 90 + i * 40, 400, 120 + i * 40), text=BODY)])
+        for i in range(6)
+    ]
+    filled = [
+        _block([_line((72, 340 + i * 30, 540, 365 + i * 30), text=BODY)])
+        for i in range(2)
+    ]
+    findings, check = lr._check_alignment(ragged + filled)
+    assert check.unable_to_assess is False
+    assert findings == []
 
 
 def test_assign_alignments_skips_page_without_a_content_column() -> None:
@@ -1609,6 +1682,89 @@ def test_centre_shift_skips_tied_or_weak_axis() -> None:
         for i in range(4)
     ]
     assert lr._is_title_page(zero_width_page) is False
+
+
+def test_execution_page_with_a_clause_is_not_a_title_page() -> None:
+    pw, ph = 595.28, 841.89
+    shorts = [
+        _block(
+            [
+                _line(
+                    (200, 80 + i * 24, 400, 94 + i * 24),
+                    text=f"TITLE LINE {i} HERE",
+                    page_width=pw,
+                    page_height=ph,
+                )
+            ]
+        )
+        for i in range(4)
+    ]
+    assert lr._is_title_page(shorts) is True
+    with_clause = shorts + [
+        _block([_line((76, 200, 518, 260), text=BODY, page_width=pw, page_height=ph)])
+    ]
+    assert lr._is_title_page(with_clause) is False
+
+    cover = [
+        _block(
+            [
+                _line(
+                    (200, 80 + i * 30, 400, 94 + i * 30),
+                    text=title,
+                    page=0,
+                    page_width=pw,
+                    page_height=ph,
+                )
+            ]
+        )
+        for i, title in enumerate(
+            [
+                "THE COMPANIES ACT 1967",
+                "CONSTITUTION OF",
+                "ACME PTE LTD HERE",
+                "INCORPORATED ON 30 MAY",
+            ]
+        )
+    ]
+    execution = [
+        _block(
+            [_line((76, 67, 180, 80), text="EXECUTION PAGE", page=1, page_width=pw, page_height=ph)]
+        ),
+        _block([_line((76, 85, 518, 126), text=BODY, page=1, page_width=pw, page_height=ph)]),
+        _block(
+            [
+                _line(
+                    (76, 296, 208, 309),
+                    text="Dated this 30 day of May 2017.",
+                    page=1,
+                    page_width=pw,
+                    page_height=ph,
+                )
+            ]
+        ),
+        _block(
+            [
+                _line(
+                    (76, 332, 214, 345),
+                    text="Witness to the above signatures:",
+                    page=1,
+                    page_width=pw,
+                    page_height=ph,
+                )
+            ]
+        ),
+    ]
+    lr._apply_heading_and_cover_roles(cover + execution)
+    pages = [
+        PageMargins(
+            page=1, left=168, right=100, top=107, bottom=346, page_width=pw, page_height=ph
+        ),
+        PageMargins(
+            page=2, left=70, right=70, top=67, bottom=37, page_width=pw, page_height=ph
+        ),
+    ]
+    findings, _ = lr._check_margins(pages, cover + execution)
+    assert findings == []
 
 
 def test_classify_alignment_guards_and_fallbacks() -> None:
