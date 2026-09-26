@@ -121,6 +121,12 @@ async def delete_document(document_id: str) -> None:
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
+    if document.status == DocumentStatus.APPROVED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An approved document cannot be deleted.",
+        )
+
     try:
         await asyncio.to_thread(document_repository.remove_document, document)
     except Exception as exc:

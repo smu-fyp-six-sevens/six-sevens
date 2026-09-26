@@ -1046,14 +1046,16 @@ export default function DocumentDetailsPage({
       <div className="document-details-intro">
         <div className="document-details-title-row">
           <h1>Document Details</h1>
-          <button
-            type="button"
-            className="delete-record-button"
-            onClick={() => setDeleteConfirmOpen(true)}
-            disabled={isDeletingDocument}
-          >
-            {isDeletingDocument ? 'Deleting…' : 'Delete document'}
-          </button>
+          {document.status !== 'approved' && (
+            <button
+              type="button"
+              className="delete-record-button"
+              onClick={() => setDeleteConfirmOpen(true)}
+              disabled={isDeletingDocument}
+            >
+              {isDeletingDocument ? 'Deleting…' : 'Delete document'}
+            </button>
+          )}
         </div>
         <p className="sub">
           View extracted data and review any fields that require

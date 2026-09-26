@@ -1173,6 +1173,19 @@ def test_delete_document_removes_it_and_resyncs_the_case() -> None:
     mock_case_status.sync_submission_finalized.assert_called_once_with("case-1")
 
 
+def test_delete_document_rejects_an_approved_document() -> None:
+    document = _make_document()
+    document.status = DocumentStatus.APPROVED
+
+    with patch("app.routers.documents.document_repository") as mock_repo:
+        mock_repo.get_document.return_value = document
+
+        response = client.delete("/documents/doc-1")
+
+    assert response.status_code == 409
+    mock_repo.remove_document.assert_not_called()
+
+
 def test_delete_document_not_found() -> None:
     with patch("app.routers.documents.document_repository") as mock_repo:
         mock_repo.get_document.return_value = None

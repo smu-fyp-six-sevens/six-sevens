@@ -1044,12 +1044,6 @@ async function handleApproveAllEligibleDocuments() {
                           <span className="document-routing">
                             Approved
                           </span>
-
-                          <DocumentRowDelete
-                            filename={document.filename}
-                            isDeleting={deletingDocumentId === document.id}
-                            onDelete={() => setDocumentToDelete(document)}
-                          />
                         </div>
                       ))}
                     </div>
