@@ -9,7 +9,6 @@ Reference map of every source file under `backend/` (excluding `backend/doc_gen_
 - **case_repository.py** — Supabase CRUD for the `cases` table: create/get/list cases and set/clear `submission_finalized`.
 - **case_status.py** — Computes case-level rollups: worst-first `documents_status`, required/additional requirement coverage, `sync_submission_finalized`, and `build_case_snapshot`/`build_summary` for the WebSocket and REST case endpoints.
 - **config.py** — Centralised `Settings` object reading all configuration (Supabase, Dify, auth, thresholds, LangGraph models) from environment variables.
-- **dify_client.py** — Async HTTP client (`DifyClient`) for Dify's `/workflows/run` and `/chat-messages` APIs, with retry-with-backoff wrappers and a concurrency semaphore for the Classifier chatflow.
 - **document_repository.py** — Supabase CRUD for the `documents` table: create, status updates, classification/extraction/escalation/metadata writes, and status-filtered queries.
 - **extracted_fields_repository.py** — Mirrors a document's `extracted_fields` into the normalised one-row-per-field `extracted_fields` table (replace/get, single and batched-by-document-ids).
 - **extraction_prompts.py** — Per-document-type extraction schemas (required/additional/optional field tiers), extra field-specific guidance, and `build_extraction_prompt`/`schema_field_names` used by both the Dify and LangGraph extraction paths.
@@ -18,7 +17,6 @@ Reference map of every source file under `backend/` (excluding `backend/doc_gen_
 - **mapper.py** — Cross-document identity/address matching logic: groups documents into identities (by `nric_number` or name), computes proof-of-address and id-document (front/back) coverage per identity.
 - **models.py** — Pydantic models and enums for the whole domain (`DocumentStatus`, `DocumentType`, `CaseRecord`, `DocumentRecord`, `CaseSummary`, etc.) plus `compute_fulfilled_requirements`, the checklist-requirement logic.
 - **monitoring.py** — `is_stuck`/`get_stuck_documents`: flags documents idle in a non-terminal status past `STUCK_THRESHOLD_SECONDS`.
-- **orchestrator.py** — The Dify-based pipeline: runs Classifier (Intake Coordinator) → Extraction with a bounded reclassification escalation loop, persists results, and always leaves a document at `ANALYZED`/`FAILED`.
 - **queue_service.py** — In-memory async `DocumentQueue` with a worker pool; dequeues documents and (on this branch) hands them to the LangGraph pipeline for processing.
 - **realtime_listener.py** — Subscribes once per process to Supabase Realtime changes on `documents`/`cases`, debounces bursts per `case_id`, and publishes rebuilt snapshots via `case_broadcaster`.
 - **storage_service.py** — Thin wrapper over Supabase Storage: upload/download/delete files and create signed URLs.
@@ -42,16 +40,23 @@ Reference map of every source file under `backend/` (excluding `backend/doc_gen_
 - **cache_gate.py** — `PromptCacheGate`: lets only the first concurrent caller for a given static-prompt key through immediately, so parallel documents don't all miss Anthropic's prompt cache at once.
 - **classify_graph.py** — The classify subgraph: deterministic `rule_classify` → Sonnet agent (offered `llm_classify_tool` first, then `vision_llm`) → validate → repair, plus the reclassify re-entry point.
 - **classify_support.py** — Shared classify logic: `validate_agent_output` (ported from the old Dify "Validate Output" node), `address_check`, and the agent's static/dynamic system prompt builder.
-- **extract.py** — One-shot Sonnet extraction call (`run_extraction`) reusing `extraction_prompts.build_extraction_prompt` and `orchestrator._parse_extraction_output`, with prompt-cache splitting.
+- **extract.py** — One-shot Sonnet extraction call (`run_extraction`) with prompt-cache splitting, plus `parse_extraction_output` (JSON cleanup, per-field confidences).
 - **graph.py** — The full per-document graph: ingest → classify → finalise → extract → analyzed/failed, including the bounded classify↔extract reclassify loop.
 - **llm_classify.py** — `llm_classify_tool`: a Haiku-based independent text classification pass returning top-3 ranked candidates (port of the old Dify LLM classification node).
-- **nodes.py** — Deterministic graph nodes (ingest, finalise_classification, extract, mark_analyzed/failed, record_escalation) that delegate to the shared `orchestrator`/repository helpers.
-- **pipeline.py** — Public entry points (`process_document`, `rerun_extraction`) mirroring `orchestrator`'s contract, invoking the compiled LangGraph document graph.
+- **nodes.py** — Deterministic graph nodes (ingest, finalise_classification, extract, mark_analyzed/failed, record_escalation) plus the repository-writing helpers they use (`ingest_document_text`, `persist_extracted_fields`, `record_classification_result`, `set_status`, `fail_document`).
+- **pipeline.py** — Public entry points (`process_document`, `rerun_extraction`) that run the document graph / an extraction-only rerun and always leave the document at `ANALYZED`/`FAILED`.
 - **rule_classify.py** — Pure regex/keyword classifier (`classify_by_rules`) ported from the old Dify rule-based node, plus a LangGraph-only "certain type" fast-path and residential-address heuristics.
 - **state.py** — `DocumentGraphState` TypedDict: the small, PII-free graph state (ids, hashes, classification/extraction summaries, attempt counters).
 - **text_cache.py** — Process-local, run-scoped cache mapping `document_id` → ingested raw text, since graph state itself never carries raw text.
 - **trace.py** — Dev-only in-memory per-document trace of which route/tools/models the LangGraph pipeline used, exposed via `/documents/{id}/langgraph-trace`.
 - **vision_tool.py** — `vision_llm` tool: sends the actual document image/PDF to Sonnet for vision-based classification when text-only signals are weak or ambiguous.
+
+## app/langgraph/detection/
+
+- **__init__.py** — Package docstring for the Detection Agent.
+- **graph.py** — The Lead Investigator graph: plan which specialists to consult (starting from a per-document-type default team, recording any deviation and why others are skipped) -> parallel specialists -> lead review with at most one second look -> deterministic merge into one report; `run_detection` entry point.
+- **specialists.py** — The three specialists (layout & rendering, content validation, digital authenticity) as small tool-calling subgraphs that return structured reports.
+- **tools.py** — Parameter-bound detection tools (font consistency, spelling, date consistency, metadata, transaction balance) returning size-capped, fact-only findings.
 
 ## app/fraud_detection/
 

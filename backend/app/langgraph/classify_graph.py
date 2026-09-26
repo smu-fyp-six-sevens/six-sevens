@@ -146,8 +146,7 @@ def should_continue_agent(state: DocumentGraphState) -> str:
 
 def build_reconsideration_message(escalation: dict, evidence: list[str] | None = None) -> HumanMessage:
     """
-    Port of orchestrator._reconsideration_query, as a chat message instead of
-    a Dify Start-node input: the next turn in the same conversation, not a
+    Builds the reconsideration turn as a chat message: the next turn in the same conversation, not a
     fresh classification — see prepare_reclassify_node.
     """
     reason = escalation.get("reason", "")

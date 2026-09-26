@@ -2,12 +2,10 @@
 Document graph (Phases 1-4): ingest -> classify -> finalise_classification ->
 extract -> ANALYZED/FAILED, with a bounded classify<->extract reclassify loop
 (settings.MAX_RECLASSIFICATION_ATTEMPTS) when Extraction judges the
-classified type wrong — mirrors orchestrator._process_document's escalation
-loop. The reclassify branch re-enters at the Sonnet agent directly (see
-classify_graph.prepare_reclassify_node), not the whole classify subgraph:
-a bare rule/LLM re-guess has nothing new to react to, whereas the agent can
-actually weigh Extraction's objection — same "continue the conversation"
-principle Dify used via conversation_id.
+classified type wrong. The reclassify branch re-enters at the Sonnet agent
+directly (see classify_graph.prepare_reclassify_node), not the whole classify
+subgraph: a bare rule re-guess has nothing new to react to, whereas the agent
+can actually weigh Extraction's objection — the conversation just continues.
 
 No checkpointer yet — that's the rest of Phase 4 (Postgres checkpointer with
 pruning, rerun_extraction), see LANGGRAPH_MIGRATION_PLAN.md section 6.
@@ -55,8 +53,7 @@ def build_document_graph():
     # --- Reclassify loop (Phase 4) ---
     # Own nodes, not the "classify" subgraph reused wholesale: this always
     # goes straight to the agent (see prepare_reclassify_node's docstring),
-    # skipping rule_classify/llm_classify/the certain/fast shortcuts, which
-    # only make sense on a document's first pass.
+    # skipping rule_classify, which only makes sense on a document's first pass.
     graph.add_node("record_escalation", nodes.record_escalation_node)
     graph.add_node("prepare_reclassify", classify_graph.prepare_reclassify_node)
     graph.add_node("reclassify_agent", classify_graph.agent_node)

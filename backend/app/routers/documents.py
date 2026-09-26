@@ -284,7 +284,7 @@ async def update_document_type(
 
     try:
         if type_changed:
-            # Self-fulfilment only, like _finalise_classification's first
+            # Self-fulfilment only, like nodes.record_classification_result's first
             # write: the existing extracted_fields came from the wrong
             # schema, so they shouldn't be used to claim e.g.
             # proof_of_address for the new type — the extraction rerun

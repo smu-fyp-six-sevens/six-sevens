@@ -1,9 +1,9 @@
 """
-Public entry point for the langgraph experiment — mirrors
-orchestrator.process_document's contract (always leaves the document at
-ANALYZED or FAILED, and never raises) so queue_service can call it as a
-drop-in replacement while phases 0-3 are evaluated. See
-LANGGRAPH_MIGRATION_PLAN.md.
+Public entry points for the document pipeline: process_document (the full
+classify -> extract graph) and rerun_extraction (extraction only, after an
+officer corrects the document type). Both always leave the document at
+ANALYZED or FAILED and never raise, so queue_service's worker loop and the
+router's background task don't need their own retry/fallback logic.
 """
 
 from __future__ import annotations
@@ -11,10 +11,10 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from . import extract, text_cache
+from . import extract, nodes, text_cache
 from .graph import get_document_graph
 from ..config import settings
-from .. import case_status, document_repository, orchestrator
+from .. import case_status, document_repository
 from ..models import DocumentStatus
 
 logger = logging.getLogger("classifier_pipeline.langgraph.pipeline")
@@ -22,10 +22,10 @@ logger = logging.getLogger("classifier_pipeline.langgraph.pipeline")
 
 async def process_document(document_id: str) -> None:
     """
-    Runs the langgraph document graph for one document. Never raises — same
-    "always ends ANALYZED or FAILED" contract as orchestrator.process_document,
-    so queue_service's worker loop doesn't need its own retry/fallback logic
-    around this call either.
+    Runs the langgraph document graph for one document. Any exception the
+    graph doesn't already translate into a FAILED status (e.g. an unexpected
+    Supabase write error) is caught here so the document never gets stuck at
+    a non-terminal status, which would leave the frontend polling forever.
     """
     graph = get_document_graph()
     try:
@@ -37,7 +37,7 @@ async def process_document(document_id: str) -> None:
         logger.exception("Document %s: unhandled error during langgraph orchestration", document_id)
         text_cache.discard(document_id)
         try:
-            await orchestrator._fail(document_id, f"Unhandled langgraph orchestration error: {exc}")
+            await nodes.fail_document(document_id, f"Unhandled langgraph orchestration error: {exc}")
         except Exception:
             logger.exception(
                 "Document %s: failed to record FAILED status after unhandled langgraph error", document_id
@@ -50,9 +50,7 @@ async def rerun_extraction(document_id: str) -> None:
     document_type — called from routers/documents.py's PATCH
     .../document-type handler, only when the officer actually changed the
     type (a confirmed-unchanged type has nothing new for Extraction to
-    re-read; see that handler). Mirrors orchestrator.rerun_extraction's
-    contract exactly (always ends ANALYZED or FAILED, never raises), just
-    using this graph's own extract node instead of Dify's workflow.
+    re-read; see that handler).
     """
     try:
         await _rerun_extraction(document_id)
@@ -60,7 +58,7 @@ async def rerun_extraction(document_id: str) -> None:
         logger.exception("Document %s: unhandled error during langgraph extraction rerun", document_id)
         text_cache.discard(document_id)
         try:
-            await orchestrator._fail(document_id, f"Unhandled langgraph orchestration error: {exc}")
+            await nodes.fail_document(document_id, f"Unhandled langgraph orchestration error: {exc}")
         except Exception:
             logger.exception(
                 "Document %s: failed to record FAILED status after unhandled langgraph error", document_id
@@ -76,15 +74,15 @@ async def _rerun_extraction(document_id: str) -> None:
     document_type = document.document_type or "unrecognised"
 
     try:
-        raw_text = await orchestrator._ingest_document_text(document_id, document)
-    except orchestrator.OrchestrationError as exc:
-        await orchestrator._fail(document_id, str(exc), document_type=document_type)
+        raw_text = await nodes.ingest_document_text(document_id, document)
+    except nodes.IngestError as exc:
+        await nodes.fail_document(document_id, str(exc), document_type=document_type)
         return
     finally:
         text_cache.discard(document_id)
 
     if not raw_text.strip():
-        await orchestrator._fail(
+        await nodes.fail_document(
             document_id, "Extraction produced no usable text", document_type=document_type
         )
         return
@@ -92,10 +90,10 @@ async def _rerun_extraction(document_id: str) -> None:
     extraction = await extract.run_extraction(document_type, raw_text)
     # Persisted regardless of escalation, same as the main graph's extract
     # node — whatever fields Extraction found are real data worth keeping.
-    await orchestrator._persist_extracted_fields(document_id, document_type, extraction)
+    await nodes.persist_extracted_fields(document_id, document_type, extraction)
 
     if extraction.get("escalation"):
-        await orchestrator._fail(
+        await nodes.fail_document(
             document_id,
             f"Extraction could not process this as {document_type}: "
             f"{extraction['escalation'].get('reason')}",

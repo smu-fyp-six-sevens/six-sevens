@@ -96,14 +96,25 @@ cache; every other concurrent call for that same prompt waits for it to finish, 
 with a warm cache. You'll see this as the very first document of a batch (or of a new document
 type) taking a little longer than the ones right after it — that's expected, not a bug.
 
-## 6. What isn't wired up yet (by design, later phases)
+## 6. Try the Detection Agent
+
+Open a finished (`analyzed`) document and use the **Detection (dev)** panel: press *Run detection*.
+A lead investigator (Sonnet) picks the specialists this document needs — starting from a default team
+for the document type, and noting any deviation from it — and records why it skipped the others, the three specialists (Layout & Rendering, Content Validation, Digital Authenticity; Haiku) run their tools in parallel, the lead may ask for one second
+look, and you get one combined report: verdict (`flagged` / `clean` / `inconclusive`), the
+specialists consulted and skipped with reasons, and the merged findings. The report is stored on
+the document's langgraph trace (so it survives restarts and shows in the `langgraph_trace`
+table under `detection_report`); nothing is written to the `documents` table. For a whole
+case: `GET /cases/{case_id}/detection/reports`.
+
+## 7. What isn't wired up yet (by design, later phases)
 
 - **No checkpointing/persistence.** Nothing here is saved to Postgres as graph state; a crash
   mid-run just fails the document the normal way (same as Dify does today).
 - **`classification_reasoning` isn't saved to Supabase yet** — deliberately, see section 4 above.
-- **Detection Agent isn't built at all yet** (separate, later work — see `CLAUDE.md`).
+- **Detection isn't wired to approval yet**: it only runs from the dev endpoint/panel, with no `pending_review`/`detecting` statuses or persisted findings (needs DB changes, deferred until after UAT).
 
-## 7. If something breaks
+## 8. If something breaks
 
 - `ANTHROPIC_API_KEY` missing/invalid → documents will go straight to `failed` with an
   Anthropic auth error in `failure_reason` and in the backend logs.

@@ -116,12 +116,13 @@ detect(document_id)
   lead (decides which specialists, and why) -> Send in parallel -> specialists -> lead synthesises -> findings
 ```
 
+- **Default team per document type (built).** The lead's prompt carries an expected/optional team for each document type (income/financial documents: all three; corporate and identity documents: Content + Digital, Layout optional; unrecognised: none). It's guidance, not routing: the lead may deviate with a reason, and any deviation is recorded (`plan_deviation` in the report, `detection_deviation` in the trace). Layout is dropped from the expected set for non-PDF files.
 - **The lead is the agent.** From document type and content it chooses which specialists to run and records a reason for each one it skips
   (auditable, and part of the report). Each specialist likewise chooses which of its own tools to call. A fixed doc-type table is only a prompt hint, not the router.
 - **Specialists (proposed tool mapping):**
   - Layout & Rendering: `font_consistency_v2` (fonts, sizes, row deviations), later misalignment/spacing.
-  - Content Validation: `spelling_anomaly`, later numerical and date checks.
-  - Digital Authenticity: metadata (ExifTool), AI-generated/image manipulation checks.
+  - Content Validation: `spelling_anomaly`, plus date-consistency and bank-statement running-balance (numerical) checks — built.
+  - Digital Authenticity: metadata (ExifTool) checks — built; AI-generated/image manipulation checks not yet.
 - **Isolation:** each specialist is a subgraph with private messages; only a compact structured finding goes back to the lead.
 - **Tool results are ground truth.** Findings are merged deterministically; the LLM adds severity and rationale but cannot delete a finding.
   "Unable to assess" is its own result, never read as a pass. Documents are untrusted, so text inside one must not be able to suppress a result.
@@ -193,11 +194,11 @@ New secrets: `ANTHROPIC_API_KEY` (new to this backend; today the keys live in Di
    built — only the classifier side has one so far.
 4. 🟡 **Loop + persistence:** reclassify cycle ✅ done. Postgres checkpointer with pruning, `rerun_extraction` on this path: not yet.
    *Checkpoint to judge whether LangGraph fits before continuing.*
-4b. ⬜ **Detection:** approval endpoint and marker, `detecting` status, tools wrapped, three specialists, lead, deterministic findings merge.
+4b. 🟡 **Detection:** the agent module is built (`backend/app/langgraph/detection/`): lead investigator, three specialists (layout & rendering, content validation incl. numerical checks, digital authenticity), tools wrapped, parallel dispatch, one code-enforced second look, deterministic findings merge, report stored on the langgraph trace. Triggered from a dev endpoint (`POST /documents/{id}/detection/run`) with no DB changes. Still to do after UAT: approval endpoint/marker, `pending_review`/`detecting` statuses, persisting findings, wiring detection to approval.
 5. 🟡 **Concurrency and caching:** cache breakpoints + `cache_gate.py` done (see section 5) — ahead of schedule, since testing needed
    it. Per-provider rate limiters and cache-hit metrics still not built.
 6. ⬜ **Observability, guardrails, evals, CI.** (The dev-only trace panel is not this — it's a testing aid, not OTel/Prometheus.)
-7. ⬜ **Learning/Store** last. Delete the Dify client, keys and DSL only when this branch is adopted.
+7. ⬜ **Learning/Store** last. `orchestrator.py`, `dify_client.py` and their tests are already deleted on this branch (their shared helpers moved into `langgraph/nodes.py` and `langgraph/extract.py`); the Dify DSL files, env keys and deploy config are removed when this branch is adopted.
 
 ## 7. Settled and deferred
 

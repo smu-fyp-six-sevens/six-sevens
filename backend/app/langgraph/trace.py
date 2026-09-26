@@ -39,6 +39,23 @@ def start(document_id: str) -> None:
     _persist(document_id)
 
 
+def resume(document_id: str) -> None:
+    """
+    Loads this document's persisted trace into memory (if it isn't already),
+    so a later record() appends to it instead of overwriting the saved row
+    with a fresh one — for work that happens after the original process run
+    (e.g. detection). Blocking; call via asyncio.to_thread.
+    """
+    if document_id in _traces:
+        return
+    try:
+        persisted = get_persisted(document_id)
+    except Exception:  # noqa: BLE001 — falls back to a fresh trace
+        persisted = None
+    if persisted:
+        _traces[document_id] = persisted
+
+
 def _trace(document_id: str) -> dict[str, Any]:
     return _traces.setdefault(document_id, {"document_id": document_id, "started_at": time.time(), "steps": []})
 
@@ -52,6 +69,26 @@ def record(document_id: str, step: str, **fields: Any) -> None:
 
 def get(document_id: str) -> dict[str, Any] | None:
     return _traces.get(document_id)
+
+
+def get_case_detection_reports(case_id: str) -> list[dict[str, Any]]:
+    """Detection reports stored on the traces of every document in a case."""
+    rows = (
+        supabase_client.table("langgraph_trace")
+        .select("document_id, trace")
+        .eq("trace->>case_id", case_id)
+        .execute()
+        .data
+    )
+    return [
+        {
+            "document_id": row["document_id"],
+            "filename": row["trace"].get("filename"),
+            "report": row["trace"]["detection_report"],
+        }
+        for row in rows
+        if (row.get("trace") or {}).get("detection_report")
+    ]
 
 
 def get_persisted(document_id: str) -> dict[str, Any] | None:

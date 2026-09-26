@@ -60,6 +60,7 @@ app.include_router(upload.router, dependencies=_protected)
 app.include_router(documents.router, dependencies=_protected)
 app.include_router(monitoring.router, dependencies=_protected)
 app.include_router(detection.router, dependencies=_protected)
+app.include_router(detection.cases_router, dependencies=_protected)
 app.include_router(injection.router, dependencies=_protected)
 app.include_router(extraction.router, dependencies=_protected)
 # Not in _protected as a whole: the WebSocket route can't carry an

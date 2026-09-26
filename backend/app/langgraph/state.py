@@ -63,7 +63,7 @@ class DocumentGraphState(TypedDict, total=False):
     extraction: Optional[ExtractionSummary]
 
     # Bounded classify<->extract reclassification loop — mirrors
-    # orchestrator.MAX_RECLASSIFICATION_ATTEMPTS.
+    # settings.MAX_RECLASSIFICATION_ATTEMPTS.
     attempts: int
 
     status: str

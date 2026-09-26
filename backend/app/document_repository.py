@@ -121,7 +121,7 @@ def record_escalation(document_id: str, reason: str) -> None:
     """
     Marks that Extraction judged the classified document_type to be wrong
     at least once during processing, triggering a re-run of Intake
-    Coordinator (see orchestrator._process_document's escalation loop).
+    Coordinator (see the langgraph reclassify loop (nodes.record_escalation_node)).
     Persisted independently of the final outcome so the frontend can show
     "classification was re-run" even once the document reaches a terminal
     status under a different (or the same) document_type.

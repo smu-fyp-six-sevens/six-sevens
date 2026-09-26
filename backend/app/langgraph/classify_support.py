@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import json
 
-# Keep in sync with orchestrator's classification-worthy text threshold.
+# Minimum extracted-text length worth classifying from text alone.
 MIN_USABLE_CHARS = 50
 
 _ABSENT_RESULT = {"top_candidates": [], "notes": "tool output unparseable - treat as absent"}
