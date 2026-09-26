@@ -10,6 +10,10 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from ..config import settings
 from ..fraud_detection.metadata_analysis import MetadataAnalysisResult, check_metadata_anomalies
 from ..fraud_detection.layout_anomalies import LayoutAnomalyResult, check_layout_anomalies
+from ..fraud_detection.numerical_validation import (
+    NumericalValidationResult,
+    check_numerical_validation,
+)
 from ..fraud_detection.spelling_anomaly import SpellingAnomalyResult, check_spelling_anomalies
 from ..ingestion.ingestion_service import ingest_document
 from ..ingestion.metadata_extractor import extract_metadata
@@ -115,6 +119,23 @@ async def test_metadata_anomaly(
     metadata = await asyncio.to_thread(extract_metadata, file_bytes, file.filename)
     return check_metadata_anomalies(str(uuid.uuid4()), metadata, document_type or None)
     
+@router.post("/test-numerical-validation", response_model=NumericalValidationResult)
+async def test_numerical_validation(file: UploadFile = File(...)) -> NumericalValidationResult:
+    """
+    Dev/QA upload: same `NumericalValidationResult` as
+    GET /documents/{id}/detection/numerical-validation.
+
+    Runs without extracted fields, since there's no classified document
+    behind an ad-hoc upload — so the format and Benford passes run, but the
+    arithmetic reconciliation checks (which need structured fields like a
+    statement's transactions) will find nothing to compare here.
+    """
+    file_bytes = await _read_and_validate_upload(file)
+    return await asyncio.to_thread(
+        check_numerical_validation, str(uuid.uuid4()), file_bytes, file.filename
+    )
+
+
 @router.post("/test-layout-anomalies", response_model=LayoutAnomalyResult)
 async def test_layout_anomalies(file: UploadFile = File(...)) -> LayoutAnomalyResult:
     """

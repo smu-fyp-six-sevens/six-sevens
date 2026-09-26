@@ -7,6 +7,10 @@ from fastapi.testclient import TestClient
 
 from app.fraud_detection.metadata_analysis import MetadataAnalysisResult
 from app.fraud_detection.layout_anomalies import CheckAssessment, LayoutAnomalyResult
+from app.fraud_detection.numerical_validation import (
+    BenfordAnalysis,
+    NumericalValidationResult,
+)
 from app.fraud_detection.spelling_anomaly import SpellingAnomaly, SpellingAnomalyResult
 from app.main import app
 
@@ -203,3 +207,57 @@ def test_test_layout_anomalies_success() -> None:
     assert response.json()["unable_to_assess"] is False
     mock_check.assert_called_once()
     assert mock_check.call_args[0][1] == b"%PDF-1.4 fake"
+
+
+def test_test_numerical_validation_success() -> None:
+    result = NumericalValidationResult(
+        document_id="ignored",
+        values_analysed=7,
+        findings=[],
+        benford=BenfordAnalysis(
+            sample_size=0,
+            digits=[],
+            unable_to_assess=True,
+            unable_to_assess_reason="Too few values",
+        ),
+        unable_to_assess=False,
+    )
+
+    with patch(
+        "app.routers.extraction.check_numerical_validation", return_value=result
+    ) as mock_check:
+        response = client.post(
+            "/extraction/test-numerical-validation",
+            files={"file": ("statement.pdf", io.BytesIO(b"%PDF-1.4 fake"), "application/pdf")},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["values_analysed"] == 7
+    args = mock_check.call_args[0]
+    assert args[1] == b"%PDF-1.4 fake"
+    assert args[2] == "statement.pdf"
+    # No classified document behind an ad-hoc upload, so no extracted
+    # fields are forwarded and the arithmetic checks have nothing to run on.
+    assert len(args) == 3
+
+
+def test_test_numerical_validation_rejects_unsupported_content_type() -> None:
+    with patch("app.routers.extraction.check_numerical_validation") as mock_check:
+        response = client.post(
+            "/extraction/test-numerical-validation",
+            files={"file": ("virus.exe", io.BytesIO(b"MZ"), "application/octet-stream")},
+        )
+
+    assert response.status_code == 415
+    mock_check.assert_not_called()
+
+
+def test_test_numerical_validation_rejects_empty_file() -> None:
+    with patch("app.routers.extraction.check_numerical_validation") as mock_check:
+        response = client.post(
+            "/extraction/test-numerical-validation",
+            files={"file": ("statement.pdf", io.BytesIO(b""), "application/pdf")},
+        )
+
+    assert response.status_code == 400
+    mock_check.assert_not_called()

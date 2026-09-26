@@ -3,6 +3,8 @@ import AppHeader from '../components/AppHeader';
 import DropZone from '../components/DropZone';
 import { testMetadataAnomaly } from '../services/metadataAnomalyService';
 import type { MetadataAnalysisResult, MetadataAnomaly } from '../services/metadataAnomalyService';
+import { testNumericalValidation } from '../services/numericalValidationService';
+import type { NumericalValidationResult } from '../services/numericalValidationService';
 import { testSpellingAnomaly } from '../services/spellingAnomalyService';
 import type { SpellingAnomalyResult } from '../services/spellingAnomalyService';
 import { DOCUMENT_TYPE_OPTIONS } from '../services/uploadService';
@@ -50,12 +52,16 @@ export default function TestAnomalyPage({ onBack }: TestAnomalyPageProps) {
   const [spellingError, setSpellingError] = useState<string | null>(null);
   const [metadataResult, setMetadataResult] = useState<MetadataAnalysisResult | null>(null);
   const [metadataError, setMetadataError] = useState<string | null>(null);
+  const [numericalResult, setNumericalResult] = useState<NumericalValidationResult | null>(null);
+  const [numericalError, setNumericalError] = useState<string | null>(null);
 
   function resetResults() {
     setSpellingResult(null);
     setSpellingError(null);
     setMetadataResult(null);
     setMetadataError(null);
+    setNumericalResult(null);
+    setNumericalError(null);
   }
 
   function handleFiles(files: File[]) {
@@ -73,9 +79,10 @@ export default function TestAnomalyPage({ onBack }: TestAnomalyPageProps) {
     // Each check runs independently — one failing (e.g. exiftool missing
     // in this environment) shouldn't hide a result the other could still
     // produce.
-    const [spelling, metadata] = await Promise.allSettled([
+    const [spelling, metadata, numerical] = await Promise.allSettled([
       testSpellingAnomaly(file),
       testMetadataAnomaly(file, documentType || undefined),
+      testNumericalValidation(file),
     ]);
 
     if (spelling.status === 'fulfilled') {
@@ -94,10 +101,21 @@ export default function TestAnomalyPage({ onBack }: TestAnomalyPageProps) {
       );
     }
 
+    if (numerical.status === 'fulfilled') {
+      setNumericalResult(numerical.value);
+    } else {
+      setNumericalError(
+        numerical.reason instanceof Error
+          ? numerical.reason.message
+          : 'Numerical validation failed.',
+      );
+    }
+
     setIsSubmitting(false);
   }
 
-  const hasAnyResult = spellingResult !== null || metadataResult !== null;
+  const hasAnyResult =
+    spellingResult !== null || metadataResult !== null || numericalResult !== null;
 
   return (
     <main className="shell">
@@ -290,6 +308,105 @@ export default function TestAnomalyPage({ onBack }: TestAnomalyPageProps) {
             )}
 
             {metadataResult && <RawJson value={metadataResult} />}
+          </section>
+        )}
+
+        {(numericalResult || numericalError) && (
+          <section className="details-card">
+            <div className="anomaly-card-head">
+              <h2>Numerical validation</h2>
+              {numericalResult && (
+                <span className={`badge ${numericalResult.unable_to_assess ? 'err' : 'ok'}`}>
+                  {numericalResult.unable_to_assess
+                    ? 'Unable to assess'
+                    : `${numericalResult.findings.length} flagged`}
+                </span>
+              )}
+            </div>
+
+            {numericalError ? (
+              <p className="mock-note warning">⚠ {numericalError}</p>
+            ) : numericalResult!.unable_to_assess ? (
+              <p className="mock-note warning">
+                {numericalResult!.unable_to_assess_reason ??
+                  'No numerical values could be read from this document.'}
+              </p>
+            ) : (
+              <>
+                <p className="anomaly-empty">
+                  {numericalResult!.values_analysed} numerical value
+                  {numericalResult!.values_analysed === 1 ? '' : 's'} read from the text. Note
+                  that arithmetic reconciliation needs a classified document's extracted
+                  fields, so it finds nothing on an ad-hoc upload like this one.
+                </p>
+
+                {numericalResult!.findings.length === 0 ? (
+                  <p className="anomaly-empty">No numerical anomalies flagged.</p>
+                ) : (
+                  <div className="kv-grid kv-grid--flush">
+                    {numericalResult!.findings.map((finding, index) => (
+                      <div key={`${finding.finding_type}-${index}`} className="kv-row">
+                        <span className="kv-key">
+                          <span
+                            className={`badge severity-chip ${SEVERITY_BADGE_CLASS[finding.severity]}`}
+                          >
+                            {finding.severity}
+                          </span>
+                          {finding.finding_type}
+                          {finding.page !== null && ` · p${finding.page}`}
+                        </span>
+                        <span className="kv-value">
+                          {finding.summary}
+                          {finding.stated !== null && finding.expected !== null && (
+                            <>
+                              {' '}
+                              <strong>
+                                (stated {finding.stated}, expected {finding.expected})
+                              </strong>
+                            </>
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="section-label anomaly-subhead">
+                  <span>Benford&apos;s Law — leading digit distribution</span>
+                </div>
+
+                {numericalResult!.benford.unable_to_assess ? (
+                  <p className="anomaly-empty">
+                    {numericalResult!.benford.unable_to_assess_reason}
+                  </p>
+                ) : (
+                  <>
+                    <p className="anomaly-empty">
+                      {numericalResult!.benford.sample_size} values ·{' '}
+                      chi-square {numericalResult!.benford.chi_square} against a p&lt;0.01
+                      critical value of {numericalResult!.benford.chi_square_critical} ·{' '}
+                      {numericalResult!.benford.conforms
+                        ? 'consistent with Benford'
+                        : 'differs by more than chance'}
+                    </p>
+                    <div className="kv-grid kv-grid--flush">
+                      {numericalResult!.benford.digits.map((row) => (
+                        <div key={row.digit} className="kv-row">
+                          <span className="kv-key">Leading digit {row.digit}</span>
+                          <span className="kv-value">
+                            {row.count} occurrence{row.count === 1 ? '' : 's'} ·{' '}
+                            {row.observed_percentage.toFixed(1)}% observed vs{' '}
+                            {row.expected_percentage.toFixed(1)}% expected
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+
+            {numericalResult && <RawJson value={numericalResult} />}
           </section>
         )}
       </section>

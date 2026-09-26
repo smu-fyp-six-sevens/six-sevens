@@ -15,6 +15,10 @@ from ..fraud_detection.font_consistency_v2 import (
 )
 from ..fraud_detection.metadata_analysis import MetadataAnalysisResult, check_metadata_anomalies
 from ..fraud_detection.layout_anomalies import LayoutAnomalyResult, check_layout_anomalies
+from ..fraud_detection.numerical_validation import (
+    NumericalValidationResult,
+    check_numerical_validation,
+)
 from ..fraud_detection.spelling_anomaly import SpellingAnomalyResult, check_spelling_anomalies
 
 router = APIRouter(prefix="/documents", tags=["detection"])
@@ -125,6 +129,45 @@ async def get_spelling_anomaly(document_id: str) -> SpellingAnomalyResult:
     extracted_fields = await _fetch_extracted_fields(document_id)
     return await check_spelling_anomalies(
         document_id, file_bytes, document.filename, extracted_fields
+    )
+
+
+@router.get(
+    "/{document_id}/detection/numerical-validation",
+    response_model=NumericalValidationResult,
+)
+async def get_numerical_validation(document_id: str) -> NumericalValidationResult:
+    """
+    Content Validation Specialist. On-demand and side-effect free, like the
+    spelling and layout checks — the result is returned as JSON for a lead
+    agent to consume and nothing is written to the database.
+
+    Takes both the file (for the figures in the text, and the page each one
+    sits on) and the document's extracted fields (for the figures that are
+    supposed to reconcile against each other — a statement's running
+    balance, a portfolio's quantity x price). Extracted fields degrade
+    gracefully: without them the format and Benford passes still run.
+    """
+    try:
+        document = await asyncio.to_thread(document_repository.get_document, document_id)
+    except Exception as exc:
+        logger.exception("Failed to fetch document %s", document_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch the document. Check Supabase table access.",
+        ) from exc
+
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    file_bytes = await _fetch_document_bytes(document_id)
+    extracted_fields = await _fetch_extracted_fields(document_id)
+    return await asyncio.to_thread(
+        check_numerical_validation,
+        document_id,
+        file_bytes,
+        document.filename,
+        extracted_fields,
     )
 
 

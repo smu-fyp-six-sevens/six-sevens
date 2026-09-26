@@ -8,6 +8,10 @@ from app.fraud_detection.font_consistency import FontConsistencyResult
 from app.fraud_detection.font_consistency_v2 import ExtractedField, FontConsistencyResultV2
 from app.fraud_detection.metadata_analysis import MetadataAnalysisResult
 from app.fraud_detection.layout_anomalies import CheckAssessment, LayoutAnomalyResult
+from app.fraud_detection.numerical_validation import (
+    BenfordAnalysis,
+    NumericalValidationResult,
+)
 from app.fraud_detection.spelling_anomaly import SpellingAnomaly, SpellingAnomalyResult
 from app.main import app
 from app.models import DocumentRecord, DocumentStatus
@@ -352,4 +356,114 @@ def test_get_metadata_anomaly_document_not_found() -> None:
 
     assert response.status_code == 404
     mock_check.assert_not_called()
+
+
+def _numerical_result() -> NumericalValidationResult:
+    return NumericalValidationResult(
+        document_id="doc-1",
+        values_analysed=12,
+        findings=[],
+        benford=BenfordAnalysis(
+            sample_size=0,
+            digits=[],
+            unable_to_assess=True,
+            unable_to_assess_reason="Too few values",
+        ),
+        unable_to_assess=False,
+    )
+
+
+def test_get_numerical_validation_passes_file_and_extracted_fields() -> None:
+    fields = [
+        ExtractedField(
+            field_name="transactions", field_type="array", field_value=[], confidence=0.9
+        )
+    ]
+    with (
+        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers.detection.storage_service") as mock_storage,
+        patch("app.routers.detection.extracted_fields_repository") as mock_fields,
+        patch(
+            "app.routers.detection.check_numerical_validation",
+            return_value=_numerical_result(),
+        ) as mock_check,
+    ):
+        mock_repo.get_document.return_value = _document()
+        mock_storage.download_file.return_value = b"%PDF-1.4"
+        mock_fields.get_extracted_fields.return_value = fields
+
+        response = client.get("/documents/doc-1/detection/numerical-validation")
+
+    assert response.status_code == 200
+    assert response.json()["values_analysed"] == 12
+    # Both sources reach the check: the file for figures in the text, the
+    # extracted fields for the ones that must reconcile.
+    args = mock_check.call_args[0]
+    assert args[1] == b"%PDF-1.4"
+    assert args[2] == "statement.pdf"
+    assert args[3] == fields
+
+
+def test_get_numerical_validation_degrades_when_fields_fetch_fails() -> None:
+    with (
+        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers.detection.storage_service") as mock_storage,
+        patch("app.routers.detection.extracted_fields_repository") as mock_fields,
+        patch(
+            "app.routers.detection.check_numerical_validation",
+            return_value=_numerical_result(),
+        ) as mock_check,
+    ):
+        mock_repo.get_document.return_value = _document()
+        mock_storage.download_file.return_value = b"%PDF-1.4"
+        mock_fields.get_extracted_fields.side_effect = RuntimeError("fields down")
+
+        response = client.get("/documents/doc-1/detection/numerical-validation")
+
+    assert response.status_code == 200
+    assert mock_check.call_args[0][3] == []
+
+
+def test_get_numerical_validation_writes_nothing() -> None:
+    with (
+        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers.detection.storage_service") as mock_storage,
+        patch("app.routers.detection.extracted_fields_repository") as mock_fields,
+        patch(
+            "app.routers.detection.check_numerical_validation",
+            return_value=_numerical_result(),
+        ),
+    ):
+        mock_repo.get_document.return_value = _document()
+        mock_storage.download_file.return_value = b"%PDF-1.4"
+        mock_fields.get_extracted_fields.return_value = []
+
+        response = client.get("/documents/doc-1/detection/numerical-validation")
+
+    assert response.status_code == 200
+    # Result is returned as JSON for the lead agent; nothing is persisted.
+    mock_repo.update_extracted_fields.assert_not_called()
+    mock_repo.update_metadata_anomalies.assert_not_called()
+
+
+def test_get_numerical_validation_fetch_and_not_found_errors() -> None:
+    with (
+        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers.detection.check_numerical_validation") as mock_check,
+    ):
+        mock_repo.get_document.side_effect = RuntimeError("db down")
+        assert (
+            client.get("/documents/doc-1/detection/numerical-validation").status_code == 502
+        )
+        mock_check.assert_not_called()
+
+    with (
+        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers.detection.check_numerical_validation") as mock_check,
+    ):
+        mock_repo.get_document.return_value = None
+        assert (
+            client.get("/documents/missing/detection/numerical-validation").status_code == 404
+        )
+        mock_check.assert_not_called()
 
