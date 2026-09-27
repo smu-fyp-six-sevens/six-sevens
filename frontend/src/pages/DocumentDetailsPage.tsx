@@ -734,6 +734,7 @@ export default function DocumentDetailsPage({
   const [caseMatch, setCaseMatch] = useState<DocumentCaseMatch | null>(null);
   const hasCase = Boolean(document?.case_id);
   const documentStatus = document?.status;
+  const isApproved = document?.status === 'approved';
   const extractedFieldsJson = JSON.stringify(document?.extracted_fields ?? null);
 
   useEffect(() => {
@@ -803,6 +804,7 @@ export default function DocumentDetailsPage({
   // threshold — the backend enforces both. Saving sets confidence to 1.0, so
   // the dropdown goes away afterwards.
   const canCorrectType =
+    !isApproved &&
     (document?.status === 'analyzed' || document?.status === 'failed') &&
     !(
       document.classification_confidence != null &&
@@ -1044,7 +1046,7 @@ export default function DocumentDetailsPage({
   }
 
   async function handleSaveFields() {
-    if (!document) {
+    if (!document || isApproved) {
       return;
     }
 
@@ -1421,20 +1423,26 @@ export default function DocumentDetailsPage({
             </span>
           )}
 
-          <button
-            type="button"
-            className="add-field-button"
-            disabled={isInFlight}
-            title={isInFlight ? 'Fields can\'t be edited while the document is being processed.' : undefined}
-            onClick={() => {
-              setIsAddFieldOpen(true);
-              setAddFieldError(null);
-              setNewFieldName('');
-              setNewFieldValue('');
-            }}
-          >
-            + Add field
-          </button>
+          {!isApproved && (
+            <button
+              type="button"
+              className="add-field-button"
+              disabled={isInFlight}
+              title={
+                isInFlight
+                  ? 'Fields can\'t be edited while the document is being processed.'
+                  : undefined
+              }
+              onClick={() => {
+                setIsAddFieldOpen(true);
+                setAddFieldError(null);
+                setNewFieldName('');
+                setNewFieldValue('');
+              }}
+            >
+              + Add field
+            </button>
+          )}
         </div>
 
         {isAddFieldOpen && (
@@ -1592,7 +1600,7 @@ export default function DocumentDetailsPage({
                     '—'
                   )}
 
-                  {field.id && (
+                  {!isApproved && field.id && (
                     <button
                       type="button"
                       className="delete-field-button"
@@ -1654,7 +1662,7 @@ export default function DocumentDetailsPage({
           Manual review
           ===================================================== */}
 
-      {(needsManualReview || isUnrecognisedDocument) && (
+      {!isApproved && (needsManualReview || isUnrecognisedDocument) && (
         <section className="details-card details-card--review">
           <div className="details-section-heading details-section-heading--warning">
             <span className="details-section-icon">⚠</span>
@@ -1722,7 +1730,7 @@ export default function DocumentDetailsPage({
                     <ArrayFieldEditButton
                       label={humanizeFieldKey(key)}
                       draftJson={fieldDraft[key] ?? '[]'}
-                      disabled={isSaving || !canEditField}
+                      disabled={isSaving || isApproved || !canEditField}
                       onChange={(json) => handleFieldChange(key, json)}
                     />
                   ) : isArrayOfLabelValueStrings(field.value) ? (
@@ -1794,6 +1802,7 @@ export default function DocumentDetailsPage({
               )}
             </div>
 
+          {!isApproved && (
             <button
               type="button"
               className="details-save-button"
@@ -1802,6 +1811,7 @@ export default function DocumentDetailsPage({
             >
               {isSaving ? 'Saving…' : 'Save fields'}
             </button>
+          )}
           </div>
         </section>
       )}
