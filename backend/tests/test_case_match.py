@@ -229,11 +229,12 @@ def test_incumbency_flagged_when_other_documents_agree_on_a_different_company_na
     assert "PLATINUM FITNESS GROUP" in result.incumbency.reasons[0]
 
 
-def test_incumbency_flagged_when_it_disagrees_with_case_company_name() -> None:
-    result = check_case_match(_case("ACNE Pte Ltd"), [_incumbency(), *_corroborating(3)])
+def test_case_name_is_ignored_when_verifying_incumbency() -> None:
+    # The case name is an officer-typed label, e.g. a placeholder — only the
+    # other documents' UEN/company name decide whether the certificate is right.
+    result = check_case_match(_case("Case 67"), [_incumbency(), *_corroborating(3)])
 
-    assert result.incumbency.status == IncumbencyStatus.MANUAL_REVIEW
-    assert "ACNE Pte Ltd" in result.incumbency.reasons[0]
+    assert result.incumbency.status == IncumbencyStatus.VERIFIED
 
 
 def test_incumbency_without_uen_goes_to_manual_review() -> None:
@@ -509,3 +510,25 @@ def test_case_snapshot_includes_case_match_computed_from_plain_fields() -> None:
     passport_match = next(d for d in snapshot["case_match"]["documents"] if d["document_id"] == "pp")
     assert passport_match["status"] == "manual_review"
     assert passport_match["case_mismatch"] is True
+
+
+def test_rejected_incumbency_is_not_used_as_the_reference() -> None:
+    wrong = _incumbency({**INCUMBENCY_FIELDS, "uen": OTHER_UEN}, "wrong-inc").model_copy(
+        update={"status": DocumentStatus.REJECTED}
+    )
+    right = _incumbency(doc_id="right-inc")
+    result = check_case_match(_case(), [wrong, right, *_corroborating(3)])
+
+    assert result.incumbency.document_id == "right-inc"
+    assert result.incumbency.status == IncumbencyStatus.VERIFIED
+    rejected = _by_id(result, "wrong-inc")
+    assert rejected.status == DocumentMatchStatus.PENDING
+    assert not rejected.can_proceed_to_fraud_detection
+
+
+def test_rejected_documents_do_not_count_towards_verifying_incumbency() -> None:
+    docs = _corroborating(3)
+    docs[0] = docs[0].model_copy(update={"status": DocumentStatus.REJECTED})
+    result = check_case_match(_case(), [_incumbency(), *docs])
+
+    assert result.incumbency.status == IncumbencyStatus.INSUFFICIENT_EVIDENCE

@@ -33,7 +33,13 @@ from typing import Iterable, NamedTuple, Optional
 
 from pydantic import BaseModel, Field
 
-from .models import CaseRecord, DocumentRecord, DocumentType, is_personal_bank_statement
+from .models import (
+    CaseRecord,
+    DocumentRecord,
+    DocumentStatus,
+    DocumentType,
+    is_personal_bank_statement,
+)
 
 # Step 1: how many other documents must carry the incumbency's UEN before
 # it's trusted as the case's reference.
@@ -441,11 +447,10 @@ def _verify_incumbency(
                     f"{other_uen}, but {incumbency.filename} shows {uen}"
                 )
 
-    if case.company_name and company_name and not company_names_match(case.company_name, company_name):
-        review_reasons.append(
-            f'The case is recorded as "{case.company_name}" but the certificate of '
-            f'incumbency names "{company_name}"'
-        )
+    # Deliberately not compared against case.company_name: it's a free-text
+    # label an officer types at case creation (often a placeholder like
+    # "Case 67"), not verified company data. The certificate is judged only
+    # by whether the case's other documents agree with its UEN/company name.
 
     if uen is not None:
         # Same comparison as step 2 (UEN when the document has one, otherwise
@@ -653,10 +658,29 @@ def _match_document(
     return result(DocumentMatchStatus.MATCH, "Matches the case's company and individuals", comparisons)
 
 
+def _rejected(doc: DocumentRecord) -> DocumentCaseMatch:
+    return DocumentCaseMatch(
+        document_id=doc.id,
+        filename=doc.filename,
+        document_type=doc.document_type,
+        status=DocumentMatchStatus.PENDING,
+        can_proceed_to_fraud_detection=False,
+        reason="Rejected by a loan officer — excluded from the case match",
+    )
+
+
 def check_case_match(case: CaseRecord, documents: Iterable[DocumentRecord]) -> CaseMatchResult:
     documents = list(documents)
-    verification, incumbency_doc = _verify_incumbency(case, documents)
-    matches = [_match_document(doc, incumbency_doc, verification) for doc in documents]
+    # A document a loan officer rejected is out of the case: it can't be the
+    # reference incumbency, and it can't corroborate or contradict one.
+    active = [doc for doc in documents if doc.status != DocumentStatus.REJECTED]
+    verification, incumbency_doc = _verify_incumbency(case, active)
+    matches = [
+        _match_document(doc, incumbency_doc, verification)
+        if doc.status != DocumentStatus.REJECTED
+        else _rejected(doc)
+        for doc in documents
+    ]
     return CaseMatchResult(
         case_id=case.id,
         incumbency=verification,

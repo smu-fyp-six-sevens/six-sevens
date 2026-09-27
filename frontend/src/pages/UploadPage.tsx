@@ -486,7 +486,9 @@ async function handleApproveAllEligibleDocuments() {
   const eligibleDocuments = extractedDocuments.filter(
     (document) =>
       document.status === 'analyzed' &&
-      formatRoutingOutcome(document) === 'Accepted',
+      // With the case-match result, so a document flagged as belonging to
+      // another company/individual is never swept up in a bulk approval.
+      formatRoutingOutcome(document, caseMatches.get(document.id)) === 'Accepted',
   );
 
   if (eligibleDocuments.length === 0) {

@@ -170,6 +170,7 @@ export function formatRoutingOutcome(
     DocumentRecord,
     'status' | 'classification_outcome' | 'extracted_fields'
   >,
+  caseMatch?: Pick<DocumentCaseMatch, 'status'> | null,
 ): string {
   if (document.status === 'rejected') {
     return 'Rejected';
@@ -180,6 +181,7 @@ export function formatRoutingOutcome(
   if (
     document.status === 'failed' ||
     document.classification_outcome === 'manual_review' ||
+    caseMatch?.status === 'manual_review' ||
     (lowestConfidence != null &&
       lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD)
   ) {
