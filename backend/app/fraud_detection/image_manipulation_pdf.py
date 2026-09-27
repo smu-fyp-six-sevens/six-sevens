@@ -58,6 +58,16 @@ _DETAIL_COARSE_FACTOR = 8
 # to mean anything.
 _MIN_DETAIL_PIXELS = 64
 
+# Below this many comparable assets, a median is too easily moved by the very
+# region being judged: altering one of three values shifts the midpoint enough
+# that a different, untouched region becomes the most distant from it. The
+# finding is still real — the document IS internally inconsistent — but which
+# region is the altered one stops being knowable from resolution alone, so it
+# is reported as an inconsistency across a named set rather than as an
+# accusation against one region. Four is the smallest count at which two
+# regions can agree and still outvote a third.
+_MIN_CONFIDENT_ATTRIBUTION = 4
+
 
 class Tolerances(BaseModel):
     """
@@ -615,6 +625,24 @@ def _check_resolution(
             continue
 
         direction = "higher" if region.effective_dpi > baseline else "lower"
+
+        # With too few regions to form a majority, say so rather than naming
+        # this one as the altered region. An officer who is sent to the wrong
+        # image and finds nothing wrong with it learns to distrust the check.
+        confident = len(comparable) >= _MIN_CONFIDENT_ATTRIBUTION
+        spread = ", ".join(
+            f"{other.effective_dpi:.0f} DPI (xref {other.xref}"
+            f"{', this one' if other.xref == region.xref else ''})"
+            for other in sorted(comparable, key=lambda r: -r.effective_dpi)
+        )
+        caveat = (
+            "" if confident else
+            f" With only {len(comparable)} comparable regions there is no majority to "
+            "establish which of them is out of place, so this reports an inconsistency "
+            f"across the set rather than a verdict on one region. The full spread is: "
+            f"{spread}. Each should be checked against the document it is supposed to "
+            "have come from."
+        )
         indicators.append(
             ImageManipulationIndicator(
                 indicator="Resolution Mismatch",
@@ -622,12 +650,21 @@ def _check_resolution(
                 bbox=region.bbox,
                 detected=f"{region.effective_dpi:.0f} DPI",
                 expected=f"~{baseline:.0f} DPI (median of {len(comparable)} regions)",
-                deviation=f"{ratio:.1f}x {direction}",
-                severity="high" if ratio >= tolerances.dpi_ratio * 2 else "medium",
+                deviation=(
+                    f"{ratio:.1f}x {direction}" if confident
+                    else f"{ratio:.1f}x {direction}; which region is altered is ambiguous"
+                ),
+                # Less evidence, so a lower claim. A three-region spread is worth
+                # a look, not the confidence of a clear majority.
+                severity=(
+                    ("high" if ratio >= tolerances.dpi_ratio * 2 else "medium")
+                    if confident else "medium"
+                ),
                 summary=(
                     f"Page {region.page + 1}: an image region is drawn at "
                     f"{region.effective_dpi:.0f} DPI, {ratio:.1f}x {direction} than the "
                     f"~{baseline:.0f} DPI of the other images in this document."
+                    + caveat
                 ),
                 evidence={
                     "xref": region.xref,
@@ -636,6 +673,12 @@ def _check_resolution(
                     "ratio": round(ratio, 2),
                     "comparable_regions": len(comparable),
                     "tolerance_ratio": tolerances.dpi_ratio,
+                    "attribution_confident": confident,
+                    # Every candidate, so a reviewer can see the whole spread
+                    # instead of only the region this row happens to name.
+                    "all_region_dpi": {
+                        str(other.xref): other.effective_dpi for other in comparable
+                    },
                 },
             )
         )
@@ -685,6 +728,54 @@ def _check_compression(
             majority_signature = None
 
     flagged: set[tuple[int, BBox]] = set()
+
+    # With exactly two JPEGs there is no majority to find — one of each is a
+    # 1-1 split, so the loop below never fires and a genuinely different
+    # encoder passes unnoticed. The tables either match or they do not, which
+    # is a fact about the pair rather than about either one, so both are
+    # reported and the attribution left open. Mirrors the two-region path in
+    # _check_resolution, for the same reason.
+    if (
+        majority_signature is None
+        and len(jpegs) == 2
+        and jpegs[0].quantisation_signature != jpegs[1].quantisation_signature
+    ):
+        logger.debug(
+            "compression: 2 JPEGs with differing tables (%s vs %s), comparing pairwise",
+            jpegs[0].quantisation_signature, jpegs[1].quantisation_signature,
+        )
+        for region, other in ((jpegs[0], jpegs[1]), (jpegs[1], jpegs[0])):
+            if region not in candidates:
+                continue
+            flagged.add((region.xref, region.bbox))
+            indicators.append(
+                ImageManipulationIndicator(
+                    indicator="Compression Mismatch",
+                    page=region.page,
+                    bbox=region.bbox,
+                    detected=f"JPEG quantisation table {region.quantisation_signature}",
+                    expected=(
+                        f"{other.quantisation_signature} (the only other JPEG region)"
+                    ),
+                    deviation="different encoder or quality setting; which region is "
+                              "altered is ambiguous",
+                    severity="medium",
+                    summary=(
+                        f"Page {region.page + 1}: this document's two JPEG regions were "
+                        "compressed with different quantisation tables, so they did not "
+                        "come out of the same pass. With only two there is no majority "
+                        "to say which one is out of place; both should be checked "
+                        "against the document they are supposed to have come from."
+                    ),
+                    evidence={
+                        "xref": region.xref,
+                        "quantisation_signature": region.quantisation_signature,
+                        "other_quantisation_signature": other.quantisation_signature,
+                        "jpeg_regions": 2,
+                        "attribution_confident": False,
+                    },
+                )
+            )
 
     if majority_signature is not None:
         for region in jpegs:
@@ -771,7 +862,59 @@ def _check_compression(
         "baseline %.5f bytes/pixel",
         len(lossy), len(comparable), tolerances.min_comparable_regions, baseline_bpp,
     )
-    if len(lossy) >= tolerances.min_comparable_regions and baseline_bpp > 0:
+    # Same degeneracy as above: the median of two values is their midpoint, so
+    # each sits the same distance from it and neither can cross the tolerance.
+    # Two regions 3.3x apart each score only 1.8x against their own midpoint.
+    if len(lossy) == 2 and baseline_bpp > 0:
+        first, second = lossy
+        ratio = _ratio_against(first.bytes_per_pixel, second.bytes_per_pixel)
+        logger.debug(
+            "compression: only 2 lossy assets, comparing pairwise: %.5f vs %.5f "
+            "bytes/pixel = %.2fx apart vs tolerance %.2fx -> %s",
+            first.bytes_per_pixel, second.bytes_per_pixel, ratio,
+            tolerances.bytes_per_pixel_ratio,
+            "MISMATCH" if ratio >= tolerances.bytes_per_pixel_ratio else "within tolerance",
+        )
+        if ratio >= tolerances.bytes_per_pixel_ratio:
+            for region, other in ((first, second), (second, first)):
+                if region not in candidates or (region.xref, region.bbox) in flagged:
+                    continue
+                direction = (
+                    "more" if region.bytes_per_pixel > other.bytes_per_pixel else "less"
+                )
+                flagged.add((region.xref, region.bbox))
+                indicators.append(
+                    ImageManipulationIndicator(
+                        indicator="Compression Mismatch",
+                        page=region.page,
+                        bbox=region.bbox,
+                        detected=f"{region.bytes_per_pixel:.4f} bytes/pixel",
+                        expected=(
+                            f"{other.bytes_per_pixel:.4f} bytes/pixel "
+                            "(the only other lossy region)"
+                        ),
+                        deviation=f"{ratio:.1f}x {direction} data per pixel; which "
+                                  "region is altered is ambiguous",
+                        severity="medium",
+                        summary=(
+                            f"Page {region.page + 1}: this document's two lossy image "
+                            f"regions store {ratio:.1f}x different amounts of data per "
+                            "pixel, meaning they were compressed at different qualities. "
+                            "With only two there is no majority to say which one is out "
+                            "of place."
+                        ),
+                        evidence={
+                            "xref": region.xref,
+                            "bytes_per_pixel": region.bytes_per_pixel,
+                            "other_bytes_per_pixel": other.bytes_per_pixel,
+                            "ratio": round(ratio, 2),
+                            "tolerance_ratio": tolerances.bytes_per_pixel_ratio,
+                            "attribution_confident": False,
+                        },
+                    )
+                )
+
+    elif len(lossy) >= tolerances.min_comparable_regions and baseline_bpp > 0:
         for region in lossy:
             if region not in candidates:
                 continue

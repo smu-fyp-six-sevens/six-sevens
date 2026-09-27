@@ -74,11 +74,14 @@ def test_resolution_mismatch_is_flagged():
     result = check_image_manipulation("doc", _pdf(place))
     found = [i for i in result.indicators if i.indicator == "Resolution Mismatch"]
     assert len(found) == 1
-    assert found[0].severity == "high"
     assert found[0].page == 0
     # AC4: a usable bounding region, not just a page number.
     assert found[0].bbox[2] > found[0].bbox[0]
     assert "144" in found[0].expected
+    # Three regions cannot form a majority, so the deviation is reported but
+    # not pinned on one region — see test_attribution_is_hedged_below_four_regions.
+    assert found[0].severity == "medium"
+    assert found[0].evidence["attribution_confident"] is False
 
 
 # --- AC3: compression -------------------------------------------------------
@@ -450,3 +453,121 @@ def test_detail_ratio_survives_recompression():
 def test_detail_ratio_is_none_when_unmeasurable():
     assert _detail_ratio(_jpeg(40, 40, 85)) is None       # too small
     assert _detail_ratio(b"\x89PNG not a real image") is None  # undecodable
+
+
+# --- attribution confidence at low region counts ----------------------------
+
+def test_attribution_is_hedged_below_four_regions():
+    """
+    Altering one of three regions moves the median enough that a different,
+    untouched region can become the most distant from it. The document IS
+    inconsistent, but which region is the altered one is not knowable from
+    resolution alone, so the finding must not read as a verdict on one region.
+    """
+    def place(page):
+        _two_consistent_regions(page)
+        page.insert_image(pymupdf.Rect(56, 580, 356, 780), stream=_jpeg(2400, 1600, 85, 200))
+
+    result = check_image_manipulation("doc", _pdf(place))
+    found = [i for i in result.indicators if i.indicator == "Resolution Mismatch"]
+    assert len(found) == 1
+    assert found[0].evidence["attribution_confident"] is False
+    assert found[0].severity == "medium"  # capped: less evidence, lower claim
+    assert "no majority" in found[0].summary
+    assert "ambiguous" in found[0].deviation
+    # Every candidate's DPI travels with the finding, so a reviewer can see the
+    # whole spread rather than only the region this row happens to name.
+    assert len(found[0].evidence["all_region_dpi"]) == 3
+
+
+def test_attribution_is_confident_from_four_regions():
+    """With a real majority, the outlier can be named and severity earned."""
+    def place(page):
+        for n, top in enumerate((100, 240, 380, 520)):
+            page.insert_image(
+                pymupdf.Rect(56, top, 356, top + 120), stream=_jpeg(600, 240, 85, 180 + n * 5)
+            )
+        page.insert_image(pymupdf.Rect(56, 660, 356, 780), stream=_jpeg(3000, 1200, 85, 205))
+
+    result = check_image_manipulation("doc", _pdf(place))
+    found = [i for i in result.indicators if i.indicator == "Resolution Mismatch"]
+    assert len(found) == 1
+    assert found[0].evidence["attribution_confident"] is True
+    assert found[0].severity == "high"
+    assert "no majority" not in found[0].summary
+
+
+# --- AC3 at exactly two regions ---------------------------------------------
+#
+# The same median degeneracy the resolution check handles: with two values the
+# median is their midpoint, so each sits the same distance from it and neither
+# can cross a tolerance. Two JPEGs also form a 1-1 split with no majority, so
+# the odd-one-out logic never fires. Both paths have to compare pairwise.
+
+def _flat_jpeg(width: int, height: int, quality: int, shade: int) -> bytes:
+    """Same encoder and quality as _jpeg, but almost no content — so the
+    quantisation tables match while bytes-per-pixel differs enormously."""
+    buffer = io.BytesIO()
+    Image.new("RGB", (width, height), (shade, shade, shade)).save(
+        buffer, "JPEG", quality=quality
+    )
+    return buffer.getvalue()
+
+
+def test_two_jpegs_with_different_tables_are_both_reported():
+    """
+    Reproduces a real miss: a logo re-saved at a different quality is visually
+    identical and was passing as clean, because one JPEG against one JPEG is a
+    1-1 split with no majority.
+    """
+    def place(page):
+        page.insert_image(pymupdf.Rect(56, 100, 356, 300), stream=_jpeg(600, 400, 92))
+        page.insert_image(pymupdf.Rect(56, 340, 356, 540), stream=_jpeg(600, 400, 55, 190))
+
+    result = check_image_manipulation("doc", _pdf(place))
+    found = [i for i in result.indicators if i.indicator == "Compression Mismatch"]
+    assert len(found) == 2  # neither can be singled out
+    assert all(i.evidence["attribution_confident"] is False for i in found)
+    assert all(i.severity == "medium" for i in found)
+    assert "no majority" in found[0].summary
+
+
+def test_two_matching_jpegs_are_not_reported():
+    """The other side of it: same encoder, same quality, nothing to say."""
+    def place(page):
+        page.insert_image(pymupdf.Rect(56, 100, 356, 300), stream=_jpeg(600, 400, 85))
+        page.insert_image(pymupdf.Rect(56, 340, 356, 540), stream=_jpeg(600, 400, 85, 190))
+
+    result = check_image_manipulation("doc", _pdf(place))
+    assert [i for i in result.indicators if i.indicator == "Compression Mismatch"] == []
+
+
+def test_two_lossy_regions_are_compared_pairwise_on_bytes_per_pixel():
+    """
+    Same quantisation tables, so only the data density differs. Against their
+    own midpoint two regions 13x apart score 3.6x each — this used to sit close
+    enough to the tolerance to be luck rather than logic.
+    """
+    def place(page):
+        page.insert_image(pymupdf.Rect(56, 100, 356, 300), stream=_jpeg(600, 400, 85))
+        page.insert_image(pymupdf.Rect(56, 340, 356, 540),
+                          stream=_flat_jpeg(600, 400, 85, 190))
+
+    result = check_image_manipulation("doc", _pdf(place))
+    found = [i for i in result.indicators if i.indicator == "Compression Mismatch"]
+    assert len(found) == 2
+    assert "bytes/pixel" in found[0].detected
+    assert "the only other lossy region" in found[0].expected
+
+
+def test_three_jpegs_still_name_the_odd_one_out():
+    """With a majority the attribution is earned, and severity with it."""
+    def place(page):
+        page.insert_image(pymupdf.Rect(56, 100, 356, 280), stream=_jpeg(600, 360, 92))
+        page.insert_image(pymupdf.Rect(56, 300, 356, 480), stream=_jpeg(600, 360, 92, 190))
+        page.insert_image(pymupdf.Rect(56, 520, 356, 700), stream=_jpeg(600, 360, 45, 200))
+
+    result = check_image_manipulation("doc", _pdf(place))
+    found = [i for i in result.indicators if i.indicator == "Compression Mismatch"]
+    assert len(found) == 1
+    assert found[0].severity == "high"
