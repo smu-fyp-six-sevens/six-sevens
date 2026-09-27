@@ -571,11 +571,37 @@ def test_single_page_marks_margin_unable_but_still_analyses_layout() -> None:
 
 def test_too_little_text_marks_indent_and_alignment_unable() -> None:
     result = check_layout_anomalies("doc-1", _single_line_pdf())
-    assert result.unable_to_assess is False
+    assert result.unable_to_assess is True
+    assert "one-page" in (result.unable_to_assess_reason or "")
     assert result.indentation.unable_to_assess is True
     assert result.alignment.unable_to_assess is True
     assert result.margin.unable_to_assess is True
     assert result.spacing.unable_to_assess is True
+
+
+def _form_lines(*, shift_last: bool) -> list[_Block]:
+    """One-page form: short labels, one of them tagged body, the rest headings."""
+    blocks = []
+    for index in range(5):
+        x = 100.0 if shift_last and index == 4 else 72.0
+        blocks.append(
+            _block(
+                [_line((x, 80 + index * 24, x + 180, 92 + index * 24), text=f"Field label {index} on this form")],
+                role="body" if index == 0 else "heading",
+            )
+        )
+    return blocks
+
+
+def test_one_page_form_lines_can_show_an_indent() -> None:
+    clean, clean_check = lr._check_indentation(_form_lines(shift_last=False))
+    assert clean_check.unable_to_assess is False
+    assert clean == []
+
+    findings, check = lr._check_indentation(_form_lines(shift_last=True))
+    assert check.unable_to_assess is False
+    assert findings
+    assert findings[0].evidence["left_delta_pt"] == 28.0
 
 
 # ---------------------------------------------------------------------------
@@ -588,6 +614,68 @@ def test_consistent_document_has_no_indent_or_alignment_anomalies() -> None:
     assert result.unable_to_assess is False
     assert not any(a.anomaly_type == "Indentation" for a in result.anomalies)
     assert not any(a.anomaly_type == "Alignment" for a in result.anomalies)
+
+
+def _statement_columns(*, shift_one: bool = False) -> list[_Block]:
+    blocks: list[_Block] = []
+    y = 120.0
+    for i in range(6):
+        blocks.append(
+            _block([
+                _line(
+                    (40, y, 150, y + 11),
+                    text=f"01/06/2026 10:0{i}:00 AM",
+                )
+            ])
+        )
+        x = 258.0 if shift_one and i == 3 else 230.0
+        blocks.append(
+            _block([
+                _line(
+                    (x, y, x + 340, y + 11),
+                    text=f"GIRO Payment PREMISES RENTAL {i} 0.00 5147.30",
+                )
+            ])
+        )
+        y += 28
+    return blocks
+
+
+def test_repeated_columns_are_not_indentation_anomalies() -> None:
+    findings, _check = lr._check_indentation(_statement_columns())
+    assert findings == []
+
+
+def test_a_line_off_every_column_is_still_an_indent() -> None:
+    findings, _check = lr._check_indentation(_statement_columns(shift_one=True))
+    assert findings
+    assert any("RENTAL 3" in finding.text for finding in findings)
+
+
+def _protruding_paragraph_pdf() -> bytes:
+    def build(doc):
+        for page_index in range(3):
+            page = doc.new_page(width=612, height=792)
+            y = 90
+            for block_index in range(3):
+                protrude = page_index == 2 and block_index == 1
+                right = 590 if protrude else 500
+                text = (
+                    BODY + " Extra words sit further along this same line."
+                    if protrude
+                    else BODY
+                )
+                _textbox(page, pymupdf.Rect(72, y, right, y + 70), text, align=0)
+                y += 80
+
+    return _pdf_bytes(build)
+
+
+def test_paragraph_past_the_usual_right_edge_is_named() -> None:
+    result = check_layout_anomalies("doc-1", _protruding_paragraph_pdf())
+    edges = [a for a in result.anomalies if "right-edge" in _kinds(a)]
+    assert len(edges) == 1
+    assert edges[0].page == 3
 
 
 def test_flags_indented_paragraph() -> None:
@@ -1118,6 +1206,18 @@ def test_same_paragraph_signals_are_one_finding() -> None:
     assert "+24.0 pt" not in finding.summary
     assert "Anomaly Type:" not in finding.summary
     assert "Detected:" not in finding.summary
+
+    body = finding.model_dump()
+    assert set(body) == {"type", "page", "where", "text", "summary", "confidence", "checks"}
+    assert body["type"] == "Indentation"
+    assert [check["check"] for check in body["checks"]] == [
+        "indentation",
+        "right edge",
+        "paragraph spacing",
+    ]
+    assert body["checks"][0]["difference"] == "+24.0 pt"
+    assert "evidence" not in body
+    assert "detected" not in body
 
 
 def test_flags_shifted_header_and_footer_chrome() -> None:
