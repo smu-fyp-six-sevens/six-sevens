@@ -14,7 +14,7 @@ import logging
 from . import extract, nodes, text_cache
 from .graph import get_document_graph
 from ..config import settings
-from .. import case_status, document_repository
+from .. import case_status, document_repository, telemetry
 from ..models import DocumentStatus
 
 logger = logging.getLogger("classifier_pipeline.langgraph.pipeline")
@@ -28,20 +28,23 @@ async def process_document(document_id: str) -> None:
     a non-terminal status, which would leave the frontend polling forever.
     """
     graph = get_document_graph()
-    try:
-        await graph.ainvoke(
-            {"document_id": document_id, "attempts": 0},
-            config={"recursion_limit": settings.LANGGRAPH_RECURSION_LIMIT},
-        )
-    except Exception as exc:  # noqa: BLE001 — last line of defence against a stuck document
-        logger.exception("Document %s: unhandled error during langgraph orchestration", document_id)
-        text_cache.discard(document_id)
+    span = telemetry.get_tracer().start_as_current_span("langgraph.process_document")
+    with span as current_span:
+        current_span.set_attribute("document_id", document_id)
         try:
-            await nodes.fail_document(document_id, f"Unhandled langgraph orchestration error: {exc}")
-        except Exception:
-            logger.exception(
-                "Document %s: failed to record FAILED status after unhandled langgraph error", document_id
+            await graph.ainvoke(
+                {"document_id": document_id, "attempts": 0},
+                config={"recursion_limit": settings.LANGGRAPH_RECURSION_LIMIT},
             )
+        except Exception as exc:  # noqa: BLE001 — last line of defence against a stuck document
+            logger.exception("Document %s: unhandled error during langgraph orchestration", document_id)
+            text_cache.discard(document_id)
+            try:
+                await nodes.fail_document(document_id, f"Unhandled langgraph orchestration error: {exc}")
+            except Exception:
+                logger.exception(
+                    "Document %s: failed to record FAILED status after unhandled langgraph error", document_id
+                )
 
 
 async def rerun_extraction(document_id: str) -> None:
@@ -52,17 +55,19 @@ async def rerun_extraction(document_id: str) -> None:
     type (a confirmed-unchanged type has nothing new for Extraction to
     re-read; see that handler).
     """
-    try:
-        await _rerun_extraction(document_id)
-    except Exception as exc:  # noqa: BLE001 — last line of defence against a stuck document
-        logger.exception("Document %s: unhandled error during langgraph extraction rerun", document_id)
-        text_cache.discard(document_id)
+    with telemetry.get_tracer().start_as_current_span("langgraph.rerun_extraction") as span:
+        span.set_attribute("document_id", document_id)
         try:
-            await nodes.fail_document(document_id, f"Unhandled langgraph orchestration error: {exc}")
-        except Exception:
-            logger.exception(
-                "Document %s: failed to record FAILED status after unhandled langgraph error", document_id
-            )
+            await _rerun_extraction(document_id)
+        except Exception as exc:  # noqa: BLE001 — last line of defence against a stuck document
+            logger.exception("Document %s: unhandled error during langgraph extraction rerun", document_id)
+            text_cache.discard(document_id)
+            try:
+                await nodes.fail_document(document_id, f"Unhandled langgraph orchestration error: {exc}")
+            except Exception:
+                logger.exception(
+                    "Document %s: failed to record FAILED status after unhandled langgraph error", document_id
+                )
 
 
 async def _rerun_extraction(document_id: str) -> None:

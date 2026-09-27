@@ -35,7 +35,7 @@ from typing_extensions import TypedDict
 from . import tools as detection_tools
 from .specialists import SEVERITIES, SPECIALISTS, _parse_json_object, run_specialist
 from .. import trace
-from ... import document_repository, extracted_fields_repository
+from ... import document_repository, extracted_fields_repository, telemetry
 from ...config import settings
 
 logger = logging.getLogger("classifier_pipeline.langgraph.detection")
@@ -149,7 +149,7 @@ or, when requesting a second look:
 {{"summary": "<...>", "second_look": {{"finding_id": "<id>", "to": "<specialist name>", "question": "<what to check>", "reason": "<why this deserves a second look>"}}}}"""
 
 
-async def _ask_lead(system_prompt: str, user_payload: dict) -> dict | None:
+async def _ask_lead(system_prompt: str, user_payload: dict, *, span_name: str) -> dict | None:
     import json
 
     from langchain_anthropic import ChatAnthropic  # local import: optional dep
@@ -160,10 +160,12 @@ async def _ask_lead(system_prompt: str, user_payload: dict) -> dict | None:
         temperature=0,
         max_tokens=1500,
     )
-    response = await model.ainvoke([
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=json.dumps(user_payload, default=str)),
-    ])
+    with telemetry.get_tracer().start_as_current_span(span_name) as span:
+        response = await model.ainvoke([
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=json.dumps(user_payload, default=str)),
+        ])
+        telemetry.record_usage(span, response)
     content = response.content if isinstance(response.content, str) else "".join(
         b.get("text", "") for b in response.content if isinstance(b, dict)
     )
@@ -224,7 +226,7 @@ def _normalise_plan(raw: dict | None) -> dict:
 
 async def lead_plan_node(state: DetectionState) -> dict:
     prompt = _PLAN_PROMPT.format(catalogue=_catalogue())
-    plan = _normalise_plan(await _ask_lead(prompt, {"document": state["context"]}))
+    plan = _normalise_plan(await _ask_lead(prompt, {"document": state["context"]}, span_name="detection.lead_plan"))
     plan["deviation"] = _plan_deviation(plan, state["context"]["default_team"])
     trace.record(
         state["document_id"], "detection_plan",
@@ -321,7 +323,7 @@ async def lead_review_node(state: DetectionState) -> dict:
         "document": state["context"],
         "reports": _compact_reports(state["reports"]),
         "second_look_already_used": used,
-    })
+    }, span_name="detection.lead_review")
     summary = (raw or {}).get("summary") or ""
     request = None if used else _validated_second_look((raw or {}).get("second_look"), state["reports"])
     update: dict = {"lead_summary": summary}
@@ -490,11 +492,16 @@ async def run_detection(document_id: str) -> dict:
     """Investigates one document and returns the combined report. Raises DetectionError if it can't be investigated."""
     await asyncio.to_thread(trace.resume, document_id)
     trace.record(document_id, "detection_start")
-    try:
-        final = await get_detection_graph().ainvoke(
-            {"document_id": document_id, "reports": [], "second_look_used": False},
-            config={"recursion_limit": _RECURSION_LIMIT},
-        )
-    finally:
-        detection_tools.clear_context(document_id)
-    return final["result"]
+    with telemetry.get_tracer().start_as_current_span("detection.run") as span:
+        span.set_attribute("document_id", document_id)
+        try:
+            final = await get_detection_graph().ainvoke(
+                {"document_id": document_id, "reports": [], "second_look_used": False},
+                config={"recursion_limit": _RECURSION_LIMIT},
+            )
+        finally:
+            detection_tools.clear_context(document_id)
+        result = final["result"]
+        span.set_attribute("verdict", result["verdict"])
+        span.set_attribute("finding_count", len(result["findings"]))
+        return result

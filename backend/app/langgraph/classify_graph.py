@@ -35,6 +35,7 @@ from langgraph.prebuilt import ToolNode
 
 from . import text_cache, trace
 from .cache_gate import cache_gate
+from .. import telemetry
 from .classify_support import agent_prompt_parts, validate_agent_output
 from .llm_classify import llm_classify_tool
 from .rule_classify import classify_by_rules
@@ -100,41 +101,50 @@ async def agent_node(state: DocumentGraphState) -> dict:
     if available_tools:
         model = model.bind_tools(available_tools)
 
-    if existing:
-        # Tool-loop continuation: the system message (with its cache_control
-        # breakpoint) is already in `existing`, so there's nothing new to
-        # gate — this call is naturally later than whichever call first
-        # warmed the cache for this key.
-        response: AIMessage = await model.ainvoke(existing)
+    with telemetry.get_tracer().start_as_current_span("classify.agent_call") as span:
+        span.set_attribute("document_id", state["document_id"])
+        span.set_attribute("turn", "continuation" if existing else "first")
+        span.set_attribute("offered_tools", [t.name for t in available_tools])
+
+        if existing:
+            # Tool-loop continuation: the system message (with its
+            # cache_control breakpoint) is already in `existing`, so there's
+            # nothing new to gate — this call is naturally later than
+            # whichever call first warmed the cache for this key.
+            response: AIMessage = await model.ainvoke(existing)
+            telemetry.record_usage(span, response)
+            span.set_attribute("tool_calls", [tc["name"] for tc in (response.tool_calls or [])])
+            trace.record(
+                state["document_id"], "agent_call",
+                offered_tools=[t.name for t in available_tools],
+                tool_calls=[tc["name"] for tc in (response.tool_calls or [])],
+            )
+            return {"agent_messages": [response]}
+
+        # Static instructions and the per-document inputs are two separate
+        # content blocks so cache_control only covers the byte-stable half —
+        # concatenating them into one block would make the whole thing vary
+        # per document and never hit the cache. See classify_support.agent_prompt_parts.
+        static_prompt, dynamic_inputs = agent_prompt_parts(state.get("rule_result"), _raw_text(state))
+        model_input = [
+            SystemMessage(content=[
+                {"type": "text", "text": static_prompt, "cache_control": {"type": "ephemeral"}},
+                {"type": "text", "text": dynamic_inputs},
+            ]),
+            HumanMessage(content="Classify this document."),
+        ]
+        response = await cache_gate.run("classify_agent", lambda: model.ainvoke(model_input))
+        telemetry.record_usage(span, response)
+        span.set_attribute("tool_calls", [tc["name"] for tc in (response.tool_calls or [])])
         trace.record(
             state["document_id"], "agent_call",
             offered_tools=[t.name for t in available_tools],
             tool_calls=[tc["name"] for tc in (response.tool_calls or [])],
         )
-        return {"agent_messages": [response]}
-
-    # Static instructions and the per-document inputs are two separate
-    # content blocks so cache_control only covers the byte-stable half —
-    # concatenating them into one block would make the whole thing vary
-    # per document and never hit the cache. See classify_support.agent_prompt_parts.
-    static_prompt, dynamic_inputs = agent_prompt_parts(state.get("rule_result"), _raw_text(state))
-    model_input = [
-        SystemMessage(content=[
-            {"type": "text", "text": static_prompt, "cache_control": {"type": "ephemeral"}},
-            {"type": "text", "text": dynamic_inputs},
-        ]),
-        HumanMessage(content="Classify this document."),
-    ]
-    response = await cache_gate.run("classify_agent", lambda: model.ainvoke(model_input))
-    trace.record(
-        state["document_id"], "agent_call",
-        offered_tools=[t.name for t in available_tools],
-        tool_calls=[tc["name"] for tc in (response.tool_calls or [])],
-    )
-    # agent_messages uses the add_messages reducer (see state.py), which
-    # appends — only the messages new to this call are returned, not the
-    # accumulated history, or they'd be duplicated.
-    return {"agent_messages": [*model_input, response]}
+        # agent_messages uses the add_messages reducer (see state.py), which
+        # appends — only the messages new to this call are returned, not the
+        # accumulated history, or they'd be duplicated.
+        return {"agent_messages": [*model_input, response]}
 
 
 def should_continue_agent(state: DocumentGraphState) -> str:

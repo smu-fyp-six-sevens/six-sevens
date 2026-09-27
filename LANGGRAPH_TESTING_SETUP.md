@@ -96,7 +96,31 @@ cache; every other concurrent call for that same prompt waits for it to finish, 
 with a warm cache. You'll see this as the very first document of a batch (or of a new document
 type) taking a little longer than the ones right after it — that's expected, not a bug.
 
-## 6. Try the Detection Agent
+## 6. Observability (OpenTelemetry)
+
+Off by default. To try it locally without any GCP setup:
+
+```
+OTEL_ENABLED=true
+```
+
+Every request (FastAPI auto-instrumentation) and every model call in the classify/extract/detection
+paths gets a span, printed to the console, including token usage as span attributes. No code
+changes needed to turn it off again — just unset the variable.
+
+To export to a real Google Cloud project's Cloud Trace instead of the console, also set:
+
+```
+GOOGLE_CLOUD_PROJECT=<your-project-id>
+```
+
+This needs credentials reachable from wherever the backend runs, with `roles/cloudtrace.agent` on
+that project — either Application Default Credentials (`gcloud auth application-default login`
+locally) or, on Cloud Run, the service's own runtime service account. If credentials aren't set up,
+it falls back to the console automatically rather than crashing. This only writes new trace data;
+it doesn't touch anything else already deployed on that project.
+
+## 7. Try the Detection Agent
 
 Open a finished (`analyzed`) document and use the **Detection (dev)** panel: press *Run detection*.
 A lead investigator (Sonnet) picks the specialists this document needs — starting from a default team
@@ -107,14 +131,14 @@ the document's langgraph trace (so it survives restarts and shows in the `langgr
 table under `detection_report`); nothing is written to the `documents` table. For a whole
 case: `GET /cases/{case_id}/detection/reports`.
 
-## 7. What isn't wired up yet (by design, later phases)
+## 8. What isn't wired up yet (by design, later phases)
 
 - **No checkpointing/persistence.** Nothing here is saved to Postgres as graph state; a crash
   mid-run just fails the document the normal way (same as Dify does today).
 - **`classification_reasoning` isn't saved to Supabase yet** — deliberately, see section 4 above.
 - **Detection isn't wired to approval yet**: it only runs from the dev endpoint/panel, with no `pending_review`/`detecting` statuses or persisted findings (needs DB changes, deferred until after UAT).
 
-## 8. If something breaks
+## 9. If something breaks
 
 - `ANTHROPIC_API_KEY` missing/invalid → documents will go straight to `failed` with an
   Anthropic auth error in `failure_reason` and in the backend logs.

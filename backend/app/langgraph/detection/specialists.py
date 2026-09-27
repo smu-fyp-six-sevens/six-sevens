@@ -23,6 +23,7 @@ from typing_extensions import TypedDict
 
 from . import tools as detection_tools
 from ...config import settings
+from ... import telemetry
 
 logger = logging.getLogger("classifier_pipeline.langgraph.detection.specialists")
 
@@ -136,21 +137,27 @@ def _make_agent_node(spec: Specialist):
         ).bind_tools(list(spec.tools))
 
         existing = state.get("messages") or []
-        if existing:
-            response = await model.ainvoke(existing)
-            return {"messages": [response]}
+        with telemetry.get_tracer().start_as_current_span(f"detection.specialist.{spec.name}") as span:
+            span.set_attribute("document_id", state.get("document_id") or "")
+            span.set_attribute("turn", "continuation" if existing else "first")
 
-        seed = [
-            SystemMessage(content=_SPECIALIST_PROMPT.format(
-                title=spec.title,
-                expertise=spec.expertise,
-                document_type=state.get("document_type") or "unknown",
-                brief=state.get("brief") or "Review this document within your expertise.",
-            )),
-            HumanMessage(content="Begin your review."),
-        ]
-        response = await model.ainvoke(seed)
-        return {"messages": [*seed, response]}
+            if existing:
+                response = await model.ainvoke(existing)
+                telemetry.record_usage(span, response)
+                return {"messages": [response]}
+
+            seed = [
+                SystemMessage(content=_SPECIALIST_PROMPT.format(
+                    title=spec.title,
+                    expertise=spec.expertise,
+                    document_type=state.get("document_type") or "unknown",
+                    brief=state.get("brief") or "Review this document within your expertise.",
+                )),
+                HumanMessage(content="Begin your review."),
+            ]
+            response = await model.ainvoke(seed)
+            telemetry.record_usage(span, response)
+            return {"messages": [*seed, response]}
 
     return agent_node
 

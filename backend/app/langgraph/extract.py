@@ -12,6 +12,7 @@ import re
 
 from ..config import settings
 from ..extraction_prompts import build_extraction_prompt
+from .. import telemetry
 
 logger = logging.getLogger("classifier_pipeline.langgraph.extract")
 
@@ -47,13 +48,16 @@ async def run_extraction(document_type: str, raw_text: str) -> dict:
             {"type": "text", "text": text},
         ],
     }
-    # Gated per document_type (the actual cache key — see
-    # _split_prompt_for_caching): the first document of a given type in a
-    # batch pays for the cache write, the rest of that type wait for it
-    # rather than racing it. Different types never block each other.
-    response = await cache_gate.run(f"extract:{document_type}", lambda: model.ainvoke([message]))
-    llm_output = response.content if isinstance(response.content, str) else str(response.content)
-    return parse_extraction_output(llm_output)
+    with telemetry.get_tracer().start_as_current_span("extract.run_extraction") as span:
+        span.set_attribute("document_type", document_type)
+        # Gated per document_type (the actual cache key — see
+        # _split_prompt_for_caching): the first document of a given type in a
+        # batch pays for the cache write, the rest of that type wait for it
+        # rather than racing it. Different types never block each other.
+        response = await cache_gate.run(f"extract:{document_type}", lambda: model.ainvoke([message]))
+        telemetry.record_usage(span, response)
+        llm_output = response.content if isinstance(response.content, str) else str(response.content)
+        return parse_extraction_output(llm_output)
 
 
 def parse_extraction_output(llm_output: str) -> dict:

@@ -120,5 +120,18 @@ class Settings:
     # calls each, while still being a real ceiling against a runaway loop.
     LANGGRAPH_RECURSION_LIMIT: int = 60
 
+    # --- Observability (langgraph-test branch) --- see telemetry.py and
+    # LANGGRAPH_MIGRATION_PLAN.md section 6. Off by default: importing the
+    # SDK is harmless, but no TracerProvider is installed and every span is a
+    # no-op until this is turned on, so there's no cost or behaviour change
+    # for anyone who doesn't set it.
+    OTEL_ENABLED: bool = os.environ.get("OTEL_ENABLED", "false").lower() == "true"
+    # Required for the Cloud Trace exporter (a service account/ADC with
+    # roles/cloudtrace.agent on this project, reachable from wherever this
+    # backend runs). Left unset -> traces print to the console instead, so
+    # OTEL_ENABLED can be tried locally before any GCP wiring exists.
+    GOOGLE_CLOUD_PROJECT: str = _env("GOOGLE_CLOUD_PROJECT", "")
+    OTEL_SERVICE_NAME: str = _env("OTEL_SERVICE_NAME", "six-sevens-backend")
+
 
 settings = Settings()

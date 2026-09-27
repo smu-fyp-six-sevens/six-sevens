@@ -1,6 +1,6 @@
 # Backend File Map
 
-Reference map of every source file under `backend/` (excluding `backend/doc_gen_scripts/` and `__pycache__`).
+Reference map of source files under `backend/`, scoped to the parts likely to be reorganised for an API gateway (Kong) and Prometheus/Grafana observability. Excludes `backend/doc_gen_scripts/`, `__pycache__`, and — deliberately, not an oversight — `app/langgraph/`, `app/langgraph/detection/`, `app/fraud_detection/`, `app/injection/` and `scripts/`: self-contained subsystems (the LangGraph pipeline, the Detection Agent, the fraud-check library, the dev fraud-injection tooling, and the synthetic-document generator) that a Kong/API-gateway refactor wouldn't fold into anything else — they'd sit behind whichever service exposes them, unchanged internally.
 
 ## app/
 
@@ -21,6 +21,7 @@ Reference map of every source file under `backend/` (excluding `backend/doc_gen_
 - **realtime_listener.py** — Subscribes once per process to Supabase Realtime changes on `documents`/`cases`, debounces bursts per `case_id`, and publishes rebuilt snapshots via `case_broadcaster`.
 - **storage_service.py** — Thin wrapper over Supabase Storage: upload/download/delete files and create signed URLs.
 - **supabase_client.py** — Builds the shared sync `supabase_client` (HTTP/1.1, publishable key) and an async client factory (secret key) used only by the Realtime listener.
+- **telemetry.py** — OpenTelemetry setup (`setup`, `get_tracer`, `record_usage`): off by default, exports to Google Cloud Trace when configured, else console.
 
 ## app/routers/
 
@@ -34,61 +35,12 @@ Reference map of every source file under `backend/` (excluding `backend/doc_gen_
 - **upload.py** — Single and batch document upload: validates, stores to Supabase Storage, creates the document row, and enqueues it.
 - **ws.py** — `POST /ws/tickets` (mints a short-lived WS auth ticket) and the `WS /ws/cases/{case_id}` push-based case-status socket.
 
-## app/langgraph/
-
-- **__init__.py** — Package docstring only; marks this as the in-progress LangGraph experiment not yet wired into production routing.
-- **cache_gate.py** — `PromptCacheGate`: lets only the first concurrent caller for a given static-prompt key through immediately, so parallel documents don't all miss Anthropic's prompt cache at once.
-- **classify_graph.py** — The classify subgraph: deterministic `rule_classify` → Sonnet agent (offered `llm_classify_tool` first, then `vision_llm`) → validate → repair, plus the reclassify re-entry point.
-- **classify_support.py** — Shared classify logic: `validate_agent_output` (ported from the old Dify "Validate Output" node), `address_check`, and the agent's static/dynamic system prompt builder.
-- **extract.py** — One-shot Sonnet extraction call (`run_extraction`) with prompt-cache splitting, plus `parse_extraction_output` (JSON cleanup, per-field confidences).
-- **graph.py** — The full per-document graph: ingest → classify → finalise → extract → analyzed/failed, including the bounded classify↔extract reclassify loop.
-- **llm_classify.py** — `llm_classify_tool`: a Haiku-based independent text classification pass returning top-3 ranked candidates (port of the old Dify LLM classification node).
-- **nodes.py** — Deterministic graph nodes (ingest, finalise_classification, extract, mark_analyzed/failed, record_escalation) plus the repository-writing helpers they use (`ingest_document_text`, `persist_extracted_fields`, `record_classification_result`, `set_status`, `fail_document`).
-- **pipeline.py** — Public entry points (`process_document`, `rerun_extraction`) that run the document graph / an extraction-only rerun and always leave the document at `ANALYZED`/`FAILED`.
-- **rule_classify.py** — Pure regex/keyword classifier (`classify_by_rules`) ported from the old Dify rule-based node, plus a LangGraph-only "certain type" fast-path and residential-address heuristics.
-- **state.py** — `DocumentGraphState` TypedDict: the small, PII-free graph state (ids, hashes, classification/extraction summaries, attempt counters).
-- **text_cache.py** — Process-local, run-scoped cache mapping `document_id` → ingested raw text, since graph state itself never carries raw text.
-- **trace.py** — Dev-only in-memory per-document trace of which route/tools/models the LangGraph pipeline used, exposed via `/documents/{id}/langgraph-trace`.
-- **vision_tool.py** — `vision_llm` tool: sends the actual document image/PDF to Sonnet for vision-based classification when text-only signals are weak or ambiguous.
-
-## app/langgraph/detection/
-
-- **__init__.py** — Package docstring for the Detection Agent.
-- **graph.py** — The Lead Investigator graph: plan which specialists to consult (starting from a per-document-type default team, recording any deviation and why others are skipped) -> parallel specialists -> lead review with at most one second look -> deterministic merge into one report; `run_detection` entry point.
-- **specialists.py** — The three specialists (layout & rendering, content validation, digital authenticity) as small tool-calling subgraphs that return structured reports.
-- **tools.py** — Parameter-bound detection tools (font consistency, spelling, date consistency, metadata, transaction balance) returning size-capped, fact-only findings.
-
-## app/fraud_detection/
-
-- **domain_terms.py** — Seed allow-list of legal/financial/KYC terms and acronyms so `spelling_anomaly.py` doesn't flag legitimate domain vocabulary.
-- **font_consistency.py** — v1 font-consistency check: extracts PDF text spans, compares each span against its line's and region's dominant font/size/emphasis pattern, and reports scored/grouped anomalies.
-- **font_consistency_v2.py** — v2 font-consistency check: tighter row-level comparison plus field-anchored comparison (locates each extracted field's value in the PDF and checks its rendering against the document baseline).
-- **spelling_anomaly.py** — SymSpell-based spelling-anomaly detector: tokenizes extracted text, filters known domain terms and extracted-field values, and suppresses likely proper nouns to avoid LLM calls.
-
 ## app/ingestion/
 
 - **ingestion_service.py** — `ingest_document`: top-level orchestration choosing native-PDF text extraction, OCR fallback for scanned PDFs, or straight OCR for images, plus a `needs_review` heuristic.
 - **metadata_extractor.py** — Runs `exiftool` on a temp copy of the uploaded file to pull embedded file metadata (author, creation date, software, etc.).
 - **ocr_extractor.py** — Wraps RapidOCR (`extract_image_with_ocr`) to OCR a PIL/numpy image into per-line text + confidence elements.
 - **pdf_extractor.py** — PyMuPDF-based native PDF text/span extraction (`extract_pdf`) and a `pdf_contains_text` check used to decide whether OCR fallback is needed.
-
-## app/injection/
-
-- **__init__.py** — Empty; marks `app.injection` as a package.
-- **field_text.py** — Splits a recognised text field into `(label_prefix, value)` (e.g. "Account No. " + "XXXX-0472") so injectors can replace just the value while preserving printed labels.
-- **injectors.py** — One `DefectInjector` subclass per `DefectType` (font, font_size, numerical, metadata, spelling, misalignment, emphasis, text_overlay, image_manipulation) implementing the actual defect mutation.
-- **pdf.py** — Large low-level module for PDF/image field discovery (native PDF spans, PDF embedded images, OCR-discovered fields on raster images) and pixel/vector-level defect rendering (font swap, text splice, emphasis, overlay, image manipulation, metadata read/write).
-- **schemas.py** — Pydantic models for the injection API: `DefectType`, `FieldValue`, `InjectableDocument`, `InjectDefectRequest`/`Response`, with per-defect-type required-field validation.
-- **service.py** — `InjectionService.inject_defect`: looks up the template document, stages a working copy, delegates to the matching injector, and asserts only the expected fields changed.
-- **store.py** — In-memory registry of injectable template/generated documents (`DOCUMENTS`/`TEMPLATES`), loaded from `document_templates/`, with lookup/registration/staging helpers.
-
-## scripts/
-
-- **_inspect_mastersheet.py** — Ad-hoc dev script that dumps every sheet name, shape, columns, and sample rows of the v9 mastersheet xlsx.
-- **generate_from_mastersheet.py** — Main synthetic-document generator: reads the mastersheet workbook and, per case ID, calls each document type's generator (bank statements, IDs, payslips, COI, proof of address, incumbency, constitution, FATCA/CRS, loans, NOA, optional docs), then normalises output file extensions.
-- **regenerate_selected.py** — Regenerates only a fixed subset of document types (passport, constitution, COI, incumbency, source-of-wealth, NOA) across all/selected cases without touching the rest.
-- **run_batch.py** — CLI to generate documents for a case range or explicit list, optionally parallelised across worker processes via `ProcessPoolExecutor`.
-- **verify_documents.py** — Cross-checks the mastersheet's document-producing rows against `documents_generated/<case_id>/` to report missing/extra files per case.
 
 ## Refactoring analysis — path toward the 5-service split (`CLAUDE.md`)
 
@@ -104,10 +56,11 @@ intentionally not called out below — that's a separate, later decision.
   then publishes an event — it must stop knowing `queue_service` exists at all.
 
 **2. Per-Document Orchestrator** (classify → extract → escalation loop → analyzed/failed)
-- Files: `queue_service.py`, `orchestrator.py`, `langgraph/` (all 14 files), `dify_client.py`,
-  `extraction_prompts.py`, `document_repository.py`, `extracted_fields_repository.py`.
-  Future home of the Detection Agent (`fraud_detection/*`, currently only reachable via the
-  dev-only `routers/detection.py`).
+- Files: `queue_service.py`, `extraction_prompts.py`, `document_repository.py`,
+  `extracted_fields_repository.py`, plus `app/langgraph/` (the actual classify/extract graph —
+  out of scope for this map, see the note at the top, but it's what this service would run).
+  Detection work happens through `app/langgraph/detection/` and `app/fraud_detection/`, both
+  likewise out of scope here.
 - Blocker: `queue_service.py` is an in-memory `asyncio.Queue` — inherently single-process.
   For this service to be independently deployable it needs a real subscription
   (`document.uploaded` in, `document.analyzed`/`document.classified` out) in place of the
@@ -117,8 +70,8 @@ intentionally not called out below — that's a separate, later decision.
 **3. Case Gate/Orchestrator** (tracks completion, triggers per-case pipeline)
 - Files: `case_repository.py`, `case_status.py`.
 - Blocker: `case_status.sync_submission_finalized` is called synchronously, inline, from
-  inside `orchestrator.py`/`langgraph/nodes.py` and from `routers/documents.py` — i.e. the
-  Per-Document Orchestrator currently reaches into the Case Gate's logic directly. Splitting
+  inside `app/langgraph/nodes.py` and from `routers/documents.py` — i.e. the Per-Document
+  Orchestrator currently reaches into the Case Gate's logic directly. Splitting
   requires this to become "per-document work finishes → publish an event" with the Case Gate
   reacting to it independently, not being called as a function.
 
@@ -148,8 +101,8 @@ intentionally not called out below — that's a separate, later decision.
   one global view.
 
 **Stays internal tooling, not a customer-facing service**
-- `routers/injection.py` + `injection/` (all 6 files) — dev-only fraud-injection tooling for
-  generating test cases, not part of the runtime pipeline.
+- `routers/injection.py` (+ `app/injection/`, out of scope here) — dev-only fraud-injection
+  tooling for generating test cases, not part of the runtime pipeline.
 - `routers/extraction.py` — dev/QA test endpoints, same category.
 
 **Biggest structural blocker overall:** nothing above is really "file organization" — every
@@ -174,11 +127,50 @@ Same idea as a service boundary, just enforced in-process now rather than across
 **2. Replace direct cross-component calls with an internal event bus.** *(Deprioritised —
 revisit once the bulk of the app is built, not now.)*
 The concrete coupling example: `case_status.sync_submission_finalized(...)` is called inline
-from `orchestrator.py`, `langgraph/nodes.py`, and `routers/documents.py`. Instead of every
+from `app/langgraph/nodes.py` and `routers/documents.py`. Instead of every
 caller knowing "finishing a document also means updating case status," the document
 component would just do `event_bus.publish("document.analyzed", document_id)`, and the case
 component subscribes and reacts independently. In-process this can be a small `asyncio`-based
 dispatcher (dict of event name → handler coroutines) — no new infrastructure — but it means
 the communication shape (named events + payloads) is already correct if a real message broker
 is ever introduced later, since only the transport underneath would change.
+
+## Implications for Kong (API gateway) + Prometheus + Grafana
+
+This is the actual motivation for the component/service-layer cleanup above: Kong needs real
+service boundaries to route to, and Prometheus/Grafana need a metrics surface on each of those
+boundaries. Neither is a reason to add more files — they're a reason the boundary work above
+has a concrete payoff instead of being cleanup for its own sake.
+
+**Kong sits in front of the same boundaries as the refactoring analysis, not new ones.**
+Whatever comes out of splitting `routers/` into the 5 service-shaped groups above (or even just
+into in-process modules with the "component = table owner" boundary) is what Kong would route
+to — `/documents/*` and `/cases/*` upload/write paths to the Ingestion/Per-Document
+Orchestrator, `GET /cases/*` and `GET /documents/*` read paths to the Query Service, and so on.
+Kong doesn't need those to be separately *deployed* to add value immediately — it can sit in
+front of the single FastAPI app today and still centralise:
+- **Auth**, replacing `auth.py`'s shared-credential bearer check with Kong's own key-auth/JWT
+  plugin at the gateway — FastAPI's `require_auth` dependency becomes redundant once Kong is
+  the one thing that can reach the backend at all.
+- **Rate limiting and quotas** per API key/consumer, which nothing in this codebase does today
+  (`DIFY_CLASSIFIER_MAX_CONCURRENCY`-style limits are Anthropic-call-specific, not
+  request-level).
+- **Routing**, once there's more than one deployable service to route between — today's
+  single-FastAPI-process reality means this part is mostly future-facing.
+
+**Prometheus needs two different things, not one.**
+- **Gateway-level metrics** (request count, latency, status code, per-route) come from Kong's
+  own Prometheus plugin — no backend code needed for these at all.
+- **App-level metrics** (LLM token usage/cost per document, classify/extract latency, queue
+  depth, stuck-document count) need a `/metrics` endpoint added to the FastAPI app
+  (`prometheus_client`, alongside the existing `/health`/`/health/db` in `main.py`). This is a
+  different signal from the OpenTelemetry traces already wired (`app/telemetry.py`): traces are
+  for following one document's run end-to-end, metrics are for aggregate rates/percentiles over
+  time — both are worth having, and they don't replace each other. `monitoring.py`'s
+  `is_stuck`/`get_stuck_documents` (currently only polled via `GET /monitoring/issues`) is the
+  most natural first Prometheus gauge, since the data already exists.
+
+**Grafana** then dashboards both sources — Kong's gateway metrics and the app's own
+`/metrics` — and, since Cloud Trace can be added as a Grafana data source, can also surface the
+OTel traces next to them instead of only being reachable via the GCP console.
 </content>
