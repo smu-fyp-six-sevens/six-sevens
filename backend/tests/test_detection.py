@@ -12,6 +12,7 @@ from app.fraud_detection.numerical_validation import (
     BenfordAnalysis,
     NumericalValidationResult,
 )
+# from app.fraud_detection.date_anomalies import DateAnomalyResult
 from app.fraud_detection.spelling_anomaly import SpellingAnomaly, SpellingAnomalyResult
 from app.main import app
 from app.models import DocumentRecord, DocumentStatus
@@ -275,9 +276,8 @@ def test_get_metadata_anomaly_success_persists_result() -> None:
     body = response.json()
     assert body["anomalies"][0]["field"] == "author"
     mock_check.assert_called_once_with("doc-1", None, None)
-    mock_repo.update_metadata_anomalies.assert_called_once_with(
-        "doc-1", result.model_dump()
-    )
+    # Result is returned as JSON for the lead agent; nothing is persisted.
+    mock_repo.update_metadata_anomalies.assert_not_called()
 
 
 def test_get_metadata_anomaly_passes_stored_metadata_and_document_type_through() -> None:
@@ -307,29 +307,6 @@ def test_get_metadata_anomaly_passes_stored_metadata_and_document_type_through()
 
     assert response.status_code == 200
     mock_check.assert_called_once_with("doc-1", {"Author": "Jane Tan"}, "bank_statement")
-
-
-def test_get_metadata_anomaly_still_returns_result_when_persistence_fails() -> None:
-    result = MetadataAnalysisResult(
-        document_id="doc-1",
-        extracted_metadata={},
-        anomalies=[],
-        ai_generation_indicators=[],
-        unable_to_assess=True,
-        unable_to_assess_reason="No metadata was captured for this document",
-    )
-
-    with (
-        patch("app.routers.detection.document_repository") as mock_repo,
-        patch("app.routers.detection.check_metadata_anomalies", return_value=result),
-    ):
-        mock_repo.get_document.return_value = _make_document()
-        mock_repo.update_metadata_anomalies.side_effect = RuntimeError("db down")
-
-        response = client.get("/documents/doc-1/detection/metadata-anomaly")
-
-    assert response.status_code == 200
-    assert response.json()["unable_to_assess"] is True
 
 
 def test_get_metadata_anomaly_fetch_document_failure_returns_502() -> None:
@@ -466,4 +443,85 @@ def test_get_numerical_validation_fetch_and_not_found_errors() -> None:
             client.get("/documents/missing/detection/numerical-validation").status_code == 404
         )
         mock_check.assert_not_called()
+
+
+# def _date_anomaly_result() -> DateAnomalyResult:
+#     return DateAnomalyResult(
+#         document_id="doc-1",
+#         dates_extracted=[],
+#         findings=[],
+#         skipped_checks=[],
+#         unable_to_assess=False,
+#     )
+
+
+# def test_get_date_anomalies_passes_file_and_extracted_fields() -> None:
+#     fields = [
+#         ExtractedField(
+#             field_name="incorporation_date", field_type="string", field_value="2020-01-01", confidence=0.9
+#         )
+#     ]
+#     with (
+#         patch("app.routers.detection.document_repository") as mock_repo,
+#         patch("app.routers.detection.storage_service") as mock_storage,
+#         patch("app.routers.detection.extracted_fields_repository") as mock_fields,
+#         patch(
+#             "app.routers.detection.check_date_anomalies",
+#             return_value=_date_anomaly_result(),
+#         ) as mock_check,
+#     ):
+#         mock_repo.get_document.return_value = _document()
+#         mock_storage.download_file.return_value = b"%PDF-1.4"
+#         mock_fields.get_extracted_fields.return_value = fields
+
+#         response = client.get("/documents/doc-1/detection/date-anomalies")
+
+#     assert response.status_code == 200
+#     args = mock_check.call_args[0]
+#     assert args[1] == b"%PDF-1.4"
+#     assert args[2] == "statement.pdf"
+#     assert args[3] == fields
+
+
+# def test_get_date_anomalies_writes_nothing() -> None:
+#     with (
+#         patch("app.routers.detection.document_repository") as mock_repo,
+#         patch("app.routers.detection.storage_service") as mock_storage,
+#         patch("app.routers.detection.extracted_fields_repository") as mock_fields,
+#         patch(
+#             "app.routers.detection.check_date_anomalies",
+#             return_value=_date_anomaly_result(),
+#         ),
+#     ):
+#         mock_repo.get_document.return_value = _document()
+#         mock_storage.download_file.return_value = b"%PDF-1.4"
+#         mock_fields.get_extracted_fields.return_value = []
+
+#         response = client.get("/documents/doc-1/detection/date-anomalies")
+
+#     assert response.status_code == 200
+#     mock_repo.update_extracted_fields.assert_not_called()
+#     mock_repo.update_metadata_anomalies.assert_not_called()
+
+
+# def test_get_date_anomalies_fetch_and_not_found_errors() -> None:
+#     with (
+#         patch("app.routers.detection.document_repository") as mock_repo,
+#         patch("app.routers.detection.check_date_anomalies") as mock_check,
+#     ):
+#         mock_repo.get_document.side_effect = RuntimeError("db down")
+#         assert (
+#             client.get("/documents/doc-1/detection/date-anomalies").status_code == 502
+#         )
+#         mock_check.assert_not_called()
+
+#     with (
+#         patch("app.routers.detection.document_repository") as mock_repo,
+#         patch("app.routers.detection.check_date_anomalies") as mock_check,
+#     ):
+#         mock_repo.get_document.return_value = None
+#         assert (
+#             client.get("/documents/missing/detection/date-anomalies").status_code == 404
+#         )
+#         mock_check.assert_not_called()
 
