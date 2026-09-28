@@ -3,12 +3,20 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from typing import Optional
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
 from ..config import settings
+from ..fraud_detection.metadata_analysis import MetadataAnalysisResult, check_metadata_anomalies
+from ..fraud_detection.layout_anomalies import LayoutAnomalyResult, check_layout_anomalies
+from ..fraud_detection.numerical_validation import (
+    NumericalValidationResult,
+    check_numerical_validation,
+)
 from ..fraud_detection.spelling_anomaly import SpellingAnomalyResult, check_spelling_anomalies
 from ..ingestion.ingestion_service import ingest_document
+from ..ingestion.metadata_extractor import extract_metadata
 from ..models import ExtractionTestResponse
 
 router = APIRouter(prefix="/extraction", tags=["extraction"])
@@ -86,3 +94,60 @@ async def test_spelling_anomaly(file: UploadFile = File(...)) -> SpellingAnomaly
     # A random id purely for log messages inside check_spelling_anomalies —
     # no document exists to key it to here.
     return await check_spelling_anomalies(str(uuid.uuid4()), file_bytes, file.filename)
+
+
+@router.post("/test-metadata-anomaly", response_model=MetadataAnalysisResult)
+async def test_metadata_anomaly(
+    file: UploadFile = File(...),
+    document_type: Optional[str] = Form(None),
+) -> MetadataAnalysisResult:
+    """
+    Dev/QA endpoint, same spirit as /test-spelling-anomaly above: unlike the
+    real GET /documents/{id}/detection/metadata-anomaly endpoint (which
+    reads metadata already captured at ingestion time), this one runs
+    exiftool on the upload directly since there's no real document here for
+    ingestion to have already captured anything against — no case, no
+    persisted document, nothing written to the database.
+
+    document_type is optional here because there's no classified document
+    to take it from; supplying it lets this tool exercise the rules that
+    only apply to institution-issued documents (see
+    metadata_analysis.INSTITUTION_ORIGINATED_DOCUMENT_TYPES), which would
+    otherwise be unreachable from the dev tool.
+    """
+    file_bytes = await _read_and_validate_upload(file)
+    metadata = await asyncio.to_thread(extract_metadata, file_bytes, file.filename)
+    return check_metadata_anomalies(str(uuid.uuid4()), metadata, document_type or None)
+    
+@router.post("/test-numerical-validation", response_model=NumericalValidationResult)
+async def test_numerical_validation(file: UploadFile = File(...)) -> NumericalValidationResult:
+    """
+    Dev/QA upload: same `NumericalValidationResult` as
+    GET /documents/{id}/detection/numerical-validation.
+
+    Runs without extracted fields, since there's no classified document
+    behind an ad-hoc upload — so the format and Benford passes run, but the
+    arithmetic reconciliation checks (which need structured fields like a
+    statement's transactions) will find nothing to compare here.
+    """
+    file_bytes = await _read_and_validate_upload(file)
+    return await asyncio.to_thread(
+        check_numerical_validation, str(uuid.uuid4()), file_bytes, file.filename
+    )
+
+
+@router.post("/test-layout-anomalies", response_model=LayoutAnomalyResult)
+async def test_layout_anomalies(file: UploadFile = File(...)) -> LayoutAnomalyResult:
+    """
+    Dev/QA upload: same `LayoutAnomalyResult` as
+    GET /documents/{id}/detection/layout-anomalies. `document_id` is a
+    fresh UUID for this request, not a stored document.
+
+    Several checks on the same area become one finding with
+    `evidence.signals`. Neighbouring flagged paragraphs add
+    `local_pattern` / `consecutive_run` enrichment, not a new type.
+    """
+    file_bytes = await _read_and_validate_upload(file)
+    return await asyncio.to_thread(
+        check_layout_anomalies, str(uuid.uuid4()), file_bytes
+    )

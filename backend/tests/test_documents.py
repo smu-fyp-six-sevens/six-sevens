@@ -872,3 +872,352 @@ def test_update_document_type_write_failure_returns_502_without_rerun() -> None:
 
     assert response.status_code == 502
     mock_pipeline.rerun_extraction.assert_not_called()
+    mock_orchestrator.rerun_extraction.assert_not_called()
+
+
+# --- POST /documents/{id}/extracted-fields (manual field add) -----------
+
+
+def _payslip_document(document_id: str = "doc-1") -> DocumentRecord:
+    return DocumentRecord(
+        id=document_id,
+        case_id="case-1",
+        filename="payslip.pdf",
+        document_type="payslip",
+        storage_path=f"case-1/{document_id}_payslip.pdf",
+        status=DocumentStatus.ANALYZED,
+        uploaded_at=_TIMESTAMP,
+    )
+
+
+def test_add_extracted_field_inserts_and_returns_refetched_document() -> None:
+    added = ExtractedField(
+        id="field-1",
+        field_name="net_pay",
+        field_type="number",
+        field_value=5000,
+        confidence=1.0,
+    )
+
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+        patch("app.routers.documents.case_status") as mock_case_status,
+    ):
+        mock_repo.get_document.return_value = _payslip_document()
+        # 1st call: the duplicate-name check (no fields yet). 2nd: the
+        # re-read that rebuilds documents.extracted_fields. 3rd: the
+        # get_document() refetch that builds the response body.
+        mock_fields_repo.get_extracted_fields.side_effect = [[], [added], [added]]
+
+        response = client.post(
+            "/documents/doc-1/extracted-fields",
+            json={"field_name": "net_pay", "field_value": 5000},
+        )
+
+    assert response.status_code == 200
+    # id is echoed back alongside value/confidence — it's what the frontend
+    # targets when deleting the field again.
+    assert response.json()["extracted_fields"] == {
+        "net_pay": {"id": "field-1", "value": 5000, "confidence": 1.0}
+    }
+
+    # net_pay is a required field for a payslip, so it's inserted under that
+    # category rather than as a freeform addition.
+    mock_fields_repo.add_extracted_field.assert_called_once_with(
+        "doc-1",
+        "net_pay",
+        5000,
+        required_field_names={"individual_name", "company_name", "net_pay", "company_address"},
+    )
+    # Manually entered fields are human-verified, hence confidence 1.0.
+    mock_repo.update_extracted_fields.assert_called_once_with(
+        "doc-1", {"net_pay": 5000}, 1.0, ["payslip"]
+    )
+    mock_case_status.sync_submission_finalized.assert_called_once_with("case-1")
+
+
+def test_add_extracted_field_trims_whitespace_from_name() -> None:
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+        patch("app.routers.documents.case_status"),
+    ):
+        mock_repo.get_document.return_value = _payslip_document()
+        mock_fields_repo.get_extracted_fields.side_effect = [[], [], []]
+
+        response = client.post(
+            "/documents/doc-1/extracted-fields",
+            json={"field_name": "  net_pay  ", "field_value": 5000},
+        )
+
+    assert response.status_code == 200
+    assert mock_fields_repo.add_extracted_field.call_args[0][1] == "net_pay"
+
+
+def test_add_extracted_field_rejects_blank_name_before_touching_the_database() -> None:
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+    ):
+        response = client.post(
+            "/documents/doc-1/extracted-fields",
+            json={"field_name": "   ", "field_value": "x"},
+        )
+
+    assert response.status_code == 400
+    mock_repo.get_document.assert_not_called()
+    mock_fields_repo.add_extracted_field.assert_not_called()
+
+
+def test_add_extracted_field_document_not_found() -> None:
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+    ):
+        mock_repo.get_document.return_value = None
+
+        response = client.post(
+            "/documents/missing-id/extracted-fields",
+            json={"field_name": "net_pay", "field_value": 5000},
+        )
+
+    assert response.status_code == 404
+    mock_fields_repo.add_extracted_field.assert_not_called()
+
+
+def test_add_extracted_field_rejects_duplicate_name() -> None:
+    existing = ExtractedField(
+        id="field-1", field_name="net_pay", field_type="number",
+        field_value=5000, confidence=1.0,
+    )
+
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+    ):
+        mock_repo.get_document.return_value = _payslip_document()
+        mock_fields_repo.get_extracted_fields.return_value = [existing]
+
+        response = client.post(
+            "/documents/doc-1/extracted-fields",
+            json={"field_name": "net_pay", "field_value": 9999},
+        )
+
+    assert response.status_code == 409
+    mock_fields_repo.add_extracted_field.assert_not_called()
+
+
+def test_add_extracted_field_skips_case_sync_for_caseless_document() -> None:
+    document = _payslip_document()
+    document.case_id = None
+
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+        patch("app.routers.documents.case_status") as mock_case_status,
+    ):
+        mock_repo.get_document.return_value = document
+        mock_fields_repo.get_extracted_fields.side_effect = [[], [], []]
+
+        response = client.post(
+            "/documents/doc-1/extracted-fields",
+            json={"field_name": "net_pay", "field_value": 5000},
+        )
+
+    assert response.status_code == 200
+    mock_case_status.sync_submission_finalized.assert_not_called()
+
+
+def test_add_extracted_field_write_failure_returns_502() -> None:
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+    ):
+        mock_repo.get_document.return_value = _payslip_document()
+        mock_fields_repo.get_extracted_fields.return_value = []
+        mock_fields_repo.add_extracted_field.side_effect = RuntimeError("db down")
+
+        response = client.post(
+            "/documents/doc-1/extracted-fields",
+            json={"field_name": "net_pay", "field_value": 5000},
+        )
+
+    assert response.status_code == 502
+
+
+# --- DELETE /documents/{id}/extracted-fields/{field_id} -----------------
+
+
+def test_delete_extracted_field_removes_and_recomputes_requirements() -> None:
+    doomed = ExtractedField(
+        id="field-1", field_name="net_pay", field_type="number",
+        field_value=5000, confidence=1.0,
+    )
+    kept = ExtractedField(
+        id="field-2", field_name="individual_name", field_type="string",
+        field_value="Jane Tan", confidence=0.9,
+    )
+
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+        patch("app.routers.documents.case_status") as mock_case_status,
+    ):
+        mock_repo.get_document.return_value = _payslip_document()
+        mock_fields_repo.get_extracted_fields.side_effect = [
+            [doomed, kept],  # lookup that resolves field_id
+            [kept],          # re-read after the delete
+            [kept],          # get_document() refetch
+        ]
+
+        response = client.delete("/documents/doc-1/extracted-fields/field-1")
+
+    assert response.status_code == 200
+    mock_fields_repo.delete_extracted_field.assert_called_once_with("doc-1", "field-1")
+    # Unlike the add path, a deletion doesn't make the document
+    # human-verified, so its existing extraction_confidence is carried
+    # through rather than bumped to 1.0.
+    mock_repo.update_extracted_fields.assert_called_once_with(
+        "doc-1", {"individual_name": "Jane Tan"}, None, ["payslip"]
+    )
+    mock_case_status.sync_submission_finalized.assert_called_once_with("case-1")
+
+
+def test_delete_extracted_field_document_not_found() -> None:
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+    ):
+        mock_repo.get_document.return_value = None
+
+        response = client.delete("/documents/missing-id/extracted-fields/field-1")
+
+    assert response.status_code == 404
+    mock_fields_repo.delete_extracted_field.assert_not_called()
+
+
+def test_delete_extracted_field_rejects_field_belonging_to_another_document() -> None:
+    other = ExtractedField(
+        id="field-9", field_name="net_pay", field_type="number",
+        field_value=5000, confidence=1.0,
+    )
+
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+    ):
+        mock_repo.get_document.return_value = _payslip_document()
+        mock_fields_repo.get_extracted_fields.return_value = [other]
+
+        response = client.delete("/documents/doc-1/extracted-fields/field-1")
+
+    assert response.status_code == 404
+    mock_fields_repo.delete_extracted_field.assert_not_called()
+
+
+def test_delete_extracted_field_skips_case_sync_for_caseless_document() -> None:
+    document = _payslip_document()
+    document.case_id = None
+    doomed = ExtractedField(
+        id="field-1", field_name="net_pay", field_type="number",
+        field_value=5000, confidence=1.0,
+    )
+
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+        patch("app.routers.documents.case_status") as mock_case_status,
+    ):
+        mock_repo.get_document.return_value = document
+        mock_fields_repo.get_extracted_fields.side_effect = [[doomed], [], []]
+
+        response = client.delete("/documents/doc-1/extracted-fields/field-1")
+
+    assert response.status_code == 200
+    mock_case_status.sync_submission_finalized.assert_not_called()
+
+
+def test_delete_extracted_field_write_failure_returns_502() -> None:
+    doomed = ExtractedField(
+        id="field-1", field_name="net_pay", field_type="number",
+        field_value=5000, confidence=1.0,
+    )
+
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+    ):
+        mock_repo.get_document.return_value = _payslip_document()
+        mock_fields_repo.get_extracted_fields.return_value = [doomed]
+        mock_fields_repo.delete_extracted_field.side_effect = RuntimeError("db down")
+
+        response = client.delete("/documents/doc-1/extracted-fields/field-1")
+
+    assert response.status_code == 502
+
+
+def test_delete_document_removes_it_and_resyncs_the_case() -> None:
+    document = _make_document()
+
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.case_status") as mock_case_status,
+    ):
+        mock_repo.get_document.return_value = document
+
+        response = client.delete("/documents/doc-1")
+
+    assert response.status_code == 204
+    assert response.content == b""
+    mock_repo.remove_document.assert_called_once_with(document)
+    mock_case_status.sync_submission_finalized.assert_called_once_with("case-1")
+
+
+def test_delete_document_rejects_an_approved_document() -> None:
+    document = _make_document()
+    document.status = DocumentStatus.APPROVED
+
+    with patch("app.routers.documents.document_repository") as mock_repo:
+        mock_repo.get_document.return_value = document
+
+        response = client.delete("/documents/doc-1")
+
+    assert response.status_code == 409
+    mock_repo.remove_document.assert_not_called()
+
+
+def test_delete_document_not_found() -> None:
+    with patch("app.routers.documents.document_repository") as mock_repo:
+        mock_repo.get_document.return_value = None
+
+        response = client.delete("/documents/missing-id")
+
+    assert response.status_code == 404
+    mock_repo.remove_document.assert_not_called()
+
+
+def test_delete_document_without_a_case_skips_checklist_sync() -> None:
+    document = _make_document()
+    document.case_id = None
+
+    with (
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.case_status") as mock_case_status,
+    ):
+        mock_repo.get_document.return_value = document
+
+        response = client.delete("/documents/doc-1")
+
+    assert response.status_code == 204
+    mock_case_status.sync_submission_finalized.assert_not_called()
+
+
+def test_delete_document_db_failure_returns_502() -> None:
+    with patch("app.routers.documents.document_repository") as mock_repo:
+        mock_repo.get_document.return_value = _make_document()
+        mock_repo.remove_document.side_effect = RuntimeError("db down")
+
+        response = client.delete("/documents/doc-1")
+
+    assert response.status_code == 502

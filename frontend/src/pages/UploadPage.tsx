@@ -1,22 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
+import ConfirmDialog from '../components/ConfirmDialog';
 import DropZone from '../components/DropZone';
 import FileRow from '../components/FileRow';
 import { subscribeToCaseStatus } from '../services/caseSocket';
 import type { CaseStatusSubscription } from '../services/caseSocket';
 import {
+  approveDocument,
+  deleteCase,
+  deleteDocument,
   ADDITIONAL_DOCUMENT_TYPES,
   REQUIRED_DOCUMENT_TYPES,
   EXTRACTION_CONFIDENCE_THRESHOLD,
   TERMINAL_DOCUMENT_STATUSES,
   formatDocumentStatus,
+  formatDocumentType,
   formatRoutingOutcome,
   lowestFieldConfidence,
+  updateCase,
   updateExtractedFields,
   uploadDocuments,
+  CLASSIFICATION_CONFIDENCE_THRESHOLD,
 } from '../services/uploadService';
-import type { BulkUploadItemResult, DocumentRecord } from '../services/uploadService';
+import type {
+  BulkUploadItemResult,
+  DocumentCaseMatch,
+  DocumentRecord,
+} from '../services/uploadService';
 import {
   MAX_BULK_FILES,
   MAX_FILE_SIZE_BYTES,
@@ -25,16 +36,11 @@ import {
   validateFiles,
 } from '../utils/fileValidation';
 import type { FileIssue } from '../utils/fileValidation';
+import {
+  MAX_COMPANY_NAME_LENGTH,
+  validateCompanyName,
+} from '../utils/caseValidation';
 
-const formatDocumentType = (documentType?: string | null) => {
-  if (!documentType) return "—";
-
-  const formatted = documentType
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-
-  return formatted.replace(/\bId\b/g, "ID").replace(/\bNric\b/g, "NRIC");
-};
 
 const MAX_FILE_SIZE_MB = Math.floor(MAX_FILE_SIZE_BYTES / (1024 * 1024));
 
@@ -49,6 +55,8 @@ interface UploadPageProps {
   selectedCase: CaseRecord;
   onBack: () => void;
   onOpenDocument: (documentId: string) => void;
+  onCaseUpdated: (companyName: string) => void;
+  onCaseDeleted: () => void;
 }
 
 function isExtractionNotConfiguredFailure(reason: string | null | undefined): boolean {
@@ -185,11 +193,94 @@ function describeIssue(issue: FileIssue): string {
   }
 }
 
+function DocumentRowDelete({
+  filename,
+  isDeleting,
+  onDelete,
+}: {
+  filename: string;
+  isDeleting: boolean;
+  onDelete: () => void;
+}) {
+  return (
+    <span className="document-row-actions">
+      <button
+        type="button"
+        className={`delete-document-button${isDeleting ? ' is-visible' : ''}`}
+        aria-label={isDeleting ? `Deleting ${filename}` : `Delete ${filename}`}
+        disabled={isDeleting}
+        onClick={(event) => {
+          event.stopPropagation();
+          onDelete();
+        }}
+        onKeyDown={(event) => event.stopPropagation()}
+      >
+        <svg
+          viewBox="0 0 24 24"
+          width="24"
+          height="24"
+          aria-hidden="true"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M4 7h16" />
+          <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+          <path d="M7 7l1 12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-12" />
+          <path d="M10 11v6" />
+          <path d="M14 11v6" />
+        </svg>
+      </button>
+    </span>
+  );
+}
+
 export default function UploadPage({
   selectedCase,
   onBack,
   onOpenDocument,
+  onCaseUpdated,
+  onCaseDeleted,
 }: UploadPageProps) {
+  const [isEditingCase, setIsEditingCase] = useState(false);
+  const [companyNameDraft, setCompanyNameDraft] = useState(selectedCase.applicant);
+  const [isSavingCase, setIsSavingCase] = useState(false);
+  const [saveCaseError, setSaveCaseError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCompanyNameDraft(selectedCase.applicant);
+  }, [selectedCase.applicant]);
+
+  async function handleSaveCase() {
+    const trimmed = companyNameDraft.trim();
+    const validationError = validateCompanyName(companyNameDraft);
+    if (validationError) {
+      setSaveCaseError(validationError);
+      return;
+    }
+
+    setIsSavingCase(true);
+    setSaveCaseError(null);
+
+    try {
+      const updated = await updateCase(selectedCase.id, trimmed);
+      onCaseUpdated(updated.company_name ?? trimmed);
+      setIsEditingCase(false);
+    } catch (err) {
+      setSaveCaseError(err instanceof Error ? err.message : 'Failed to save case.');
+    } finally {
+      setIsSavingCase(false);
+    }
+  }
+
+  function handleCancelEditCase() {
+    setCompanyNameDraft(selectedCase.applicant);
+    setSaveCaseError(null);
+    setIsEditingCase(false);
+  }
+
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [countError, setCountError] = useState<string | null>(null);
   const [rejections, setRejections] = useState<{ file: File; issue: FileIssue }[]>([]);
@@ -213,11 +304,29 @@ export default function UploadPage({
   const [savingFields, setSavingFields] = useState<Set<string>>(new Set());
   const [saveFieldErrors, setSaveFieldErrors] = useState<Map<string, string>>(new Map());
   const [wsConnected, setWsConnected] = useState(false);
+  const [approvingDocumentId, setApprovingDocumentId] = useState<string | null>(null);
+  const [approveError, setApproveError] = useState<string | null>(null);
+  const [isApprovingAll, setIsApprovingAll] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
+  const [isDeletingCase, setIsDeletingCase] = useState(false);
+  const [caseDeleteOpen, setCaseDeleteOpen] = useState(false);
+  const [documentToDelete, setDocumentToDelete] = useState<DocumentRecord | null>(null);
+  // Case-match result per document (see backend/app/case_match.py), pushed
+  // with every case snapshot — folded into the displayed routing outcome.
+  const [caseMatches, setCaseMatches] = useState<Map<string, DocumentCaseMatch>>(new Map());
+
+  // A case-match flag needs manual review until an officer approves the
+  // document — approving it is that review.
+  const caseMatchNeedsReview = (document: DocumentRecord) =>
+    document.status !== 'approved' &&
+    caseMatches.get(document.id)?.status === 'manual_review';
 
   const flaggedDocuments = Array.from(documentDetails.values()).filter((document) => {
     const lowestConfidence = lowestFieldConfidence(document.extracted_fields);
     return (
       document.classification_outcome === 'manual_review' ||
+      caseMatchNeedsReview(document) ||
       (lowestConfidence != null && lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD)
     );
   });
@@ -252,10 +361,13 @@ export default function UploadPage({
 
     const subscription = subscribeToCaseStatus(
       selectedCase.id,
-      ({ documents, caseSummary }) => {
+      ({ documents, caseSummary, caseMatch }) => {
         if (!isMountedRef.current) return;
 
         setDocumentDetails(new Map(documents.map((document) => [document.id, document])));
+        setCaseMatches(
+          new Map((caseMatch?.documents ?? []).map((match) => [match.document_id, match])),
+        );
         setFulfilledRequirements(new Set(caseSummary.fulfilled_requirements));
         setProofOfAddressCoverage(caseSummary.proof_of_address_coverage);
         setIdDocumentCoverage(caseSummary.id_document_coverage);
@@ -337,6 +449,89 @@ export default function UploadPage({
     }
   }
 
+  async function handleApproveDocument(documentId: string) {
+  setApprovingDocumentId(documentId);
+  setApproveError(null);
+
+  try {
+    const updated = await approveDocument(documentId);
+
+    if (!isMountedRef.current) {
+      return;
+    }
+
+    setDocumentDetails((current) => {
+      const next = new Map(current);
+      next.set(documentId, updated);
+      return next;
+    });
+  } catch (err) {
+    if (!isMountedRef.current) {
+      return;
+    }
+
+    setApproveError(
+      err instanceof Error
+        ? err.message
+        : 'Failed to approve document.',
+    );
+  } finally {
+    if (isMountedRef.current) {
+      setApprovingDocumentId(null);
+    }
+  }
+}
+
+async function handleApproveAllEligibleDocuments() {
+  const eligibleDocuments = extractedDocuments.filter(
+    (document) =>
+      document.status === 'analyzed' &&
+      // With the case-match result, so a document flagged as belonging to
+      // another company/individual is never swept up in a bulk approval.
+      formatRoutingOutcome(document, caseMatches.get(document.id)) === 'Accepted',
+  );
+
+  if (eligibleDocuments.length === 0) {
+    return;
+  }
+
+  setIsApprovingAll(true);
+  setApproveError(null);
+
+  try {
+    const updatedDocuments = await Promise.all(
+      eligibleDocuments.map((document) => approveDocument(document.id)),
+    );
+
+    if (!isMountedRef.current) {
+      return;
+    }
+
+    setDocumentDetails((current) => {
+      const next = new Map(current);
+
+      for (const updated of updatedDocuments) {
+        next.set(updated.id, updated);
+      }
+
+      return next;
+    });
+  } catch (err) {
+    if (!isMountedRef.current) {
+      return;
+    }
+
+    setApproveError(
+      err instanceof Error
+        ? err.message
+        : 'Failed to approve eligible documents.',
+    );
+  } finally {
+    if (isMountedRef.current) {
+      setIsApprovingAll(false);
+    }
+  }
+}
   function getFieldDraft(
     documentId: string,
     extractedFields: Record<string, unknown>,
@@ -430,6 +625,61 @@ export default function UploadPage({
     setJustSubmitted(false);
   }
 
+  async function confirmDeleteCase() {
+    setIsDeletingCase(true);
+    setDeleteError(null);
+
+    try {
+      await deleteCase(selectedCase.id);
+      onCaseDeleted();
+    } catch (err) {
+      setCaseDeleteOpen(false);
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete case.');
+      setIsDeletingCase(false);
+    }
+  }
+
+  async function confirmDeleteDocument() {
+    if (!documentToDelete) return;
+
+    const document = documentToDelete;
+    setDeletingDocumentId(document.id);
+    setDeleteError(null);
+
+    try {
+      await deleteDocument(document.id);
+      setDocumentDetails((current) => {
+        const next = new Map(current);
+        next.delete(document.id);
+        return next;
+      });
+      setCaseMatches((current) => {
+        const next = new Map(current);
+        next.delete(document.id);
+        return next;
+      });
+      caseSocketRef.current?.refresh();
+      setDocumentToDelete(null);
+    } catch (err) {
+      setDocumentToDelete(null);
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete document.');
+    } finally {
+      setDeletingDocumentId(null);
+    }
+  }
+
+  const documents = Array.from(documentDetails.values()).sort((a, b) =>
+    a.uploaded_at.localeCompare(b.uploaded_at),
+  );
+
+  const extractedDocuments = documents.filter(
+    (document) => document.status !== 'approved',
+  );
+
+  const approvedDocuments = documents.filter(
+    (document) => document.status === 'approved',
+  );
+
   const completedCount = results.length + rejections.length;
   const successfulCount = results.filter((result) => result.success).length;
   const failedCount =
@@ -445,10 +695,64 @@ export default function UploadPage({
             ← Back to case queue
           </button>
 
-          <p className="eyebrow">
-            Case #{selectedCase.caseNumber} · {selectedCase.type} —{' '}
-            {selectedCase.applicant}
-          </p>
+          {isEditingCase ? (
+            <div className="add-field-form">
+              <div className="add-field-form-row">
+                <label htmlFor="case-company-name">Company name</label>
+                <input
+                  id="case-company-name"
+                  type="text"
+                  value={companyNameDraft}
+                  onChange={(event) => setCompanyNameDraft(event.target.value)}
+                  maxLength={MAX_COMPANY_NAME_LENGTH}
+                  disabled={isSavingCase}
+                  aria-invalid={saveCaseError ? true : undefined}
+                  aria-describedby={saveCaseError ? 'case-company-name-error' : undefined}
+                />
+              </div>
+
+              {saveCaseError && (
+                <p id="case-company-name-error" className="add-field-error" role="alert">
+                  {saveCaseError}
+                </p>
+              )}
+
+              <div className="add-field-form-actions">
+                <button type="button" onClick={handleCancelEditCase} disabled={isSavingCase}>
+                  Cancel
+                </button>
+                <button type="button" onClick={() => void handleSaveCase()} disabled={isSavingCase}>
+                  {isSavingCase ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="case-header-row">
+              <p className="eyebrow">
+                Case #{selectedCase.caseNumber} · {selectedCase.type} —{' '}
+                {selectedCase.applicant}
+              </p>
+              <div className="case-header-actions">
+                <button type="button" className="edit-case-button" onClick={() => setIsEditingCase(true)}>
+                  ✎ Edit case details
+                </button>
+                <button
+                  type="button"
+                  className="delete-record-button"
+                  onClick={() => setCaseDeleteOpen(true)}
+                  disabled={isDeletingCase}
+                >
+                  {isDeletingCase ? 'Deleting…' : 'Delete case'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {deleteError && (
+            <div className="toast show mixed" role="alert">
+              ⚠ {deleteError}
+            </div>
+          )}
 
           <h1>Upload supporting documents</h1>
 
@@ -552,122 +856,205 @@ export default function UploadPage({
             </div>
           )}
 
-          {documentDetails.size > 0 && (
-            <section className="documents-card">
-              <div className="documents-card-header">
-                <div className="documents-card-title">
-                  <span className="documents-card-icon">▣</span>
-                  <span>Extracted Files</span>
-                </div>
+            {documents.length > 0 && (
+              <>
+                {/* EXTRACTED DOCUMENTS */}
+                {extractedDocuments.length > 0 && (
+                  <section className="documents-card">
+                    <div className="documents-card-header">
+                      <div className="documents-card-title">
+                        <span className="documents-card-icon">▣</span>
+                        <span>Extracted Files</span>
+                      </div>
 
-                <div className="documents-card-actions">
-                  <button
-                    type="button"
-                    className="approve-all-btn"
-                    onClick={() => {
-                      // Frontend-only for now.
-                      // Backend approval logic can be connected later.
-                    }}
-                  >
-                    Approve all eligible documents
-                  </button>
-
-                  <span
-                    className={`mock-badge${wsConnected ? ' live' : ''}`}
-                    title={
-                      wsConnected
-                        ? 'Connected — updates push in real time'
-                        : 'Disconnected — reconnecting…'
-                    }
-                  >
-                    {wsConnected ? 'LIVE' : 'OFFLINE'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="documents-table">
-                <div className="documents-table-header">
-                  <span>Filename</span>
-                  <span>Document Type</span>
-                  <span>Status</span>
-                  <span>Classification Confidence</span>
-                  <span>Routing Outcome</span>
-                </div>
-
-                {Array.from(documentDetails.values())
-                  .sort((a, b) =>
-                    a.uploaded_at.localeCompare(b.uploaded_at),
-                  )
-                  .map((document) => {
-                    const status = document.status;
-                    const isTerminal = TERMINAL_DOCUMENT_STATUSES.has(status);
-
-                    return (
-                      <div
-                        key={document.id}
-                        className="documents-table-row documents-table-row--clickable"
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`View ${document.filename}`}
-                        onClick={() => onOpenDocument(document.id)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            onOpenDocument(document.id);
+                      <div className="documents-card-actions">
+                        <button
+                          type="button"
+                          className="approve-all-btn"
+                          onClick={() => void handleApproveAllEligibleDocuments()}
+                          disabled={
+                            isApprovingAll ||
+                            !extractedDocuments.some((document) => document.status === 'analyzed')
                           }
-                        }}
-                      >
-                        <span className="document-filename">
-                          {formatRoutingOutcome(document) ===
-                            'Manual Review' && (
-                            <span
-                              className="document-manual-review-icon"
-                              title="Requires manual review"
-                              aria-label="Requires manual review"
-                            >
-                              ⚠
-                            </span>
-                          )}
-
-                          {document.filename}
-                        </span>
-
-                        <span className="document-type-cell">
-                          {formatDocumentType(document.document_type)}
-                        </span>
-
-                        <span className="document-status-cell">
-                          <span
-                            className={`status-dot ${
-                              status === 'analyzed'
-                                ? 'status-dot--success'
-                                : status === 'failed'
-                                  ? 'status-dot--failed'
-                                  : ''
-                            }`}
-                          />
-
-                          <span>
-                          {formatDocumentStatus(status)}
-                          {!isTerminal && '…'}
-                        </span>
-                        </span>
-
-                        <span className="document-confidence">
-                          {document.confidence != null
-                            ? document.confidence.toFixed(2)
-                            : '—'}
-                        </span>
-
-                        <span className="document-routing">
-                          {formatRoutingOutcome(document)}
+                        >
+                          {isApprovingAll
+                            ? 'Approving…'
+                            : 'Approve all eligible documents'}
+                        </button>
+                        <span
+                          className={`mock-badge${wsConnected ? ' live' : ''}`}
+                          title={
+                            wsConnected
+                              ? 'Connected — updates push in real time'
+                              : 'Disconnected — reconnecting…'
+                          }
+                        >
+                          {wsConnected ? 'LIVE' : 'OFFLINE'}
                         </span>
                       </div>
-                    );
-                  })}
-              </div>
-            </section>
-          )}
+                    </div>
+
+                    {approveError && (
+                      <div className="toast show mixed">⚠ {approveError}</div>
+                    )}
+
+                    <div className="documents-table">
+                      <div className="documents-table-header">
+                        <span>Filename</span>
+                        <span>Document Type</span>
+                        <span>Status</span>
+                        <span>Classification Confidence</span>
+                        <span>Routing Outcome</span>
+                      </div>
+
+                      {extractedDocuments.map((document) => {
+                        const status = document.status;
+                        const isTerminal = TERMINAL_DOCUMENT_STATUSES.has(status);
+                        const isApproving = approvingDocumentId === document.id;
+                        const caseMatch = caseMatches.get(document.id);
+                        const routingOutcome = formatRoutingOutcome(document, caseMatch);
+                        const manualReviewTitle =
+                          caseMatch?.status === 'manual_review'
+                            ? caseMatch.reason
+                            : 'Requires manual review';
+
+                        return (
+                          <div
+                            key={document.id}
+                            className="documents-table-row documents-table-row--clickable"
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`View ${document.filename}`}
+                            onClick={() => onOpenDocument(document.id)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                onOpenDocument(document.id);
+                              }
+                            }}
+                          >
+                            <span className="document-filename">
+                              {routingOutcome === 'Manual Review' && (
+                                <span
+                                  className="document-manual-review-icon"
+                                  title={manualReviewTitle}
+                                  aria-label={manualReviewTitle}
+                                >
+                                  ⚠
+                                </span>
+                              )}
+
+                              {document.filename}
+                            </span>
+
+                            <span className="document-type-cell">
+                              {formatDocumentType(document.document_type)}
+                            </span>
+
+                            <span className="document-status-cell">
+                              <span
+                                className={`status-dot ${
+                                  status === 'analyzed'
+                                    ? 'status-dot--success'
+                                    : status === 'failed'
+                                      ? 'status-dot--failed'
+                                      : ''
+                                }`}
+                              />
+
+                              <span>
+                                {formatDocumentStatus(status)}
+                                {!isTerminal && '…'}
+                              </span>
+                            </span>
+
+                            <span className="document-confidence">
+                              {document.confidence != null
+                                ? document.confidence.toFixed(2)
+                                : '—'}
+                            </span>
+
+                            <span className="document-routing">
+                              {routingOutcome}
+                            </span>
+
+                            <DocumentRowDelete
+                              filename={document.filename}
+                              isDeleting={deletingDocumentId === document.id}
+                              onDelete={() => setDocumentToDelete(document)}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
+
+                {/* APPROVED DOCUMENTS */}
+                {approvedDocuments.length > 0 && (
+                  <section className="documents-card approved-documents-card">
+                    <div className="documents-card-header">
+                      <div className="documents-card-title">
+                        <span className="documents-card-icon">✓</span>
+                        <span>Approved Documents</span>
+                      </div>
+                    </div>
+
+                    <div className="documents-table">
+                      <div className="documents-table-header">
+                        <span>Filename</span>
+                        <span>Document Type</span>
+                        <span>Status</span>
+                        <span>Classification Confidence</span>
+                        <span>Routing Outcome</span>
+                      </div>
+
+                      {approvedDocuments.map((document) => (
+                        <div
+                          key={document.id}
+                          className="documents-table-row documents-table-row--clickable"
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`View ${document.filename}`}
+                          onClick={() => onOpenDocument(document.id)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              onOpenDocument(document.id);
+                            }
+                          }}
+                        >
+                          <span className="document-filename">
+                            {document.filename}
+                          </span>
+
+                          <span className="document-type-cell">
+                            {formatDocumentType(document.document_type)}
+                          </span>
+
+                          <span className="document-status-cell">
+                            <span className="status-dot status-dot--success" />
+                            <span>Approved</span>
+                          </span>
+
+                          <span className="document-confidence">
+                            {document.confidence != null
+                              ? document.confidence.toFixed(2)
+                              : '—'}
+                          </span>
+
+                          <span className="document-routing">
+                            Approved
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </>
+            )}
+
+
 
           <section className="summary-card">
             <div className="summary-card-header">
@@ -729,17 +1116,30 @@ export default function UploadPage({
                   const lowestConfidence = lowestFieldConfidence(document.extracted_fields);
                   const lowExtractionConfidence =
                     lowestConfidence != null && lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD;
+                  const caseMatch = caseMatches.get(document.id);
 
+                  // Classification problems first — a case-match reason is
+                  // only meaningful once the document type is right.
                   const reason =
-                    document.classification_outcome === 'manual_review'
-                      ? document.escalation_reason ??
-                        (document.document_type === 'unrecognised'
-                          ? 'Document type could not be confidently recognised.'
-                          : lowExtractionConfidence
-                            ? 'Extracted fields have low confidence and require review.'
-                            : 'Document requires manual review.')
-                      : 'Extracted fields have low confidence and require review.';
-
+                    document.classification_outcome !== 'manual_review' &&
+                    caseMatch &&
+                    caseMatchNeedsReview(document)
+                      ? `${caseMatch.reason}. Please verify the document belongs to this case before approving.`
+                      : document.classification_outcome === 'manual_review'
+                      ? document.document_type === 'unrecognised'
+                        ? 'Document type could not be confidently recognised. Please verify the document type before approving.'
+                        : document.confidence != null &&
+                            document.confidence < CLASSIFICATION_CONFIDENCE_THRESHOLD
+                          ? `Classification confidence (${document.confidence.toFixed(
+                              2,
+                            )}) is below the required threshold of ${CLASSIFICATION_CONFIDENCE_THRESHOLD.toFixed(
+                              2,
+                            )}. Please verify the document type before approving.`
+                          : document.escalation_reason ??
+                            'This document was routed to manual review during classification. Please verify the document before approving.'
+                      : lowExtractionConfidence
+                        ? 'One or more extracted fields have low confidence and require review.'
+                        : 'This document requires manual review.';
                   return (
                     <div
                       key={document.id}
@@ -750,8 +1150,7 @@ export default function UploadPage({
 
                         <div className="flagged-item-meta">
                           <span>
-                            {document.document_type ??
-                              'Unknown document type'}
+                            {formatDocumentType(document.document_type)}
                           </span>
 
                           {lowestConfidence != null && (
@@ -761,10 +1160,9 @@ export default function UploadPage({
                             </span>
                           )}
 
-                          {document.classification_outcome ===
-                            'manual_review' && (
+                          {caseMatch?.case_mismatch && caseMatchNeedsReview(document) && (
                             <span className="flagged-status">
-                              Manual review
+                              Case mismatch
                             </span>
                           )}
                         </div>
@@ -952,6 +1350,30 @@ export default function UploadPage({
           </ul>
         </aside>
       </div>
+
+      {caseDeleteOpen && (
+        <ConfirmDialog
+          title="Delete this case?"
+          message={`Case ${selectedCase.caseNumber || selectedCase.id} (${selectedCase.applicant}) and its documents will be removed and cannot be recovered.`}
+          isConfirming={isDeletingCase}
+          onCancel={() => {
+            if (!isDeletingCase) setCaseDeleteOpen(false);
+          }}
+          onConfirm={() => void confirmDeleteCase()}
+        />
+      )}
+
+      {documentToDelete && (
+        <ConfirmDialog
+          title="Delete this document?"
+          message={`${documentToDelete.filename} will be removed from this case and cannot be recovered.`}
+          isConfirming={deletingDocumentId === documentToDelete.id}
+          onCancel={() => {
+            if (deletingDocumentId === null) setDocumentToDelete(null);
+          }}
+          onConfirm={() => void confirmDeleteDocument()}
+        />
+      )}
     </main>
   );
 }

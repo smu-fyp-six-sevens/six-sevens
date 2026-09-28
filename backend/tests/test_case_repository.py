@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app import case_repository
 
 
@@ -113,3 +115,80 @@ def test_set_submission_finalized_false_clears_finalized_at() -> None:
 
         update_payload = mock_client.table.return_value.update.call_args[0][0]
         assert update_payload == {"submission_finalized": False, "finalized_at": None}
+
+
+def test_list_cases_includes_dev_cases_by_default() -> None:
+    with patch("app.case_repository.supabase_client") as mock_client:
+        query = mock_client.table.return_value.select.return_value
+        query.execute.return_value = _execute_result([_row()])
+
+        cases = case_repository.list_cases()
+
+        assert len(cases) == 1
+        # No dev filter applied — the query is executed as selected.
+        query.eq.assert_not_called()
+
+
+def test_list_cases_excludes_dev_cases_when_asked() -> None:
+    # What the deployed environment uses so demo/test cases don't show up
+    # in the real queue.
+    with patch("app.case_repository.supabase_client") as mock_client:
+        query = mock_client.table.return_value.select.return_value
+        query.eq.return_value.execute.return_value = _execute_result([_row()])
+
+        cases = case_repository.list_cases(include_dev=False)
+
+        assert len(cases) == 1
+        query.eq.assert_called_once_with("dev", False)
+
+
+def test_update_case_writes_company_name_and_touches_updated_at() -> None:
+    with patch("app.case_repository.supabase_client") as mock_client:
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+            _execute_result([_row(company_name="Acme Pte Ltd")])
+        )
+
+        result = case_repository.update_case("case-1", "Acme Pte Ltd")
+
+        assert result is not None
+        assert result.company_name == "Acme Pte Ltd"
+        update_payload = mock_client.table.return_value.update.call_args[0][0]
+        assert update_payload["company_name"] == "Acme Pte Ltd"
+        # Stamped server-side rather than trusted from the client.
+        assert update_payload["updated_at"] is not None
+        mock_client.table.return_value.update.return_value.eq.assert_called_once_with(
+            "id", "case-1"
+        )
+
+
+def test_update_case_returns_none_when_no_row_matched() -> None:
+    with patch("app.case_repository.supabase_client") as mock_client:
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+            _execute_result([])
+        )
+
+        assert case_repository.update_case("missing-id", "Acme Pte Ltd") is None
+
+
+def test_delete_case_deletes_the_row() -> None:
+    with patch("app.case_repository.service_supabase_client") as mock_service:
+        mock_client = mock_service.return_value
+        mock_client.table.return_value.delete.return_value.eq.return_value.execute.return_value = (
+            _execute_result([_row()])
+        )
+
+        case_repository.delete_case("case-1")
+
+    mock_client.table.assert_called_with("cases")
+    mock_client.table.return_value.delete.return_value.eq.assert_called_once_with("id", "case-1")
+    mock_client.table.return_value.delete.return_value.eq.return_value.execute.assert_called_once()
+
+
+def test_delete_case_raises_when_no_row_was_removed() -> None:
+    with patch("app.case_repository.service_supabase_client") as mock_service:
+        mock_service.return_value.table.return_value.delete.return_value.eq.return_value.execute.return_value = (
+            _execute_result([])
+        )
+
+        with pytest.raises(RuntimeError, match="was not deleted"):
+            case_repository.delete_case("case-1")

@@ -1,9 +1,11 @@
 import { apiBaseUrl, authFetch } from '../lib/api';
-import type { CaseRequirementCoverage, DocumentRecord } from './uploadService';
+import type { CaseMatchResult, CaseRequirementCoverage, DocumentRecord } from './uploadService';
 
 export interface CaseStatusSnapshot {
   documents: DocumentRecord[];
   caseSummary: CaseRequirementCoverage;
+  // null only if a backend without the case-match check sent the snapshot.
+  caseMatch: CaseMatchResult | null;
 }
 
 const RECONNECT_DELAY_MS = 2000;
@@ -79,7 +81,12 @@ export function subscribeToCaseStatus(
         };
 
         socket.onmessage = (event) => {
-          let payload: { type?: string; case?: unknown; documents?: unknown };
+          let payload: {
+            type?: string;
+            case?: unknown;
+            documents?: unknown;
+            case_match?: unknown;
+          };
           try {
             payload = JSON.parse(event.data as string);
           } catch {
@@ -90,6 +97,7 @@ export function subscribeToCaseStatus(
             onSnapshot({
               documents: payload.documents as DocumentRecord[],
               caseSummary: payload.case as CaseRequirementCoverage,
+              caseMatch: (payload.case_match as CaseMatchResult | undefined) ?? null,
             });
           }
         };

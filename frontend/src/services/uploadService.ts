@@ -105,22 +105,85 @@ export function lowestFieldConfidence(fields: Record<string, unknown> | null): n
   return lowest;
 }
 
+// Mirrors DocumentCaseMatch / CaseMatchResult in backend/app/case_match.py —
+// whether a document belongs to the case's company and individuals, checked
+// against the certificate of incumbency. Computed live by the backend, never
+// stored.
+export interface CaseMatchComparison {
+  check: 'company_uen' | 'company_name' | 'individual_id' | 'individual_name';
+  outcome: 'match' | 'mismatch';
+  document_field: string;
+  document_value: string;
+  case_value: string | null;
+  reason: string;
+}
+
+export interface DocumentCaseMatch {
+  document_id: string;
+  filename: string;
+  document_type: string | null;
+  status: 'match' | 'manual_review' | 'pending';
+  can_proceed_to_fraud_detection: boolean;
+  // The company or an individual on the document doesn't match the case.
+  case_mismatch: boolean;
+  reason: string;
+  comparisons: CaseMatchComparison[];
+}
+
+export interface CaseMatchResult {
+  case_id: string;
+  incumbency: {
+    status: 'missing' | 'insufficient_evidence' | 'verified' | 'manual_review';
+    document_id: string | null;
+    uen: string | null;
+    company_name: string | null;
+    reasons: string[];
+  };
+  documents: DocumentCaseMatch[];
+  mismatched_document_ids: string[];
+}
+
+export async function getDocumentCaseMatch(documentId: string): Promise<DocumentCaseMatch> {
+  const response = await authFetch(`/documents/${documentId}/detection/case-match`);
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to fetch case match (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as DocumentCaseMatch;
+}
+
 // Overall routing outcome shown in the UI (view only). classification_outcome
 // alone only records the classifier's decision — documents are always sent on
 // to extraction, so an 'accepted' classification can still end up needing
 // manual review. This folds in the later stages: a failed document or one
 // with a low-confidence field reads as Manual Review (same rule as the
 // flagged-documents list), and an accepted one reads as Pending until
-// extraction has finished.
+// extraction has finished. caseMatch folds in the case-match check the same
+// way: a document it sends to manual review (it belongs to another
+// company/individual, or the certificate of incumbency itself is in doubt)
+// reads as Manual Review — without touching the stored
+// classification_outcome, which the checklist still relies on.
 export function formatRoutingOutcome(
-  document: Pick<DocumentRecord, 'status' | 'classification_outcome' | 'extracted_fields'>,
+  document: Pick<
+    DocumentRecord,
+    'status' | 'classification_outcome' | 'extracted_fields'
+  >,
+  caseMatch?: Pick<DocumentCaseMatch, 'status'> | null,
 ): string {
+  if (document.status === 'rejected') {
+    return 'Rejected';
+  }
+
   const lowestConfidence = lowestFieldConfidence(document.extracted_fields);
 
   if (
     document.status === 'failed' ||
     document.classification_outcome === 'manual_review' ||
-    (lowestConfidence != null && lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD)
+    caseMatch?.status === 'manual_review' ||
+    (lowestConfidence != null &&
+      lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD)
   ) {
     return 'Manual Review';
   }
@@ -135,7 +198,12 @@ export function formatRoutingOutcome(
 // Statuses that no longer change on their own — a document sitting in any
 // other status is still actively moving through the pipeline (see the "…"
 // suffix formatDocumentStatus's callers append for non-terminal statuses).
-export const TERMINAL_DOCUMENT_STATUSES = new Set(['analyzed', 'failed']);
+export const TERMINAL_DOCUMENT_STATUSES = new Set([
+  'analyzed',
+  'approved',
+  'rejected',
+  'failed',
+]);
 
 // Single source of truth for how a raw backend DocumentStatus reads in the
 // UI — shared by the case's document table and the document details page,
@@ -157,6 +225,10 @@ export function formatDocumentStatus(status: string): string {
       return 'Extracting';
     case 'analyzed':
       return 'Extracted';
+    case 'approved':
+      return 'Approved';
+    case 'rejected':
+      return 'Rejected';
     case 'failed':
       return 'Failed';
     default:
@@ -189,6 +261,38 @@ export const DOCUMENT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'notice_of_assessment', label: 'Notice of assessment' },
   { value: 'unrecognised', label: 'Other' },
 ];
+
+export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
+  bank_statement: 'Bank statement',
+  certificate_of_incorporation: 'Certificate of incorporation',
+  payslip: 'Payslip',
+  passport: 'Passport',
+  nric: 'NRIC',
+  fatca_crs_declaration: 'FATCA/CRS Declaration',
+  certificate_of_incumbency: 'Certificate of incumbency',
+  company_constitution: 'Company constitution',
+  proof_of_address: 'Proof of address',
+  source_of_wealth: 'Source of wealth',
+  credit_report: 'Credit report',
+  list_of_loans: 'List of loans',
+  notice_of_assessment: 'Notice of assessment',
+  unrecognised: 'Other',
+};
+
+export function formatDocumentType(
+  documentType: string | null | undefined,
+): string {
+  if (!documentType) {
+    return '—';
+  }
+
+  return (
+    DOCUMENT_TYPE_LABELS[documentType] ??
+    documentType
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (char) => char.toUpperCase())
+  );
+}
 
 
 // Mirrors the subset of CaseSummary in backend/app/models.py this page
@@ -230,6 +334,48 @@ export async function getCaseRequirementCoverage(caseId: string): Promise<CaseRe
   }
 
   return (await response.json()) as CaseRequirementCoverage;
+}
+
+// Mirrors UpdateCaseRequest in backend/app/models.py. Only company_name is
+// officer-editable today — status, submission_finalized and
+// greenlink_case_id are system-managed and not exposed here.
+export interface UpdatedCase {
+  id: string;
+  greenlink_case_id: string;
+  company_name: string | null;
+}
+
+export async function deleteCase(caseId: string): Promise<void> {
+  const response = await authFetch(`/cases/${caseId}`, { method: 'DELETE' });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to delete case (${response.status}): ${detail}`);
+  }
+}
+
+export async function deleteDocument(documentId: string): Promise<void> {
+  const response = await authFetch(`/documents/${documentId}`, { method: 'DELETE' });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to delete document (${response.status}): ${detail}`);
+  }
+}
+
+export async function updateCase(caseId: string, companyName: string): Promise<UpdatedCase> {
+  const response = await authFetch(`/cases/${caseId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ company_name: companyName }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to update case (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as UpdatedCase;
 }
 
 export async function getDocument(documentId: string): Promise<DocumentRecord> {
@@ -366,6 +512,85 @@ export async function updateExtractedFields(
   return (await response.json()) as DocumentRecord;
 }
 
+export async function addExtractedField(
+  documentId: string,
+  fieldName: string,
+  fieldValue: unknown,
+): Promise<DocumentRecord> {
+  const response = await authFetch(`/documents/${documentId}/extracted-fields`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      field_name: fieldName,
+      field_value: fieldValue,
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to add extracted field (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as DocumentRecord;
+}
+
+export async function deleteExtractedField(
+  documentId: string,
+  fieldId: string,
+): Promise<DocumentRecord> {
+  const response = await authFetch(
+    `/documents/${documentId}/extracted-fields/${fieldId}`,
+    {
+      method: 'DELETE',
+    },
+  );
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(
+      `Failed to delete extracted field (${response.status}): ${detail}`,
+    );
+  }
+
+  return (await response.json()) as DocumentRecord;
+}
+
+export async function approveDocument(
+  documentId: string,
+): Promise<DocumentRecord> {
+  const response = await authFetch(`/documents/${documentId}/approve`, {
+    method: 'POST',
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(
+      `Failed to approve document (${response.status}): ${detail}`,
+    );
+  }
+
+  return (await response.json()) as DocumentRecord;
+}
+
+export async function rejectDocument(
+  documentId: string,
+): Promise<DocumentRecord> {
+  const response = await authFetch(
+    `/documents/${documentId}/reject`,
+    {
+      method: 'POST',
+    },
+  );
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(
+      `Reject failed (${response.status}): ${detail}`,
+    );
+  }
+
+  return (await response.json()) as DocumentRecord;
+}
 // Mirrors UpdateDocumentTypeRequest in backend/app/models.py. Saving also
 // kicks off a background extraction rerun against the new type — the
 // returned record already reads status 'extracting'.
@@ -387,9 +612,13 @@ export async function updateDocumentType(
   return (await response.json()) as DocumentRecord;
 }
 
-export async function uploadDocuments(caseId: string, files: File[]): Promise<BulkUploadResponse> {
+export async function uploadDocuments(
+  caseId: string,
+  files: File[],
+): Promise<BulkUploadResponse> {
   const formData = new FormData();
   formData.append('case_id', caseId);
+
   for (const file of files) {
     formData.append('files', file);
   }

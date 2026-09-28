@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+from . import extracted_fields_repository, storage_service
 from .models import DocumentRecord, DocumentStatus
-from .supabase_client import supabase_client
+from .supabase_client import service_supabase_client, supabase_client
+
+logger = logging.getLogger(__name__)
 
 
 def create_document(
@@ -51,7 +55,16 @@ def update_status(
 
     supabase_client.table("documents").update(update).eq("id", document_id).execute()
 
+def approve_document(document_id: str) -> None:
+    supabase_client.table("documents").update(
+        {"status": DocumentStatus.APPROVED.value}
+    ).eq("id", document_id).execute()
 
+def reject_document(document_id: str) -> None:
+    supabase_client.table("documents").update(
+        {"status": DocumentStatus.REJECTED.value}
+    ).eq("id", document_id).execute()
+    
 def record_classification(
     document_id: str,
     *,
@@ -142,6 +155,45 @@ def update_metadata(document_id: str, metadata: dict) -> None:
     supabase_client.table("documents").update({"metadata": metadata}).eq(
         "id", document_id
     ).execute()
+
+
+def update_metadata_anomalies(document_id: str, result: dict) -> None:
+    """
+    Persists the Digital Authenticity Specialist's metadata-anomaly result
+    (see fraud_detection.metadata_analysis) as a single JSON blob shaped
+    exactly like the MetadataAnalysisResult response body — ready to hand to
+    a future lead-agent aggregator as-is rather than reconstructed from
+    several rows. Kept separate from `metadata` above (the raw exiftool
+    dict ingestion already stores) since this is a derived analysis of that
+    data, not the source data itself.
+    """
+    supabase_client.table("documents").update({"metadata_anomalies": result}).eq(
+        "id", document_id
+    ).execute()
+
+
+def remove_document(document: DocumentRecord) -> None:
+    """
+    Permanently removes a document: its extracted-field rows, the stored
+    file, and the documents row. Field rows go first so a foreign key on
+    extracted_fields.document_id cannot block the documents delete.
+
+    Storage deletion is best-effort. A missing object should not leave the
+    row in place; a later retry still deletes the row.
+    """
+    extracted_fields_repository.delete_fields_for_document(document.id)
+    if document.storage_path:
+        try:
+            storage_service.delete_file(document.storage_path)
+        except Exception:
+            logger.exception(
+                "Failed to delete stored file for document %s at %s",
+                document.id,
+                document.storage_path,
+            )
+    result = service_supabase_client().table("documents").delete().eq("id", document.id).execute()
+    if not result.data:
+        raise RuntimeError(f"Document {document.id} was not deleted")
 
 
 def get_document(document_id: str) -> Optional[DocumentRecord]:

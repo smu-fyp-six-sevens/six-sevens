@@ -330,7 +330,8 @@ h1 {
 }
 
 .case-card {
-  width: 100%;
+  position: relative;
+  width: calc(100% - 56px);
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 9px;
@@ -338,19 +339,86 @@ h1 {
   display: flex;
   align-items: center;
   gap: 14px;
-  cursor: pointer;
   margin-bottom: 8px;
   color: inherit;
   text-align: left;
   transition: border-color 0.12s, transform 0.12s;
 }
 
+.case-card-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.case-card-delete-slot {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+}
+
+.case-card-delete {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--red);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.case-card:hover .case-card-delete,
+.case-card:focus-within .case-card-delete,
+.case-card-delete.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.case-card-delete:hover:not(:disabled),
+.case-card-delete:focus-visible {
+  color: var(--red);
+  background: var(--red-bg);
+}
+
+.case-card-delete:disabled {
+  cursor: not-allowed;
+}
+
+@media (hover: none) {
+  .case-card-delete {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
 .case-card:hover,
-.case-card:focus-visible {
+.case-card:focus-within {
   border-color: var(--steel);
   transform: translateX(2px);
 }
 
+.case-card-open:focus-visible,
 .case-card:focus-visible,
 .dropzone:focus-visible,
 .back-link:focus-visible,
@@ -396,6 +464,7 @@ h1 {
 .case-arrow {
   color: var(--ink-soft);
   font-size: 16px;
+  cursor: pointer;
 }
 
 .no-results,
@@ -1230,10 +1299,11 @@ h1 {
 
 .documents-card {
   margin-top: 28px;
+  margin-right: 56px;
   background: #ffffff;
   border: 1px solid #e1e5eb;
   border-radius: 12px;
-  overflow: hidden;
+  overflow: visible;
   box-shadow: 0 2px 8px rgba(20, 35, 60, 0.04);
 }
 
@@ -1297,6 +1367,7 @@ h1 {
 }
 
 .documents-table-row {
+  position: relative;
   min-height: 64px;
   border-bottom: 1px solid #edf0f3;
   color: #263753;
@@ -1306,6 +1377,7 @@ h1 {
 
 .documents-table-row:last-child {
   border-bottom: 0;
+  border-radius: 0 0 11px 11px;
 }
 
 .documents-table-row:hover {
@@ -1364,6 +1436,10 @@ h1 {
   background: #dc2626;
 }
 
+.status-dot--rejected {
+  background: #dc2626;
+}
+
 
 .document-confidence {
   color: #17294d;
@@ -1375,7 +1451,89 @@ h1 {
   color: #34445f;
 }
 
+.document-row-actions {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+}
+
+.delete-document-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--red);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.documents-table-row:hover .delete-document-button,
+.documents-table-row:focus-within .delete-document-button,
+.delete-document-button.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: none) {
+  .delete-document-button {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.delete-record-button {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border: 1px solid var(--red);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--red);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.delete-document-button:hover:not(:disabled),
+.delete-document-button:focus-visible {
+  background: var(--red-bg);
+  color: var(--red);
+}
+
+.delete-record-button:hover:not(:disabled) {
+  background: var(--red);
+  color: #fff;
+}
+
+.delete-document-button:disabled,
+.delete-record-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.delete-document-button:focus-visible,
+.delete-record-button:focus-visible,
+.case-card-delete:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(179, 64, 42, 0.25);
+}
+
 .document-status--failed {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.document-status.document-status--rejected {
   background: #fef2f2;
   color: #dc2626;
 }
@@ -1409,6 +1567,13 @@ h1 {
 
 .document-details-intro {
   margin-bottom: 28px;
+}
+
+.document-details-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .document-details-intro h1 {
@@ -1543,6 +1708,109 @@ h1 {
   opacity: 0.6;
 }
 
+/* Neutral sibling of .details-type-select — that one's warm border flags a
+   low-confidence classification the officer needs to correct, which would
+   read as a warning on a dev tool's plain dropdown. */
+.type-select {
+  width: 100%;
+  max-width: 380px;
+  min-width: 0;
+  box-sizing: border-box;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #17294d;
+  font: inherit;
+  font-size: 13px;
+}
+
+.type-select:disabled {
+  opacity: 0.6;
+}
+
+/* --- Anomaly test page (dev tool) -------------------------------------
+   Each check's result gets one .details-card; everything below keeps the
+   card's *inner* content from stacking up as further nested boxes, which
+   is what made this page read as a pile of unrelated panels. */
+
+/* Plain single column. This page used to borrow .upload-view, which is a
+   `1fr 240px` grid built for UploadPage's sticky sidebar — with no sidebar
+   to fill the second track, its children auto-placed into alternating
+   cells (heading left, intro right, dropzone left, empty-state right...),
+   which is what scattered the page. */
+.tool-view {
+  margin-top: 28px;
+}
+
+.anomaly-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.anomaly-card-head h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.anomaly-subhead {
+  margin-top: 16px;
+}
+
+/* Flat inside a card: the card already supplies the border and white
+   ground, so the grid only needs its row dividers. */
+.kv-grid--flush {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+
+.kv-grid--flush .kv-row {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.anomaly-empty {
+  margin: 8px 0 0;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+}
+
+.badge.warn {
+  background: var(--amber-bg);
+  color: var(--amber);
+}
+
+.severity-chip {
+  margin-right: 8px;
+}
+
+/* Raw JSON is a debugging aid, not the point of the page — collapsed by
+   default so it stops dominating the result it belongs to. */
+.raw-json {
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.raw-json > summary {
+  cursor: pointer;
+  font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.raw-json > summary:hover {
+  color: var(--ink);
+}
+
 .details-label {
   display: block;
   margin-bottom: 7px;
@@ -1583,6 +1851,169 @@ h1 {
   font-size: 18px;
 }
 
+.add-field-button {
+  margin-left: auto;
+  padding: 7px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.case-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.case-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.case-header-row .eyebrow {
+  margin-bottom: 0;
+}
+
+.edit-case-button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: 1px solid var(--steel);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--steel);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  text-transform: none;
+  letter-spacing: normal;
+  cursor: pointer;
+}
+
+.edit-case-button:hover {
+  background: var(--steel);
+  color: #ffffff;
+}
+
+.add-field-button:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
+.add-field-form {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+}
+
+.add-field-form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.add-field-form-row label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.add-field-form-row input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 13px;
+}
+
+.add-field-form-row input:focus {
+  outline: none;
+  border-color: #6b7280;
+  box-shadow: 0 0 0 2px rgba(107, 114, 128, 0.12);
+}
+
+.add-field-error {
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: #b91c1c;
+}
+
+.add-field-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.add-field-form-actions button {
+  padding: 7px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.add-field-form-actions button:first-child {
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #374151;
+}
+
+.add-field-form-actions button:last-child {
+  border: none;
+  background: #111827;
+  color: #ffffff;
+}
+
+.add-field-form-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.extracted-field-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.delete-field-button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 5px;
+  background: #ffffff;
+  color: #6b7280;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.delete-field-button:hover {
+  border-color: #d1d5db;
+  background: #f9fafb;
+  color: #b91c1c;
+}
+
+.delete-field-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 /* Extracted information table */
 
 .extracted-table {
@@ -1751,6 +2182,83 @@ h1 {
 .array-value-hint {
   color: #6b778c;
   font-weight: 400;
+}
+
+.confirm-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(18, 32, 61, 0.45);
+}
+
+.confirm-dialog {
+  width: min(560px, 100%);
+  padding: 36px 40px 32px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 16px 48px rgba(18, 32, 61, 0.28);
+  text-align: center;
+}
+
+.confirm-dialog h2 {
+  margin: 0 0 12px;
+  color: var(--ink);
+  font-size: 24px;
+}
+
+.confirm-dialog p {
+  margin: 0 auto;
+  max-width: 42ch;
+  color: var(--ink-soft);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.confirm-dialog-actions button {
+  min-width: 108px;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.confirm-dialog-cancel {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+}
+
+.confirm-dialog-cancel:hover:not(:disabled) {
+  background: #f6f4ef;
+}
+
+.confirm-dialog-danger {
+  border: 0;
+  background: var(--red);
+  color: #fff;
+}
+
+.confirm-dialog-danger:hover:not(:disabled) {
+  background: #9a3522;
+}
+
+.confirm-dialog-cancel:disabled,
+.confirm-dialog-danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .array-modal-backdrop {
@@ -2157,30 +2665,43 @@ h1 {
 
 .manual-review-row {
   min-height: 64px;
-  border-bottom: 1px solid #f0dddd;
+  border-bottom: 1px solid #e8ebef;
+  background: #ffffff;
 }
 
 .manual-review-row:last-child {
   border-bottom: 0;
 }
 
+.manual-review-row--needs-attention {
+  background: #fff5f5;
+}
+
 .manual-review-field {
-  color: #a33131;
+  color: #263753;
   font-size: 13px;
   font-weight: 600;
 }
 
+.manual-review-row--needs-attention .manual-review-field {
+  color: #b3402a;
+}
 .manual-review-input {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
   padding: 10px 12px;
-  border: 1px solid #e4a3a3;
+  border: 1px solid #d9dee6;
   border-radius: 7px;
   background: #ffffff;
   color: #17294d;
   font: inherit;
   font-size: 13px;
+}
+
+.manual-review-row--needs-attention .manual-review-input {
+  border-color: #d33b3b;
+  background: #fff8f8;
 }
 
 .manual-review-input:focus {
@@ -2814,4 +3335,28 @@ h1 {
   .login-heading h1 {
     font-size: 24px;
   }
+}
+
+.approve-document-btn {
+  border: 1px solid #1f7a4d;
+  background: #1f7a4d;
+  color: #ffffff;
+  border-radius: 6px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.approve-document-btn:hover {
+  background: #19643f;
+}
+
+.approve-document-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.approved-documents-card {
+  margin-top: 24px;
 }

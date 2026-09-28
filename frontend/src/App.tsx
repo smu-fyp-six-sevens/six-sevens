@@ -9,7 +9,7 @@ import {
 } from 'react-router-dom';
 
 import CaseQueuePage from './pages/CaseQueuePage';
-import SpellingAnomalyTestPage from './pages/SpellingAnomalyTestPage';
+import TestAnomalyPage from './pages/TestAnomalyPage';
 import UploadPage from './pages/UploadPage';
 import CreateCasePage from './pages/CreateCasePage';
 import DocumentDetailsPage from './pages/DocumentDetailsPage';
@@ -48,11 +48,13 @@ function CaseQueueRoute({
   isLoading,
   error,
   onRetry,
+  onCaseDeleted,
 }: {
   cases: CaseRecord[];
   isLoading: boolean;
   error: string | null;
   onRetry: () => void;
+  onCaseDeleted: (caseId: string) => void;
 }) {
   const navigate = useNavigate();
 
@@ -65,16 +67,21 @@ function CaseQueueRoute({
       onOpenCase={(selectedCase) =>
         navigate(`/cases/${selectedCase.caseNumber ?? selectedCase.id}`)
       }
-      onOpenSpellingAnomalyTest={() => navigate('/test-spelling-anomalies')}
+      onOpenTestAnomaly={() => navigate('/test-anomalies')}
       onCreateCase={() => navigate('/create-case')}
+      onCaseDeleted={onCaseDeleted}
     />
   );
 }
 
 function CaseDetailsRoute({
   cases,
+  onCaseUpdated,
+  onCaseDeleted,
 }: {
   cases: CaseRecord[];
+  onCaseUpdated: (caseId: string, companyName: string) => void;
+  onCaseDeleted: (caseId: string) => void;
 }) {
   const { caseNumber } = useParams();
   const navigate = useNavigate();
@@ -105,6 +112,11 @@ function CaseDetailsRoute({
           `/cases/${selectedCase.caseNumber ?? selectedCase.id}/documents/${documentId}`
         )
       }
+      onCaseUpdated={(companyName) => onCaseUpdated(selectedCase.id, companyName)}
+      onCaseDeleted={() => {
+        onCaseDeleted(selectedCase.id);
+        navigate('/cases');
+      }}
     />
   );
 }
@@ -143,6 +155,11 @@ function DocumentDetailsRoute({
           `/cases/${selectedCase.caseNumber ?? selectedCase.id}`
         )
       }
+      onDocumentDeleted={() =>
+        navigate(
+          `/cases/${selectedCase.caseNumber ?? selectedCase.id}`
+        )
+      }
     />
   );
 }
@@ -168,11 +185,11 @@ function CreateCaseRoute({
   );
 }
 
-function SpellingAnomalyTestRoute() {
+function TestAnomalyRoute() {
   const navigate = useNavigate();
 
   return (
-    <SpellingAnomalyTestPage
+    <TestAnomalyPage
       onBack={() => navigate('/cases')}
     />
   );
@@ -210,7 +227,6 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAuthed, setIsAuthed] = useState(() => getToken() !== null);
-  const [showSpellingAnomalyTest, setShowSpellingAnomalyTest] = useState(false);
 
   async function loadCases(signal?: AbortSignal) {
     setIsLoading(true);
@@ -272,11 +288,6 @@ export default function App() {
     return () => controller.abort();
   }, [isAuthed]);
 
-  if (showSpellingAnomalyTest) {
-    return <SpellingAnomalyTestPage onBack={() => setShowSpellingAnomalyTest(false)} />;
-  }
-
-
   return (
     <BrowserRouter>
       <Routes>
@@ -299,6 +310,9 @@ export default function App() {
                 isLoading={isLoading}
                 error={error}
                 onRetry={() => void loadCases()}
+                onCaseDeleted={(caseId) =>
+                  setCases((current) => current.filter((item) => item.id !== caseId))
+                }
               />
             </RequireAuth>
           }
@@ -313,7 +327,19 @@ export default function App() {
                   <p>Loading case...</p>
                 </div>
               ) : (
-                <CaseDetailsRoute cases={cases} />
+                <CaseDetailsRoute
+                  cases={cases}
+                  onCaseUpdated={(caseId, companyName) =>
+                    setCases((current) =>
+                      current.map((item) =>
+                        item.id === caseId ? { ...item, applicant: companyName } : item
+                      )
+                    )
+                  }
+                  onCaseDeleted={(caseId) =>
+                    setCases((current) => current.filter((item) => item.id !== caseId))
+                  }
+                />
               )}
             </RequireAuth>
           }
@@ -347,10 +373,10 @@ export default function App() {
         />
 
         <Route
-          path="/test-spelling-anomalies"
+          path="/test-anomalies"
           element={
             <RequireAuth isAuthed={isAuthed}>
-              <SpellingAnomalyTestRoute />
+              <TestAnomalyRoute />
             </RequireAuth>
           }
         />

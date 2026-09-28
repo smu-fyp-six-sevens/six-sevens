@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class DocumentStatus(str, Enum):
@@ -13,6 +13,8 @@ class DocumentStatus(str, Enum):
     PROCESSING = "processing"   # AC2: Classifier workflow invoked (shown as "Classifying")
     EXTRACTING = "extracting"   # classification recorded; Extraction workflow invoked
     ANALYZED = "analyzed"       # Classifier (and downstream agents) finished
+    APPROVED = "approved"       # When loan officer manually approves a document
+    REJECTED = "rejected"       # When loan officer manually rejects a document
     FAILED = "failed"           # AC3: retries exhausted, needs manual review
 
 
@@ -220,6 +222,11 @@ class CaseRecord(BaseModel):
     recommended_additional_documents: list = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
+    # Set automatically at creation from settings.IS_CLOUD_DEPLOYMENT (never
+    # by the caller) — True for anything created outside the cloud
+    # deployment, hidden from the cloud case queue during UAT. See
+    # case_repository.create_case / list_cases.
+    dev: bool = False
 
 
 class CaseDocumentsStatus(str, Enum):
@@ -297,6 +304,26 @@ class CaseSummary(CaseRecord):
     )
 
 
+class UpdateCaseRequest(BaseModel):
+    """
+    A loan officer updating the case's own identifying details. Only
+    company_name is officer-editable today — status, submission_finalized
+    and greenlink_case_id are system-managed (see case_status.py /
+    case_repository.set_submission_finalized) and deliberately excluded
+    here so they can't be overwritten through this endpoint.
+    """
+
+    company_name: str
+
+    @field_validator("company_name")
+    @classmethod
+    def company_name_must_not_be_blank(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("company_name is required")
+        return trimmed
+
+
 class DocumentRecord(BaseModel):
     id: str
     case_id: Optional[str] = None
@@ -326,6 +353,10 @@ class DocumentRecord(BaseModel):
     # The classifier's own plain-language justification for document_type —
     # see document_repository.record_classification.
     classification_reasoning: Optional[str] = None
+    # The Digital Authenticity Specialist's stored result (see
+    # fraud_detection.metadata_analysis.MetadataAnalysisResult) — set once
+    # GET .../detection/metadata-anomaly has run for this document.
+    metadata_anomalies: Optional[dict] = None
 
 
 class UpdateExtractedFieldsRequest(BaseModel):
@@ -338,6 +369,9 @@ class UpdateExtractedFieldsRequest(BaseModel):
     extracted_fields: dict
     evidence: list[str] = Field(default_factory=list)
 
+class AddExtractedFieldRequest(BaseModel):
+    field_name: str
+    field_value: object
 
 class UpdateDocumentTypeRequest(BaseModel):
     """

@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import AppHeader from '../components/AppHeader';
 import CaseCard from '../components/CaseCard';
+import ConfirmDialog from '../components/ConfirmDialog';
+import { hideDevFeatures } from '../lib/api';
+import { deleteCase } from '../services/uploadService';
 import type { CaseRecord } from '../App';
 
 interface CaseQueuePageProps {
@@ -9,8 +12,9 @@ interface CaseQueuePageProps {
   error: string | null;
   onRetry: () => void;
   onOpenCase: (caseRecord: CaseRecord) => void;
-  onOpenSpellingAnomalyTest: () => void;
+  onOpenTestAnomaly: () => void;
   onCreateCase: () => void;
+  onCaseDeleted: (caseId: string) => void;
 }
 
 // One colour per status label (see mapStatus in App.tsx); anything else
@@ -80,10 +84,14 @@ export default function CaseQueuePage({
   error,
   onRetry,
   onOpenCase,
-  onOpenSpellingAnomalyTest,
+  onOpenTestAnomaly,
   onCreateCase,
+  onCaseDeleted,
 }: CaseQueuePageProps) {
   const [search, setSearch] = useState('');
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deletingCaseId, setDeletingCaseId] = useState<string | null>(null);
+  const [caseToDelete, setCaseToDelete] = useState<CaseRecord | null>(null);
   const [savedStatuses, setSavedStatuses] = useState<Set<string>>(
     () => new Set(loadPrefs().statuses),
   );
@@ -168,6 +176,25 @@ export default function CaseQueuePage({
 
     if (exact) {
       onOpenCase(exact);
+    }
+  }
+
+  async function confirmDeleteCase() {
+    if (!caseToDelete) return;
+
+    const caseRecord = caseToDelete;
+    setDeletingCaseId(caseRecord.id);
+    setDeleteError(null);
+
+    try {
+      await deleteCase(caseRecord.id);
+      setCaseToDelete(null);
+      onCaseDeleted(caseRecord.id);
+    } catch (err) {
+      setCaseToDelete(null);
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete case.');
+    } finally {
+      setDeletingCaseId(null);
     }
   }
 
@@ -260,10 +287,18 @@ export default function CaseQueuePage({
 
         <div className="queue-label">
           Assigned to you ({matches.length})
-          <button type="button" className="dev-tool-link" onClick={onOpenSpellingAnomalyTest}>
-            Test spelling anomaly detection →
-          </button>
+          {!hideDevFeatures && (
+            <button type="button" className="dev-tool-link" onClick={onOpenTestAnomaly}>
+              Test anomaly detection →
+            </button>
+          )}
         </div>
+
+        {deleteError && (
+          <div className="toast show mixed" role="alert">
+            ⚠ {deleteError}
+          </div>
+        )}
 
         {isLoading ? (
           <div className="no-results">
@@ -287,6 +322,8 @@ export default function CaseQueuePage({
               key={caseRecord.id}
               caseRecord={caseRecord}
               onOpen={onOpenCase}
+              onDelete={setCaseToDelete}
+              isDeleting={deletingCaseId === caseRecord.id}
             />
           ))
         ) : (
@@ -295,6 +332,18 @@ export default function CaseQueuePage({
           </div>
         )}
       </section>
+
+      {caseToDelete && (
+        <ConfirmDialog
+          title="Delete this case?"
+          message={`Case ${displayCaseNumber(caseToDelete)} (${caseToDelete.applicant}) and its documents will be removed and cannot be recovered.`}
+          isConfirming={deletingCaseId === caseToDelete.id}
+          onCancel={() => {
+            if (deletingCaseId === null) setCaseToDelete(null);
+          }}
+          onConfirm={() => void confirmDeleteCase()}
+        />
+      )}
     </main>
   );
 }

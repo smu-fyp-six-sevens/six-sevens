@@ -54,7 +54,7 @@ class ExtractedField(BaseModel):
     'ACME Pte Ltd'). See _field_search_text for how this gets resolved to
     actual searchable text.
     """
-
+    id: str | None = None
     field_name: str
     field_type: str
     field_value: Any

@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Optional
 
-from .supabase_client import supabase_client
+from .supabase_client import service_supabase_client, supabase_client
 from .fraud_detection.font_consistency_v2 import ExtractedField
 
 def _infer_field_type(value: object) -> str:
@@ -105,3 +105,51 @@ def get_extracted_fields_for_documents(
     for row in result.data:
         by_document[row["document_id"]].append(ExtractedField(**row))
     return by_document
+
+def add_extracted_field(
+    document_id: str,
+    field_name: str,
+    field_value: object,
+    *,
+    required_field_names: set[str],
+) -> None:
+    """
+    Adds one manually entered extracted field.
+
+    Manually added fields are treated as human-verified,
+    so their confidence is always 1.0.
+    """
+    supabase_client.table("extracted_fields").insert({
+        "document_id": document_id,
+        "field_name": field_name,
+        "field_value": field_value,
+        "confidence": 1.0,
+        "field_category": (
+            "required" if field_name in required_field_names else "additional"
+        ),
+        "field_type": _infer_field_type(field_value),
+    }).execute()
+
+
+def delete_fields_for_document(document_id: str) -> None:
+    """Removes every extracted-field row for a document that is being deleted."""
+    service_supabase_client().table("extracted_fields").delete().eq(
+        "document_id", document_id
+    ).execute()
+
+
+def delete_extracted_field(
+    document_id: str,
+    field_id: str,
+) -> None:
+    """
+    Deletes one extracted field belonging to the specified document.
+    """
+    (
+        supabase_client
+        .table("extracted_fields")
+        .delete()
+        .eq("id", field_id)
+        .eq("document_id", document_id)
+        .execute()
+    )

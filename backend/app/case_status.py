@@ -4,6 +4,8 @@ from collections import defaultdict
 from typing import Optional
 
 from . import case_repository, document_repository, extracted_fields_repository
+from .case_match import check_case_match
+from .config import settings
 from .mapper import (
     compute_id_document_identity_coverage,
     compute_id_document_identity_progress,
@@ -169,10 +171,15 @@ def build_case_snapshot(case_id: str) -> Optional[dict]:
         return None
     documents = document_repository.list_documents(case_id=case_id)
     summary = build_summary(case, documents)
+    # Before enrichment: that rewrites extracted_fields in place into
+    # {"value", "confidence"} wrappers, while case_match reads the plain
+    # values documents.extracted_fields stores.
+    case_match = check_case_match(case, documents)
     enriched = _enrich_with_extracted_fields(documents)
     return {
         "type": "snapshot",
         "case": summary.model_dump(mode="json"),
+        "case_match": case_match.model_dump(mode="json"),
         "documents": [document.model_dump(mode="json") for document in enriched],
     }
 
@@ -191,7 +198,7 @@ def list_case_summaries() -> list[CaseSummary]:
     N+1 as the case count grows. Fine at current scale; would need
     pagination/filtering if that stops being true.
     """
-    cases = case_repository.list_cases()
+    cases = case_repository.list_cases(include_dev=not settings.IS_CLOUD_DEPLOYMENT)
     documents_by_case: dict[str, list[DocumentRecord]] = defaultdict(list)
     for doc in document_repository.list_documents():
         if doc.case_id is not None:

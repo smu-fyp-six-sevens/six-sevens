@@ -2,15 +2,23 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { subscribeToCaseStatus } from '../services/caseSocket';
 import {
+  deleteExtractedField,
+  deleteDocument,
+  addExtractedField,
+  approveDocument,
+  rejectDocument,
   CLASSIFICATION_CONFIDENCE_THRESHOLD,
   DOCUMENT_TYPE_OPTIONS,
   EXTRACTION_CONFIDENCE_THRESHOLD,
   TERMINAL_DOCUMENT_STATUSES,
   formatDocumentStatus,
+  formatDocumentType,
   formatRoutingOutcome,
   getDocument,
+  getDocumentCaseMatch,
   getDetectionReport,
   getLangGraphTrace,
   runDetection,
@@ -23,17 +31,10 @@ interface DocumentDetailsPageProps {
   selectedCase: CaseRecord;
   documentId: string;
   onBack: () => void;
+  onDocumentDeleted: () => void;
 }
 
-const formatDocumentType = (documentType?: string | null) => {
-  if (!documentType) return "—";
 
-  const formatted = documentType
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-
-  return formatted.replace(/\bId\b/g, "ID");
-};
 const FIELD_KEY_ACRONYMS = new Set([
   'id',
   'uen',
@@ -54,6 +55,7 @@ function humanizeFieldKey(key: string): string {
 }
 
 interface ExtractedField {
+  id?: string;
   value: unknown;
   confidence: number | null;
 }
@@ -73,6 +75,7 @@ function displayableFieldEntries(
         'value' in rawField
       ) {
         const field = rawField as {
+          id?: unknown;
           value?: unknown;
           confidence?: unknown;
         };
@@ -80,6 +83,7 @@ function displayableFieldEntries(
         return [
           key,
           {
+            id: typeof field.id === 'string' ? field.id : undefined,
             value: field.value ?? null,
             confidence:
               typeof field.confidence === 'number'
@@ -612,11 +616,21 @@ export default function DocumentDetailsPage({
   selectedCase,
   documentId,
   onBack,
+  onDocumentDeleted,
 }: DocumentDetailsPageProps) {
   const [document, setDocument] = useState<DocumentRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  const [isAddFieldOpen, setIsAddFieldOpen] = useState(false);
+  const [newFieldName, setNewFieldName] = useState('');
+  const [newFieldValue, setNewFieldValue] = useState('');
+  const [isAddingField, setIsAddingField] = useState(false);
+  const [addFieldError, setAddFieldError] = useState<string | null>(null);
+
+  const [deletingFieldId, setDeletingFieldId] = useState<string | null>(null);
+  const [deleteFieldError, setDeleteFieldError] = useState<string | null>(null);
+  
   const [fieldDraft, setFieldDraft] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -638,6 +652,14 @@ export default function DocumentDetailsPage({
   const [isRunningDetection, setIsRunningDetection] = useState(false);
   const [detectionError, setDetectionError] = useState<string | null>(null);
 
+  const [isApproving, setIsApproving] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
+
+  const [isRejecting, setIsRejecting] = useState(false);
+  const [rejectError, setRejectError] = useState<string | null>(null);
+  const [isDeletingDocument, setIsDeletingDocument] = useState(false);
+  const [deleteDocumentError, setDeleteDocumentError] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   // Last extracted_fields the draft was built from — lets a live update reset
   // the draft only when the fields really changed (e.g. a rerun finishing),
   // not wipe an officer's in-progress edits on every unrelated case update.
@@ -686,6 +708,40 @@ export default function DocumentDetailsPage({
     };
   }, [documentId]);
 
+  // Whether this document belongs to the case's company and individuals (see
+  // backend/app/case_match.py). Depends on every document in the case, so
+  // it's fetched on its own rather than carried on the document itself, and
+  // refetched whenever this document's own status or fields change.
+  const [caseMatch, setCaseMatch] = useState<DocumentCaseMatch | null>(null);
+  const hasCase = Boolean(document?.case_id);
+  const documentStatus = document?.status;
+  const extractedFieldsJson = JSON.stringify(document?.extracted_fields ?? null);
+
+  useEffect(() => {
+    if (!hasCase || documentStatus !== 'analyzed') {
+      setCaseMatch(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    getDocumentCaseMatch(documentId)
+      .then((result) => {
+        if (!cancelled) setCaseMatch(result);
+      })
+      .catch(() => {
+        // Informational only — the rest of the page works without it.
+        if (!cancelled) setCaseMatch(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [documentId, hasCase, documentStatus, extractedFieldsJson]);
+
+  const caseMatchMismatches =
+    caseMatch?.comparisons.filter((comparison) => comparison.outcome === 'mismatch') ?? [];
+
   const extractedFields = useMemo(
     () => displayableFieldEntries(document?.extracted_fields ?? null),
     [document?.extracted_fields],
@@ -699,6 +755,14 @@ export default function DocumentDetailsPage({
     document?.status === 'failed' && document.failure_reason
       ? describeFailureReason(document.failure_reason)
       : null;
+
+  // Distinct from failureReason (a hard processing failure) and from
+  // needsManualReview below (extraction's per-field confidence) — this is
+  // the Classifier's own confidence in document_type, compared the same way
+  // the backend gates canCorrectType (see below).
+  const lowClassificationConfidence =
+    document?.confidence != null &&
+    document.confidence < CLASSIFICATION_CONFIDENCE_THRESHOLD;
 
   // Manual review is driven by the lowest confidence among this document's
   // own extracted fields — not a single document-wide extraction_confidence
@@ -824,6 +888,50 @@ export default function DocumentDetailsPage({
     };
   }, [documentId, isInFlight, document?.status]);
 
+  async function handleApproveDocument() {
+    if (!document) {
+      return;
+    }
+
+    setIsApproving(true);
+    setApproveError(null);
+
+    try {
+      const updated = await approveDocument(document.id);
+      setDocument(updated);
+    } catch (error) {
+      setApproveError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to approve document.',
+      );
+    } finally {
+      setIsApproving(false);
+    }
+  }
+
+  async function handleRejectDocument() {
+  if (!document) {
+    return;
+  }
+
+  setIsRejecting(true);
+  setRejectError(null);
+
+  try {
+    const updated = await rejectDocument(document.id);
+    setDocument(updated);
+  } catch (error) {
+    setRejectError(
+      error instanceof Error
+        ? error.message
+        : 'Failed to reject document.',
+    );
+  } finally {
+    setIsRejecting(false);
+  }
+}
+
   async function handleSaveType() {
     if (!document || !chosenType) {
       return;
@@ -944,6 +1052,24 @@ export default function DocumentDetailsPage({
     }
   }
 
+  async function confirmDeleteDocument() {
+    if (!document) return;
+
+    setIsDeletingDocument(true);
+    setDeleteDocumentError(null);
+
+    try {
+      await deleteDocument(document.id);
+      onDocumentDeleted();
+    } catch (error) {
+      setDeleteConfirmOpen(false);
+      setDeleteDocumentError(
+        error instanceof Error ? error.message : 'Failed to delete document.',
+      );
+      setIsDeletingDocument(false);
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="shell shell--upload">
@@ -989,11 +1115,28 @@ export default function DocumentDetailsPage({
       </div>
 
       <div className="document-details-intro">
-        <h1>Document Details</h1>
+        <div className="document-details-title-row">
+          <h1>Document Details</h1>
+          {document.status !== 'approved' && (
+            <button
+              type="button"
+              className="delete-record-button"
+              onClick={() => setDeleteConfirmOpen(true)}
+              disabled={isDeletingDocument}
+            >
+              {isDeletingDocument ? 'Deleting…' : 'Delete document'}
+            </button>
+          )}
+        </div>
         <p className="sub">
           View extracted data and review any fields that require
           manual correction.
         </p>
+        {deleteDocumentError && (
+          <div className="toast show mixed" role="alert">
+            ⚠ {deleteDocumentError}
+          </div>
+        )}
       </div>
 
       {/* =====================================================
@@ -1022,7 +1165,10 @@ export default function DocumentDetailsPage({
                 ? 'document-status--success'
                 : document.status === 'failed'
                   ? 'document-status--failed'
-                  : ''
+                  : document.status === 'rejected'
+                    ? 'document-status--rejected'
+                    : ''
+                  
             }`}
           >
             <span
@@ -1031,7 +1177,9 @@ export default function DocumentDetailsPage({
                   ? 'status-dot--success'
                   : document.status === 'failed'
                     ? 'status-dot--failed'
-                    : ''
+                    : document.status === 'rejected'
+                      ? 'status-dot--rejected'
+                      : ''
               }`}
             />
             {formatDocumentStatus(document.status)}
@@ -1103,10 +1251,34 @@ export default function DocumentDetailsPage({
           <div>
             <span className="details-label">Routing Outcome</span>
             <strong>
-              {formatRoutingOutcome(document)}
+              {formatRoutingOutcome(document, caseMatch)}
             </strong>
           </div>
         </div>
+
+        {caseMatch?.status === 'manual_review' && (
+          <div className="review-message review-message--warning details-failure-reason">
+            <div>
+              <strong>
+                {caseMatch.case_mismatch
+                  ? 'Case mismatch — sent to manual review'
+                  : 'Sent to manual review'}
+              </strong>
+              {caseMatchMismatches.length > 0 ? (
+                caseMatchMismatches.map((comparison) => (
+                  <div key={`${comparison.document_field}:${comparison.document_value}`}>
+                    {comparison.reason}
+                    {comparison.case_value && (
+                      <> (certificate of incumbency: {comparison.case_value})</>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div>{caseMatch.reason}</div>
+              )}
+            </div>
+          </div>
+        )}
 
         {failureReason && (
           <div className="review-message review-message--error details-failure-reason">
@@ -1114,6 +1286,25 @@ export default function DocumentDetailsPage({
               <strong>{failureReason.title}</strong>
               <div>{failureReason.detail}</div>
               {canCorrectType && (
+                <div className="details-failure-reason-hint">
+                  You can correct the document type above and re-run extraction.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {lowClassificationConfidence && (
+          <div className="review-message review-message--warning details-failure-reason">
+            <div>
+              <strong>Classification confidence below threshold</strong>
+              <div>
+                This document was classified as{' '}
+                {formatDocumentType(document.document_type)} with{' '}
+                {document.confidence!.toFixed(2)} confidence, below the
+                required {CLASSIFICATION_CONFIDENCE_THRESHOLD.toFixed(2)}.
+              </div>
+              {canCorrectType && !failureReason && (
                 <div className="details-failure-reason-hint">
                   You can correct the document type above and re-run extraction.
                 </div>
@@ -1140,7 +1331,115 @@ export default function DocumentDetailsPage({
               </strong>
             </span>
           )}
+
+          <button
+            type="button"
+            className="add-field-button"
+            onClick={() => {
+              setIsAddFieldOpen(true);
+              setAddFieldError(null);
+              setNewFieldName('');
+              setNewFieldValue('');
+            }}
+          >
+            + Add field
+          </button>
         </div>
+
+        {isAddFieldOpen && (
+          <div className="add-field-form">
+            <div className="add-field-form-row">
+              <label htmlFor="new-field-name">Field name</label>
+              <input
+                id="new-field-name"
+                type="text"
+                value={newFieldName}
+                onChange={(event) => setNewFieldName(event.target.value)}
+                placeholder="e.g. Company Address"
+                disabled={isAddingField}
+              />
+            </div>
+
+            <div className="add-field-form-row">
+              <label htmlFor="new-field-value">Field value</label>
+              <input
+                id="new-field-value"
+                type="text"
+                value={newFieldValue}
+                onChange={(event) => setNewFieldValue(event.target.value)}
+                placeholder="Enter the value"
+                disabled={isAddingField}
+              />
+            </div>
+
+            {addFieldError && (
+              <div className="add-field-error">
+                {addFieldError}
+              </div>
+            )}
+
+            <div className="add-field-form-actions">
+              <button
+                type="button"
+                onClick={() => setIsAddFieldOpen(false)}
+                disabled={isAddingField}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  const fieldName = newFieldName.trim();
+
+                  if (!fieldName) {
+                    setAddFieldError('Field name cannot be empty.');
+                    return;
+                  }
+
+                  if (!document) {
+                    setAddFieldError('Document is not loaded.');
+                    return;
+                  }
+
+                  setIsAddingField(true);
+                  setAddFieldError(null);
+
+                  try {
+                    const updated = await addExtractedField(
+                      document.id,
+                      fieldName,
+                      newFieldValue,
+                    );
+
+                    setDocument(updated);
+                    setFieldDraft(buildFieldDraft(updated.extracted_fields));
+                    setIsAddFieldOpen(false);
+                    setNewFieldName('');
+                    setNewFieldValue('');
+                  } catch (error) {
+                    setAddFieldError(
+                      error instanceof Error
+                        ? error.message
+                        : 'Failed to add field.',
+                    );
+                  } finally {
+                    setIsAddingField(false);
+                  }
+                }}
+                disabled={isAddingField}
+              >
+                Add field
+              </button>
+            </div>
+          </div>
+        )}
+
+        {deleteFieldError && (
+          <div className="add-field-error">
+            {deleteFieldError}
+          </div>
+        )}
 
         {extractedFields.length === 0 ? (
           <div className="review-message review-message--error">
@@ -1187,7 +1486,7 @@ export default function DocumentDetailsPage({
                   )}
                 </span>
 
-                <span>
+                <span className="extracted-field-actions">
                   {field.confidence != null ? (
                     <span
                       className={
@@ -1200,6 +1499,58 @@ export default function DocumentDetailsPage({
                     </span>
                   ) : (
                     '—'
+                  )}
+
+                  {field.id && (
+                    <button
+                      type="button"
+                      className="delete-field-button"
+                      onClick={async () => {
+                        const confirmed = window.confirm(
+                          'Are you sure you want to delete this field? This field will not be recoverable.',
+                        );
+
+                        if (!confirmed) {
+                          return;
+                        }
+
+                        const fieldId = field.id;
+
+                        if (!fieldId) {
+                          return;
+                        }
+
+                        if (!document) {
+                          setDeleteFieldError('Document is not loaded.');
+                          return;
+                        }
+
+                        setDeletingFieldId(fieldId);
+                        setDeleteFieldError(null);
+
+                        try {
+                          const updated = await deleteExtractedField(
+                            document.id,
+                            fieldId,
+                          );
+
+                          setDocument(updated);
+                        } catch (error) {
+                          setDeleteFieldError(
+                            error instanceof Error
+                              ? error.message
+                              : 'Failed to delete field.',
+                          );
+                        } finally {
+                          setDeletingFieldId(null);
+                        }
+                      }}
+                      disabled={deletingFieldId === field.id}
+                      title="Delete field"
+                      aria-label={`Delete ${humanizeFieldKey(key)}`}
+                    >
+                      {deletingFieldId === field.id ? '…' : '×'}
+                    </button>
                   )}
                 </span>
               </div>
@@ -1267,7 +1618,9 @@ export default function DocumentDetailsPage({
               return (
                 <div
                   key={key}
-                  className="manual-review-row"
+                  className={`manual-review-row${
+                    canEditField ? ' manual-review-row--needs-attention' : ''
+                  }`}
                 >
                   <span className="manual-review-field">
                     {humanizeFieldKey(key)}
@@ -1465,21 +1818,44 @@ export default function DocumentDetailsPage({
           Document actions
           ===================================================== */}
 
-      <div className="document-actions">
-        <button
-          type="button"
-          className="document-action--reject"
-        >
-          ✕ Reject Document
-        </button>
+        {approveError && (
+          <div className="save-error">{approveError}</div>
+        )}
 
-        <button
-          type="button"
-          className="document-action--approve"
-        >
-          ✓ Approve Document
-        </button>
-      </div>
+        {document.status !== 'approved' && 
+        document.status !== 'rejected' && (
+          <div className="document-actions">
+            <button
+              type="button"
+              className="document-action--reject"
+              disabled={isRejecting || isApproving}
+              onClick={() => void handleRejectDocument()}
+            >
+              {isRejecting ? 'Rejecting…' : '✕ Reject Document'}
+            </button>
+
+            <button
+              type="button"
+              className="document-action--approve"
+              disabled={isApproving || document.status !== 'analyzed'}
+              onClick={() => void handleApproveDocument()}
+            >
+              {isApproving ? 'Approving…' : '✓ Approve Document'}
+            </button>
+          </div>
+        )}
+
+      {deleteConfirmOpen && document && (
+        <ConfirmDialog
+          title="Delete this document?"
+          message={`${document.filename} will be removed from this case and cannot be recovered.`}
+          isConfirming={isDeletingDocument}
+          onCancel={() => {
+            if (!isDeletingDocument) setDeleteConfirmOpen(false);
+          }}
+          onConfirm={() => void confirmDeleteDocument()}
+        />
+      )}
     </div>
   );
 }

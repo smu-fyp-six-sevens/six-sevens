@@ -33,6 +33,20 @@ class Settings:
     AUTH_PASSWORD: str = _env("AUTH_PASSWORD")
     AUTH_SECRET_KEY: str = _env("AUTH_SECRET_KEY")
 
+    # UAT/demo isolation: local dev and the cloud deployment currently share
+    # one Supabase project. DEPLOYMENT_ENV is the one source of truth for
+    # "which one is this process" — set to "cloud" only on the cloud Cloud
+    # Run service (see .github/workflows/deploy.yml); left unset (defaults
+    # to "dev") on every local machine. Drives both ends of case_repository's
+    # dev flag: a case created while IS_CLOUD_DEPLOYMENT is True is always
+    # dev=False (a real, sponsor-visible case); one created while it's False
+    # is always dev=True (never manually flipped) — and the case queue
+    # filters out dev=True cases only when IS_CLOUD_DEPLOYMENT is True, so
+    # local dev still sees everything. To test cloud behaviour locally, set
+    # DEPLOYMENT_ENV=cloud in backend/.env temporarily.
+    DEPLOYMENT_ENV: str = _env("DEPLOYMENT_ENV", "dev")
+    IS_CLOUD_DEPLOYMENT: bool = DEPLOYMENT_ENV.lower() == "cloud"
+
     # Comma-separated list of exact origins the frontend is served from, in
     # addition to local dev.
     ALLOWED_ORIGINS: list[str] = [
