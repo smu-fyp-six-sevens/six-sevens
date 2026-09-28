@@ -20,7 +20,7 @@ numpy
 symspellpy>=6.7,<7.0
 
 # LangGraph experiment (langgraph-test branch, backend/app/langgraph) — see
-# LANGGRAPH_MIGRATION_PLAN.md. Not used by the Dify code path.
+# LANGGRAPH_MIGRATION_PLAN.md.
 langgraph>=0.2,<0.3
 langchain-anthropic>=0.3,<0.4
 langgraph-checkpoint-postgres>=2.0,<3.0

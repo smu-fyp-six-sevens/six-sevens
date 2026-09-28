@@ -5,11 +5,30 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from . import extracted_fields_repository, storage_service
+from . import case_status, extracted_fields_repository, storage_service
 from .models import DocumentRecord, DocumentStatus
 from .supabase_client import service_supabase_client, supabase_client
 
 logger = logging.getLogger(__name__)
+
+
+def _sync_case(case_id: Optional[str]) -> None:
+    """
+    Best-effort refresh of the case-level submission_finalized cache after a
+    write that can change a document's classification_outcome or
+    fulfilled_requirements. Never raises: the document write above already
+    succeeded and is the source of truth, and get_case_summary/build_summary
+    always recompute requirement coverage live from the documents themselves
+    rather than trusting this cached flag — so a failed resync here just
+    leaves it stale until the next successful write to this case's documents
+    self-heals it, not something worth failing the caller's request over.
+    """
+    if case_id is None:
+        return
+    try:
+        case_status.sync_submission_finalized(case_id)
+    except Exception:
+        logger.exception("Document write succeeded but failed to resync case %s", case_id)
 
 
 def create_document(
@@ -53,12 +72,25 @@ def update_status(
     if document_type is not None:
         update["document_type"] = document_type
 
-    supabase_client.table("documents").update(update).eq("id", document_id).execute()
+    result = supabase_client.table("documents").update(update).eq("id", document_id).execute()
+    # Only the ANALYZED transition can change requirement coverage (a
+    # document's classification_outcome/fulfilled_requirements are set
+    # earlier, by record_classification/update_extracted_fields) — every
+    # other status this function sets (queued/processing/extracting/failed)
+    # never did resync before either, so this deliberately doesn't sync on
+    # those to avoid extra writes with no coverage-affecting reason.
+    if status == DocumentStatus.ANALYZED and result.data:
+        _sync_case(result.data[0].get("case_id"))
 
 def approve_document(document_id: str) -> None:
-    supabase_client.table("documents").update(
-        {"status": DocumentStatus.APPROVED.value}
-    ).eq("id", document_id).execute()
+    result = (
+        supabase_client.table("documents")
+        .update({"status": DocumentStatus.APPROVED.value})
+        .eq("id", document_id)
+        .execute()
+    )
+    if result.data:
+        _sync_case(result.data[0].get("case_id"))
 
 def reject_document(document_id: str) -> None:
     supabase_client.table("documents").update(
@@ -97,7 +129,9 @@ def record_classification(
     }
     if reasoning is not None:
         update["classification_reasoning"] = reasoning
-    supabase_client.table("documents").update(update).eq("id", document_id).execute()
+    result = supabase_client.table("documents").update(update).eq("id", document_id).execute()
+    if result.data:
+        _sync_case(result.data[0].get("case_id"))
 
 
 def update_extracted_fields(
@@ -127,7 +161,9 @@ def update_extracted_fields(
     }
     if fulfilled_requirements is not None:
         update["fulfilled_requirements"] = fulfilled_requirements
-    supabase_client.table("documents").update(update).eq("id", document_id).execute()
+    result = supabase_client.table("documents").update(update).eq("id", document_id).execute()
+    if result.data:
+        _sync_case(result.data[0].get("case_id"))
 
 
 def record_escalation(document_id: str, reason: str) -> None:
@@ -179,6 +215,7 @@ def remove_document(document: DocumentRecord) -> None:
     result = service_supabase_client().table("documents").delete().eq("id", document.id).execute()
     if not result.data:
         raise RuntimeError(f"Document {document.id} was not deleted")
+    _sync_case(document.case_id)
 
 
 def get_document(document_id: str) -> Optional[DocumentRecord]:

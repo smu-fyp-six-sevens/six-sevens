@@ -4,20 +4,18 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from pydantic import BaseModel
 
-from .. import (
-    case_status,
-    document_repository,
-    extracted_fields_repository,
-    storage_service,
-)
+from .. import document_repository, extracted_fields_repository, storage_service
+
+from ._dependencies import get_document_or_404
 from ..config import settings
-from ..extraction_prompts import KNOWN_DOCUMENT_TYPES, schema_field_names
+from ..langgraph.extraction_prompts import KNOWN_DOCUMENT_TYPES, schema_field_names
 from ..models import (
+    IN_FLIGHT_STATUSES,
     AddExtractedFieldRequest,
     ClassificationOutcome,
-    DocumentDownloadResponse,
     DocumentRecord,
     DocumentStatus,
     UpdateDocumentTypeRequest,
@@ -31,15 +29,16 @@ from ..queue_service import document_queue
 # "unrecognised" is the "Other" catch-all: Extraction has a generic schema for it.
 _SETTABLE_DOCUMENT_TYPES = {*KNOWN_DOCUMENT_TYPES, "unrecognised"}
 # A pipeline run is already in flight for these — correcting the type now would race it.
-_TYPE_OVERRIDE_BLOCKED_STATUSES = {
-    DocumentStatus.UPLOADED,
-    DocumentStatus.QUEUED,
-    DocumentStatus.PROCESSING,
-    DocumentStatus.EXTRACTING,
-}
+_TYPE_OVERRIDE_BLOCKED_STATUSES = IN_FLIGHT_STATUSES
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 logger = logging.getLogger(__name__)
+
+
+class DocumentDownloadResponse(BaseModel):
+    document_id: str
+    signed_url: str
+    expires_in: int
 
 
 @router.get("", response_model=list[DocumentRecord])
@@ -105,23 +104,13 @@ async def get_document(document_id: str) -> DocumentRecord:
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_document(document_id: str) -> None:
+async def delete_document(
+    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+) -> None:
     """
     Removes a document from its case. A following GET /documents/{id} or
     a case document list no longer returns it.
     """
-    try:
-        document = await asyncio.to_thread(document_repository.get_document, document_id)
-    except Exception as exc:
-        logger.exception("Failed to fetch document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch the document. Check Supabase table access.",
-        ) from exc
-
-    if document is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
-
     if document.status == DocumentStatus.APPROVED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -137,25 +126,12 @@ async def delete_document(document_id: str) -> None:
             detail="Failed to delete the document. Check Supabase table access.",
         ) from exc
 
-    if document.case_id is None:
-        return
-
-    try:
-        await asyncio.to_thread(case_status.sync_submission_finalized, document.case_id)
-    except Exception:
-        # The document row is already gone. The live case snapshot recomputes
-        # requirement coverage from the documents that remain, so a failed
-        # checklist write should not tell the officer the delete failed.
-        logger.exception(
-            "Deleted document %s but failed to resync case %s",
-            document_id,
-            document.case_id,
-        )
-
 
 @router.patch("/{document_id}/extracted-fields", response_model=DocumentRecord)
 async def update_extracted_fields(
-    document_id: str, request: UpdateExtractedFieldsRequest
+    document_id: str,
+    request: UpdateExtractedFieldsRequest,
+    document: DocumentRecord = Depends(get_document_or_404),
 ) -> DocumentRecord:
     """
     A loan officer manually correcting low-confidence extracted fields (see
@@ -164,18 +140,6 @@ async def update_extracted_fields(
     since a human has now verified the values, which also takes the document
     back above the threshold so the frontend stops showing it as editable.
     """
-    try:
-        document = await asyncio.to_thread(document_repository.get_document, document_id)
-    except Exception as exc:
-        logger.exception("Failed to fetch document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch the document. Check Supabase table access.",
-        ) from exc
-
-    if document is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
-
     try:
         # Recomputed rather than left as whatever the automated pipeline last
         # wrote — a loan officer correcting individual_address (e.g. filling
@@ -270,9 +234,6 @@ async def update_extracted_fields(
             detail="Failed to save extracted fields. Check Supabase table access.",
         ) from exc
 
-    if document.case_id is not None:
-        await asyncio.to_thread(case_status.sync_submission_finalized, document.case_id)
-
     updated = await get_document(document_id)
     return updated
 
@@ -283,6 +244,7 @@ async def update_extracted_fields(
 async def add_extracted_field(
     document_id: str,
     request: AddExtractedFieldRequest,
+    document: DocumentRecord = Depends(get_document_or_404),
 ) -> DocumentRecord:
     """
     Adds one manually entered extracted field.
@@ -299,17 +261,6 @@ async def add_extracted_field(
         )
 
     try:
-        document = await asyncio.to_thread(
-            document_repository.get_document,
-            document_id,
-        )
-
-        if document is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Document not found",
-            )
-
         existing_fields = await asyncio.to_thread(
             extracted_fields_repository.get_extracted_fields,
             document_id,
@@ -358,12 +309,6 @@ async def add_extracted_field(
             fulfilled_requirements,
         )
 
-        if document.case_id is not None:
-            await asyncio.to_thread(
-                case_status.sync_submission_finalized,
-                document.case_id,
-            )
-
         return await get_document(document_id)
 
     except HTTPException:
@@ -385,6 +330,7 @@ async def add_extracted_field(
 async def delete_extracted_field(
     document_id: str,
     field_id: str,
+    document: DocumentRecord = Depends(get_document_or_404),
 ) -> DocumentRecord:
     """
     Deletes one manually entered extracted field.
@@ -393,17 +339,6 @@ async def delete_extracted_field(
     Fulfilled requirements are recalculated after deletion.
     """
     try:
-        document = await asyncio.to_thread(
-            document_repository.get_document,
-            document_id,
-        )
-
-        if document is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Document not found",
-            )
-
         existing_fields = await asyncio.to_thread(
             extracted_fields_repository.get_extracted_fields,
             document_id,
@@ -449,12 +384,6 @@ async def delete_extracted_field(
             fulfilled_requirements,
         )
 
-        if document.case_id is not None:
-            await asyncio.to_thread(
-                case_status.sync_submission_finalized,
-                document.case_id,
-            )
-
         return await get_document(document_id)
 
     except HTTPException:
@@ -471,30 +400,14 @@ async def delete_extracted_field(
         ) from exc
 
 @router.post("/{document_id}/approve", response_model=DocumentRecord)
-async def approve_document(document_id: str) -> DocumentRecord:
+async def approve_document(
+    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+) -> DocumentRecord:
     """
     Approves a completed document after loan officer review.
 
     Only documents that have finished extraction can be approved.
     """
-    try:
-        document = await asyncio.to_thread(
-            document_repository.get_document,
-            document_id,
-        )
-    except Exception as exc:
-        logger.exception("Failed to fetch document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch the document. Check Supabase table access.",
-        ) from exc
-
-    if document is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found",
-        )
-
     if document.status != DocumentStatus.ANALYZED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -507,12 +420,6 @@ async def approve_document(document_id: str) -> DocumentRecord:
             document_id,
         )
 
-        if document.case_id is not None:
-            await asyncio.to_thread(
-                case_status.sync_submission_finalized,
-                document.case_id,
-            )
-
         return await get_document(document_id)
 
     except Exception as exc:
@@ -523,25 +430,9 @@ async def approve_document(document_id: str) -> DocumentRecord:
         ) from exc
     
 @router.post("/{document_id}/reject", response_model=DocumentRecord)
-async def reject_document(document_id: str) -> DocumentRecord:
-    try:
-        document = await asyncio.to_thread(
-            document_repository.get_document,
-            document_id,
-        )
-    except Exception as exc:
-        logger.exception("Failed to fetch document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch the document. Check Supabase table access.",
-        ) from exc
-
-    if document is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found",
-        )
-
+async def reject_document(
+    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+) -> DocumentRecord:
     if document.status != DocumentStatus.ANALYZED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -569,6 +460,7 @@ async def update_document_type(
     document_id: str,
     request: UpdateDocumentTypeRequest,
     background_tasks: BackgroundTasks,
+    document: DocumentRecord = Depends(get_document_or_404),
 ) -> DocumentRecord:
     """
     A loan officer confirming or correcting a low-confidence document_type
@@ -590,18 +482,6 @@ async def update_document_type(
             status_code=422,
             detail=f"Unknown document_type: {request.document_type}",
         )
-
-    try:
-        document = await asyncio.to_thread(document_repository.get_document, document_id)
-    except Exception as exc:
-        logger.exception("Failed to fetch document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch the document. Check Supabase table access.",
-        ) from exc
-
-    if document is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
     if document.status in _TYPE_OVERRIDE_BLOCKED_STATUSES:
         raise HTTPException(
@@ -666,9 +546,6 @@ async def update_document_type(
             detail="Failed to save the document type. Check Supabase table access.",
         ) from exc
 
-    if document.case_id is not None:
-        await asyncio.to_thread(case_status.sync_submission_finalized, document.case_id)
-
     if type_changed:
         background_tasks.add_task(langgraph_pipeline.rerun_extraction, document_id)
 
@@ -676,7 +553,9 @@ async def update_document_type(
 
 
 @router.post("/{document_id}/retry", response_model=DocumentRecord)
-async def retry_document(document_id: str) -> DocumentRecord:
+async def retry_document(
+    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+) -> DocumentRecord:
     """
     Re-enqueues a document that's stuck or failed. Exists specifically for
     orphaned in-memory-queue state: this queue (see queue_service.py) does
@@ -686,18 +565,6 @@ async def retry_document(document_id: str) -> DocumentRecord:
     wants to re-attempt. Refuses ANALYZED documents since there's nothing
     to retry there.
     """
-    try:
-        document = await asyncio.to_thread(document_repository.get_document, document_id)
-    except Exception as exc:
-        logger.exception("Failed to fetch document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch the document. Check Supabase table access.",
-        ) from exc
-
-    if document is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
-
     if document.status == DocumentStatus.ANALYZED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -752,24 +619,13 @@ async def get_document_langgraph_trace(document_id: str) -> dict:
 
 
 @router.get("/{document_id}/download", response_model=DocumentDownloadResponse)
-async def get_document_download_url(document_id: str) -> DocumentDownloadResponse:
+async def get_document_download_url(
+    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+) -> DocumentDownloadResponse:
     """
     Returns a short-lived signed URL for the document's file in Supabase
     Storage rather than proxying the bytes through this service.
     """
-    try:
-        document = await asyncio.to_thread(document_repository.get_document, document_id)
-    except Exception as exc:
-        logger.exception("Failed to fetch document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch the document. Check Supabase table access.",
-        ) from exc
-
-    if document is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
-        )
     if document.storage_path is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Document has no stored file"

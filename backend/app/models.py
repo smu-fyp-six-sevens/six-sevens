@@ -18,6 +18,19 @@ class DocumentStatus(str, Enum):
     FAILED = "failed"           # AC3: retries exhausted, needs manual review
 
 
+# The pipeline is still actively running on a document in any of these
+# statuses — a mutation that assumes a settled document (manual type
+# override, monitoring's "stuck" check, running detection) would race it.
+# Single source of truth: was independently redefined 3 times (monitoring.py,
+# routers/documents.py, routers/detection.py) before being centralised here.
+IN_FLIGHT_STATUSES = frozenset({
+    DocumentStatus.UPLOADED,
+    DocumentStatus.QUEUED,
+    DocumentStatus.PROCESSING,
+    DocumentStatus.EXTRACTING,
+})
+
+
 class ClassificationOutcome(str, Enum):
     """
     Routing decision made at the classification stage, independent of
@@ -378,56 +391,6 @@ class UpdateDocumentTypeRequest(BaseModel):
     document_type: str
 
 
-class UploadResponse(BaseModel):
-    document_id: str
-    status: DocumentStatus
-
-
-class BulkUploadItemResult(BaseModel):
-    filename: str
-    success: bool
-    document_id: Optional[str] = None
-    status: Optional[DocumentStatus] = None
-    error: Optional[str] = None
-
-
-class BulkUploadResponse(BaseModel):
-    results: list[BulkUploadItemResult]
-
-
-class DocumentDownloadResponse(BaseModel):
-    document_id: str
-    signed_url: str
-    expires_in: int
-
-
-class ExtractionTestPage(BaseModel):
-    """
-    One page's worth of extraction output. `elements` shape depends on
-    extraction_method: native-PDF elements carry font/size/flags, OCR
-    elements carry a per-line confidence score — kept as free-form dicts
-    here rather than a union model since this endpoint is a debugging
-    window onto whatever ingest_document actually returned.
-    """
-
-    page_number: int
-    text: str
-    elements: list[dict] = Field(default_factory=list)
-
-
-class ExtractionTestResponse(BaseModel):
-    """Mirrors the dict returned by ingestion.ingestion_service.ingest_document."""
-
-    file_name: str
-    file_type: str
-    metadata: dict = Field(default_factory=dict)
-    extraction_method: str
-    raw_text: str
-    pages: list[ExtractionTestPage]
-    needs_review: bool
-    status: str
-
-
 class StuckDocument(BaseModel):
     id: str
     case_id: Optional[str] = None
@@ -441,9 +404,3 @@ class ProcessingErrorEntry(BaseModel):
     document_id: str
     error: str
     occurred_at: datetime
-
-
-class MonitoringIssues(BaseModel):
-    stuck: list[StuckDocument]
-    failed: list[DocumentRecord]
-    recent_errors: list[ProcessingErrorEntry]

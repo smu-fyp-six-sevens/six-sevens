@@ -1,11 +1,11 @@
 """
 Font-consistency v2: open/empty/error paths plus real mixed-style PDFs.
 
-v1 (font_consistency.py) has no test coverage of its own anymore — v2
-superseded it as the real check — but v2 still imports some of v1's
-building blocks directly (_Span, _compile_detected_styles,
-_dimension_deviations, _dominant_pattern, _extract_spans) rather than
-reimplementing them, so those stay covered here via v2's own tests.
+font_consistency.py (v1) was retired once v2 superseded it as the real
+check; the span-extraction/style-comparison building blocks it originated
+(_Span, _compile_detected_styles, _dimension_deviations, _dominant_pattern,
+_extract_spans) moved into font_consistency_v2.py itself rather than being
+deleted, since v2 still relies on them unchanged.
 """
 
 from __future__ import annotations
@@ -16,17 +16,15 @@ import pymupdf
 import pytest
 
 from app.fraud_detection import font_consistency_v2 as v2
-from app.fraud_detection.font_consistency import (
+from app.fraud_detection.font_consistency_v2 import (
+    ExtractedField,
     _Span,
+    _build_rows,
+    _check_field_anchored,
     _compile_detected_styles,
     _dimension_deviations,
     _dominant_pattern,
     _extract_spans,
-)
-from app.fraud_detection.font_consistency_v2 import (
-    ExtractedField,
-    _build_rows,
-    _check_field_anchored,
     _field_search_text,
     _group_anomalies_v2,
     _match_field_occurrences,
@@ -102,7 +100,8 @@ def _span(**kwargs) -> _Span:
 
 
 # ---------------------------------------------------------------------------
-# shared helpers (defined in v1, but v2 imports and depends on them directly)
+# span extraction & style-comparison building blocks (originated in the now-
+# retired v1 module; v2 depends on them directly, unchanged)
 # ---------------------------------------------------------------------------
 
 
@@ -142,11 +141,10 @@ def test_extract_spans_skips_non_text_empty_and_bad_bbox() -> None:
 
 def test_compile_detected_styles_and_dimension_deviations() -> None:
     """
-    _compile_detected_styles and _dimension_deviations are v1-originated but
-    imported directly into font_consistency_v2.py (see this file's module
-    docstring) — kept here as unit coverage now that v1's own public-API
-    tests (check_font_consistency, _score_deviations, _group_anomalies) are
-    gone, since v2's own tests only exercise these indirectly.
+    _compile_detected_styles and _dimension_deviations originated in the
+    retired v1 module and now live directly in font_consistency_v2.py (see
+    this file's module docstring) — kept here as unit coverage since v2's
+    own tests only exercise these indirectly.
     """
     majority = _span(text="AAA", font="Helvetica", size=12.0, bbox=(0, 0, 20, 12))
     majority2 = _span(text="BBB", font="Helvetica", size=12.0, bbox=(20, 0, 40, 12))

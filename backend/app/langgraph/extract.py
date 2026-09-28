@@ -11,7 +11,7 @@ import logging
 import re
 
 from ..config import settings
-from ..extraction_prompts import build_extraction_prompt
+from .extraction_prompts import build_extraction_prompt
 from .. import telemetry
 
 logger = logging.getLogger("classifier_pipeline.langgraph.extract")

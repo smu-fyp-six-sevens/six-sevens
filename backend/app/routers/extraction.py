@@ -6,21 +6,47 @@ import uuid
 from typing import Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from pydantic import BaseModel, Field
 
 from ..config import settings
 from ..fraud_detection.metadata_analysis import MetadataAnalysisResult, check_metadata_anomalies
 from ..fraud_detection.layout_anomalies import LayoutAnomalyResult, check_layout_anomalies
-from ..fraud_detection.numerical_validation import (
-    NumericalValidationResult,
-    check_numerical_validation,
-)
+from ..fraud_detection.numerical_validation import NumericalValidationResult, check_numerical_validation
 from ..fraud_detection.spelling_anomaly import SpellingAnomalyResult, check_spelling_anomalies
+##why are these parked here
+
 from ..ingestion.ingestion_service import ingest_document
 from ..ingestion.metadata_extractor import extract_metadata
-from ..models import ExtractionTestResponse
 
 router = APIRouter(prefix="/extraction", tags=["extraction"])
 logger = logging.getLogger(__name__)
+
+
+class ExtractionTestPage(BaseModel):
+    """
+    One page's worth of extraction output. `elements` shape depends on
+    extraction_method: native-PDF elements carry font/size/flags, OCR
+    elements carry a per-line confidence score — kept as free-form dicts
+    here rather than a union model since this endpoint is a debugging
+    window onto whatever ingest_document actually returned.
+    """
+
+    page_number: int
+    text: str
+    elements: list[dict] = Field(default_factory=list)
+
+
+class ExtractionTestResponse(BaseModel):
+    """Mirrors the dict returned by ingestion.ingestion_service.ingest_document."""
+
+    file_name: str
+    file_type: str
+    metadata: dict = Field(default_factory=dict)
+    extraction_method: str
+    raw_text: str
+    pages: list[ExtractionTestPage]
+    needs_review: bool
+    status: str
 
 
 async def _read_and_validate_upload(file: UploadFile) -> bytes:

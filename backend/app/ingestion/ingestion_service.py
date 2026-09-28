@@ -1,20 +1,8 @@
 from io import BytesIO
-
 from PIL import Image
-
-from .pdf_extractor import (
-    extract_pdf,
-    pdf_contains_text
-)
-
-from .ocr_extractor import (
-    extract_image_with_ocr
-)
-
-from .metadata_extractor import (
-    extract_metadata
-)
-
+from .pdf_extractor import extract_pdf, pdf_contains_text
+from .ocr_extractor import extract_image_with_ocr
+from .metadata_extractor import extract_metadata
 
 def _needs_review(extraction_method: str, raw_text: str, pages: list) -> bool:
     if not raw_text.strip():

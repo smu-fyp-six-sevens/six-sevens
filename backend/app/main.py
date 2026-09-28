@@ -2,16 +2,15 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, status
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
-from . import realtime_listener, telemetry
-from .auth import require_auth
+from . import auth, health, realtime_listener, telemetry
 from .config import settings
 from .health import check_db_connection
 from .queue_service import document_queue
-from .routers import auth, extraction, injection, cases, detection, documents, monitoring, upload, ws
+from .routers import extraction, injection, cases, detection, documents, monitoring, upload, ws
 
 logger = logging.getLogger(__name__)
 
@@ -53,9 +52,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_protected = [Depends(require_auth)]
+_protected = [Depends(auth.require_auth)]
 
-app.include_router(auth.router)
+# Not in _protected: /health, /health/db (see app/health.py — a Cloud Run
+# liveness/readiness probe can't carry an Authorization header) and
+# /auth/login below (it's what issues the token in the first place).
+app.include_router(health.router)
 app.include_router(cases.router, dependencies=_protected)
 app.include_router(upload.router, dependencies=_protected)
 app.include_router(documents.router, dependencies=_protected)
@@ -71,29 +73,23 @@ app.include_router(extraction.router, dependencies=_protected)
 app.include_router(ws.router)
 
 
-@app.get("/health")
-def health_check() -> dict[str, str]:
-    """Liveness only — does not touch the database. See /health/db for that."""
-    return {"status": "ok"}
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 
-@app.get("/health/db")
-def health_check_db() -> JSONResponse:
-    """
-    Readiness check: does a real query against Supabase succeed right now?
-    Suitable for a Cloud Run readiness probe once deployed there — a failure
-    here should stop new traffic being routed to this instance, not restart
-    it (the underlying cause is almost never fixed by a restart).
-    """
-    try:
-        check_db_connection()
-    except Exception as exc:
-        logger.exception("Database health check failed")
-        return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={"status": "unhealthy", "detail": str(exc)},
+class LoginResponse(BaseModel):
+    token: str
+
+
+@app.post("/auth/login", response_model=LoginResponse)
+def login(body: LoginRequest) -> LoginResponse:
+    if not auth.verify_credentials(body.username, body.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
         )
-    return JSONResponse(status_code=status.HTTP_200_OK, content={"status": "ok"})
+    return LoginResponse(token=auth.create_token())
 
 
 @app.get("/message")

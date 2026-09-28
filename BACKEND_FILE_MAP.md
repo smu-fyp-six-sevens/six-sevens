@@ -11,7 +11,6 @@ Reference map of source files under `backend/`, scoped to the parts likely to be
 - **config.py** — Centralised `Settings` object reading all configuration (Supabase, Dify, auth, thresholds, LangGraph models) from environment variables.
 - **document_repository.py** — Supabase CRUD for the `documents` table: create, status updates, classification/extraction/escalation/metadata writes, and status-filtered queries.
 - **extracted_fields_repository.py** — Mirrors a document's `extracted_fields` into the normalised one-row-per-field `extracted_fields` table (replace/get, single and batched-by-document-ids).
-- **extraction_prompts.py** — Per-document-type extraction schemas (required/additional/optional field tiers), extra field-specific guidance, and `build_extraction_prompt`/`schema_field_names` used by both the Dify and LangGraph extraction paths.
 - **health.py** — `check_db_connection`, a lightweight real Supabase query used by the `/health/db` readiness probe.
 - **main.py** — FastAPI app setup: CORS, router registration, lifespan (starts the document queue + Realtime listener), and `/health`, `/health/db`, `/message` endpoints.
 - **mapper.py** — Cross-document identity/address matching logic: groups documents into identities (by `nric_number` or name), computes proof-of-address and id-document (front/back) coverage per identity.
@@ -27,7 +26,7 @@ Reference map of source files under `backend/`, scoped to the parts likely to be
 
 - **auth.py** — `POST /auth/login`: verifies shared credentials and issues a bearer token.
 - **cases.py** — `POST/GET /cases`, `GET /cases/{id}`: case creation and summary retrieval.
-- **detection.py** — On-demand fraud-detection endpoints: font-consistency v1/v2 and spelling-anomaly checks for a stored document.
+- **detection.py** — On-demand fraud-detection endpoints: font-consistency and spelling-anomaly checks for a stored document.
 - **documents.py** — Document CRUD/actions: get/list, manual extracted-fields correction, manual document-type correction (triggers a LangGraph extraction rerun), retry, langgraph debug trace, and signed download URL.
 - **extraction.py** — Dev/QA endpoints: `/extraction/test` (raw ingestion only, bypasses Dify) and `/extraction/test-spelling-anomaly`.
 - **injection.py** — Dev fraud-injection API: list injectable template documents, list a document's fields, and `POST /api/dev/inject` to apply a defect.
@@ -56,9 +55,10 @@ intentionally not called out below — that's a separate, later decision.
   then publishes an event — it must stop knowing `queue_service` exists at all.
 
 **2. Per-Document Orchestrator** (classify → extract → escalation loop → analyzed/failed)
-- Files: `queue_service.py`, `extraction_prompts.py`, `document_repository.py`,
-  `extracted_fields_repository.py`, plus `app/langgraph/` (the actual classify/extract graph —
-  out of scope for this map, see the note at the top, but it's what this service would run).
+- Files: `queue_service.py`, `document_repository.py`,
+  `extracted_fields_repository.py`, plus `app/langgraph/` (the actual classify/extract graph,
+  including `extraction_prompts.py` — out of scope for this map, see the note at the top, but
+  it's what this service would run).
   Detection work happens through `app/langgraph/detection/` and `app/fraud_detection/`, both
   likewise out of scope here.
 - Blocker: `queue_service.py` is an in-memory `asyncio.Queue` — inherently single-process.

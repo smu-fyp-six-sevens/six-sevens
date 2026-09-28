@@ -1,16 +1,25 @@
+##this document and the whole monitoring will need to be reevaluated, will need a retry endpoint to be developed later for this to even have a point
+
 from __future__ import annotations
 
 import logging
 
 from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel
 
 from .. import document_repository
-from ..models import DocumentStatus, MonitoringIssues, StuckDocument
+from ..models import DocumentRecord, DocumentStatus, ProcessingErrorEntry, StuckDocument
 from ..monitoring import get_stuck_documents
 from ..queue_service import document_queue
 
 router = APIRouter(prefix="/documents", tags=["monitoring"])
 logger = logging.getLogger(__name__)
+
+
+class MonitoringIssues(BaseModel):
+    stuck: list[StuckDocument]
+    failed: list[DocumentRecord]
+    recent_errors: list[ProcessingErrorEntry]
 
 
 @router.get("/monitoring/stuck", response_model=list[StuckDocument])

@@ -4,14 +4,9 @@ from datetime import datetime, timezone
 
 from . import document_repository
 from .config import settings
-from .models import DocumentRecord, DocumentStatus, StuckDocument
+from .models import IN_FLIGHT_STATUSES, DocumentRecord, StuckDocument
 
-_STUCK_ELIGIBLE_STATUSES = (
-    DocumentStatus.UPLOADED,
-    DocumentStatus.QUEUED,
-    DocumentStatus.PROCESSING,
-    DocumentStatus.EXTRACTING,
-)
+_STUCK_ELIGIBLE_STATUSES = IN_FLIGHT_STATUSES
 
 
 def is_stuck(doc: DocumentRecord) -> bool:

@@ -1,5 +1,5 @@
 import pytest
-from app.extraction_prompts import build_extraction_prompt, schema_field_names, EXTRACTION_SCHEMAS
+from app.langgraph.extraction_prompts import build_extraction_prompt, schema_field_names, EXTRACTION_SCHEMAS
 
 
 def test_known_document_type_builds_prompt():

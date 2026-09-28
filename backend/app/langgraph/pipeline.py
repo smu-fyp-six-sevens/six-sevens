@@ -14,7 +14,7 @@ import logging
 from . import extract, nodes, text_cache
 from .graph import get_document_graph
 from ..config import settings
-from .. import case_status, document_repository, telemetry
+from .. import document_repository, telemetry
 from ..models import DocumentStatus
 
 logger = logging.getLogger("classifier_pipeline.langgraph.pipeline")
@@ -115,6 +115,4 @@ async def _rerun_extraction(document_id: str) -> None:
         document_type=document_type,
         failure_reason="",
     )
-    if document.case_id is not None:
-        await asyncio.to_thread(case_status.sync_submission_finalized, document.case_id)
     logger.info("Document %s: langgraph extraction rerun complete as %s", document_id, document_type)

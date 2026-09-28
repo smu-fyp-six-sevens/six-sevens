@@ -17,7 +17,7 @@ def test_health_check() -> None:
 
 
 def test_health_check_db_ok() -> None:
-    with patch("app.main.check_db_connection") as mock_check:
+    with patch("app.health.check_db_connection") as mock_check:
         mock_check.return_value = None
 
         response = client.get("/health/db")
@@ -27,7 +27,7 @@ def test_health_check_db_ok() -> None:
 
 
 def test_health_check_db_unhealthy() -> None:
-    with patch("app.main.check_db_connection") as mock_check:
+    with patch("app.health.check_db_connection") as mock_check:
         mock_check.side_effect = RuntimeError("connection refused")
 
         response = client.get("/health/db")

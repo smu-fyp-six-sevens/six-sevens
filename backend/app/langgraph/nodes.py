@@ -16,9 +16,9 @@ import mimetypes
 
 from . import extract, text_cache, trace
 from .state import DocumentGraphState
-from .. import case_status, document_repository, extracted_fields_repository, storage_service
+from .. import document_repository, extracted_fields_repository, storage_service
 from ..config import settings
-from ..extraction_prompts import schema_field_names
+from .extraction_prompts import schema_field_names
 from ..ingestion.ingestion_service import ingest_document
 from ..models import ClassificationOutcome, DocumentStatus, compute_fulfilled_requirements
 
@@ -131,12 +131,13 @@ def _is_below_threshold(confidence: float | None) -> bool:
     return confidence is None or confidence < settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
 
 
-async def record_classification_result(document_id: str, case_id: str | None, classification: dict) -> None:
+async def record_classification_result(document_id: str, classification: dict) -> None:
     """
     Records the classification-stage result (type, confidence, outcome) and
     enforces the confidence threshold as a system-level gate — the agent's
-    own needs_manual_review flag is OR'd in as an extra signal. Also syncs
-    the case's submission_finalized flag, since this is where a document's
+    own needs_manual_review flag is OR'd in as an extra signal.
+    document_repository.record_classification resyncs the case's
+    submission_finalized flag itself, since this is where a document's
     fulfilled_requirements (and so the case's coverage) first changes.
 
     Extraction always runs after this. A genuinely typeless response is
@@ -177,9 +178,6 @@ async def record_classification_result(document_id: str, case_id: str | None, cl
         # this is a one-line flip later.
     )
 
-    if case_id is not None:
-        await asyncio.to_thread(case_status.sync_submission_finalized, case_id)
-
 
 # --- nodes ------------------------------------------------------------------
 
@@ -211,7 +209,7 @@ async def ingest_node(state: DocumentGraphState) -> dict:
 
 async def finalise_classification_node(state: DocumentGraphState) -> dict:
     classification = dict(state["classification"])
-    await record_classification_result(state["document_id"], state.get("case_id"), classification)
+    await record_classification_result(state["document_id"], classification)
     # record_classification_result may normalise document_type (unnamed ->
     # "unrecognised") in place — write the normalised dict back to state so
     # extract_node runs against the same type that was actually persisted.
@@ -306,8 +304,6 @@ async def mark_analyzed_node(state: DocumentGraphState) -> dict:
     await asyncio.to_thread(
         document_repository.update_status, document_id, DocumentStatus.ANALYZED, document_type=document_type
     )
-    if state.get("case_id") is not None:
-        await asyncio.to_thread(case_status.sync_submission_finalized, state["case_id"])
     text_cache.discard(document_id)
     trace.record(document_id, "done", final_status="analyzed")
     logger.info("Document %s: langgraph classification+extraction complete", document_id)
