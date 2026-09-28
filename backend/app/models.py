@@ -353,10 +353,6 @@ class DocumentRecord(BaseModel):
     # The classifier's own plain-language justification for document_type —
     # see document_repository.record_classification.
     classification_reasoning: Optional[str] = None
-    # The Digital Authenticity Specialist's stored result (see
-    # fraud_detection.metadata_analysis.MetadataAnalysisResult) — set once
-    # GET .../detection/metadata-anomaly has run for this document.
-    metadata_anomalies: Optional[dict] = None
 
 
 class UpdateExtractedFieldsRequest(BaseModel):
