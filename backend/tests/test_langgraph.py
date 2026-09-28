@@ -1,22 +1,20 @@
 """
-Tests for the langgraph experiment (backend/app/langgraph, phases 0-3).
+Tests for the langgraph pipeline (backend/app/langgraph).
 
 Split in two tiers:
 - Pure-logic tests (rule_classify, llm_classify parsing, classify_support,
-  router) have no dependency on the langgraph/langchain-anthropic packages
-  and always run.
-- Graph-shape/agent tests need `langgraph` (and, for the fake-model smoke
-  test, `langchain-anthropic`/`langchain-core`) installed — see
-  requirements.txt. They're skipped, not failed, until those are installed
-  (`pip install -r requirements.txt`), matching this repo's CI/CD stance of
-  no network calls in tests.
+  extract parsing, tool-staging) have no dependency on the
+  langgraph/langchain-anthropic packages and always run.
+- Graph-shape tests need `langgraph` installed — see requirements.txt /
+  pyproject.toml. They're skipped, not failed, if it isn't (`importorskip`),
+  matching this repo's CI/CD stance of no network calls in tests.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from app.langgraph import classify_support, router
+from app.langgraph import classify_support, extract
 from app.langgraph.llm_classify import parse_llm_classification
 from app.langgraph.rule_classify import classify_by_rules
 
@@ -125,52 +123,71 @@ def test_validate_agent_output_passport_self_fulfils_id_document():
     assert result["fulfilled_requirements"] == ["id_document"]
 
 
-# --- router ----------------------------------------------------------------
+# --- extract parsing ---------------------------------------------------
 
-def _candidate(document_type, match_strength, confidence=None):
-    return {
-        "document_type": document_type,
-        "match_strength": match_strength,
-        "confidence": confidence if confidence is not None else match_strength,
-        "reasoning": "",
-        "evidence": [],
-    }
-
-
-def test_router_fast_path_when_sources_agree_strongly():
-    rule_result = {"top_candidates": [_candidate("payslip", 0.9, 1.0)], "notes": []}
-    llm_result = {"top_candidates": [_candidate("payslip", 0.9, 1.0)], "notes": []}
-    assert router.decide_route(rule_result, llm_result, "some payslip text" * 10) == router.FAST
+def test_parse_extraction_output_splits_value_and_confidence_per_field():
+    raw = (
+        '{"extracted_fields": {"name": {"value": "Tan", "confidence": 0.9}, '
+        '"id": {"value": "S123", "confidence": 0.7}}}'
+    )
+    result = extract.parse_extraction_output(raw)
+    assert result["extracted_fields"] == {"name": "Tan", "id": "S123"}
+    assert result["field_confidences"] == {"name": 0.9, "id": 0.7}
+    assert result["confidence"] == pytest.approx(0.8)
 
 
-def test_router_agent_path_when_sources_disagree():
-    rule_result = {"top_candidates": [_candidate("payslip", 0.9)], "notes": []}
-    llm_result = {"top_candidates": [_candidate("bank_statement", 0.9)], "notes": []}
-    assert router.decide_route(rule_result, llm_result, "text") == router.AGENT
+def test_parse_extraction_output_strips_code_fence_and_think_block():
+    raw = (
+        "<think>hmm</think>\n```json\n"
+        '{"extracted_fields": {"a": {"value": 1, "confidence": 1.0}}}\n```'
+    )
+    assert extract.parse_extraction_output(raw)["extracted_fields"] == {"a": 1}
 
 
-def test_router_agent_path_when_below_threshold():
-    rule_result = {"top_candidates": [_candidate("payslip", 0.5, 1.0)], "notes": []}
-    llm_result = {"top_candidates": [_candidate("payslip", 0.5, 1.0)], "notes": []}
-    assert router.decide_route(rule_result, llm_result, "text") == router.AGENT
+def test_parse_extraction_output_unwrapped_field_has_unknown_confidence():
+    result = extract.parse_extraction_output('{"extracted_fields": {"a": "bare"}}')
+    assert result["extracted_fields"] == {"a": "bare"}
+    assert result["field_confidences"] == {"a": None}
+    assert result["confidence"] == 0.0
 
 
-def test_router_agent_path_when_no_candidates_at_all():
-    empty = {"top_candidates": [], "notes": []}
-    assert router.decide_route(empty, empty, "") == router.AGENT
+def test_parse_extraction_output_malformed_json_escalates_with_model_text():
+    result = extract.parse_extraction_output("This is not a payslip at all.")
+    assert result["extracted_fields"] == {}
+    assert "This is not a payslip at all." in result["escalation"]["reason"]
 
 
-def test_router_agent_path_for_nric_with_unknown_address_check():
-    rule_result = {"top_candidates": [_candidate("nric", 0.95, 1.0)], "notes": []}
-    llm_result = {"top_candidates": [_candidate("nric", 0.95, 1.0)], "notes": []}
-    # No address-related note at all -> address_check == "unknown" -> escalate.
-    assert router.decide_route(rule_result, llm_result, "some nric text" * 10) == router.AGENT
+# --- tool staging + graph shape (needs langgraph installed) -----------------
 
+def test_available_tools_enforces_llm_first_vision_last():
+    """
+    The agent's first turn is only ever offered llm_classify_tool; vision_llm
+    only becomes available from the second turn onward, and only until it's
+    been called once — enforced in code (classify_graph._available_tools),
+    not just prompted, since vision sends the whole document image and is by
+    far the most expensive tool. See classify_graph.py's module docstring.
+    """
+    pytest.importorskip("langgraph", reason="langgraph not installed — see requirements.txt")
+    from langchain_core.messages import AIMessage, HumanMessage
 
-# --- graph shape (needs langgraph installed) --------------------------------
+    from app.langgraph.classify_graph import _available_tools
+
+    assert [t.name for t in _available_tools([])] == ["llm_classify_tool"]
+
+    first_turn = [
+        HumanMessage(content="go"),
+        AIMessage(content="", tool_calls=[{"name": "llm_classify_tool", "args": {}, "id": "1"}]),
+    ]
+    assert [t.name for t in _available_tools(first_turn)] == ["vision_llm"]
+
+    used_vision = first_turn + [
+        AIMessage(content="", tool_calls=[{"name": "vision_llm", "args": {}, "id": "2"}])
+    ]
+    assert _available_tools(used_vision) == []
+
 
 def test_classify_graph_compiles():
-    pytest.importorskip("langgraph", reason="langgraph not installed yet — see requirements.txt")
+    pytest.importorskip("langgraph", reason="langgraph not installed — see requirements.txt")
     from app.langgraph.classify_graph import build_classify_graph
 
     graph = build_classify_graph()
@@ -178,8 +195,24 @@ def test_classify_graph_compiles():
 
 
 def test_document_graph_compiles():
-    pytest.importorskip("langgraph", reason="langgraph not installed yet — see requirements.txt")
+    pytest.importorskip("langgraph", reason="langgraph not installed — see requirements.txt")
     from app.langgraph.graph import build_document_graph
 
     graph = build_document_graph()
     assert graph is not None
+
+
+def test_detection_graph_compiles():
+    pytest.importorskip("langgraph", reason="langgraph not installed — see requirements.txt")
+    from app.langgraph.detection.graph import build_detection_graph
+
+    graph = build_detection_graph()
+    assert graph is not None
+
+
+def test_specialist_graphs_compile():
+    pytest.importorskip("langgraph", reason="langgraph not installed — see requirements.txt")
+    from app.langgraph.detection.specialists import SPECIALISTS, build_specialist_graph
+
+    for spec in SPECIALISTS.values():
+        assert build_specialist_graph(spec) is not None

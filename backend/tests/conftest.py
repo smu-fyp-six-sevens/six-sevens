@@ -6,6 +6,15 @@ import pytest
 from app.auth import require_auth
 from app.main import app
 
+# test_orchestrator.py / test_dify_client.py test app.orchestrator and
+# app.dify_client, both deleted (backend/app/langgraph replaced them — see
+# LANGGRAPH_MIGRATION_PLAN.md section 7). They're kept on disk, unrun, as
+# reference for porting equivalent coverage onto the langgraph modules
+# (app/langgraph/nodes.py, app/langgraph/pipeline.py) rather than being
+# retyped from scratch — collection is skipped since they'd otherwise fail
+# to import at all.
+collect_ignore = ["test_orchestrator.py", "test_dify_client.py"]
+
 PDF_DOC_ID = "C001_CertIncumbency"
 IMAGE_DOC_ID = "ocbc_sample"
 

@@ -872,7 +872,6 @@ def test_update_document_type_write_failure_returns_502_without_rerun() -> None:
 
     assert response.status_code == 502
     mock_pipeline.rerun_extraction.assert_not_called()
-    mock_orchestrator.rerun_extraction.assert_not_called()
 
 
 # --- POST /documents/{id}/extracted-fields (manual field add) -----------
