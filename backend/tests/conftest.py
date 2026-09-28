@@ -168,3 +168,50 @@ def isolated_injection_templates(
     monkeypatch.setattr("app.injection.store.TEMPLATES_DIR", _injection_template_files)
     monkeypatch.setattr("app.injection.store.DOCUMENTS_GENERATED_DIR", generated)
     return _injection_template_files
+
+
+# --- Regression suite tags (SCRUM-206) ----------------------------------------
+# Existing tests that also serve as regression tests for a sprint's manual test
+# cases, tagged here centrally (rather than editing each file) so that
+# `pytest -m sprint1` / `pytest -m sprint2` run each sprint's full set. The
+# regression-specific test files tag themselves with @pytest.mark.sprintN.
+# Keys are a test file, or file::test_name for a single test.
+_EXISTING_REGRESSION_TESTS: dict[str, list[tuple[str, str, str]]] = {
+    # SCRUM-6 Upload Documents (backend side of DI-008/009/012/013)
+    "test_documents.py::test_upload_batch_partial_failure": [("sprint1", "SCRUM-6", "DI-013")],
+    "test_documents.py::test_upload_rejects_missing_filename_and_oversized_file": [("sprint1", "SCRUM-6", "DI-009")],
+    "test_documents.py::test_upload_batch_rejects_too_many_files": [("sprint1", "SCRUM-6", "DI-004")],
+    "test_documents.py::test_upload_storage_failure_returns_502": [("sprint1", "SCRUM-6", "DI-012")],
+    "test_ingestion.py::test_ingest_rejects_unsupported_type": [("sprint1", "SCRUM-6", "DI-008")],
+    # SCRUM-17 Auto-trigger classification: stored document is queued (MA-001)
+    "test_queue_service.py::test_enqueue_marks_queued_and_puts_document_id_on_queue": [
+        ("sprint1", "SCRUM-17", "MA-001"),
+    ],
+    # SCRUM-14 (PDF) and SCRUM-121 (PNG/JPG) fraud injection
+    "test_fraud_injections.py": [
+        ("sprint1", "SCRUM-14", "DT-012 / DT-013"),
+        ("sprint2", "SCRUM-121", "DT-014 – DT-019"),
+    ],
+    "test_injectors.py": [("sprint1", "SCRUM-14", "DT-012"), ("sprint2", "SCRUM-121", "DT-014 / DT-015")],
+    "test_injection_router.py": [("sprint1", "SCRUM-14", "DT-013"), ("sprint2", "SCRUM-121", "DT-016")],
+    # SCRUM-78 / SCRUM-96 case management API (CM-001 – CM-013)
+    "test_cases.py::test_list_cases": [("sprint2", "SCRUM-78", "CM-001")],
+    "test_cases.py::test_get_case_returns_summary_with_documents_status": [("sprint2", "SCRUM-83", "CM-005")],
+    "test_cases.py::test_create_case_with_company_name": [("sprint2", "SCRUM-96", "CM-010 / CM-012")],
+    # SCRUM-115 generated PDF/PNG/JPG documents go through ingestion (DT-029)
+    "test_ingestion.py::test_ingest_native_pdf": [("sprint2", "SCRUM-115", "DT-029")],
+    "test_ingestion.py::test_ingest_scanned_pdf_uses_ocr": [("sprint2", "SCRUM-115", "DT-029")],
+    "test_ingestion.py::test_ingest_image": [("sprint2", "SCRUM-115", "DT-029")],
+    # SCRUM-114 / SCRUM-118 checklist mapping
+    "test_mapper.py": [("sprint2", "SCRUM-118", "DI-035 – DI-038")],
+}
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    for item in items:
+        path = Path(str(item.fspath)).name
+        name = item.originalname or item.name
+        for key in (path, f"{path}::{name}"):
+            for sprint, story, test_case in _EXISTING_REGRESSION_TESTS.get(key, []):
+                item.add_marker(getattr(pytest.mark, sprint))
+                item.add_marker(pytest.mark.story(story, test_case))

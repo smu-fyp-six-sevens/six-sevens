@@ -69,11 +69,51 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+  frontend-regression:
+    # SCRUM-206 regression suite: Sprint 1 & 2 test cases against a mocked
+    # backend (frontend/e2e). No Supabase or AI calls. A failure here fails
+    # the PR check, and GitHub emails whoever pushed it.
+    name: Frontend regression (Playwright)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run regression tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 14
+
   publish-images:
     name: Publish Docker images
     needs:
       - backend-ci
       - frontend-ci
+      - frontend-regression
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     strategy:

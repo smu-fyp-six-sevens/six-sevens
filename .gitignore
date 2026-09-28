@@ -21,3 +21,7 @@ document_templates/
 documents_generated/
 fyp_backend.egg-info
 backend/test_files
+
+# Playwright regression suite output
+frontend/playwright-report/
+frontend/test-results/
