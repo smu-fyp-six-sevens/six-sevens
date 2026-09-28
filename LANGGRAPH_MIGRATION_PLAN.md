@@ -1,8 +1,10 @@
-# LangGraph migration plan (branch `langgraph-test`)
+# LangGraph migration plan (originally branch `langgraph-test`, now merged into `main`)
 
 **Goal:** replace the Dify Classifier chatflow, Extractor workflow, the three classifier tool workflows and `orchestrator.py` with LangGraph
 inside the FastAPI backend, then build the fraud Detection team natively on it. DSL files: `backend/app/dify/`.
-This branch is an experiment: it will not go to prod, and the deployed cloud keeps running Dify until the workflow is run manually.
+**Done:** the migration completed — `langgraph-test` merged into `main`, and Dify has since been fully removed from the
+codebase, env vars, and deploy pipeline (no remaining code path, secrets, or Cloud Run config). This document is kept as
+the historical record of the migration's design and the Dify-vs-LangGraph comparisons below.
 
 ## 0. Status
 
@@ -45,7 +47,7 @@ every upload on this branch now runs through LangGraph, not Dify. See `LANGGRAPH
 
 | Topic | Decision |
 |---|---|
-| Cutover | Hard switch on this branch. No feature flag. Dify keeps running in the cloud in the background. |
+| Cutover | Hard switch, no feature flag. Completed: merged into `main`, Dify fully removed. |
 | Order | Classify + Extract first (phases 0-4), Detection after (4b). Goal is to judge whether LangGraph fits before investing more. |
 | `llm_classify` model | Haiku 4.5 instead of DeepSeek (one fewer vendor, shares the Anthropic cache). |
 | HITL | Non-blocking. No long-lived `interrupt()` runs (see section 4). |
@@ -178,7 +180,9 @@ Treat uploaded documents as untrusted (prompt injection): delimited data blocks,
 **Conversational state and learning.** Reclassify memory becomes checkpointed `messages`. The LangGraph Store (learning from officer corrections) is the very last phase.
 
 **CI/CD and deploy.** Tests use fake chat models and `MemorySaver`, no network; existing 100% coverage bar applies. Same container and `deploy.yml`, LangGraph as a library (no LangGraph Platform).
-New secrets: `ANTHROPIC_API_KEY` (new to this backend; today the keys live in Dify), `LANGGRAPH_DATABASE_URL`, optional encryption key. Cloud Run settings unchanged.
+`ANTHROPIC_API_KEY` is wired into `deploy.yml`'s Cloud Run env vars and set as a GitHub Actions
+secret. `LANGGRAPH_DATABASE_URL` and an optional encryption key are still only needed once the
+Postgres checkpointer (phase 4) is actually wired in — not yet.
 
 ## 6. Phases
 
@@ -198,7 +202,13 @@ New secrets: `ANTHROPIC_API_KEY` (new to this backend; today the keys live in Di
 5. 🟡 **Concurrency and caching:** cache breakpoints + `cache_gate.py` done (see section 5) — ahead of schedule, since testing needed
    it. Per-provider rate limiters and cache-hit metrics still not built.
 6. 🟡 **Observability:** OpenTelemetry tracing is wired (`backend/app/telemetry.py`) — off by default (`OTEL_ENABLED`), FastAPI auto-instrumented, manual spans on every model-call boundary (classify agent, extraction, detection lead/specialists) with token-usage attributes, exports to Google Cloud Trace when `GOOGLE_CLOUD_PROJECT` is set, else prints to console. Setup steps (env vars, GCP credentials) are in `LANGGRAPH_TESTING_SETUP.md` section 6. Guardrails, evals, CI still not built. (The dev-only trace panel is not this — it's a testing aid, not OTel/Prometheus.)
-7. ⬜ **Learning/Store** last. `orchestrator.py`, `dify_client.py` and their tests are already deleted on this branch (their shared helpers moved into `langgraph/nodes.py` and `langgraph/extract.py`); the Dify DSL files, env keys and deploy config are removed when this branch is adopted.
+7. ⬜ **Learning/Store** last — not built yet.
+
+**Dify removal:** ✅ done. `orchestrator.py`/`dify_client.py` and their tests deleted (shared
+helpers moved into `langgraph/nodes.py` and `langgraph/extract.py`); the `backend/app/dify/` DSL
+files, `DIFY_*` env keys (`.env`, GitHub Actions secrets), and deploy-pipeline config
+(`ci-cd.yml`, `deploy.yml`) are all removed. `ANTHROPIC_API_KEY` is wired into the Cloud Run
+deploy step in its place.
 
 ## 7. Settled and deferred
 

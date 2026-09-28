@@ -40,7 +40,7 @@ def test_font_consistency_v2_uses_extracted_fields() -> None:
     )
     fields = [ExtractedField(field_name="name", field_type="string", field_value="Jane", confidence=0.9)]
     with (
-        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.storage_service") as mock_storage,
         patch("app.routers.detection.extracted_fields_repository") as mock_fields,
         patch("app.routers.detection.check_font_consistency_v2", return_value=result) as mock_check,
@@ -64,7 +64,7 @@ def test_font_consistency_v2_degrades_when_fields_fetch_fails() -> None:
         unable_to_assess=False,
     )
     with (
-        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.storage_service") as mock_storage,
         patch("app.routers.detection.extracted_fields_repository") as mock_fields,
         patch("app.routers.detection.check_font_consistency_v2", return_value=result) as mock_check,
@@ -96,7 +96,7 @@ def test_layout_anomalies_happy_path() -> None:
         unable_to_assess=False,
     )
     with (
-        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.storage_service") as mock_storage,
         patch("app.routers.detection.check_layout_anomalies", return_value=result) as mock_check,
     ):
@@ -114,20 +114,20 @@ def test_layout_anomalies_happy_path() -> None:
 
 
 def test_font_consistency_v2_fetch_errors() -> None:
-    with patch("app.routers.detection.document_repository") as mock_repo:
+    with patch("app.routers._dependencies.document_repository") as mock_repo:
         mock_repo.get_document.side_effect = RuntimeError("db down")
         assert client.get("/documents/doc-1/detection/font-consistency-v2").status_code == 502
 
-    with patch("app.routers.detection.document_repository") as mock_repo:
+    with patch("app.routers._dependencies.document_repository") as mock_repo:
         mock_repo.get_document.return_value = None
         assert client.get("/documents/doc-1/detection/font-consistency-v2").status_code == 404
 
-    with patch("app.routers.detection.document_repository") as mock_repo:
+    with patch("app.routers._dependencies.document_repository") as mock_repo:
         mock_repo.get_document.return_value = _document(storage_path=None)
         assert client.get("/documents/doc-1/detection/font-consistency-v2").status_code == 404
 
     with (
-        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.storage_service") as mock_storage,
     ):
         mock_repo.get_document.return_value = _document()
@@ -158,7 +158,7 @@ def test_get_spelling_anomaly_success_returns_result_with_no_persistence() -> No
     )
 
     with (
-        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.storage_service") as mock_storage,
         patch("app.routers.detection.extracted_fields_repository") as mock_fields_repo,
         patch(
@@ -182,7 +182,7 @@ def test_get_spelling_anomaly_success_returns_result_with_no_persistence() -> No
 
 def test_get_spelling_anomaly_fetch_document_failure_returns_502() -> None:
     with (
-        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_repo,
         patch(
             "app.routers.detection.check_spelling_anomalies", new_callable=AsyncMock
         ) as mock_check,
@@ -197,7 +197,7 @@ def test_get_spelling_anomaly_fetch_document_failure_returns_502() -> None:
 
 def test_get_spelling_anomaly_document_not_found() -> None:
     with (
-        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_repo,
         patch(
             "app.routers.detection.check_spelling_anomalies", new_callable=AsyncMock
         ) as mock_check,
@@ -212,7 +212,7 @@ def test_get_spelling_anomaly_document_not_found() -> None:
 
 def test_get_spelling_anomaly_storage_failure_returns_502() -> None:
     with (
-        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.storage_service") as mock_storage,
         patch(
             "app.routers.detection.check_spelling_anomalies", new_callable=AsyncMock
@@ -239,7 +239,7 @@ def test_get_metadata_anomaly_success_persists_result() -> None:
     )
 
     with (
-        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_repo,
         patch(
             "app.routers.detection.check_metadata_anomalies", return_value=result
         ) as mock_check,
@@ -252,8 +252,6 @@ def test_get_metadata_anomaly_success_persists_result() -> None:
     body = response.json()
     assert body["anomalies"][0]["field"] == "author"
     mock_check.assert_called_once_with("doc-1", None, None)
-    # Result is returned as JSON for the lead agent; nothing is persisted.
-    mock_repo.update_metadata_anomalies.assert_not_called()
 
 
 def test_get_metadata_anomaly_passes_stored_metadata_and_document_type_through() -> None:
@@ -272,7 +270,7 @@ def test_get_metadata_anomaly_passes_stored_metadata_and_document_type_through()
     document.document_type = "bank_statement"
 
     with (
-        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_repo,
         patch(
             "app.routers.detection.check_metadata_anomalies", return_value=result
         ) as mock_check,
@@ -287,7 +285,7 @@ def test_get_metadata_anomaly_passes_stored_metadata_and_document_type_through()
 
 def test_get_metadata_anomaly_fetch_document_failure_returns_502() -> None:
     with (
-        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.check_metadata_anomalies") as mock_check,
     ):
         mock_repo.get_document.side_effect = RuntimeError("Supabase table access failed")
@@ -300,7 +298,7 @@ def test_get_metadata_anomaly_fetch_document_failure_returns_502() -> None:
 
 def test_get_metadata_anomaly_document_not_found() -> None:
     with (
-        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.check_metadata_anomalies") as mock_check,
     ):
         mock_repo.get_document.return_value = None
@@ -333,7 +331,7 @@ def test_get_numerical_validation_passes_file_and_extracted_fields() -> None:
         )
     ]
     with (
-        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.storage_service") as mock_storage,
         patch("app.routers.detection.extracted_fields_repository") as mock_fields,
         patch(
@@ -359,7 +357,7 @@ def test_get_numerical_validation_passes_file_and_extracted_fields() -> None:
 
 def test_get_numerical_validation_degrades_when_fields_fetch_fails() -> None:
     with (
-        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.storage_service") as mock_storage,
         patch("app.routers.detection.extracted_fields_repository") as mock_fields,
         patch(
@@ -379,7 +377,7 @@ def test_get_numerical_validation_degrades_when_fields_fetch_fails() -> None:
 
 def test_get_numerical_validation_writes_nothing() -> None:
     with (
-        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.storage_service") as mock_storage,
         patch("app.routers.detection.extracted_fields_repository") as mock_fields,
         patch(
@@ -396,12 +394,11 @@ def test_get_numerical_validation_writes_nothing() -> None:
     assert response.status_code == 200
     # Result is returned as JSON for the lead agent; nothing is persisted.
     mock_repo.update_extracted_fields.assert_not_called()
-    mock_repo.update_metadata_anomalies.assert_not_called()
 
 
 def test_get_numerical_validation_fetch_and_not_found_errors() -> None:
     with (
-        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.check_numerical_validation") as mock_check,
     ):
         mock_repo.get_document.side_effect = RuntimeError("db down")
@@ -411,7 +408,7 @@ def test_get_numerical_validation_fetch_and_not_found_errors() -> None:
         mock_check.assert_not_called()
 
     with (
-        patch("app.routers.detection.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.check_numerical_validation") as mock_check,
     ):
         mock_repo.get_document.return_value = None

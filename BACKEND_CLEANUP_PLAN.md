@@ -1,5 +1,97 @@
 # Backend dependency/redundancy cleanup (post-merge)
 
+## Test suite repair — IN PROGRESS, resume here tomorrow
+
+Everything in "Progress" below (Steps 1-6, Phase 2's cases-domain migration, the
+`sync_submission_finalized` consolidation) landed and is committed (`61d730b "refactoring
+woohoo"`). Since then, in the same session but a separate pass, also completed and committed in
+that same commit: retired `font_consistency.py` (v1) entirely into `font_consistency_v2.py`,
+moved `extraction_prompts.py` into `app/langgraph/`, split `health.py`/`auth` endpoints out of
+`main.py` into their own modules, removed the dead single-file `/documents/upload` endpoint and
+its `UploadResponse` model, trimmed `config.py`'s comments, and eliminated every Dify reference
+from the codebase (code, `.env`, GitHub Actions workflows) — see the conversation history for
+full detail on each if needed; all of that is done, not part of what's left below.
+
+**What's left, uncommitted right now:** fixing the test suite fallout from all of the above.
+Before this pass: **65 failing tests** (`python -m pytest -q` from `backend/`). All 65 traced to
+one root cause — tests patching module attributes (`document_repository`, `case_repository`,
+`case_status`) at import paths that no longer exist after this session's refactors, mainly:
+- `routers/documents.py`, `routers/cases.py`, `routers/detection.py`, `routers/upload.py` no
+  longer import `document_repository`/`case_repository` directly for their `Depends`-gated
+  endpoints — the fetch happens in `routers/_dependencies.py` instead, so tests need to patch
+  `app.routers._dependencies.document_repository` / `.case_status` for the dependency's own
+  fetch, *separately* from patching `app.routers.<module>.document_repository` for whatever the
+  handler body itself still calls directly (these are two different mock objects, since
+  `_dependencies.py` and e.g. `documents.py` each hold their own `from .. import
+  document_repository` binding to the same underlying module — patching one does not patch the
+  other).
+- `routers/documents.py` no longer imports `case_status` at all — the case-resync now happens
+  inside `document_repository`'s own write functions (`_sync_case`), so router-level tests
+  asserting `case_status.sync_submission_finalized was called` are asserting something that's no
+  longer observable at that layer. Fixed by deleting those specific assertions (with a one-line
+  comment pointing at where that behaviour actually lives now), not by trying to re-mock it.
+- `routers/cases.py`'s `delete_case` now delegates its whole "remove every document, then the
+  case row" cascade to `case_status.delete_case` — the router test can no longer assert on
+  `document_repository.list_documents`/`remove_document` calls directly; it can only assert
+  `case_status.delete_case` was called. (You explicitly said not to add new dedicated
+  `case_status.delete_case` cascade tests right now — "i do not need max coverage now,
+  i will enable this edit when you ask me again" — so that cascade currently has **no direct unit
+  test**, only indirect coverage via whatever `case_status.py`'s existing tests happen to touch.
+  Worth revisiting later if you want it back.)
+
+**Fixed so far (65 → 10 failing), files touched, uncommitted:**
+- `tests/test_cases.py` — fully rewritten for the `case_status`-owned design; all 18 tests pass.
+  `test_delete_case_removes_its_documents_then_the_case` was replaced with
+  `test_delete_case_calls_case_status_delete_case` (asserts the delegation only, per the note
+  above about not adding new cascade-level coverage).
+- `tests/test_case_match.py` — the 4 `case-match` endpoint tests repointed at
+  `app.case_status.case_repository`/`document_repository` (where the real fetches now happen)
+  instead of the old router-level patches; one also needed
+  `app.routers._dependencies.document_repository` for its `Depends` fetch. All pass.
+- `tests/test_detection.py` — every `patch("app.routers.detection.document_repository")` →
+  `patch("app.routers._dependencies.document_repository")` (`routers/detection.py` never imports
+  `document_repository` directly at all anymore). Also deleted two leftover assertions on
+  `document_repository.update_metadata_anomalies`, a method that was deleted from
+  `document_repository.py` entirely back in Step 1 — the assertions still "worked" (a `MagicMock`
+  doesn't complain about asserting on an attribute that doesn't exist on the real object) but were
+  meaningless. All pass.
+- `tests/test_documents.py` — the big one, still **10 of ~75 tests failing**. Fixed: upload-batch
+  (`case_repository` → `case_status`), download-url, all `retry_document` tests, all
+  `update_extracted_fields` tests, all `update_document_type` tests, most `add_extracted_field`
+  tests. Also tightened a few tests that were only passing "by accident" (patching the wrong
+  target meant the mock never engaged, and the *real* `document_repository` call failed against
+  the placeholder test Supabase URL — coincidentally producing the same expected status code,
+  e.g. 502, for the wrong reason). Those now patch the correct target and actually exercise the
+  mocked behaviour they claim to.
+
+**Still red (10 tests) — not yet looked at, do these first tomorrow:**
+```
+test_add_extracted_field_trims_whitespace_from_name
+test_add_extracted_field_skips_case_sync_for_caseless_document
+test_delete_extracted_field_removes_and_recomputes_requirements
+test_delete_extracted_field_document_not_found
+test_delete_extracted_field_rejects_field_belonging_to_another_document
+test_delete_extracted_field_skips_case_sync_for_caseless_document
+test_delete_document_removes_it_and_resyncs_the_case
+test_delete_document_rejects_an_approved_document
+test_delete_document_not_found
+test_delete_document_without_a_case_skips_checklist_sync
+```
+The first two (`add_extracted_field_trims_whitespace_from_name`,
+`..._skips_case_sync_for_caseless_document`) were touched in the same edit as the rest of the
+`add_extracted_field` block and still fail for an *unconfirmed* reason (didn't get to debug
+before stopping — check these first, something in that last edit likely needs one more tweak).
+The `delete_extracted_field` and `delete_document` blocks (8 tests) haven't been touched at
+all yet — they need the exact same treatment already applied to `update_extracted_fields`/
+`add_extracted_field` just above them in the same file: split `document: Depends(get_document_or_404)`
+fetch onto `app.routers._dependencies.document_repository`, keep the handler's own
+`document_repository`/`extracted_fields_repository` calls on `app.routers.documents.*`, and
+delete any `case_status` patch/assertion (documents.py doesn't import it anymore).
+
+**After those 10 are green:** run `python -m pytest -q` once more from `backend/` to confirm
+**0 failing**, then decide whether to tackle **Step 7** (`test_orchestrator.py`/`test_dify_client.py`
+— still sitting `collect_ignore`'d in `conftest.py`, completely untouched this whole session).
+
 ## Progress (updated during execution, before a session compact)
 
 **Steps 1-5: done and verified** (compiled + smoke-tested with mocked repos via standalone

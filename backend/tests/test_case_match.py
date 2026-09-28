@@ -433,9 +433,12 @@ def test_document_with_nothing_to_compare_goes_to_manual_review() -> None:
 
 
 def test_case_match_endpoint() -> None:
+    # GET /cases/{id}/case-match delegates to case_status.get_case_match_for_case,
+    # which is the only thing that still imports case_repository/document_repository
+    # directly for this path (routers/cases.py itself only imports case_status).
     docs = [_incumbency(), *_corroborating(3)]
-    with patch("app.routers.cases.case_repository") as case_repo, patch(
-        "app.routers.cases.document_repository"
+    with patch("app.case_status.case_repository") as case_repo, patch(
+        "app.case_status.document_repository"
     ) as doc_repo:
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = docs
@@ -445,12 +448,12 @@ def test_case_match_endpoint() -> None:
     body = response.json()
     assert body["incumbency"]["status"] == "verified"
     assert len(body["documents"]) == 4
-    doc_repo.list_documents.assert_called_once_with("case-1")
+    doc_repo.list_documents.assert_called_once_with(case_id="case-1")
 
 
 def test_case_match_endpoint_404_for_unknown_case() -> None:
-    with patch("app.routers.cases.case_repository") as case_repo, patch(
-        "app.routers.cases.document_repository"
+    with patch("app.case_status.case_repository") as case_repo, patch(
+        "app.case_status.document_repository"
     ):
         case_repo.get_case.return_value = None
         response = client.get("/cases/nope/case-match")
@@ -459,11 +462,18 @@ def test_case_match_endpoint_404_for_unknown_case() -> None:
 
 
 def test_document_case_match_endpoint_returns_that_documents_entry() -> None:
+    # GET /documents/{id}/detection/case-match sits behind
+    # Depends(get_document_or_404) (fetches via _dependencies.document_repository)
+    # and then delegates to case_status.get_case_match_for_document, which does
+    # its own separate document_repository/case_repository fetches.
     stray = _doc("list_of_loans", {"uen": OTHER_UEN, "individual_name": "Tan Wei Ming"}, "stray")
     docs = [_incumbency(), *_corroborating(3), stray]
-    with patch("app.routers.detection.case_repository") as case_repo, patch(
-        "app.routers.detection.document_repository"
-    ) as doc_repo:
+    with (
+        patch("app.routers._dependencies.document_repository") as dep_doc_repo,
+        patch("app.case_status.document_repository") as doc_repo,
+        patch("app.case_status.case_repository") as case_repo,
+    ):
+        dep_doc_repo.get_document.return_value = stray
         doc_repo.get_document.return_value = stray
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = docs
@@ -479,10 +489,8 @@ def test_document_case_match_endpoint_returns_that_documents_entry() -> None:
 
 def test_document_case_match_endpoint_404_without_case() -> None:
     orphan = _doc("nric", {"nric_number": "S1234567A"}, "orphan").model_copy(update={"case_id": None})
-    with patch("app.routers.detection.case_repository"), patch(
-        "app.routers.detection.document_repository"
-    ) as doc_repo:
-        doc_repo.get_document.return_value = orphan
+    with patch("app.routers._dependencies.document_repository") as dep_doc_repo:
+        dep_doc_repo.get_document.return_value = orphan
         response = client.get("/documents/orphan/detection/case-match")
 
     assert response.status_code == 404

@@ -8,7 +8,7 @@ Reference map of source files under `backend/`, scoped to the parts likely to be
 - **case_broadcaster.py** — In-memory pub/sub (`CaseBroadcaster`) that fans out case snapshots from the Realtime listener to subscribed WebSocket connections via per-case `asyncio.Queue`s.
 - **case_repository.py** — Supabase CRUD for the `cases` table: create/get/list cases and set/clear `submission_finalized`.
 - **case_status.py** — Computes case-level rollups: worst-first `documents_status`, required/additional requirement coverage, `sync_submission_finalized`, and `build_case_snapshot`/`build_summary` for the WebSocket and REST case endpoints.
-- **config.py** — Centralised `Settings` object reading all configuration (Supabase, Dify, auth, thresholds, LangGraph models) from environment variables.
+- **config.py** — Centralised `Settings` object reading all configuration (Supabase, auth, thresholds, LangGraph models) from environment variables.
 - **document_repository.py** — Supabase CRUD for the `documents` table: create, status updates, classification/extraction/escalation/metadata writes, and status-filtered queries.
 - **extracted_fields_repository.py** — Mirrors a document's `extracted_fields` into the normalised one-row-per-field `extracted_fields` table (replace/get, single and batched-by-document-ids).
 - **health.py** — `check_db_connection`, a lightweight real Supabase query used by the `/health/db` readiness probe.
@@ -28,7 +28,7 @@ Reference map of source files under `backend/`, scoped to the parts likely to be
 - **cases.py** — `POST/GET /cases`, `GET /cases/{id}`: case creation and summary retrieval.
 - **detection.py** — On-demand fraud-detection endpoints: font-consistency and spelling-anomaly checks for a stored document.
 - **documents.py** — Document CRUD/actions: get/list, manual extracted-fields correction, manual document-type correction (triggers a LangGraph extraction rerun), retry, langgraph debug trace, and signed download URL.
-- **extraction.py** — Dev/QA endpoints: `/extraction/test` (raw ingestion only, bypasses Dify) and `/extraction/test-spelling-anomaly`.
+- **extraction.py** — Dev/QA endpoints: `/extraction/test` (raw ingestion only, bypasses the LangGraph pipeline) and `/extraction/test-spelling-anomaly`.
 - **injection.py** — Dev fraud-injection API: list injectable template documents, list a document's fields, and `POST /api/dev/inject` to apply a defect.
 - **monitoring.py** — `GET /documents/monitoring/stuck` and `/monitoring/issues`: surfaces stuck documents, failed documents, and recent in-memory queue errors.
 - **upload.py** — Single and batch document upload: validates, stores to Supabase Storage, creates the document row, and enqueues it.
@@ -45,8 +45,7 @@ Reference map of source files under `backend/`, scoped to the parts likely to be
 
 Mapping current files onto the target services (Ingestion, Per-Document Orchestrator, Case
 Gate/Orchestrator, Aggregation, Query), and what's blocking each from being genuinely
-independent today. Dify-vs-LangGraph duplication inside "Per-Document Orchestrator" is
-intentionally not called out below — that's a separate, later decision.
+independent today.
 
 **1. Ingestion Service** (upload → storage → row → publish `document.uploaded`)
 - Files: `routers/upload.py`, `storage_service.py`, `ingestion/` (all 4 files).
@@ -153,8 +152,7 @@ front of the single FastAPI app today and still centralise:
   plugin at the gateway — FastAPI's `require_auth` dependency becomes redundant once Kong is
   the one thing that can reach the backend at all.
 - **Rate limiting and quotas** per API key/consumer, which nothing in this codebase does today
-  (`DIFY_CLASSIFIER_MAX_CONCURRENCY`-style limits are Anthropic-call-specific, not
-  request-level).
+  (`QUEUE_WORKER_CONCURRENCY`-style limits are Anthropic-call-specific, not request-level).
 - **Routing**, once there's more than one deployable service to route between — today's
   single-FastAPI-process reality means this part is mostly future-facing.
 

@@ -1,12 +1,12 @@
-# Testing the LangGraph pipeline locally (`langgraph-test` branch)
+# Testing the LangGraph pipeline locally
 
-`queue_service.py` now hard-switches every document upload to the new LangGraph pipeline
-(`backend/app/langgraph/`) instead of Dify (see `LANGGRAPH_MIGRATION_PLAN.md`). This is
-phases 0-4: classify (a deterministic rule pass, then a Sonnet agent that decides itself
-whether to call the Haiku classifier and/or vision as tools), extract (Sonnet), and a bounded
-classify<->extract reclassify loop when Extraction disagrees with the classified type. No
-persistence/checkpointing yet. Dify itself is untouched and still running in the cloud, just
-not called from this branch's upload path.
+`queue_service.py` hard-switches every document upload to the LangGraph pipeline
+(`backend/app/langgraph/`) — see `LANGGRAPH_MIGRATION_PLAN.md`. This is phases 0-4: classify (a
+deterministic rule pass, then a Sonnet agent that decides itself whether to call the Haiku
+classifier and/or vision as tools), extract (Sonnet), and a bounded classify<->extract
+reclassify loop when Extraction disagrees with the classified type. No persistence/checkpointing
+yet. Dify has been fully removed from this repo (code, env vars, deploy config) — this is now
+the only pipeline.
 
 ## 1. Install the new Python dependencies
 
@@ -21,7 +21,7 @@ installed ahead of Phase 4), and `psycopg[binary,pool]` (same). Everything else 
 
 ## 2. Add your Anthropic API key
 
-Add to `backend/.env` (new variable, not used by the Dify path):
+Add to `backend/.env`:
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...

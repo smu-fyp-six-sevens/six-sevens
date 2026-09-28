@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.models import CaseDocumentsStatus, CaseRecord, CaseSummary, DocumentRecord, DocumentStatus
+from app.models import CaseDocumentsStatus, CaseRecord, CaseSummary
 
 
 client = TestClient(app)
@@ -37,25 +36,25 @@ def _make_summary(
 
 
 def test_create_case() -> None:
-    with patch("app.routers.cases.case_repository") as mock_repo:
-        mock_repo.create_case.return_value = _make_case("new-case")
+    with patch("app.routers.cases.case_status") as mock_case_status:
+        mock_case_status.create_case.return_value = _make_case("new-case")
 
         response = client.post("/cases")
 
     assert response.status_code == 201
     assert response.json()["id"] == "new-case"
-    mock_repo.create_case.assert_called_once_with(None)
+    mock_case_status.create_case.assert_called_once_with(None)
 
 
 def test_create_case_with_company_name() -> None:
-    with patch("app.routers.cases.case_repository") as mock_repo:
-        mock_repo.create_case.return_value = _make_case("new-case", company_name="Acme Pte Ltd")
+    with patch("app.routers.cases.case_status") as mock_case_status:
+        mock_case_status.create_case.return_value = _make_case("new-case", company_name="Acme Pte Ltd")
 
         response = client.post("/cases", json={"company_name": "Acme Pte Ltd"})
 
     assert response.status_code == 201
     assert response.json()["company_name"] == "Acme Pte Ltd"
-    mock_repo.create_case.assert_called_once_with("Acme Pte Ltd")
+    mock_case_status.create_case.assert_called_once_with("Acme Pte Ltd")
 
 
 def test_get_case_not_found() -> None:
@@ -80,8 +79,8 @@ def test_get_case_returns_summary_with_documents_status() -> None:
 
 
 def test_create_case_db_failure_returns_502() -> None:
-    with patch("app.routers.cases.case_repository") as mock_repo:
-        mock_repo.create_case.side_effect = RuntimeError("connection refused")
+    with patch("app.routers.cases.case_status") as mock_case_status:
+        mock_case_status.create_case.side_effect = RuntimeError("connection refused")
 
         response = client.post("/cases")
 
@@ -122,14 +121,20 @@ def test_list_cases_db_failure_returns_502() -> None:
 
 
 # --- PATCH /cases/{case_id} (officer renaming a case) -------------------
+#
+# update_case/delete_case both sit behind Depends(get_case_or_404) (see
+# routers/_dependencies.py), which calls case_status.get_case itself — so
+# these tests patch app.routers._dependencies.case_status for the
+# existence check, separately from app.routers.cases.case_status for the
+# handler's own writes.
 
 
 def test_update_case_saves_company_name_and_returns_fresh_summary() -> None:
     with (
-        patch("app.routers.cases.case_repository") as mock_repo,
+        patch("app.routers._dependencies.case_status") as mock_dep_case_status,
         patch("app.routers.cases.case_status") as mock_case_status,
     ):
-        mock_repo.get_case.return_value = _make_case("case-1")
+        mock_dep_case_status.get_case.return_value = _make_case("case-1")
         mock_case_status.get_case_summary.return_value = _make_summary("case-1")
 
         response = client.patch(
@@ -138,7 +143,7 @@ def test_update_case_saves_company_name_and_returns_fresh_summary() -> None:
 
     assert response.status_code == 200
     assert response.json()["id"] == "case-1"
-    mock_repo.update_case.assert_called_once_with("case-1", "Meridian Warehousing Pte Ltd")
+    mock_case_status.update_case.assert_called_once_with("case-1", "Meridian Warehousing Pte Ltd")
     # The summary is re-read rather than patched in memory, so the response
     # reflects whatever the write actually landed.
     mock_case_status.get_case_summary.assert_called_once_with("case-1")
@@ -146,52 +151,66 @@ def test_update_case_saves_company_name_and_returns_fresh_summary() -> None:
 
 def test_update_case_trims_surrounding_whitespace() -> None:
     with (
-        patch("app.routers.cases.case_repository") as mock_repo,
+        patch("app.routers._dependencies.case_status") as mock_dep_case_status,
         patch("app.routers.cases.case_status") as mock_case_status,
     ):
-        mock_repo.get_case.return_value = _make_case("case-1")
+        mock_dep_case_status.get_case.return_value = _make_case("case-1")
         mock_case_status.get_case_summary.return_value = _make_summary("case-1")
 
         response = client.patch("/cases/case-1", json={"company_name": "  Acme Pte Ltd  "})
 
     assert response.status_code == 200
-    mock_repo.update_case.assert_called_once_with("case-1", "Acme Pte Ltd")
+    mock_case_status.update_case.assert_called_once_with("case-1", "Acme Pte Ltd")
 
 
 def test_update_case_rejects_blank_company_name() -> None:
-    # UpdateCaseRequest's own validator rejects this before the handler
-    # runs, so nothing is written.
-    with patch("app.routers.cases.case_repository") as mock_repo:
+    # UpdateCaseRequest's own validator rejects this before the write would
+    # ever happen, so nothing is written regardless of dependency order.
+    with (
+        patch("app.routers._dependencies.case_status") as mock_dep_case_status,
+        patch("app.routers.cases.case_status") as mock_case_status,
+    ):
+        mock_dep_case_status.get_case.return_value = _make_case("case-1")
+
         response = client.patch("/cases/case-1", json={"company_name": "   "})
 
     assert response.status_code == 422
-    mock_repo.update_case.assert_not_called()
+    mock_case_status.update_case.assert_not_called()
 
 
 def test_update_case_not_found() -> None:
-    with patch("app.routers.cases.case_repository") as mock_repo:
-        mock_repo.get_case.return_value = None
+    with (
+        patch("app.routers._dependencies.case_status") as mock_dep_case_status,
+        patch("app.routers.cases.case_status") as mock_case_status,
+    ):
+        mock_dep_case_status.get_case.return_value = None
 
         response = client.patch("/cases/missing-id", json={"company_name": "Acme Pte Ltd"})
 
     assert response.status_code == 404
-    mock_repo.update_case.assert_not_called()
+    mock_case_status.update_case.assert_not_called()
 
 
 def test_update_case_fetch_failure_returns_502() -> None:
-    with patch("app.routers.cases.case_repository") as mock_repo:
-        mock_repo.get_case.side_effect = RuntimeError("connection refused")
+    with (
+        patch("app.routers._dependencies.case_status") as mock_dep_case_status,
+        patch("app.routers.cases.case_status") as mock_case_status,
+    ):
+        mock_dep_case_status.get_case.side_effect = RuntimeError("connection refused")
 
         response = client.patch("/cases/case-1", json={"company_name": "Acme Pte Ltd"})
 
     assert response.status_code == 502
-    mock_repo.update_case.assert_not_called()
+    mock_case_status.update_case.assert_not_called()
 
 
 def test_update_case_write_failure_returns_502() -> None:
-    with patch("app.routers.cases.case_repository") as mock_repo:
-        mock_repo.get_case.return_value = _make_case("case-1")
-        mock_repo.update_case.side_effect = RuntimeError("db down")
+    with (
+        patch("app.routers._dependencies.case_status") as mock_dep_case_status,
+        patch("app.routers.cases.case_status") as mock_case_status,
+    ):
+        mock_dep_case_status.get_case.return_value = _make_case("case-1")
+        mock_case_status.update_case.side_effect = RuntimeError("db down")
 
         response = client.patch("/cases/case-1", json={"company_name": "Acme Pte Ltd"})
 
@@ -202,10 +221,10 @@ def test_update_case_missing_summary_after_write_returns_404() -> None:
     # The row was there a moment ago (the pre-check passed) but the summary
     # re-read came back empty — e.g. deleted concurrently.
     with (
-        patch("app.routers.cases.case_repository") as mock_repo,
+        patch("app.routers._dependencies.case_status") as mock_dep_case_status,
         patch("app.routers.cases.case_status") as mock_case_status,
     ):
-        mock_repo.get_case.return_value = _make_case("case-1")
+        mock_dep_case_status.get_case.return_value = _make_case("case-1")
         mock_case_status.get_case_summary.return_value = None
 
         response = client.patch("/cases/case-1", json={"company_name": "Acme Pte Ltd"})
@@ -213,51 +232,50 @@ def test_update_case_missing_summary_after_write_returns_404() -> None:
     assert response.status_code == 404
 
 
-def test_delete_case_removes_its_documents_then_the_case() -> None:
-    document = DocumentRecord(
-        id="doc-1",
-        case_id="case-1",
-        filename="statement.pdf",
-        storage_path="case-1/doc-1_statement.pdf",
-        status=DocumentStatus.UPLOADED,
-        uploaded_at=datetime(2026, 8, 26, tzinfo=timezone.utc),
-    )
+# --- DELETE /cases/{case_id} ---------------------------------------------
+#
+# The documents-then-case cascade now lives entirely inside
+# case_status.delete_case (see test_case_status.py for that behaviour) —
+# the router itself is a thin wrapper behind Depends(get_case_or_404), so
+# these only assert the wrapper's own responsibilities: 404 gating and
+# delegating to case_status.delete_case.
 
+
+def test_delete_case_calls_case_status_delete_case() -> None:
     with (
-        patch("app.routers.cases.case_repository") as mock_cases,
-        patch("app.routers.cases.document_repository") as mock_documents,
+        patch("app.routers._dependencies.case_status") as mock_dep_case_status,
+        patch("app.routers.cases.case_status") as mock_case_status,
     ):
-        mock_cases.get_case.return_value = _make_case("case-1")
-        mock_documents.list_documents.return_value = [document]
+        mock_dep_case_status.get_case.return_value = _make_case("case-1")
 
         response = client.delete("/cases/case-1")
 
     assert response.status_code == 204
     assert response.content == b""
-    mock_documents.list_documents.assert_called_once_with("case-1")
-    mock_documents.remove_document.assert_called_once_with(document)
-    mock_cases.delete_case.assert_called_once_with("case-1")
+    mock_case_status.delete_case.assert_called_once_with("case-1")
 
 
 def test_delete_case_not_found() -> None:
     with (
-        patch("app.routers.cases.case_repository") as mock_cases,
-        patch("app.routers.cases.document_repository") as mock_documents,
+        patch("app.routers._dependencies.case_status") as mock_dep_case_status,
+        patch("app.routers.cases.case_status") as mock_case_status,
     ):
-        mock_cases.get_case.return_value = None
+        mock_dep_case_status.get_case.return_value = None
 
         response = client.delete("/cases/missing-id")
 
     assert response.status_code == 404
-    mock_documents.remove_document.assert_not_called()
-    mock_cases.delete_case.assert_not_called()
+    mock_case_status.delete_case.assert_not_called()
 
 
 def test_delete_case_db_failure_returns_502() -> None:
-    with patch("app.routers.cases.case_repository") as mock_cases:
-        mock_cases.get_case.side_effect = RuntimeError("connection refused")
+    with (
+        patch("app.routers._dependencies.case_status") as mock_dep_case_status,
+        patch("app.routers.cases.case_status") as mock_case_status,
+    ):
+        mock_dep_case_status.get_case.return_value = _make_case("case-1")
+        mock_case_status.delete_case.side_effect = RuntimeError("connection refused")
 
         response = client.delete("/cases/case-1")
 
     assert response.status_code == 502
-    mock_cases.delete_case.assert_not_called()

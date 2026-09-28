@@ -82,9 +82,9 @@ async def test_extraction(file: UploadFile = File(...)) -> ExtractionTestRespons
     Dev/QA endpoint: runs just the raw-text extraction step (native PDF
     text, OCR fallback for scanned PDFs, or straight OCR for images) on an
     uploaded file and returns the result directly. Bypasses Supabase
-    storage, the document queue, and Dify entirely — this exists so the
-    extraction stage can be eyeballed on its own before it ever reaches
-    classification/LLM extraction.
+    storage, the document queue, and the LangGraph pipeline entirely — this
+    exists so the extraction stage can be eyeballed on its own before it
+    ever reaches classification/LLM extraction.
     """
     file_bytes = await _read_and_validate_upload(file)
 
