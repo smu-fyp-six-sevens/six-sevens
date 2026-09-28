@@ -6,8 +6,9 @@ import time
 from collections import deque
 from datetime import datetime, timezone
 
-from . import document_repository, orchestrator
+from . import document_repository
 from .config import settings
+from .langgraph import pipeline as langgraph_pipeline
 from .models import DocumentStatus, ProcessingErrorEntry
 
 logger = logging.getLogger("classifier_pipeline.queue")
@@ -20,12 +21,10 @@ class DocumentQueue:
 
     This satisfies AC1 (document enters a queue for async processing) and
     AC2 (dequeue -> hand off within a target window) for a single-instance
-    deployment. Once handed off, orchestrator.process_document owns
-    classification/extraction/retry/terminal-status — this layer no longer
-    retries invocations itself (see orchestrator.py for why). Concurrent
-    workers are safe here: DifyClient opens a fresh httpx.AsyncClient per
-    call (no shared connection to race on), and the shared Supabase client
-    is pinned to HTTP/1.1 (see supabase_client.py) specifically so
+    deployment. Once handed off, langgraph pipeline.process_document owns
+    classification/extraction/terminal-status — this layer doesn't retry
+    anything itself. Concurrent workers are safe here: the shared Supabase
+    client is pinned to HTTP/1.1 (see supabase_client.py) specifically so
     concurrent requests don't corrupt a shared HTTP/2 connection. For
     multi-instance/production use, swap this for a durable queue (e.g.
     Cloud Pub/Sub, as scoped for the Cloud Native award) so queued items
@@ -82,7 +81,7 @@ class DocumentQueue:
                     "Worker %d: unhandled error processing document %s", worker_id, document_id
                 )
                 self._record_error(document_id, str(exc))
-                # Last-resort safety net: orchestrator.process_document already
+                # Last-resort safety net: langgraph_pipeline.process_document already
                 # catches its own exceptions and marks FAILED, but errors raised
                 # before/outside that call (e.g. get_document here) would
                 # otherwise leave the document stuck at a non-terminal status
@@ -110,9 +109,9 @@ class DocumentQueue:
             self._record_error(document_id, message)
             return
 
-        # AC2: mark processing before handing off to the orchestrator.
+        # AC2: mark processing before handing off to the pipeline.
         # invoke_time_seconds is logged so "within 1 second of dequeue" is
-        # measurable in tests/monitoring, independent of Dify's own latency.
+        # measurable in tests/monitoring, independent of the pipeline's own latency.
         processing_started_at = datetime.now(timezone.utc)
         await asyncio.to_thread(
             document_repository.update_status,
@@ -127,11 +126,9 @@ class DocumentQueue:
                 document_id, invoke_time_seconds, settings.DEQUEUE_TO_INVOKE_TARGET_SECONDS,
             )
 
-        # orchestrator.process_document owns classify -> extract -> escalate
-        # -> terminal status (ANALYZED/FAILED) from here. It catches its own
-        # DifyInvocationErrors and translates them into a FAILED status
-        # rather than raising, so no retry loop is needed at this layer.
-        await orchestrator.process_document(document_id)
+        # Owns classify -> extract -> terminal status (ANALYZED/FAILED) from
+        # here, and never raises, so no retry loop is needed at this layer.
+        await langgraph_pipeline.process_document(document_id)
 
 
 document_queue = DocumentQueue()

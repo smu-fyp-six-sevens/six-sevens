@@ -350,6 +350,9 @@ class DocumentRecord(BaseModel):
     extraction_confidence: Optional[float] = None
     escalation_reason: Optional[str] = None
     metadata: Optional[dict] = None
+    # The classifier's own plain-language justification for document_type —
+    # see document_repository.record_classification.
+    classification_reasoning: Optional[str] = None
     # The Digital Authenticity Specialist's stored result (see
     # fraud_detection.metadata_analysis.MetadataAnalysisResult) — set once
     # GET .../detection/metadata-anomaly has run for this document.

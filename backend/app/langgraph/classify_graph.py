@@ -1,0 +1,283 @@
+"""
+Classify subgraph: rule_classify runs deterministically (the only
+deterministic step), then the agent takes over — it decides itself whether
+to call llm_classify_tool and/or vision_llm, but NOT in whatever order: the
+agent's first turn is only ever offered llm_classify_tool; vision_llm only
+becomes available starting from its second turn onward, and only until it's
+been called once. This is a code-enforced ordering (see _available_tools),
+not just a prompt suggestion — vision is by far the most expensive tool
+(a full image, not just text), so it never gets to be the agent's first or
+only move. Within that ordering the agent still genuinely decides whether
+to call either tool at all, which is what keeps this agentic rather than a
+hardcoded pipeline with an LLM bolted on. See LANGGRAPH_MIGRATION_PLAN.md.
+
+    rule_classify -> agent (turn 1: llm_classify_tool only)
+                       -> [tools -> agent (turn 2+: vision_llm only)]* -> validate -> repair
+
+Also holds the reclassify entry point (Phase 4): when Extraction escalates,
+graph.py routes back into this same agent/tools/validate/repair chain via
+prepare_reclassify_node, continuing the same conversation rather than
+re-running rule_classify. Since that conversation already has at least one
+prior agent turn, only vision_llm (if not already used) is offered there —
+llm_classify_tool already had its one shot on the original pass.
+
+No checkpointer here (`compile(checkpointer=False)` in graph.py) — only the
+parent graph persists, per LANGGRAPH_MIGRATION_PLAN.md section 5.
+"""
+
+from __future__ import annotations
+
+import logging
+
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langgraph.graph import END, StateGraph
+from langgraph.prebuilt import ToolNode
+
+from . import text_cache, trace
+from .cache_gate import cache_gate
+from .. import telemetry
+from .classify_support import agent_prompt_parts, validate_agent_output
+from .llm_classify import llm_classify_tool
+from .rule_classify import classify_by_rules
+from .state import DocumentGraphState
+from .vision_tool import vision_llm
+from ..config import settings
+
+logger = logging.getLogger("classifier_pipeline.langgraph.classify")
+
+_TOOLS = [llm_classify_tool, vision_llm]
+
+
+def _raw_text(state: DocumentGraphState) -> str:
+    return text_cache.get(state["document_id"]) or ""
+
+
+def _called_tool_names(messages: list) -> set[str]:
+    names: set[str] = set()
+    for message in messages:
+        if isinstance(message, AIMessage):
+            names.update(tc["name"] for tc in (message.tool_calls or []))
+    return names
+
+
+def _available_tools(existing_messages: list) -> list:
+    """
+    Enforces the ordering described in this module's docstring: llm_classify_tool
+    only on the agent's first turn, vision_llm only from the second turn
+    onward (and only until it's been called once) — never the reverse, and
+    never both offered in the same turn.
+    """
+    if not existing_messages:
+        return [llm_classify_tool]
+    if "vision_llm" in _called_tool_names(existing_messages):
+        return []
+    return [vision_llm]
+
+
+def rule_node(state: DocumentGraphState) -> dict:
+    """The only deterministic step — everything after this is the agent's call."""
+    result = classify_by_rules(state["filename"], _raw_text(state))
+    top = (result.get("top_candidates") or [None])[0]
+    trace.record(
+        state["document_id"], "rule_classify",
+        rule_top_type=top["document_type"] if top else None,
+        rule_top_strength=top["match_strength"] if top else None,
+        certain_type=result.get("certain_type"),
+    )
+    return {"rule_result": result}
+
+
+async def agent_node(state: DocumentGraphState) -> dict:
+    from langchain_anthropic import ChatAnthropic  # local import: optional dep until phase 0 is installed
+
+    existing = state.get("agent_messages") or []
+    available_tools = _available_tools(existing)
+    model = ChatAnthropic(
+        model=settings.LANGGRAPH_SONNET_MODEL,
+        api_key=settings.ANTHROPIC_API_KEY,
+        temperature=0,
+        max_tokens=1024,
+    )
+    if available_tools:
+        model = model.bind_tools(available_tools)
+
+    with telemetry.get_tracer().start_as_current_span("classify.agent_call") as span:
+        span.set_attribute("document_id", state["document_id"])
+        span.set_attribute("turn", "continuation" if existing else "first")
+        span.set_attribute("offered_tools", [t.name for t in available_tools])
+
+        if existing:
+            # Tool-loop continuation: the system message (with its
+            # cache_control breakpoint) is already in `existing`, so there's
+            # nothing new to gate — this call is naturally later than
+            # whichever call first warmed the cache for this key.
+            response: AIMessage = await model.ainvoke(existing)
+            telemetry.record_usage(span, response)
+            span.set_attribute("tool_calls", [tc["name"] for tc in (response.tool_calls or [])])
+            trace.record(
+                state["document_id"], "agent_call",
+                offered_tools=[t.name for t in available_tools],
+                tool_calls=[tc["name"] for tc in (response.tool_calls or [])],
+            )
+            return {"agent_messages": [response]}
+
+        # Static instructions and the per-document inputs are two separate
+        # content blocks so cache_control only covers the byte-stable half —
+        # concatenating them into one block would make the whole thing vary
+        # per document and never hit the cache. See classify_support.agent_prompt_parts.
+        static_prompt, dynamic_inputs = agent_prompt_parts(state.get("rule_result"), _raw_text(state))
+        model_input = [
+            SystemMessage(content=[
+                {"type": "text", "text": static_prompt, "cache_control": {"type": "ephemeral"}},
+                {"type": "text", "text": dynamic_inputs},
+            ]),
+            HumanMessage(content="Classify this document."),
+        ]
+        response = await cache_gate.run("classify_agent", lambda: model.ainvoke(model_input))
+        telemetry.record_usage(span, response)
+        span.set_attribute("tool_calls", [tc["name"] for tc in (response.tool_calls or [])])
+        trace.record(
+            state["document_id"], "agent_call",
+            offered_tools=[t.name for t in available_tools],
+            tool_calls=[tc["name"] for tc in (response.tool_calls or [])],
+        )
+        # agent_messages uses the add_messages reducer (see state.py), which
+        # appends — only the messages new to this call are returned, not the
+        # accumulated history, or they'd be duplicated.
+        return {"agent_messages": [*model_input, response]}
+
+
+def should_continue_agent(state: DocumentGraphState) -> str:
+    last = state["agent_messages"][-1]
+    if isinstance(last, AIMessage) and last.tool_calls:
+        return "tools"
+    return "validate"
+
+
+def build_reconsideration_message(escalation: dict, evidence: list[str] | None = None) -> HumanMessage:
+    """
+    Builds the reconsideration turn as a chat message: the next turn in the same conversation, not a
+    fresh classification — see prepare_reclassify_node.
+    """
+    reason = escalation.get("reason", "")
+    suggested = escalation.get("suggested_document_type")
+    evidence = evidence if evidence is not None else (escalation.get("evidence") or [])
+    if suggested:
+        text = f"Extraction thinks this document may actually be a {suggested}: {reason}"
+    else:
+        text = f"Extraction judged your classification incorrect: {reason}"
+    if evidence:
+        bullets = "\n".join(f"- {line}" for line in evidence)
+        text += f"\n\nEvidence from the document text:\n{bullets}"
+    text += "\n\nPlease reconsider your classification given this."
+    return HumanMessage(content=text)
+
+
+def prepare_reclassify_node(state: DocumentGraphState) -> dict:
+    """
+    Phase 4 reclassify entry point (see graph.py's decide_after_extract):
+    always re-enters at the agent, never re-runs rule_classify — a bare
+    regex re-guess has nothing new to react to, whereas the agent can
+    actually weigh Extraction's specific objection (and re-call its tools if
+    it decides it needs to).
+
+    Always a continuation of the existing `agent_messages` conversation
+    (matching Dify's conversation_id continuation): the agent runs at least
+    once for every document now (there's no code path that finalises
+    without it), so agent_messages is guaranteed non-empty by the time
+    Extraction — and therefore a possible reclassify — could happen.
+    """
+    document_id = state["document_id"]
+    escalation = (state.get("extraction") or {}).get("escalation") or {}
+    new_messages = [build_reconsideration_message(escalation)]
+
+    trace.record(document_id, "reclassify", reason=escalation.get("reason"))
+    return {"agent_messages": new_messages, "classification": None}
+
+
+def validate_node(state: DocumentGraphState) -> dict:
+    last = state["agent_messages"][-1]
+    content = last.content if isinstance(last.content, str) else str(last.content)
+    classification = validate_agent_output(content)
+    trace.record(state["document_id"], "validate", document_type=classification.get("document_type"))
+    return {"classification": classification}
+
+
+async def repair_node(state: DocumentGraphState) -> dict:
+    """
+    Deterministic cleanup already happened inside validate_agent_output
+    (strips to the {...} span). If that still couldn't produce a
+    document_type, one Haiku re-ask; if that also fails, manual review.
+    See LANGGRAPH_MIGRATION_PLAN.md section 5, "Repair node".
+    """
+    classification = state.get("classification") or {}
+    if classification.get("document_type"):
+        return {}
+
+    from langchain_anthropic import ChatAnthropic  # local import: optional dep until phase 0 is installed
+
+    last = state["agent_messages"][-1]
+    bad_output = last.content if isinstance(last.content, str) else str(last.content)
+    repair_model = ChatAnthropic(
+        model=settings.LANGGRAPH_HAIKU_MODEL,
+        api_key=settings.ANTHROPIC_API_KEY,
+        temperature=0,
+        max_tokens=512,
+    )
+    try:
+        response = await repair_model.ainvoke([
+            SystemMessage(
+                content="Extract ONLY a valid JSON object of the shape "
+                '{"document_type": "...", "confidence": 0.0, "evidence": [...], '
+                '"reasoning": "...", "needs_manual_review": true, "fulfilled_requirements": [...]} '
+                "from the text below. If no such object can be recovered, respond with "
+                '{"document_type": null}.'
+            ),
+            HumanMessage(content=bad_output),
+        ])
+        repaired = validate_agent_output(response.content if isinstance(response.content, str) else str(response.content))
+    except Exception as exc:  # noqa: BLE001 — repair failing is itself a valid outcome, not a crash
+        logger.warning("Repair re-ask failed: %s", exc)
+        repaired = {}
+
+    if repaired.get("document_type"):
+        return {"classification": repaired}
+
+    return {
+        "classification": {
+            "document_type": "unrecognised",
+            "confidence": 0.0,
+            "evidence": [],
+            "reasoning": "Agent output could not be parsed even after a repair re-ask; routed to manual review.",
+            "needs_manual_review": True,
+            "fulfilled_requirements": [],
+        }
+    }
+
+
+def build_classify_graph():
+    graph = StateGraph(DocumentGraphState)
+    graph.add_node("rule_classify", rule_node)
+    graph.add_node("agent", agent_node)
+    graph.add_node("tools", ToolNode(_TOOLS, messages_key="agent_messages", handle_tool_errors=True))
+    graph.add_node("validate", validate_node)
+    graph.add_node("repair", repair_node)
+
+    graph.set_entry_point("rule_classify")
+    graph.add_edge("rule_classify", "agent")
+    graph.add_conditional_edges("agent", should_continue_agent, {"tools": "tools", "validate": "validate"})
+    graph.add_edge("tools", "agent")
+    graph.add_edge("validate", "repair")
+    graph.add_edge("repair", END)
+
+    return graph.compile(checkpointer=False)
+
+
+classify_graph = None  # built lazily — see get_classify_graph()
+
+
+def get_classify_graph():
+    global classify_graph
+    if classify_graph is None:
+        classify_graph = build_classify_graph()
+    return classify_graph

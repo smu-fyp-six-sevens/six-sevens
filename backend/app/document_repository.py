@@ -73,6 +73,7 @@ def record_classification(
     classification_outcome: str,
     evidence: Optional[list[str]] = None,
     fulfilled_requirements: Optional[list[str]] = None,
+    reasoning: Optional[str] = None,
 ) -> None:
     """
     Persists the classification-stage decision (type, confidence, and
@@ -80,6 +81,12 @@ def record_classification(
     document status — this can happen well before the document reaches a
     terminal ANALYZED/FAILED status, since Extraction is a separate stage
     that runs afterward and can fail on its own.
+
+    `reasoning` is the classifier's own plain-language justification for the
+    decision (the Dify chatflow's Agent 3 always produced one; it was parsed
+    into the classification dict but never actually persisted anywhere —
+    kept here now so it isn't silently dropped). Optional and update-only
+    (never clears a prior reasoning with "") since not every caller has one.
     """
     update = {
         "document_type": document_type,
@@ -88,6 +95,8 @@ def record_classification(
         "evidence": evidence or [],
         "fulfilled_requirements": fulfilled_requirements or [],
     }
+    if reasoning is not None:
+        update["classification_reasoning"] = reasoning
     supabase_client.table("documents").update(update).eq("id", document_id).execute()
 
 
@@ -125,7 +134,7 @@ def record_escalation(document_id: str, reason: str) -> None:
     """
     Marks that Extraction judged the classified document_type to be wrong
     at least once during processing, triggering a re-run of Intake
-    Coordinator (see orchestrator._process_document's escalation loop).
+    Coordinator (see the langgraph reclassify loop (nodes.record_escalation_node)).
     Persisted independently of the final outcome so the frontend can show
     "classification was re-run" even once the document reaches a terminal
     status under a different (or the same) document_type.

@@ -60,14 +60,14 @@ async def test_process_document_records_error_when_document_missing() -> None:
     queue = DocumentQueue()
     with (
         patch("app.queue_service.document_repository") as mock_repo,
-        patch("app.queue_service.orchestrator") as mock_orchestrator,
+        patch("app.queue_service.langgraph_pipeline") as mock_pipeline,
     ):
         mock_repo.get_document.return_value = None
 
         await queue._process_document("missing-doc", dequeued_at=time.monotonic())
 
         mock_repo.update_status.assert_not_called()
-        mock_orchestrator.process_document.assert_not_called()
+        mock_pipeline.process_document.assert_not_called()
         errors = queue.get_recent_errors()
         assert len(errors) == 1
         assert errors[0].document_id == "missing-doc"
@@ -78,10 +78,10 @@ async def test_process_document_marks_processing_then_delegates_to_orchestrator(
     queue = DocumentQueue()
     with (
         patch("app.queue_service.document_repository") as mock_repo,
-        patch("app.queue_service.orchestrator") as mock_orchestrator,
+        patch("app.queue_service.langgraph_pipeline") as mock_pipeline,
     ):
         mock_repo.get_document.return_value = _make_document()
-        mock_orchestrator.process_document = AsyncMock()
+        mock_pipeline.process_document = AsyncMock()
 
         await queue._process_document("doc-1", dequeued_at=time.monotonic())
 
@@ -89,7 +89,7 @@ async def test_process_document_marks_processing_then_delegates_to_orchestrator(
         assert args[0] == "doc-1"
         assert args[1] == DocumentStatus.PROCESSING
         assert "processing_started_at" in kwargs
-        mock_orchestrator.process_document.assert_awaited_once_with("doc-1")
+        mock_pipeline.process_document.assert_awaited_once_with("doc-1")
 
 
 @pytest.mark.asyncio
@@ -97,17 +97,17 @@ async def test_process_document_logs_warning_when_invocation_slow() -> None:
     queue = DocumentQueue()
     with (
         patch("app.queue_service.document_repository") as mock_repo,
-        patch("app.queue_service.orchestrator") as mock_orchestrator,
+        patch("app.queue_service.langgraph_pipeline") as mock_pipeline,
         patch("app.queue_service.settings") as mock_settings,
     ):
         mock_repo.get_document.return_value = _make_document()
-        mock_orchestrator.process_document = AsyncMock()
+        mock_pipeline.process_document = AsyncMock()
         mock_settings.DEQUEUE_TO_INVOKE_TARGET_SECONDS = 0.0
 
         # dequeued "in the past" so elapsed time exceeds the (zeroed) target
         await queue._process_document("doc-1", dequeued_at=time.monotonic() - 5)
 
-        mock_orchestrator.process_document.assert_awaited_once_with("doc-1")
+        mock_pipeline.process_document.assert_awaited_once_with("doc-1")
 
 
 @pytest.mark.asyncio

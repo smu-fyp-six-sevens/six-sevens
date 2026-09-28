@@ -19,10 +19,13 @@ import {
   formatRoutingOutcome,
   getDocument,
   getDocumentCaseMatch,
+  getDetectionReport,
+  getLangGraphTrace,
+  runDetection,
   updateDocumentType,
   updateExtractedFields,
 } from '../services/uploadService';
-import type { DocumentCaseMatch, DocumentRecord } from '../services/uploadService';
+import type { DetectionReport, DocumentRecord, LangGraphTrace } from '../services/uploadService';
 
 interface DocumentDetailsPageProps {
   selectedCase: CaseRecord;
@@ -637,6 +640,18 @@ export default function DocumentDetailsPage({
   const [isSavingType, setIsSavingType] = useState(false);
   const [typeError, setTypeError] = useState<string | null>(null);
 
+  // langgraph-test branch debug aid (see backend/app/langgraph/trace.py) —
+  // shows which pipeline route this document actually took. Not present
+  // once a document went through the old Dify path or after a backend
+  // restart, so a missing trace is expected, not an error.
+  const [langGraphTrace, setLangGraphTrace] = useState<LangGraphTrace | null>(null);
+
+  // Detection Agent (dev aid, backend/app/langgraph/detection): the stored
+  // report for this document, and the in-flight state of a manual run.
+  const [detectionReport, setDetectionReport] = useState<DetectionReport | null>(null);
+  const [isRunningDetection, setIsRunningDetection] = useState(false);
+  const [detectionError, setDetectionError] = useState<string | null>(null);
+
   const [isApproving, setIsApproving] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
 
@@ -816,6 +831,62 @@ export default function DocumentDetailsPage({
     return () => subscription.unsubscribe();
   }, [caseId, isInFlight, documentId]);
 
+  useEffect(() => {
+    let cancelled = false;
+    getDetectionReport(documentId)
+      .then((report) => {
+        if (!cancelled) setDetectionReport(report);
+      })
+      .catch(() => {
+        // Dev-only aid — a fetch failure here shouldn't disturb the page.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [documentId]);
+
+  async function handleRunDetection() {
+    setIsRunningDetection(true);
+    setDetectionError(null);
+    try {
+      setDetectionReport(await runDetection(documentId));
+    } catch (error) {
+      setDetectionError(error instanceof Error ? error.message : 'Detection failed');
+    } finally {
+      setIsRunningDetection(false);
+    }
+  }
+
+  // Poll the langgraph trace while the pipeline is running (there's no
+  // websocket event for it), and once more right after it finishes so the
+  // final route/steps show up without a manual refresh.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTrace() {
+      try {
+        const result = await getLangGraphTrace(documentId);
+        if (!cancelled) {
+          setLangGraphTrace(result);
+        }
+      } catch {
+        // Dev-only aid — a fetch failure here shouldn't disturb the page.
+      }
+    }
+
+    void loadTrace();
+    if (!isInFlight) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const interval = window.setInterval(() => void loadTrace(), 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [documentId, isInFlight, document?.status]);
 
   async function handleApproveDocument() {
     if (!document) {
@@ -1151,8 +1222,8 @@ export default function DocumentDetailsPage({
                   {isSavingType
                     ? 'Saving…'
                     : chosenType === document.document_type
-                      ? 'Confirm & re-run extraction'
-                      : 'Save & re-run extraction'}
+                      ? 'Confirm doc type'
+                      : 'Confirm doc type and rerun'}
                 </button>
 
                 {typeError && (
@@ -1642,6 +1713,106 @@ export default function DocumentDetailsPage({
           </div>
         </section>
       )}
+
+      {/* =====================================================
+          LangGraph trace (langgraph-test branch debug aid, not styled —
+          see backend/app/langgraph/trace.py)
+          ===================================================== */}
+
+      <section className="details-card" style={{ fontFamily: 'monospace', fontSize: '0.85em' }}>
+        <h2 style={{ marginTop: 0 }}>LangGraph trace (debug)</h2>
+        {!langGraphTrace ? (
+          <p>No langgraph trace yet for this document (not processed via langgraph in this backend process, or not started yet).</p>
+        ) : (
+          <>
+            <div>rule_top_type / strength: {String(langGraphTrace.rule_top_type ?? '—')} / {String(langGraphTrace.rule_top_strength ?? '—')}</div>
+            <div>certain_type: {String(langGraphTrace.certain_type ?? '—')}</div>
+            <div>llm_top_type / strength (only if the agent called it): {String(langGraphTrace.llm_top_type ?? '—')} / {String(langGraphTrace.llm_top_strength ?? '—')}</div>
+            <div>vision_top_type / strength (only if the agent called it): {String(langGraphTrace.vision_top_type ?? '—')} / {String(langGraphTrace.vision_top_strength ?? '—')}</div>
+            <div>final_status: {String(langGraphTrace.final_status ?? '—')}</div>
+            <div>
+              classification_reasoning (debug only — not saved to the database yet):{' '}
+              {String(langGraphTrace.classification_reasoning ?? '—')}
+            </div>
+            <details style={{ marginTop: '0.5em' }}>
+              <summary>Full step log ({langGraphTrace.steps.length} steps)</summary>
+              <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                {JSON.stringify(langGraphTrace.steps, null, 2)}
+              </pre>
+            </details>
+          </>
+        )}
+      </section>
+
+      {/* =====================================================
+          Detection Agent (dev aid, not styled — see
+          backend/app/langgraph/detection/graph.py)
+          ===================================================== */}
+
+      <section className="details-card" style={{ fontFamily: 'monospace', fontSize: '0.85em' }}>
+        <h2 style={{ marginTop: 0 }}>Detection (dev)</h2>
+        <button type="button" onClick={() => void handleRunDetection()} disabled={isRunningDetection || isInFlight}>
+          {isRunningDetection ? 'Investigating…' : detectionReport ? 'Re-run detection' : 'Run detection'}
+        </button>
+        {detectionError && <p style={{ color: 'crimson' }}>{detectionError}</p>}
+        {!detectionReport ? (
+          <p>No detection report yet for this document.</p>
+        ) : (
+          <>
+            <p>
+              <strong>Verdict: {detectionReport.verdict.toUpperCase()}</strong> — {detectionReport.summary}
+            </p>
+            <div>Specialists consulted:</div>
+            <ul>
+              {detectionReport.consulted.map((c) => (
+                <li key={c.specialist}>
+                  {c.title}{c.second_look ? ' (second look)' : ''} — {c.reason} [tools: {c.tools_called.join(', ') || 'none'}]
+                </li>
+              ))}
+              {detectionReport.consulted.length === 0 && <li>none</li>}
+            </ul>
+            {detectionReport.plan_deviation &&
+              (detectionReport.plan_deviation.added.length > 0 || detectionReport.plan_deviation.dropped.length > 0) && (
+                <p>
+                  Deviated from the default team — added: {detectionReport.plan_deviation.added.join(', ') || 'none'};
+                  dropped: {detectionReport.plan_deviation.dropped.join(', ') || 'none'}
+                </p>
+              )}
+            <div>Specialists not consulted:</div>
+            <ul>
+              {detectionReport.skipped.map((s) => (
+                <li key={s.specialist}>{s.title} — {s.reason}</li>
+              ))}
+              {detectionReport.skipped.length === 0 && <li>none</li>}
+            </ul>
+            {detectionReport.second_look && (
+              <p>
+                Second look: {detectionReport.second_look.from} → {detectionReport.second_look.to} —{' '}
+                {detectionReport.second_look.question} ({detectionReport.second_look.reason})
+              </p>
+            )}
+            <div>Findings ({detectionReport.findings.length}):</div>
+            <ul>
+              {detectionReport.findings.map((f) => (
+                <li key={`${f.tool}-${f.id}`}>
+                  [{f.severity}] {f.summary} — {f.rationale} ({f.specialists.join(', ')})
+                </li>
+              ))}
+              {detectionReport.findings.length === 0 && <li>none</li>}
+            </ul>
+            {detectionReport.unable_to_assess.length > 0 && (
+              <>
+                <div>Could not assess:</div>
+                <ul>
+                  {detectionReport.unable_to_assess.map((u, i) => (
+                    <li key={i}>{u.specialist} / {u.tool ?? 'tool'} — {u.reason ?? 'unknown reason'}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </>
+        )}
+      </section>
 
       {/* =====================================================
           Document actions

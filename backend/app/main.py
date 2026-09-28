@@ -6,7 +6,7 @@ from fastapi import Depends, FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from . import realtime_listener
+from . import realtime_listener, telemetry
 from .auth import require_auth
 from .config import settings
 from .health import check_db_connection
@@ -42,6 +42,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="fyp API", lifespan=lifespan)
+telemetry.setup(app)
 
 app.add_middleware(
     CORSMiddleware,
@@ -60,6 +61,7 @@ app.include_router(upload.router, dependencies=_protected)
 app.include_router(documents.router, dependencies=_protected)
 app.include_router(monitoring.router, dependencies=_protected)
 app.include_router(detection.router, dependencies=_protected)
+app.include_router(detection.cases_router, dependencies=_protected)
 app.include_router(injection.router, dependencies=_protected)
 app.include_router(extraction.router, dependencies=_protected)
 # Not in _protected as a whole: the WebSocket route can't carry an

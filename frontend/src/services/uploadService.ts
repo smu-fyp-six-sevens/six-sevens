@@ -389,6 +389,97 @@ export async function getDocument(documentId: string): Promise<DocumentRecord> {
   return (await response.json()) as DocumentRecord;
 }
 
+// Dev-only window into the langgraph-test branch's pipeline (see
+// backend/app/langgraph/trace.py) — which route a document took (fast vs
+// Sonnet agent), rule/llm/vision results, escalation. Not persisted: 404s
+// once the backend process restarts, or for a document not yet processed
+// via langgraph. Informative only — not meant for production use.
+export interface LangGraphTraceStep {
+  step: string;
+  at: number;
+  [key: string]: unknown;
+}
+
+export interface LangGraphTrace {
+  document_id: string;
+  started_at: number;
+  steps: LangGraphTraceStep[];
+  [key: string]: unknown;
+}
+
+export async function getLangGraphTrace(documentId: string): Promise<LangGraphTrace | null> {
+  const response = await authFetch(`/documents/${documentId}/langgraph-trace`);
+
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to fetch langgraph trace (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as LangGraphTrace;
+}
+
+export type DetectionSeverity = 'info' | 'low' | 'medium' | 'high';
+
+export interface DetectionFinding {
+  id: string;
+  tool: string;
+  summary: string;
+  severity: DetectionSeverity;
+  rationale: string;
+  specialists: string[];
+  via_second_look: boolean;
+}
+
+export interface DetectionReport {
+  document_id: string;
+  document_type: string;
+  verdict: 'flagged' | 'clean' | 'inconclusive';
+  summary: string;
+  findings: DetectionFinding[];
+  consulted: {
+    specialist: string;
+    title: string;
+    reason: string;
+    tools_called: string[];
+    summary: string;
+    uncertain: boolean;
+    second_look: boolean;
+  }[];
+  skipped: { specialist: string; title: string; reason: string }[];
+  plan_deviation: { default_expected: string[]; added: string[]; dropped: string[] } | null;
+  second_look: { from: string; to: string; question: string; reason: string } | null;
+  unable_to_assess: { specialist: string; tool: string | null; reason: string | null }[];
+  generated_at: string;
+}
+
+export async function getDetectionReport(documentId: string): Promise<DetectionReport | null> {
+  const response = await authFetch(`/documents/${documentId}/detection/report`);
+
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to fetch detection report (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as DetectionReport;
+}
+
+export async function runDetection(documentId: string): Promise<DetectionReport> {
+  const response = await authFetch(`/documents/${documentId}/detection/run`, { method: 'POST' });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Detection failed (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as DetectionReport;
+}
+
 export async function listDocuments(caseId: string): Promise<DocumentRecord[]> {
   const response = await authFetch(`/documents?case_id=${encodeURIComponent(caseId)}`);
 

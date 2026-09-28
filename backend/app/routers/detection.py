@@ -5,6 +5,10 @@ import logging
 
 from fastapi import APIRouter, HTTPException, status
 
+
+from ..langgraph import trace as langgraph_trace
+from ..langgraph.detection.graph import DetectionError, run_detection
+from ..models import DocumentStatus
 from .. import case_repository, document_repository, extracted_fields_repository, storage_service
 from ..case_match import DocumentCaseMatch, check_case_match
 from ..fraud_detection.font_consistency import FontConsistencyResult, check_font_consistency
@@ -22,6 +26,7 @@ from ..fraud_detection.numerical_validation import (
 from ..fraud_detection.spelling_anomaly import SpellingAnomalyResult, check_spelling_anomalies
 
 router = APIRouter(prefix="/documents", tags=["detection"])
+cases_router = APIRouter(prefix="/cases", tags=["detection"])
 logger = logging.getLogger(__name__)
 
 
@@ -132,6 +137,65 @@ async def get_spelling_anomaly(document_id: str) -> SpellingAnomalyResult:
     )
 
 
+# A pipeline run is still in flight for these — detection needs finished extraction.
+_DETECTION_BLOCKED_STATUSES = {
+    DocumentStatus.UPLOADED,
+    DocumentStatus.QUEUED,
+    DocumentStatus.PROCESSING,
+    DocumentStatus.EXTRACTING,
+}
+
+
+@router.post("/{document_id}/detection/run")
+async def run_document_detection(document_id: str) -> dict:
+    """
+    Runs the Lead Investigator + specialists over one document and returns the
+    combined report (also stored on the document's langgraph trace, so it
+    survives restarts — see langgraph/detection/graph.py). Nothing is written
+    to the documents table.
+    """
+    document = await asyncio.to_thread(document_repository.get_document, document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    if document.status in _DETECTION_BLOCKED_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Document is still being processed; run detection once extraction has finished.",
+        )
+    try:
+        return await run_detection(document_id)
+    except DetectionError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Detection failed for document %s", document_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Detection failed: {exc}"
+        ) from exc
+
+
+@router.get("/{document_id}/detection/report")
+async def get_document_detection_report(document_id: str) -> dict:
+    try:
+        trace = await asyncio.to_thread(langgraph_trace.get_persisted, document_id)
+    except Exception:  # noqa: BLE001 — table unreachable: fall back to in-memory
+        trace = None
+    trace = trace or langgraph_trace.get(document_id)
+    report = (trace or {}).get("detection_report")
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No detection report for this document yet.")
+    return report
+
+
+@cases_router.get("/{case_id}/detection/reports")
+async def get_case_detection_reports(case_id: str) -> list[dict]:
+    """Every stored detection report for a case's documents, for one combined view."""
+    try:
+        return await asyncio.to_thread(langgraph_trace.get_case_detection_reports, case_id)
+    except Exception as exc:
+        logger.exception("Failed to load detection reports for case %s", case_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to load detection reports."
+        ) from exc
 @router.get(
     "/{document_id}/detection/numerical-validation",
     response_model=NumericalValidationResult,

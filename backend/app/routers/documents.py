@@ -10,7 +10,6 @@ from .. import (
     case_status,
     document_repository,
     extracted_fields_repository,
-    orchestrator,
     storage_service,
 )
 from ..config import settings
@@ -25,6 +24,8 @@ from ..models import (
     UpdateExtractedFieldsRequest,
     compute_fulfilled_requirements,
 )
+from ..langgraph import pipeline as langgraph_pipeline
+from ..langgraph import trace as langgraph_trace
 from ..queue_service import document_queue
 
 # "unrecognised" is the "Other" catch-all: Extraction has a generic schema for it.
@@ -570,14 +571,18 @@ async def update_document_type(
     background_tasks: BackgroundTasks,
 ) -> DocumentRecord:
     """
-    A loan officer correcting a low-confidence document_type (the frontend
-    only offers this below settings.CLASSIFICATION_CONFIDENCE_THRESHOLD —
-    enforced here too, so it can't be scripted around). Records the type as
-    officer-confirmed (confidence 1.0, ACCEPTED), then re-runs Extraction
-    only, in the background, against the new type — Extraction from the
-    wrong schema is what made the old fields wrong in the first place. The
-    response already reads EXTRACTING; the result arrives via the case
-    status WebSocket like any other status change.
+    A loan officer confirming or correcting a low-confidence document_type
+    (the frontend only offers this below settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
+    — enforced here too, so it can't be scripted around). Always records the
+    type as officer-confirmed (confidence 1.0, ACCEPTED).
+
+    Only actually changing the type re-runs Extraction, in the background —
+    Extraction from the wrong schema is what made the old fields wrong in
+    the first place, so a genuine correction needs a re-run. Confirming the
+    type as-is has nothing new for Extraction to find (it already ran once
+    against this same type), so that case only touches the classification
+    columns and leaves status/extracted_fields untouched — the response
+    reads EXTRACTING only when a re-run was actually kicked off.
     """
     document_type = request.document_type.strip().lower()
     if document_type not in _SETTABLE_DOCUMENT_TYPES:
@@ -613,26 +618,47 @@ async def update_document_type(
             detail="Classification confidence is above the threshold; the type can't be overridden.",
         )
 
+    type_changed = document_type != document.document_type
+
     try:
-        # Self-fulfilment only, like _finalise_classification's first write:
-        # the existing extracted_fields came from the wrong schema, so they
-        # shouldn't be used to claim e.g. proof_of_address for the new type
-        # — rerun_extraction recomputes this from the real re-extracted fields.
-        await asyncio.to_thread(
-            document_repository.record_classification,
-            document_id,
-            document_type=document_type,
-            confidence=1.0,
-            classification_outcome=ClassificationOutcome.ACCEPTED.value,
-            evidence=[],
-            fulfilled_requirements=compute_fulfilled_requirements(document_type, None),
-        )
-        await asyncio.to_thread(
-            document_repository.update_status,
-            document_id,
-            DocumentStatus.EXTRACTING,
-            processing_started_at=datetime.now(timezone.utc),
-        )
+        if type_changed:
+            # Self-fulfilment only, like nodes.record_classification_result's first
+            # write: the existing extracted_fields came from the wrong
+            # schema, so they shouldn't be used to claim e.g.
+            # proof_of_address for the new type — the extraction rerun
+            # recomputes this from the real re-extracted fields. Old
+            # evidence was reasoning for the wrong type, so it's cleared too.
+            await asyncio.to_thread(
+                document_repository.record_classification,
+                document_id,
+                document_type=document_type,
+                confidence=1.0,
+                classification_outcome=ClassificationOutcome.ACCEPTED.value,
+                evidence=[],
+                fulfilled_requirements=compute_fulfilled_requirements(document_type, None),
+            )
+            await asyncio.to_thread(
+                document_repository.update_status,
+                document_id,
+                DocumentStatus.EXTRACTING,
+                processing_started_at=datetime.now(timezone.utc),
+            )
+        else:
+            # Confirming an already-correct low-confidence guess: Extraction
+            # already ran against this exact type, so its fields are still
+            # valid — recompute fulfilled_requirements from them (more
+            # accurate than the None used above) instead of discarding
+            # anything, and keep the existing evidence since it was already
+            # reasoning for this same type.
+            await asyncio.to_thread(
+                document_repository.record_classification,
+                document_id,
+                document_type=document_type,
+                confidence=1.0,
+                classification_outcome=ClassificationOutcome.ACCEPTED.value,
+                evidence=document.evidence,
+                fulfilled_requirements=compute_fulfilled_requirements(document_type, document.extracted_fields),
+            )
     except Exception as exc:
         logger.exception("Failed to update document type for document %s", document_id)
         raise HTTPException(
@@ -643,7 +669,8 @@ async def update_document_type(
     if document.case_id is not None:
         await asyncio.to_thread(case_status.sync_submission_finalized, document.case_id)
 
-    background_tasks.add_task(orchestrator.rerun_extraction, document_id)
+    if type_changed:
+        background_tasks.add_task(langgraph_pipeline.rerun_extraction, document_id)
 
     return await get_document(document_id)
 
@@ -699,6 +726,29 @@ async def retry_document(document_id: str) -> DocumentRecord:
         ) from exc
 
     return await asyncio.to_thread(document_repository.get_document, document_id)
+
+
+@router.get("/{document_id}/langgraph-trace")
+async def get_document_langgraph_trace(document_id: str) -> dict:
+    """
+    Dev-only window into the langgraph pipeline (see app/langgraph/trace.py)
+    — which route a document took (fast vs Sonnet agent), what rule/llm/
+    vision each said, whether it escalated. Read from the Supabase
+    `langgraph_trace` table; falls back to this process's in-memory copy if the
+    row isn't there yet. langgraph-test branch only; not for production use.
+    """
+    try:
+        result = await asyncio.to_thread(langgraph_trace.get_persisted, document_id)
+    except Exception:  # noqa: BLE001 — table unreachable: fall back to in-memory
+        result = None
+    if result is None:
+        result = langgraph_trace.get(document_id)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No langgraph trace found for this document.",
+        )
+    return result
 
 
 @router.get("/{document_id}/download", response_model=DocumentDownloadResponse)
