@@ -623,7 +623,7 @@ def _typed_document(**overrides) -> DocumentRecord:
     fields = {
         "status": DocumentStatus.ANALYZED,
         "document_type": "payslip",
-        "confidence": 0.5,
+        "classification_confidence": 0.5,
         **overrides,
     }
     return _make_document().model_copy(update=fields)
@@ -648,8 +648,8 @@ def test_update_document_type_records_type_and_reruns_extraction() -> None:
     mock_repo.record_classification.assert_called_once_with(
         "doc-1",
         document_type="nric",
-        confidence=1.0,
-        classification_outcome="accepted",
+        classification_confidence=1.0,
+        routing_status="accepted",
         evidence=[],
         fulfilled_requirements=["id_document"],
     )
@@ -681,8 +681,8 @@ def test_update_document_type_confirms_existing_type_without_rerunning_extractio
     mock_repo.record_classification.assert_called_once_with(
         "doc-1",
         document_type="payslip",
-        confidence=1.0,
-        classification_outcome="accepted",
+        classification_confidence=1.0,
+        routing_status="accepted",
         evidence=document.evidence,
         fulfilled_requirements=compute_fulfilled_requirements("payslip", document.extracted_fields),
     )
@@ -698,7 +698,10 @@ def test_update_document_type_allows_unclassified_failed_document_without_case()
         patch("app.routers.documents.langgraph_pipeline") as mock_pipeline,
     ):
         document = _typed_document(
-            status=DocumentStatus.FAILED, confidence=None, document_type=None, case_id=None
+            status=DocumentStatus.FAILED,
+            classification_confidence=None,
+            document_type=None,
+            case_id=None,
         )
         mock_dep_repo.get_document.return_value = document
         mock_repo.get_document.return_value = document
@@ -762,7 +765,7 @@ def test_update_document_type_rejects_confident_classification() -> None:
         patch("app.routers.documents.document_repository") as mock_repo,
     ):
         mock_dep_repo.get_document.return_value = _typed_document(
-            confidence=settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
+            classification_confidence=settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
         )
 
         response = client.patch("/documents/doc-1/document-type", json={"document_type": "nric"})

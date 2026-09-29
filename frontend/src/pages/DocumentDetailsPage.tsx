@@ -780,8 +780,8 @@ export default function DocumentDetailsPage({
   // the Classifier's own confidence in document_type, compared the same way
   // the backend gates canCorrectType (see below).
   const lowClassificationConfidence =
-    document?.confidence != null &&
-    document.confidence < CLASSIFICATION_CONFIDENCE_THRESHOLD;
+    document?.classification_confidence != null &&
+    document.classification_confidence < CLASSIFICATION_CONFIDENCE_THRESHOLD;
 
   // Manual review is driven by the lowest confidence among this document's
   // own extracted fields — not a single document-wide extraction_confidence
@@ -805,8 +805,8 @@ export default function DocumentDetailsPage({
   const canCorrectType =
     (document?.status === 'analyzed' || document?.status === 'failed') &&
     !(
-      document.confidence != null &&
-      document.confidence >= CLASSIFICATION_CONFIDENCE_THRESHOLD
+      document.classification_confidence != null &&
+      document.classification_confidence >= CLASSIFICATION_CONFIDENCE_THRESHOLD
     );
 
   // What the dropdown currently shows: the officer's pick, else the existing
@@ -1331,8 +1331,8 @@ export default function DocumentDetailsPage({
               Classification Confidence
             </span>
             <strong>
-              {document.confidence != null
-                ? document.confidence.toFixed(2)
+              {document.classification_confidence != null
+                ? document.classification_confidence.toFixed(2)
                 : '—'}
             </strong>
           </div>
@@ -1390,7 +1390,7 @@ export default function DocumentDetailsPage({
               <div>
                 This document was classified as{' '}
                 {formatDocumentType(document.document_type)} with{' '}
-                {document.confidence!.toFixed(2)} confidence, below the
+                {document.classification_confidence!.toFixed(2)} confidence, below the
                 required {CLASSIFICATION_CONFIDENCE_THRESHOLD.toFixed(2)}.
               </div>
               {canCorrectType && !failureReason && (

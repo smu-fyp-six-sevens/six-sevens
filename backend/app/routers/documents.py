@@ -15,9 +15,9 @@ from ..langgraph.extraction_prompts import KNOWN_DOCUMENT_TYPES, schema_field_na
 from ..models import (
     IN_FLIGHT_STATUSES,
     AddExtractedFieldRequest,
-    ClassificationOutcome,
     DocumentRecord,
     DocumentStatus,
+    RoutingStatus,
     UpdateDocumentTypeRequest,
     UpdateExtractedFieldsRequest,
     compute_fulfilled_requirements,
@@ -505,8 +505,8 @@ async def update_document_type(
         )
 
     if (
-        document.confidence is not None
-        and document.confidence >= settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
+        document.classification_confidence is not None
+        and document.classification_confidence >= settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
     ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -527,8 +527,8 @@ async def update_document_type(
                 document_repository.record_classification,
                 document_id,
                 document_type=document_type,
-                confidence=1.0,
-                classification_outcome=ClassificationOutcome.ACCEPTED.value,
+                classification_confidence=1.0,
+                routing_status=RoutingStatus.ACCEPTED.value,
                 evidence=[],
                 fulfilled_requirements=compute_fulfilled_requirements(document_type, None),
             )
@@ -549,8 +549,8 @@ async def update_document_type(
                 document_repository.record_classification,
                 document_id,
                 document_type=document_type,
-                confidence=1.0,
-                classification_outcome=ClassificationOutcome.ACCEPTED.value,
+                classification_confidence=1.0,
+                routing_status=RoutingStatus.ACCEPTED.value,
                 evidence=document.evidence,
                 fulfilled_requirements=compute_fulfilled_requirements(document_type, document.extracted_fields),
             )

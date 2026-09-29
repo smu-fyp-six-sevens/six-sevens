@@ -22,7 +22,7 @@ def _row(mapping: Any) -> dict:
 def _sync_case(case_id: Optional[str]) -> None:
     """
     Best-effort refresh of the case-level submission_finalized cache after a
-    write that can change a document's classification_outcome or
+    write that can change a document's routing_status or
     fulfilled_requirements. Never raises: the document write above already
     succeeded and is the source of truth, and get_case_summary/build_summary
     always recompute requirement coverage live from the documents themselves
@@ -104,7 +104,7 @@ def update_status(
         query = query.in_("status", [s.value for s in expected_current_statuses])
     result = query.execute()
     # Only the ANALYZED transition can change requirement coverage (a
-    # document's classification_outcome/fulfilled_requirements are set
+    # document's routing_status/fulfilled_requirements are set
     # earlier, by record_classification/update_extracted_fields) — every
     # other status this function sets (queued/processing/extracting/failed)
     # never did resync before either, so this deliberately doesn't sync on
@@ -132,11 +132,10 @@ def record_classification(
     document_id: str,
     *,
     document_type: Optional[str],
-    confidence: Optional[float],
-    classification_outcome: str,
+    classification_confidence: Optional[float],
+    routing_status: str,
     evidence: Optional[list[str]] = None,
     fulfilled_requirements: Optional[list[str]] = None,
-    reasoning: Optional[str] = None,
 ) -> None:
     """
     Persists the classification-stage decision (type, confidence, and
@@ -144,22 +143,14 @@ def record_classification(
     document status — this can happen well before the document reaches a
     terminal ANALYZED/FAILED status, since Extraction is a separate stage
     that runs afterward and can fail on its own.
-
-    `reasoning` is the classifier's own plain-language justification for the
-    decision (the Dify chatflow's Agent 3 always produced one; it was parsed
-    into the classification dict but never actually persisted anywhere —
-    kept here now so it isn't silently dropped). Optional and update-only
-    (never clears a prior reasoning with "") since not every caller has one.
     """
     update = {
         "document_type": document_type,
-        "confidence": confidence,
-        "classification_outcome": classification_outcome,
+        "classification_confidence": classification_confidence,
+        "routing_status": routing_status,
         "evidence": evidence or [],
         "fulfilled_requirements": fulfilled_requirements or [],
     }
-    if reasoning is not None:
-        update["classification_reasoning"] = reasoning
     result = supabase_client.table("documents").update(update).eq("id", document_id).execute()
     if result.data:
         _sync_case(_row(result.data[0]).get("case_id"))

@@ -19,8 +19,8 @@ export interface DocumentRecord {
   case_id: string | null;
   filename: string;
   document_type: string | null;
-  confidence: number | null;
-  classification_outcome: 'accepted' | 'manual_review' | null;
+  classification_confidence: number | null;
+  routing_status: 'accepted' | 'manual_review' | null;
   storage_path: string | null;
   status: string;
   retry_count: number;
@@ -32,7 +32,7 @@ export interface DocumentRecord {
   fulfilled_requirements: string[];
   extracted_fields: Record<string, unknown> | null;
   // Extraction's own confidence in extracted_fields — separate from
-  // `confidence` above (the classifier's), never overwrites it.
+  // `classification_confidence` above (the classifier's), never overwrites it.
   extraction_confidence: number | null;
   escalation_reason: string | null;
   metadata: Record<string, unknown> | null;
@@ -154,7 +154,7 @@ export async function getDocumentCaseMatch(documentId: string): Promise<Document
   return (await response.json()) as DocumentCaseMatch;
 }
 
-// Overall routing outcome shown in the UI (view only). classification_outcome
+// Overall routing outcome shown in the UI (view only). routing_status
 // alone only records the classifier's decision — documents are always sent on
 // to extraction, so an 'accepted' classification can still end up needing
 // manual review. This folds in the later stages: a failed document or one
@@ -164,11 +164,11 @@ export async function getDocumentCaseMatch(documentId: string): Promise<Document
 // way: a document it sends to manual review (it belongs to another
 // company/individual, or the certificate of incumbency itself is in doubt)
 // reads as Manual Review — without touching the stored
-// classification_outcome, which the checklist still relies on.
+// routing_status, which the checklist still relies on.
 export function formatRoutingOutcome(
   document: Pick<
     DocumentRecord,
-    'status' | 'classification_outcome' | 'extracted_fields'
+    'status' | 'routing_status' | 'extracted_fields'
   >,
   caseMatch?: Pick<DocumentCaseMatch, 'status'> | null,
 ): string {
@@ -180,7 +180,7 @@ export function formatRoutingOutcome(
 
   if (
     document.status === 'failed' ||
-    document.classification_outcome === 'manual_review' ||
+    document.routing_status === 'manual_review' ||
     caseMatch?.status === 'manual_review' ||
     (lowestConfidence != null &&
       lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD)
@@ -188,7 +188,7 @@ export function formatRoutingOutcome(
     return 'Manual Review';
   }
 
-  if (document.classification_outcome === 'accepted') {
+  if (document.routing_status === 'accepted') {
     return document.status === 'analyzed' ? 'Accepted' : 'Pending';
   }
 

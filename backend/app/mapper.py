@@ -9,9 +9,9 @@ from __future__ import annotations
 from typing import NamedTuple, Optional
 
 from .models import (
-    ClassificationOutcome,
     DocumentRecord,
     IDENTITY_DOCUMENT_TYPES,
+    RoutingStatus,
     counts_as_address_proof,
 )
 
@@ -87,7 +87,7 @@ def _named_addresses_from_document(doc: DocumentRecord) -> list[_NamedAddress]:
 
 def _collect_identity_state(documents: list[DocumentRecord]) -> _IdentityState:
     accepted = [
-        doc for doc in documents if doc.classification_outcome == ClassificationOutcome.ACCEPTED
+        doc for doc in documents if doc.routing_status == RoutingStatus.ACCEPTED
     ]
 
     # Identities come ONLY from id_document uploads — an address document

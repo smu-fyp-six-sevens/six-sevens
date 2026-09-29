@@ -20,13 +20,13 @@ from .models import (
     CaseDocumentsStatus,
     CaseRecord,
     CaseSummary,
-    ClassificationOutcome,
     DocumentRecord,
     DocumentStatus,
     DocumentType,
     IdDocumentCoverage,
     IDENTITY_DOCUMENT_REQUIREMENT,
     ProofOfAddressCoverage,
+    RoutingStatus,
 )
 from .monitoring import is_stuck
 
@@ -65,7 +65,7 @@ def compute_requirement_coverage(documents: list[DocumentRecord]) -> tuple[list[
     """
     fulfilled: set[str] = set()
     for doc in documents:
-        if doc.classification_outcome == ClassificationOutcome.ACCEPTED:
+        if doc.routing_status == RoutingStatus.ACCEPTED:
             fulfilled.update(doc.fulfilled_requirements)
 
     # Overrides whatever individual documents self-reported for this one

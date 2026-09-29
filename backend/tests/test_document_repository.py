@@ -262,15 +262,15 @@ def test_record_classification_sends_fields_with_defaults() -> None:
         document_repository.record_classification(
             "doc-1",
             document_type="payslip",
-            confidence=0.9,
-            classification_outcome="accepted",
+            classification_confidence=0.9,
+            routing_status="accepted",
         )
 
         update_payload = mock_client.table.return_value.update.call_args[0][0]
         assert update_payload == {
             "document_type": "payslip",
-            "confidence": 0.9,
-            "classification_outcome": "accepted",
+            "classification_confidence": 0.9,
+            "routing_status": "accepted",
             "evidence": [],
             "fulfilled_requirements": [],
         }
@@ -284,8 +284,8 @@ def test_record_classification_includes_evidence_and_fulfilled_requirements() ->
         document_repository.record_classification(
             "doc-1",
             document_type="unrecognised",
-            confidence=0.2,
-            classification_outcome="manual_review",
+            classification_confidence=0.2,
+            routing_status="manual_review",
             evidence=["reads like a shipping manifest"],
             fulfilled_requirements=["id_document"],
         )
@@ -293,25 +293,11 @@ def test_record_classification_includes_evidence_and_fulfilled_requirements() ->
         update_payload = mock_client.table.return_value.update.call_args[0][0]
         assert update_payload == {
             "document_type": "unrecognised",
-            "confidence": 0.2,
-            "classification_outcome": "manual_review",
+            "classification_confidence": 0.2,
+            "routing_status": "manual_review",
             "evidence": ["reads like a shipping manifest"],
             "fulfilled_requirements": ["id_document"],
         }
-
-
-def test_record_classification_includes_reasoning_when_given() -> None:
-    with patch("app.document_repository.supabase_client") as mock_client:
-        document_repository.record_classification(
-            "doc-1",
-            document_type="payslip",
-            confidence=0.9,
-            classification_outcome="accepted",
-            reasoning="Matches payslip layout and net-pay wording.",
-        )
-
-        update_payload = mock_client.table.return_value.update.call_args[0][0]
-        assert update_payload["classification_reasoning"] == "Matches payslip layout and net-pay wording."
 
 
 def test_record_escalation_sends_reason() -> None:

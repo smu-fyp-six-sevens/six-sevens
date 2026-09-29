@@ -161,7 +161,7 @@ function acceptedIdentityNames(documents: DocumentRecord[]): string[] {
   for (const document of documents) {
     if (
       document.status !== 'analyzed' ||
-      document.classification_outcome !== 'accepted' ||
+      document.routing_status !== 'accepted' ||
       (document.document_type !== 'nric' && document.document_type !== 'passport')
     ) {
       continue;
@@ -338,7 +338,7 @@ export default function UploadPage({
   const flaggedDocuments = Array.from(documentDetails.values()).filter((document) => {
     const lowestConfidence = lowestFieldConfidence(document.extracted_fields);
     return (
-      document.classification_outcome === 'manual_review' ||
+      document.routing_status === 'manual_review' ||
       caseMatchNeedsReview(document) ||
       (lowestConfidence != null && lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD)
     );
@@ -1111,8 +1111,8 @@ async function handleApproveAllEligibleDocuments() {
                             </span>
 
                             <span className="document-confidence">
-                              {document.confidence != null
-                                ? document.confidence.toFixed(2)
+                              {document.classification_confidence != null
+                                ? document.classification_confidence.toFixed(2)
                                 : '—'}
                             </span>
 
@@ -1182,8 +1182,8 @@ async function handleApproveAllEligibleDocuments() {
                           </span>
 
                           <span className="document-confidence">
-                            {document.confidence != null
-                              ? document.confidence.toFixed(2)
+                            {document.classification_confidence != null
+                              ? document.classification_confidence.toFixed(2)
                               : '—'}
                           </span>
 
@@ -1265,16 +1265,16 @@ async function handleApproveAllEligibleDocuments() {
                   // Classification problems first — a case-match reason is
                   // only meaningful once the document type is right.
                   const reason =
-                    document.classification_outcome !== 'manual_review' &&
+                    document.routing_status !== 'manual_review' &&
                     caseMatch &&
                     caseMatchNeedsReview(document)
                       ? `${caseMatch.reason}. Please verify the document belongs to this case before approving.`
-                      : document.classification_outcome === 'manual_review'
+                      : document.routing_status === 'manual_review'
                       ? document.document_type === 'unrecognised'
                         ? 'Document type could not be confidently recognised. Please verify the document type before approving.'
-                        : document.confidence != null &&
-                            document.confidence < CLASSIFICATION_CONFIDENCE_THRESHOLD
-                          ? `Classification confidence (${document.confidence.toFixed(
+                        : document.classification_confidence != null &&
+                            document.classification_confidence < CLASSIFICATION_CONFIDENCE_THRESHOLD
+                          ? `Classification confidence (${document.classification_confidence.toFixed(
                               2,
                             )}) is below the required threshold of ${CLASSIFICATION_CONFIDENCE_THRESHOLD.toFixed(
                               2,
