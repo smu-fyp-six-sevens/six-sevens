@@ -189,6 +189,23 @@ def _confidence_by_name(fields: list[ExtractedField] | None) -> dict[str, float]
 _CURRENCY_SYMBOLS = r"\$|€|£|¥|₹"
 _CURRENCY_WORDS = r"SGD|USD|EUR|GBP|MYR|AUD|HKD|JPY|CNY|RMB|IDR|THB|PHP|INR"
 
+# A rate/percentage's decorative suffix — doc_gen_scripts' own loan-letter
+# templates render e.g. "6.00% per annum, fixed" / "6.50% per annum" — must
+# come off before the comma/whitespace strip below collapses the spaces
+# these phrases depend on for their word boundaries.
+_RATE_SUFFIX_RE = re.compile(
+    r"%|\bper\s+annum\b|\bp\.?a\.?\b|\bfixed\b|\bannually\b|\bper\s+year\b", re.IGNORECASE,
+)
+
+# doc_gen_scripts' overdraft_facility_generator.py renders interest_rate as
+# a reference-rate formula, not a flat number: "Bank's Prime Rate + 2.50%
+# (currently 6.72% p.a.)" — the plain cleanup above can't turn that into a
+# float (the bank/reference-rate name is genuinely non-numeric), but the
+# effective rate the formula resolves to is right there in the "currently
+# N%" clause; used as a last-resort fallback when the straightforward parse
+# fails, not tried first, so it never overrides a real, simple number.
+_CURRENTLY_RATE_RE = re.compile(r"currently\s+(-?\d+(?:\.\d+)?)\s*%", re.IGNORECASE)
+
 
 def _as_number(value: Any) -> float | None:
     if isinstance(value, bool):
@@ -196,14 +213,16 @@ def _as_number(value: Any) -> float | None:
     if isinstance(value, (int, float)):
         return float(value)
     if isinstance(value, str):
-        cleaned = re.sub(rf"[,\s]|{_CURRENCY_SYMBOLS}|{_CURRENCY_WORDS}", "", value, flags=re.I)
+        text = _RATE_SUFFIX_RE.sub("", value)
+        cleaned = re.sub(rf"[,\s]|{_CURRENCY_SYMBOLS}|{_CURRENCY_WORDS}", "", text, flags=re.I)
         cleaned = cleaned.strip()
         if cleaned.startswith("(") and cleaned.endswith(")"):
             cleaned = "-" + cleaned[1:-1]
         try:
             return float(cleaned)
         except ValueError:
-            return None
+            match = _CURRENTLY_RATE_RE.search(value)
+            return float(match.group(1)) if match else None
     return None
 
 
@@ -245,7 +264,11 @@ _MONTHS = ["jan", "feb", "mar", "apr", "may", "jun",
 
 _DATE_FIELD_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"^(\d{4})-(\d{1,2})-(\d{1,2})$"), "ymd"),
-    (re.compile(r"^(\d{1,2})/(\d{1,2})/(\d{4})$"), "dmy"),
+    # dd/mm/yyyy or dd-mm-yyyy — the day-first numeric shape shows up with
+    # either separator depending on the document/locale; the ymd pattern
+    # above already claims any dash-separated string starting with a
+    # 4-digit year, so there's no ambiguity in also accepting a dash here.
+    (re.compile(r"^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$"), "dmy"),
     (re.compile(r"^(\d{1,2})[- ]([A-Za-z]{3,9})[- ](\d{4})$"), "dMy"),
     (re.compile(r"^([A-Za-z]{3,9})[- ](\d{1,2}),?\s*(\d{4})$"), "Mdy"),
 ]

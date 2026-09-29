@@ -110,6 +110,13 @@ def test_date_valid_parses_a_date_with_a_trailing_timestamp() -> None:
     assert _codes(result, "GEN.DATE_VALID") == []
 
 
+def test_date_valid_parses_dash_separated_day_first_dates() -> None:
+    # dd-mm-yyyy (dashes) is the same shape as dd/mm/yyyy (slashes) — both
+    # show up depending on the document/locale.
+    result = _run([_field("date_of_issue", "20-12-2025")])
+    assert _codes(result, "GEN.DATE_VALID") == []
+
+
 def test_date_valid_does_not_flag_forward_looking_fields_in_the_future() -> None:
     # A loan's review date, a bill's due date, a document's expiry — these
     # are supposed to be after today; only their own dedicated checks (or
@@ -225,6 +232,32 @@ def test_cr_date_logic_flags_closing_before_opening() -> None:
         document_type="credit_report",
     )
     assert len(_codes(result, "CR.DATE_LOGIC")) == 1
+
+
+def test_cr_date_logic_flags_account_opened_in_the_future_as_impossible() -> None:
+    # A date genuinely in the future (vs today) is impossible regardless of
+    # what the report_date field says — and this must still fire even
+    # without report_date extracted at all.
+    result = _run(
+        [_field("accounts", [{"date_opened": "2099-01-01"}])],
+        document_type="credit_report",
+    )
+    findings = _codes(result, "CR.DATE_LOGIC")
+    assert len(findings) == 1
+    assert findings[0].severity == "impossible"
+
+
+def test_cr_date_logic_does_not_double_flag_a_future_date_against_report_date() -> None:
+    # The account date is beyond both today and report_date — only the
+    # stronger "impossible" finding should fire, not a second
+    # "inconsistent vs report_date" one for the same fact.
+    result = _run(
+        [_field("report_date", "2026-06-02"), _field("accounts", [{"date_opened": "2030-11-07"}])],
+        document_type="credit_report",
+    )
+    findings = _codes(result, "CR.DATE_LOGIC")
+    assert len(findings) == 1
+    assert findings[0].severity == "impossible"
 
 
 # ---------------------------------------------------------------------------

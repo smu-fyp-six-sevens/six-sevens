@@ -313,6 +313,7 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         "additional": [
             "accounts", "account_count", "enquiry_count", "default_count",
             "earliest_account_date", "total_outstanding_balance", "report_date", "bureau_score",
+            "previous_enquiries","narratives",
         ],
     },
     "list_of_loans": {
@@ -336,11 +337,19 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # for whatever named contractual terms are actually present.
         # monthly_instalment through offer_validity_days (not doc_gen-
         # verified — added for fraud_detection.numerical_validation's
-        # LOAN.* checks).
+        # LOAN.* checks). offer_date IS doc_gen-verified though — every
+        # template's letterhead() helper (loan_letter_common.py) renders
+        # it as the letter's own "Date:" line, right after "Our Ref:".
+        # review_date is doc_gen-verified for the overdraft variant only
+        # (overdraft_facility_generator.py; term_loan/EFS use a fixed
+        # tenure instead, see loan_tenure above) — see EXTRA_FIELD_GUIDANCE
+        # below for how to tell "Date:" apart from Review Date and the
+        # Validity-of-Offer window, which are not the same field.
         "additional": [
             "interest_rate", "loan_tenure", "loan_terms",
             "monthly_instalment", "repayment_schedule", "fee_percentage", "fee_amount",
             "facility_type", "scheme_name", "offer_date", "acceptance_date", "offer_validity_days",
+            "review_date",
         ],
         # prob change in the future to others like {lender, amount, currency, status}
     },
@@ -538,7 +547,17 @@ EXTRA_FIELD_GUIDANCE: dict[str, str] = {
         'in the document, e.g. "Purpose", "Repayment", "Security") and "value" '
         "(that term's text as shown). Capture whatever named terms are "
         "actually present — the exact set varies by facility type (term loan, "
-        "overdraft, EFS) — rather than expecting a fixed list."
+        "overdraft, EFS) — rather than expecting a fixed list.\n\n"
+        '"offer_date" is the letter\'s own dateline — the "Date:" line near '
+        'the top, right after "Our Ref:" — not any other date on the page. '
+        'Do not confuse it with "Review Date" (a future annual-review '
+        "checkpoint, its own separate field, review_date) or the wording "
+        "under \"Validity of Offer\" (a relative window like \"30 days from "
+        "the date of this letter\", not an absolute date — leave "
+        'offer_validity_days as that number of days, not a date). '
+        '"acceptance_date" is the date next to the signatory\'s own '
+        'signature in the "Acceptance" section at the end, not the '
+        "letter's own dateline."
     ),
     "notice_of_assessment": (
         'For "tax_computation", its "value" should be an array of objects — '
@@ -583,7 +602,17 @@ _FIELD_WRAPPER_INSTRUCTIONS = (
     '{"value": <the extracted value, or null if not present>, "confidence": <float '
     "0.0-1.0, your confidence that this specific value is correct and clearly "
     "supported by the text>} — do not return a bare value, always wrap it like "
-    "this, for every field regardless of which tier it came from."
+    "this, for every field regardless of which tier it came from.\n\n"
+    "Every value must be a literal transcription of what the document itself "
+    "states — never your own commentary, correction, or judgement about "
+    "whether a value looks wrong, inconsistent, or anomalous. If a date, "
+    "figure, or other value looks like a typo, a miscalculation, or doesn't "
+    "match something else in the document, extract it exactly as printed "
+    "anyway (lower confidence is fine if the print quality itself is poor, "
+    "but not because the value looks suspicious) — do not silently correct "
+    "it to what you think was intended, and do not add a separate field "
+    "describing the discrepancy. Spotting and explaining anomalies is a "
+    "separate, later, deterministic step; this step is transcription only."
 )
 
 

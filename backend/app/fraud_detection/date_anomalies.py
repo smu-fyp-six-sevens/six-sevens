@@ -274,8 +274,9 @@ def _check_date_valid(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck | None
         elif parsed > ctx.today and not _is_forward_looking_date_field(name):
             findings.append(_finding(
                 "GEN.DATE_VALID", "impossible",
-                f"{name} ({parsed.isoformat()}) falls after the submission date "
-                f"({ctx.today.isoformat()})",
+                f"{name} ({parsed.isoformat()}) is after today's date "
+                f"({ctx.today.isoformat()}) — nothing dated later than today can be genuine "
+                "yet",
                 field=name, stated=parsed.isoformat(), expected=f"on or before {ctx.today.isoformat()}",
             ))
     return findings, None
@@ -544,8 +545,19 @@ def _check_cr_age_at_opening(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck
 
 
 def _check_cr_date_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck | None]:
-    """CR.DATE_LOGIC. Closing follows opening; all dates on or before the
-    enquiry date."""
+    """
+    CR.DATE_LOGIC. Closing follows opening; no account date is in the
+    future (checked against today directly — not just the report's own
+    date — so this still catches it even if report_date wasn't extracted);
+    all dates on or before the enquiry date.
+
+    A date that's actually in the future (vs today) is reported as
+    impossible rather than merely inconsistent-with-the-report-date: it
+    can't be real regardless of what the report itself claims elsewhere.
+    The report-date comparison only fires when the stronger future check
+    didn't already catch that same date, to avoid flagging the same fact
+    twice under two severities.
+    """
     values = _need(ctx, "CR.DATE_LOGIC", "accounts")
     if values is None:
         return [], _skip_missing("CR.DATE_LOGIC", "accounts")
@@ -560,15 +572,24 @@ def _check_cr_date_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck | N
                 f"({opened.isoformat()})",
                 field=f"accounts[{i}].date_closed",
             ))
-        if enquiry_date:
-            for d, label in ((opened, "opening"), (closed, "closing")):
-                if d and d > enquiry_date:
-                    findings.append(_finding(
-                        "CR.DATE_LOGIC", "inconsistent",
-                        f"Account {i + 1}'s {label} date ({d.isoformat()}) is after the report "
-                        f"date ({enquiry_date.isoformat()})",
-                        field=f"accounts[{i}]",
-                    ))
+        for d, label, field_name in ((opened, "opening", "date_opened"), (closed, "closing", "date_closed")):
+            if d is None:
+                continue
+            if d > ctx.today:
+                findings.append(_finding(
+                    "CR.DATE_LOGIC", "impossible",
+                    f"Account {i + 1}'s {label} date ({d.isoformat()}) is in the future "
+                    f"(today is {ctx.today.isoformat()})",
+                    field=f"accounts[{i}].{field_name}", stated=d.isoformat(),
+                ))
+            elif enquiry_date and d > enquiry_date:
+                findings.append(_finding(
+                    "CR.DATE_LOGIC", "inconsistent",
+                    f"Account {i + 1}'s {label} date ({d.isoformat()}) is after the report "
+                    f"date ({enquiry_date.isoformat()})",
+                    field=f"accounts[{i}].{field_name}", stated=d.isoformat(),
+                    expected=f"on or before {enquiry_date.isoformat()}",
+                ))
     return findings, None
 
 

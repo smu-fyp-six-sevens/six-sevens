@@ -85,6 +85,18 @@ def test_amount_parse_marks_unparseable_amount_as_needs_review() -> None:
     assert findings[0].needs_review is True
 
 
+def test_amount_parse_does_not_flag_a_plain_percentage_rate() -> None:
+    result = _run([_field("interest_rate", "6.50% per annum")])
+    assert _codes(result, "GEN.AMOUNT_PARSE") == []
+
+
+def test_amount_parse_does_not_flag_a_reference_rate_formula() -> None:
+    # doc_gen_scripts' overdraft template renders this shape; the effective
+    # rate is the "(currently N%)" clause.
+    result = _run([_field("interest_rate", "Bank's Prime Rate + 2.50% (currently 6.72% p.a.)")])
+    assert _codes(result, "GEN.AMOUNT_PARSE") == []
+
+
 # ---------------------------------------------------------------------------
 # Skipping — the AC1/AC7 contract
 # ---------------------------------------------------------------------------
@@ -621,6 +633,19 @@ def test_loan_rate_band_flags_out_of_band_rate() -> None:
         document_type="list_of_loans",
     )
     assert len(_codes(result, "LOAN.RATE_BAND")) == 1
+
+
+def test_loan_rate_band_runs_against_a_reference_rate_formula() -> None:
+    # Previously silently skipped for every overdraft facility, since
+    # _as_number couldn't parse this shape at all — 6.72 is within the
+    # 5-15% overdraft band, so this should run and find nothing wrong.
+    result = _run(
+        [_field("interest_rate", "Bank's Prime Rate + 2.50% (currently 6.72% p.a.)"),
+         _field("facility_type", "overdraft")],
+        document_type="list_of_loans",
+    )
+    assert _codes(result, "LOAN.RATE_BAND") == []
+    assert "LOAN.RATE_BAND" not in {s.check_code for s in result.skipped_checks}
 
 
 # ---------------------------------------------------------------------------
