@@ -42,6 +42,10 @@ jobs:
       - name: Show coverage report (sorted by coverage, ascending)
         run: coverage report --show-missing --sort=cover
 
+      - name: Type check (pyright) — warning only, does not fail the build
+        continue-on-error: true
+        run: npx --yes pyright --pythonpath "$(python -c 'import sys; print(sys.executable)')" app
+
   frontend-ci:
     name: Frontend CI
     runs-on: ubuntu-latest

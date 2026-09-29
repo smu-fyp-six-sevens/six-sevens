@@ -546,7 +546,7 @@ def test_get_case_match_for_document_appends_document_missing_from_the_fetched_l
 
 def test_case_snapshot_includes_case_match_computed_from_plain_fields() -> None:
     from app import case_service
-    from app.fraud_detection.font_consistency_v2 import ExtractedField
+    from app.fraud_detection.font_consistency import ExtractedField
 
     passport = _doc("passport", {"individual_name": "TEO KAI MING", "nric_number": "S7273147P"}, "pp")
     docs = [_incumbency(), *_corroborating(3), passport]

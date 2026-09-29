@@ -3,7 +3,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from app import extracted_fields_repository
-from app.fraud_detection.font_consistency_v2 import ExtractedField
+from app.fraud_detection.font_consistency import ExtractedField
 
 
 def test_replace_extracted_fields_deletes_then_inserts_one_row_per_field() -> None:

@@ -151,7 +151,7 @@ explicitly asked to go further. `app/injection/*` is omitted from coverage entir
 `app/case_service.py`, `app/langgraph/rule_classify.py`, `app/storage_service.py`,
 `app/routers/documents.py`, `app/document_repository.py`, `app/langgraph/graph.py`,
 `app/langgraph/extract.py`, `app/fraud_detection/layout_anomalies.py`,
-`app/fraud_detection/font_consistency_v2.py`, `app/langgraph/cache_gate.py`,
+`app/fraud_detection/font_consistency.py`, `app/langgraph/cache_gate.py`,
 `app/langgraph/text_cache.py`, `app/supabase_client.py`.
 (`layout_anomalies.py` has one line marked `pragma: no cover` — a defensive "fragment too short
 to confidently flag" guard too fragile to hand-construct a reliable synthetic test for; already
@@ -175,3 +175,124 @@ Two independent open items:
 2. **Coverage on the deferred LangGraph files** — say the word to continue past the <10-line
    threshold; it's a much bigger effort (new test fixtures for graph state, async node
    execution, tool-call mocking) than everything done so far.
+
+## Pyright/pylance type-check audit (separate from the test-suite work above)
+
+Ran `pyright` (the open-source engine behind VSCode's Pylance) against the whole `app/` tree —
+the closest CLI equivalent, since Pylance itself only runs inside VSCode. **Correction on the way
+in**: the very first pass piped output through `tail -300` before saving it, which silently
+dropped everything before that window — so the initial "281 errors" count and file list were
+incomplete. Re-ran with full JSON output (no truncation) to get the real picture.
+
+**Starting count: 281 errors. Current count: 56 errors**, now concentrated in 2 files (plus 2
+small residual spots — see below). Now wired into CI as a non-blocking warning (see
+`.github/workflows/ci-cd.yml`'s "Type check (pyright)" step, `continue-on-error: true` so it
+never fails the build).
+
+### Fixed (17 files brought to 0 errors)
+
+- **`app/langgraph/state.py`, `detection/graph.py`, `detection/specialists.py`** — the vast
+  majority of the noise was `reportTypedDictNotRequiredAccess`: LangGraph's state TypedDicts are
+  declared `total=False` (nodes return partial updates), so pyright treats every key access as
+  "might not exist." Marked the fields that are genuinely always present — either supplied in the
+  initial `ainvoke()` call (`document_id`, `reports`, `second_look_used`, `specialist`, `brief`,
+  `document_type`) or always written together as a full unit (`ClassificationResult`'s 6 fields) —
+  as `Required[...]`, verified against the actual invoke call sites and write sites, not guessed.
+- **`app/langgraph/nodes.py`, `classify_graph.py`, `detection/specialists.py`** — for state fields
+  set by an *earlier* node rather than the initial invoke (`classification`, `agent_messages`,
+  `messages`, `context`, `plan`, `second_look`), switched `state["x"]` to `state.get("x")` +
+  `assert x is not None` with a comment on *why* the assert always holds (graph edge order
+  guarantees it). Small helper functions (`_context`, `_plan`, `_second_look_request` in
+  `detection/graph.py`) centralise the repeated ones.
+- **ChatAnthropic call-signature false positives** (7 call sites across `classify_graph.py`,
+  `detection/graph.py`, `detection/specialists.py`, `extract.py`, `llm_classify.py`,
+  `vision_tool.py`) — confirmed via inspecting the installed `langchain_anthropic` package that
+  `model`/`max_tokens` are real, working kwargs (aliased fields, `populate_by_name` makes both
+  spellings valid at runtime) that pyright's pydantic-overload resolution mishandles. Centralised
+  into one `app/langgraph/_anthropic.py` helper with the suppression in one place instead of at
+  every call site.
+- **`app/langgraph/trace.py`** — root cause was `supabase-py` typing a JSON column as a large
+  recursive union; added `cast(dict, ...)` at the two read sites since this module is the only
+  writer of that column and controls its real shape.
+- **`app/realtime_listener.py`** — `AsyncRealtimeChannel` imported from its real submodule path
+  instead of the package's re-export (pyright's own suggested fix, confirmed importable and
+  functionally identical at runtime); the `"*"` wildcard event replaced with the
+  `RealtimePostgresChangesListenEvent.All` enum member (confirmed to be a `str` subclass with
+  value `"*"`, so this is a type-correctness fix, not a behaviour change); `_on_change`'s
+  parameter retyped from `dict` to the real `PostgresChangesPayload` TypedDict.
+- **`app/storage_service.py`** — `create_signed_url` asserts Supabase actually returned a
+  `signedUrl` instead of silently typing it as possibly `None` while declaring a `str` return.
+- **`app/routers/documents.py`** — `retry_document`'s final refetch now 404s instead of violating
+  its own return type if the document vanished between the update and the refetch. (A first
+  attempt at the `extraction_confidence` fix here coerced a legitimate `None` — a field manually
+  added to a document Extraction never ran against — to `0.0`, changing real behaviour; a test
+  caught it (`test_delete_extracted_field_removes_and_recomputes_requirements`). Fixed properly
+  instead by widening `document_repository.update_extracted_fields`'s param to `Optional[float]`,
+  since the function already handles `None` fine — the param type was just lying.)
+- **`app/document_repository.py`, `case_repository.py`, `extracted_fields_repository.py`** — the
+  two repeating causes predicted below were both confirmed: (a) `SomeModel(**row)` where `row`
+  comes from a Supabase `.execute().data[i]` typed as a loose JSON union rather than
+  `dict[str, Any]` — fixed with a small `_row()` cast helper added to each of the three files
+  (same fix already proven in `trace.py`); (b) the matching `_sync_case`/JSON-subscript cascade on
+  `result.data[0].get("case_id")` calls, fixed the same way.
+- **`app/ingestion/ocr_extractor.py`** — `RapidOCR.__call__`'s declared return type is a union
+  over every intermediate pipeline stage (for callers that skip det/cls/rec); cast to the concrete
+  `RapidOCROutput` it always actually returns here, plus an `assert` that `txts`/`scores` are set
+  whenever `boxes` is (confirmed: the dataclass always produces the three together).
+- **`app/ingestion/ingestion_service.py`, `pdf_extractor.py`, `font_consistency.py`,
+  `layout_anomalies.py`, `injection/pdf.py`** — the `enumerate(doc)`-on-a-`pymupdf.Document` issue
+  (5 call sites): switched to `for i in range(len(doc)): page = doc[i]`, since `Document` supports
+  `__getitem__`/`__len__` but not `__iter__`. **This traded one error for a smaller one**: `doc[i]`
+  types looser than direct iteration did, so `page.get_text("dict").get("blocks", [])` now shows
+  as invalid on 2 of those 5 call sites (`font_consistency.py`, `pdf_extractor.py` — see
+  "Remaining" below). Net improvement (5 errors closed, 2 opened) but not a clean fix yet.
+- **`app/fraud_detection/font_consistency_v2.py` renamed to `font_consistency.py`** (separately
+  requested, not part of the pyright pass) — no `v1` module has existed for a long time, so the
+  "v2" suffix on the file, its API route (`/detection/font-consistency-v2` →
+  `/detection/font-consistency`), response model (`FontConsistencyResultV2` → `FontConsistencyResult`),
+  and function names (`check_font_consistency_v2` → `check_font_consistency`) no longer meant
+  anything. Confirmed no frontend code called the old route before renaming it. Left the *internal*
+  `_group_anomalies_v2`/`FontAnomalyV2`/`_RawAnomalyV2` names and the historical v1-vs-v2 scoring
+  comments alone — those denote an actual algorithm version, unrelated to the module-naming
+  confusion this rename was about.
+- **`app/routers/extraction.py`** — `_read_and_validate_upload` already validated
+  `file.filename`/`file.content_type` were non-empty but discarded that validation, forcing every
+  caller to re-read the still-`Optional`-typed `UploadFile` attributes. Now returns
+  `(bytes, filename, content_type)` so callers use the validated values.
+- **`app/case_match.py`** — two spots asserted a value non-`None` where a helper's own contract
+  already guaranteed it (`_document_uen` returns all 3 of its tuple's fields together or none;
+  `_normalize_id` only returns truthy for a real string input) — pyright just couldn't see across
+  the function boundary.
+
+### Remaining — 56 errors in 4 files, not yet started
+
+```
+31  app/fraud_detection/layout_anomalies.py
+21  app/injection/pdf.py
+ 2  app/fraud_detection/font_consistency.py   <- regression from the enumerate(doc) fix, see above
+ 2  app/ingestion/pdf_extractor.py            <- same regression
+```
+
+Patterns spotted while scoping these (not yet fixed):
+
+- **`font_consistency.py` (2), `pdf_extractor.py` (2)** — the `page.get_text("dict").get("blocks",
+  [])` issue introduced by the `doc[i]` indexing fix above. `page = doc[page_index]` types looser
+  than direct iteration did; was about to check `pymupdf.Document.__getitem__`'s exact declared
+  return type annotation when paused. Likely needs its own `cast(pymupdf.Page, doc[i])`.
+- **`app/fraud_detection/layout_anomalies.py` (31)** — mostly `float | object` arithmetic (a
+  helper returning `object` where a `float` was expected) and a `str` vs. `Alignment` (a
+  `Literal`/enum type) mismatch at a few call sites — likely a missing narrow cast or return-type
+  annotation on one or two shared helpers, not 31 independent issues.
+- **`app/injection/pdf.py` (21)** — dev-only synthetic fraud-injection tool (lowest priority by
+  the same reasoning as the test-exclusion above). PIL `FreeTypeFont` vs. `ImageFont` return-type
+  mismatches, a few `Optional` subscripts, one `bytearray`/buffer type mismatch.
+
+### Next step when resumed
+
+Continue through the remaining 4 files, same approach as above: root-cause each pattern (usually
+one fix covers several individual errors), prefer real narrowing (`assert`, `cast`, returning
+validated values) over blanket suppressions, and only use a `pyright: ignore` comment for
+confirmed library-stub gaps (verified by inspecting the installed package, not assumed). Start by
+resolving the `doc[i]` regression in `font_consistency.py`/`pdf_extractor.py` before moving on to
+`layout_anomalies.py`/`injection/pdf.py`, since the same `pymupdf.Page` cast will be needed in
+those two files too once their own `enumerate(doc)` fix is verified.

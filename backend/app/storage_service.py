@@ -48,4 +48,6 @@ def create_signed_url(
     data = supabase_client.storage.from_(settings.SUPABASE_STORAGE_BUCKET).create_signed_url(
         storage_path, expires_in, options
     )
-    return data["signedUrl"]
+    signed_url = data["signedUrl"]
+    assert signed_url is not None, "Supabase returned no signedUrl for a successful create_signed_url call"
+    return signed_url

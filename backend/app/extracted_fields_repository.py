@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Optional
+from typing import Any, Optional, cast
 
 from .supabase_client import service_supabase_client, supabase_client
-from .fraud_detection.font_consistency_v2 import ExtractedField
+from .fraud_detection.font_consistency import ExtractedField
+
+
+def _row(mapping: Any) -> dict:
+    """postgrest types a row as a loose JSON union rather than dict[str, Any]
+    — every row here is one we (or our own migrations) wrote, so this cast
+    just tells the type checker what's already true."""
+    return cast(dict, mapping)
+
 
 def _infer_field_type(value: object) -> str:
     if value is None:
@@ -72,7 +80,7 @@ def get_extracted_fields(document_id: str) -> list[ExtractedField]:
     """
     Extra columns on the extracted_fields table (id, document_id, idx,
     extracted_at, field_category, ...) are dropped automatically —
-    ExtractedField only declares what font_consistency_v2 actually uses.
+    ExtractedField only declares what font_consistency actually uses.
     """
     result = (
         supabase_client.table("extracted_fields")
@@ -80,7 +88,7 @@ def get_extracted_fields(document_id: str) -> list[ExtractedField]:
         .eq("document_id", document_id)
         .execute()
     )
-    return [ExtractedField(**row) for row in result.data]
+    return [ExtractedField(**_row(row)) for row in result.data]
 
 
 def get_extracted_fields_for_documents(
@@ -102,7 +110,8 @@ def get_extracted_fields_for_documents(
         .execute()
     )
     by_document: dict[str, list[ExtractedField]] = defaultdict(list)
-    for row in result.data:
+    for raw_row in result.data:
+        row = _row(raw_row)
         by_document[row["document_id"]].append(ExtractedField(**row))
     return by_document
 
@@ -119,7 +128,10 @@ def add_extracted_field(
     Manually added fields are treated as human-verified,
     so their confidence is always 1.0.
     """
-    supabase_client.table("extracted_fields").insert({
+    # field_value is intentionally `object` (any JSON-serialisable value a
+    # human can enter) — too wide for postgrest's strict JSON param type, so
+    # cast the row itself rather than narrow the public parameter.
+    supabase_client.table("extracted_fields").insert(cast(dict, {
         "document_id": document_id,
         "field_name": field_name,
         "field_value": field_value,
@@ -128,7 +140,7 @@ def add_extracted_field(
             "required" if field_name in required_field_names else "additional"
         ),
         "field_type": _infer_field_type(field_value),
-    }).execute()
+    })).execute()
 
 
 def delete_fields_for_document(document_id: str) -> None:

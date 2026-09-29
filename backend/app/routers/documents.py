@@ -380,6 +380,10 @@ async def delete_extracted_field(
             document_repository.update_extracted_fields,
             document_id,
             extracted_fields,
+            # A deletion doesn't make the document human-verified (unlike
+            # add_extracted_field's confidence=1.0), so whatever confidence
+            # it already had — including None, for a document Extraction
+            # never ran against — is carried through unchanged.
             document.extraction_confidence,
             fulfilled_requirements,
         )
@@ -592,7 +596,10 @@ async def retry_document(
             detail="Failed to re-enqueue the document.",
         ) from exc
 
-    return await asyncio.to_thread(document_repository.get_document, document_id)
+    refreshed = await asyncio.to_thread(document_repository.get_document, document_id)
+    if refreshed is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    return refreshed
 
 
 @router.get("/{document_id}/langgraph-trace")

@@ -9,7 +9,7 @@ from app.case_service import (
     compute_requirement_coverage,
     sync_submission_finalized,
 )
-from app.fraud_detection.font_consistency_v2 import ExtractedField
+from app.fraud_detection.font_consistency import ExtractedField
 from app.config import settings
 from app.models import (
     ADDITIONAL_DOCUMENT_TYPES,

@@ -5,6 +5,7 @@ import os
 import re
 from collections import deque
 from pathlib import Path
+from typing import Iterable, cast
 
 import pymupdf
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, PngImagePlugin
@@ -2331,7 +2332,9 @@ def _discover_native_pdf_fields(
     metadata: dict[str, str],
 ) -> dict[str, FieldValue]:
     fields: dict[str, FieldValue] = {}
-    for page_index, page in enumerate(doc):
+    # pymupdf.Document is iterable at runtime even though pyright's
+    # enumerate() overload resolution doesn't recognise it as Iterable.
+    for page_index, page in enumerate(cast(Iterable, doc)):
         page_dict = page.get_text("dict")
         for block in page_dict.get("blocks", []):
             if block.get("type") != 0:
@@ -2380,7 +2383,7 @@ def _discover_pdf_image_fields(
     """Register embedded bitmap placements from PyMuPDF (not vector drawings)."""
     fields = dict(existing)
     seen: set[tuple] = set()
-    for page_index, page in enumerate(doc):
+    for page_index, page in enumerate(cast(Iterable, doc)):
         for info in page.get_image_info() or []:
             bbox = info.get("bbox")
             if not bbox or len(bbox) != 4:

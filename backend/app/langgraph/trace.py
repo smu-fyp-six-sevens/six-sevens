@@ -81,9 +81,11 @@ def get_case_detection_reports(case_id: str) -> list[dict[str, Any]]:
         .data
     )
     reports = []
-    for row in rows:
-        # The `trace` column is always a JSON object written by _write_row
-        # above — cast() just tells the type checker what's already true.
+    for raw_row in rows:
+        # Every row here is a JSON object (the query selects document_id,
+        # trace from a real table) — cast() just tells the type checker
+        # what's already true, since postgrest types .data loosely.
+        row = cast(dict, raw_row)
         row_trace = cast(dict, row.get("trace")) or {}
         if not row_trace.get("detection_report"):
             continue
@@ -99,7 +101,7 @@ def get_persisted(document_id: str) -> dict[str, Any] | None:
     result = supabase_client.table("langgraph_trace").select("trace").eq("document_id", document_id).execute()
     if not result.data:
         return None
-    return cast(dict, result.data[0]["trace"])
+    return cast(dict, cast(dict, result.data[0])["trace"])
 
 
 def _persist(document_id: str) -> None:

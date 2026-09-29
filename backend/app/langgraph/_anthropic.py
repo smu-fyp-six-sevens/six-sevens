@@ -26,8 +26,8 @@ def build_chat_anthropic(model: str, max_tokens: int, *, temperature: float = 0)
     from langchain_anthropic import ChatAnthropic  # local import: optional dep until phase 0 is installed
 
     return ChatAnthropic(  # pyright: ignore[reportCallIssue]
-        model=model,
+        model=model,  # pyright: ignore[reportCallIssue]
         api_key=settings.ANTHROPIC_API_KEY,
         temperature=temperature,
-        max_tokens=max_tokens,
+        max_tokens=max_tokens,  # pyright: ignore[reportCallIssue]
     )

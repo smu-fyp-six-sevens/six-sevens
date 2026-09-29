@@ -4,12 +4,12 @@ import json
 import logging
 import re
 from collections import Counter
-from typing import Any, Literal
+from typing import Any, Iterable, Literal, cast
 
 import pymupdf
 from pydantic import BaseModel
 
-logger = logging.getLogger("fraud_detection.font_consistency_v2")
+logger = logging.getLogger("fraud_detection.font_consistency")
 
 # --- span extraction & style-comparison building blocks ---------------------
 #
@@ -93,7 +93,10 @@ class _Span(BaseModel):
 
 def _extract_spans(doc: pymupdf.Document) -> list[_Span]:
     spans: list[_Span] = []
-    for page_index, page in enumerate(doc):
+    # pymupdf.Document is iterable at runtime (and duck-typed test doubles
+    # only implement __iter__) even though pyright's enumerate() overload
+    # resolution doesn't recognise it as Iterable — cast documents that.
+    for page_index, page in enumerate(cast(Iterable, doc)):
         underline_rects = _underline_rects(page)
         for block_index, block in enumerate(page.get_text("dict").get("blocks", [])):
             if block.get("type") != 0:  # not a text block
@@ -255,7 +258,7 @@ class ExtractedField(BaseModel):
 class FontAnomalyV2(BaseModel):
     """
     One deviation *pattern*, fact-only (no confidence/severity scoring —
-    see the font_consistency_v2 plan). `field_name`/`occurrences`/
+    see the font_consistency plan). `field_name`/`occurrences`/
     `deviating_occurrences` are set only for field-anchored findings; row-
     level findings leave them None and rely on `occurrence_count` /
     `locations` instead, same as v1.
@@ -285,7 +288,7 @@ class _RawAnomalyV2(BaseModel):
     deviating_occurrences: int | None = None
 
 
-class FontConsistencyResultV2(BaseModel):
+class FontConsistencyResult(BaseModel):
     document_id: str
     anomalies: list[FontAnomalyV2]
     all_detected_styles: list[DetectedStyle]
@@ -293,8 +296,8 @@ class FontConsistencyResultV2(BaseModel):
     unable_to_assess_reason: str | None = None
 
 
-def _empty_result(document_id: str, reason: str | None = None) -> FontConsistencyResultV2:
-    return FontConsistencyResultV2(
+def _empty_result(document_id: str, reason: str | None = None) -> FontConsistencyResult:
+    return FontConsistencyResult(
         document_id=document_id,
         anomalies=[],
         all_detected_styles=[],
@@ -303,11 +306,11 @@ def _empty_result(document_id: str, reason: str | None = None) -> FontConsistenc
     )
 
 
-def check_font_consistency_v2(
+def check_font_consistency(
     document_id: str,
     file_bytes: bytes,
     extracted_fields: list[ExtractedField] | None = None,
-) -> FontConsistencyResultV2:
+) -> FontConsistencyResult:
     """
     v2: row-level comparison (tight, local — replaces v1's line+region dual
     comparison) plus, when extracted_fields is provided, a field-anchored
@@ -333,7 +336,7 @@ def check_font_consistency_v2(
                 "image-only PDF with no text layer, or an encrypted/"
                 "corrupted one."
             )
-            logger.warning("Font consistency check (v2): document %s: %s", document_id, reason)
+            logger.warning("Font consistency check: document %s: %s", document_id, reason)
             return _empty_result(document_id, reason)
 
         spans_by_page: dict[int, list[_Span]] = {}
@@ -356,14 +359,14 @@ def check_font_consistency_v2(
 
         anomalies = _group_anomalies_v2(raw_anomalies)
 
-        return FontConsistencyResultV2(
+        return FontConsistencyResult(
             document_id=document_id,
             anomalies=anomalies,
             all_detected_styles=_compile_detected_styles(spans),
             unable_to_assess=False,
         )
     except Exception as exc:
-        logger.exception("Font consistency check (v2) failed for document %s", document_id)
+        logger.exception("Font consistency check failed for document %s", document_id)
         reason = f"Unexpected error during font consistency check: {type(exc).__name__}: {exc}"
         return _empty_result(document_id, reason)
     finally:
@@ -454,7 +457,7 @@ def _match_field_occurrences(
     wants to catch.
     """
     occurrences: list[list[_Span]] = []
-    for page_index, page in enumerate(doc):
+    for page_index, page in enumerate(cast(Iterable, doc)):
         page_spans = spans_by_page.get(page_index)
         if not page_spans:
             continue

@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from starlette.datastructures import Headers
 
 from app.config import settings
-from app.fraud_detection.font_consistency_v2 import ExtractedField
+from app.fraud_detection.font_consistency import ExtractedField
 from app.main import app
 from app.models import CaseRecord, DocumentRecord, DocumentStatus, compute_fulfilled_requirements
 from app.routers.upload import _ingest_one

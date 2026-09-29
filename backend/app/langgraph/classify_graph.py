@@ -77,7 +77,9 @@ def _available_tools(existing_messages: list) -> list:
 
 def rule_node(state: DocumentGraphState) -> dict:
     """The only deterministic step — everything after this is the agent's call."""
-    result = classify_by_rules(state["filename"], _raw_text(state))
+    filename = state.get("filename")
+    assert filename is not None, "ingest_node must set filename before the classify subgraph runs"
+    result = classify_by_rules(filename, _raw_text(state))
     top = (result.get("top_candidates") or [None])[0]
     trace.record(
         state["document_id"], "rule_classify",
@@ -131,7 +133,7 @@ async def agent_node(state: DocumentGraphState) -> dict:
             ]),
             HumanMessage(content="Classify this document."),
         ]
-        response = await cache_gate.run("classify_agent", lambda: model.ainvoke(model_input))
+        response = cast(AIMessage, await cache_gate.run("classify_agent", lambda: model.ainvoke(model_input)))
         telemetry.record_usage(span, response)
         span.set_attribute("tool_calls", [tc["name"] for tc in (response.tool_calls or [])])
         trace.record(

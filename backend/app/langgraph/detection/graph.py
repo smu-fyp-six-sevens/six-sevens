@@ -403,7 +403,8 @@ def merge_reports(state: DetectionState) -> dict:
                 "specialist": name,
                 "title": SPECIALISTS[name].title,
                 "reason": (
-                    f"Second look: {request['question']}" if was_second_look and name not in reasons
+                    f"Second look: {request['question']}"
+                    if was_second_look and name not in reasons and request
                     else reasons.get(name, "Selected by the lead investigator.")
                 ),
                 "tools_called": list(report["tools_called"]),

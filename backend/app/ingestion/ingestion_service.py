@@ -1,4 +1,6 @@
 from io import BytesIO
+from typing import Iterable, cast
+
 from PIL import Image
 from .pdf_extractor import extract_pdf, pdf_contains_text
 from .ocr_extractor import extract_image_with_ocr
@@ -63,7 +65,7 @@ def ingest_document(
             pages = []
             all_text = []
 
-            for index, page in enumerate(document):
+            for index, page in enumerate(cast(Iterable, document)):
 
                 pix = page.get_pixmap(
                     matrix=pymupdf.Matrix(2, 2)

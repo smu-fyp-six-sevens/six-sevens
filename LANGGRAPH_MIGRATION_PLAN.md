@@ -122,14 +122,14 @@ detect(document_id)
 - **The lead is the agent.** From document type and content it chooses which specialists to run and records a reason for each one it skips
   (auditable, and part of the report). Each specialist likewise chooses which of its own tools to call. A fixed doc-type table is only a prompt hint, not the router.
 - **Specialists (proposed tool mapping):**
-  - Layout & Rendering: `font_consistency_v2` (fonts, sizes, row deviations), later misalignment/spacing.
+  - Layout & Rendering: `font_consistency` (fonts, sizes, row deviations), later misalignment/spacing.
   - Content Validation: `spelling_anomaly`, plus date-consistency and bank-statement running-balance (numerical) checks — built.
   - Digital Authenticity: metadata (ExifTool) checks — built; AI-generated/image manipulation checks not yet.
 - **Isolation:** each specialist is a subgraph with private messages; only a compact structured finding goes back to the lead.
 - **Tool results are ground truth.** Findings are merged deterministically; the LLM adds severity and rationale but cannot delete a finding.
   "Unable to assess" is its own result, never read as a pass. Documents are untrusted, so text inside one must not be able to suppress a result.
 - **Tools are local and parameter-bound:** bind `document_id` from state, fetch bytes/fields inside the tool (reuse helpers in `routers/detection.py`), return size-capped results.
-  `font_consistency_v2` is CPU-bound (run via `asyncio.to_thread`, bounded pool). `spelling_anomaly` re-ingests text; pass it in instead.
+  `font_consistency` is CPU-bound (run via `asyncio.to_thread`, bounded pool). `spelling_anomaly` re-ingests text; pass it in instead.
 - **Cost:** up to 1 lead + 3 specialist runs per document. Haiku for specialists, Sonnet for the lead; measure before adding more.
 - **Evals:** `injection/pdf.py` makes forged documents with known ground truth, so specialists can be scored on precision/recall. Keep the synthetic-to-real caveat from CLAUDE.md.
 

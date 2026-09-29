@@ -511,6 +511,8 @@ def _compare_company(
 
     uen_field, raw_uen, uen = _document_uen(fields)
     if uen is not None and reference.uen is not None:
+        # _document_uen returns all three of these together or none at all.
+        assert uen_field is not None and raw_uen is not None
         matched = uen == reference.uen
         return FieldComparison(
             check="company_uen",
@@ -548,6 +550,9 @@ def _compare_person(person: _Person, reference: IncumbencyVerification) -> Optio
     reference_ids = {_normalize_id(p.id_number) for p in reference.individuals} - {None}
     id_number = _normalize_id(person.id_number)
     if id_number and reference_ids:
+        # _normalize_id only returns truthy when given a real string, so
+        # person.id_number (the raw value it was normalised from) is too.
+        assert person.id_number is not None
         matched = id_number in reference_ids
         who = f" ({person.name})" if person.name else ""
         return FieldComparison(

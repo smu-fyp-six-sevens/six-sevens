@@ -3,13 +3,20 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional, cast
 
 from . import case_service, extracted_fields_repository, storage_service
 from .models import DocumentRecord, DocumentStatus
 from .supabase_client import service_supabase_client, supabase_client
 
 logger = logging.getLogger(__name__)
+
+
+def _row(mapping: Any) -> dict:
+    """postgrest types a row as a loose JSON union rather than dict[str, Any]
+    — every row here is one we (or our own migrations) wrote, so this cast
+    just tells the type checker what's already true."""
+    return cast(dict, mapping)
 
 
 def _sync_case(case_id: Optional[str]) -> None:
@@ -45,7 +52,7 @@ def create_document(
         "uploaded_at": now.isoformat(),
     }
     result = supabase_client.table("documents").insert(row).execute()
-    return DocumentRecord(**result.data[0])
+    return DocumentRecord(**_row(result.data[0]))
 
 
 def update_status(
@@ -80,7 +87,7 @@ def update_status(
     # never did resync before either, so this deliberately doesn't sync on
     # those to avoid extra writes with no coverage-affecting reason.
     if status == DocumentStatus.ANALYZED and result.data:
-        _sync_case(result.data[0].get("case_id"))
+        _sync_case(_row(result.data[0]).get("case_id"))
 
 def approve_document(document_id: str) -> None:
     result = (
@@ -90,7 +97,7 @@ def approve_document(document_id: str) -> None:
         .execute()
     )
     if result.data:
-        _sync_case(result.data[0].get("case_id"))
+        _sync_case(_row(result.data[0]).get("case_id"))
 
 def reject_document(document_id: str) -> None:
     supabase_client.table("documents").update(
@@ -131,13 +138,13 @@ def record_classification(
         update["classification_reasoning"] = reasoning
     result = supabase_client.table("documents").update(update).eq("id", document_id).execute()
     if result.data:
-        _sync_case(result.data[0].get("case_id"))
+        _sync_case(_row(result.data[0]).get("case_id"))
 
 
 def update_extracted_fields(
     document_id: str,
     extracted_fields: dict,
-    extraction_confidence: float,
+    extraction_confidence: Optional[float],
     fulfilled_requirements: Optional[list[str]] = None,
 ) -> None:
     """
@@ -163,7 +170,7 @@ def update_extracted_fields(
         update["fulfilled_requirements"] = fulfilled_requirements
     result = supabase_client.table("documents").update(update).eq("id", document_id).execute()
     if result.data:
-        _sync_case(result.data[0].get("case_id"))
+        _sync_case(_row(result.data[0]).get("case_id"))
 
 
 def record_escalation(document_id: str, reason: str) -> None:
@@ -243,7 +250,7 @@ def get_document(document_id: str) -> Optional[DocumentRecord]:
     result = supabase_client.table("documents").select("*").eq("id", document_id).execute()
     if not result.data:
         return None
-    return DocumentRecord(**result.data[0])
+    return DocumentRecord(**_row(result.data[0]))
 
 
 def get_documents_in_status(statuses: list[DocumentStatus]) -> list[DocumentRecord]:
@@ -253,7 +260,7 @@ def get_documents_in_status(statuses: list[DocumentStatus]) -> list[DocumentReco
         .in_("status", [s.value for s in statuses])
         .execute()
     )
-    return [DocumentRecord(**row) for row in result.data]
+    return [DocumentRecord(**_row(row)) for row in result.data]
 
 
 def list_documents(
@@ -266,4 +273,4 @@ def list_documents(
     if status is not None:
         query = query.eq("status", status.value)
     result = query.execute()
-    return [DocumentRecord(**row) for row in result.data]
+    return [DocumentRecord(**_row(row)) for row in result.data]

@@ -12,10 +12,10 @@ from ..models import IN_FLIGHT_STATUSES, DocumentRecord
 from .. import case_service, extracted_fields_repository, storage_service
 from ._dependencies import get_document_or_404
 from ..case_match import DocumentCaseMatch
-from ..fraud_detection.font_consistency_v2 import (
+from ..fraud_detection.font_consistency import (
     ExtractedField,
-    FontConsistencyResultV2,
-    check_font_consistency_v2,
+    FontConsistencyResult,
+    check_font_consistency,
 )
 from ..fraud_detection.metadata_analysis import MetadataAnalysisResult, check_metadata_anomalies
 from ..fraud_detection.layout_anomalies import LayoutAnomalyResult, check_layout_anomalies
@@ -59,15 +59,15 @@ async def _fetch_extracted_fields(document_id: str) -> list[ExtractedField]:
 
 
 @router.get(
-    "/{document_id}/detection/font-consistency-v2", response_model=FontConsistencyResultV2
+    "/{document_id}/detection/font-consistency", response_model=FontConsistencyResult
 )
-async def get_font_consistency_v2(
+async def get_font_consistency(
     document_id: str, document: DocumentRecord = Depends(get_document_or_404)
-) -> FontConsistencyResultV2:
+) -> FontConsistencyResult:
     file_bytes = await _download_document_bytes(document)
     extracted_fields = await _fetch_extracted_fields(document_id)
     return await asyncio.to_thread(
-        check_font_consistency_v2, document_id, file_bytes, extracted_fields
+        check_font_consistency, document_id, file_bytes, extracted_fields
     )
 
 

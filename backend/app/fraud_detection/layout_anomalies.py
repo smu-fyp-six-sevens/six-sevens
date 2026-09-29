@@ -4,7 +4,7 @@ import logging
 import re
 from collections import Counter
 from statistics import median
-from typing import Literal
+from typing import Iterable, Literal, cast
 
 import pymupdf
 from pydantic import BaseModel
@@ -337,7 +337,10 @@ def check_layout_anomalies(document_id: str, file_bytes: bytes) -> LayoutAnomaly
 def _extract_blocks(doc: pymupdf.Document) -> list[_Block]:
     blocks: list[_Block] = []
     table_rects_by_page: dict[int, list[pymupdf.Rect]] = {}
-    for page_index, page in enumerate(doc):
+    # pymupdf.Document is iterable at runtime (and duck-typed test doubles
+    # only implement __iter__) even though pyright's enumerate() overload
+    # resolution doesn't recognise it as Iterable — cast documents that.
+    for page_index, page in enumerate(cast(Iterable, doc)):
         page_width = float(page.rect.width)
         page_height = float(page.rect.height)
         table_rects_by_page[page_index] = _table_rects(page)
