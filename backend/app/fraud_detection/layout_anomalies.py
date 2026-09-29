@@ -4,12 +4,14 @@ import logging
 import re
 from collections import Counter
 from statistics import median
-from typing import Iterable, Literal, cast
+from typing import Iterable, Literal, TypeVar, cast
 
 import pymupdf
 from pydantic import BaseModel
 
 logger = logging.getLogger("fraud_detection.layout_anomalies")
+
+_T = TypeVar("_T")
 
 BBox = tuple[float, float, float, float]
 Alignment = Literal["left-aligned", "centred", "right-aligned", "justified"]
@@ -1347,15 +1349,21 @@ def _check_alignment(blocks: list[_Block]) -> tuple[list[LayoutAnomaly], CheckAs
         if not labelled:
             continue
 
-        full_peers = [(block, alignment) for block, alignment, band in labelled if band == "full"]
-        short_peers = [(block, alignment) for block, alignment, band in labelled if band == "short"]
-        full_expected = _dominant(alignment for _, alignment in full_peers) if len(full_peers) >= 2 else None
+        full_peers: list[tuple[_Block, Alignment]] = [
+            (block, alignment) for block, alignment, band in labelled if band == "full"
+        ]
+        short_peers: list[tuple[_Block, Alignment]] = [
+            (block, alignment) for block, alignment, band in labelled if band == "short"
+        ]
+        full_aligns: list[Alignment] = [alignment for _, alignment in full_peers]
+        full_expected = _dominant(full_aligns) if len(full_peers) >= 2 else None
 
-        for band, peers in (("full", full_peers), ("short", short_peers)):
+        for peers in (full_peers, short_peers):
             if len(peers) < 2:
                 continue
             classified_any = True
-            expected = _dominant(alignment for _, alignment in peers)
+            peer_aligns: list[Alignment] = [alignment for _, alignment in peers]
+            expected = _dominant(peer_aligns)
             if expected is None:
                 continue
             matching = sum(1 for _, a in peers if a == expected)
@@ -2265,7 +2273,7 @@ def _bucket_pt(value: float, bucket: float = _INDENT_BUCKET_PT) -> float:
     return round(value / bucket) * bucket
 
 
-def _dominant(values) -> object | None:
+def _dominant(values: Iterable[_T]) -> _T | None:
     """
     Most common value, or None if there's a tie for first place — a tie
     means there's no real majority pattern to call "expected", so nothing
