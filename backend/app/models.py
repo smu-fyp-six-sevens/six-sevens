@@ -16,6 +16,7 @@ class DocumentStatus(str, Enum):
     APPROVED = "approved"       # When loan officer manually approves a document
     REJECTED = "rejected"       # When loan officer manually rejects a document
     FAILED = "failed"           # AC3: retries exhausted, needs manual review
+    CANCELLED = "cancelled"     # Manually stopped by a loan officer while queued/processing
 
 
 # The pipeline is still actively running on a document in any of these
@@ -356,6 +357,12 @@ class DocumentRecord(BaseModel):
     failure_reason: Optional[str] = None
     evidence: list[str] = Field(default_factory=list)
     fulfilled_requirements: list[str] = Field(default_factory=list)
+    # Not a documents-table column — document_repository.get_document/
+    # list_documents populate this from the extracted_fields table on every
+    # read (see document_repository._attach_extracted_fields). Plain
+    # {field_name: value}; routers/documents.py's GET and case_service's
+    # case-list enrichment separately rewrap it as {value, confidence} for
+    # the API response.
     extracted_fields: Optional[dict] = None
     # Extraction's own confidence in the values it pulled into extracted_fields
     # — distinct from (and no longer overwrites) the classifier's `confidence`

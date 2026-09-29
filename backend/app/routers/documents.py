@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from .. import document_repository, extracted_fields_repository, storage_service
+from .. import document_repository, extracted_fields_repository, monitoring, storage_service
 
 from ._dependencies import get_document_or_404
 from ..config import settings
@@ -110,11 +110,25 @@ async def delete_document(
     """
     Removes a document from its case. A following GET /documents/{id} or
     a case document list no longer returns it.
+
+    Only allowed once the document has reached a terminal state (ANALYZED,
+    FAILED, REJECTED, CANCELLED) — deleting one still QUEUED/PROCESSING/
+    EXTRACTING would race the pipeline actively writing to it (status
+    updates, extracted fields) and orphan a document row mid-flight. Cancel
+    it first if you want to stop and then delete an in-flight document.
     """
     if document.status == DocumentStatus.APPROVED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="An approved document cannot be deleted.",
+        )
+    if document.status in IN_FLIGHT_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Document is still being processed; cancel it first, or wait "
+                "for it to finish, before deleting."
+            ),
         )
 
     try:
@@ -212,7 +226,6 @@ async def update_extracted_fields(
         await asyncio.to_thread(
             document_repository.update_extracted_fields,
             document_id,
-            request.extracted_fields,
             1.0,
             fulfilled_requirements,
         )
@@ -284,8 +297,8 @@ async def add_extracted_field(
             required_field_names=required_field_names,
         )
 
-        # Re-fetch the fields so the documents.extracted_fields JSON
-        # and the normalized extracted_fields table stay in sync.
+        # Re-fetch the full field set (including the one just added) to
+        # recompute fulfilled_requirements against it.
         all_fields = await asyncio.to_thread(
             extracted_fields_repository.get_extracted_fields,
             document_id,
@@ -304,7 +317,6 @@ async def add_extracted_field(
         await asyncio.to_thread(
             document_repository.update_extracted_fields,
             document_id,
-            extracted_fields,
             1.0,
             fulfilled_requirements,
         )
@@ -379,7 +391,6 @@ async def delete_extracted_field(
         await asyncio.to_thread(
             document_repository.update_extracted_fields,
             document_id,
-            extracted_fields,
             # A deletion doesn't make the document human-verified (unlike
             # add_extracted_field's confidence=1.0), so whatever confidence
             # it already had — including None, for a document Extraction
@@ -561,40 +572,95 @@ async def retry_document(
     document_id: str, document: DocumentRecord = Depends(get_document_or_404)
 ) -> DocumentRecord:
     """
-    Re-enqueues a document that's stuck or failed. Exists specifically for
-    orphaned in-memory-queue state: this queue (see queue_service.py) does
-    not survive a backend restart, so any document still QUEUED/PROCESSING
-    at that moment is permanently abandoned — nothing else will ever pick
-    it back up. Also useful for a genuinely FAILED document the officer
-    wants to re-attempt. Refuses ANALYZED documents since there's nothing
-    to retry there.
+    Re-enqueues a document that's FAILED, or stuck — PROCESSING for longer
+    than settings.STUCK_PROCESSING_RETRY_THRESHOLD_SECONDS (see
+    monitoring.is_stuck_processing_for_retry). The stuck case exists
+    specifically for orphaned in-memory-queue state: this queue (see
+    queue_service.py) does not survive a backend restart, so a document
+    still PROCESSING at that moment is permanently abandoned — nothing else
+    will ever pick it back up. Deliberately does NOT allow retrying a
+    document that's merely QUEUED or normally PROCESSING (not yet past the
+    stuck threshold) — a worker may genuinely still be running it, and
+    racing that with a second concurrent pipeline run would duplicate LLM
+    calls and interleave writes unpredictably. Use cancel_document first if
+    you want to stop an actively-running document instead.
     """
-    if document.status == DocumentStatus.ANALYZED:
+    is_stuck = monitoring.is_stuck_processing_for_retry(document)
+    if document.status != DocumentStatus.FAILED and not is_stuck:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Document already analyzed; nothing to retry.",
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Document can only be retried when it has failed, or has been "
+                "processing for an unusually long time (possibly orphaned)."
+            ),
         )
 
     try:
+        # Guards against a race with e.g. a concurrent cancel or the
+        # in-flight run itself finishing between the check above and here —
+        # if the status has moved on, this simply doesn't match and updated
+        # stays False below.
+        updated = await asyncio.to_thread(
+            document_repository.update_status,
+            document_id,
+            DocumentStatus.QUEUED,
+            retry_count=document.retry_count + 1,
+            expected_current_statuses=[document.status],
+        )
+        if not updated:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Document's state changed; refetch and try again.",
+            )
         # update_status only ever writes fields passed as non-None, so this
         # can't clear a stale failure_reason from the prior attempt — it's
         # left in place and will read as stale once this retry succeeds.
         # Pre-existing limitation of update_status, not new to this retry
         # path (the classification-escalation loop's own success path has
         # the same gap), so not fixed here.
-        await asyncio.to_thread(
-            document_repository.update_status,
-            document_id,
-            DocumentStatus.QUEUED,
-            retry_count=document.retry_count + 1,
-        )
         await document_queue.enqueue(document_id)
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception("Failed to re-enqueue document %s", document_id)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to re-enqueue the document.",
         ) from exc
+
+    refreshed = await asyncio.to_thread(document_repository.get_document, document_id)
+    if refreshed is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    return refreshed
+
+
+@router.post("/{document_id}/cancel", response_model=DocumentRecord)
+async def cancel_document(
+    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+) -> DocumentRecord:
+    """
+    Stops a document that's still QUEUED or PROCESSING. The status write is
+    an atomic compare-and-swap (only applies if the document is still in one
+    of those two statuses), so two concurrent cancels — or a cancel racing
+    the pipeline reaching a terminal status on its own — can't both "win".
+    Only once that write succeeds do we attempt to interrupt an in-flight
+    run (see queue_service.DocumentQueue.cancel_document); a QUEUED document
+    that hasn't been dequeued yet needs no interruption, since
+    queue_service._process_document checks status on dequeue and skips it.
+    """
+    updated = await asyncio.to_thread(
+        document_repository.update_status,
+        document_id,
+        DocumentStatus.CANCELLED,
+        expected_current_statuses=[DocumentStatus.QUEUED, DocumentStatus.PROCESSING],
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Document can only be cancelled while queued or processing.",
+        )
+
+    document_queue.cancel_document(document_id)
 
     refreshed = await asyncio.to_thread(document_repository.get_document, document_id)
     if refreshed is None:

@@ -64,7 +64,6 @@ async def persist_extracted_fields(document_id: str, document_type: str, extract
     await asyncio.to_thread(
         document_repository.update_extracted_fields,
         document_id,
-        extracted_fields,
         extraction_confidence,
         fulfilled_requirements,
     )

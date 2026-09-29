@@ -37,10 +37,11 @@ def replace_extracted_fields(
     required_field_names: set[str],
 ) -> None:
     """
-    Mirrors a document's extracted_fields into the normalised extracted_fields
-    table — one row per field, rather than the single jsonb blob on
-    documents.extracted_fields — so individual fields can be queried,
-    joined, or reported on directly.
+    Persists a document's extracted field values as one row per field —
+    the sole place field values live (documents.extracted_fields is not
+    written; document_repository.get_document/list_documents read it back
+    from here) — so individual fields can be queried, joined, or reported
+    on directly.
 
     Replaces (delete-then-insert) rather than upserts: re-processing a
     document (a reclassification escalation, or a loan officer's manual
@@ -114,6 +115,22 @@ def get_extracted_fields_for_documents(
         row = _row(raw_row)
         by_document[row["document_id"]].append(ExtractedField(**row))
     return by_document
+
+def get_extracted_fields_dict(document_id: str) -> dict:
+    """Plain {field_name: value} shape — what documents.extracted_fields
+    used to hold before it was retired in favour of this table."""
+    return {field.field_name: field.field_value for field in get_extracted_fields(document_id)}
+
+
+def get_extracted_fields_dicts_for_documents(document_ids: list[str]) -> dict[str, dict]:
+    """Batched version of get_extracted_fields_dict, for document_repository's
+    list_documents/get_documents_in_status to enrich a whole page in one query."""
+    by_document = get_extracted_fields_for_documents(document_ids)
+    return {
+        document_id: {field.field_name: field.field_value for field in fields}
+        for document_id, fields in by_document.items()
+    }
+
 
 def add_extracted_field(
     document_id: str,

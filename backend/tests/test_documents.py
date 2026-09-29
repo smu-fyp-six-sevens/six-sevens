@@ -151,7 +151,7 @@ def test_retry_document_rejects_already_analyzed() -> None:
 
         response = client.post("/documents/doc-1/retry")
 
-    assert response.status_code == 400
+    assert response.status_code == 409
 
 
 def test_retry_document_requeues_stuck_processing_document() -> None:
@@ -180,7 +180,10 @@ def test_retry_document_requeues_stuck_processing_document() -> None:
     assert response.status_code == 200
     assert response.json()["status"] == "queued"
     mock_repo.update_status.assert_called_once_with(
-        "doc-1", DocumentStatus.QUEUED, retry_count=1
+        "doc-1",
+        DocumentStatus.QUEUED,
+        retry_count=1,
+        expected_current_statuses=[DocumentStatus.PROCESSING],
     )
     mock_queue.enqueue.assert_awaited_once_with("doc-1")
 
@@ -204,7 +207,10 @@ def test_retry_document_allows_retrying_failed_document() -> None:
 
     assert response.status_code == 200
     mock_repo.update_status.assert_called_once_with(
-        "doc-1", DocumentStatus.QUEUED, retry_count=3
+        "doc-1",
+        DocumentStatus.QUEUED,
+        retry_count=3,
+        expected_current_statuses=[DocumentStatus.FAILED],
     )
 
 
@@ -285,7 +291,7 @@ def test_update_extracted_fields_success() -> None:
     # models.compute_fulfilled_requirements) rather than left untouched —
     # here just self-fulfilment since no individual_address was corrected in.
     mock_repo.update_extracted_fields.assert_called_once_with(
-        "doc-1", {"individual_name": "Jane Tan (corrected)"}, 1.0, ["payslip"]
+        "doc-1", 1.0, ["payslip"]
     )
     # required_field_names drawn from the document's own document_type
     # ("payslip") so field_category reflects the same required/additional
@@ -533,7 +539,9 @@ def test_retry_document_fetch_and_enqueue_failures() -> None:
         patch("app.routers.documents.document_repository"),
         patch("app.routers.documents.document_queue") as mock_queue,
     ):
-        mock_dep_repo.get_document.return_value = _make_document("doc-1")
+        failed = _make_document("doc-1")
+        failed.status = DocumentStatus.FAILED
+        mock_dep_repo.get_document.return_value = failed
         mock_queue.enqueue = AsyncMock(side_effect=RuntimeError("queue down"))
         assert client.post("/documents/doc-1/retry").status_code == 502
 
@@ -809,7 +817,7 @@ def test_add_extracted_field_inserts_and_returns_refetched_document() -> None:
     )
     # Manually entered fields are human-verified, hence confidence 1.0.
     mock_repo.update_extracted_fields.assert_called_once_with(
-        "doc-1", {"net_pay": 5000}, 1.0, ["payslip"]
+        "doc-1", 1.0, ["payslip"]
     )
     # document_repository.update_extracted_fields resyncs the case itself
     # now — not observable from here since that call is mocked.
@@ -964,7 +972,7 @@ def test_delete_extracted_field_removes_and_recomputes_requirements() -> None:
     # human-verified, so its existing extraction_confidence is carried
     # through rather than bumped to 1.0.
     mock_repo.update_extracted_fields.assert_called_once_with(
-        "doc-1", {"individual_name": "Jane Tan"}, None, ["payslip"]
+        "doc-1", None, ["payslip"]
     )
     # document_repository.update_extracted_fields resyncs the case itself
     # now — not observable from here since that call is mocked.
@@ -1047,6 +1055,7 @@ def test_delete_extracted_field_write_failure_returns_502() -> None:
 
 def test_delete_document_removes_it_and_resyncs_the_case() -> None:
     document = _make_document()
+    document.status = DocumentStatus.ANALYZED
 
     with (
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
@@ -1095,6 +1104,7 @@ def test_delete_document_not_found() -> None:
 def test_delete_document_without_a_case_skips_checklist_sync() -> None:
     document = _make_document()
     document.case_id = None
+    document.status = DocumentStatus.ANALYZED
 
     with (
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
@@ -1114,7 +1124,9 @@ def test_delete_document_db_failure_returns_502() -> None:
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
     ):
-        mock_dep_repo.get_document.return_value = _make_document()
+        failed = _make_document()
+        failed.status = DocumentStatus.ANALYZED
+        mock_dep_repo.get_document.return_value = failed
         mock_repo.remove_document.side_effect = RuntimeError("db down")
 
         response = client.delete("/documents/doc-1")

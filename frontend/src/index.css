@@ -1440,6 +1440,51 @@ h1 {
   background: #dc2626;
 }
 
+.status-dot--cancelled {
+  background: #6b7280;
+}
+
+.status-dot--stuck {
+  background: #d97706;
+}
+
+.document-status-stuck-badge {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #b45309;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.document-row-status-action {
+  padding: 3px 9px;
+  border: 1px solid #b9c2ce;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #25344e;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.document-row-status-action:hover:not(:disabled) {
+  background: #f6f7f9;
+}
+
+.document-row-status-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.document-row-status-action--retry {
+  border-color: #172f58;
+  color: #172f58;
+}
+
 
 .document-confidence {
   color: #17294d;
@@ -1651,6 +1696,16 @@ h1 {
 .document-status--failed {
   background: #fef2f2;
   color: #dc2626;
+}
+
+.document-status--cancelled {
+  background: #f1f2f4;
+  color: #4b5568;
+}
+
+.document-status--stuck {
+  background: #fff7ed;
+  color: #b45309;
 }
 
 .status-dot {
@@ -2533,7 +2588,9 @@ h1 {
 }
 
 .document-action--reject,
-.document-action--approve {
+.document-action--approve,
+.document-action--cancel,
+.document-action--retry {
   min-width: 145px;
   padding: 10px 18px;
   border-radius: 7px;
@@ -2562,6 +2619,32 @@ h1 {
 
 .document-action--approve:hover {
   background: #102544;
+}
+
+.document-action--cancel {
+  border: 1px solid #d97706;
+  background: #ffffff;
+  color: #b45309;
+}
+
+.document-action--cancel:hover {
+  background: #fff7ed;
+}
+
+.document-action--retry {
+  border: 1px solid #172f58;
+  background: #ffffff;
+  color: #172f58;
+}
+
+.document-action--retry:hover {
+  background: #eef2f8;
+}
+
+.document-action--cancel:disabled,
+.document-action--retry:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Error / loading states */
@@ -2609,7 +2692,9 @@ h1 {
   }
 
   .document-action--reject,
-  .document-action--approve {
+  .document-action--approve,
+  .document-action--cancel,
+  .document-action--retry {
     width: 100%;
   }
 }

@@ -234,8 +234,9 @@ def build_case_snapshot(case_id: str) -> Optional[dict]:
         return None
     summary = build_summary(case, documents)
     # Before enrichment: that rewrites extracted_fields in place into
-    # {"value", "confidence"} wrappers, while case_match reads the plain
-    # values documents.extracted_fields stores.
+    # {"value", "confidence"} wrappers, while case_match (and mapper.py, via
+    # build_summary above) reads the plain values document_repository
+    # already populated from the extracted_fields table.
     case_match = check_case_match(case, documents)
     enriched = _enrich_with_extracted_fields(documents)
     return {

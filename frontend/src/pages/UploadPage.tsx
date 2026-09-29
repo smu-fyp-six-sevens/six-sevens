@@ -8,8 +8,13 @@ import { subscribeToCaseStatus } from '../services/caseSocket';
 import type { CaseStatusSubscription } from '../services/caseSocket';
 import {
   approveDocument,
+  cancelDocument,
+  canCancelDocument,
+  canRetryDocument,
   deleteCase,
   deleteDocument,
+  isDocumentStuckProcessing,
+  retryDocument,
   ADDITIONAL_DOCUMENT_TYPES,
   REQUIRED_DOCUMENT_TYPES,
   EXTRACTION_CONFIDENCE_THRESHOLD,
@@ -307,6 +312,14 @@ export default function UploadPage({
   const [approvingDocumentId, setApprovingDocumentId] = useState<string | null>(null);
   const [approveError, setApproveError] = useState<string | null>(null);
   const [isApprovingAll, setIsApprovingAll] = useState(false);
+  const [cancellingDocumentId, setCancellingDocumentId] = useState<string | null>(null);
+  const [cancelActionError, setCancelActionError] = useState<string | null>(null);
+  const [retryingDocumentId, setRetryingDocumentId] = useState<string | null>(null);
+  const [retryActionError, setRetryActionError] = useState<string | null>(null);
+  // Forces a re-render every so often while any document is PROCESSING, so
+  // a "Stuck"/Retry-eligible document surfaces purely from time passing —
+  // isDocumentStuckProcessing itself reads Date.now() fresh each render.
+  const [, setStuckTick] = useState(0);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const [isDeletingCase, setIsDeletingCase] = useState(false);
@@ -478,6 +491,68 @@ export default function UploadPage({
   } finally {
     if (isMountedRef.current) {
       setApprovingDocumentId(null);
+    }
+  }
+}
+
+async function handleCancelDocument(documentId: string) {
+  setCancellingDocumentId(documentId);
+  setCancelActionError(null);
+
+  try {
+    const updated = await cancelDocument(documentId);
+
+    if (!isMountedRef.current) {
+      return;
+    }
+
+    setDocumentDetails((current) => {
+      const next = new Map(current);
+      next.set(documentId, updated);
+      return next;
+    });
+  } catch (err) {
+    if (!isMountedRef.current) {
+      return;
+    }
+
+    setCancelActionError(
+      err instanceof Error ? err.message : 'Failed to cancel document.',
+    );
+  } finally {
+    if (isMountedRef.current) {
+      setCancellingDocumentId(null);
+    }
+  }
+}
+
+async function handleRetryDocument(documentId: string) {
+  setRetryingDocumentId(documentId);
+  setRetryActionError(null);
+
+  try {
+    const updated = await retryDocument(documentId);
+
+    if (!isMountedRef.current) {
+      return;
+    }
+
+    setDocumentDetails((current) => {
+      const next = new Map(current);
+      next.set(documentId, updated);
+      return next;
+    });
+  } catch (err) {
+    if (!isMountedRef.current) {
+      return;
+    }
+
+    setRetryActionError(
+      err instanceof Error ? err.message : 'Failed to retry document.',
+    );
+  } finally {
+    if (isMountedRef.current) {
+      setRetryingDocumentId(null);
     }
   }
 }
@@ -672,6 +747,21 @@ async function handleApproveAllEligibleDocuments() {
     a.uploaded_at.localeCompare(b.uploaded_at),
   );
 
+  const anyDocumentProcessing = documents.some((document) => document.status === 'processing');
+  // Mirrors routers/cases.py's delete_case guard: every status not in
+  // TERMINAL_DOCUMENT_STATUSES is in-flight (the two sets are exact
+  // complements of DocumentStatus).
+  const caseHasInFlightDocument = documents.some(
+    (document) => !TERMINAL_DOCUMENT_STATUSES.has(document.status),
+  );
+  useEffect(() => {
+    if (!anyDocumentProcessing) {
+      return;
+    }
+    const interval = window.setInterval(() => setStuckTick((n) => n + 1), 15000);
+    return () => window.clearInterval(interval);
+  }, [anyDocumentProcessing]);
+
   const extractedDocuments = documents.filter(
     (document) => document.status !== 'approved',
   );
@@ -740,7 +830,12 @@ async function handleApproveAllEligibleDocuments() {
                   type="button"
                   className="delete-record-button"
                   onClick={() => setCaseDeleteOpen(true)}
-                  disabled={isDeletingCase}
+                  disabled={isDeletingCase || caseHasInFlightDocument}
+                  title={
+                    caseHasInFlightDocument
+                      ? "Case has a document that's still being processed; cancel it first, or wait for it to finish."
+                      : undefined
+                  }
                 >
                   {isDeletingCase ? 'Deleting…' : 'Delete case'}
                 </button>
@@ -897,6 +992,12 @@ async function handleApproveAllEligibleDocuments() {
                     {approveError && (
                       <div className="toast show mixed">⚠ {approveError}</div>
                     )}
+                    {cancelActionError && (
+                      <div className="toast show mixed">⚠ {cancelActionError}</div>
+                    )}
+                    {retryActionError && (
+                      <div className="toast show mixed">⚠ {retryActionError}</div>
+                    )}
 
                     <div className="documents-table">
                       <div className="documents-table-header">
@@ -911,6 +1012,9 @@ async function handleApproveAllEligibleDocuments() {
                         const status = document.status;
                         const isTerminal = TERMINAL_DOCUMENT_STATUSES.has(status);
                         const isApproving = approvingDocumentId === document.id;
+                        const isStuck = isDocumentStuckProcessing(document);
+                        const isCancellingRow = cancellingDocumentId === document.id;
+                        const isRetryingRow = retryingDocumentId === document.id;
                         const caseMatch = caseMatches.get(document.id);
                         const routingOutcome = formatRoutingOutcome(document, caseMatch);
                         const manualReviewTitle =
@@ -958,7 +1062,11 @@ async function handleApproveAllEligibleDocuments() {
                                     ? 'status-dot--success'
                                     : status === 'failed'
                                       ? 'status-dot--failed'
-                                      : ''
+                                      : status === 'cancelled'
+                                        ? 'status-dot--cancelled'
+                                        : isStuck
+                                          ? 'status-dot--stuck'
+                                          : ''
                                 }`}
                               />
 
@@ -966,6 +1074,40 @@ async function handleApproveAllEligibleDocuments() {
                                 {formatDocumentStatus(status)}
                                 {!isTerminal && '…'}
                               </span>
+
+                              {isStuck && (
+                                <span className="document-status-stuck-badge">Stuck</span>
+                              )}
+
+                              {canCancelDocument(status) && (
+                                <button
+                                  type="button"
+                                  className="document-row-status-action"
+                                  disabled={isCancellingRow}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void handleCancelDocument(document.id);
+                                  }}
+                                  onKeyDown={(event) => event.stopPropagation()}
+                                >
+                                  {isCancellingRow ? 'Cancelling…' : 'Cancel'}
+                                </button>
+                              )}
+
+                              {canRetryDocument(document) && (
+                                <button
+                                  type="button"
+                                  className="document-row-status-action document-row-status-action--retry"
+                                  disabled={isRetryingRow}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void handleRetryDocument(document.id);
+                                  }}
+                                  onKeyDown={(event) => event.stopPropagation()}
+                                >
+                                  {isRetryingRow ? 'Retrying…' : 'Retry'}
+                                </button>
+                              )}
                             </span>
 
                             <span className="document-confidence">
@@ -978,11 +1120,13 @@ async function handleApproveAllEligibleDocuments() {
                               {routingOutcome}
                             </span>
 
-                            <DocumentRowDelete
-                              filename={document.filename}
-                              isDeleting={deletingDocumentId === document.id}
-                              onDelete={() => setDocumentToDelete(document)}
-                            />
+                            {isTerminal && (
+                              <DocumentRowDelete
+                                filename={document.filename}
+                                isDeleting={deletingDocumentId === document.id}
+                                onDelete={() => setDocumentToDelete(document)}
+                              />
+                            )}
                           </div>
                         );
                       })}

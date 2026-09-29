@@ -9,7 +9,12 @@ import {
   deleteDocument,
   addExtractedField,
   approveDocument,
+  cancelDocument,
+  canCancelDocument,
+  canRetryDocument,
+  isDocumentStuckProcessing,
   rejectDocument,
+  retryDocument,
   CLASSIFICATION_CONFIDENCE_THRESHOLD,
   DOCUMENT_TYPE_OPTIONS,
   EXTRACTION_CONFIDENCE_THRESHOLD,
@@ -657,6 +662,18 @@ export default function DocumentDetailsPage({
 
   const [isRejecting, setIsRejecting] = useState(false);
   const [rejectError, setRejectError] = useState<string | null>(null);
+
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+
+  // Forces a re-render every so often while PROCESSING so the "Stuck"
+  // badge/Retry button can appear once the threshold is crossed purely from
+  // time passing — isDocumentStuckProcessing itself reads Date.now() fresh
+  // on every render, this just makes sure a render actually happens.
+  const [, forceStuckRecheck] = useState(0);
   const [isDeletingDocument, setIsDeletingDocument] = useState(false);
   const [deleteDocumentError, setDeleteDocumentError] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -805,6 +822,14 @@ export default function DocumentDetailsPage({
     document?.status === 'extracting';
 
   useEffect(() => {
+    if (document?.status !== 'processing') {
+      return;
+    }
+    const interval = window.setInterval(() => forceStuckRecheck((n) => n + 1), 15000);
+    return () => window.clearInterval(interval);
+  }, [document?.status]);
+
+  useEffect(() => {
     if (!caseId || !isInFlight) {
       return;
     }
@@ -931,6 +956,50 @@ export default function DocumentDetailsPage({
     setIsRejecting(false);
   }
 }
+
+  async function handleCancelDocument() {
+    if (!document) {
+      return;
+    }
+
+    setIsCancelling(true);
+    setCancelError(null);
+
+    try {
+      const updated = await cancelDocument(document.id);
+      setDocument(updated);
+    } catch (error) {
+      setCancelError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to cancel document.',
+      );
+    } finally {
+      setIsCancelling(false);
+    }
+  }
+
+  async function handleRetryDocument() {
+    if (!document) {
+      return;
+    }
+
+    setIsRetrying(true);
+    setRetryError(null);
+
+    try {
+      const updated = await retryDocument(document.id);
+      setDocument(updated);
+    } catch (error) {
+      setRetryError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to retry document.',
+      );
+    } finally {
+      setIsRetrying(false);
+    }
+  }
 
   async function handleSaveType() {
     if (!document || !chosenType) {
@@ -1117,7 +1186,7 @@ export default function DocumentDetailsPage({
       <div className="document-details-intro">
         <div className="document-details-title-row">
           <h1>Document Details</h1>
-          {document.status !== 'approved' && (
+          {document.status !== 'approved' && !isInFlight && (
             <button
               type="button"
               className="delete-record-button"
@@ -1167,8 +1236,11 @@ export default function DocumentDetailsPage({
                   ? 'document-status--failed'
                   : document.status === 'rejected'
                     ? 'document-status--rejected'
-                    : ''
-                  
+                    : document.status === 'cancelled'
+                      ? 'document-status--cancelled'
+                      : isDocumentStuckProcessing(document)
+                        ? 'document-status--stuck'
+                        : ''
             }`}
           >
             <span
@@ -1179,10 +1251,16 @@ export default function DocumentDetailsPage({
                     ? 'status-dot--failed'
                     : document.status === 'rejected'
                       ? 'status-dot--rejected'
-                      : ''
+                      : document.status === 'cancelled'
+                        ? 'status-dot--cancelled'
+                        : isDocumentStuckProcessing(document)
+                          ? 'status-dot--stuck'
+                          : ''
               }`}
             />
-            {formatDocumentStatus(document.status)}
+            {isDocumentStuckProcessing(document)
+              ? `${formatDocumentStatus(document.status)} (Stuck)`
+              : formatDocumentStatus(document.status)}
             {!TERMINAL_DOCUMENT_STATUSES.has(document.status) && '…'}
           </div>
         </div>
@@ -1335,6 +1413,8 @@ export default function DocumentDetailsPage({
           <button
             type="button"
             className="add-field-button"
+            disabled={isInFlight}
+            title={isInFlight ? 'Fields can\'t be edited while the document is being processed.' : undefined}
             onClick={() => {
               setIsAddFieldOpen(true);
               setAddFieldError(null);
@@ -1545,7 +1625,7 @@ export default function DocumentDetailsPage({
                           setDeletingFieldId(null);
                         }
                       }}
-                      disabled={deletingFieldId === field.id}
+                      disabled={deletingFieldId === field.id || isInFlight}
                       title="Delete field"
                       aria-label={`Delete ${humanizeFieldKey(key)}`}
                     >
@@ -1610,10 +1690,11 @@ export default function DocumentDetailsPage({
                 String(field.value).trim() === '-';
 
               const canEditField =
-                isUnrecognisedDocument ||
-                isEmptyField ||
-                (field.confidence != null &&
-                  field.confidence < EXTRACTION_CONFIDENCE_THRESHOLD);
+                !isInFlight &&
+                (isUnrecognisedDocument ||
+                  isEmptyField ||
+                  (field.confidence != null &&
+                    field.confidence < EXTRACTION_CONFIDENCE_THRESHOLD));
 
               return (
                 <div
@@ -1705,7 +1786,7 @@ export default function DocumentDetailsPage({
             <button
               type="button"
               className="details-save-button"
-              disabled={isSaving}
+              disabled={isSaving || isInFlight}
               onClick={() => void handleSaveFields()}
             >
               {isSaving ? 'Saving…' : 'Save fields'}
@@ -1821,10 +1902,38 @@ export default function DocumentDetailsPage({
         {approveError && (
           <div className="save-error">{approveError}</div>
         )}
+        {cancelError && (
+          <div className="save-error">{cancelError}</div>
+        )}
+        {retryError && (
+          <div className="save-error">{retryError}</div>
+        )}
 
-        {document.status !== 'approved' && 
+        {document.status !== 'approved' &&
         document.status !== 'rejected' && (
           <div className="document-actions">
+            {canCancelDocument(document.status) && (
+              <button
+                type="button"
+                className="document-action--cancel"
+                disabled={isCancelling}
+                onClick={() => void handleCancelDocument()}
+              >
+                {isCancelling ? 'Cancelling…' : '⏹ Cancel Processing'}
+              </button>
+            )}
+
+            {canRetryDocument(document) && (
+              <button
+                type="button"
+                className="document-action--retry"
+                disabled={isRetrying}
+                onClick={() => void handleRetryDocument()}
+              >
+                {isRetrying ? 'Retrying…' : '↻ Retry Document'}
+              </button>
+            )}
+
             <button
               type="button"
               className="document-action--reject"

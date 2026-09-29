@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional, cast
 
-from . import case_service, extracted_fields_repository, storage_service
+from . import extracted_fields_repository, storage_service
 from .models import DocumentRecord, DocumentStatus
 from .supabase_client import service_supabase_client, supabase_client
 
@@ -29,10 +29,18 @@ def _sync_case(case_id: Optional[str]) -> None:
     rather than trusting this cached flag — so a failed resync here just
     leaves it stale until the next successful write to this case's documents
     self-heals it, not something worth failing the caller's request over.
+
+    Imports case_service locally rather than at module level — case_service
+    itself imports this module (it needs document_repository's own CRUD to
+    assemble a case's documents), and this is the only thing here that needs
+    case_service, so deferring it avoids a module-level circular import
+    between the two.
     """
     if case_id is None:
         return
     try:
+        from . import case_service
+
         case_service.sync_submission_finalized(case_id)
     except Exception:
         logger.exception("Document write succeeded but failed to resync case %s", case_id)
@@ -64,7 +72,19 @@ def update_status(
     retry_count: Optional[int] = None,
     failure_reason: Optional[str] = None,
     document_type: Optional[str] = None,
-) -> None:
+    expected_current_statuses: Optional[list[DocumentStatus]] = None,
+) -> bool:
+    """
+    expected_current_statuses turns this into an atomic compare-and-swap:
+    the WHERE clause requires the row's current status to still be one of
+    these, so a caller that read a document's status and now wants to act
+    on it (cancel, retry) can't race a concurrent transition — e.g. two
+    simultaneous cancel requests, or a cancel landing after the pipeline
+    already reached ANALYZED. Returns whether the update actually matched a
+    row; callers that pass this should check it and treat False as
+    "the document's state changed underneath you, refetch and reconsider"
+    rather than assuming the transition happened.
+    """
     update: dict = {
         "status": status.value,
     }
@@ -79,7 +99,10 @@ def update_status(
     if document_type is not None:
         update["document_type"] = document_type
 
-    result = supabase_client.table("documents").update(update).eq("id", document_id).execute()
+    query = supabase_client.table("documents").update(update).eq("id", document_id)
+    if expected_current_statuses is not None:
+        query = query.in_("status", [s.value for s in expected_current_statuses])
+    result = query.execute()
     # Only the ANALYZED transition can change requirement coverage (a
     # document's classification_outcome/fulfilled_requirements are set
     # earlier, by record_classification/update_extracted_fields) — every
@@ -88,6 +111,7 @@ def update_status(
     # those to avoid extra writes with no coverage-affecting reason.
     if status == DocumentStatus.ANALYZED and result.data:
         _sync_case(_row(result.data[0]).get("case_id"))
+    return bool(result.data)
 
 def approve_document(document_id: str) -> None:
     result = (
@@ -143,18 +167,23 @@ def record_classification(
 
 def update_extracted_fields(
     document_id: str,
-    extracted_fields: dict,
     extraction_confidence: Optional[float],
     fulfilled_requirements: Optional[list[str]] = None,
 ) -> None:
     """
-    Persists the Extraction-stage output into its own extraction_confidence
+    Persists the Extraction-stage confidence into its own extraction_confidence
     column — kept separate from record_classification's confidence (the
     Classifier's confidence in document_type) so neither stage's number
     overwrites the other's; both remain readable after the fact. Also used
     for a loan officer's manual correction (see routers/documents.py's PATCH
     endpoint), which passes extraction_confidence=1.0 since a human has now
     verified the values.
+
+    Does NOT write the field values themselves — the extracted_fields table
+    (see extracted_fields_repository.replace_extracted_fields, called
+    alongside this by every one of this function's callers) is the only
+    place those are persisted; get_document/list_documents read them back
+    from there, not from a documents column.
 
     fulfilled_requirements is optional (rather than always written here)
     since callers compute it from the extracted_fields they're passing in
@@ -163,7 +192,6 @@ def update_extracted_fields(
     given" write.
     """
     update: dict = {
-        "extracted_fields": extracted_fields,
         "extraction_confidence": (
             round(extraction_confidence, 2) if extraction_confidence is not None else None
         ),
@@ -248,11 +276,31 @@ def remove_documents(documents: list[DocumentRecord]) -> None:
     service_supabase_client().table("documents").delete().in_("id", document_ids).execute()
 
 
+def _attach_extracted_fields(documents: list[DocumentRecord]) -> list[DocumentRecord]:
+    """
+    Populates extracted_fields from the extracted_fields table — the only
+    place field values are persisted (see update_extracted_fields). Always
+    overwrites, including with None when a document has no rows there, so a
+    document's extracted_fields never reflects stale/legacy data that may
+    still sit in the documents.extracted_fields column.
+    """
+    if not documents:
+        return documents
+    fields_by_document = extracted_fields_repository.get_extracted_fields_dicts_for_documents(
+        [document.id for document in documents]
+    )
+    for document in documents:
+        document.extracted_fields = fields_by_document.get(document.id) or None
+    return documents
+
+
 def get_document(document_id: str) -> Optional[DocumentRecord]:
     result = supabase_client.table("documents").select("*").eq("id", document_id).execute()
     if not result.data:
         return None
-    return DocumentRecord(**_row(result.data[0]))
+    document = DocumentRecord(**_row(result.data[0]))
+    _attach_extracted_fields([document])
+    return document
 
 
 def get_documents_in_status(statuses: list[DocumentStatus]) -> list[DocumentRecord]:
@@ -262,7 +310,7 @@ def get_documents_in_status(statuses: list[DocumentStatus]) -> list[DocumentReco
         .in_("status", [s.value for s in statuses])
         .execute()
     )
-    return [DocumentRecord(**_row(row)) for row in result.data]
+    return _attach_extracted_fields([DocumentRecord(**_row(row)) for row in result.data])
 
 
 def list_documents(
@@ -275,4 +323,4 @@ def list_documents(
     if status is not None:
         query = query.eq("status", status.value)
     result = query.execute()
-    return [DocumentRecord(**_row(row)) for row in result.data]
+    return _attach_extracted_fields([DocumentRecord(**_row(row)) for row in result.data])

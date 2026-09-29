@@ -203,7 +203,48 @@ export const TERMINAL_DOCUMENT_STATUSES = new Set([
   'approved',
   'rejected',
   'failed',
+  'cancelled',
 ]);
+
+// Mirrors settings.STUCK_PROCESSING_RETRY_THRESHOLD_SECONDS in
+// backend/app/config.py — kept in sync manually. The backend is the actual
+// source of truth (routers/documents.py's retry endpoint enforces this
+// server-side and is the final word), this copy only drives when the UI
+// itself starts offering Retry / showing the "Stuck" badge without waiting
+// on a fetch round-trip.
+export const STUCK_PROCESSING_RETRY_THRESHOLD_MS = 10 * 60 * 1000;
+
+// True once a PROCESSING document has been sitting there long enough that
+// it's more likely orphaned (e.g. a backend restart abandoned it — see
+// queue_service.py's docstring) than genuinely still running. Mirrors
+// monitoring.is_stuck_processing_for_retry.
+export function isDocumentStuckProcessing(
+  document: Pick<DocumentRecord, 'status' | 'processing_started_at'>,
+): boolean {
+  if (document.status !== 'processing' || !document.processing_started_at) {
+    return false;
+  }
+  const startedAt = new Date(document.processing_started_at).getTime();
+  if (Number.isNaN(startedAt)) {
+    return false;
+  }
+  return Date.now() - startedAt > STUCK_PROCESSING_RETRY_THRESHOLD_MS;
+}
+
+// Mirrors routers/documents.py's cancel_document eligibility.
+export function canCancelDocument(status: string): boolean {
+  return status === 'queued' || status === 'processing';
+}
+
+// Mirrors routers/documents.py's retry_document eligibility: FAILED, or
+// PROCESSING for long enough to be considered stuck. Deliberately excludes
+// QUEUED/normal PROCESSING — a worker may genuinely still be running it;
+// cancel it first if you want to stop an actively-running document.
+export function canRetryDocument(
+  document: Pick<DocumentRecord, 'status' | 'processing_started_at'>,
+): boolean {
+  return document.status === 'failed' || isDocumentStuckProcessing(document);
+}
 
 // Single source of truth for how a raw backend DocumentStatus reads in the
 // UI — shared by the case's document table and the document details page,
@@ -231,6 +272,8 @@ export function formatDocumentStatus(status: string): string {
       return 'Rejected';
     case 'failed':
       return 'Failed';
+    case 'cancelled':
+      return 'Cancelled';
     default:
       return status;
   }
@@ -587,6 +630,32 @@ export async function rejectDocument(
     throw new Error(
       `Reject failed (${response.status}): ${detail}`,
     );
+  }
+
+  return (await response.json()) as DocumentRecord;
+}
+
+export async function cancelDocument(documentId: string): Promise<DocumentRecord> {
+  const response = await authFetch(`/documents/${documentId}/cancel`, {
+    method: 'POST',
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to cancel document (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as DocumentRecord;
+}
+
+export async function retryDocument(documentId: string): Promise<DocumentRecord> {
+  const response = await authFetch(`/documents/${documentId}/retry`, {
+    method: 'POST',
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to retry document (${response.status}): ${detail}`);
   }
 
   return (await response.json()) as DocumentRecord;
