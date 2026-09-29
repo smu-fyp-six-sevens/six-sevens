@@ -735,6 +735,11 @@ export default function DocumentDetailsPage({
   const hasCase = Boolean(document?.case_id);
   const documentStatus = document?.status;
   const isApproved = document?.status === 'approved';
+  const canApprove =
+    document?.status === 'analyzed' &&
+    (document.missing_required_fields?.length ?? 0) === 0;
+
+  const missingRequiredFields = document?.missing_required_fields ?? [];
   const extractedFieldsJson = JSON.stringify(document?.extracted_fields ?? null);
 
   useEffect(() => {
@@ -1955,23 +1960,37 @@ export default function DocumentDetailsPage({
               </button>
             )}
 
-            <button
-              type="button"
-              className="document-action--reject"
-              disabled={isRejecting || isApproving}
-              onClick={() => void handleRejectDocument()}
-            >
-              {isRejecting ? 'Rejecting…' : '✕ Reject Document'}
-            </button>
+            {document.status === 'analyzed' && missingRequiredFields.length > 0 && (
+              <div className="approval-warning">
+                Cannot approve yet. Please complete the following required field
+                {missingRequiredFields.length > 1 ? 's' : ''}:{' '}
+                <strong>
+                  {missingRequiredFields
+                    .map((fieldName) => humanizeFieldKey(fieldName))
+                    .join(', ')}
+                </strong>
+              </div>
+            )}
 
-            <button
-              type="button"
-              className="document-action--approve"
-              disabled={isApproving || document.status !== 'analyzed'}
-              onClick={() => void handleApproveDocument()}
-            >
-              {isApproving ? 'Approving…' : '✓ Approve Document'}
-            </button>
+            <div className="document-actions-row">
+              <button
+                type="button"
+                className="document-action--reject"
+                disabled={isRejecting || isApproving}
+                onClick={() => void handleRejectDocument()}
+              >
+                {isRejecting ? 'Rejecting…' : '✕ Reject Document'}
+              </button>
+
+              <button
+                type="button"
+                className="document-action--approve"
+                disabled={isApproving || !canApprove}
+                onClick={() => void handleApproveDocument()}
+              >
+                {isApproving ? 'Approving…' : '✓ Approve Document'}
+              </button>
+            </div>
           </div>
         )}
 

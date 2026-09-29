@@ -30,6 +30,7 @@ export interface DocumentRecord {
   failure_reason: string | null;
   evidence: string[];
   fulfilled_requirements: string[];
+  missing_required_fields: string[];
   extracted_fields: Record<string, unknown> | null;
   // Extraction's own confidence in extracted_fields — separate from
   // `classification_confidence` above (the classifier's), never overwrites it.

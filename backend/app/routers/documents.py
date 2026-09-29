@@ -100,6 +100,11 @@ async def get_document(document_id: str) -> DocumentRecord:
             for field in extracted_fields
         }
 
+    document.missing_required_fields = _missing_required_fields(
+        document.document_type,
+        extracted_fields,
+    )
+
     return document
 
 
