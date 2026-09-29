@@ -414,6 +414,46 @@ async def delete_extracted_field(
             detail="Failed to delete extracted field. Check Supabase table access.",
         ) from exc
 
+def _missing_required_fields(
+    document_type: str | None,
+    extracted_fields,
+) -> list[str]:
+    required_field_names = set(
+        schema_field_names(document_type or "")
+    )
+
+    if not required_field_names:
+        return []
+
+    fields_by_name = {
+        field.field_name: field
+        for field in extracted_fields
+    }
+
+    missing: list[str] = []
+
+    for field_name in sorted(required_field_names):
+        field = fields_by_name.get(field_name)
+
+        if field is None:
+            missing.append(field_name)
+            continue
+
+        value = field.field_value
+
+        if value is None:
+            missing.append(field_name)
+            continue
+
+        if isinstance(value, str) and not value.strip():
+            missing.append(field_name)
+            continue
+
+        if isinstance(value, (list, dict)) and not value:
+            missing.append(field_name)
+
+    return missing
+
 @router.post("/{document_id}/approve", response_model=DocumentRecord)
 async def approve_document(
     document_id: str, document: DocumentRecord = Depends(get_document_or_404)
@@ -430,6 +470,26 @@ async def approve_document(
         )
 
     try:
+        extracted_fields = await asyncio.to_thread(
+            extracted_fields_repository.get_extracted_fields,
+            document_id,
+        )
+
+        missing_required_fields = _missing_required_fields(
+            document.document_type,
+            extracted_fields,
+        )
+
+        if missing_required_fields:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Cannot approve document. Required fields are missing "
+                    "or empty: "
+                    + ", ".join(missing_required_fields)
+                ),
+            )
+
         await asyncio.to_thread(
             document_repository.approve_document,
             document_id,
@@ -437,6 +497,8 @@ async def approve_document(
 
         return await get_document(document_id)
 
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception("Failed to approve document %s", document_id)
         raise HTTPException(
