@@ -693,11 +693,19 @@ async def get_document_langgraph_trace(document_id: str) -> dict:
 
 @router.get("/{document_id}/download", response_model=DocumentDownloadResponse)
 async def get_document_download_url(
-    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+    document_id: str,
+    inline: bool = False,
+    document: DocumentRecord = Depends(get_document_or_404),
 ) -> DocumentDownloadResponse:
     """
     Returns a short-lived signed URL for the document's file in Supabase
     Storage rather than proxying the bytes through this service.
+
+    inline=True omits the `download` option Storage otherwise sets, which is
+    what puts a `Content-Disposition: attachment` header on the response —
+    without it, a browser renders the file (PDF/image) in place instead of
+    downloading it. Used by the frontend's preview modal; plain downloads
+    (the default) still get the attachment header + filename.
     """
     if document.storage_path is None:
         raise HTTPException(
@@ -709,7 +717,7 @@ async def get_document_download_url(
             storage_service.create_signed_url,
             document.storage_path,
             settings.SIGNED_URL_EXPIRY_SECONDS,
-            document.filename,
+            None if inline else document.filename,
         )
     except Exception as exc:
         logger.exception("Failed to create signed URL for document %s", document_id)

@@ -294,28 +294,43 @@ def _attach_extracted_fields(documents: list[DocumentRecord]) -> list[DocumentRe
     return documents
 
 
-def get_document(document_id: str) -> Optional[DocumentRecord]:
+def get_document(document_id: str, *, include_fields: bool = True) -> Optional[DocumentRecord]:
+    """
+    include_fields=False skips the extracted_fields table round-trip for
+    callers that only need status/document_type/etc. (the langgraph pipeline
+    nodes, the queue worker, detection's context loader) — cheap to opt out
+    of since it's a separate query, not part of the documents-table read
+    itself. Defaults to True since most callers (API responses, case-match,
+    mapper) do need it and forgetting to ask for it would silently produce
+    wrong data, whereas forgetting to opt out just costs an extra query.
+    """
     result = supabase_client.table("documents").select("*").eq("id", document_id).execute()
     if not result.data:
         return None
     document = DocumentRecord(**_row(result.data[0]))
-    _attach_extracted_fields([document])
+    if include_fields:
+        _attach_extracted_fields([document])
     return document
 
 
-def get_documents_in_status(statuses: list[DocumentStatus]) -> list[DocumentRecord]:
+def get_documents_in_status(
+    statuses: list[DocumentStatus], *, include_fields: bool = True
+) -> list[DocumentRecord]:
     result = (
         supabase_client.table("documents")
         .select("*")
         .in_("status", [s.value for s in statuses])
         .execute()
     )
-    return _attach_extracted_fields([DocumentRecord(**_row(row)) for row in result.data])
+    documents = [DocumentRecord(**_row(row)) for row in result.data]
+    return _attach_extracted_fields(documents) if include_fields else documents
 
 
 def list_documents(
     case_id: Optional[str] = None,
     status: Optional[DocumentStatus] = None,
+    *,
+    include_fields: bool = True,
 ) -> list[DocumentRecord]:
     query = supabase_client.table("documents").select("*")
     if case_id is not None:
@@ -323,4 +338,5 @@ def list_documents(
     if status is not None:
         query = query.eq("status", status.value)
     result = query.execute()
-    return _attach_extracted_fields([DocumentRecord(**_row(row)) for row in result.data])
+    documents = [DocumentRecord(**_row(row)) for row in result.data]
+    return _attach_extracted_fields(documents) if include_fields else documents

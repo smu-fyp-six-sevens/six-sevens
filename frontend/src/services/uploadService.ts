@@ -432,6 +432,50 @@ export async function getDocument(documentId: string): Promise<DocumentRecord> {
   return (await response.json()) as DocumentRecord;
 }
 
+// Mirrors DocumentDownloadResponse in backend/app/models.py.
+export interface DocumentDownloadResponse {
+  document_id: string;
+  signed_url: string;
+  expires_in: number;
+}
+
+// inline=true asks the backend to omit Storage's `download` option, which
+// is what puts a Content-Disposition: attachment header on the response —
+// without it, a browser renders the file in place (an <iframe>/<img> can
+// load it directly) instead of downloading it. Used by the preview modal;
+// a plain download link should call this with inline=false (the default).
+export async function getDocumentDownloadUrl(
+  documentId: string,
+  { inline = false }: { inline?: boolean } = {},
+): Promise<DocumentDownloadResponse> {
+  const response = await authFetch(
+    `/documents/${documentId}/download${inline ? '?inline=true' : ''}`,
+  );
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to get a document URL (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as DocumentDownloadResponse;
+}
+
+// PDF -> <iframe> (native browser PDF viewer), image -> <img>. Anything
+// else (shouldn't happen — upload validation only accepts these) falls
+// back to "no inline preview, offer a download link instead".
+export type PreviewKind = 'pdf' | 'image' | 'unsupported';
+
+export function previewKindForFilename(filename: string): PreviewKind {
+  const lowered = filename.toLowerCase();
+  if (lowered.endsWith('.pdf')) {
+    return 'pdf';
+  }
+  if (/\.(png|jpe?g)$/.test(lowered)) {
+    return 'image';
+  }
+  return 'unsupported';
+}
+
 // Dev-only window into the langgraph-test branch's pipeline (see
 // backend/app/langgraph/trace.py) — which route a document took (fast vs
 // Sonnet agent), rule/llm/vision results, escalation. Not persisted: 404s

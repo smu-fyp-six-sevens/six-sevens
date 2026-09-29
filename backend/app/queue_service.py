@@ -137,7 +137,9 @@ class DocumentQueue:
             task.cancel()
 
     async def _process_document(self, document_id: str, dequeued_at: float) -> None:
-        document = await asyncio.to_thread(document_repository.get_document, document_id)
+        document = await asyncio.to_thread(
+            document_repository.get_document, document_id, include_fields=False
+        )
         if document is None:
             message = f"Document {document_id} not found when dequeued (row may have been deleted)"
             logger.error(message)

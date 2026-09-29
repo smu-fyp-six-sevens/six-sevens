@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
+import DocumentPreviewModal from '../components/DocumentPreviewModal';
 import { subscribeToCaseStatus } from '../services/caseSocket';
 import {
   deleteExtractedField,
@@ -677,6 +678,7 @@ export default function DocumentDetailsPage({
   const [isDeletingDocument, setIsDeletingDocument] = useState(false);
   const [deleteDocumentError, setDeleteDocumentError] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   // Last extracted_fields the draft was built from — lets a live update reset
   // the draft only when the fields really changed (e.g. a rerun finishing),
   // not wipe an officer's in-progress edits on every unrelated case update.
@@ -1186,16 +1188,25 @@ export default function DocumentDetailsPage({
       <div className="document-details-intro">
         <div className="document-details-title-row">
           <h1>Document Details</h1>
-          {document.status !== 'approved' && !isInFlight && (
+          <div className="document-details-title-actions">
             <button
               type="button"
-              className="delete-record-button"
-              onClick={() => setDeleteConfirmOpen(true)}
-              disabled={isDeletingDocument}
+              className="preview-document-button"
+              onClick={() => setIsPreviewOpen(true)}
             >
-              {isDeletingDocument ? 'Deleting…' : 'Delete document'}
+              ⛶ Preview document
             </button>
-          )}
+            {document.status !== 'approved' && !isInFlight && (
+              <button
+                type="button"
+                className="delete-record-button"
+                onClick={() => setDeleteConfirmOpen(true)}
+                disabled={isDeletingDocument}
+              >
+                {isDeletingDocument ? 'Deleting…' : 'Delete document'}
+              </button>
+            )}
+          </div>
         </div>
         <p className="sub">
           View extracted data and review any fields that require
@@ -1963,6 +1974,14 @@ export default function DocumentDetailsPage({
             if (!isDeletingDocument) setDeleteConfirmOpen(false);
           }}
           onConfirm={() => void confirmDeleteDocument()}
+        />
+      )}
+
+      {isPreviewOpen && document && (
+        <DocumentPreviewModal
+          documentId={document.id}
+          filename={document.filename}
+          onClose={() => setIsPreviewOpen(false)}
         />
       )}
     </div>

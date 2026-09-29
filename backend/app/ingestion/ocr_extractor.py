@@ -9,7 +9,28 @@ from rapidocr import RapidOCR
 from rapidocr.utils.output import RapidOCROutput
 
 
-reader = RapidOCR()
+class _LazyReader:
+    """
+    Defers RapidOCR()'s eager ONNX model loading (visible as several-second
+    startup log lines) until the first real OCR call, instead of paying that
+    cost at import time. That import-time cost is fine for a long-running
+    process, but every one of Cloud Run's scale-to-zero cold starts would
+    otherwise pay it even for a request that never touches OCR (e.g. a
+    native-text PDF). Kept as a plain callable (not a function reassigning a
+    module global) so tests can still do
+    `monkeypatch.setattr(ocr_extractor, "reader", ...)` to replace it outright.
+    """
+
+    def __init__(self) -> None:
+        self._reader: RapidOCR | None = None
+
+    def __call__(self, image):
+        if self._reader is None:
+            self._reader = RapidOCR()
+        return self._reader(image)
+
+
+reader = _LazyReader()
 
 
 def extract_image_with_ocr(image, page_number: int = 1) -> dict:

@@ -43,7 +43,11 @@ def is_stuck_processing_for_retry(doc: DocumentRecord) -> bool:
 def get_stuck_documents() -> list[StuckDocument]:
     """AC4: any stuck document is queryable here — so no accepted document
     can become invisible to monitoring."""
-    candidates = document_repository.get_documents_in_status(list(_STUCK_ELIGIBLE_STATUSES))
+    # Narrowed to StuckDocument below, which has no extracted_fields of its
+    # own — skip the extra query.
+    candidates = document_repository.get_documents_in_status(
+        list(_STUCK_ELIGIBLE_STATUSES), include_fields=False
+    )
 
     now = datetime.now(timezone.utc)
     stuck: list[StuckDocument] = []

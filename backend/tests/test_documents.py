@@ -229,6 +229,34 @@ def test_get_document_download_url() -> None:
     assert body["document_id"] == "doc-1"
     assert body["signed_url"] == "https://example.supabase.co/signed/doc-1"
     assert body["expires_in"] == settings.SIGNED_URL_EXPIRY_SECONDS
+    # Plain downloads pass the filename through, which is what puts a
+    # Content-Disposition: attachment header on Storage's response.
+    mock_storage.create_signed_url.assert_called_once_with(
+        "case-1/doc-1_statement.pdf",
+        settings.SIGNED_URL_EXPIRY_SECONDS,
+        "statement.pdf",
+    )
+
+
+def test_get_document_download_url_inline_omits_the_filename() -> None:
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.storage_service") as mock_storage,
+    ):
+        mock_dep_repo.get_document.return_value = _make_document("doc-1")
+        mock_storage.create_signed_url.return_value = "https://example.supabase.co/signed/doc-1"
+
+        response = client.get("/documents/doc-1/download?inline=true")
+
+    assert response.status_code == 200
+    # No filename -> no `download` option -> Storage omits the
+    # Content-Disposition: attachment header, so a browser renders it
+    # in place instead of downloading it (the preview modal's use case).
+    mock_storage.create_signed_url.assert_called_once_with(
+        "case-1/doc-1_statement.pdf",
+        settings.SIGNED_URL_EXPIRY_SECONDS,
+        None,
+    )
 
 
 def test_update_extracted_fields_success() -> None:

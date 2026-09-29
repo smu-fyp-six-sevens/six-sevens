@@ -184,7 +184,9 @@ async def record_classification_result(document_id: str, classification: dict) -
 async def ingest_node(state: DocumentGraphState) -> dict:
     document_id = state["document_id"]
     trace.start(document_id)
-    document = await asyncio.to_thread(document_repository.get_document, document_id)
+    document = await asyncio.to_thread(
+        document_repository.get_document, document_id, include_fields=False
+    )
     if document is None:
         trace.record(document_id, "ingest", error=f"Document {document_id} not found")
         return {"status": "failed", "failure_reason": f"Document {document_id} not found"}
