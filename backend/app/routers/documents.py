@@ -4,41 +4,41 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from pydantic import BaseModel
 
-from .. import (
-    case_status,
-    document_repository,
-    extracted_fields_repository,
-    orchestrator,
-    storage_service,
-)
+from .. import document_repository, extracted_fields_repository, monitoring, storage_service
+
+from ._dependencies import get_document_or_404
 from ..config import settings
-from ..extraction_prompts import KNOWN_DOCUMENT_TYPES, schema_field_names
+from ..langgraph.extraction_prompts import KNOWN_DOCUMENT_TYPES, schema_field_names
 from ..models import (
+    IN_FLIGHT_STATUSES,
     AddExtractedFieldRequest,
-    ClassificationOutcome,
-    DocumentDownloadResponse,
     DocumentRecord,
     DocumentStatus,
+    RoutingStatus,
     UpdateDocumentTypeRequest,
     UpdateExtractedFieldsRequest,
     compute_fulfilled_requirements,
 )
+from ..langgraph import pipeline as langgraph_pipeline
+from ..langgraph import trace as langgraph_trace
 from ..queue_service import document_queue
 
 # "unrecognised" is the "Other" catch-all: Extraction has a generic schema for it.
 _SETTABLE_DOCUMENT_TYPES = {*KNOWN_DOCUMENT_TYPES, "unrecognised"}
 # A pipeline run is already in flight for these — correcting the type now would race it.
-_TYPE_OVERRIDE_BLOCKED_STATUSES = {
-    DocumentStatus.UPLOADED,
-    DocumentStatus.QUEUED,
-    DocumentStatus.PROCESSING,
-    DocumentStatus.EXTRACTING,
-}
+_TYPE_OVERRIDE_BLOCKED_STATUSES = IN_FLIGHT_STATUSES
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 logger = logging.getLogger(__name__)
+
+
+class DocumentDownloadResponse(BaseModel):
+    document_id: str
+    signed_url: str
+    expires_in: int
 
 
 @router.get("", response_model=list[DocumentRecord])
@@ -104,27 +104,31 @@ async def get_document(document_id: str) -> DocumentRecord:
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_document(document_id: str) -> None:
+async def delete_document(
+    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+) -> None:
     """
     Removes a document from its case. A following GET /documents/{id} or
     a case document list no longer returns it.
+
+    Only allowed once the document has reached a terminal state (ANALYZED,
+    FAILED, REJECTED, CANCELLED) — deleting one still QUEUED/PROCESSING/
+    EXTRACTING would race the pipeline actively writing to it (status
+    updates, extracted fields) and orphan a document row mid-flight. Cancel
+    it first if you want to stop and then delete an in-flight document.
     """
-    try:
-        document = await asyncio.to_thread(document_repository.get_document, document_id)
-    except Exception as exc:
-        logger.exception("Failed to fetch document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch the document. Check Supabase table access.",
-        ) from exc
-
-    if document is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
-
     if document.status == DocumentStatus.APPROVED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="An approved document cannot be deleted.",
+        )
+    if document.status in IN_FLIGHT_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Document is still being processed; cancel it first, or wait "
+                "for it to finish, before deleting."
+            ),
         )
 
     try:
@@ -136,25 +140,12 @@ async def delete_document(document_id: str) -> None:
             detail="Failed to delete the document. Check Supabase table access.",
         ) from exc
 
-    if document.case_id is None:
-        return
-
-    try:
-        await asyncio.to_thread(case_status.sync_submission_finalized, document.case_id)
-    except Exception:
-        # The document row is already gone. The live case snapshot recomputes
-        # requirement coverage from the documents that remain, so a failed
-        # checklist write should not tell the officer the delete failed.
-        logger.exception(
-            "Deleted document %s but failed to resync case %s",
-            document_id,
-            document.case_id,
-        )
-
 
 @router.patch("/{document_id}/extracted-fields", response_model=DocumentRecord)
 async def update_extracted_fields(
-    document_id: str, request: UpdateExtractedFieldsRequest
+    document_id: str,
+    request: UpdateExtractedFieldsRequest,
+    document: DocumentRecord = Depends(get_document_or_404),
 ) -> DocumentRecord:
     """
     A loan officer manually correcting low-confidence extracted fields (see
@@ -163,18 +154,6 @@ async def update_extracted_fields(
     since a human has now verified the values, which also takes the document
     back above the threshold so the frontend stops showing it as editable.
     """
-    try:
-        document = await asyncio.to_thread(document_repository.get_document, document_id)
-    except Exception as exc:
-        logger.exception("Failed to fetch document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch the document. Check Supabase table access.",
-        ) from exc
-
-    if document is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
-
     try:
         # Recomputed rather than left as whatever the automated pipeline last
         # wrote — a loan officer correcting individual_address (e.g. filling
@@ -247,7 +226,6 @@ async def update_extracted_fields(
         await asyncio.to_thread(
             document_repository.update_extracted_fields,
             document_id,
-            request.extracted_fields,
             1.0,
             fulfilled_requirements,
         )
@@ -269,9 +247,6 @@ async def update_extracted_fields(
             detail="Failed to save extracted fields. Check Supabase table access.",
         ) from exc
 
-    if document.case_id is not None:
-        await asyncio.to_thread(case_status.sync_submission_finalized, document.case_id)
-
     updated = await get_document(document_id)
     return updated
 
@@ -282,6 +257,7 @@ async def update_extracted_fields(
 async def add_extracted_field(
     document_id: str,
     request: AddExtractedFieldRequest,
+    document: DocumentRecord = Depends(get_document_or_404),
 ) -> DocumentRecord:
     """
     Adds one manually entered extracted field.
@@ -298,17 +274,6 @@ async def add_extracted_field(
         )
 
     try:
-        document = await asyncio.to_thread(
-            document_repository.get_document,
-            document_id,
-        )
-
-        if document is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Document not found",
-            )
-
         existing_fields = await asyncio.to_thread(
             extracted_fields_repository.get_extracted_fields,
             document_id,
@@ -332,8 +297,8 @@ async def add_extracted_field(
             required_field_names=required_field_names,
         )
 
-        # Re-fetch the fields so the documents.extracted_fields JSON
-        # and the normalized extracted_fields table stay in sync.
+        # Re-fetch the full field set (including the one just added) to
+        # recompute fulfilled_requirements against it.
         all_fields = await asyncio.to_thread(
             extracted_fields_repository.get_extracted_fields,
             document_id,
@@ -352,16 +317,9 @@ async def add_extracted_field(
         await asyncio.to_thread(
             document_repository.update_extracted_fields,
             document_id,
-            extracted_fields,
             1.0,
             fulfilled_requirements,
         )
-
-        if document.case_id is not None:
-            await asyncio.to_thread(
-                case_status.sync_submission_finalized,
-                document.case_id,
-            )
 
         return await get_document(document_id)
 
@@ -384,6 +342,7 @@ async def add_extracted_field(
 async def delete_extracted_field(
     document_id: str,
     field_id: str,
+    document: DocumentRecord = Depends(get_document_or_404),
 ) -> DocumentRecord:
     """
     Deletes one manually entered extracted field.
@@ -392,17 +351,6 @@ async def delete_extracted_field(
     Fulfilled requirements are recalculated after deletion.
     """
     try:
-        document = await asyncio.to_thread(
-            document_repository.get_document,
-            document_id,
-        )
-
-        if document is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Document not found",
-            )
-
         existing_fields = await asyncio.to_thread(
             extracted_fields_repository.get_extracted_fields,
             document_id,
@@ -443,16 +391,13 @@ async def delete_extracted_field(
         await asyncio.to_thread(
             document_repository.update_extracted_fields,
             document_id,
-            extracted_fields,
+            # A deletion doesn't make the document human-verified (unlike
+            # add_extracted_field's confidence=1.0), so whatever confidence
+            # it already had — including None, for a document Extraction
+            # never ran against — is carried through unchanged.
             document.extraction_confidence,
             fulfilled_requirements,
         )
-
-        if document.case_id is not None:
-            await asyncio.to_thread(
-                case_status.sync_submission_finalized,
-                document.case_id,
-            )
 
         return await get_document(document_id)
 
@@ -470,30 +415,14 @@ async def delete_extracted_field(
         ) from exc
 
 @router.post("/{document_id}/approve", response_model=DocumentRecord)
-async def approve_document(document_id: str) -> DocumentRecord:
+async def approve_document(
+    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+) -> DocumentRecord:
     """
     Approves a completed document after loan officer review.
 
     Only documents that have finished extraction can be approved.
     """
-    try:
-        document = await asyncio.to_thread(
-            document_repository.get_document,
-            document_id,
-        )
-    except Exception as exc:
-        logger.exception("Failed to fetch document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch the document. Check Supabase table access.",
-        ) from exc
-
-    if document is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found",
-        )
-
     if document.status != DocumentStatus.ANALYZED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -506,12 +435,6 @@ async def approve_document(document_id: str) -> DocumentRecord:
             document_id,
         )
 
-        if document.case_id is not None:
-            await asyncio.to_thread(
-                case_status.sync_submission_finalized,
-                document.case_id,
-            )
-
         return await get_document(document_id)
 
     except Exception as exc:
@@ -522,25 +445,9 @@ async def approve_document(document_id: str) -> DocumentRecord:
         ) from exc
     
 @router.post("/{document_id}/reject", response_model=DocumentRecord)
-async def reject_document(document_id: str) -> DocumentRecord:
-    try:
-        document = await asyncio.to_thread(
-            document_repository.get_document,
-            document_id,
-        )
-    except Exception as exc:
-        logger.exception("Failed to fetch document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch the document. Check Supabase table access.",
-        ) from exc
-
-    if document is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found",
-        )
-
+async def reject_document(
+    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+) -> DocumentRecord:
     if document.status != DocumentStatus.ANALYZED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -568,16 +475,21 @@ async def update_document_type(
     document_id: str,
     request: UpdateDocumentTypeRequest,
     background_tasks: BackgroundTasks,
+    document: DocumentRecord = Depends(get_document_or_404),
 ) -> DocumentRecord:
     """
-    A loan officer correcting a low-confidence document_type (the frontend
-    only offers this below settings.CLASSIFICATION_CONFIDENCE_THRESHOLD —
-    enforced here too, so it can't be scripted around). Records the type as
-    officer-confirmed (confidence 1.0, ACCEPTED), then re-runs Extraction
-    only, in the background, against the new type — Extraction from the
-    wrong schema is what made the old fields wrong in the first place. The
-    response already reads EXTRACTING; the result arrives via the case
-    status WebSocket like any other status change.
+    A loan officer confirming or correcting a low-confidence document_type
+    (the frontend only offers this below settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
+    — enforced here too, so it can't be scripted around). Always records the
+    type as officer-confirmed (confidence 1.0, ACCEPTED).
+
+    Only actually changing the type re-runs Extraction, in the background —
+    Extraction from the wrong schema is what made the old fields wrong in
+    the first place, so a genuine correction needs a re-run. Confirming the
+    type as-is has nothing new for Extraction to find (it already ran once
+    against this same type), so that case only touches the classification
+    columns and leaves status/extracted_fields untouched — the response
+    reads EXTRACTING only when a re-run was actually kicked off.
     """
     document_type = request.document_type.strip().lower()
     if document_type not in _SETTABLE_DOCUMENT_TYPES:
@@ -586,18 +498,6 @@ async def update_document_type(
             detail=f"Unknown document_type: {request.document_type}",
         )
 
-    try:
-        document = await asyncio.to_thread(document_repository.get_document, document_id)
-    except Exception as exc:
-        logger.exception("Failed to fetch document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch the document. Check Supabase table access.",
-        ) from exc
-
-    if document is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
-
     if document.status in _TYPE_OVERRIDE_BLOCKED_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -605,34 +505,55 @@ async def update_document_type(
         )
 
     if (
-        document.confidence is not None
-        and document.confidence >= settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
+        document.classification_confidence is not None
+        and document.classification_confidence >= settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
     ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Classification confidence is above the threshold; the type can't be overridden.",
         )
 
+    type_changed = document_type != document.document_type
+
     try:
-        # Self-fulfilment only, like _finalise_classification's first write:
-        # the existing extracted_fields came from the wrong schema, so they
-        # shouldn't be used to claim e.g. proof_of_address for the new type
-        # — rerun_extraction recomputes this from the real re-extracted fields.
-        await asyncio.to_thread(
-            document_repository.record_classification,
-            document_id,
-            document_type=document_type,
-            confidence=1.0,
-            classification_outcome=ClassificationOutcome.ACCEPTED.value,
-            evidence=[],
-            fulfilled_requirements=compute_fulfilled_requirements(document_type, None),
-        )
-        await asyncio.to_thread(
-            document_repository.update_status,
-            document_id,
-            DocumentStatus.EXTRACTING,
-            processing_started_at=datetime.now(timezone.utc),
-        )
+        if type_changed:
+            # Self-fulfilment only, like nodes.record_classification_result's first
+            # write: the existing extracted_fields came from the wrong
+            # schema, so they shouldn't be used to claim e.g.
+            # proof_of_address for the new type — the extraction rerun
+            # recomputes this from the real re-extracted fields. Old
+            # evidence was reasoning for the wrong type, so it's cleared too.
+            await asyncio.to_thread(
+                document_repository.record_classification,
+                document_id,
+                document_type=document_type,
+                classification_confidence=1.0,
+                routing_status=RoutingStatus.ACCEPTED.value,
+                evidence=[],
+                fulfilled_requirements=compute_fulfilled_requirements(document_type, None),
+            )
+            await asyncio.to_thread(
+                document_repository.update_status,
+                document_id,
+                DocumentStatus.EXTRACTING,
+                processing_started_at=datetime.now(timezone.utc),
+            )
+        else:
+            # Confirming an already-correct low-confidence guess: Extraction
+            # already ran against this exact type, so its fields are still
+            # valid — recompute fulfilled_requirements from them (more
+            # accurate than the None used above) instead of discarding
+            # anything, and keep the existing evidence since it was already
+            # reasoning for this same type.
+            await asyncio.to_thread(
+                document_repository.record_classification,
+                document_id,
+                document_type=document_type,
+                classification_confidence=1.0,
+                routing_status=RoutingStatus.ACCEPTED.value,
+                evidence=document.evidence,
+                fulfilled_requirements=compute_fulfilled_requirements(document_type, document.extracted_fields),
+            )
     except Exception as exc:
         logger.exception("Failed to update document type for document %s", document_id)
         raise HTTPException(
@@ -640,57 +561,66 @@ async def update_document_type(
             detail="Failed to save the document type. Check Supabase table access.",
         ) from exc
 
-    if document.case_id is not None:
-        await asyncio.to_thread(case_status.sync_submission_finalized, document.case_id)
-
-    background_tasks.add_task(orchestrator.rerun_extraction, document_id)
+    if type_changed:
+        background_tasks.add_task(langgraph_pipeline.rerun_extraction, document_id)
 
     return await get_document(document_id)
 
 
 @router.post("/{document_id}/retry", response_model=DocumentRecord)
-async def retry_document(document_id: str) -> DocumentRecord:
+async def retry_document(
+    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+) -> DocumentRecord:
     """
-    Re-enqueues a document that's stuck or failed. Exists specifically for
-    orphaned in-memory-queue state: this queue (see queue_service.py) does
-    not survive a backend restart, so any document still QUEUED/PROCESSING
-    at that moment is permanently abandoned — nothing else will ever pick
-    it back up. Also useful for a genuinely FAILED document the officer
-    wants to re-attempt. Refuses ANALYZED documents since there's nothing
-    to retry there.
+    Re-enqueues a document that's FAILED, or stuck — PROCESSING for longer
+    than settings.STUCK_PROCESSING_RETRY_THRESHOLD_SECONDS (see
+    monitoring.is_stuck_processing_for_retry). The stuck case exists
+    specifically for orphaned in-memory-queue state: this queue (see
+    queue_service.py) does not survive a backend restart, so a document
+    still PROCESSING at that moment is permanently abandoned — nothing else
+    will ever pick it back up. Deliberately does NOT allow retrying a
+    document that's merely QUEUED or normally PROCESSING (not yet past the
+    stuck threshold) — a worker may genuinely still be running it, and
+    racing that with a second concurrent pipeline run would duplicate LLM
+    calls and interleave writes unpredictably. Use cancel_document first if
+    you want to stop an actively-running document instead.
     """
-    try:
-        document = await asyncio.to_thread(document_repository.get_document, document_id)
-    except Exception as exc:
-        logger.exception("Failed to fetch document %s", document_id)
+    is_stuck = monitoring.is_stuck_processing_for_retry(document)
+    if document.status != DocumentStatus.FAILED and not is_stuck:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch the document. Check Supabase table access.",
-        ) from exc
-
-    if document is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
-
-    if document.status == DocumentStatus.ANALYZED:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Document already analyzed; nothing to retry.",
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Document can only be retried when it has failed, or has been "
+                "processing for an unusually long time (possibly orphaned)."
+            ),
         )
 
     try:
+        # Guards against a race with e.g. a concurrent cancel or the
+        # in-flight run itself finishing between the check above and here —
+        # if the status has moved on, this simply doesn't match and updated
+        # stays False below.
+        updated = await asyncio.to_thread(
+            document_repository.update_status,
+            document_id,
+            DocumentStatus.QUEUED,
+            retry_count=document.retry_count + 1,
+            expected_current_statuses=[document.status],
+        )
+        if not updated:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Document's state changed; refetch and try again.",
+            )
         # update_status only ever writes fields passed as non-None, so this
         # can't clear a stale failure_reason from the prior attempt — it's
         # left in place and will read as stale once this retry succeeds.
         # Pre-existing limitation of update_status, not new to this retry
         # path (the classification-escalation loop's own success path has
         # the same gap), so not fixed here.
-        await asyncio.to_thread(
-            document_repository.update_status,
-            document_id,
-            DocumentStatus.QUEUED,
-            retry_count=document.retry_count + 1,
-        )
         await document_queue.enqueue(document_id)
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception("Failed to re-enqueue document %s", document_id)
         raise HTTPException(
@@ -698,28 +628,85 @@ async def retry_document(document_id: str) -> DocumentRecord:
             detail="Failed to re-enqueue the document.",
         ) from exc
 
-    return await asyncio.to_thread(document_repository.get_document, document_id)
+    refreshed = await asyncio.to_thread(document_repository.get_document, document_id)
+    if refreshed is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    return refreshed
+
+
+@router.post("/{document_id}/cancel", response_model=DocumentRecord)
+async def cancel_document(
+    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+) -> DocumentRecord:
+    """
+    Stops a document that's still QUEUED or PROCESSING. The status write is
+    an atomic compare-and-swap (only applies if the document is still in one
+    of those two statuses), so two concurrent cancels — or a cancel racing
+    the pipeline reaching a terminal status on its own — can't both "win".
+    Only once that write succeeds do we attempt to interrupt an in-flight
+    run (see queue_service.DocumentQueue.cancel_document); a QUEUED document
+    that hasn't been dequeued yet needs no interruption, since
+    queue_service._process_document checks status on dequeue and skips it.
+    """
+    updated = await asyncio.to_thread(
+        document_repository.update_status,
+        document_id,
+        DocumentStatus.CANCELLED,
+        expected_current_statuses=[DocumentStatus.QUEUED, DocumentStatus.PROCESSING],
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Document can only be cancelled while queued or processing.",
+        )
+
+    document_queue.cancel_document(document_id)
+
+    refreshed = await asyncio.to_thread(document_repository.get_document, document_id)
+    if refreshed is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    return refreshed
+
+
+@router.get("/{document_id}/langgraph-trace")
+async def get_document_langgraph_trace(document_id: str) -> dict:
+    """
+    Dev-only window into the langgraph pipeline (see app/langgraph/trace.py)
+    — which route a document took (fast vs Sonnet agent), what rule/llm/
+    vision each said, whether it escalated. Read from the Supabase
+    `langgraph_trace` table; falls back to this process's in-memory copy if the
+    row isn't there yet. langgraph-test branch only; not for production use.
+    """
+    try:
+        result = await asyncio.to_thread(langgraph_trace.get_persisted, document_id)
+    except Exception:  # noqa: BLE001 — table unreachable: fall back to in-memory
+        result = None
+    if result is None:
+        result = langgraph_trace.get(document_id)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No langgraph trace found for this document.",
+        )
+    return result
 
 
 @router.get("/{document_id}/download", response_model=DocumentDownloadResponse)
-async def get_document_download_url(document_id: str) -> DocumentDownloadResponse:
+async def get_document_download_url(
+    document_id: str,
+    inline: bool = False,
+    document: DocumentRecord = Depends(get_document_or_404),
+) -> DocumentDownloadResponse:
     """
     Returns a short-lived signed URL for the document's file in Supabase
     Storage rather than proxying the bytes through this service.
-    """
-    try:
-        document = await asyncio.to_thread(document_repository.get_document, document_id)
-    except Exception as exc:
-        logger.exception("Failed to fetch document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch the document. Check Supabase table access.",
-        ) from exc
 
-    if document is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
-        )
+    inline=True omits the `download` option Storage otherwise sets, which is
+    what puts a `Content-Disposition: attachment` header on the response —
+    without it, a browser renders the file (PDF/image) in place instead of
+    downloading it. Used by the frontend's preview modal; plain downloads
+    (the default) still get the attachment header + filename.
+    """
     if document.storage_path is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Document has no stored file"
@@ -730,7 +717,7 @@ async def get_document_download_url(document_id: str) -> DocumentDownloadRespons
             storage_service.create_signed_url,
             document.storage_path,
             settings.SIGNED_URL_EXPIRY_SECONDS,
-            document.filename,
+            None if inline else document.filename,
         )
     except Exception as exc:
         logger.exception("Failed to create signed URL for document %s", document_id)

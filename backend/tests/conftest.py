@@ -9,6 +9,19 @@ from app.main import app
 PDF_DOC_ID = "C001_CertIncumbency"
 IMAGE_DOC_ID = "ocbc_sample"
 
+# app/injection/* is a dev-only synthetic fraud-injection tool used to
+# generate test documents for the detector — not part of the graded
+# detection pipeline (see CLAUDE.md). Deliberately not unit-tested for now;
+# the files below are left in place (not deleted) in case that changes.
+collect_ignore = [
+    "test_field_text.py",
+    "test_fraud_injections.py",
+    "test_injection_router.py",
+    "test_injectors.py",
+    "test_pdf.py",
+    "test_store.py",
+]
+
 
 @pytest.fixture(autouse=True)
 def _bypass_auth():
@@ -61,7 +74,7 @@ def _block_real_supabase_network(monkeypatch: pytest.MonkeyPatch) -> None:
     Without this, a test that forgets to mock a call site silently
     succeeds locally (a real .env with real credentials is present) but
     fails in CI (no network egress) — exactly what happened with
-    case_status.sync_submission_finalized in test_orchestrator.py: it
+    case_service.sync_submission_finalized in test_orchestrator.py: it
     wasn't mocked, "passed" locally against the real dev database, and
     only broke in CI. Failing loudly here makes that reproducible locally
     the moment it happens, instead of only in CI.

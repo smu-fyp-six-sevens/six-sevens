@@ -20,7 +20,7 @@ the company's UEN, name, officers and shareholders. Three steps:
    officers/shareholders — ID number first, otherwise name.
 
 Computed live from the documents table on every read, never stored — the same
-reasoning as case_status.py: the result depends on every document in the
+reasoning as case_service.py: the result depends on every document in the
 case, so any new upload can change it, and there's no single event that
 would keep a stored copy honest.
 """
@@ -511,6 +511,8 @@ def _compare_company(
 
     uen_field, raw_uen, uen = _document_uen(fields)
     if uen is not None and reference.uen is not None:
+        # _document_uen returns all three of these together or none at all.
+        assert uen_field is not None and raw_uen is not None
         matched = uen == reference.uen
         return FieldComparison(
             check="company_uen",
@@ -548,6 +550,9 @@ def _compare_person(person: _Person, reference: IncumbencyVerification) -> Optio
     reference_ids = {_normalize_id(p.id_number) for p in reference.individuals} - {None}
     id_number = _normalize_id(person.id_number)
     if id_number and reference_ids:
+        # _normalize_id only returns truthy when given a real string, so
+        # person.id_number (the raw value it was normalised from) is too.
+        assert person.id_number is not None
         matched = id_number in reference_ids
         who = f" ({person.name})" if person.name else ""
         return FieldComparison(

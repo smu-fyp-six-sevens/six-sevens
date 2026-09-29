@@ -5,12 +5,17 @@ import os
 import re
 from collections import deque
 from pathlib import Path
+from typing import Iterable, cast
 
 import pymupdf
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, PngImagePlugin
 
 from .field_text import split_label_and_value
 from .schemas import FieldValue
+
+# PIL's FreeTypeFont and (bitmap-default) ImageFont don't share a base class,
+# but callers here treat either as "a loaded PIL font" interchangeably.
+PilFont = ImageFont.FreeTypeFont | ImageFont.ImageFont
 
 
 def _project_root() -> Path:
@@ -349,7 +354,7 @@ def resolve_emphasis_font_file(
     return None
 
 
-def _load_truetype(path: str, size: float, index: int = 0) -> ImageFont.ImageFont:
+def _load_truetype(path: str, size: float, index: int = 0) -> PilFont:
     size_i = max(8, int(round(size)))
     try:
         return ImageFont.truetype(path, size_i, index=index)
@@ -359,7 +364,7 @@ def _load_truetype(path: str, size: float, index: int = 0) -> ImageFont.ImageFon
         return ImageFont.truetype(path, size_i)
 
 
-def _font_path_index(font: ImageFont.ImageFont) -> tuple[str | None, int]:
+def _font_path_index(font: PilFont) -> tuple[str | None, int]:
     path = getattr(font, "path", None)
     if not isinstance(path, str) or not Path(path).exists():
         return None, 0
@@ -376,7 +381,7 @@ def _pil_font(
     bold: bool = False,
     font_path: str | None = None,
     index: int = 0,
-) -> ImageFont.ImageFont:
+) -> PilFont:
     """Load a system TTF close to the requested PDF built-in / custom font."""
     size_i = max(8, int(round(size)))
     if font_path and Path(font_path).exists():
@@ -510,7 +515,7 @@ def _iter_system_font_faces() -> list[tuple[str, int]]:
     return faces
 
 
-def _font_face_kind(path: str, font: ImageFont.ImageFont) -> str:
+def _font_face_kind(path: str, font: PilFont) -> str:
     """sans / serif / mono / other — from file name and FreeType family."""
     family = getattr(getattr(font, "font", None), "family", "") or ""
     style = getattr(getattr(font, "font", None), "style", "") or ""
@@ -564,9 +569,9 @@ def _font_face_kind(path: str, font: ImageFont.ImageFont) -> str:
 
 
 def _pick_matched_font(
-    best_for: dict[str, tuple[float, ImageFont.ImageFont]],
-    fallback: ImageFont.ImageFont,
-) -> ImageFont.ImageFont:
+    best_for: dict[str, tuple[float, PilFont]],
+    fallback: PilFont,
+) -> PilFont:
     """Keep the source family. Sans wins close races (bills are almost always sans)."""
     if not best_for:
         return fallback
@@ -581,7 +586,7 @@ def _pick_matched_font(
     return sans_font
 
 
-def _text_width(pil_font: ImageFont.ImageFont, text: str) -> float:
+def _text_width(pil_font: PilFont, text: str) -> float:
     try:
         return float(pil_font.getlength(text))
     except AttributeError:
@@ -603,7 +608,7 @@ def _mean_abs_diff(left: list[int], right: list[int]) -> float:
 def _render_text_on_bg(
     text: str,
     *,
-    font: ImageFont.ImageFont,
+    font: PilFont,
     width: int,
     height: int,
     bg: tuple[int, int, int],
@@ -704,7 +709,7 @@ def _size_for_ink_width(
     return max(min_size, min(max_size, size))
 
 
-def _glyph_ink_size(font: ImageFont.ImageFont, text: str) -> tuple[float, float]:
+def _glyph_ink_size(font: PilFont, text: str) -> tuple[float, float]:
     try:
         left, top, right, bottom = font.getbbox(text, anchor="ls")
     except TypeError:
@@ -721,7 +726,7 @@ def _fit_truetype_to_ink(
     target_height: float,
     min_size: float,
     max_size: float,
-) -> ImageFont.ImageFont:
+) -> PilFont:
     """Scale a chosen face so sample_text matches the original ink box height."""
     seed = max(min_size, min(max_size, target_height if target_height >= 1 else 12.0))
     best = _load_truetype(path, seed, index)
@@ -766,7 +771,7 @@ def _match_font_to_crop(
     ink: tuple[int, int, int],
     bg: tuple[int, int, int],
     max_size: float,
-) -> ImageFont.ImageFont:
+) -> PilFont:
     """
     Pick the system font/size whose rendering of sample_text best matches the crop.
 
@@ -794,7 +799,7 @@ def _match_font_to_crop(
     min_size = max(7.0, height * 0.4)
     size_cap = max(min_size, min(max(max_size, height * 1.35), height * 1.8))
 
-    best_for: dict[str, tuple[float, ImageFont.ImageFont]] = {}
+    best_for: dict[str, tuple[float, PilFont]] = {}
     for path, index in _iter_system_font_faces():
         base_size = _size_for_ink_width(
             path, index, sample_text, ink_w, min_size, size_cap
@@ -905,7 +910,9 @@ def _halo_pixels(
         for x in range(ox0, ox1):
             if x0 <= x < x1 and y0 <= y < y1:
                 continue
-            pixels.append(rgb.getpixel((x, y)))
+            # .convert("RGB") guarantees getpixel() returns a 3-int tuple,
+            # though PIL's stub types it as a union covering every mode.
+            pixels.append(cast(tuple[int, int, int], rgb.getpixel((x, y))))
     return pixels
 
 
@@ -1051,7 +1058,7 @@ def _value_subrect(
     old_text: str,
     old_start: int,
     old_end: int,
-    probe_font: ImageFont.ImageFont,
+    probe_font: PilFont,
 ) -> list[float]:
     """Map a character span onto the OCR pixel box using font metrics."""
     x0, y0, x1, y1 = field.rect
@@ -1088,7 +1095,7 @@ def _ink_rect_in_image(
 
 
 def _origin_for_ink_box(
-    font: ImageFont.ImageFont,
+    font: PilFont,
     text: str,
     ink_rect: list[float],
     *,
@@ -1110,14 +1117,14 @@ def _origin_for_ink_box(
 
 
 def _image_rewrite_font(
-    matched: ImageFont.ImageFont,
+    matched: PilFont,
     *,
     font_name: str | None,
     requested_size: float,
     original_size: float,
     preserve_face: bool,
     size_changed: bool,
-) -> ImageFont.ImageFont:
+) -> PilFont:
     if not preserve_face:
         return _pil_font(font_name, requested_size, bold=False)
     if not size_changed:
@@ -1135,7 +1142,7 @@ def _image_rewrite_font(
 
 
 def _glyph_box(
-    font: ImageFont.ImageFont,
+    font: PilFont,
     text: str,
     origin: tuple[float, float],
 ) -> list[float]:
@@ -1188,7 +1195,7 @@ def _keep_pixel_span(old: str, new: str) -> tuple[int, int, int, int] | None:
 
 def _mapped_span_xs(
     ink: list[float],
-    font: ImageFont.ImageFont,
+    font: PilFont,
     text: str,
     start: int,
     end: int,
@@ -1241,7 +1248,7 @@ def _draw_text_ls(
     text: str,
     *,
     fill: tuple[int, int, int],
-    font: ImageFont.ImageFont,
+    font: PilFont,
 ) -> None:
     draw = ImageDraw.Draw(image)
     try:
@@ -1258,7 +1265,7 @@ def _try_splice_rewritten_text(
     *,
     ink: tuple[int, int, int],
     bg: tuple[int, int, int],
-    matched: ImageFont.ImageFont,
+    matched: PilFont,
     full_ink: list[float],
     align: str,
 ) -> bool:
@@ -1630,7 +1637,7 @@ def _styled_font_path(font_path: str | None, style: str) -> str | None:
     return None
 
 
-def _styled_face(font: ImageFont.ImageFont, style: str) -> tuple[str, int] | None:
+def _styled_face(font: PilFont, style: str) -> tuple[str, int] | None:
     """Bold/italic face in the same family as a matched crop font (TTF sibling or TTC index)."""
     if style not in {"bold", "italic"}:
         return None
@@ -1973,7 +1980,9 @@ def _apply_emphasis_on_image(image_path: Path, field: FieldValue, style: str) ->
 
 def extract_pdf_text(pdf_path: Path) -> str:
     doc = pymupdf.open(pdf_path)
-    text = "\n".join(page.get_text() for page in doc)
+    # get_text()'s return type is a union over every "mode" it supports;
+    # the default mode ("text") always returns a plain string.
+    text = "\n".join(cast(str, page.get_text()) for page in doc)
     doc.close()
     return text
 
@@ -2157,7 +2166,7 @@ def _dominant_paper_color(image: Image.Image) -> tuple[int, int, int]:
     for pixel in sample.getdata():
         key = (pixel[0] // 16, pixel[1] // 16, pixel[2] // 16)
         counts[key] = counts.get(key, 0) + 1
-    quantized = max(counts, key=counts.get)
+    quantized = max(counts, key=lambda k: counts[k])
     return (
         quantized[0] * 16 + 8,
         quantized[1] * 16 + 8,
@@ -2212,6 +2221,7 @@ def _discover_raster_image_fields(
     mask = Image.new("L", (small_w, small_h), 0)
     mask_px = mask.load()
     work_px = work.load()
+    assert mask_px is not None and work_px is not None
     for y in range(small_h):
         for x in range(small_w):
             red, green, blue = work_px[x, y]
@@ -2295,6 +2305,7 @@ def _connected_pixel_boxes(
     """Inclusive-start exclusive-end boxes of white blobs on an L mask."""
     width, height = mask.size
     pixels = mask.load()
+    assert pixels is not None
     seen = [[False] * width for _ in range(height)]
     boxes: list[tuple[int, int, int, int]] = []
     for start_y in range(height):
@@ -2331,7 +2342,9 @@ def _discover_native_pdf_fields(
     metadata: dict[str, str],
 ) -> dict[str, FieldValue]:
     fields: dict[str, FieldValue] = {}
-    for page_index, page in enumerate(doc):
+    # pymupdf.Document is iterable at runtime even though pyright's
+    # enumerate() overload resolution doesn't recognise it as Iterable.
+    for page_index, page in enumerate(cast(Iterable, doc)):
         page_dict = page.get_text("dict")
         for block in page_dict.get("blocks", []):
             if block.get("type") != 0:
@@ -2380,7 +2393,7 @@ def _discover_pdf_image_fields(
     """Register embedded bitmap placements from PyMuPDF (not vector drawings)."""
     fields = dict(existing)
     seen: set[tuple] = set()
-    for page_index, page in enumerate(doc):
+    for page_index, page in enumerate(cast(Iterable, doc)):
         for info in page.get_image_info() or []:
             bbox = info.get("bbox")
             if not bbox or len(bbox) != 4:
@@ -2536,7 +2549,9 @@ def _pdf_text_length(text: str, fontsize: float, insert_kwargs: dict) -> float:
     fontname = insert_kwargs.get("fontname") or "helv"
     try:
         font = pymupdf.Font(fontfile=fontfile) if fontfile else pymupdf.Font(fontname)
-        return float(font.text_length(text, fontsize=fontsize))
+        # text_length's stub declares fontsize: int, but the C API accepts
+        # (and this caller relies on) a float; cast is type-only, no coercion.
+        return float(font.text_length(text, fontsize=cast(int, fontsize)))
     except Exception:
         return float(fontsize) * max(1, len(text)) * 0.5
 
@@ -2718,7 +2733,7 @@ def _overlay_cover_rect_on_image(
     image: Image.Image,
     field: FieldValue,
     text: str,
-    font: ImageFont.ImageFont,
+    font: PilFont,
     origin: tuple[float, float],
     ink: tuple[int, int, int],
     bg: tuple[int, int, int],
@@ -2843,7 +2858,9 @@ def _apply_manipulation(
 
     if indicator == "visible_boundary":
         out = crop.convert("RGB")
-        paper = crop.getpixel((0, 0))
+        # crop was already .convert("RGB")'d above, so getpixel() always
+        # returns a 3-int tuple here, though PIL's stub types it as a union.
+        paper = cast(tuple[int, int, int], crop.getpixel((0, 0)))
         halo = tuple(max(0, min(255, channel - 22)) for channel in paper)
         thickness = max(3, min(width, height) // 16)
         ring = Image.new("L", (width, height), 0)
@@ -3044,6 +3061,7 @@ def _pil_from_pdf_image(doc: pymupdf.Document, xref: int) -> Image.Image | None:
     if smask:
         try:
             mask_blob = doc.extract_image(int(smask)).get("image")
+            assert mask_blob is not None
             mask = Image.open(io.BytesIO(mask_blob)).convert("L")
             image = image.convert("RGBA")
             if mask.size != image.size:
@@ -3072,7 +3090,9 @@ def _manipulate_region_on_pdf(
     pad = 0.8
     cover = pymupdf.Rect(box.x0 - pad, box.y0 - pad, box.x1 + pad, box.y1 + pad) & page.rect
     paper_sample = _pdf_clip_to_pil(page, cover)
-    paper = _rgb01(paper_sample.getpixel((0, 0)))
+    # _pdf_clip_to_pil always returns an RGB image, so getpixel() always
+    # returns a 3-int tuple here, though PIL's stub types it as a union.
+    paper = _rgb01(cast(tuple[int, int, int], paper_sample.getpixel((0, 0))))
     crop = paper_sample
     insert_box = cover
     if indicator == "scaling_anomaly":

@@ -3,7 +3,7 @@ from __future__ import annotations
 import random
 from unittest.mock import patch
 
-from app.fraud_detection.font_consistency_v2 import ExtractedField
+from app.fraud_detection.font_consistency import ExtractedField
 from app.fraud_detection.numerical_validation import (
     BENFORD_MIN_SAMPLE,
     NumericalValue,

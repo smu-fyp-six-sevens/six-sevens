@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.fraud_detection.font_consistency_v2 import ExtractedField
+from app.fraud_detection.font_consistency import ExtractedField
 from app.fraud_detection.spelling_anomaly import (
     _dehyphenate_spans,
     _filter_candidates,
@@ -117,7 +117,7 @@ def test_known_terms_from_extracted_fields_tokenizes_string_values() -> None:
             field_value="Kowalski Tan", confidence=0.9,
         ),
         # Double-JSON-encoded string, as real Supabase rows sometimes are
-        # (see font_consistency_v2._field_search_text).
+        # (see font_consistency._field_search_text).
         ExtractedField(
             field_name="company_name", field_type="string",
             field_value='"Acme Pte Ltd"', confidence=0.9,

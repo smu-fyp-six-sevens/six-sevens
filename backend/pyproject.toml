@@ -22,6 +22,22 @@ dependencies = [
   "reportlab>=4.2,<5.0",
   "pypdf>=4.2,<5.0",
   "symspellpy>=6.7,<7.0",
+  "numpy",
+  # LangGraph pipeline (backend/app/langgraph) — imported unconditionally by
+  # main.py (via queue_service -> langgraph.pipeline -> langgraph.graph), so
+  # this is a hard runtime dependency, not optional. Keep in sync with
+  # requirements.txt.
+  "langgraph>=0.2,<0.3",
+  "langchain-anthropic>=0.3,<0.4",
+  "langgraph-checkpoint-postgres>=2.0,<3.0",
+  "psycopg[binary,pool]>=3.1,<4.0",
+  # Observability (see app/telemetry.py) — also imported unconditionally by
+  # main.py; off at runtime by default (OTEL_ENABLED), but still has to be
+  # importable.
+  "opentelemetry-api>=1.27,<2.0",
+  "opentelemetry-sdk>=1.27,<2.0",
+  "opentelemetry-instrumentation-fastapi>=0.48b0",
+  "opentelemetry-exporter-gcp-trace>=1.7,<2.0",
   # Mock-document generators (doc_gen_scripts, scripts/generate_from_mastersheet.py),
   # exercised by tests/test_regression_document_generation.py. Already in
   # requirements.txt; CI installs from this file.
@@ -51,9 +67,26 @@ markers = [
   "sprint2: regression test for a Sprint 2 test case",
   "story(jira_id, test_case_id): the Jira story and manual test case ID this test covers",
 ]
+filterwarnings = [
+  # langgraph-checkpoint's own internal import (JsonPlusSerializer) trips a
+  # pending-deprecation warning about an `allowed_objects` default we never
+  # pass ourselves — nothing in this codebase calls it, so there's no source
+  # fix, only this filter. Revisit once Phase 4's checkpointer is actually
+  # wired in (see LANGGRAPH_MIGRATION_PLAN.md).
+  "ignore::langchain_core._api.deprecation.LangChainPendingDeprecationWarning",
+]
 
 [tool.setuptools.packages.find]
 include = ["app*"]
+
+[tool.coverage.run]
+omit = [
+  # Dev-only synthetic fraud-injection tool, deliberately not unit-tested
+  # (see tests/conftest.py's collect_ignore) — omit so it doesn't show as a
+  # 0% coverage gap.
+  "app/injection/*",
+  "app/routers/injection.py",
+]
 
 [tool.coverage.report]
 exclude_lines = [

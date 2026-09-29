@@ -29,7 +29,7 @@ async def test_debounced_publish_builds_and_broadcasts_snapshot_after_the_delay(
     with (
         patch("app.realtime_listener.asyncio.sleep", new=AsyncMock()),
         patch(
-            "app.realtime_listener.case_status.build_case_snapshot",
+            "app.realtime_listener.case_service.build_case_snapshot",
             return_value={"type": "snapshot"},
         ) as mock_build,
         patch("app.realtime_listener.broadcaster.publish") as mock_publish,
@@ -50,7 +50,7 @@ async def test_debounced_publish_returns_quietly_when_cancelled_during_the_delay
         patch(
             "app.realtime_listener.asyncio.sleep", new=AsyncMock(side_effect=asyncio.CancelledError)
         ),
-        patch("app.realtime_listener.case_status.build_case_snapshot") as mock_build,
+        patch("app.realtime_listener.case_service.build_case_snapshot") as mock_build,
         patch("app.realtime_listener.broadcaster.publish") as mock_publish,
     ):
         await realtime_listener._debounced_publish("case-1")
@@ -64,7 +64,7 @@ async def test_debounced_publish_swallows_snapshot_build_errors() -> None:
     with (
         patch("app.realtime_listener.asyncio.sleep", new=AsyncMock()),
         patch(
-            "app.realtime_listener.case_status.build_case_snapshot",
+            "app.realtime_listener.case_service.build_case_snapshot",
             side_effect=RuntimeError("boom"),
         ),
         patch("app.realtime_listener.broadcaster.publish") as mock_publish,
@@ -82,7 +82,7 @@ async def test_debounced_publish_swallows_snapshot_build_errors() -> None:
 async def test_debounced_publish_skips_broadcast_when_case_no_longer_exists() -> None:
     with (
         patch("app.realtime_listener.asyncio.sleep", new=AsyncMock()),
-        patch("app.realtime_listener.case_status.build_case_snapshot", return_value=None),
+        patch("app.realtime_listener.case_service.build_case_snapshot", return_value=None),
         patch("app.realtime_listener.broadcaster.publish") as mock_publish,
     ):
         await realtime_listener._debounced_publish("case-1")

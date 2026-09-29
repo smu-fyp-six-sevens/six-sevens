@@ -2,11 +2,18 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional, cast
 
 from .config import settings
 from .models import CaseRecord
 from .supabase_client import service_supabase_client, supabase_client
+
+
+def _row(mapping: Any) -> dict:
+    """postgrest types a row as a loose JSON union rather than dict[str, Any]
+    — every row here is one we (or our own migrations) wrote, so this cast
+    just tells the type checker what's already true."""
+    return cast(dict, mapping)
 
 
 def create_case(company_name: Optional[str] = None) -> CaseRecord:
@@ -33,14 +40,14 @@ def create_case(company_name: Optional[str] = None) -> CaseRecord:
 
     result = supabase_client.table("cases").insert(row).execute()
 
-    return CaseRecord(**result.data[0])
+    return CaseRecord(**_row(result.data[0]))
 
 
 def get_case(case_id: str) -> Optional[CaseRecord]:
     result = supabase_client.table("cases").select("*").eq("id", case_id).execute()
     if not result.data:
         return None
-    return CaseRecord(**result.data[0])
+    return CaseRecord(**_row(result.data[0]))
 
 
 def list_cases(*, include_dev: bool = True) -> list[CaseRecord]:
@@ -48,7 +55,7 @@ def list_cases(*, include_dev: bool = True) -> list[CaseRecord]:
     if not include_dev:
         query = query.eq("dev", False)
     result = query.execute()
-    return [CaseRecord(**row) for row in result.data]
+    return [CaseRecord(**_row(row)) for row in result.data]
 
 
 def update_case(case_id: str, company_name: str) -> Optional[CaseRecord]:
@@ -65,7 +72,7 @@ def update_case(case_id: str, company_name: str) -> Optional[CaseRecord]:
     )
     if not result.data:
         return None
-    return CaseRecord(**result.data[0])
+    return CaseRecord(**_row(result.data[0]))
 
 
 def delete_case(case_id: str) -> None:
@@ -84,7 +91,7 @@ def delete_case(case_id: str) -> None:
 def set_submission_finalized(case_id: str, finalized: bool) -> None:
     """
     Kept in sync with actual requirement coverage rather than being a
-    one-way, officer-triggered action — see case_status.sync_submission_finalized,
+    one-way, officer-triggered action — see case_service.sync_submission_finalized,
     called right after every classification result is recorded. Reversible:
     if a later reclassification (e.g. via the /retry endpoint) drops
     coverage back below 100%, this flips back to False/None automatically.

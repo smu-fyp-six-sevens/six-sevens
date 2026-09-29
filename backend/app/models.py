@@ -16,15 +16,29 @@ class DocumentStatus(str, Enum):
     APPROVED = "approved"       # When loan officer manually approves a document
     REJECTED = "rejected"       # When loan officer manually rejects a document
     FAILED = "failed"           # AC3: retries exhausted, needs manual review
+    CANCELLED = "cancelled"     # Manually stopped by a loan officer while queued/processing
 
 
-class ClassificationOutcome(str, Enum):
+# The pipeline is still actively running on a document in any of these
+# statuses — a mutation that assumes a settled document (manual type
+# override, monitoring's "stuck" check, running detection) would race it.
+# Single source of truth: was independently redefined 3 times (monitoring.py,
+# routers/documents.py, routers/detection.py) before being centralised here.
+IN_FLIGHT_STATUSES = frozenset({
+    DocumentStatus.UPLOADED,
+    DocumentStatus.QUEUED,
+    DocumentStatus.PROCESSING,
+    DocumentStatus.EXTRACTING,
+})
+
+
+class RoutingStatus(str, Enum):
     """
     Routing decision made at the classification stage, independent of
     whether the later Extraction stage subsequently succeeds or fails.
     ACCEPTED means classification met the confidence threshold and was
     routed to Analysis — it does not mean the document ultimately reached
-    ANALYZED status.
+    ANALYZED status. Backed by the documents.routing_status column.
     """
 
     ACCEPTED = "accepted"
@@ -235,7 +249,7 @@ class CaseDocumentsStatus(str, Enum):
     document outranks nine analyzed ones. Computed live from the documents
     table on every read — never stored — since "stuck" is itself a
     time-elapsed condition with no event that would keep a stored column
-    honest (see case_status.py).
+    honest (see case_service.py).
     """
 
     NO_DOCUMENTS = "no_documents"
@@ -286,7 +300,7 @@ class IdDocumentCoverage(BaseModel):
 class CaseSummary(CaseRecord):
     """
     documents_status and fulfilled_requirements are both computed live from
-    the documents table on every read, never stored — see case_status.py.
+    the documents table on every read, never stored — see case_service.py.
     recommended_additional_documents is repurposed here as the computed
     "still missing" list (the checklist requirements no accepted document
     has fulfilled yet), overriding whatever's in the underlying (always
@@ -308,7 +322,7 @@ class UpdateCaseRequest(BaseModel):
     """
     A loan officer updating the case's own identifying details. Only
     company_name is officer-editable today — status, submission_finalized
-    and greenlink_case_id are system-managed (see case_status.py /
+    and greenlink_case_id are system-managed (see case_service.py /
     case_repository.set_submission_finalized) and deliberately excluded
     here so they can't be overwritten through this endpoint.
     """
@@ -332,8 +346,8 @@ class DocumentRecord(BaseModel):
     # The Classifier's confidence in document_type — set once at classification
     # and never overwritten by Extraction. See extraction_confidence below for
     # the separate, later stage's own confidence in the field values it found.
-    confidence: Optional[float] = None
-    classification_outcome: Optional[ClassificationOutcome] = None
+    classification_confidence: Optional[float] = None
+    routing_status: Optional[RoutingStatus] = None
     storage_path: Optional[str] = None
     status: DocumentStatus
     retry_count: int = 0
@@ -343,17 +357,20 @@ class DocumentRecord(BaseModel):
     failure_reason: Optional[str] = None
     evidence: list[str] = Field(default_factory=list)
     fulfilled_requirements: list[str] = Field(default_factory=list)
+    # Not a documents-table column — document_repository.get_document/
+    # list_documents populate this from the extracted_fields table on every
+    # read (see document_repository._attach_extracted_fields). Plain
+    # {field_name: value}; routers/documents.py's GET and case_service's
+    # case-list enrichment separately rewrap it as {value, confidence} for
+    # the API response.
     extracted_fields: Optional[dict] = None
     # Extraction's own confidence in the values it pulled into extracted_fields
-    # — distinct from (and no longer overwrites) the classifier's `confidence`
-    # above. Set to 1.0 when a loan officer manually saves corrected fields.
+    # — distinct from (and no longer overwrites) the classifier's
+    # `classification_confidence` above. Set to 1.0 when a loan officer
+    # manually saves corrected fields.
     extraction_confidence: Optional[float] = None
     escalation_reason: Optional[str] = None
     metadata: Optional[dict] = None
-    # The Digital Authenticity Specialist's stored result (see
-    # fraud_detection.metadata_analysis.MetadataAnalysisResult) — set once
-    # GET .../detection/metadata-anomaly has run for this document.
-    metadata_anomalies: Optional[dict] = None
 
 
 class UpdateExtractedFieldsRequest(BaseModel):
@@ -379,56 +396,6 @@ class UpdateDocumentTypeRequest(BaseModel):
     document_type: str
 
 
-class UploadResponse(BaseModel):
-    document_id: str
-    status: DocumentStatus
-
-
-class BulkUploadItemResult(BaseModel):
-    filename: str
-    success: bool
-    document_id: Optional[str] = None
-    status: Optional[DocumentStatus] = None
-    error: Optional[str] = None
-
-
-class BulkUploadResponse(BaseModel):
-    results: list[BulkUploadItemResult]
-
-
-class DocumentDownloadResponse(BaseModel):
-    document_id: str
-    signed_url: str
-    expires_in: int
-
-
-class ExtractionTestPage(BaseModel):
-    """
-    One page's worth of extraction output. `elements` shape depends on
-    extraction_method: native-PDF elements carry font/size/flags, OCR
-    elements carry a per-line confidence score — kept as free-form dicts
-    here rather than a union model since this endpoint is a debugging
-    window onto whatever ingest_document actually returned.
-    """
-
-    page_number: int
-    text: str
-    elements: list[dict] = Field(default_factory=list)
-
-
-class ExtractionTestResponse(BaseModel):
-    """Mirrors the dict returned by ingestion.ingestion_service.ingest_document."""
-
-    file_name: str
-    file_type: str
-    metadata: dict = Field(default_factory=dict)
-    extraction_method: str
-    raw_text: str
-    pages: list[ExtractionTestPage]
-    needs_review: bool
-    status: str
-
-
 class StuckDocument(BaseModel):
     id: str
     case_id: Optional[str] = None
@@ -442,9 +409,3 @@ class ProcessingErrorEntry(BaseModel):
     document_id: str
     error: str
     occurred_at: datetime
-
-
-class MonitoringIssues(BaseModel):
-    stuck: list[StuckDocument]
-    failed: list[DocumentRecord]
-    recent_errors: list[ProcessingErrorEntry]

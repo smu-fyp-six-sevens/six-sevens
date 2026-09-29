@@ -53,6 +53,23 @@ def test_delete_file_removes_by_path() -> None:
         )
 
 
+def test_delete_files_batches_removal_of_many_paths() -> None:
+    with patch("app.storage_service.supabase_client") as mock_client:
+        storage_service.delete_files(["case-1/a.pdf", "case-1/b.pdf"])
+
+        mock_client.storage.from_.assert_called_once_with(settings.SUPABASE_STORAGE_BUCKET)
+        mock_client.storage.from_.return_value.remove.assert_called_once_with(
+            ["case-1/a.pdf", "case-1/b.pdf"]
+        )
+
+
+def test_delete_files_is_a_noop_for_an_empty_list() -> None:
+    with patch("app.storage_service.supabase_client") as mock_client:
+        storage_service.delete_files([])
+
+        mock_client.storage.from_.assert_not_called()
+
+
 def test_create_signed_url_without_download_filename() -> None:
     with patch("app.storage_service.supabase_client") as mock_client:
         mock_client.storage.from_.return_value.create_signed_url.return_value = {
