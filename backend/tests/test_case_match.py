@@ -433,12 +433,12 @@ def test_document_with_nothing_to_compare_goes_to_manual_review() -> None:
 
 
 def test_case_match_endpoint() -> None:
-    # GET /cases/{id}/case-match delegates to case_status.get_case_match_for_case,
+    # GET /cases/{id}/case-match delegates to case_service.get_case_match_for_case,
     # which is the only thing that still imports case_repository/document_repository
-    # directly for this path (routers/cases.py itself only imports case_status).
+    # directly for this path (routers/cases.py itself only imports case_service).
     docs = [_incumbency(), *_corroborating(3)]
-    with patch("app.case_status.case_repository") as case_repo, patch(
-        "app.case_status.document_repository"
+    with patch("app.case_service.case_repository") as case_repo, patch(
+        "app.case_service.document_repository"
     ) as doc_repo:
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = docs
@@ -452,8 +452,8 @@ def test_case_match_endpoint() -> None:
 
 
 def test_case_match_endpoint_404_for_unknown_case() -> None:
-    with patch("app.case_status.case_repository") as case_repo, patch(
-        "app.case_status.document_repository"
+    with patch("app.case_service.case_repository") as case_repo, patch(
+        "app.case_service.document_repository"
     ):
         case_repo.get_case.return_value = None
         response = client.get("/cases/nope/case-match")
@@ -464,14 +464,14 @@ def test_case_match_endpoint_404_for_unknown_case() -> None:
 def test_document_case_match_endpoint_returns_that_documents_entry() -> None:
     # GET /documents/{id}/detection/case-match sits behind
     # Depends(get_document_or_404) (fetches via _dependencies.document_repository)
-    # and then delegates to case_status.get_case_match_for_document, which does
+    # and then delegates to case_service.get_case_match_for_document, which does
     # its own separate document_repository/case_repository fetches.
     stray = _doc("list_of_loans", {"uen": OTHER_UEN, "individual_name": "Tan Wei Ming"}, "stray")
     docs = [_incumbency(), *_corroborating(3), stray]
     with (
         patch("app.routers._dependencies.document_repository") as dep_doc_repo,
-        patch("app.case_status.document_repository") as doc_repo,
-        patch("app.case_status.case_repository") as case_repo,
+        patch("app.case_service.document_repository") as doc_repo,
+        patch("app.case_service.case_repository") as case_repo,
     ):
         dep_doc_repo.get_document.return_value = stray
         doc_repo.get_document.return_value = stray
@@ -497,14 +497,14 @@ def test_document_case_match_endpoint_404_without_case() -> None:
 
 
 def test_case_snapshot_includes_case_match_computed_from_plain_fields() -> None:
-    from app import case_status
+    from app import case_service
     from app.fraud_detection.font_consistency_v2 import ExtractedField
 
     passport = _doc("passport", {"individual_name": "TEO KAI MING", "nric_number": "S7273147P"}, "pp")
     docs = [_incumbency(), *_corroborating(3), passport]
-    with patch("app.case_status.case_repository") as case_repo, patch(
-        "app.case_status.document_repository"
-    ) as doc_repo, patch("app.case_status.extracted_fields_repository") as fields_repo:
+    with patch("app.case_service.case_repository") as case_repo, patch(
+        "app.case_service.document_repository"
+    ) as doc_repo, patch("app.case_service.extracted_fields_repository") as fields_repo:
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = docs
         # Enrichment rewrites extracted_fields into {value, confidence}
@@ -512,7 +512,7 @@ def test_case_snapshot_includes_case_match_computed_from_plain_fields() -> None:
         fields_repo.get_extracted_fields_for_documents.return_value = {
             "pp": [ExtractedField(field_name="nric_number", field_type="string", field_value="S7273147P", confidence=0.9)]
         }
-        snapshot = case_status.build_case_snapshot("case-1")
+        snapshot = case_service.build_case_snapshot("case-1")
 
     assert snapshot["case_match"]["incumbency"]["status"] == "verified"
     passport_match = next(d for d in snapshot["case_match"]["documents"] if d["document_id"] == "pp")

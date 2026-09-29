@@ -114,13 +114,12 @@ def update_case(case_id: str, company_name: str) -> Optional[CaseRecord]:
 def delete_case(case_id: str) -> None:
     """
     Removes a case and every document that belongs to it. Documents go
-    first (each via document_repository.remove_document, which also clears
-    their extracted-field rows and stored file) so nothing is left orphaned
+    first (via document_repository.remove_documents, which batch-clears
+    their extracted-field rows and stored files) so nothing is left orphaned
     if the case delete were to run first and fail partway through.
     """
     documents = document_repository.list_documents(case_id=case_id)
-    for document in documents:
-        document_repository.remove_document(document)
+    document_repository.remove_documents(documents)
     case_repository.delete_case(case_id)
 
 

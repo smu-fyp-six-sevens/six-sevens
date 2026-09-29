@@ -50,12 +50,12 @@ def _make_case(case_id: str = "case-1", greenlink_case_id: str = "GLDB-1") -> Ca
 
 def test_upload_batch_partial_failure() -> None:
     with (
-        patch("app.routers.upload.case_status") as mock_case_status,
+        patch("app.routers.upload.case_service") as mock_case_service,
         patch("app.routers.upload.storage_service") as mock_storage,
         patch("app.routers.upload.document_repository") as mock_repo,
         patch("app.routers.upload.document_queue") as mock_queue,
     ):
-        mock_case_status.get_case.return_value = _make_case("case-1")
+        mock_case_service.get_case.return_value = _make_case("case-1")
         mock_storage.upload_file.return_value = "case-1/uuid_good.pdf"
         mock_repo.create_document.return_value = _make_document("doc-good")
         mock_queue.enqueue = AsyncMock()
@@ -790,10 +790,11 @@ def test_add_extracted_field_inserts_and_returns_refetched_document() -> None:
 def test_add_extracted_field_trims_whitespace_from_name() -> None:
     with (
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
-        patch("app.routers.documents.document_repository"),
+        patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
         mock_dep_repo.get_document.return_value = _payslip_document()
+        mock_repo.get_document.return_value = _payslip_document()
         mock_fields_repo.get_extracted_fields.side_effect = [[], [], []]
 
         response = client.post(
@@ -867,10 +868,11 @@ def test_add_extracted_field_skips_case_sync_for_caseless_document() -> None:
 
     with (
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
-        patch("app.routers.documents.document_repository"),
+        patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
         mock_dep_repo.get_document.return_value = document
+        mock_repo.get_document.return_value = document
         mock_fields_repo.get_extracted_fields.side_effect = [[], [], []]
 
         response = client.post(
@@ -914,10 +916,11 @@ def test_delete_extracted_field_removes_and_recomputes_requirements() -> None:
     )
 
     with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
-        patch("app.routers.documents.case_status") as mock_case_status,
     ):
+        mock_dep_repo.get_document.return_value = _payslip_document()
         mock_repo.get_document.return_value = _payslip_document()
         mock_fields_repo.get_extracted_fields.side_effect = [
             [doomed, kept],  # lookup that resolves field_id
@@ -935,15 +938,16 @@ def test_delete_extracted_field_removes_and_recomputes_requirements() -> None:
     mock_repo.update_extracted_fields.assert_called_once_with(
         "doc-1", {"individual_name": "Jane Tan"}, None, ["payslip"]
     )
-    mock_case_status.sync_submission_finalized.assert_called_once_with("case-1")
+    # document_repository.update_extracted_fields resyncs the case itself
+    # now — not observable from here since that call is mocked.
 
 
 def test_delete_extracted_field_document_not_found() -> None:
     with (
-        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
-        mock_repo.get_document.return_value = None
+        mock_dep_repo.get_document.return_value = None
 
         response = client.delete("/documents/missing-id/extracted-fields/field-1")
 
@@ -958,10 +962,10 @@ def test_delete_extracted_field_rejects_field_belonging_to_another_document() ->
     )
 
     with (
-        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
-        mock_repo.get_document.return_value = _payslip_document()
+        mock_dep_repo.get_document.return_value = _payslip_document()
         mock_fields_repo.get_extracted_fields.return_value = [other]
 
         response = client.delete("/documents/doc-1/extracted-fields/field-1")
@@ -979,17 +983,19 @@ def test_delete_extracted_field_skips_case_sync_for_caseless_document() -> None:
     )
 
     with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
-        patch("app.routers.documents.case_status") as mock_case_status,
     ):
+        mock_dep_repo.get_document.return_value = document
         mock_repo.get_document.return_value = document
         mock_fields_repo.get_extracted_fields.side_effect = [[doomed], [], []]
 
         response = client.delete("/documents/doc-1/extracted-fields/field-1")
 
     assert response.status_code == 200
-    mock_case_status.sync_submission_finalized.assert_not_called()
+    # No case_id on the document -> document_repository.update_extracted_fields
+    # (mocked here) never has a case to resync in the first place.
 
 
 def test_delete_extracted_field_write_failure_returns_502() -> None:
@@ -999,10 +1005,10 @@ def test_delete_extracted_field_write_failure_returns_502() -> None:
     )
 
     with (
-        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
-        mock_repo.get_document.return_value = _payslip_document()
+        mock_dep_repo.get_document.return_value = _payslip_document()
         mock_fields_repo.get_extracted_fields.return_value = [doomed]
         mock_fields_repo.delete_extracted_field.side_effect = RuntimeError("db down")
 
@@ -1015,25 +1021,29 @@ def test_delete_document_removes_it_and_resyncs_the_case() -> None:
     document = _make_document()
 
     with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
-        patch("app.routers.documents.case_status") as mock_case_status,
     ):
-        mock_repo.get_document.return_value = document
+        mock_dep_repo.get_document.return_value = document
 
         response = client.delete("/documents/doc-1")
 
     assert response.status_code == 204
     assert response.content == b""
     mock_repo.remove_document.assert_called_once_with(document)
-    mock_case_status.sync_submission_finalized.assert_called_once_with("case-1")
+    # document_repository.remove_document resyncs the case itself now — not
+    # observable from here since that call is mocked.
 
 
 def test_delete_document_rejects_an_approved_document() -> None:
     document = _make_document()
     document.status = DocumentStatus.APPROVED
 
-    with patch("app.routers.documents.document_repository") as mock_repo:
-        mock_repo.get_document.return_value = document
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
 
         response = client.delete("/documents/doc-1")
 
@@ -1042,8 +1052,11 @@ def test_delete_document_rejects_an_approved_document() -> None:
 
 
 def test_delete_document_not_found() -> None:
-    with patch("app.routers.documents.document_repository") as mock_repo:
-        mock_repo.get_document.return_value = None
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+    ):
+        mock_dep_repo.get_document.return_value = None
 
         response = client.delete("/documents/missing-id")
 
@@ -1056,20 +1069,24 @@ def test_delete_document_without_a_case_skips_checklist_sync() -> None:
     document.case_id = None
 
     with (
-        patch("app.routers.documents.document_repository") as mock_repo,
-        patch("app.routers.documents.case_status") as mock_case_status,
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository"),
     ):
-        mock_repo.get_document.return_value = document
+        mock_dep_repo.get_document.return_value = document
 
         response = client.delete("/documents/doc-1")
 
     assert response.status_code == 204
-    mock_case_status.sync_submission_finalized.assert_not_called()
+    # No case_id on the document -> document_repository.remove_document
+    # (mocked here) never has a case to resync in the first place.
 
 
 def test_delete_document_db_failure_returns_502() -> None:
-    with patch("app.routers.documents.document_repository") as mock_repo:
-        mock_repo.get_document.return_value = _make_document()
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+    ):
+        mock_dep_repo.get_document.return_value = _make_document()
         mock_repo.remove_document.side_effect = RuntimeError("db down")
 
         response = client.delete("/documents/doc-1")

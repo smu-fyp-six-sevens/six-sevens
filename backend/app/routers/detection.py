@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from ..langgraph import trace as langgraph_trace
 from ..langgraph.detection.graph import DetectionError, run_detection
 from ..models import IN_FLIGHT_STATUSES, DocumentRecord
-from .. import case_status, extracted_fields_repository, storage_service
+from .. import case_service, extracted_fields_repository, storage_service
 from ._dependencies import get_document_or_404
 from ..case_match import DocumentCaseMatch
 from ..fraud_detection.font_consistency_v2 import (
@@ -238,7 +238,7 @@ async def get_case_match(
             status_code=status.HTTP_404_NOT_FOUND, detail="Document is not attached to a case"
         )
 
-    match = await asyncio.to_thread(case_status.get_case_match_for_document, document_id)
+    match = await asyncio.to_thread(case_service.get_case_match_for_document, document_id)
     if match is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
     return match

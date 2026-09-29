@@ -248,7 +248,7 @@ class CaseDocumentsStatus(str, Enum):
     document outranks nine analyzed ones. Computed live from the documents
     table on every read — never stored — since "stuck" is itself a
     time-elapsed condition with no event that would keep a stored column
-    honest (see case_status.py).
+    honest (see case_service.py).
     """
 
     NO_DOCUMENTS = "no_documents"
@@ -299,7 +299,7 @@ class IdDocumentCoverage(BaseModel):
 class CaseSummary(CaseRecord):
     """
     documents_status and fulfilled_requirements are both computed live from
-    the documents table on every read, never stored — see case_status.py.
+    the documents table on every read, never stored — see case_service.py.
     recommended_additional_documents is repurposed here as the computed
     "still missing" list (the checklist requirements no accepted document
     has fulfilled yet), overriding whatever's in the underlying (always
@@ -321,7 +321,7 @@ class UpdateCaseRequest(BaseModel):
     """
     A loan officer updating the case's own identifying details. Only
     company_name is officer-editable today — status, submission_finalized
-    and greenlink_case_id are system-managed (see case_status.py /
+    and greenlink_case_id are system-managed (see case_service.py /
     case_repository.set_submission_finalized) and deliberately excluded
     here so they can't be overwritten through this endpoint.
     """

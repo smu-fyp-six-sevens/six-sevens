@@ -6,15 +6,6 @@ import pytest
 from app.auth import require_auth
 from app.main import app
 
-# test_orchestrator.py / test_dify_client.py test app.orchestrator and
-# app.dify_client, both deleted (backend/app/langgraph replaced them — see
-# LANGGRAPH_MIGRATION_PLAN.md section 7). They're kept on disk, unrun, as
-# reference for porting equivalent coverage onto the langgraph modules
-# (app/langgraph/nodes.py, app/langgraph/pipeline.py) rather than being
-# retyped from scratch — collection is skipped since they'd otherwise fail
-# to import at all.
-collect_ignore = ["test_orchestrator.py", "test_dify_client.py"]
-
 PDF_DOC_ID = "C001_CertIncumbency"
 IMAGE_DOC_ID = "ocbc_sample"
 
@@ -70,7 +61,7 @@ def _block_real_supabase_network(monkeypatch: pytest.MonkeyPatch) -> None:
     Without this, a test that forgets to mock a call site silently
     succeeds locally (a real .env with real credentials is present) but
     fails in CI (no network egress) — exactly what happened with
-    case_status.sync_submission_finalized in test_orchestrator.py: it
+    case_service.sync_submission_finalized in test_orchestrator.py: it
     wasn't mocked, "passed" locally against the real dev database, and
     only broke in CI. Failing loudly here makes that reproducible locally
     the moment it happens, instead of only in CI.

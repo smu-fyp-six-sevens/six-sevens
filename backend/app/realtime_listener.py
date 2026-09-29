@@ -6,7 +6,7 @@ import logging
 from realtime import AsyncRealtimeChannel
 from supabase import AsyncClient
 
-from . import case_status
+from . import case_service
 from .case_broadcaster import broadcaster
 from .supabase_client import build_async_supabase_client
 
@@ -38,7 +38,7 @@ async def _debounced_publish(case_id: str) -> None:
         return
 
     try:
-        snapshot = await asyncio.to_thread(case_status.build_case_snapshot, case_id)
+        snapshot = await asyncio.to_thread(case_service.build_case_snapshot, case_id)
     except Exception:
         logger.exception("Failed to build case snapshot for case %s", case_id)
         return

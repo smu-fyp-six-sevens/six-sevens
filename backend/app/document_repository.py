@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from . import case_status, extracted_fields_repository, storage_service
+from . import case_service, extracted_fields_repository, storage_service
 from .models import DocumentRecord, DocumentStatus
 from .supabase_client import service_supabase_client, supabase_client
 
@@ -26,7 +26,7 @@ def _sync_case(case_id: Optional[str]) -> None:
     if case_id is None:
         return
     try:
-        case_status.sync_submission_finalized(case_id)
+        case_service.sync_submission_finalized(case_id)
     except Exception:
         logger.exception("Document write succeeded but failed to resync case %s", case_id)
 
@@ -216,6 +216,27 @@ def remove_document(document: DocumentRecord) -> None:
     if not result.data:
         raise RuntimeError(f"Document {document.id} was not deleted")
     _sync_case(document.case_id)
+
+
+def remove_documents(documents: list[DocumentRecord]) -> None:
+    """
+    Batch version of remove_document, for deleting every document under a
+    case in one pass instead of one round-trip per document per step. Skips
+    the per-document _sync_case call — callers doing this in bulk (case
+    deletion) are removing the case itself right after, so resyncing its
+    submission_finalized flag in between would be wasted work.
+    """
+    if not documents:
+        return
+    document_ids = [document.id for document in documents]
+    extracted_fields_repository.delete_fields_for_documents(document_ids)
+    storage_paths = [document.storage_path for document in documents if document.storage_path]
+    if storage_paths:
+        try:
+            storage_service.delete_files(storage_paths)
+        except Exception:
+            logger.exception("Failed to delete stored files for documents %s", document_ids)
+    service_supabase_client().table("documents").delete().in_("id", document_ids).execute()
 
 
 def get_document(document_id: str) -> Optional[DocumentRecord]:

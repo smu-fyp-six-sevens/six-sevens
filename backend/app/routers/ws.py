@@ -5,7 +5,7 @@ import logging
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
-from .. import case_status
+from .. import case_service
 from ..auth import consume_ws_ticket, create_ws_ticket, require_auth
 from ..case_broadcaster import broadcaster
 
@@ -56,7 +56,7 @@ async def case_status_socket(websocket: WebSocket, case_id: str, ticket: str = "
         # a connection that just (re)opened has missed whatever Realtime
         # events happened while it was down, and this closes that gap. See
         # WS.MD's "missed-event race condition" note.
-        initial = await asyncio.to_thread(case_status.build_case_snapshot, case_id)
+        initial = await asyncio.to_thread(case_service.build_case_snapshot, case_id)
         if initial is None:
             await websocket.send_json({"type": "error", "detail": "Case not found"})
         else:
@@ -87,7 +87,7 @@ async def case_status_socket(websocket: WebSocket, case_id: str, ticket: str = "
                     # the new row's insert has necessarily propagated
                     # through Realtime yet.
                     snapshot = await asyncio.to_thread(
-                        case_status.build_case_snapshot, case_id
+                        case_service.build_case_snapshot, case_id
                     )
                     if snapshot is not None:
                         await websocket.send_json(snapshot)

@@ -5,7 +5,7 @@ import logging
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 
-from .. import case_status
+from .. import case_service
 from ._dependencies import get_case_or_404
 from ..case_match import CaseMatchResult
 from ..models import CaseRecord, CaseSummary, UpdateCaseRequest
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 @router.post("", response_model=CaseRecord, status_code=status.HTTP_201_CREATED)
 async def create_case(company_name: str | None = Body(None, embed=True)) -> CaseRecord:
     try:
-        return await asyncio.to_thread(case_status.create_case, company_name)
+        return await asyncio.to_thread(case_service.create_case, company_name)
     except Exception as exc:
         logger.exception("Failed to create case")
         raise HTTPException(
@@ -29,7 +29,7 @@ async def create_case(company_name: str | None = Body(None, embed=True)) -> Case
 @router.get("", response_model=list[CaseSummary])
 async def list_cases() -> list[CaseSummary]:
     try:
-        return await asyncio.to_thread(case_status.list_case_summaries)
+        return await asyncio.to_thread(case_service.list_case_summaries)
     except Exception as exc:
         logger.exception("Failed to list cases")
         raise HTTPException(
@@ -41,7 +41,7 @@ async def list_cases() -> list[CaseSummary]:
 @router.get("/{case_id}", response_model=CaseSummary)
 async def get_case(case_id: str) -> CaseSummary:
     try:
-        summary = await asyncio.to_thread(case_status.get_case_summary, case_id)
+        summary = await asyncio.to_thread(case_service.get_case_summary, case_id)
     except Exception as exc:
         logger.exception("Failed to fetch case %s", case_id)
         raise HTTPException(
@@ -60,7 +60,7 @@ async def update_case(
 ) -> CaseSummary:
     try:
         await asyncio.to_thread(
-            case_status.update_case, case_id, request.company_name
+            case_service.update_case, case_id, request.company_name
         )
     except Exception as exc:
         logger.exception("Failed to update case %s", case_id)
@@ -69,7 +69,7 @@ async def update_case(
             detail="Failed to save the case. Check Supabase table access.",
         ) from exc
 
-    updated = await asyncio.to_thread(case_status.get_case_summary, case_id)
+    updated = await asyncio.to_thread(case_service.get_case_summary, case_id)
     if updated is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
     return updated
@@ -83,7 +83,7 @@ async def delete_case(case_id: str, case: CaseRecord = Depends(get_case_or_404))
     returns it.
     """
     try:
-        await asyncio.to_thread(case_status.delete_case, case_id)
+        await asyncio.to_thread(case_service.delete_case, case_id)
     except Exception as exc:
         logger.exception("Failed to delete case %s", case_id)
         raise HTTPException(
@@ -100,7 +100,7 @@ async def get_case_match(case_id: str) -> CaseMatchResult:
     case_match.py. Computed live on every call; nothing is written.
     """
     try:
-        result = await asyncio.to_thread(case_status.get_case_match_for_case, case_id)
+        result = await asyncio.to_thread(case_service.get_case_match_for_case, case_id)
     except Exception as exc:
         logger.exception("Failed to fetch case %s for case-match", case_id)
         raise HTTPException(

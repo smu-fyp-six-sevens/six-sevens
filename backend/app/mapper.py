@@ -1,6 +1,6 @@
 """
 Cross-document identity matching for proof_of_address — a distinct concern
-from case_status.py's other job (documents_status rollup, submission_finalized
+from case_service.py's other job (documents_status rollup, submission_finalized
 sync): this is specifically about joining documents by extracted
 individual_name to figure out who still needs an address on file.
 """

@@ -8,7 +8,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from postgrest.exceptions import APIError
 from pydantic import BaseModel
 
-from .. import case_status, document_repository, storage_service
+from .. import case_service, document_repository, storage_service
 from ..config import settings
 from ..models import DocumentRecord, DocumentStatus
 from ..queue_service import document_queue
@@ -57,7 +57,7 @@ async def _ingest_one(case_id: str | None, file: UploadFile) -> DocumentRecord:
         )
 
     if case_id is not None:
-        case = await asyncio.to_thread(case_status.get_case, case_id)
+        case = await asyncio.to_thread(case_service.get_case, case_id)
         if case is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

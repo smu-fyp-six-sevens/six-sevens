@@ -7,7 +7,7 @@ Reference map of source files under `backend/`, scoped to the parts likely to be
 - **auth.py** — Shared-credential HMAC-signed bearer token auth (`create_token`/`require_auth`) plus short-lived single-use WebSocket ticket minting/consumption for the case-status socket.
 - **case_broadcaster.py** — In-memory pub/sub (`CaseBroadcaster`) that fans out case snapshots from the Realtime listener to subscribed WebSocket connections via per-case `asyncio.Queue`s.
 - **case_repository.py** — Supabase CRUD for the `cases` table: create/get/list cases and set/clear `submission_finalized`.
-- **case_status.py** — Computes case-level rollups: worst-first `documents_status`, required/additional requirement coverage, `sync_submission_finalized`, and `build_case_snapshot`/`build_summary` for the WebSocket and REST case endpoints.
+- **case_service.py** — Computes case-level rollups: worst-first `documents_status`, required/additional requirement coverage, `sync_submission_finalized`, and `build_case_snapshot`/`build_summary` for the WebSocket and REST case endpoints.
 - **config.py** — Centralised `Settings` object reading all configuration (Supabase, auth, thresholds, LangGraph models) from environment variables.
 - **document_repository.py** — Supabase CRUD for the `documents` table: create, status updates, classification/extraction/escalation/metadata writes, and status-filtered queries.
 - **extracted_fields_repository.py** — Mirrors a document's `extracted_fields` into the normalised one-row-per-field `extracted_fields` table (replace/get, single and batched-by-document-ids).
@@ -67,8 +67,8 @@ independent today.
   file move.
 
 **3. Case Gate/Orchestrator** (tracks completion, triggers per-case pipeline)
-- Files: `case_repository.py`, `case_status.py`.
-- Blocker: `case_status.sync_submission_finalized` is called synchronously, inline, from
+- Files: `case_repository.py`, `case_service.py`.
+- Blocker: `case_service.sync_submission_finalized` is called synchronously, inline, from
   inside `app/langgraph/nodes.py` and from `routers/documents.py` — i.e. the Per-Document
   Orchestrator currently reaches into the Case Gate's logic directly. Splitting
   requires this to become "per-document work finishes → publish an event" with the Case Gate
@@ -105,7 +105,7 @@ independent today.
 - `routers/extraction.py` — dev/QA test endpoints, same category.
 
 **Biggest structural blocker overall:** nothing above is really "file organization" — every
-service boundary today is crossed by a direct Python function call (`case_status.sync_submission_finalized(...)`,
+service boundary today is crossed by a direct Python function call (`case_service.sync_submission_finalized(...)`,
 `document_repository.get_document(...)`, `queue_service.enqueue(...)`) rather than an event or
 API call. Reorganizing files into service-shaped folders is cosmetic until those specific
 call sites are replaced with publish/subscribe or HTTP boundaries — that replacement, not the
@@ -117,7 +117,7 @@ These apply regardless of whether the app ever physically splits into separate s
 they're just good in-process boundaries.
 
 **1. Component = table owner + a service layer, not just a repository.**
-Right now routers and orchestrator code call `document_repository`/`case_status`/
+Right now routers and orchestrator code call `document_repository`/`case_service`/
 `extracted_fields_repository` directly, from wherever. Instead, each domain (documents,
 cases, extracted_fields) should get one module that's the *only* thing allowed to import its
 repository — everything else calls that module's functions, never the repository directly.
@@ -125,7 +125,7 @@ Same idea as a service boundary, just enforced in-process now rather than across
 
 **2. Replace direct cross-component calls with an internal event bus.** *(Deprioritised —
 revisit once the bulk of the app is built, not now.)*
-The concrete coupling example: `case_status.sync_submission_finalized(...)` is called inline
+The concrete coupling example: `case_service.sync_submission_finalized(...)` is called inline
 from `app/langgraph/nodes.py` and `routers/documents.py`. Instead of every
 caller knowing "finishing a document also means updating case status," the document
 component would just do `event_bus.publish("document.analyzed", document_id)`, and the case

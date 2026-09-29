@@ -15,7 +15,7 @@ import logging
 
 from fastapi import HTTPException, status
 
-from .. import case_status, document_repository
+from .. import case_service, document_repository
 from ..models import CaseRecord, DocumentRecord
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ async def get_document_or_404(document_id: str) -> DocumentRecord:
 
 async def get_case_or_404(case_id: str) -> CaseRecord:
     try:
-        case = await asyncio.to_thread(case_status.get_case, case_id)
+        case = await asyncio.to_thread(case_service.get_case, case_id)
     except Exception as exc:
         logger.exception("Failed to fetch case %s", case_id)
         raise HTTPException(

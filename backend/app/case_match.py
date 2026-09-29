@@ -20,7 +20,7 @@ the company's UEN, name, officers and shareholders. Three steps:
    officers/shareholders — ID number first, otherwise name.
 
 Computed live from the documents table on every read, never stored — the same
-reasoning as case_status.py: the result depends on every document in the
+reasoning as case_service.py: the result depends on every document in the
 case, so any new upload can change it, and there's no single event that
 would keep a stored copy honest.
 """

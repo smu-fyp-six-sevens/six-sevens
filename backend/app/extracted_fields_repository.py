@@ -138,6 +138,15 @@ def delete_fields_for_document(document_id: str) -> None:
     ).execute()
 
 
+def delete_fields_for_documents(document_ids: list[str]) -> None:
+    """Batch version of delete_fields_for_document — one round-trip for many documents."""
+    if not document_ids:
+        return
+    service_supabase_client().table("extracted_fields").delete().in_(
+        "document_id", document_ids
+    ).execute()
+
+
 def delete_extracted_field(
     document_id: str,
     field_id: str,

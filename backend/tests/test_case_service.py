@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
-from app.case_status import (
+from app.case_service import (
     _enrich_with_extracted_fields,
     compute_documents_status,
     compute_requirement_coverage,
@@ -61,7 +61,7 @@ def test_enrich_with_extracted_fields_fills_in_fields_for_matching_documents() -
     doc_with_fields = _make_document("doc-1", DocumentStatus.ANALYZED)
     doc_without_fields = _make_document("doc-2", DocumentStatus.ANALYZED)
 
-    with patch("app.case_status.extracted_fields_repository") as mock_repo:
+    with patch("app.case_service.extracted_fields_repository") as mock_repo:
         mock_repo.get_extracted_fields_for_documents.return_value = {
             "doc-1": [
                 ExtractedField(
@@ -84,7 +84,7 @@ def test_enrich_with_extracted_fields_fills_in_fields_for_matching_documents() -
 
 
 def test_enrich_with_extracted_fields_handles_empty_document_list() -> None:
-    with patch("app.case_status.extracted_fields_repository") as mock_repo:
+    with patch("app.case_service.extracted_fields_repository") as mock_repo:
         mock_repo.get_extracted_fields_for_documents.return_value = {}
 
         assert _enrich_with_extracted_fields([]) == []
@@ -452,8 +452,8 @@ def test_sync_submission_finalized_true_when_all_requirements_met() -> None:
     all_fulfilled = _make_fully_covered_documents()
 
     with (
-        patch("app.case_status.document_repository") as mock_doc_repo,
-        patch("app.case_status.case_repository") as mock_case_repo,
+        patch("app.case_service.document_repository") as mock_doc_repo,
+        patch("app.case_service.case_repository") as mock_case_repo,
     ):
         mock_doc_repo.list_documents.return_value = all_fulfilled
 
@@ -473,8 +473,8 @@ def test_sync_submission_finalized_false_when_incomplete() -> None:
     ]
 
     with (
-        patch("app.case_status.document_repository") as mock_doc_repo,
-        patch("app.case_status.case_repository") as mock_case_repo,
+        patch("app.case_service.document_repository") as mock_doc_repo,
+        patch("app.case_service.case_repository") as mock_case_repo,
     ):
         mock_doc_repo.list_documents.return_value = documents
 
@@ -490,8 +490,8 @@ def test_sync_submission_finalized_reverses_when_coverage_drops() -> None:
     finalized=False, not keep a stale True.
     """
     with (
-        patch("app.case_status.document_repository") as mock_doc_repo,
-        patch("app.case_status.case_repository") as mock_case_repo,
+        patch("app.case_service.document_repository") as mock_doc_repo,
+        patch("app.case_service.case_repository") as mock_case_repo,
     ):
         mock_doc_repo.list_documents.return_value = _make_fully_covered_documents()
         sync_submission_finalized("case-1")
@@ -526,8 +526,8 @@ def test_case_finalizes_without_additional_document() -> None:
     assert not any(doc.document_type in ADDITIONAL_DOCUMENT_TYPES for doc in documents)
 
     with (
-        patch("app.case_status.document_repository") as mock_doc_repo,
-        patch("app.case_status.case_repository") as mock_case_repo,
+        patch("app.case_service.document_repository") as mock_doc_repo,
+        patch("app.case_service.case_repository") as mock_case_repo,
     ):
         mock_doc_repo.list_documents.return_value = documents
         sync_submission_finalized("case-1")
