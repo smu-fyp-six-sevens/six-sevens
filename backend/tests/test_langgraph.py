@@ -15,6 +15,7 @@ from __future__ import annotations
 import pytest
 
 from app.langgraph import classify_support, extract
+from app.langgraph import rule_classify as rc
 from app.langgraph.llm_classify import parse_llm_classification
 from app.langgraph.rule_classify import classify_by_rules
 
@@ -45,6 +46,49 @@ def test_rule_classify_residential_address_note():
         "IDENTITY CARD NO. S1234567A residential address blk 123 singapore 123456",
     )
     assert any("residential address" in note for note in result["notes"])
+
+
+def test_residential_address_evidence_business_address_cancels_out_a_weak_positive():
+    notes = rc._residential_address_evidence("registered office blk 123")
+    assert notes == [
+        "Proof of address check: address present but appears to be a "
+        "business/office address, not residential"
+    ]
+
+
+def test_residential_address_evidence_weak_positive_alone_is_not_enough():
+    notes = rc._residential_address_evidence("123 Jalan Road")
+    assert notes == ["Proof of address check: no residential address detected"]
+
+
+def test_certain_signal_returns_the_one_matching_document_type():
+    doc_type, matched = rc._certain_signal("Business Profile (Company) of Acme Pte Ltd")
+    assert doc_type == "certificate_of_incumbency"
+    assert matched
+
+
+def test_certain_signal_none_when_nothing_matches():
+    assert rc._certain_signal("just some ordinary prose") is None
+
+
+def test_classify_by_rules_sets_certain_type_when_a_certain_pattern_fires():
+    result = classify_by_rules("doc.pdf", "Business Profile (Company) of Acme Pte Ltd")
+    assert result["certain_type"] == "certificate_of_incumbency"
+    assert result["certain_evidence"]
+
+
+def test_reasoning_filename_only_with_no_extracted_text():
+    text = rc._reasoning(0.5, 0.0, 0.5, has_text=False)
+    assert "no extracted text was supplied" in text
+
+
+def test_normalise_all_zero_scores_splits_confidence_evenly():
+    candidates = [
+        {"document_type": "a", "match_strength": 0.0, "reasoning": "r", "evidence": []},
+        {"document_type": "b", "match_strength": 0.0, "reasoning": "r", "evidence": []},
+    ]
+    out = rc._normalise(candidates)
+    assert [c["confidence"] for c in out] == [0.5, 0.5]
 
 
 # --- llm_classify parsing ------------------------------------------------
@@ -157,6 +201,33 @@ def test_parse_extraction_output_malformed_json_escalates_with_model_text():
     assert "This is not a payslip at all." in result["escalation"]["reason"]
 
 
+def test_split_prompt_for_caching_keeps_raw_text_separate_from_the_schema_prefix():
+    prefix, text = extract._split_prompt_for_caching("payslip", "Net pay: 5000")
+    assert text == "Net pay: 5000"
+    assert "Net pay: 5000" not in prefix
+    assert prefix  # the schema/instructions prefix is never empty
+
+
+async def test_run_extraction_calls_the_model_and_parses_its_response():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    pytest.importorskip("langchain_anthropic", reason="langchain-anthropic not installed")
+
+    fake_response = SimpleNamespace(
+        content='{"extracted_fields": {"net_pay": {"value": 5000, "confidence": 0.9}}}'
+    )
+    mock_model = MagicMock()
+    mock_model.ainvoke = AsyncMock(return_value=fake_response)
+
+    with patch("langchain_anthropic.ChatAnthropic", return_value=mock_model):
+        result = await extract.run_extraction("payslip", "Net pay: 5000")
+
+    assert result["extracted_fields"] == {"net_pay": 5000}
+    assert result["field_confidences"] == {"net_pay": 0.9}
+    mock_model.ainvoke.assert_awaited_once()
+
+
 # --- tool staging + graph shape (needs langgraph installed) -----------------
 
 def test_available_tools_enforces_llm_first_vision_last():
@@ -200,6 +271,54 @@ def test_document_graph_compiles():
 
     graph = build_document_graph()
     assert graph is not None
+
+
+def test_route_after_ingest():
+    from app.langgraph.graph import _route_after_ingest
+
+    assert _route_after_ingest({"status": "failed"}) == "fail"
+    assert _route_after_ingest({"status": "uploaded"}) == "classify"
+
+
+def test_route_after_check_text():
+    from app.langgraph.graph import _route_after_check_text
+
+    assert _route_after_check_text({"status": "failed"}) == "fail"
+    assert _route_after_check_text({"status": "extracting"}) == "extract"
+
+
+def test_decide_after_extract_no_escalation_is_analyzed():
+    from app.langgraph.graph import _decide_after_extract
+
+    assert _decide_after_extract({"extraction": {}}) == "analyzed"
+
+
+def test_decide_after_extract_escalation_within_budget_reclassifies():
+    from app.config import settings
+    from app.langgraph.graph import _decide_after_extract
+
+    state = {"extraction": {"escalation": True}, "attempts": 0}
+    assert settings.MAX_RECLASSIFICATION_ATTEMPTS > 0
+    assert _decide_after_extract(state) == "reclassify"
+
+
+def test_decide_after_extract_escalation_past_budget_is_unresolved():
+    from app.config import settings
+    from app.langgraph.graph import _decide_after_extract
+
+    state = {"extraction": {"escalation": True}, "attempts": settings.MAX_RECLASSIFICATION_ATTEMPTS}
+    assert _decide_after_extract(state) == "unresolved"
+
+
+def test_get_document_graph_builds_once_and_caches():
+    pytest.importorskip("langgraph", reason="langgraph not installed — see requirements.txt")
+    from app.langgraph import graph as document_graph_module
+
+    document_graph_module.document_graph = None
+    first = document_graph_module.get_document_graph()
+    second = document_graph_module.get_document_graph()
+    assert first is second
+    document_graph_module.document_graph = None
 
 
 def test_detection_graph_compiles():

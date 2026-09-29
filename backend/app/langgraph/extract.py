@@ -30,17 +30,11 @@ def _split_prompt_for_caching(document_type: str, raw_text: str) -> tuple[str, s
 
 
 async def run_extraction(document_type: str, raw_text: str) -> dict:
-    from langchain_anthropic import ChatAnthropic  # local import: optional dep until phase 0 is installed
-
+    from ._anthropic import build_chat_anthropic
     from .cache_gate import cache_gate
 
     prefix, text = _split_prompt_for_caching(document_type, raw_text)
-    model = ChatAnthropic(
-        model=settings.LANGGRAPH_SONNET_MODEL,
-        api_key=settings.ANTHROPIC_API_KEY,
-        temperature=0,
-        max_tokens=4096,
-    )
+    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, 4096)
     message = {
         "role": "user",
         "content": [

@@ -13,7 +13,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import Annotated, Any, Required
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, StateGraph
@@ -99,10 +99,12 @@ Set "uncertain" to true when a finding is ambiguous, or a second opinion from a 
 
 
 class SpecialistState(TypedDict, total=False):
-    document_id: str
-    specialist: str
-    brief: str
-    document_type: str
+    # document_id/specialist/brief/document_type are always supplied by
+    # run_specialist's initial ainvoke() below.
+    document_id: Required[str]
+    specialist: Required[str]
+    brief: Required[str]
+    document_type: Required[str]
     messages: Annotated[list, add_messages]
     report: dict
 
@@ -127,14 +129,9 @@ def _parse_json_object(text: str) -> dict | None:
 
 def _make_agent_node(spec: Specialist):
     async def agent_node(state: SpecialistState) -> dict:
-        from langchain_anthropic import ChatAnthropic  # local import: optional dep
+        from .._anthropic import build_chat_anthropic
 
-        model = ChatAnthropic(
-            model=settings.LANGGRAPH_HAIKU_MODEL,
-            api_key=settings.ANTHROPIC_API_KEY,
-            temperature=0,
-            max_tokens=1024,
-        ).bind_tools(list(spec.tools))
+        model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 1024).bind_tools(list(spec.tools))
 
         existing = state.get("messages") or []
         with telemetry.get_tracer().start_as_current_span(f"detection.specialist.{spec.name}") as span:
@@ -163,12 +160,15 @@ def _make_agent_node(spec: Specialist):
 
 
 def _should_continue(state: SpecialistState) -> str:
-    last = state["messages"][-1]
+    # agent_node always runs first and always returns at least one message
+    # (see its docstring-equivalent above) — messages is never empty here.
+    messages = state.get("messages") or []
+    last = messages[-1]
     return "tools" if isinstance(last, AIMessage) and last.tool_calls else "collect"
 
 
 def _collect_node(state: SpecialistState) -> dict:
-    messages = state["messages"]
+    messages = state.get("messages") or []
     tools_called: list[str] = []
     unable: list[dict] = []
     findings: dict[str, dict] = {}

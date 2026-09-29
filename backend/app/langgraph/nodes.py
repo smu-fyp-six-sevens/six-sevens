@@ -208,7 +208,11 @@ async def ingest_node(state: DocumentGraphState) -> dict:
 
 
 async def finalise_classification_node(state: DocumentGraphState) -> dict:
-    classification = dict(state["classification"])
+    # classify subgraph always sets this before finalise_classification_node
+    # runs (see graph.py's edges) — never actually None/missing here.
+    raw_classification = state.get("classification")
+    assert raw_classification is not None
+    classification = dict(raw_classification)
     await record_classification_result(state["document_id"], classification)
     # record_classification_result may normalise document_type (unnamed ->
     # "unrecognised") in place — write the normalised dict back to state so
@@ -237,7 +241,12 @@ async def check_text_available(state: DocumentGraphState) -> dict:
 
 async def extract_node(state: DocumentGraphState) -> dict:
     document_id = state["document_id"]
-    document_type = state["classification"]["document_type"]
+    # Set by finalise_classification_node just before this runs, and always
+    # normalised to a real type string there (see record_classification_result).
+    classification = state.get("classification")
+    assert classification is not None
+    document_type = classification["document_type"]
+    assert document_type is not None
     raw_text = text_cache.get(document_id) or ""
 
     await set_status(document_id, DocumentStatus.EXTRACTING)
@@ -300,7 +309,10 @@ async def mark_unresolved_escalation_node(state: DocumentGraphState) -> dict:
 
 async def mark_analyzed_node(state: DocumentGraphState) -> dict:
     document_id = state["document_id"]
-    document_type = state["classification"]["document_type"]
+    classification = state.get("classification")
+    assert classification is not None
+    document_type = classification["document_type"]
+    assert document_type is not None
     await asyncio.to_thread(
         document_repository.update_status, document_id, DocumentStatus.ANALYZED, document_type=document_type
     )

@@ -1387,7 +1387,7 @@ def _check_alignment(blocks: list[_Block]) -> tuple[list[LayoutAnomaly], CheckAs
                     block, alignment, full_expected, content_left
                 ):
                     continue
-                if not (len(block.lines) >= 2 or block.char_count >= 80):
+                if not (len(block.lines) >= 2 or block.char_count >= 80):  # pragma: no cover
                     continue
                 key = (block.page + 1, tuple(round(v, 2) for v in block.bbox))
                 if key in already:

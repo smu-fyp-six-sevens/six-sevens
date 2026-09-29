@@ -102,3 +102,48 @@ def test_list_case_summaries_with_no_cases_returns_empty() -> None:
         mock_doc_repo.list_documents.return_value = []
 
         assert case_service.list_case_summaries() == []
+
+
+def test_get_case_delegates_to_case_repository() -> None:
+    with patch("app.case_service.case_repository") as mock_case_repo:
+        mock_case_repo.get_case.return_value = _make_case("case-1")
+
+        result = case_service.get_case("case-1")
+
+        assert result == _make_case("case-1")
+        mock_case_repo.get_case.assert_called_once_with("case-1")
+
+
+def test_create_case_delegates_to_case_repository() -> None:
+    with patch("app.case_service.case_repository") as mock_case_repo:
+        mock_case_repo.create_case.return_value = _make_case("case-1")
+
+        result = case_service.create_case("Acme Pte Ltd")
+
+        assert result == _make_case("case-1")
+        mock_case_repo.create_case.assert_called_once_with("Acme Pte Ltd")
+
+
+def test_update_case_delegates_to_case_repository() -> None:
+    with patch("app.case_service.case_repository") as mock_case_repo:
+        mock_case_repo.update_case.return_value = _make_case("case-1")
+
+        result = case_service.update_case("case-1", "New Name Pte Ltd")
+
+        assert result == _make_case("case-1")
+        mock_case_repo.update_case.assert_called_once_with("case-1", "New Name Pte Ltd")
+
+
+def test_delete_case_removes_its_documents_then_the_case() -> None:
+    documents = [_make_document("doc-1"), _make_document("doc-2")]
+    with (
+        patch("app.case_service.case_repository") as mock_case_repo,
+        patch("app.case_service.document_repository") as mock_doc_repo,
+    ):
+        mock_doc_repo.list_documents.return_value = documents
+
+        case_service.delete_case("case-1")
+
+        mock_doc_repo.list_documents.assert_called_once_with(case_id="case-1")
+        mock_doc_repo.remove_documents.assert_called_once_with(documents)
+        mock_case_repo.delete_case.assert_called_once_with("case-1")

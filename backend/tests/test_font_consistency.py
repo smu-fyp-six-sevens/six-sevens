@@ -340,3 +340,21 @@ def test_check_field_anchored_direct(monkeypatch) -> None:
     )
     assert isinstance(raw, list)
     doc.close()
+
+
+def test_font_family_returns_original_name_when_stripping_leaves_nothing() -> None:
+    assert v2._font_family("Bold") == "Bold"
+
+
+def test_is_underlined_false_for_zero_width_span() -> None:
+    assert v2._is_underlined((100.0, 0.0, 100.0, 50.0), []) is False
+
+
+def test_is_underlined_false_when_no_rect_is_near_the_baseline() -> None:
+    far_rect = pymupdf.Rect(0, 1000, 100, 1005)
+    assert v2._is_underlined((0.0, 0.0, 100.0, 20.0), [far_rect]) is False
+
+
+def test_dominant_empty_and_tie() -> None:
+    assert v2._dominant([]) is None
+    assert v2._dominant(["a", "b"]) is None

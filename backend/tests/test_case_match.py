@@ -6,6 +6,8 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
+from app import case_match as cm
+from app import case_service
 from app.case_match import (
     CheckOutcome,
     DocumentMatchStatus,
@@ -461,6 +463,14 @@ def test_case_match_endpoint_404_for_unknown_case() -> None:
     assert response.status_code == 404
 
 
+def test_case_match_endpoint_db_failure_returns_502() -> None:
+    with patch("app.routers.cases.case_service") as mock_case_service:
+        mock_case_service.get_case_match_for_case.side_effect = RuntimeError("connection refused")
+        response = client.get("/cases/case-1/case-match")
+
+    assert response.status_code == 502
+
+
 def test_document_case_match_endpoint_returns_that_documents_entry() -> None:
     # GET /documents/{id}/detection/case-match sits behind
     # Depends(get_document_or_404) (fetches via _dependencies.document_repository)
@@ -494,6 +504,44 @@ def test_document_case_match_endpoint_404_without_case() -> None:
         response = client.get("/documents/orphan/detection/case-match")
 
     assert response.status_code == 404
+
+
+def test_get_case_match_for_document_none_when_document_has_no_case() -> None:
+    orphan = _doc("nric", {"nric_number": "S1234567A"}, "orphan").model_copy(update={"case_id": None})
+    with patch("app.case_service.document_repository") as doc_repo:
+        doc_repo.get_document.return_value = orphan
+        assert case_service.get_case_match_for_document("orphan") is None
+
+
+def test_get_case_match_for_document_none_when_its_case_is_missing() -> None:
+    doc = _doc("payslip", {}, "doc-1")
+    with (
+        patch("app.case_service.document_repository") as doc_repo,
+        patch("app.case_service.case_repository") as case_repo,
+    ):
+        doc_repo.get_document.return_value = doc
+        case_repo.get_case.return_value = None
+        assert case_service.get_case_match_for_document("doc-1") is None
+
+
+def test_get_case_match_for_document_appends_document_missing_from_the_fetched_list() -> None:
+    stray = _doc("list_of_loans", {"uen": OTHER_UEN, "individual_name": "Tan Wei Ming"}, "stray")
+    with (
+        patch("app.case_service.document_repository") as doc_repo,
+        patch("app.case_service.case_repository") as case_repo,
+    ):
+        doc_repo.get_document.return_value = stray
+        case_repo.get_case.return_value = _case()
+        # Deliberately excludes `stray` — its own fetch by document_id
+        # succeeded, but this case's own document list doesn't have it yet
+        # (e.g. a replication lag), the defensive case get_case_match_for_document
+        # guards against.
+        doc_repo.list_documents.return_value = [_incumbency(), *_corroborating(3)]
+
+        result = case_service.get_case_match_for_document("stray")
+
+    assert result is not None
+    assert result.document_id == "stray"
 
 
 def test_case_snapshot_includes_case_match_computed_from_plain_fields() -> None:
@@ -540,3 +588,39 @@ def test_rejected_documents_do_not_count_towards_verifying_incumbency() -> None:
     result = check_case_match(_case(), [_incumbency(), *docs])
 
     assert result.incumbency.status == IncumbencyStatus.INSUFFICIENT_EVIDENCE
+
+
+# --- small private-helper edge cases (pure functions, no fixtures needed) --
+
+
+def test_strings_flattens_only_the_string_items_of_a_list() -> None:
+    assert cm._strings([1, "a; b", None, ["nested, ignored"]]) == ["a", "b"]
+
+
+def test_normalize_uen_none_for_non_string_input() -> None:
+    assert cm.normalize_uen(12345) is None
+
+
+def test_normalize_uen_none_when_nothing_alphanumeric_remains() -> None:
+    assert cm.normalize_uen("!!!") is None
+
+
+def test_company_tokens_empty_for_non_string_input() -> None:
+    assert cm._company_tokens(None) == []
+
+
+def test_list_field_people_skips_non_dict_entries() -> None:
+    people = cm._list_field_people({"officers": [123, {"name": "Jane Tan"}]})
+    assert len(people) == 1
+    assert people[0].name == "Jane Tan"
+
+
+def test_is_personal_document_true_for_personal_bank_statement() -> None:
+    doc = _doc("bank_statement", {"individual_name": "Jane Tan"}, "bs")
+    assert cm._is_personal_document(doc, doc.extracted_fields) is True
+
+
+def test_compare_person_returns_none_without_id_or_name_to_compare() -> None:
+    person = cm._Person(name=None, id_number=None, name_field="x", id_field="y")
+    reference = cm.IncumbencyVerification(status=IncumbencyStatus.VERIFIED)
+    assert cm._compare_person(person, reference) is None

@@ -186,16 +186,10 @@ async def classify_by_llm(extracted_text: str) -> dict:
     isn't racing concurrent siblings for the same cache write — see
     cache_gate.py.
     """
-    from langchain_anthropic import ChatAnthropic  # local import: optional dep until phase 0 is installed
-
+    from ._anthropic import build_chat_anthropic
     from .cache_gate import cache_gate
 
-    model = ChatAnthropic(
-        model=settings.LANGGRAPH_HAIKU_MODEL,
-        api_key=settings.ANTHROPIC_API_KEY,
-        temperature=0,
-        max_tokens=1024,
-    )
+    model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 1024)
     messages = [
         {
             "role": "system",

@@ -12,7 +12,7 @@ from starlette.datastructures import Headers
 from app.config import settings
 from app.fraud_detection.font_consistency_v2 import ExtractedField
 from app.main import app
-from app.models import CaseRecord, DocumentRecord, DocumentStatus
+from app.models import CaseRecord, DocumentRecord, DocumentStatus, compute_fulfilled_requirements
 from app.routers.upload import _ingest_one
 
 
@@ -626,6 +626,34 @@ def test_update_document_type_records_type_and_reruns_extraction() -> None:
     mock_pipeline.rerun_extraction.assert_awaited_once_with("doc-1")
 
 
+def test_update_document_type_confirms_existing_type_without_rerunning_extraction() -> None:
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+        patch("app.routers.documents.langgraph_pipeline") as mock_pipeline,
+    ):
+        document = _typed_document()
+        mock_dep_repo.get_document.return_value = document
+        mock_repo.get_document.return_value = document
+        mock_fields_repo.get_extracted_fields.return_value = []
+        mock_pipeline.rerun_extraction = AsyncMock()
+
+        response = client.patch("/documents/doc-1/document-type", json={"document_type": "payslip"})
+
+    assert response.status_code == 200
+    mock_repo.record_classification.assert_called_once_with(
+        "doc-1",
+        document_type="payslip",
+        confidence=1.0,
+        classification_outcome="accepted",
+        evidence=document.evidence,
+        fulfilled_requirements=compute_fulfilled_requirements("payslip", document.extracted_fields),
+    )
+    mock_repo.update_status.assert_not_called()
+    mock_pipeline.rerun_extraction.assert_not_awaited()
+
+
 def test_update_document_type_allows_unclassified_failed_document_without_case() -> None:
     with (
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
@@ -1092,3 +1120,146 @@ def test_delete_document_db_failure_returns_502() -> None:
         response = client.delete("/documents/doc-1")
 
     assert response.status_code == 502
+
+
+# --- POST /{document_id}/approve -----------------------------------------
+
+
+def test_approve_document_success() -> None:
+    document = _typed_document()
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
+        mock_repo.get_document.return_value = document.model_copy(
+            update={"status": DocumentStatus.APPROVED}
+        )
+        mock_fields_repo.get_extracted_fields.return_value = []
+
+        response = client.post("/documents/doc-1/approve")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "approved"
+    mock_repo.approve_document.assert_called_once_with("doc-1")
+
+
+def test_approve_document_rejects_a_document_not_yet_analyzed() -> None:
+    document = _typed_document(status=DocumentStatus.EXTRACTING)
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
+
+        response = client.post("/documents/doc-1/approve")
+
+    assert response.status_code == 400
+    mock_repo.approve_document.assert_not_called()
+
+
+def test_approve_document_write_failure_returns_502() -> None:
+    document = _typed_document()
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
+        mock_repo.approve_document.side_effect = RuntimeError("db down")
+
+        response = client.post("/documents/doc-1/approve")
+
+    assert response.status_code == 502
+
+
+# --- POST /{document_id}/reject -------------------------------------------
+
+
+def test_reject_document_success() -> None:
+    document = _typed_document()
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
+        mock_repo.get_document.return_value = document.model_copy(
+            update={"status": DocumentStatus.REJECTED}
+        )
+        mock_fields_repo.get_extracted_fields.return_value = []
+
+        response = client.post("/documents/doc-1/reject")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "rejected"
+    mock_repo.reject_document.assert_called_once_with("doc-1")
+
+
+def test_reject_document_rejects_a_document_not_yet_analyzed() -> None:
+    document = _typed_document(status=DocumentStatus.EXTRACTING)
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
+
+        response = client.post("/documents/doc-1/reject")
+
+    assert response.status_code == 400
+    mock_repo.reject_document.assert_not_called()
+
+
+def test_reject_document_write_failure_returns_502() -> None:
+    document = _typed_document()
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
+        mock_repo.reject_document.side_effect = RuntimeError("db down")
+
+        response = client.post("/documents/doc-1/reject")
+
+    assert response.status_code == 502
+
+
+# --- GET /{document_id}/langgraph-trace ------------------------------------
+
+
+def test_langgraph_trace_returns_persisted_result() -> None:
+    with patch("app.routers.documents.langgraph_trace") as mock_trace:
+        mock_trace.get_persisted.return_value = {"route": "fast_path"}
+
+        response = client.get("/documents/doc-1/langgraph-trace")
+
+    assert response.status_code == 200
+    assert response.json() == {"route": "fast_path"}
+    mock_trace.get.assert_not_called()
+
+
+def test_langgraph_trace_falls_back_to_in_memory_when_persisted_lookup_fails() -> None:
+    with patch("app.routers.documents.langgraph_trace") as mock_trace:
+        mock_trace.get_persisted.side_effect = RuntimeError("db down")
+        mock_trace.get.return_value = {"route": "sonnet_agent"}
+
+        response = client.get("/documents/doc-1/langgraph-trace")
+
+    assert response.status_code == 200
+    assert response.json() == {"route": "sonnet_agent"}
+
+
+def test_langgraph_trace_404_when_nothing_found_anywhere() -> None:
+    with patch("app.routers.documents.langgraph_trace") as mock_trace:
+        mock_trace.get_persisted.return_value = None
+        mock_trace.get.return_value = None
+
+        response = client.get("/documents/doc-1/langgraph-trace")
+
+    assert response.status_code == 404

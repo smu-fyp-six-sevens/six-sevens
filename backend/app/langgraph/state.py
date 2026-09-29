@@ -13,18 +13,21 @@ safe to log.
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Optional, TypedDict
+from typing import Annotated, Any, Optional, Required, TypedDict
 
 from langgraph.graph.message import add_messages
 
 
 class ClassificationResult(TypedDict, total=False):
-    document_type: Optional[str]
-    confidence: float
-    evidence: list[str]
-    reasoning: str
-    needs_manual_review: bool
-    fulfilled_requirements: list[str]
+    # All six are always set together — see classify_support.validate_agent_output
+    # and classify_graph.py's repair fallback, the only two places this dict is
+    # built — so Required here reflects a real invariant, not a hopeful cast.
+    document_type: Required[Optional[str]]
+    confidence: Required[float]
+    evidence: Required[list[str]]
+    reasoning: Required[str]
+    needs_manual_review: Required[bool]
+    fulfilled_requirements: Required[list[str]]
 
 
 class ExtractionSummary(TypedDict, total=False):
@@ -42,7 +45,9 @@ class ExtractionSummary(TypedDict, total=False):
 class DocumentGraphState(TypedDict, total=False):
     # Identity / reference — never bytes, never raw text (see files/parameter
     # binding in the migration plan). Nodes and tools fetch by these.
-    document_id: str
+    # document_id is Required: pipeline.process_document's initial ainvoke()
+    # always supplies it (see graph.py) — every node runs after that.
+    document_id: Required[str]
     case_id: Optional[str]
     filename: str
     storage_path: str

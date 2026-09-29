@@ -117,8 +117,7 @@ def _capped(result: dict) -> VisionClassificationResult:
 
 
 async def _classify_with_vision(storage_path: str, filename: str) -> VisionClassificationResult:
-    from langchain_anthropic import ChatAnthropic  # local import: optional dep until phase 0 is installed
-
+    from ._anthropic import build_chat_anthropic
     from .cache_gate import cache_gate
 
     try:
@@ -126,12 +125,7 @@ async def _classify_with_vision(storage_path: str, filename: str) -> VisionClass
     except Exception as exc:  # noqa: BLE001 — a failed tool call is "treat as absent", not a crash
         return VisionClassificationResult(notes=[f"Could not read the document: {exc}"])
 
-    model = ChatAnthropic(
-        model=settings.LANGGRAPH_SONNET_MODEL,
-        api_key=settings.ANTHROPIC_API_KEY,
-        temperature=0,
-        max_tokens=1024,
-    )
+    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, 1024)
     # Static prompt FIRST, document second. A cache_control breakpoint caches
     # everything up to and including its own block, so with the document
     # first the cached prefix contained this document — unique per call,

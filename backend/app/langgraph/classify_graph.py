@@ -28,6 +28,7 @@ parent graph persists, per LANGGRAPH_MIGRATION_PLAN.md section 5.
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
@@ -88,16 +89,11 @@ def rule_node(state: DocumentGraphState) -> dict:
 
 
 async def agent_node(state: DocumentGraphState) -> dict:
-    from langchain_anthropic import ChatAnthropic  # local import: optional dep until phase 0 is installed
+    from ._anthropic import build_chat_anthropic
 
     existing = state.get("agent_messages") or []
     available_tools = _available_tools(existing)
-    model = ChatAnthropic(
-        model=settings.LANGGRAPH_SONNET_MODEL,
-        api_key=settings.ANTHROPIC_API_KEY,
-        temperature=0,
-        max_tokens=1024,
-    )
+    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, 1024)
     if available_tools:
         model = model.bind_tools(available_tools)
 
@@ -111,7 +107,9 @@ async def agent_node(state: DocumentGraphState) -> dict:
             # cache_control breakpoint) is already in `existing`, so there's
             # nothing new to gate — this call is naturally later than
             # whichever call first warmed the cache for this key.
-            response: AIMessage = await model.ainvoke(existing)
+            # ChatAnthropic always returns an AIMessage; ainvoke's declared
+            # return type is the more general BaseMessage.
+            response = cast(AIMessage, await model.ainvoke(existing))
             telemetry.record_usage(span, response)
             span.set_attribute("tool_calls", [tc["name"] for tc in (response.tool_calls or [])])
             trace.record(
@@ -148,7 +146,7 @@ async def agent_node(state: DocumentGraphState) -> dict:
 
 
 def should_continue_agent(state: DocumentGraphState) -> str:
-    last = state["agent_messages"][-1]
+    last = (state.get("agent_messages") or [])[-1]
     if isinstance(last, AIMessage) and last.tool_calls:
         return "tools"
     return "validate"
@@ -196,7 +194,7 @@ def prepare_reclassify_node(state: DocumentGraphState) -> dict:
 
 
 def validate_node(state: DocumentGraphState) -> dict:
-    last = state["agent_messages"][-1]
+    last = (state.get("agent_messages") or [])[-1]
     content = last.content if isinstance(last.content, str) else str(last.content)
     classification = validate_agent_output(content)
     trace.record(state["document_id"], "validate", document_type=classification.get("document_type"))
@@ -214,16 +212,11 @@ async def repair_node(state: DocumentGraphState) -> dict:
     if classification.get("document_type"):
         return {}
 
-    from langchain_anthropic import ChatAnthropic  # local import: optional dep until phase 0 is installed
+    from ._anthropic import build_chat_anthropic
 
-    last = state["agent_messages"][-1]
+    last = (state.get("agent_messages") or [])[-1]
     bad_output = last.content if isinstance(last.content, str) else str(last.content)
-    repair_model = ChatAnthropic(
-        model=settings.LANGGRAPH_HAIKU_MODEL,
-        api_key=settings.ANTHROPIC_API_KEY,
-        temperature=0,
-        max_tokens=512,
-    )
+    repair_model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 512)
     try:
         response = await repair_model.ainvoke([
             SystemMessage(

@@ -25,7 +25,7 @@ import logging
 import operator
 import os
 from datetime import datetime, timezone
-from typing import Annotated, Any
+from typing import Annotated, Any, Required
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
@@ -49,11 +49,14 @@ class DetectionError(Exception):
 
 
 class DetectionState(TypedDict, total=False):
-    document_id: str
+    # document_id/reports/second_look_used are always supplied by
+    # run_detection's initial ainvoke() below — Required reflects that,
+    # everything else builds up as the graph runs.
+    document_id: Required[str]
     context: dict
     plan: dict
-    reports: Annotated[list, operator.add]
-    second_look_used: bool
+    reports: Required[Annotated[list, operator.add]]
+    second_look_used: Required[bool]
     second_look: dict | None
     lead_summary: str
     result: dict
@@ -152,14 +155,9 @@ or, when requesting a second look:
 async def _ask_lead(system_prompt: str, user_payload: dict, *, span_name: str) -> dict | None:
     import json
 
-    from langchain_anthropic import ChatAnthropic  # local import: optional dep
+    from .._anthropic import build_chat_anthropic
 
-    model = ChatAnthropic(
-        model=settings.LANGGRAPH_SONNET_MODEL,
-        api_key=settings.ANTHROPIC_API_KEY,
-        temperature=0,
-        max_tokens=1500,
-    )
+    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, 1500)
     with telemetry.get_tracer().start_as_current_span(span_name) as span:
         response = await model.ainvoke([
             SystemMessage(content=system_prompt),
@@ -173,6 +171,27 @@ async def _ask_lead(system_prompt: str, user_payload: dict, *, span_name: str) -
 
 
 # --- nodes ------------------------------------------------------------------
+
+
+def _context(state: DetectionState) -> dict:
+    """load_context_node always runs first and sets this before anything else does."""
+    context = state.get("context")
+    assert context is not None
+    return context
+
+
+def _plan(state: DetectionState) -> dict:
+    """lead_plan_node always runs before anything that reads this."""
+    plan = state.get("plan")
+    assert plan is not None
+    return plan
+
+
+def _second_look_request(state: DetectionState) -> dict:
+    """Only read on the run_second_look branch, gated on this being set (see _after_review)."""
+    request = state.get("second_look")
+    assert request is not None
+    return request
 
 
 async def load_context_node(state: DetectionState) -> dict:
@@ -226,8 +245,9 @@ def _normalise_plan(raw: dict | None) -> dict:
 
 async def lead_plan_node(state: DetectionState) -> dict:
     prompt = _PLAN_PROMPT.format(catalogue=_catalogue())
-    plan = _normalise_plan(await _ask_lead(prompt, {"document": state["context"]}, span_name="detection.lead_plan"))
-    plan["deviation"] = _plan_deviation(plan, state["context"]["default_team"])
+    context = _context(state)
+    plan = _normalise_plan(await _ask_lead(prompt, {"document": context}, span_name="detection.lead_plan"))
+    plan["deviation"] = _plan_deviation(plan, context["default_team"])
     trace.record(
         state["document_id"], "detection_plan",
         detection_consult=[c["specialist"] for c in plan["consult"]],
@@ -238,13 +258,13 @@ async def lead_plan_node(state: DetectionState) -> dict:
 
 
 def _dispatch(state: DetectionState):
-    consult = state["plan"]["consult"]
+    consult = _plan(state)["consult"]
     if not consult:
         return "synthesize"
     return [
         Send("specialist", {
             "document_id": state["document_id"],
-            "document_type": state["context"]["document_type"],
+            "document_type": _context(state)["document_type"],
             "name": entry["specialist"],
             "brief": entry["brief"],
         })
@@ -320,7 +340,7 @@ async def lead_review_node(state: DetectionState) -> dict:
     )
     prompt = _REVIEW_PROMPT.format(catalogue=_catalogue(), second_look_rule=rule)
     raw = await _ask_lead(prompt, {
-        "document": state["context"],
+        "document": _context(state),
         "reports": _compact_reports(state["reports"]),
         "second_look_already_used": used,
     }, span_name="detection.lead_review")
@@ -340,7 +360,7 @@ def _after_review(state: DetectionState) -> str:
 
 
 async def second_look_node(state: DetectionState) -> dict:
-    request = state["second_look"]
+    request = _second_look_request(state)
     brief = (
         f"SECOND LOOK requested by the lead investigator. The {SPECIALISTS[request['from']].title} reported: "
         f"\"{request['finding_summary']}\" (severity {request['finding_severity']}; {request['finding_rationale']}). "
@@ -352,7 +372,7 @@ async def second_look_node(state: DetectionState) -> dict:
     )
     result = await specialist_node({
         "document_id": state["document_id"],
-        "document_type": state["context"]["document_type"],
+        "document_type": _context(state)["document_type"],
         "name": request["to"],
         "brief": brief,
         "second_look": True,
@@ -366,7 +386,7 @@ def _max_severity(a: str, b: str) -> str:
 
 def merge_reports(state: DetectionState) -> dict:
     """Deterministic merge into the one combined result the analyst sees."""
-    plan, reports, context = state["plan"], state["reports"], state["context"]
+    plan, reports, context = _plan(state), state["reports"], _context(state)
     request = state.get("second_look") if state.get("second_look_used") else None
 
     findings: dict[tuple, dict] = {}
@@ -470,7 +490,10 @@ def build_detection_graph():
 
     graph.set_entry_point("load_context")
     graph.add_edge("load_context", "lead_plan")
-    graph.add_conditional_edges("lead_plan", _dispatch, ["specialist", "synthesize"])
+    # _dispatch returning list[Send] for the map/fan-out case is LangGraph's
+    # documented Send pattern; add_conditional_edges' stub just doesn't
+    # include Send in its declared return-type union.
+    graph.add_conditional_edges("lead_plan", _dispatch, ["specialist", "synthesize"])  # pyright: ignore[reportArgumentType]
     graph.add_edge("specialist", "lead_review")
     graph.add_conditional_edges("lead_review", _after_review, {"run_second_look": "run_second_look", "synthesize": "synthesize"})
     graph.add_edge("run_second_look", "lead_review")

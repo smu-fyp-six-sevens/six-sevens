@@ -39,8 +39,8 @@ jobs:
       - name: Run backend tests
         run: pytest --cov=app --cov-report=
 
-      - name: Show coverage report (sorted by coverage, descending)
-        run: coverage report --show-missing --sort=-cover
+      - name: Show coverage report (sorted by coverage, ascending)
+        run: coverage report --show-missing --sort=cover
 
   frontend-ci:
     name: Frontend CI

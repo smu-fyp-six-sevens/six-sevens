@@ -64,6 +64,15 @@ filterwarnings = [
 [tool.setuptools.packages.find]
 include = ["app*"]
 
+[tool.coverage.run]
+omit = [
+  # Dev-only synthetic fraud-injection tool, deliberately not unit-tested
+  # (see tests/conftest.py's collect_ignore) — omit so it doesn't show as a
+  # 0% coverage gap.
+  "app/injection/*",
+  "app/routers/injection.py",
+]
+
 [tool.coverage.report]
 exclude_lines = [
   "pragma: no cover",

@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
+from typing import Any, cast
 
 from ..supabase_client import supabase_client
 
@@ -80,20 +80,26 @@ def get_case_detection_reports(case_id: str) -> list[dict[str, Any]]:
         .execute()
         .data
     )
-    return [
-        {
+    reports = []
+    for row in rows:
+        # The `trace` column is always a JSON object written by _write_row
+        # above — cast() just tells the type checker what's already true.
+        row_trace = cast(dict, row.get("trace")) or {}
+        if not row_trace.get("detection_report"):
+            continue
+        reports.append({
             "document_id": row["document_id"],
-            "filename": row["trace"].get("filename"),
-            "report": row["trace"]["detection_report"],
-        }
-        for row in rows
-        if (row.get("trace") or {}).get("detection_report")
-    ]
+            "filename": row_trace.get("filename"),
+            "report": row_trace["detection_report"],
+        })
+    return reports
 
 
 def get_persisted(document_id: str) -> dict[str, Any] | None:
     result = supabase_client.table("langgraph_trace").select("trace").eq("document_id", document_id).execute()
-    return result.data[0]["trace"] if result.data else None
+    if not result.data:
+        return None
+    return cast(dict, result.data[0]["trace"])
 
 
 def _persist(document_id: str) -> None:

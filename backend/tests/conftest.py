@@ -9,6 +9,19 @@ from app.main import app
 PDF_DOC_ID = "C001_CertIncumbency"
 IMAGE_DOC_ID = "ocbc_sample"
 
+# app/injection/* is a dev-only synthetic fraud-injection tool used to
+# generate test documents for the detector — not part of the graded
+# detection pipeline (see CLAUDE.md). Deliberately not unit-tested for now;
+# the files below are left in place (not deleted) in case that changes.
+collect_ignore = [
+    "test_field_text.py",
+    "test_fraud_injections.py",
+    "test_injection_router.py",
+    "test_injectors.py",
+    "test_pdf.py",
+    "test_store.py",
+]
+
 
 @pytest.fixture(autouse=True)
 def _bypass_auth():
