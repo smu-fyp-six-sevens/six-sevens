@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import AppHeader from '../components/AppHeader';
 import DropZone from '../components/DropZone';
-import { testMetadataAnomaly } from '../services/metadataAnomalyService';
+import { testMetadataAnomaly, getMetadataAnomaly } from '../services/metadataAnomalyService';
 import type { MetadataAnalysisResult, MetadataAnomaly } from '../services/metadataAnomalyService';
 import { testNumericalValidation, getNumericalValidation } from '../services/numericalValidationService';
 import type { NumericalFinding, NumericalValidationResult } from '../services/numericalValidationService';
 import { testDateAnomalies, getDateAnomalies } from '../services/dateAnomalyService';
 import type { DateFinding, DateAnomalyResult } from '../services/dateAnomalyService';
-import { testSpellingAnomaly } from '../services/spellingAnomalyService';
+import { testSpellingAnomaly, getSpellingAnomaly } from '../services/spellingAnomalyService';
 import type { SpellingAnomalyResult } from '../services/spellingAnomalyService';
 import { DOCUMENT_TYPE_OPTIONS } from '../services/uploadService';
 
@@ -110,21 +110,34 @@ export default function TestAnomalyPage({ onBack }: TestAnomalyPageProps) {
 
     // Each check runs independently — one failing (e.g. exiftool missing
     // in this environment) shouldn't hide a result the other could still
-    // produce. Spelling/metadata only make sense against an uploaded file;
-    // numerical/date prefer a real document ID (real extracted_fields)
-    // when one's given, falling back to the file-upload test endpoint.
+    // produce. All four prefer a real document ID (real stored file +
+    // extracted_fields) when one's given, falling back to the file-upload
+    // test endpoint otherwise.
     const tasks: Promise<void>[] = [];
 
-    if (file) {
+    const spellingPromise = trimmedId
+      ? getSpellingAnomaly(trimmedId)
+      : file
+        ? testSpellingAnomaly(file)
+        : null;
+    if (spellingPromise) {
       tasks.push(
-        testSpellingAnomaly(file)
+        spellingPromise
           .then(setSpellingResult)
           .catch((reason) =>
             setSpellingError(reason instanceof Error ? reason.message : 'Spelling anomaly check failed.'),
           ),
       );
+    }
+
+    const metadataPromise = trimmedId
+      ? getMetadataAnomaly(trimmedId)
+      : file
+        ? testMetadataAnomaly(file, documentType || undefined)
+        : null;
+    if (metadataPromise) {
       tasks.push(
-        testMetadataAnomaly(file, documentType || undefined)
+        metadataPromise
           .then(setMetadataResult)
           .catch((reason) =>
             setMetadataError(reason instanceof Error ? reason.message : 'Metadata anomaly check failed.'),
@@ -249,11 +262,11 @@ export default function TestAnomalyPage({ onBack }: TestAnomalyPageProps) {
         />
 
         <p className="anomaly-empty">
-          When set, numerical validation and date anomalies run against this document's real,
-          already-extracted fields (GET /documents/&#123;id&#125;/detection/...) instead of the
-          file above — the only way to see those two checks produce anything other than
-          "unable to assess", since an ad-hoc upload has no extracted fields behind it.
-          Spelling and metadata still run against the uploaded file, if any.
+          When set, all four checks run against this document's real, already-stored file and
+          extracted fields (GET /documents/&#123;id&#125;/detection/...) instead of the file
+          above — the only way to see numerical validation and date anomalies produce anything
+          other than "unable to assess", since an ad-hoc upload has no extracted fields behind
+          it. Leave it blank to test against an uploaded file instead.
         </p>
 
         <div className="action-bar">
