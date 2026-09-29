@@ -490,6 +490,60 @@ def test_fs_tax_expense_rate_flags_flat_rate_ignoring_exemption() -> None:
     assert len(_codes(result, "FS.TAX_EXPENSE_RATE")) == 1
 
 
+def test_fs_re_rollforward_flags_broken_roll_forward() -> None:
+    result = _run(
+        [_field("retained_earnings_opening", "100000"), _field("profit_for_the_year", "50000"),
+         _field("dividends_paid", "0"), _field("retained_earnings_closing", "999999")],
+        document_type="source_of_wealth",
+    )
+    assert len(_codes(result, "FS.RE_ROLLFORWARD")) == 1
+
+
+def test_fs_ppe_rollforward_flags_negative_implied_additions() -> None:
+    result = _run(
+        [_field("ppe_opening", "100000"), _field("ppe_closing", "10000"),
+         _field("depreciation_expense", "5000")],
+        document_type="source_of_wealth",
+    )
+    assert len(_codes(result, "FS.PPE_ROLLFORWARD")) == 1
+
+
+def test_fs_debt_classification_flags_long_tenure_loan_with_no_non_current_portion() -> None:
+    result = _run(
+        [_field("borrowings_current", "50000"), _field("loan_tenure", "60")],
+        document_type="source_of_wealth",
+    )
+    assert len(_codes(result, "FS.DEBT_CLASSIFICATION")) == 1
+
+
+def test_fs_ratio_bands_flags_finance_costs_outside_band() -> None:
+    result = _run(
+        [_field("finance_costs", "100000"), _field("borrowings_opening", "100000"),
+         _field("borrowings_closing", "100000")],
+        document_type="source_of_wealth",
+    )
+    assert len(_codes(result, "FS.RATIO_BANDS")) == 1
+
+
+def test_fs_ratio_bands_flags_gross_margin_outside_band() -> None:
+    result = _run(
+        [_field("revenue", "100000"), _field("cost_of_sales", "200000")],
+        document_type="source_of_wealth",
+    )
+    assert len(_codes(result, "FS.RATIO_BANDS")) == 1
+
+
+def test_fs_note_refs_flags_a_reference_with_no_matching_note() -> None:
+    result = _run(
+        [_field("notes", [{"note_number": "3", "heading": "Revenue"}]),
+         _field("note_references", ["3", "7"])],
+        document_type="source_of_wealth",
+    )
+    findings = _codes(result, "FS.NOTE_REFS")
+    assert len(findings) == 1
+    assert "7" in findings[0].summary
+
+
 # ---------------------------------------------------------------------------
 # Notice of assessment
 # ---------------------------------------------------------------------------
@@ -563,6 +617,14 @@ def test_cpf_ceiling_flags_excess_once_configured() -> None:
         REFERENCE_DATA["cpf_ordinary_wage_ceiling"].clear()
 
 
+def test_cpf_base_flags_contribution_calculated_on_basic_pay_alone() -> None:
+    result = _run(
+        [_field("employee_cpf", "200"), _field("basic_pay", "1000"), _field("ordinary_wages", "2000")],
+        document_type="payslip",
+    )
+    assert len(_codes(result, "PAY.CPF_BASE")) == 1
+
+
 # ---------------------------------------------------------------------------
 # Credit report
 # ---------------------------------------------------------------------------
@@ -595,6 +657,39 @@ def test_cr_limit_vs_balance_flags_balance_over_limit() -> None:
 def test_cr_score_flags_template_placeholder() -> None:
     result = _run([_field("bureau_score", "Example Score 1500")], document_type="credit_report")
     assert len(_codes(result, "CR.SCORE")) == 1
+
+
+def test_cr_aggregate_sum_flags_mismatch_with_stated_total() -> None:
+    result = _run(
+        [_field("accounts", [{"current_balance": 1000}, {"current_balance": 2000}]),
+         _field("total_outstanding_balance", "5000")],
+        document_type="credit_report",
+    )
+    assert len(_codes(result, "CR.AGGREGATE_SUM")) == 1
+
+
+def test_cr_amortisation_flags_a_balance_fall_bigger_than_the_instalment() -> None:
+    result = _run(
+        [_field("accounts", [{
+            "monthly_instalment": 100,
+            "balance_history": [{"balance": 1000}, {"balance": 200}],
+        }])],
+        document_type="credit_report",
+    )
+    assert len(_codes(result, "CR.AMORTISATION")) == 1
+
+
+def test_cr_linear_series_flags_a_mechanically_constant_balance_fall() -> None:
+    result = _run(
+        [_field("accounts", [{
+            "balance_history": [
+                {"balance": 1000}, {"balance": 900}, {"balance": 800},
+                {"balance": 700}, {"balance": 600},
+            ],
+        }])],
+        document_type="credit_report",
+    )
+    assert len(_codes(result, "CR.LINEAR_SERIES")) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -648,6 +743,18 @@ def test_loan_rate_band_runs_against_a_reference_rate_formula() -> None:
     assert "LOAN.RATE_BAND" not in {s.check_code for s in result.skipped_checks}
 
 
+def test_loan_scheme_params_flags_amount_over_the_schemes_cap() -> None:
+    REFERENCE_DATA["loan_scheme_params"]["Enterprise Financing Scheme"] = {"amount_cap": 500000}
+    try:
+        result = _run(
+            [_field("scheme_name", "Enterprise Financing Scheme"), _field("loan_amount", "900000")],
+            document_type="list_of_loans",
+        )
+        assert len(_codes(result, "LOAN.SCHEME_PARAMS")) == 1
+    finally:
+        REFERENCE_DATA["loan_scheme_params"].clear()
+
+
 # ---------------------------------------------------------------------------
 # Proof of address
 # ---------------------------------------------------------------------------
@@ -660,6 +767,23 @@ def test_poa_balance_arithmetic_flags_mismatch() -> None:
         document_type="proof_of_address",
     )
     assert len(_codes(result, "POA.BALANCE_ARITHMETIC")) == 1
+
+
+def test_poa_usage_match_flags_stated_usage_not_matching_the_trend() -> None:
+    result = _run(
+        [_field("usage_this_period", "500"),
+         _field("consumption_trend", [{"month": "Jan", "usage": 200}])],
+        document_type="proof_of_address",
+    )
+    assert len(_codes(result, "POA.USAGE_MATCH")) == 1
+
+
+def test_poa_unit_rate_flags_an_implausible_tariff() -> None:
+    result = _run(
+        [_field("current_charges", "1000"), _field("usage_this_period", "1")],
+        document_type="proof_of_address",
+    )
+    assert len(_codes(result, "POA.UNIT_RATE")) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -684,6 +808,14 @@ def test_acra_officers_flags_no_director() -> None:
     assert len(_codes(result, "ACRA.OFFICERS")) == 1
 
 
+def test_acra_capital_per_share_flags_an_implausible_per_share_value() -> None:
+    result = _run(
+        [_field("share_capital", "2000000"), _field("issued_shares", "1")],
+        document_type="certificate_of_incumbency",
+    )
+    assert len(_codes(result, "ACRA.CAPITAL_PER_SHARE")) == 1
+
+
 def test_const_subscriber_sum_flags_mismatch() -> None:
     result = _run(
         [_field("subscribers", [{"shares": 300000}, {"shares": 100000}]),
@@ -699,6 +831,14 @@ def test_const_quorum_flags_quorum_exceeding_subscribers() -> None:
         document_type="company_constitution",
     )
     assert len(_codes(result, "CONST.QUORUM")) == 1
+
+
+def test_const_capital_per_share_flags_an_implausible_per_share_value() -> None:
+    result = _run(
+        [_field("share_capital", "2000000"), _field("issued_shares", "1")],
+        document_type="company_constitution",
+    )
+    assert len(_codes(result, "CONST.CAPITAL_PER_SHARE")) == 1
 
 
 def _build_mrz(passport_no: str, dob: str, expiry: str) -> str:
