@@ -604,6 +604,234 @@ def test_one_page_form_lines_can_show_an_indent() -> None:
     assert findings[0].evidence["left_delta_pt"] == 28.0
 
 
+def _sentence(x0: float, y0: float, x1: float, text: str) -> _Line:
+    return _line((x0, y0, x1, y0 + 12), text=text)
+
+
+def test_a_line_that_slides_inside_its_block_is_named() -> None:
+    block = _block([
+        _sentence(466, 544, 541, "$1,091.60"),
+        _sentence(78, 547, 475, "Total Amount Payable will be deducted from your account"),
+        _sentence(54, 557, 73, "2026"),
+    ])
+    findings = lr._check_shifted_lines([block])
+    assert findings
+    assert "Total Amount Payable" in findings[0].text
+    assert findings[0].evidence["left_delta_pt"] == 24.0
+
+
+def test_one_line_past_a_stable_block_edge_is_named() -> None:
+    lines = [
+        _sentence(78, 195, 516, "If yes, please provide the tax identifying number for the entity"),
+        _sentence(78, 219, 513, "If no, please complete the following table indicating tax residence"),
+        _sentence(102, 242, 550, "require that the self-certification include a tax identifying number"),
+        _sentence(78, 255, 192, "each reportable jurisdiction"),
+    ]
+    findings = lr._check_shifted_lines([_block(lines, role="table")])
+    edges = [item for item in findings if item.evidence.get("kind") == "right-edge"]
+    assert edges
+    assert "self-certification" in edges[0].text
+    assert edges[0].evidence["right_delta_pt"] > 20
+
+
+def test_short_tokens_in_a_small_block_are_not_a_shifted_line() -> None:
+    block = _block([
+        _line((83, 350, 101, 362), text="4020"),
+        _line((60, 356, 74, 366), text="kWh"),
+    ])
+    assert lr._check_shifted_lines([block]) == []
+
+
+def test_first_line_indent_and_a_shared_indent_are_not_shifts() -> None:
+    first_line = _block([
+        _sentence(90, 100, 500, "The registered office of the Company shall be in Singapore today"),
+        _sentence(72, 114, 500, "The registered office of the Company shall be in Singapore today"),
+        _sentence(72, 128, 420, "and the rest of this clause continues at the same left edge"),
+    ])
+    shared = _block([
+        _sentence(72, 200, 500, "If yes, please provide the tax identifying number for the entity"),
+        _sentence(114, 214, 500, "I undertake to advise the bank within thirty days of any change"),
+        _sentence(114, 228, 500, "I undertake to advise the bank within thirty days of any change"),
+    ])
+    assert lr._check_shifted_lines([first_line, shared]) == []
+
+
+def test_a_last_line_shifted_right_is_named_from_the_line_above() -> None:
+    text = "This is a computer-generated payslip and does not require a signature"
+    blocks = [
+        _block([_sentence(64, 348, 160, "Total deductions for this pay period are listed above")]),
+        _block([_sentence(92, 432, 340, text)]),
+    ]
+    findings = lr._check_shifted_lines(blocks)
+    assert findings
+    assert "computer-generated" in findings[0].text
+    assert findings[0].evidence["left_delta_pt"] == 28.0
+
+
+def test_a_line_shifted_left_of_the_lines_around_it_is_named() -> None:
+    text = "The company shall keep its registers at the registered office"
+    blocks = [
+        _block([_sentence(72, 100, 500, text)]),
+        _block([_sentence(44, 128, 472, text)]),
+        _block([_sentence(72, 156, 500, text)]),
+    ]
+    findings = lr._check_shifted_lines(blocks)
+    shifted = [item for item in findings if item.evidence.get("left_delta_pt", 0) < 0]
+    assert shifted
+    assert shifted[0].evidence["left_delta_pt"] == -28.0
+
+
+def test_a_line_moved_down_onto_the_next_line_is_named() -> None:
+    kept = "The information in this report is collated from contributing members"
+    moved = "Monthly instalment amounts for joint accounts are reported in full"
+    blocks = [
+        _block([_sentence(48, 640, 520, "Explanation of the score ranges from one thousand upward")]),
+        _block([_sentence(48, 681, 500, kept)]),
+        _block([_sentence(48, 682, 560, moved)]),
+        _block([_sentence(48, 710, 540, "The bureau accepts no liability for the use of this report")]),
+    ]
+    findings = lr._check_shifted_lines(blocks)
+    named = [item for item in findings if "joint accounts" in item.text]
+    assert named
+    assert named[0].evidence["kind"] == "vertical"
+    assert named[0].evidence["vertical_delta_pt"] > 0
+
+
+def test_a_line_moved_up_between_its_neighbours_is_named() -> None:
+    text = "The borrower shall not permit the outstanding balance to exceed it"
+    ys = (100, 114, 128, 142, 154, 190)
+    blocks = [
+        _block([_sentence(62, y, 520, "This facility is repayable on demand at the bank's sole discretion")])
+        for y in ys[:4]
+    ]
+    blocks.append(_block([_sentence(62, ys[4], 520, text)]))
+    blocks.append(
+        _block([_sentence(62, ys[5], 520, "Interest rates change with movements in the bank prime rate")])
+    )
+    findings = lr._check_shifted_lines(blocks)
+    named = [item for item in findings if "outstanding balance" in item.text]
+    assert named
+    assert named[0].evidence["kind"] == "vertical"
+    assert named[0].evidence["vertical_delta_pt"] < 0
+
+
+def test_a_paragraph_break_is_not_a_vertical_shift() -> None:
+    blocks = [
+        _block([_sentence(72, y, 520, f"Clause number {index} continues across the full content column")])
+        for index, y in enumerate((100, 114, 128, 180, 194))
+    ]
+    assert lr._check_shifted_lines(blocks) == []
+
+
+def test_a_sentence_split_onto_two_baselines_is_named() -> None:
+    blocks = [
+        _block([_sentence(52, 374, 332, "The company was incorporated under the Companies Act 1967, on and from")]),
+        _block([_sentence(334, 392, 442, "18 Oct 2021, and is a Private")]),
+        _block([_sentence(52, 405, 160, "company limited by shares today")]),
+    ]
+    findings = lr._check_shifted_lines(blocks)
+    named = [item for item in findings if "incorporated under" in item.text]
+    assert named
+    assert named[0].evidence["kind"] == "vertical"
+    assert named[0].evidence["vertical_delta_pt"] == -18.0
+
+
+def test_a_left_slide_is_judged_against_a_similar_wide_line() -> None:
+    text = "Singapore dollar deposits of non-bank depositors and monies and deposits"
+    blocks = [
+        _block([_sentence(35, 221, 137, "Deposit Insurance Scheme for Singapore dollar accounts")]),
+        _block([_sentence(35, 242, 554, "Scheme are insured by the Singapore Deposit Insurance Corporation today")]),
+        _block([_sentence(13, 248, 533, text)]),
+        _block([_sentence(35, 252, 464, "Foreign currency deposits, dual currency investments, structured deposits")]),
+    ]
+    findings = lr._check_shifted_lines(blocks)
+    named = [item for item in findings if "non-bank depositors" in item.text and item.evidence.get("left_delta_pt")]
+    assert named
+    assert named[0].evidence["left_delta_pt"] < -12
+
+
+def test_a_line_dropped_into_the_gap_between_paragraphs_is_named() -> None:
+    blocks = [
+        _block([_sentence(63, 226, 505, "The information contained in this product is collated from lodgements")]),
+        _block([_sentence(63, 238, 165, "government verified sources and records")]),
+        _block([_sentence(63, 272, 516, "The list of officers for this entity is available for online authentication")]),
+        _block([_sentence(63, 310, 306, "Assistant registrar of companies and business names office")]),
+    ]
+    findings = lr._check_shifted_lines(blocks)
+    named = [item for item in findings if "list of officers" in item.text]
+    assert named
+    assert named[0].evidence["kind"] == "vertical"
+    assert named[0].evidence["vertical_delta_pt"] > 12
+
+
+def test_a_value_shifted_off_its_column_is_named() -> None:
+    blocks = [
+        _block([_sentence(330, 100, 470, "SINGAPORE CITIZEN")], role="cover"),
+        _block([_sentence(330, 128, 400, "SINGAPORE")], role="cover"),
+        _block([_sentence(330, 156, 390, "S7645675T")], role="cover"),
+        _block(
+            [
+                _sentence(230, 184, 300, "06 JAN 2024"),
+                _sentence(302, 184, 470, "MINISTRY OF HOME AFFAIRS"),
+            ],
+            role="cover",
+        ),
+    ]
+    findings = lr._check_shifted_lines(blocks)
+    named = [finding for finding in findings if "MINISTRY" in finding.text]
+    assert named
+    assert named[0].evidence["left_delta_pt"] < -12
+
+
+def test_a_value_is_judged_against_the_column_beside_it() -> None:
+    blocks = [
+        _block([_sentence(302, 40, 360, "Country Code")], role="cover"),
+        _block([_sentence(302, 58, 340, "SGP")], role="cover"),
+        _block([_sentence(330, 400, 470, "SINGAPORE CITIZEN")], role="cover"),
+        _block([_sentence(330, 428, 400, "SINGAPORE")], role="cover"),
+        _block([_sentence(330, 456, 390, "S7645675T")], role="cover"),
+        _block([_sentence(302, 484, 470, "MINISTRY OF HOME AFFAIRS")], role="cover"),
+    ]
+    findings = lr._check_shifted_lines(blocks)
+    named = [finding for finding in findings if "MINISTRY" in finding.text]
+    assert named
+    assert named[0].evidence["expected_left_indent_pt"] == 330
+    assert named[0].evidence["left_delta_pt"] < -12
+
+
+def test_a_value_that_still_starts_with_its_column_is_not_a_shift() -> None:
+    blocks = [
+        _block([_sentence(330, y, 450, text)], role="cover")
+        for y, text in (
+            (100, "SINGAPORE CITIZEN"),
+            (128, "SINGAPORE"),
+            (156, "MINISTRY OF HOME AFFAIRS"),
+            (184, "S7645675T"),
+        )
+    ]
+    findings = lr._check_shifted_lines(blocks)
+    assert not any("MINISTRY" in finding.text for finding in findings)
+
+
+def test_a_hanging_indent_is_not_a_column_shift() -> None:
+    blocks = [
+        _block([_sentence(72, 100, 520, "The borrower shall maintain all security requested")]),
+        _block([_sentence(90, 118, 520, "by the bank and shall execute every supplemental")]),
+        _block([_sentence(90, 136, 520, "document the bank reasonably requires to perfect it")]),
+        _block([_sentence(90, 154, 520, "and shall keep that security in full force")]),
+    ]
+    assert lr._check_shifted_lines(blocks) == []
+
+
+def test_a_right_hand_amount_is_not_a_horizontal_shift() -> None:
+    blocks = [
+        _block([_sentence(72, 200, 400, "Basic salary for the employee during this pay period")]),
+        _block([_line((490, 200, 540, 212), text="6,960.00")]),
+        _block([_sentence(72, 224, 400, "Allowances for the employee during this pay period")]),
+    ]
+    assert lr._check_shifted_lines(blocks) == []
+
+
 # ---------------------------------------------------------------------------
 # public API — detections (AC1–AC4)
 # ---------------------------------------------------------------------------
@@ -964,6 +1192,69 @@ def test_row_alignment_pairs_noa_amount_with_label_not_column_header() -> None:
     assert findings[0].evidence["baseline_delta_pt"] <= -6
     assert "Chargeable Income" in findings[0].location
     assert findings[0].evidence["row_count"] == 2
+
+
+def test_row_alignment_flags_a_heading_that_left_the_line_beside_it() -> None:
+    date = _block(
+        [_line((490, 971, 621, 995), text="24 JUN 2025")],
+        role="heading",
+    )
+    ministry = _block(
+        [_line((689, 950, 994, 979), text="MINISTRY OF HOME AFFAIRS")],
+        role="heading",
+    )
+    findings = lr._check_row_alignment([date, ministry])
+    assert findings
+    assert any("MINISTRY OF HOME AFFAIRS" in a.text for a in findings)
+    assert any(abs(a.evidence["top_delta_pt"]) >= 12 for a in findings)
+    assert any(abs(a.evidence["baseline_delta_pt"]) >= 12 for a in findings)
+
+
+def test_row_alignment_flags_a_heading_beside_a_body_line() -> None:
+    label = _block([_line((72, 200, 180, 214), text="Date of issue")])
+    value = _block(
+        [_line((320, 192, 520, 206), text="MINISTRY OF HOME AFFAIRS")],
+        role="heading",
+    )
+    findings = lr._check_row_alignment([label, value])
+    assert findings
+    assert any("MINISTRY OF HOME AFFAIRS" in a.text for a in findings)
+
+
+def test_row_alignment_ignores_a_heading_whose_baseline_still_meets() -> None:
+    """A wordmark can sit a few pt off at the top and still share a baseline."""
+    left = _block([_line((40, 40, 160, 62), text="PASSPORT")], role="heading")
+    right = _block(
+        [_line((180, 47, 420, 61), text="REPUBLIC OF SINGAPORE")],
+        role="heading",
+    )
+    assert lr._check_row_alignment([left, right]) == []
+
+
+def test_row_alignment_ignores_a_heading_inside_a_tall_paragraph() -> None:
+    paragraph = _block(
+        [
+            _line((72, 266, 340, 280), text="2,678.14 12 JUN UTILITY BILL PAYMENT"),
+            _line((72, 520, 340, 543), text="closing balance for the period"),
+        ]
+    )
+    amount = _block(
+        [_line((365, 521, 544, 532), text="209.53 14,723.64")],
+        role="heading",
+    )
+    assert lr._check_row_alignment([paragraph, amount]) == []
+
+
+def test_row_alignment_ignores_an_aligned_heading() -> None:
+    date = _block(
+        [_line((490, 971, 621, 995), text="24 JUN 2025")],
+        role="heading",
+    )
+    ministry = _block(
+        [_line((689, 971, 994, 995), text="MINISTRY OF HOME AFFAIRS")],
+        role="heading",
+    )
+    assert lr._check_row_alignment([date, ministry]) == []
 
 
 def test_centre_shift_flags_off_axis_cover_company_name() -> None:

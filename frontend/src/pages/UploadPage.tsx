@@ -3,6 +3,7 @@ import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DropZone from '../components/DropZone';
+import KebabMenu from '../components/KebabMenu';
 import FileRow from '../components/FileRow';
 import { subscribeToCaseStatus } from '../services/caseSocket';
 import type { CaseStatusSubscription } from '../services/caseSocket';
@@ -191,50 +192,6 @@ function describeIssue(issue: FileIssue): string {
     case 'duplicate':
       return 'This exact file has already been uploaded for this case.';
   }
-}
-
-function DocumentRowDelete({
-  filename,
-  isDeleting,
-  onDelete,
-}: {
-  filename: string;
-  isDeleting: boolean;
-  onDelete: () => void;
-}) {
-  return (
-    <span className="document-row-actions">
-      <button
-        type="button"
-        className={`delete-document-button${isDeleting ? ' is-visible' : ''}`}
-        aria-label={isDeleting ? `Deleting ${filename}` : `Delete ${filename}`}
-        disabled={isDeleting}
-        onClick={(event) => {
-          event.stopPropagation();
-          onDelete();
-        }}
-        onKeyDown={(event) => event.stopPropagation()}
-      >
-        <svg
-          viewBox="0 0 24 24"
-          width="24"
-          height="24"
-          aria-hidden="true"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M4 7h16" />
-          <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-          <path d="M7 7l1 12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-12" />
-          <path d="M10 11v6" />
-          <path d="M14 11v6" />
-        </svg>
-      </button>
-    </span>
-  );
 }
 
 export default function UploadPage({
@@ -736,14 +693,19 @@ async function handleApproveAllEligibleDocuments() {
                 <button type="button" className="edit-case-button" onClick={() => setIsEditingCase(true)}>
                   ✎ Edit case details
                 </button>
-                <button
-                  type="button"
-                  className="delete-record-button"
-                  onClick={() => setCaseDeleteOpen(true)}
+                <KebabMenu
+                  label={isDeletingCase ? 'Deleting case' : 'Case actions'}
                   disabled={isDeletingCase}
-                >
-                  {isDeletingCase ? 'Deleting…' : 'Delete case'}
-                </button>
+                  items={[
+                    {
+                      id: 'delete',
+                      label: isDeletingCase ? 'Deleting…' : 'Delete case',
+                      danger: true,
+                      disabled: isDeletingCase,
+                      onSelect: () => setCaseDeleteOpen(true),
+                    },
+                  ]}
+                />
               </div>
             </div>
           )}
@@ -905,6 +867,7 @@ async function handleApproveAllEligibleDocuments() {
                         <span>Status</span>
                         <span>Classification Confidence</span>
                         <span>Routing Outcome</span>
+                        <span className="sr-only">Actions</span>
                       </div>
 
                       {extractedDocuments.map((document) => {
@@ -978,10 +941,25 @@ async function handleApproveAllEligibleDocuments() {
                               {routingOutcome}
                             </span>
 
-                            <DocumentRowDelete
-                              filename={document.filename}
-                              isDeleting={deletingDocumentId === document.id}
-                              onDelete={() => setDocumentToDelete(document)}
+                            <KebabMenu
+                              label={
+                                deletingDocumentId === document.id
+                                  ? `Deleting ${document.filename}`
+                                  : `Actions for ${document.filename}`
+                              }
+                              disabled={deletingDocumentId === document.id}
+                              items={[
+                                {
+                                  id: 'delete',
+                                  label:
+                                    deletingDocumentId === document.id
+                                      ? 'Deleting…'
+                                      : 'Delete document',
+                                  danger: true,
+                                  disabled: deletingDocumentId === document.id,
+                                  onSelect: () => setDocumentToDelete(document),
+                                },
+                              ]}
                             />
                           </div>
                         );
@@ -1007,6 +985,7 @@ async function handleApproveAllEligibleDocuments() {
                         <span>Status</span>
                         <span>Classification Confidence</span>
                         <span>Routing Outcome</span>
+                        <span className="sr-only">Actions</span>
                       </div>
 
                       {approvedDocuments.map((document) => (
@@ -1046,6 +1025,7 @@ async function handleApproveAllEligibleDocuments() {
                           <span className="document-routing">
                             Approved
                           </span>
+                          <span />
                         </div>
                       ))}
                     </div>

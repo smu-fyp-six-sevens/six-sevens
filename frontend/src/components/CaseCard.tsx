@@ -1,4 +1,5 @@
 import type { CaseRecord } from '../App';
+import KebabMenu from './KebabMenu';
 
 interface CaseCardProps {
   caseRecord: CaseRecord;
@@ -62,39 +63,21 @@ export default function CaseCard({
             Created: {formatCreationDate(caseRecord)}
           </span>
         </span>
-
-        <span className="case-arrow" aria-hidden="true">
-          →
-        </span>
       </button>
 
-      <span className="case-card-delete-slot">
-        <button
-          type="button"
-          className={`case-card-delete${isDeleting ? ' is-visible' : ''}`}
-          aria-label={isDeleting ? `Deleting case ${caseLabel}` : `Delete case ${caseLabel}`}
-          disabled={isDeleting}
-          onClick={() => onDelete(caseRecord)}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            width="24"
-            height="24"
-            aria-hidden="true"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M4 7h16" />
-            <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-            <path d="M7 7l1 12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-12" />
-            <path d="M10 11v6" />
-            <path d="M14 11v6" />
-          </svg>
-        </button>
-      </span>
+      <KebabMenu
+        label={isDeleting ? `Deleting case ${caseLabel}` : `Case actions for ${caseLabel}`}
+        disabled={isDeleting}
+        items={[
+          {
+            id: 'delete',
+            label: isDeleting ? 'Deleting…' : 'Delete case',
+            danger: true,
+            disabled: isDeleting,
+            onSelect: () => onDelete(caseRecord),
+          },
+        ]}
+      />
     </div>
   );
 }

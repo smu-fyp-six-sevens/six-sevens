@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
+import KebabMenu from '../components/KebabMenu';
 import { subscribeToCaseStatus } from '../services/caseSocket';
 import {
   deleteExtractedField,
@@ -1047,14 +1048,19 @@ export default function DocumentDetailsPage({
         <div className="document-details-title-row">
           <h1>Document Details</h1>
           {document.status !== 'approved' && (
-            <button
-              type="button"
-              className="delete-record-button"
-              onClick={() => setDeleteConfirmOpen(true)}
+            <KebabMenu
+              label={isDeletingDocument ? 'Deleting document' : 'Document actions'}
               disabled={isDeletingDocument}
-            >
-              {isDeletingDocument ? 'Deleting…' : 'Delete document'}
-            </button>
+              items={[
+                {
+                  id: 'delete',
+                  label: isDeletingDocument ? 'Deleting…' : 'Delete document',
+                  danger: true,
+                  disabled: isDeletingDocument,
+                  onSelect: () => setDeleteConfirmOpen(true),
+                },
+              ]}
+            />
           )}
         </div>
         <p className="sub">
