@@ -30,6 +30,13 @@ def delete_file(storage_path: str) -> None:
     supabase_client.storage.from_(settings.SUPABASE_STORAGE_BUCKET).remove([storage_path])
 
 
+def delete_files(storage_paths: list[str]) -> None:
+    """Batch version of delete_file — one round-trip for many paths."""
+    if not storage_paths:
+        return
+    supabase_client.storage.from_(settings.SUPABASE_STORAGE_BUCKET).remove(storage_paths)
+
+
 def create_signed_url(
     storage_path: str,
     expires_in: int,
@@ -41,4 +48,6 @@ def create_signed_url(
     data = supabase_client.storage.from_(settings.SUPABASE_STORAGE_BUCKET).create_signed_url(
         storage_path, expires_in, options
     )
-    return data["signedUrl"]
+    signed_url = data["signedUrl"]
+    assert signed_url is not None, "Supabase returned no signedUrl for a successful create_signed_url call"
+    return signed_url

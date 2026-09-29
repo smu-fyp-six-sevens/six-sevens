@@ -9,14 +9,14 @@ from app.mapper import (
     compute_identity_proof_of_address_progress,
     compute_unmatched_proof_of_address_names,
 )
-from app.models import ClassificationOutcome, DocumentRecord, DocumentStatus
+from app.models import RoutingStatus, DocumentRecord, DocumentStatus
 
 
 def _make_document(
     document_id: str,
     *,
     document_type: str | None = None,
-    classification_outcome: ClassificationOutcome | None = None,
+    routing_status: RoutingStatus | None = None,
     extracted_fields: dict | None = None,
 ) -> DocumentRecord:
     now = datetime.now(timezone.utc)
@@ -27,7 +27,7 @@ def _make_document(
         storage_path=f"case-1/{document_id}.pdf",
         status=DocumentStatus.ANALYZED,
         uploaded_at=now,
-        classification_outcome=classification_outcome,
+        routing_status=routing_status,
         document_type=document_type,
         extracted_fields=extracted_fields,
     )
@@ -43,13 +43,13 @@ def test_progress_counts_covered_and_total_identities() -> None:
         _make_document(
             "doc-1",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "Amanda Koh", "individual_address": "1 Main St"},
         ),
         _make_document(
             "doc-2",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "Bryan Lim", "individual_address": None},
         ),
     ]
@@ -64,13 +64,13 @@ def test_progress_skips_identity_document_with_no_name_or_nric_number() -> None:
         _make_document(
             "doc-1",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_address": "1 Main St"},
         ),
         _make_document(
             "doc-2",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "Amanda Koh", "individual_address": "2 Main St"},
         ),
     ]
@@ -86,13 +86,13 @@ def test_progress_ignores_address_document_with_empty_string_name() -> None:
         _make_document(
             "doc-1",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "Amanda Koh", "individual_address": None},
         ),
         _make_document(
             "doc-2",
             document_type="proof_of_address",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "", "individual_address": "1 Main St"},
         ),
     ]
@@ -109,13 +109,13 @@ def test_progress_tolerates_non_string_individual_name() -> None:
         _make_document(
             "doc-1",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "Amanda Koh", "individual_address": None},
         ),
         _make_document(
             "doc-2",
             document_type="company_constitution",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={
                 "individual_name": ["Tan Wei Ming", "Tan Wei Jun"],
                 "individual_address": "1 Main St",
@@ -135,7 +135,7 @@ def test_progress_recognises_passport_as_an_identity_document() -> None:
         _make_document(
             "doc-1",
             document_type="passport",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "Amanda Koh", "individual_address": None},
         ),
     ]
@@ -155,7 +155,7 @@ def test_progress_links_passport_to_nric_via_shared_nric_number() -> None:
         _make_document(
             "doc-passport",
             document_type="passport",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={
                 "individual_name": "Amanda Koh",
                 "nric_number": "S1234567D",
@@ -165,7 +165,7 @@ def test_progress_links_passport_to_nric_via_shared_nric_number() -> None:
         _make_document(
             "doc-nric",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={
                 "individual_name": "AMANDAKOH",
                 "nric_number": "s1234567d",
@@ -188,7 +188,7 @@ def test_progress_does_not_link_identities_by_passport_number() -> None:
         _make_document(
             "doc-1",
             document_type="passport",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={
                 "individual_name": "Amanda Koh",
                 "passport_number": "E1234567A",
@@ -198,7 +198,7 @@ def test_progress_does_not_link_identities_by_passport_number() -> None:
         _make_document(
             "doc-2",
             document_type="passport",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={
                 "individual_name": "Bryan Lim",
                 "passport_number": "E1234567A",
@@ -208,7 +208,7 @@ def test_progress_does_not_link_identities_by_passport_number() -> None:
         _make_document(
             "doc-poa",
             document_type="proof_of_address",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "Bryan Lim", "individual_address": "1 Main St"},
         ),
     ]
@@ -223,7 +223,7 @@ def test_progress_ignores_manual_review_documents() -> None:
         _make_document(
             "doc-1",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.MANUAL_REVIEW,
+            routing_status=RoutingStatus.MANUAL_REVIEW,
             extracted_fields={"individual_name": "Amanda Koh", "individual_address": "1 Main St"},
         ),
     ]
@@ -241,27 +241,27 @@ def test_progress_with_three_identities_partial_coverage() -> None:
         _make_document(
             "doc-1",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "Amanda Koh", "individual_address": "1 Main St"},
         ),
         # Bryan: NRIC has no address, but a separate utility bill covers him.
         _make_document(
             "doc-2",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "Bryan Lim", "individual_address": None},
         ),
         _make_document(
             "doc-3",
             document_type="proof_of_address",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "Bryan Lim", "individual_address": "2 Side St"},
         ),
         # Cheryl: nothing covers her at all.
         _make_document(
             "doc-4",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "Cheryl Ong", "individual_address": None},
         ),
     ]
@@ -273,7 +273,7 @@ def test_progress_with_three_identities_all_covered() -> None:
         _make_document(
             f"doc-{i}",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": name, "individual_address": f"{i} Main St"},
         )
         for i, name in enumerate(["Amanda Koh", "Bryan Lim", "Cheryl Ong"])
@@ -292,13 +292,13 @@ def test_progress_deduplicates_same_person_across_passport_and_nric() -> None:
         _make_document(
             "doc-1",
             document_type="passport",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "Amanda Koh", "individual_address": None},
         ),
         _make_document(
             "doc-2",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "  amanda   koh ", "individual_address": "1 Main St"},
         ),
     ]
@@ -317,7 +317,7 @@ def test_progress_deduplicates_same_nric_number_despite_mismatched_names() -> No
         _make_document(
             "doc-1",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={
                 "individual_name": "Amanda Koh",
                 "nric_number": "S1234567D",
@@ -327,7 +327,7 @@ def test_progress_deduplicates_same_nric_number_despite_mismatched_names() -> No
         _make_document(
             "doc-2",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={
                 "individual_name": "AMANDAKOH",  # garbled OCR from the back image
                 "nric_number": "s1234567d",
@@ -357,7 +357,7 @@ def test_progress_links_nric_front_and_back_uploaded_as_separate_files() -> None
         _make_document(
             "doc-front",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={
                 "individual_name": "Amanda Koh",
                 "nric_number": "S1234567D",
@@ -367,7 +367,7 @@ def test_progress_links_nric_front_and_back_uploaded_as_separate_files() -> None
         _make_document(
             "doc-back",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={
                 "individual_name": None,
                 "nric_number": "S1234567D",
@@ -394,7 +394,7 @@ def test_progress_keeps_distinct_nric_numbers_as_separate_identities() -> None:
         _make_document(
             "doc-1",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={
                 "individual_name": "Amanda Koh",
                 "nric_number": "S1234567D",
@@ -404,7 +404,7 @@ def test_progress_keeps_distinct_nric_numbers_as_separate_identities() -> None:
         _make_document(
             "doc-2",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={
                 "individual_name": "Amanda Koh",
                 "nric_number": "T7654321Z",
@@ -422,7 +422,7 @@ def test_unmatched_names_is_empty_with_no_address_documents() -> None:
         _make_document(
             "doc-1",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "Amanda Koh", "individual_address": None},
         ),
     ]
@@ -443,7 +443,7 @@ def test_unmatched_names_surfaces_a_proof_of_address_that_matches_no_identity() 
         _make_document(
             "doc-poa",
             document_type="proof_of_address",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={
                 "individual_name": "Chan Mei Xuan",
                 "individual_address": "16 Bukit Panjang Ring Road, #04-16, Singapore 104065",
@@ -452,7 +452,7 @@ def test_unmatched_names_surfaces_a_proof_of_address_that_matches_no_identity() 
         _make_document(
             "doc-nric",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={
                 "individual_name": "LIM HUI LING",
                 "nric_number": "S8523456B",
@@ -470,13 +470,13 @@ def test_unmatched_names_excludes_a_name_that_does_match_an_identity() -> None:
         _make_document(
             "doc-1",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "Bryan Lim", "individual_address": None},
         ),
         _make_document(
             "doc-2",
             document_type="proof_of_address",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "bryan   lim", "individual_address": "2 Side St"},
         ),
     ]
@@ -489,7 +489,7 @@ def test_unmatched_names_ignores_manual_review_documents() -> None:
         _make_document(
             "doc-1",
             document_type="proof_of_address",
-            classification_outcome=ClassificationOutcome.MANUAL_REVIEW,
+            routing_status=RoutingStatus.MANUAL_REVIEW,
             extracted_fields={"individual_name": "Chan Mei Xuan", "individual_address": "16 Bukit Panjang"},
         ),
     ]
@@ -506,19 +506,19 @@ def test_constitution_subscriber_addresses_do_not_cover_anyone() -> None:
         _make_document(
             "doc-1",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "Ho Chloe", "nric_number": "S8905952H"},
         ),
         _make_document(
             "doc-2",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "Vikram s/o Ramesh", "nric_number": "E8762066G"},
         ),
         _make_document(
             "doc-3",
             document_type="company_constitution",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={
                 "subscribers": [
                     {"name": "Ho Chloe", "address": "33 Geylang East Avenue", "id_number": "S8905952H"},
@@ -536,13 +536,13 @@ def test_incumbency_address_does_not_cover_anyone() -> None:
         _make_document(
             "doc-1",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "Ho Chloe", "nric_number": "S8905952H"},
         ),
         _make_document(
             "doc-2",
             document_type="certificate_of_incumbency",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "Ho Chloe", "individual_address": "33 Geylang East Avenue"},
         ),
     ]
@@ -555,13 +555,13 @@ def test_corporate_bank_statement_address_does_not_cover_identity() -> None:
         _make_document(
             "doc-1",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "Amanda Koh"},
         ),
         _make_document(
             "doc-2",
             document_type="bank_statement",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={
                 "company_name": "Acme Pte Ltd",
                 "individual_name": "Amanda Koh",
@@ -578,13 +578,13 @@ def test_bank_statement_covers_identity_whose_nric_has_no_address() -> None:
         _make_document(
             "doc-1",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "Amanda Koh"},
         ),
         _make_document(
             "doc-2",
             document_type="bank_statement",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "Amanda Koh", "individual_address": "1 Main St"},
         ),
     ]
@@ -602,7 +602,7 @@ def test_constitution_subscribers_never_create_a_new_identity() -> None:
         _make_document(
             "doc-1",
             document_type="company_constitution",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={
                 "subscribers": [
                     {"name": "Ho Chloe", "address": "33 Geylang East Ave", "id_number": "S8905952H"},
@@ -624,7 +624,7 @@ def test_constitution_with_malformed_subscribers_does_not_crash() -> None:
         _make_document(
             "doc-1",
             document_type="company_constitution",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={
                 "subscribers": [
                     "not even a dict",
@@ -645,7 +645,7 @@ def test_address_document_with_blank_name_is_ignored() -> None:
         _make_document(
             "doc-1",
             document_type="proof_of_address",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "", "individual_address": "1 Main St"},
         ),
     ]
@@ -661,7 +661,7 @@ def test_id_document_identity_progress_one_identity_only_back_uploaded() -> None
         _make_document(
             "doc-1",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"nric_number": "S8905952H", "document_side": "back"},
         ),
     ]
@@ -674,7 +674,7 @@ def test_id_document_missing_side_is_back_when_only_front_uploaded() -> None:
         _make_document(
             "doc-1",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"nric_number": "S8905952H", "document_side": "front"},
         ),
     ]
@@ -691,7 +691,7 @@ def test_id_document_missing_side_is_none_when_side_was_never_extracted() -> Non
         _make_document(
             "doc-1",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"nric_number": "S8905952H"},
         ),
     ]
@@ -704,7 +704,7 @@ def test_id_document_identity_progress_covered_once_same_identity_has_both_sides
         _make_document(
             "doc-1",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={
                 "individual_name": "Amanda Koh",
                 "nric_number": "S8905952H",
@@ -714,7 +714,7 @@ def test_id_document_identity_progress_covered_once_same_identity_has_both_sides
         _make_document(
             "doc-2",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"nric_number": "S8905952H", "document_side": "back"},
         ),
     ]
@@ -733,13 +733,13 @@ def test_id_document_two_different_identities_half_complete_each_does_not_combin
         _make_document(
             "doc-1",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"nric_number": "S8905952H", "document_side": "back"},
         ),
         _make_document(
             "doc-2",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={
                 "individual_name": "Bryan Lim",
                 "nric_number": "T0123456A",
@@ -760,13 +760,13 @@ def test_id_document_two_backs_for_same_identity_still_incomplete() -> None:
         _make_document(
             "doc-1",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"nric_number": "S8905952H", "document_side": "back"},
         ),
         _make_document(
             "doc-2",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"nric_number": "S8905952H", "document_side": "back"},
         ),
     ]
@@ -778,13 +778,13 @@ def test_id_document_identity_progress_ignores_manual_review_and_unknown_side() 
         _make_document(
             "doc-1",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.MANUAL_REVIEW,
+            routing_status=RoutingStatus.MANUAL_REVIEW,
             extracted_fields={"nric_number": "S8905952H", "document_side": "front"},
         ),
         _make_document(
             "doc-2",
             document_type="nric",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"nric_number": "T0123456A", "document_side": "unknown"},
         ),
     ]
@@ -802,7 +802,7 @@ def test_id_document_single_capture_is_immediately_complete() -> None:
         _make_document(
             "doc-1",
             document_type="passport",
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             extracted_fields={"individual_name": "Amanda Koh"},
         ),
     ]

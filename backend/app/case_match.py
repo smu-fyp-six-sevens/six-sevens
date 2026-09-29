@@ -20,7 +20,7 @@ the company's UEN, name, officers and shareholders. Three steps:
    officers/shareholders — ID number first, otherwise name.
 
 Computed live from the documents table on every read, never stored — the same
-reasoning as case_status.py: the result depends on every document in the
+reasoning as case_service.py: the result depends on every document in the
 case, so any new upload can change it, and there's no single event that
 would keep a stored copy honest.
 """
@@ -33,7 +33,13 @@ from typing import Iterable, NamedTuple, Optional
 
 from pydantic import BaseModel, Field
 
-from .models import CaseRecord, DocumentRecord, DocumentType, is_personal_bank_statement
+from .models import (
+    CaseRecord,
+    DocumentRecord,
+    DocumentStatus,
+    DocumentType,
+    is_personal_bank_statement,
+)
 
 # Step 1: how many other documents must carry the incumbency's UEN before
 # it's trusted as the case's reference.
@@ -441,11 +447,10 @@ def _verify_incumbency(
                     f"{other_uen}, but {incumbency.filename} shows {uen}"
                 )
 
-    if case.company_name and company_name and not company_names_match(case.company_name, company_name):
-        review_reasons.append(
-            f'The case is recorded as "{case.company_name}" but the certificate of '
-            f'incumbency names "{company_name}"'
-        )
+    # Deliberately not compared against case.company_name: it's a free-text
+    # label an officer types at case creation (often a placeholder like
+    # "Case 67"), not verified company data. The certificate is judged only
+    # by whether the case's other documents agree with its UEN/company name.
 
     if uen is not None:
         # Same comparison as step 2 (UEN when the document has one, otherwise
@@ -506,6 +511,8 @@ def _compare_company(
 
     uen_field, raw_uen, uen = _document_uen(fields)
     if uen is not None and reference.uen is not None:
+        # _document_uen returns all three of these together or none at all.
+        assert uen_field is not None and raw_uen is not None
         matched = uen == reference.uen
         return FieldComparison(
             check="company_uen",
@@ -543,6 +550,9 @@ def _compare_person(person: _Person, reference: IncumbencyVerification) -> Optio
     reference_ids = {_normalize_id(p.id_number) for p in reference.individuals} - {None}
     id_number = _normalize_id(person.id_number)
     if id_number and reference_ids:
+        # _normalize_id only returns truthy when given a real string, so
+        # person.id_number (the raw value it was normalised from) is too.
+        assert person.id_number is not None
         matched = id_number in reference_ids
         who = f" ({person.name})" if person.name else ""
         return FieldComparison(
@@ -653,10 +663,29 @@ def _match_document(
     return result(DocumentMatchStatus.MATCH, "Matches the case's company and individuals", comparisons)
 
 
+def _rejected(doc: DocumentRecord) -> DocumentCaseMatch:
+    return DocumentCaseMatch(
+        document_id=doc.id,
+        filename=doc.filename,
+        document_type=doc.document_type,
+        status=DocumentMatchStatus.PENDING,
+        can_proceed_to_fraud_detection=False,
+        reason="Rejected by a loan officer — excluded from the case match",
+    )
+
+
 def check_case_match(case: CaseRecord, documents: Iterable[DocumentRecord]) -> CaseMatchResult:
     documents = list(documents)
-    verification, incumbency_doc = _verify_incumbency(case, documents)
-    matches = [_match_document(doc, incumbency_doc, verification) for doc in documents]
+    # A document a loan officer rejected is out of the case: it can't be the
+    # reference incumbency, and it can't corroborate or contradict one.
+    active = [doc for doc in documents if doc.status != DocumentStatus.REJECTED]
+    verification, incumbency_doc = _verify_incumbency(case, active)
+    matches = [
+        _match_document(doc, incumbency_doc, verification)
+        if doc.status != DocumentStatus.REJECTED
+        else _rejected(doc)
+        for doc in documents
+    ]
     return CaseMatchResult(
         case_id=case.id,
         incumbency=verification,

@@ -1,38 +1,30 @@
 from __future__ import annotations
 
+import json
 import logging
 import re
 from collections import Counter
-from typing import Literal
+from typing import Any, Iterable, Literal, cast
 
 import pymupdf
 from pydantic import BaseModel
 
 logger = logging.getLogger("fraud_detection.font_consistency")
 
+# --- span extraction & style-comparison building blocks ---------------------
+#
+# Originally lived in a separate font_consistency.py (v1) module and were
+# imported unchanged from there — font-family normalization, dominant-
+# pattern/tie handling, per-dimension deviation checks, span extraction
+# (incl. underline-via-vector-drawing detection) and the style inventory
+# were all still correct in v2, only the comparison *scope* and *scoring*
+# changed. v1's own public API (check_font_consistency and its line+region
+# dual-scope scoring) was retired outright once v2 superseded it, so these
+# building blocks moved here instead, now private to this module.
+
 # AC8: a size difference this small or smaller is rendering noise, not a
 # tamper signal.
 SIZE_TOLERANCE_PT = 0.5
-
-# Coarse vertical bucketing for clustering spans into structural regions —
-# coarse enough to keep a paragraph's wrapped lines in one region, fine
-# enough not to conflate unrelated regions further down a tall page.
-Y_BAND_HEIGHT_PT = 50.0
-
-# Confidence scoring: line-level comparison (does this span match its OWN
-# line's dominant style?) is the primary signal — a real forgery typically
-# edits a fragment mid-line, so the tampered text clashes with its own
-# line-mates. Region-level comparison (the page/y-band/size cluster) is a
-# weaker, secondary signal — a whole field styled differently on its own
-# line (a signature, a stamp, a bold date column) has nothing on that line
-# to disagree with, so it should never score highly on that basis alone.
-# This is not a suppression gate: every span with a nonzero score is
-# returned (see check_font_consistency) — the downstream agent reasoning
-# over this evidence is expected to weigh low-confidence signals itself,
-# rather than having them hidden before it ever sees them.
-_TYPE_WEIGHT = {"font": 0.6, "size": 0.4, "emphasis": 0.2}
-_SOURCE_MULTIPLIER = {"line": 1.0, "region": 0.5}
-_CORROBORATION_BONUS = 0.2
 
 # PyMuPDF span flag bits (see page.get_text("dict")): bit 1 (2) = italic,
 # bit 4 (16) = bold. Underline isn't a font flag — PDFs render it as vector
@@ -87,48 +79,6 @@ class AnomalyLocation(BaseModel):
     text: str
 
 
-class FontAnomaly(BaseModel):
-    """
-    One deviation *pattern* — not one span. Spans sharing the same
-    deviation_type/evidence/detected/expected signature (e.g. "12 bold
-    subtotal-row cells, all deviating from their region's non-bold
-    majority the same way") are grouped into a single entry with all their
-    locations, rather than repeated as near-identical entries. Nothing is
-    discarded — every span is still listed under `locations` — this only
-    changes how repeats of the same pattern are presented, since a real
-    document can have dozens of spans sharing one benign styling pattern
-    (see `_group_anomalies`).
-    """
-
-    deviation_type: Literal["font", "size", "emphasis", "combo"]
-    confidence: float
-    evidence: list[Literal["line", "region"]]
-    detected: dict
-    expected: dict
-    occurrence_count: int
-    locations: list[AnomalyLocation]
-
-
-class _RawAnomaly(BaseModel):
-    """Per-span deviation, before grouping — see _score_deviations/_group_anomalies."""
-
-    page: int
-    bbox: BBox
-    text: str
-    deviation_type: Literal["font", "size", "emphasis", "combo"]
-    confidence: float
-    evidence: list[Literal["line", "region"]]
-    detected: dict
-    expected: dict
-
-
-class FontConsistencyResult(BaseModel):
-    document_id: str
-    anomalies: list[FontAnomaly]
-    all_detected_styles: list[DetectedStyle]
-    unable_to_assess: bool
-
-
 class _Span(BaseModel):
     text: str
     font: str
@@ -141,61 +91,12 @@ class _Span(BaseModel):
     line_key: tuple[int, int, int]  # (page, block_index, line_index) — PyMuPDF's own line grouping
 
 
-def _empty_result(document_id: str) -> FontConsistencyResult:
-    return FontConsistencyResult(
-        document_id=document_id, anomalies=[], all_detected_styles=[], unable_to_assess=True
-    )
-
-
-def check_font_consistency(document_id: str, file_bytes: bytes) -> FontConsistencyResult:
-    """
-    Inspects a PDF's own font/size/emphasis usage for internal
-    inconsistency (e.g. one line in a different font than the paragraph
-    around it) — a classic tamper signal. Text/metadata-based, no LLM
-    tokens. Synchronous/CPU-bound — callers should run this via
-    asyncio.to_thread.
-    """
-    try:
-        doc = pymupdf.open(stream=file_bytes, filetype="pdf")
-    except Exception:
-        logger.warning("Failed to open document %s as a PDF", document_id, exc_info=True)
-        return _empty_result(document_id)
-
-    try:
-        spans = _extract_spans(doc)
-        if not spans:
-            return _empty_result(document_id)
-
-        line_groups: dict[tuple[int, int, int], list[_Span]] = {}
-        region_clusters: dict[tuple[int, int, float], list[_Span]] = {}
-        for span in spans:
-            line_groups.setdefault(span.line_key, []).append(span)
-            region_clusters.setdefault(_cluster_key(span), []).append(span)
-
-        line_dominants = {key: _dominant_pattern(group) for key, group in line_groups.items()}
-        region_dominants = {
-            key: _dominant_pattern(group) for key, group in region_clusters.items()
-        }
-
-        raw_anomalies = _score_deviations(spans, line_dominants, region_dominants)
-        anomalies = _group_anomalies(raw_anomalies)
-
-        return FontConsistencyResult(
-            document_id=document_id,
-            anomalies=anomalies,
-            all_detected_styles=_compile_detected_styles(spans),
-            unable_to_assess=False,
-        )
-    except Exception:
-        logger.exception("Font consistency check failed for document %s", document_id)
-        return _empty_result(document_id)
-    finally:
-        doc.close()
-
-
 def _extract_spans(doc: pymupdf.Document) -> list[_Span]:
     spans: list[_Span] = []
-    for page_index, page in enumerate(doc):
+    # pymupdf.Document is iterable at runtime (and duck-typed test doubles
+    # only implement __iter__) even though pyright's enumerate() overload
+    # resolution doesn't recognise it as Iterable — cast documents that.
+    for page_index, page in enumerate(cast(Iterable, doc)):
         underline_rects = _underline_rects(page)
         for block_index, block in enumerate(page.get_text("dict").get("blocks", [])):
             if block.get("type") != 0:  # not a text block
@@ -258,12 +159,6 @@ def _is_underlined(bbox: BBox, underline_rects: list[pymupdf.Rect]) -> bool:
     return False
 
 
-def _cluster_key(span: _Span) -> tuple[int, int, float]:
-    y_band = int(span.bbox[1] // Y_BAND_HEIGHT_PT)
-    size_bucket = round(span.size * 2) / 2  # nearest 0.5pt
-    return (span.page, y_band, size_bucket)
-
-
 DominantPattern = tuple[str | None, float | None, Emphasis | None]
 
 
@@ -295,148 +190,6 @@ def _dimension_deviations(span: _Span, pattern: DominantPattern) -> dict[str, bo
     }
 
 
-def _score_deviations(
-    spans: list[_Span],
-    line_dominants: dict[tuple[int, int, int], DominantPattern],
-    region_dominants: dict[tuple[int, int, float], DominantPattern],
-) -> list[_RawAnomaly]:
-    """
-    Scores each span against both its line's dominant pattern (primary
-    signal — a real forgery typically edits a fragment mid-line, clashing
-    with its own line-mates) and its region's dominant pattern (secondary —
-    a whole field legitimately styled differently, like a signature or
-    stamp, has nothing on its own line to disagree with, so line-level
-    alone won't catch it, but it shouldn't score as highly as a line-level
-    mismatch either). No suppression threshold: every span with a nonzero
-    score is returned — the downstream agent weighs confidence itself.
-    """
-    anomalies: list[_RawAnomaly] = []
-    for span in spans:
-        line_pattern = line_dominants[span.line_key]
-        region_pattern = region_dominants[_cluster_key(span)]
-        line_dev = _dimension_deviations(span, line_pattern)
-        region_dev = _dimension_deviations(span, region_pattern)
-
-        confidence = 0.0
-        contributing_dims: list[str] = []
-        evidence: set[Literal["line", "region"]] = set()
-        for dim in ("font", "size", "emphasis"):
-            flagged_by_line = line_dev[dim]
-            flagged_by_region = region_dev[dim]
-            if not flagged_by_line and not flagged_by_region:
-                continue
-
-            multiplier = max(
-                _SOURCE_MULTIPLIER["line"] if flagged_by_line else 0.0,
-                _SOURCE_MULTIPLIER["region"] if flagged_by_region else 0.0,
-            )
-            dim_confidence = _TYPE_WEIGHT[dim] * multiplier
-            if flagged_by_line and flagged_by_region:
-                dim_confidence += _CORROBORATION_BONUS
-
-            confidence += dim_confidence
-            contributing_dims.append(dim)
-            if flagged_by_line:
-                evidence.add("line")
-            if flagged_by_region:
-                evidence.add("region")
-
-        if not contributing_dims:
-            continue
-
-        deviation_type: Literal["font", "size", "emphasis", "combo"]
-        deviation_type = "combo" if len(contributing_dims) >= 2 else contributing_dims[0]  # type: ignore[assignment]
-
-        # For each dimension, "expected" must come from whichever source
-        # actually flagged that dimension's deviation — a span can match
-        # its own line (line_dev=False) while disagreeing with its region
-        # (region_dev=True); showing the line's value there would display
-        # detected == expected for a dimension that IS flagged as deviating.
-        # For a non-deviating dimension it doesn't matter which source is
-        # shown, so default to line (primary) when available.
-        line_font, line_size, line_emphasis = line_pattern
-        region_font, region_size, region_emphasis = region_pattern
-
-        def _pick(dim: str, line_value, region_value):
-            if line_dev[dim]:
-                return line_value
-            if region_dev[dim]:
-                return region_value
-            return line_value if line_value is not None else region_value
-
-        expected_font = _pick("font", line_font, region_font)
-        expected_size = _pick("size", line_size, region_size)
-        expected_emphasis = _pick("emphasis", line_emphasis, region_emphasis)
-
-        anomalies.append(
-            _RawAnomaly(
-                page=span.page,
-                bbox=span.bbox,
-                text=span.text,
-                deviation_type=deviation_type,
-                confidence=min(1.0, confidence),
-                evidence=sorted(evidence),
-                detected={
-                    "font": span.font,
-                    "size": span.size,
-                    "bold": span.bold,
-                    "italic": span.italic,
-                    "underline": span.underline,
-                },
-                expected={
-                    "font": expected_font,
-                    "size": expected_size,
-                    "bold": expected_emphasis[0] if expected_emphasis else None,
-                    "italic": expected_emphasis[1] if expected_emphasis else None,
-                    "underline": expected_emphasis[2] if expected_emphasis else None,
-                },
-            )
-        )
-    return anomalies
-
-
-def _group_anomalies(raw_anomalies: list[_RawAnomaly]) -> list[FontAnomaly]:
-    """
-    Groups spans sharing the same deviation signature into one FontAnomaly
-    with all their locations, instead of one entry per span — a real
-    document can have dozens of spans sharing one benign styling pattern
-    (e.g. every bold subtotal-row cell deviating from its region's
-    non-bold majority the same way), which would otherwise dominate the
-    output with near-identical entries. Every span is still present, under
-    `locations` — this only changes how repeats of the same pattern are
-    presented, it doesn't discard anything. Sorted by confidence descending
-    so the rarest/most-telling patterns (e.g. a genuine font-family
-    mismatch) surface first regardless of how much of the list gets read.
-    """
-    groups: dict[tuple, list[_RawAnomaly]] = {}
-    for raw in raw_anomalies:
-        key = (
-            raw.deviation_type,
-            tuple(raw.evidence),
-            tuple(sorted(raw.detected.items())),
-            tuple(sorted(raw.expected.items())),
-        )
-        groups.setdefault(key, []).append(raw)
-
-    grouped = [
-        FontAnomaly(
-            deviation_type=items[0].deviation_type,
-            confidence=items[0].confidence,
-            evidence=items[0].evidence,
-            detected=items[0].detected,
-            expected=items[0].expected,
-            occurrence_count=len(items),
-            locations=[
-                AnomalyLocation(page=item.page, bbox=item.bbox, text=item.text)
-                for item in items
-            ],
-        )
-        for items in groups.values()
-    ]
-    grouped.sort(key=lambda anomaly: anomaly.confidence, reverse=True)
-    return grouped
-
-
 def _compile_detected_styles(spans: list[_Span]) -> list[DetectedStyle]:
     counts = Counter(
         (span.font, span.size, span.bold, span.italic, span.underline) for span in spans
@@ -463,3 +216,410 @@ def _dominant(values):
     if len(counts) > 1 and counts[0][1] == counts[1][1]:
         return None
     return counts[0][0]
+
+
+# --- v2-specific ---------------------------------------------------------
+
+# Spans on the same page whose baseline (bbox y1) fall within this many
+# points of each other form one "row" — replaces PyMuPDF's own line
+# grouping, which was confirmed (via direct testing) to split a single
+# visual table row into multiple separate "line" entries whenever its cells
+# are rendered as distinct text objects.
+ROW_Y_TOLERANCE_PT = 2.0
+
+# A field's extracted text is considered "found" at a given page.search_for
+# match if a span's bbox overlaps that match by at least this fraction of
+# the span's own area. Not 100% because search_for's match rect and a
+# span's bbox rarely align pixel-perfectly (padding, kerning).
+_FIELD_OVERLAP_MIN_RATIO = 0.3
+
+RowKey = tuple[int, int]  # (page, row_index)
+
+
+class ExtractedField(BaseModel):
+    """
+    Mirrors the extracted_fields table's row shape (minus columns this
+    check doesn't use — see extracted_fields_repository.get_extracted_fields).
+    field_value is deliberately Any, not str: the column is JSON-typed, so
+    postgrest hands back whatever native type the stored JSON value
+    actually is — a str for a text field, but a float for a numeric one
+    (observed directly against real data) — and some rows store a further
+    JSON-encoded string on top of that (e.g. '"ACME Pte Ltd"' rather than
+    'ACME Pte Ltd'). See _field_search_text for how this gets resolved to
+    actual searchable text.
+    """
+    id: str | None = None
+    field_name: str
+    field_type: str
+    field_value: Any
+    confidence: float
+
+
+class FontAnomalyV2(BaseModel):
+    """
+    One deviation *pattern*, fact-only (no confidence/severity scoring —
+    see the font_consistency plan). `field_name`/`occurrences`/
+    `deviating_occurrences` are set only for field-anchored findings; row-
+    level findings leave them None and rely on `occurrence_count` /
+    `locations` instead, same as v1.
+    """
+
+    deviation_type: Literal["font", "size", "emphasis", "combo"]
+    detected: dict
+    expected: dict
+    occurrence_count: int
+    locations: list[AnomalyLocation]
+    field_name: str | None = None
+    occurrences: int | None = None
+    deviating_occurrences: int | None = None
+
+
+class _RawAnomalyV2(BaseModel):
+    """Per-span deviation, before grouping — see _score_row_deviations/_check_field_anchored/_group_anomalies_v2."""
+
+    page: int
+    bbox: BBox
+    text: str
+    deviation_type: Literal["font", "size", "emphasis", "combo"]
+    detected: dict
+    expected: dict
+    field_name: str | None = None
+    occurrences: int | None = None
+    deviating_occurrences: int | None = None
+
+
+class FontConsistencyResult(BaseModel):
+    document_id: str
+    anomalies: list[FontAnomalyV2]
+    all_detected_styles: list[DetectedStyle]
+    unable_to_assess: bool
+    unable_to_assess_reason: str | None = None
+
+
+def _empty_result(document_id: str, reason: str | None = None) -> FontConsistencyResult:
+    return FontConsistencyResult(
+        document_id=document_id,
+        anomalies=[],
+        all_detected_styles=[],
+        unable_to_assess=True,
+        unable_to_assess_reason=reason,
+    )
+
+
+def check_font_consistency(
+    document_id: str,
+    file_bytes: bytes,
+    extracted_fields: list[ExtractedField] | None = None,
+) -> FontConsistencyResult:
+    """
+    v2: row-level comparison (tight, local — replaces v1's line+region dual
+    comparison) plus, when extracted_fields is provided, a field-anchored
+    comparison that locates each extracted field's value in the PDF text
+    layer and checks its rendering against the document's own baseline
+    style. Synchronous/CPU-bound — callers should run this via
+    asyncio.to_thread.
+    """
+    try:
+        doc = pymupdf.open(stream=file_bytes, filetype="pdf")
+    except Exception as exc:
+        reason = f"Failed to open document as a PDF: {type(exc).__name__}: {exc}"
+        logger.warning("Document %s: %s", document_id, reason, exc_info=True)
+        return _empty_result(document_id, reason)
+
+    try:
+        spans = _extract_spans(doc)
+        if not spans:
+            has_images = any(page.get_images() for page in doc)
+            reason = (
+                f"No extractable text spans found ({doc.page_count} page(s), "
+                f"has embedded images: {has_images}) -- likely a scanned/"
+                "image-only PDF with no text layer, or an encrypted/"
+                "corrupted one."
+            )
+            logger.warning("Font consistency check: document %s: %s", document_id, reason)
+            return _empty_result(document_id, reason)
+
+        spans_by_page: dict[int, list[_Span]] = {}
+        for span in spans:
+            spans_by_page.setdefault(span.page, []).append(span)
+
+        rows = _build_rows(spans)
+        row_of_span: dict[int, RowKey] = {
+            id(span): row_key for row_key, group in rows.items() for span in group
+        }
+        row_dominants = {key: _dominant_pattern(group) for key, group in rows.items()}
+
+        raw_anomalies = _score_row_deviations(spans, row_of_span, row_dominants)
+
+        if extracted_fields:
+            baseline_pattern = _dominant_pattern(spans)
+            raw_anomalies += _check_field_anchored(
+                extracted_fields, doc, spans_by_page, baseline_pattern
+            )
+
+        anomalies = _group_anomalies_v2(raw_anomalies)
+
+        return FontConsistencyResult(
+            document_id=document_id,
+            anomalies=anomalies,
+            all_detected_styles=_compile_detected_styles(spans),
+            unable_to_assess=False,
+        )
+    except Exception as exc:
+        logger.exception("Font consistency check failed for document %s", document_id)
+        reason = f"Unexpected error during font consistency check: {type(exc).__name__}: {exc}"
+        return _empty_result(document_id, reason)
+    finally:
+        doc.close()
+
+
+def _build_rows(spans: list[_Span]) -> dict[RowKey, list[_Span]]:
+    by_page: dict[int, list[_Span]] = {}
+    for span in spans:
+        by_page.setdefault(span.page, []).append(span)
+
+    rows: dict[RowKey, list[_Span]] = {}
+    for page, page_spans in by_page.items():
+        page_spans.sort(key=lambda s: (s.bbox[3], s.bbox[0]))
+        row_index = -1
+        row_baseline: float | None = None
+        for span in page_spans:
+            baseline = span.bbox[3]
+            if row_baseline is None or abs(baseline - row_baseline) > ROW_Y_TOLERANCE_PT:
+                row_index += 1
+                row_baseline = baseline
+            rows.setdefault((page, row_index), []).append(span)
+    return rows
+
+
+def _score_row_deviations(
+    spans: list[_Span],
+    row_of_span: dict[int, RowKey],
+    row_dominants: dict[RowKey, DominantPattern],
+) -> list[_RawAnomalyV2]:
+    """
+    Compares each span only against its own row's dominant pattern — a real
+    forgery typically edits a fragment that then clashes with its
+    immediate neighbours. No second, broader comparison scope: the
+    structural-role/region clustering v1 used to catch legitimate
+    conventions (e.g. every bold "Total" row) is dropped in favour of
+    _group_anomalies_v2's occurrence_count, which already tells the
+    consuming agent whether an identical deviation recurs across many rows
+    (a convention) or shows up once (the higher-signal case).
+    """
+    anomalies: list[_RawAnomalyV2] = []
+    for span in spans:
+        pattern = row_dominants[row_of_span[id(span)]]
+        dev = _dimension_deviations(span, pattern)
+        contributing = [dim for dim in ("font", "size", "emphasis") if dev[dim]]
+        if not contributing:
+            continue
+
+        deviation_type: Literal["font", "size", "emphasis", "combo"]
+        deviation_type = "combo" if len(contributing) >= 2 else contributing[0]  # type: ignore[assignment]
+        dominant_font, dominant_size, dominant_emphasis = pattern
+
+        anomalies.append(
+            _RawAnomalyV2(
+                page=span.page,
+                bbox=span.bbox,
+                text=span.text,
+                deviation_type=deviation_type,
+                detected={
+                    "font": span.font,
+                    "size": span.size,
+                    "bold": span.bold,
+                    "italic": span.italic,
+                    "underline": span.underline,
+                },
+                expected={
+                    "font": dominant_font,
+                    "size": dominant_size,
+                    "bold": dominant_emphasis[0] if dominant_emphasis else None,
+                    "italic": dominant_emphasis[1] if dominant_emphasis else None,
+                    "underline": dominant_emphasis[2] if dominant_emphasis else None,
+                },
+            )
+        )
+    return anomalies
+
+
+def _match_field_occurrences(
+    doc: pymupdf.Document,
+    spans_by_page: dict[int, list[_Span]],
+    field_value: str,
+) -> list[list[_Span]]:
+    """
+    Finds every occurrence of field_value in the document's text layer
+    (page.search_for) and, for each occurrence, the span(s) that render it
+    — usually one, but a tampered field could legitimately be split across
+    spans of different styles, which is exactly the signal this check
+    wants to catch.
+    """
+    occurrences: list[list[_Span]] = []
+    for page_index, page in enumerate(cast(Iterable, doc)):
+        page_spans = spans_by_page.get(page_index)
+        if not page_spans:
+            continue
+        try:
+            rects = page.search_for(field_value)
+        except ValueError:
+            continue
+        for rect in rects:
+            matched = [span for span in page_spans if _overlaps(span.bbox, rect)]
+            if matched:
+                occurrences.append(matched)
+    return occurrences
+
+
+def _overlaps(bbox: BBox, rect: pymupdf.Rect) -> bool:
+    span_rect = pymupdf.Rect(bbox)
+    intersection = span_rect & rect
+    if intersection.is_empty:
+        return False
+    span_area = span_rect.get_area()
+    if span_area <= 0:
+        return False
+    return (intersection.get_area() / span_area) >= _FIELD_OVERLAP_MIN_RATIO
+
+
+def _field_search_text(field: ExtractedField) -> str | None:
+    """
+    field_value comes back from the JSON-typed extracted_fields column as
+    whatever native type the stored JSON value is — a str for a text
+    field, but e.g. a float for a numeric one — and some string values are
+    themselves JSON-encoded a second time (e.g. '"ACME Pte Ltd"' instead of
+    'ACME Pte Ltd'), so a str value gets one decode attempt, falling back
+    to itself when it isn't valid JSON. Only a *string* result (whether
+    that's field_value itself or what it decodes to) is anchorable this
+    way — a number/bool/list/dict has no single text span to search for,
+    so those are skipped here rather than trusting a specific field_type
+    label (which varies: the real table uses "string", not the "scalar"
+    originally assumed, and there's no schema in this repo enumerating the
+    full set of values it can take).
+    """
+    value = field.field_value
+    if isinstance(value, str):
+        try:
+            decoded = json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            decoded = value
+    else:
+        decoded = value
+
+    if not isinstance(decoded, str):
+        return None
+    decoded = decoded.strip()
+    return decoded or None
+
+
+def _check_field_anchored(
+    fields: list[ExtractedField],
+    doc: pymupdf.Document,
+    spans_by_page: dict[int, list[_Span]],
+    baseline_pattern: DominantPattern,
+) -> list[_RawAnomalyV2]:
+    """
+    For each extracted field whose value decodes to plain text, locates
+    every occurrence of it in the document and compares the rendering
+    span(s) against the document-wide dominant style. Fields whose decoded
+    value isn't a string (e.g. a table/list-shaped field) are out of scope
+    for this first pass — an honest limitation, not an oversight: there's
+    no single "value span" to anchor on for those yet. A field whose value
+    can't be found verbatim anywhere (whitespace/format drift, or a
+    genuinely image-only document) is skipped rather than failing the
+    whole check.
+    """
+    raw: list[_RawAnomalyV2] = []
+    dominant_font, dominant_size, dominant_emphasis = baseline_pattern
+
+    for field in fields:
+        search_text = _field_search_text(field)
+        if search_text is None:
+            continue
+
+        occurrence_groups = _match_field_occurrences(doc, spans_by_page, search_text)
+        if not occurrence_groups:
+            continue
+
+        occurrences = len(occurrence_groups)
+        deviating_occurrences = 0
+        deviating: list[tuple[_Span, dict[str, bool]]] = []
+        for group in occurrence_groups:
+            group_deviates = False
+            for span in group:
+                dev = _dimension_deviations(span, baseline_pattern)
+                if any(dev.values()):
+                    group_deviates = True
+                    deviating.append((span, dev))
+            if group_deviates:
+                deviating_occurrences += 1
+
+        for span, dev in deviating:
+            contributing = [dim for dim in ("font", "size", "emphasis") if dev[dim]]
+            deviation_type: Literal["font", "size", "emphasis", "combo"]
+            deviation_type = "combo" if len(contributing) >= 2 else contributing[0]  # type: ignore[assignment]
+
+            raw.append(
+                _RawAnomalyV2(
+                    page=span.page,
+                    bbox=span.bbox,
+                    text=span.text,
+                    deviation_type=deviation_type,
+                    detected={
+                        "font": span.font,
+                        "size": span.size,
+                        "bold": span.bold,
+                        "italic": span.italic,
+                        "underline": span.underline,
+                    },
+                    expected={
+                        "font": dominant_font,
+                        "size": dominant_size,
+                        "bold": dominant_emphasis[0] if dominant_emphasis else None,
+                        "italic": dominant_emphasis[1] if dominant_emphasis else None,
+                        "underline": dominant_emphasis[2] if dominant_emphasis else None,
+                    },
+                    field_name=field.field_name,
+                    occurrences=occurrences,
+                    deviating_occurrences=deviating_occurrences,
+                )
+            )
+    return raw
+
+
+def _group_anomalies_v2(raw_anomalies: list[_RawAnomalyV2]) -> list[FontAnomalyV2]:
+    """
+    Same collapsing behaviour as v1's _group_anomalies (spans sharing a
+    deviation signature become one entry with all their locations), with
+    field_name folded into the signature so findings for different fields
+    never merge. Sorted by occurrence_count ascending (rarest first) rather
+    than by a confidence score — there isn't one in v2.
+    """
+    groups: dict[tuple, list[_RawAnomalyV2]] = {}
+    for raw in raw_anomalies:
+        key = (
+            raw.deviation_type,
+            raw.field_name,
+            tuple(sorted(raw.detected.items())),
+            tuple(sorted(raw.expected.items())),
+        )
+        groups.setdefault(key, []).append(raw)
+
+    grouped = [
+        FontAnomalyV2(
+            deviation_type=items[0].deviation_type,
+            detected=items[0].detected,
+            expected=items[0].expected,
+            occurrence_count=len(items),
+            locations=[
+                AnomalyLocation(page=item.page, bbox=item.bbox, text=item.text) for item in items
+            ],
+            field_name=items[0].field_name,
+            occurrences=items[0].occurrences,
+            deviating_occurrences=items[0].deviating_occurrences,
+        )
+        for items in groups.values()
+    ]
+    grouped.sort(key=lambda anomaly: anomaly.occurrence_count)
+    return grouped

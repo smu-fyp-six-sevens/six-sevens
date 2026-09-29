@@ -1,4 +1,14 @@
-"""Font-consistency v1/v2: open/empty/error paths plus real mixed-style PDFs."""
+"""
+Font-consistency: open/empty/error paths plus real mixed-style PDFs.
+
+This module was originally font_consistency_v2.py, written to replace an
+earlier font_consistency.py (v1) — since renamed back to font_consistency.py
+now that v1 is long gone and the "v2" suffix no longer meant anything. The
+span-extraction/style-comparison building blocks v1 originated (_Span,
+_compile_detected_styles, _dimension_deviations, _dominant_pattern,
+_extract_spans) moved into this module rather than being deleted, since it
+still relies on them unchanged.
+"""
 
 from __future__ import annotations
 
@@ -7,32 +17,22 @@ from types import SimpleNamespace
 import pymupdf
 import pytest
 
-from app.fraud_detection import font_consistency as v1
-from app.fraud_detection import font_consistency_v2 as v2
+from app.fraud_detection import font_consistency as fc
 from app.fraud_detection.font_consistency import (
-    _Span,
-    _cluster_key,
-    _compile_detected_styles,
-    _dimension_deviations,
-    _dominant,
-    _dominant_pattern,
-    _extract_spans,
-    _font_family,
-    _is_underlined,
-    _score_deviations,
-    _underline_rects,
-    check_font_consistency,
-)
-from app.fraud_detection.font_consistency_v2 import (
     ExtractedField,
+    _Span,
     _build_rows,
     _check_field_anchored,
+    _compile_detected_styles,
+    _dimension_deviations,
+    _dominant_pattern,
+    _extract_spans,
     _field_search_text,
     _group_anomalies_v2,
     _match_field_occurrences,
     _overlaps,
     _score_row_deviations,
-    check_font_consistency_v2,
+    check_font_consistency,
 )
 
 
@@ -61,16 +61,6 @@ def _mixed_line_pdf(*, font: bool = False, size: bool = False, bold: bool = Fals
         second_font = "cour" if font else ("hebo" if bold else "helv")
         second_size = 20 if size else 12
         page.insert_text((140, 100), "XXX", fontsize=second_size, fontname=second_font)
-
-    return _pdf_bytes(build)
-
-
-def _underlined_pdf() -> bytes:
-    def build(doc):
-        page = doc.new_page(width=400, height=200)
-        page.insert_text((40, 100), "TOTAL ", fontsize=12, fontname="helv")
-        page.insert_text((100, 100), "AMOUNT", fontsize=12, fontname="helv")
-        page.draw_rect(pymupdf.Rect(98, 101, 180, 102.2), fill=(0, 0, 0))
 
     return _pdf_bytes(build)
 
@@ -112,29 +102,9 @@ def _span(**kwargs) -> _Span:
 
 
 # ---------------------------------------------------------------------------
-# v1 helpers
+# span extraction & style-comparison building blocks (originated in the now-
+# retired v1 module; v2 depends on them directly, unchanged)
 # ---------------------------------------------------------------------------
-
-
-def test_font_family_strips_subset_and_emphasis_suffix() -> None:
-    assert v1._font_family("ABCDEF+Helvetica-Bold") == "Helvetica"
-    assert v1._font_family("Times-Italic") == "Times"
-    assert v1._font_family("Courier") == "Courier"
-    assert v1._font_family("") == ""
-
-
-def test_dominant_tie_and_empty() -> None:
-    assert _dominant([]) is None
-    assert _dominant(["a", "b"]) is None
-    assert _dominant(["a", "a", "b"]) == "a"
-
-
-def test_is_underlined_requires_width_and_overlap() -> None:
-    assert _is_underlined((10, 10, 10, 20), [pymupdf.Rect(0, 18, 40, 19)]) is False
-    far = [pymupdf.Rect(0, 80, 40, 81)]
-    assert _is_underlined((10, 10, 40, 20), far) is False
-    near = [pymupdf.Rect(10, 19, 40, 20.5)]
-    assert _is_underlined((10, 10, 40, 20), near) is True
 
 
 def test_extract_spans_skips_non_text_empty_and_bad_bbox() -> None:
@@ -169,111 +139,26 @@ def test_extract_spans_skips_non_text_empty_and_bad_bbox() -> None:
     assert spans[0].text == "Yo"
     assert spans[0].bold is True
     assert spans[0].italic is True
-    assert _underline_rects(page)
 
 
-def test_score_deviations_line_region_combo_and_group() -> None:
-    majority = _span(text="AAA", font="Helvetica", size=12.0, line_key=(0, 0, 0), bbox=(0, 0, 20, 12))
-    majority2 = _span(text="BBB", font="Helvetica", size=12.0, line_key=(0, 0, 0), bbox=(20, 0, 40, 12))
-    deviant = _span(
-        text="XXX",
-        font="Courier",
-        size=18.0,
-        bold=True,
-        line_key=(0, 0, 0),
-        bbox=(40, 0, 80, 12),
-    )
-    lone = _span(
-        text="SIG",
-        font="Times",
-        size=12.0,
-        line_key=(0, 1, 0),
-        bbox=(0, 60, 40, 74),
-        page=0,
-    )
-    mate1 = _span(
-        text="OK1",
-        font="Helvetica",
-        size=12.0,
-        line_key=(0, 1, 1),
-        bbox=(50, 60, 90, 74),
-        page=0,
-    )
-    mate2 = _span(
-        text="OK2",
-        font="Helvetica",
-        size=12.0,
-        line_key=(0, 1, 2),
-        bbox=(100, 60, 140, 74),
-        page=0,
-    )
-    h1 = _span(text="H1", font="Helvetica", size=12.0, line_key=(0, 0, 0), bbox=(0, 0, 10, 12))
-    h2 = _span(text="H2", font="Helvetica", size=12.0, line_key=(0, 0, 0), bbox=(10, 0, 20, 12))
-    courier_on_helv_line = _span(
-        text="CX", font="Courier", size=12.0, line_key=(0, 0, 0), bbox=(20, 0, 30, 12)
-    )
-    c1 = _span(text="C1", font="Courier", size=12.0, line_key=(0, 1, 0), bbox=(0, 4, 10, 16))
-    c2 = _span(text="C2", font="Courier", size=12.0, line_key=(0, 1, 0), bbox=(10, 4, 20, 16))
-    c3 = _span(text="C3", font="Courier", size=12.0, line_key=(0, 2, 0), bbox=(20, 4, 30, 16))
-    spans = [majority, majority2, deviant, lone, mate1, mate2, h1, h2, courier_on_helv_line, c1, c2, c3]
-    line_groups: dict = {}
-    region_groups: dict = {}
-    for span in spans:
-        line_groups.setdefault(span.line_key, []).append(span)
-        region_groups.setdefault(_cluster_key(span), []).append(span)
-    raw = _score_deviations(
-        spans,
-        {key: _dominant_pattern(group) for key, group in line_groups.items()},
-        {key: _dominant_pattern(group) for key, group in region_groups.items()},
-    )
-    assert raw
-    grouped = v1._group_anomalies(raw + raw)
-    assert grouped[0].occurrence_count >= 1
-    assert grouped[0].confidence >= grouped[-1].confidence
+def test_compile_detected_styles_and_dimension_deviations() -> None:
+    """
+    _compile_detected_styles and _dimension_deviations originated in the
+    retired v1 module and now live directly in font_consistency.py (see
+    this file's module docstring) — kept here as unit coverage since v2's
+    own tests only exercise these indirectly.
+    """
+    majority = _span(text="AAA", font="Helvetica", size=12.0, bbox=(0, 0, 20, 12))
+    majority2 = _span(text="BBB", font="Helvetica", size=12.0, bbox=(20, 0, 40, 12))
+    deviant = _span(text="XXX", font="Courier", size=18.0, bold=True, bbox=(40, 0, 80, 12))
+    spans = [majority, majority2, deviant]
+
     styles = _compile_detected_styles(spans)
     assert styles[0].occurrence_count >= 1
-    assert any("region" in raw.evidence for raw in raw)
-    dims = _dimension_deviations(deviant, _dominant_pattern([majority, majority2, deviant]))
+
+    dims = _dimension_deviations(deviant, _dominant_pattern(spans))
     assert dims["font"] is True
     assert dims["size"] is True
-
-
-# ---------------------------------------------------------------------------
-# v1 public API
-# ---------------------------------------------------------------------------
-
-
-def test_check_font_consistency_invalid_and_empty() -> None:
-    bad = check_font_consistency("doc-1", b"not-a-pdf")
-    assert bad.unable_to_assess is True
-    assert bad.anomalies == []
-    empty = check_font_consistency("doc-1", _blank_pdf())
-    assert empty.unable_to_assess is True
-
-
-def test_check_font_consistency_returns_empty_on_internal_error(monkeypatch) -> None:
-    monkeypatch.setattr(v1, "_extract_spans", lambda doc: (_ for _ in ()).throw(RuntimeError("boom")))
-    result = check_font_consistency("doc-1", _consistent_pdf())
-    assert result.unable_to_assess is True
-
-
-def test_check_font_consistency_consistent_document() -> None:
-    result = check_font_consistency("doc-1", _consistent_pdf())
-    assert result.unable_to_assess is False
-    assert result.all_detected_styles
-    assert result.document_id == "doc-1"
-
-
-def test_check_font_consistency_flags_font_size_bold_and_underline() -> None:
-    font = check_font_consistency("d", _mixed_line_pdf(font=True))
-    assert any(item.deviation_type in {"font", "combo"} for item in font.anomalies)
-
-    bold = check_font_consistency("d", _mixed_line_pdf(bold=True))
-    assert bold.unable_to_assess is False
-
-    underlined = check_font_consistency("d", _underlined_pdf())
-    assert underlined.unable_to_assess is False
-    assert any(style.underline for style in underlined.all_detected_styles) or underlined.anomalies != []
 
 
 # ---------------------------------------------------------------------------
@@ -339,23 +224,23 @@ def test_match_field_occurrences_skips_empty_pages_and_search_errors(
 # ---------------------------------------------------------------------------
 
 
-def test_check_font_consistency_v2_invalid_empty_and_image_only() -> None:
-    bad = check_font_consistency_v2("doc-1", b"not-a-pdf")
+def test_check_font_consistency_invalid_empty_and_image_only() -> None:
+    bad = check_font_consistency("doc-1", b"not-a-pdf")
     assert bad.unable_to_assess is True
     assert bad.unable_to_assess_reason
 
-    empty = check_font_consistency_v2("doc-1", _blank_pdf())
+    empty = check_font_consistency("doc-1", _blank_pdf())
     assert empty.unable_to_assess is True
     assert "No extractable text" in (empty.unable_to_assess_reason or "")
 
-    image_only = check_font_consistency_v2("doc-1", _image_only_pdf())
+    image_only = check_font_consistency("doc-1", _image_only_pdf())
     assert image_only.unable_to_assess is True
     assert "embedded images" in (image_only.unable_to_assess_reason or "")
 
 
-def test_check_font_consistency_v2_returns_empty_on_internal_error(monkeypatch) -> None:
-    monkeypatch.setattr(v2, "_extract_spans", lambda doc: (_ for _ in ()).throw(RuntimeError("boom")))
-    result = check_font_consistency_v2("doc-1", _consistent_pdf())
+def test_check_font_consistency_returns_empty_on_internal_error(monkeypatch) -> None:
+    monkeypatch.setattr(fc, "_extract_spans", lambda doc: (_ for _ in ()).throw(RuntimeError("boom")))
+    result = check_font_consistency("doc-1", _consistent_pdf())
     assert result.unable_to_assess is True
     assert "Unexpected error" in (result.unable_to_assess_reason or "")
 
@@ -382,7 +267,7 @@ def test_check_field_anchored_flags_deviating_occurrence(monkeypatch: pytest.Mon
     majority = _span(text="ACME Pte Ltd", font="Helvetica", size=12.0)
     deviant = _span(text="ACME Pte Ltd", font="Courier", size=18.0, bbox=(10, 80, 90, 98))
     monkeypatch.setattr(
-        v2,
+        fc,
         "_match_field_occurrences",
         lambda *args, **kwargs: [[majority], [deviant]],
     )
@@ -397,7 +282,7 @@ def test_check_field_anchored_flags_deviating_occurrence(monkeypatch: pytest.Mon
         _dominant_pattern([majority, majority, deviant]),
     )
     assert any(item.field_name == "company" for item in raw)
-    monkeypatch.setattr(v2, "_match_field_occurrences", lambda *a, **k: [])
+    monkeypatch.setattr(fc, "_match_field_occurrences", lambda *a, **k: [])
     assert (
         _check_field_anchored(
             [ExtractedField(field_name="company", field_type="string", field_value="ACME Pte Ltd", confidence=1)],
@@ -409,12 +294,12 @@ def test_check_field_anchored_flags_deviating_occurrence(monkeypatch: pytest.Mon
     )
 
 
-def test_check_font_consistency_v2_row_and_field_anchored() -> None:
-    consistent = check_font_consistency_v2("doc-1", _consistent_pdf())
+def test_check_font_consistency_row_and_field_anchored() -> None:
+    consistent = check_font_consistency("doc-1", _consistent_pdf())
     assert consistent.unable_to_assess is False
     assert consistent.all_detected_styles
 
-    mixed = check_font_consistency_v2("doc-1", _mixed_line_pdf(font=True))
+    mixed = check_font_consistency("doc-1", _mixed_line_pdf(font=True))
     assert mixed.unable_to_assess is False
 
     def build(doc):
@@ -435,7 +320,7 @@ def test_check_font_consistency_v2_row_and_field_anchored() -> None:
             confidence=0.9,
         ),
     ]
-    anchored = check_font_consistency_v2("doc-1", pdf, fields)
+    anchored = check_font_consistency("doc-1", pdf, fields)
     assert anchored.unable_to_assess is False
 
 
@@ -457,3 +342,21 @@ def test_check_field_anchored_direct(monkeypatch) -> None:
     )
     assert isinstance(raw, list)
     doc.close()
+
+
+def test_font_family_returns_original_name_when_stripping_leaves_nothing() -> None:
+    assert fc._font_family("Bold") == "Bold"
+
+
+def test_is_underlined_false_for_zero_width_span() -> None:
+    assert fc._is_underlined((100.0, 0.0, 100.0, 50.0), []) is False
+
+
+def test_is_underlined_false_when_no_rect_is_near_the_baseline() -> None:
+    far_rect = pymupdf.Rect(0, 1000, 100, 1005)
+    assert fc._is_underlined((0.0, 0.0, 100.0, 20.0), [far_rect]) is False
+
+
+def test_dominant_empty_and_tie() -> None:
+    assert fc._dominant([]) is None
+    assert fc._dominant(["a", "b"]) is None

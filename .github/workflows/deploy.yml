@@ -75,10 +75,7 @@ jobs:
             --set-env-vars "SUPABASE_PUBLISHABLE_KEY=${{ secrets.SUPABASE_PUBLISHABLE_KEY }}" \
             --set-env-vars "SUPABASE_SECRET_KEY=${{ secrets.SUPABASE_SECRET_KEY }}" \
             --set-env-vars "SUPABASE_STORAGE_BUCKET=${{ secrets.SUPABASE_STORAGE_BUCKET || 'documents' }}" \
-            --set-env-vars "DIFY_BASE_URL=${{ secrets.DIFY_BASE_URL || 'https://api.dify.ai/v1' }}" \
-            --set-env-vars "DIFY_CLASSIFIER_API_KEY=${{ secrets.DIFY_CLASSIFIER_API_KEY }}" \
-            --set-env-vars "DIFY_EXTRACTION_WORKFLOW_ID=${{ secrets.DIFY_EXTRACTION_WORKFLOW_ID }}" \
-            --set-env-vars "DIFY_EXTRACTION_API_KEY=${{ secrets.DIFY_EXTRACTION_API_KEY }}" \
+            --set-env-vars "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" \
             --set-env-vars "AUTH_USERNAME=${{ secrets.AUTH_USERNAME }}" \
             --set-env-vars "AUTH_PASSWORD=${{ secrets.AUTH_PASSWORD }}" \
             --set-env-vars "AUTH_SECRET_KEY=${{ secrets.AUTH_SECRET_KEY }}" \

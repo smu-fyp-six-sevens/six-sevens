@@ -18,3 +18,18 @@ openpyxl>=3.1
 pandas>=2.1
 numpy
 symspellpy>=6.7,<7.0
+
+# LangGraph experiment (langgraph-test branch, backend/app/langgraph) — see
+# LANGGRAPH_MIGRATION_PLAN.md.
+langgraph>=0.2,<0.3
+langchain-anthropic>=0.3,<0.4
+langgraph-checkpoint-postgres>=2.0,<3.0
+psycopg[binary,pool]>=3.1,<4.0
+
+# Observability (langgraph-test branch) — see LANGGRAPH_MIGRATION_PLAN.md
+# section 6. Off by default (settings.OTEL_ENABLED); exports to Google Cloud
+# Trace when a project is configured, else the console.
+opentelemetry-api>=1.27,<2.0
+opentelemetry-sdk>=1.27,<2.0
+opentelemetry-instrumentation-fastapi>=0.48b0
+opentelemetry-exporter-gcp-trace>=1.7,<2.0

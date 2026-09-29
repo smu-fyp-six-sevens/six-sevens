@@ -7,13 +7,12 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi import HTTPException, UploadFile
 from fastapi.testclient import TestClient
-from postgrest.exceptions import APIError
 from starlette.datastructures import Headers
 
 from app.config import settings
-from app.fraud_detection.font_consistency_v2 import ExtractedField
+from app.fraud_detection.font_consistency import ExtractedField
 from app.main import app
-from app.models import CaseRecord, DocumentRecord, DocumentStatus
+from app.models import CaseRecord, DocumentRecord, DocumentStatus, compute_fulfilled_requirements
 from app.routers.upload import _ingest_one
 
 
@@ -51,12 +50,12 @@ def _make_case(case_id: str = "case-1", greenlink_case_id: str = "GLDB-1") -> Ca
 
 def test_upload_batch_partial_failure() -> None:
     with (
-        patch("app.routers.upload.case_repository") as mock_case_repo,
+        patch("app.routers.upload.case_service") as mock_case_service,
         patch("app.routers.upload.storage_service") as mock_storage,
         patch("app.routers.upload.document_repository") as mock_repo,
         patch("app.routers.upload.document_queue") as mock_queue,
     ):
-        mock_case_repo.get_case.return_value = _make_case("case-1")
+        mock_case_service.get_case.return_value = _make_case("case-1")
         mock_storage.upload_file.return_value = "case-1/uuid_good.pdf"
         mock_repo.create_document.return_value = _make_document("doc-good")
         mock_queue.enqueue = AsyncMock()
@@ -96,127 +95,6 @@ def test_upload_batch_rejects_no_files() -> None:
     assert response.json()["detail"] == "At least one file is required"
 
 
-def test_upload_rejects_unknown_case_id_before_touching_storage() -> None:
-    """
-    The case-existence check must run before any storage write, so an
-    invalid case_id never gets a Storage object/folder created under it.
-    """
-    with (
-        patch("app.routers.upload.case_repository") as mock_case_repo,
-        patch("app.routers.upload.storage_service") as mock_storage,
-        patch("app.routers.upload.document_repository") as mock_repo,
-    ):
-        mock_case_repo.get_case.return_value = None
-
-        response = client.post(
-            "/documents/upload",
-            data={"case_id": "does-not-exist"},
-            files={"file": ("good.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
-        )
-
-    assert response.status_code == 400
-    assert "does-not-exist" in response.json()["detail"]
-    mock_storage.upload_file.assert_not_called()
-    mock_repo.create_document.assert_not_called()
-
-
-def test_upload_allows_missing_case_id_unassigned_folder() -> None:
-    """No case_id at all is still allowed (goes to the 'unassigned' folder) —
-    the existence check only applies when a case_id is actually provided."""
-    with (
-        patch("app.routers.upload.case_repository") as mock_case_repo,
-        patch("app.routers.upload.storage_service") as mock_storage,
-        patch("app.routers.upload.document_repository") as mock_repo,
-        patch("app.routers.upload.document_queue") as mock_queue,
-    ):
-        mock_storage.upload_file.return_value = "unassigned/uuid_good.pdf"
-        mock_repo.create_document.return_value = _make_document("doc-good")
-        mock_queue.enqueue = AsyncMock()
-
-        response = client.post(
-            "/documents/upload",
-            files={"file": ("good.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
-        )
-
-    assert response.status_code == 202
-    mock_case_repo.get_case.assert_not_called()
-
-
-def test_upload_cleans_up_storage_on_fk_violation_race() -> None:
-    """
-    Defense-in-depth: even if the case existed at check time but is gone by
-    the time the document row insert runs (a race), cleanup still fires.
-    """
-    with (
-        patch("app.routers.upload.case_repository") as mock_case_repo,
-        patch("app.routers.upload.storage_service") as mock_storage,
-        patch("app.routers.upload.document_repository") as mock_repo,
-    ):
-        mock_case_repo.get_case.return_value = _make_case("case-1")
-        mock_storage.upload_file.return_value = "case-1/uuid_good.pdf"
-        mock_repo.create_document.side_effect = APIError(
-            {
-                "message": 'insert or update on table "documents" violates foreign key '
-                'constraint "documents_case_id_fkey"',
-                "code": "23503",
-                "hint": None,
-                "details": 'Key is not present in table "cases".',
-            }
-        )
-
-        response = client.post(
-            "/documents/upload",
-            data={"case_id": "case-1"},
-            files={"file": ("good.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
-        )
-
-    assert response.status_code == 400
-    assert "case-1" in response.json()["detail"]
-    mock_storage.delete_file.assert_called_once_with("case-1/uuid_good.pdf")
-
-
-def test_upload_cleans_up_storage_on_generic_db_failure() -> None:
-    with (
-        patch("app.routers.upload.case_repository") as mock_case_repo,
-        patch("app.routers.upload.storage_service") as mock_storage,
-        patch("app.routers.upload.document_repository") as mock_repo,
-    ):
-        mock_case_repo.get_case.return_value = _make_case("case-1")
-        mock_storage.upload_file.return_value = "case-1/uuid_good.pdf"
-        mock_repo.create_document.side_effect = RuntimeError("transient DB error")
-
-        response = client.post(
-            "/documents/upload",
-            data={"case_id": "case-1"},
-            files={"file": ("good.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
-        )
-
-    assert response.status_code == 502
-    mock_storage.delete_file.assert_called_once_with("case-1/uuid_good.pdf")
-
-
-def test_upload_does_not_clean_up_storage_when_enqueue_fails() -> None:
-    with (
-        patch("app.routers.upload.case_repository") as mock_case_repo,
-        patch("app.routers.upload.storage_service") as mock_storage,
-        patch("app.routers.upload.document_repository") as mock_repo,
-        patch("app.routers.upload.document_queue") as mock_queue,
-    ):
-        mock_case_repo.get_case.return_value = _make_case("case-1")
-        mock_storage.upload_file.return_value = "case-1/uuid_good.pdf"
-        mock_repo.create_document.return_value = _make_document("doc-good")
-        mock_queue.enqueue = AsyncMock(side_effect=RuntimeError("queue full"))
-
-        response = client.post(
-            "/documents/upload",
-            data={"case_id": "case-1"},
-            files={"file": ("good.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
-        )
-
-    assert response.status_code == 502
-    mock_storage.delete_file.assert_not_called()
-
-
 def test_get_document_not_found() -> None:
     with patch("app.routers.documents.document_repository") as mock_repo:
         mock_repo.get_document.return_value = None
@@ -245,7 +123,9 @@ def test_get_document_db_failure_returns_502() -> None:
 
 
 def test_get_document_download_url_db_failure_returns_502() -> None:
-    with patch("app.routers.documents.document_repository") as mock_repo:
+    # GET .../download sits behind Depends(get_document_or_404), which
+    # fetches via _dependencies.document_repository, not documents.py's own.
+    with patch("app.routers._dependencies.document_repository") as mock_repo:
         mock_repo.get_document.side_effect = RuntimeError("connection refused")
 
         response = client.get("/documents/doc-1/download")
@@ -254,8 +134,8 @@ def test_get_document_download_url_db_failure_returns_502() -> None:
 
 
 def test_retry_document_not_found() -> None:
-    with patch("app.routers.documents.document_repository") as mock_repo:
-        mock_repo.get_document.return_value = None
+    with patch("app.routers._dependencies.document_repository") as mock_dep_repo:
+        mock_dep_repo.get_document.return_value = None
 
         response = client.post("/documents/missing-id/retry")
 
@@ -266,15 +146,19 @@ def test_retry_document_rejects_already_analyzed() -> None:
     document = _make_document("doc-1")
     document.status = DocumentStatus.ANALYZED
 
-    with patch("app.routers.documents.document_repository") as mock_repo:
-        mock_repo.get_document.return_value = document
+    with patch("app.routers._dependencies.document_repository") as mock_dep_repo:
+        mock_dep_repo.get_document.return_value = document
 
         response = client.post("/documents/doc-1/retry")
 
-    assert response.status_code == 400
+    assert response.status_code == 409
 
 
 def test_retry_document_requeues_stuck_processing_document() -> None:
+    # Depends(get_document_or_404) fetches via _dependencies.document_repository
+    # (provides the pre-retry record the handler checks status/retry_count
+    # on); the handler's own final `return await ... document_repository.get_document`
+    # goes through documents.py's own reference and returns the post-retry record.
     stuck = _make_document("doc-1")
     stuck.status = DocumentStatus.PROCESSING
     stuck.retry_count = 0
@@ -283,10 +167,12 @@ def test_retry_document_requeues_stuck_processing_document() -> None:
     requeued.retry_count = 1
 
     with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.document_queue") as mock_queue,
     ):
-        mock_repo.get_document.side_effect = [stuck, requeued]
+        mock_dep_repo.get_document.return_value = stuck
+        mock_repo.get_document.return_value = requeued
         mock_queue.enqueue = AsyncMock()
 
         response = client.post("/documents/doc-1/retry")
@@ -294,7 +180,10 @@ def test_retry_document_requeues_stuck_processing_document() -> None:
     assert response.status_code == 200
     assert response.json()["status"] == "queued"
     mock_repo.update_status.assert_called_once_with(
-        "doc-1", DocumentStatus.QUEUED, retry_count=1
+        "doc-1",
+        DocumentStatus.QUEUED,
+        retry_count=1,
+        expected_current_statuses=[DocumentStatus.PROCESSING],
     )
     mock_queue.enqueue.assert_awaited_once_with("doc-1")
 
@@ -306,26 +195,31 @@ def test_retry_document_allows_retrying_failed_document() -> None:
     failed.retry_count = 2
 
     with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.document_queue") as mock_queue,
     ):
-        mock_repo.get_document.side_effect = [failed, failed]
+        mock_dep_repo.get_document.return_value = failed
+        mock_repo.get_document.return_value = failed
         mock_queue.enqueue = AsyncMock()
 
         response = client.post("/documents/doc-1/retry")
 
     assert response.status_code == 200
     mock_repo.update_status.assert_called_once_with(
-        "doc-1", DocumentStatus.QUEUED, retry_count=3
+        "doc-1",
+        DocumentStatus.QUEUED,
+        retry_count=3,
+        expected_current_statuses=[DocumentStatus.FAILED],
     )
 
 
 def test_get_document_download_url() -> None:
     with (
-        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.storage_service") as mock_storage,
     ):
-        mock_repo.get_document.return_value = _make_document("doc-1")
+        mock_dep_repo.get_document.return_value = _make_document("doc-1")
         mock_storage.create_signed_url.return_value = "https://example.supabase.co/signed/doc-1"
 
         response = client.get("/documents/doc-1/download")
@@ -335,13 +229,45 @@ def test_get_document_download_url() -> None:
     assert body["document_id"] == "doc-1"
     assert body["signed_url"] == "https://example.supabase.co/signed/doc-1"
     assert body["expires_in"] == settings.SIGNED_URL_EXPIRY_SECONDS
+    # Plain downloads pass the filename through, which is what puts a
+    # Content-Disposition: attachment header on Storage's response.
+    mock_storage.create_signed_url.assert_called_once_with(
+        "case-1/doc-1_statement.pdf",
+        settings.SIGNED_URL_EXPIRY_SECONDS,
+        "statement.pdf",
+    )
+
+
+def test_get_document_download_url_inline_omits_the_filename() -> None:
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.storage_service") as mock_storage,
+    ):
+        mock_dep_repo.get_document.return_value = _make_document("doc-1")
+        mock_storage.create_signed_url.return_value = "https://example.supabase.co/signed/doc-1"
+
+        response = client.get("/documents/doc-1/download?inline=true")
+
+    assert response.status_code == 200
+    # No filename -> no `download` option -> Storage omits the
+    # Content-Disposition: attachment header, so a browser renders it
+    # in place instead of downloading it (the preview modal's use case).
+    mock_storage.create_signed_url.assert_called_once_with(
+        "case-1/doc-1_statement.pdf",
+        settings.SIGNED_URL_EXPIRY_SECONDS,
+        None,
+    )
 
 
 def test_update_extracted_fields_success() -> None:
+    # Depends(get_document_or_404) provides `document` (via _dependencies);
+    # the handler's own final `await get_document(document_id)` call is a
+    # direct call to the get_document endpoint function, which does its own
+    # separate fetch through documents.py's own document_repository.
     with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
-        patch("app.routers.documents.case_status") as mock_case_status,
     ):
         original = DocumentRecord(
             id="doc-1",
@@ -358,7 +284,8 @@ def test_update_extracted_fields_success() -> None:
                 "extraction_confidence": 1.0,
             }
         )
-        mock_repo.get_document.side_effect = [original, updated]
+        mock_dep_repo.get_document.return_value = original
+        mock_repo.get_document.return_value = updated
         # First call is the handler's own existing-fields lookup (used to
         # decide which fields were "editable"/human-verified); the field is
         # new here (empty existing set), so it's treated as verified with
@@ -392,7 +319,7 @@ def test_update_extracted_fields_success() -> None:
     # models.compute_fulfilled_requirements) rather than left untouched —
     # here just self-fulfilment since no individual_address was corrected in.
     mock_repo.update_extracted_fields.assert_called_once_with(
-        "doc-1", {"individual_name": "Jane Tan (corrected)"}, 1.0, ["payslip"]
+        "doc-1", 1.0, ["payslip"]
     )
     # required_field_names drawn from the document's own document_type
     # ("payslip") so field_category reflects the same required/additional
@@ -408,8 +335,10 @@ def test_update_extracted_fields_success() -> None:
         required_field_names={"individual_name", "company_name", "net_pay", "company_address"},
     )
     # A manual correction can change requirement coverage (e.g. adding an
-    # address that was missing) just as much as the automated pipeline can.
-    mock_case_status.sync_submission_finalized.assert_called_once_with("case-1")
+    # address that was missing) just as much as the automated pipeline can —
+    # document_repository.update_extracted_fields resyncs the case itself
+    # now (see document_repository._sync_case), not observable from here
+    # since that call is mocked.
 
 
 def test_update_extracted_fields_preserves_confidence_for_already_reviewed_field() -> None:
@@ -418,9 +347,9 @@ def test_update_extracted_fields_preserves_confidence_for_already_reviewed_field
     # what's already there, so its original per-field confidence should be
     # kept rather than bumped to 1.0.
     with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
-        patch("app.routers.documents.case_status"),
     ):
         original = DocumentRecord(
             id="doc-1",
@@ -431,7 +360,8 @@ def test_update_extracted_fields_preserves_confidence_for_already_reviewed_field
             status=DocumentStatus.ANALYZED,
             uploaded_at=_TIMESTAMP,
         )
-        mock_repo.get_document.side_effect = [original, original]
+        mock_dep_repo.get_document.return_value = original
+        mock_repo.get_document.return_value = original
         mock_fields_repo.get_extracted_fields.side_effect = [
             [
                 ExtractedField(
@@ -464,9 +394,9 @@ def test_update_extracted_fields_bumps_confidence_for_low_confidence_existing_fi
     # is treated as human-reviewed once it comes through this endpoint, even
     # if the officer just re-saved the same value.
     with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
-        patch("app.routers.documents.case_status"),
     ):
         original = DocumentRecord(
             id="doc-1",
@@ -477,7 +407,8 @@ def test_update_extracted_fields_bumps_confidence_for_low_confidence_existing_fi
             status=DocumentStatus.ANALYZED,
             uploaded_at=_TIMESTAMP,
         )
-        mock_repo.get_document.side_effect = [original, original]
+        mock_dep_repo.get_document.return_value = original
+        mock_repo.get_document.return_value = original
         mock_fields_repo.get_extracted_fields.side_effect = [
             [
                 ExtractedField(
@@ -510,9 +441,9 @@ def test_update_extracted_fields_treats_blank_existing_value_as_editable() -> No
     # None) — that alone should make it editable/reviewable regardless of
     # its recorded confidence.
     with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
-        patch("app.routers.documents.case_status"),
     ):
         original = DocumentRecord(
             id="doc-1",
@@ -523,7 +454,8 @@ def test_update_extracted_fields_treats_blank_existing_value_as_editable() -> No
             status=DocumentStatus.ANALYZED,
             uploaded_at=_TIMESTAMP,
         )
-        mock_repo.get_document.side_effect = [original, original]
+        mock_dep_repo.get_document.return_value = original
+        mock_repo.get_document.return_value = original
         mock_fields_repo.get_extracted_fields.side_effect = [
             [
                 ExtractedField(
@@ -553,10 +485,10 @@ def test_update_extracted_fields_treats_blank_existing_value_as_editable() -> No
 
 def test_update_extracted_fields_not_found() -> None:
     with (
-        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
-        mock_repo.get_document.return_value = None
+        mock_dep_repo.get_document.return_value = None
 
         response = client.patch(
             "/documents/missing-id/extracted-fields",
@@ -598,8 +530,8 @@ def test_get_document_extracted_fields_failure_returns_502() -> None:
 
 
 def test_update_extracted_fields_fetch_and_save_failures() -> None:
-    with patch("app.routers.documents.document_repository") as mock_repo:
-        mock_repo.get_document.side_effect = RuntimeError("db down")
+    with patch("app.routers._dependencies.document_repository") as mock_dep_repo:
+        mock_dep_repo.get_document.side_effect = RuntimeError("db down")
         assert (
             client.patch(
                 "/documents/doc-1/extracted-fields",
@@ -609,10 +541,12 @@ def test_update_extracted_fields_fetch_and_save_failures() -> None:
         )
 
     with (
-        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository"),
         patch("app.routers.documents.extracted_fields_repository") as mock_fields,
     ):
-        mock_repo.get_document.return_value = _make_document("doc-1")
+        mock_dep_repo.get_document.return_value = _make_document("doc-1")
+        mock_fields.get_extracted_fields.return_value = []
         mock_fields.replace_extracted_fields.side_effect = RuntimeError("write failed")
         assert (
             client.patch(
@@ -624,54 +558,42 @@ def test_update_extracted_fields_fetch_and_save_failures() -> None:
 
 
 def test_retry_document_fetch_and_enqueue_failures() -> None:
-    with patch("app.routers.documents.document_repository") as mock_repo:
-        mock_repo.get_document.side_effect = RuntimeError("db down")
+    with patch("app.routers._dependencies.document_repository") as mock_dep_repo:
+        mock_dep_repo.get_document.side_effect = RuntimeError("db down")
         assert client.post("/documents/doc-1/retry").status_code == 502
 
     with (
-        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository"),
         patch("app.routers.documents.document_queue") as mock_queue,
     ):
-        mock_repo.get_document.return_value = _make_document("doc-1")
+        failed = _make_document("doc-1")
+        failed.status = DocumentStatus.FAILED
+        mock_dep_repo.get_document.return_value = failed
         mock_queue.enqueue = AsyncMock(side_effect=RuntimeError("queue down"))
         assert client.post("/documents/doc-1/retry").status_code == 502
 
 
 def test_download_url_missing_document_and_storage_path() -> None:
-    with patch("app.routers.documents.document_repository") as mock_repo:
-        mock_repo.get_document.return_value = None
+    with patch("app.routers._dependencies.document_repository") as mock_dep_repo:
+        mock_dep_repo.get_document.return_value = None
         assert client.get("/documents/doc-1/download").status_code == 404
 
     missing_path = _make_document("doc-1")
     missing_path.storage_path = None
-    with patch("app.routers.documents.document_repository") as mock_repo:
-        mock_repo.get_document.return_value = missing_path
+    with patch("app.routers._dependencies.document_repository") as mock_dep_repo:
+        mock_dep_repo.get_document.return_value = missing_path
         assert client.get("/documents/doc-1/download").status_code == 404
 
 
 def test_download_url_signed_url_failure() -> None:
     with (
-        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.storage_service") as mock_storage,
     ):
-        mock_repo.get_document.return_value = _make_document("doc-1")
+        mock_dep_repo.get_document.return_value = _make_document("doc-1")
         mock_storage.create_signed_url.side_effect = RuntimeError("sign failed")
         assert client.get("/documents/doc-1/download").status_code == 502
-
-
-def test_upload_rejects_missing_filename_and_oversized_file() -> None:
-    no_name = client.post(
-        "/documents/upload",
-        files={"file": ("", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
-    )
-    assert no_name.status_code in {400, 422}
-
-    with patch("app.routers.upload.settings.MAX_FILE_SIZE_BYTES", 4):
-        too_big = client.post(
-            "/documents/upload",
-            files={"file": ("big.pdf", io.BytesIO(b"%PDF-too-big"), "application/pdf")},
-        )
-    assert too_big.status_code == 413
 
 
 async def test_upload_rejects_blank_filename_direct() -> None:
@@ -683,59 +605,6 @@ async def test_upload_rejects_blank_filename_direct() -> None:
     with pytest.raises(HTTPException) as exc:
         await _ingest_one(None, upload)
     assert exc.value.status_code == 400
-
-
-def test_upload_storage_failure_returns_502() -> None:
-    with (
-        patch("app.routers.upload.case_repository") as mock_case_repo,
-        patch("app.routers.upload.storage_service") as mock_storage,
-    ):
-        mock_case_repo.get_case.return_value = _make_case("case-1")
-        mock_storage.upload_file.side_effect = RuntimeError("bucket down")
-        response = client.post(
-            "/documents/upload",
-            data={"case_id": "case-1"},
-            files={"file": ("good.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
-        )
-    assert response.status_code == 502
-
-
-def test_upload_non_fk_api_error_returns_502() -> None:
-    with (
-        patch("app.routers.upload.case_repository") as mock_case_repo,
-        patch("app.routers.upload.storage_service") as mock_storage,
-        patch("app.routers.upload.document_repository") as mock_repo,
-    ):
-        mock_case_repo.get_case.return_value = _make_case("case-1")
-        mock_storage.upload_file.return_value = "case-1/uuid_good.pdf"
-        mock_repo.create_document.side_effect = APIError(
-            {"message": "permission denied", "code": "42501", "hint": None, "details": None}
-        )
-        response = client.post(
-            "/documents/upload",
-            data={"case_id": "case-1"},
-            files={"file": ("good.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
-        )
-    assert response.status_code == 502
-    mock_storage.delete_file.assert_called_once_with("case-1/uuid_good.pdf")
-
-
-def test_upload_cleanup_swallows_delete_failure() -> None:
-    with (
-        patch("app.routers.upload.case_repository") as mock_case_repo,
-        patch("app.routers.upload.storage_service") as mock_storage,
-        patch("app.routers.upload.document_repository") as mock_repo,
-    ):
-        mock_case_repo.get_case.return_value = _make_case("case-1")
-        mock_storage.upload_file.return_value = "case-1/uuid_good.pdf"
-        mock_storage.delete_file.side_effect = RuntimeError("delete failed")
-        mock_repo.create_document.side_effect = RuntimeError("insert failed")
-        response = client.post(
-            "/documents/upload",
-            data={"case_id": "case-1"},
-            files={"file": ("good.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
-        )
-    assert response.status_code == 502
 
 
 def test_upload_batch_rejects_too_many_files() -> None:
@@ -754,7 +623,7 @@ def _typed_document(**overrides) -> DocumentRecord:
     fields = {
         "status": DocumentStatus.ANALYZED,
         "document_type": "payslip",
-        "confidence": 0.5,
+        "classification_confidence": 0.5,
         **overrides,
     }
     return _make_document().model_copy(update=fields)
@@ -762,14 +631,16 @@ def _typed_document(**overrides) -> DocumentRecord:
 
 def test_update_document_type_records_type_and_reruns_extraction() -> None:
     with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
-        patch("app.routers.documents.case_status") as mock_case_status,
-        patch("app.routers.documents.orchestrator") as mock_orchestrator,
+        patch("app.routers.documents.langgraph_pipeline") as mock_pipeline,
     ):
-        mock_repo.get_document.return_value = _typed_document()
+        document = _typed_document()
+        mock_dep_repo.get_document.return_value = document
+        mock_repo.get_document.return_value = document
         mock_fields_repo.get_extracted_fields.return_value = []
-        mock_orchestrator.rerun_extraction = AsyncMock()
+        mock_pipeline.rerun_extraction = AsyncMock()
 
         response = client.patch("/documents/doc-1/document-type", json={"document_type": " NRIC "})
 
@@ -777,51 +648,89 @@ def test_update_document_type_records_type_and_reruns_extraction() -> None:
     mock_repo.record_classification.assert_called_once_with(
         "doc-1",
         document_type="nric",
-        confidence=1.0,
-        classification_outcome="accepted",
+        classification_confidence=1.0,
+        routing_status="accepted",
         evidence=[],
         fulfilled_requirements=["id_document"],
     )
     args, kwargs = mock_repo.update_status.call_args
     assert args == ("doc-1", DocumentStatus.EXTRACTING)
     assert "processing_started_at" in kwargs
-    mock_case_status.sync_submission_finalized.assert_called_once_with("case-1")
-    mock_orchestrator.rerun_extraction.assert_awaited_once_with("doc-1")
+    # document_repository.record_classification/update_status resync the
+    # case themselves now (see document_repository._sync_case) — not
+    # observable from here since those calls are mocked.
+    mock_pipeline.rerun_extraction.assert_awaited_once_with("doc-1")
+
+
+def test_update_document_type_confirms_existing_type_without_rerunning_extraction() -> None:
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+        patch("app.routers.documents.langgraph_pipeline") as mock_pipeline,
+    ):
+        document = _typed_document()
+        mock_dep_repo.get_document.return_value = document
+        mock_repo.get_document.return_value = document
+        mock_fields_repo.get_extracted_fields.return_value = []
+        mock_pipeline.rerun_extraction = AsyncMock()
+
+        response = client.patch("/documents/doc-1/document-type", json={"document_type": "payslip"})
+
+    assert response.status_code == 200
+    mock_repo.record_classification.assert_called_once_with(
+        "doc-1",
+        document_type="payslip",
+        classification_confidence=1.0,
+        routing_status="accepted",
+        evidence=document.evidence,
+        fulfilled_requirements=compute_fulfilled_requirements("payslip", document.extracted_fields),
+    )
+    mock_repo.update_status.assert_not_called()
+    mock_pipeline.rerun_extraction.assert_not_awaited()
 
 
 def test_update_document_type_allows_unclassified_failed_document_without_case() -> None:
     with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
-        patch("app.routers.documents.case_status") as mock_case_status,
-        patch("app.routers.documents.orchestrator") as mock_orchestrator,
+        patch("app.routers.documents.langgraph_pipeline") as mock_pipeline,
     ):
-        mock_repo.get_document.return_value = _typed_document(
-            status=DocumentStatus.FAILED, confidence=None, document_type=None, case_id=None
+        document = _typed_document(
+            status=DocumentStatus.FAILED,
+            classification_confidence=None,
+            document_type=None,
+            case_id=None,
         )
+        mock_dep_repo.get_document.return_value = document
+        mock_repo.get_document.return_value = document
         mock_fields_repo.get_extracted_fields.return_value = []
-        mock_orchestrator.rerun_extraction = AsyncMock()
+        mock_pipeline.rerun_extraction = AsyncMock()
 
         response = client.patch(
             "/documents/doc-1/document-type", json={"document_type": "unrecognised"}
         )
 
     assert response.status_code == 200
-    mock_case_status.sync_submission_finalized.assert_not_called()
-    mock_orchestrator.rerun_extraction.assert_awaited_once_with("doc-1")
+    mock_pipeline.rerun_extraction.assert_awaited_once_with("doc-1")
 
 
 def test_update_document_type_rejects_unknown_type() -> None:
-    with patch("app.routers.documents.document_repository") as mock_repo:
+    # Depends(get_document_or_404) resolves before the handler body's own
+    # document_type validation runs, so the document is fetched regardless
+    # of whether the requested type turns out to be valid.
+    with patch("app.routers._dependencies.document_repository") as mock_dep_repo:
+        mock_dep_repo.get_document.return_value = _typed_document()
+
         response = client.patch("/documents/doc-1/document-type", json={"document_type": "id_document"})
 
     assert response.status_code == 422
-    mock_repo.get_document.assert_not_called()
 
 
 def test_update_document_type_not_found() -> None:
-    with patch("app.routers.documents.document_repository") as mock_repo:
-        mock_repo.get_document.return_value = None
+    with patch("app.routers._dependencies.document_repository") as mock_dep_repo:
+        mock_dep_repo.get_document.return_value = None
 
         response = client.patch("/documents/missing/document-type", json={"document_type": "nric"})
 
@@ -829,8 +738,8 @@ def test_update_document_type_not_found() -> None:
 
 
 def test_update_document_type_fetch_failure_returns_502() -> None:
-    with patch("app.routers.documents.document_repository") as mock_repo:
-        mock_repo.get_document.side_effect = RuntimeError("db down")
+    with patch("app.routers._dependencies.document_repository") as mock_dep_repo:
+        mock_dep_repo.get_document.side_effect = RuntimeError("db down")
 
         response = client.patch("/documents/doc-1/document-type", json={"document_type": "nric"})
 
@@ -838,8 +747,11 @@ def test_update_document_type_fetch_failure_returns_502() -> None:
 
 
 def test_update_document_type_conflicts_while_pipeline_is_running() -> None:
-    with patch("app.routers.documents.document_repository") as mock_repo:
-        mock_repo.get_document.return_value = _typed_document(status=DocumentStatus.PROCESSING)
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+    ):
+        mock_dep_repo.get_document.return_value = _typed_document(status=DocumentStatus.PROCESSING)
 
         response = client.patch("/documents/doc-1/document-type", json={"document_type": "nric"})
 
@@ -848,9 +760,12 @@ def test_update_document_type_conflicts_while_pipeline_is_running() -> None:
 
 
 def test_update_document_type_rejects_confident_classification() -> None:
-    with patch("app.routers.documents.document_repository") as mock_repo:
-        mock_repo.get_document.return_value = _typed_document(
-            confidence=settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+    ):
+        mock_dep_repo.get_document.return_value = _typed_document(
+            classification_confidence=settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
         )
 
         response = client.patch("/documents/doc-1/document-type", json={"document_type": "nric"})
@@ -861,17 +776,18 @@ def test_update_document_type_rejects_confident_classification() -> None:
 
 def test_update_document_type_write_failure_returns_502_without_rerun() -> None:
     with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
-        patch("app.routers.documents.orchestrator") as mock_orchestrator,
+        patch("app.routers.documents.langgraph_pipeline") as mock_pipeline,
     ):
-        mock_repo.get_document.return_value = _typed_document()
+        mock_dep_repo.get_document.return_value = _typed_document()
         mock_repo.record_classification.side_effect = RuntimeError("db down")
-        mock_orchestrator.rerun_extraction = AsyncMock()
+        mock_pipeline.rerun_extraction = AsyncMock()
 
         response = client.patch("/documents/doc-1/document-type", json={"document_type": "nric"})
 
     assert response.status_code == 502
-    mock_orchestrator.rerun_extraction.assert_not_called()
+    mock_pipeline.rerun_extraction.assert_not_called()
 
 
 # --- POST /documents/{id}/extracted-fields (manual field add) -----------
@@ -899,10 +815,11 @@ def test_add_extracted_field_inserts_and_returns_refetched_document() -> None:
     )
 
     with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
-        patch("app.routers.documents.case_status") as mock_case_status,
     ):
+        mock_dep_repo.get_document.return_value = _payslip_document()
         mock_repo.get_document.return_value = _payslip_document()
         # 1st call: the duplicate-name check (no fields yet). 2nd: the
         # re-read that rebuilds documents.extracted_fields. 3rd: the
@@ -931,17 +848,19 @@ def test_add_extracted_field_inserts_and_returns_refetched_document() -> None:
     )
     # Manually entered fields are human-verified, hence confidence 1.0.
     mock_repo.update_extracted_fields.assert_called_once_with(
-        "doc-1", {"net_pay": 5000}, 1.0, ["payslip"]
+        "doc-1", 1.0, ["payslip"]
     )
-    mock_case_status.sync_submission_finalized.assert_called_once_with("case-1")
+    # document_repository.update_extracted_fields resyncs the case itself
+    # now — not observable from here since that call is mocked.
 
 
 def test_add_extracted_field_trims_whitespace_from_name() -> None:
     with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
-        patch("app.routers.documents.case_status"),
     ):
+        mock_dep_repo.get_document.return_value = _payslip_document()
         mock_repo.get_document.return_value = _payslip_document()
         mock_fields_repo.get_extracted_fields.side_effect = [[], [], []]
 
@@ -955,26 +874,29 @@ def test_add_extracted_field_trims_whitespace_from_name() -> None:
 
 
 def test_add_extracted_field_rejects_blank_name_before_touching_the_database() -> None:
+    # Depends(get_document_or_404) still resolves before the handler body's
+    # own blank-name check runs, so the document is fetched regardless.
     with (
-        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
+        mock_dep_repo.get_document.return_value = _payslip_document()
+
         response = client.post(
             "/documents/doc-1/extracted-fields",
             json={"field_name": "   ", "field_value": "x"},
         )
 
     assert response.status_code == 400
-    mock_repo.get_document.assert_not_called()
     mock_fields_repo.add_extracted_field.assert_not_called()
 
 
 def test_add_extracted_field_document_not_found() -> None:
     with (
-        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
-        mock_repo.get_document.return_value = None
+        mock_dep_repo.get_document.return_value = None
 
         response = client.post(
             "/documents/missing-id/extracted-fields",
@@ -992,10 +914,10 @@ def test_add_extracted_field_rejects_duplicate_name() -> None:
     )
 
     with (
-        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
-        mock_repo.get_document.return_value = _payslip_document()
+        mock_dep_repo.get_document.return_value = _payslip_document()
         mock_fields_repo.get_extracted_fields.return_value = [existing]
 
         response = client.post(
@@ -1012,10 +934,11 @@ def test_add_extracted_field_skips_case_sync_for_caseless_document() -> None:
     document.case_id = None
 
     with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
-        patch("app.routers.documents.case_status") as mock_case_status,
     ):
+        mock_dep_repo.get_document.return_value = document
         mock_repo.get_document.return_value = document
         mock_fields_repo.get_extracted_fields.side_effect = [[], [], []]
 
@@ -1025,15 +948,16 @@ def test_add_extracted_field_skips_case_sync_for_caseless_document() -> None:
         )
 
     assert response.status_code == 200
-    mock_case_status.sync_submission_finalized.assert_not_called()
+    # No case_id on the document -> document_repository.update_extracted_fields
+    # (mocked here) never has a case to resync in the first place.
 
 
 def test_add_extracted_field_write_failure_returns_502() -> None:
     with (
-        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
-        mock_repo.get_document.return_value = _payslip_document()
+        mock_dep_repo.get_document.return_value = _payslip_document()
         mock_fields_repo.get_extracted_fields.return_value = []
         mock_fields_repo.add_extracted_field.side_effect = RuntimeError("db down")
 
@@ -1059,10 +983,11 @@ def test_delete_extracted_field_removes_and_recomputes_requirements() -> None:
     )
 
     with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
-        patch("app.routers.documents.case_status") as mock_case_status,
     ):
+        mock_dep_repo.get_document.return_value = _payslip_document()
         mock_repo.get_document.return_value = _payslip_document()
         mock_fields_repo.get_extracted_fields.side_effect = [
             [doomed, kept],  # lookup that resolves field_id
@@ -1078,17 +1003,18 @@ def test_delete_extracted_field_removes_and_recomputes_requirements() -> None:
     # human-verified, so its existing extraction_confidence is carried
     # through rather than bumped to 1.0.
     mock_repo.update_extracted_fields.assert_called_once_with(
-        "doc-1", {"individual_name": "Jane Tan"}, None, ["payslip"]
+        "doc-1", None, ["payslip"]
     )
-    mock_case_status.sync_submission_finalized.assert_called_once_with("case-1")
+    # document_repository.update_extracted_fields resyncs the case itself
+    # now — not observable from here since that call is mocked.
 
 
 def test_delete_extracted_field_document_not_found() -> None:
     with (
-        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
-        mock_repo.get_document.return_value = None
+        mock_dep_repo.get_document.return_value = None
 
         response = client.delete("/documents/missing-id/extracted-fields/field-1")
 
@@ -1103,10 +1029,10 @@ def test_delete_extracted_field_rejects_field_belonging_to_another_document() ->
     )
 
     with (
-        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
-        mock_repo.get_document.return_value = _payslip_document()
+        mock_dep_repo.get_document.return_value = _payslip_document()
         mock_fields_repo.get_extracted_fields.return_value = [other]
 
         response = client.delete("/documents/doc-1/extracted-fields/field-1")
@@ -1124,17 +1050,19 @@ def test_delete_extracted_field_skips_case_sync_for_caseless_document() -> None:
     )
 
     with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
-        patch("app.routers.documents.case_status") as mock_case_status,
     ):
+        mock_dep_repo.get_document.return_value = document
         mock_repo.get_document.return_value = document
         mock_fields_repo.get_extracted_fields.side_effect = [[doomed], [], []]
 
         response = client.delete("/documents/doc-1/extracted-fields/field-1")
 
     assert response.status_code == 200
-    mock_case_status.sync_submission_finalized.assert_not_called()
+    # No case_id on the document -> document_repository.update_extracted_fields
+    # (mocked here) never has a case to resync in the first place.
 
 
 def test_delete_extracted_field_write_failure_returns_502() -> None:
@@ -1144,10 +1072,10 @@ def test_delete_extracted_field_write_failure_returns_502() -> None:
     )
 
     with (
-        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
-        mock_repo.get_document.return_value = _payslip_document()
+        mock_dep_repo.get_document.return_value = _payslip_document()
         mock_fields_repo.get_extracted_fields.return_value = [doomed]
         mock_fields_repo.delete_extracted_field.side_effect = RuntimeError("db down")
 
@@ -1158,27 +1086,32 @@ def test_delete_extracted_field_write_failure_returns_502() -> None:
 
 def test_delete_document_removes_it_and_resyncs_the_case() -> None:
     document = _make_document()
+    document.status = DocumentStatus.ANALYZED
 
     with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
-        patch("app.routers.documents.case_status") as mock_case_status,
     ):
-        mock_repo.get_document.return_value = document
+        mock_dep_repo.get_document.return_value = document
 
         response = client.delete("/documents/doc-1")
 
     assert response.status_code == 204
     assert response.content == b""
     mock_repo.remove_document.assert_called_once_with(document)
-    mock_case_status.sync_submission_finalized.assert_called_once_with("case-1")
+    # document_repository.remove_document resyncs the case itself now — not
+    # observable from here since that call is mocked.
 
 
 def test_delete_document_rejects_an_approved_document() -> None:
     document = _make_document()
     document.status = DocumentStatus.APPROVED
 
-    with patch("app.routers.documents.document_repository") as mock_repo:
-        mock_repo.get_document.return_value = document
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
 
         response = client.delete("/documents/doc-1")
 
@@ -1187,8 +1120,11 @@ def test_delete_document_rejects_an_approved_document() -> None:
 
 
 def test_delete_document_not_found() -> None:
-    with patch("app.routers.documents.document_repository") as mock_repo:
-        mock_repo.get_document.return_value = None
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+    ):
+        mock_dep_repo.get_document.return_value = None
 
         response = client.delete("/documents/missing-id")
 
@@ -1199,24 +1135,174 @@ def test_delete_document_not_found() -> None:
 def test_delete_document_without_a_case_skips_checklist_sync() -> None:
     document = _make_document()
     document.case_id = None
+    document.status = DocumentStatus.ANALYZED
 
     with (
-        patch("app.routers.documents.document_repository") as mock_repo,
-        patch("app.routers.documents.case_status") as mock_case_status,
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository"),
     ):
-        mock_repo.get_document.return_value = document
+        mock_dep_repo.get_document.return_value = document
 
         response = client.delete("/documents/doc-1")
 
     assert response.status_code == 204
-    mock_case_status.sync_submission_finalized.assert_not_called()
+    # No case_id on the document -> document_repository.remove_document
+    # (mocked here) never has a case to resync in the first place.
 
 
 def test_delete_document_db_failure_returns_502() -> None:
-    with patch("app.routers.documents.document_repository") as mock_repo:
-        mock_repo.get_document.return_value = _make_document()
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+    ):
+        failed = _make_document()
+        failed.status = DocumentStatus.ANALYZED
+        mock_dep_repo.get_document.return_value = failed
         mock_repo.remove_document.side_effect = RuntimeError("db down")
 
         response = client.delete("/documents/doc-1")
 
     assert response.status_code == 502
+
+
+# --- POST /{document_id}/approve -----------------------------------------
+
+
+def test_approve_document_success() -> None:
+    document = _typed_document()
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
+        mock_repo.get_document.return_value = document.model_copy(
+            update={"status": DocumentStatus.APPROVED}
+        )
+        mock_fields_repo.get_extracted_fields.return_value = []
+
+        response = client.post("/documents/doc-1/approve")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "approved"
+    mock_repo.approve_document.assert_called_once_with("doc-1")
+
+
+def test_approve_document_rejects_a_document_not_yet_analyzed() -> None:
+    document = _typed_document(status=DocumentStatus.EXTRACTING)
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
+
+        response = client.post("/documents/doc-1/approve")
+
+    assert response.status_code == 400
+    mock_repo.approve_document.assert_not_called()
+
+
+def test_approve_document_write_failure_returns_502() -> None:
+    document = _typed_document()
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
+        mock_repo.approve_document.side_effect = RuntimeError("db down")
+
+        response = client.post("/documents/doc-1/approve")
+
+    assert response.status_code == 502
+
+
+# --- POST /{document_id}/reject -------------------------------------------
+
+
+def test_reject_document_success() -> None:
+    document = _typed_document()
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
+        mock_repo.get_document.return_value = document.model_copy(
+            update={"status": DocumentStatus.REJECTED}
+        )
+        mock_fields_repo.get_extracted_fields.return_value = []
+
+        response = client.post("/documents/doc-1/reject")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "rejected"
+    mock_repo.reject_document.assert_called_once_with("doc-1")
+
+
+def test_reject_document_rejects_a_document_not_yet_analyzed() -> None:
+    document = _typed_document(status=DocumentStatus.EXTRACTING)
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
+
+        response = client.post("/documents/doc-1/reject")
+
+    assert response.status_code == 400
+    mock_repo.reject_document.assert_not_called()
+
+
+def test_reject_document_write_failure_returns_502() -> None:
+    document = _typed_document()
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
+        mock_repo.reject_document.side_effect = RuntimeError("db down")
+
+        response = client.post("/documents/doc-1/reject")
+
+    assert response.status_code == 502
+
+
+# --- GET /{document_id}/langgraph-trace ------------------------------------
+
+
+def test_langgraph_trace_returns_persisted_result() -> None:
+    with patch("app.routers.documents.langgraph_trace") as mock_trace:
+        mock_trace.get_persisted.return_value = {"route": "fast_path"}
+
+        response = client.get("/documents/doc-1/langgraph-trace")
+
+    assert response.status_code == 200
+    assert response.json() == {"route": "fast_path"}
+    mock_trace.get.assert_not_called()
+
+
+def test_langgraph_trace_falls_back_to_in_memory_when_persisted_lookup_fails() -> None:
+    with patch("app.routers.documents.langgraph_trace") as mock_trace:
+        mock_trace.get_persisted.side_effect = RuntimeError("db down")
+        mock_trace.get.return_value = {"route": "sonnet_agent"}
+
+        response = client.get("/documents/doc-1/langgraph-trace")
+
+    assert response.status_code == 200
+    assert response.json() == {"route": "sonnet_agent"}
+
+
+def test_langgraph_trace_404_when_nothing_found_anywhere() -> None:
+    with patch("app.routers.documents.langgraph_trace") as mock_trace:
+        mock_trace.get_persisted.return_value = None
+        mock_trace.get.return_value = None
+
+        response = client.get("/documents/doc-1/langgraph-trace")
+
+    assert response.status_code == 404

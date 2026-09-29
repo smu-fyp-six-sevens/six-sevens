@@ -1,3 +1,5 @@
+from typing import Iterable, cast
+
 import pymupdf
 
 
@@ -14,7 +16,7 @@ def extract_pdf(file_bytes: bytes):
     pages = []
     total_text = []
 
-    for page_index, page in enumerate(document):
+    for page_index, page in enumerate(cast(Iterable, document)):
 
         page_number = page_index + 1
 
@@ -67,7 +69,9 @@ def pdf_contains_text(file_bytes: bytes) -> bool:
 
     for page in document:
 
-        text = page.get_text("text")
+        # get_text's return type is a union over every "mode" it supports;
+        # mode="text" specifically always returns a plain string.
+        text = cast(str, page.get_text("text"))
 
         if text.strip():
             return True

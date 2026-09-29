@@ -4,7 +4,7 @@ from collections import defaultdict
 from typing import Optional
 
 from . import case_repository, document_repository, extracted_fields_repository
-from .case_match import check_case_match
+from .case_match import CaseMatchResult, DocumentCaseMatch, check_case_match
 from .config import settings
 from .mapper import (
     compute_id_document_identity_coverage,
@@ -18,14 +18,15 @@ from .models import (
     ADDITIONAL_DOCUMENT_TYPES,
     REQUIRED_DOCUMENT_TYPES,
     CaseDocumentsStatus,
+    CaseRecord,
     CaseSummary,
-    ClassificationOutcome,
     DocumentRecord,
     DocumentStatus,
     DocumentType,
     IdDocumentCoverage,
     IDENTITY_DOCUMENT_REQUIREMENT,
     ProofOfAddressCoverage,
+    RoutingStatus,
 )
 from .monitoring import is_stuck
 
@@ -64,7 +65,7 @@ def compute_requirement_coverage(documents: list[DocumentRecord]) -> tuple[list[
     """
     fulfilled: set[str] = set()
     for doc in documents:
-        if doc.classification_outcome == ClassificationOutcome.ACCEPTED:
+        if doc.routing_status == RoutingStatus.ACCEPTED:
             fulfilled.update(doc.fulfilled_requirements)
 
     # Overrides whatever individual documents self-reported for this one
@@ -96,6 +97,30 @@ def compute_requirement_coverage(documents: list[DocumentRecord]) -> tuple[list[
         [req for req in [*REQUIRED_DOCUMENT_TYPES, *ADDITIONAL_DOCUMENT_TYPES] if req in fulfilled],
         [req for req in REQUIRED_DOCUMENT_TYPES if req not in fulfilled],
     )
+
+
+def get_case(case_id: str) -> Optional[CaseRecord]:
+    return case_repository.get_case(case_id)
+
+
+def create_case(company_name: Optional[str] = None) -> CaseRecord:
+    return case_repository.create_case(company_name)
+
+
+def update_case(case_id: str, company_name: str) -> Optional[CaseRecord]:
+    return case_repository.update_case(case_id, company_name)
+
+
+def delete_case(case_id: str) -> None:
+    """
+    Removes a case and every document that belongs to it. Documents go
+    first (via document_repository.remove_documents, which batch-clears
+    their extracted-field rows and stored files) so nothing is left orphaned
+    if the case delete were to run first and fail partway through.
+    """
+    documents = document_repository.list_documents(case_id=case_id)
+    document_repository.remove_documents(documents)
+    case_repository.delete_case(case_id)
 
 
 def sync_submission_finalized(case_id: str) -> None:
@@ -158,6 +183,44 @@ def _enrich_with_extracted_fields(documents: list[DocumentRecord]) -> list[Docum
     return documents
 
 
+def _fetch_case_and_documents(case_id: str) -> tuple[Optional[CaseRecord], list[DocumentRecord]]:
+    """
+    The "case + its documents" fetch every case-match/snapshot assembly
+    needs, in one place — see get_case_match_for_case, build_case_snapshot.
+    """
+    case = case_repository.get_case(case_id)
+    if case is None:
+        return None, []
+    return case, document_repository.list_documents(case_id=case_id)
+
+
+def get_case_match_for_case(case_id: str) -> Optional[CaseMatchResult]:
+    """Whether each of the case's documents belongs to the case's company and individuals."""
+    case, documents = _fetch_case_and_documents(case_id)
+    if case is None:
+        return None
+    return check_case_match(case, documents)
+
+
+def get_case_match_for_document(document_id: str) -> Optional[DocumentCaseMatch]:
+    """
+    One document's entry from its case's match check. The document is
+    appended to its case's document list if the fetch didn't happen to
+    include it (defensive, not expected in practice) so check_case_match
+    always has something to report on it.
+    """
+    document = document_repository.get_document(document_id)
+    if document is None or document.case_id is None:
+        return None
+    case, documents = _fetch_case_and_documents(document.case_id)
+    if case is None:
+        return None
+    if all(d.id != document.id for d in documents):
+        documents.append(document)
+    result = check_case_match(case, documents)
+    return next((match for match in result.documents if match.document_id == document_id), None)
+
+
 def build_case_snapshot(case_id: str) -> Optional[dict]:
     """
     Assembles the exact payload pushed over the case status WebSocket (see
@@ -166,14 +229,14 @@ def build_case_snapshot(case_id: str) -> Optional[dict]:
     paths can't drift out of sync with each other. Runs on a worker thread
     (supabase-py's sync client) wherever it's called from.
     """
-    case = case_repository.get_case(case_id)
+    case, documents = _fetch_case_and_documents(case_id)
     if case is None:
         return None
-    documents = document_repository.list_documents(case_id=case_id)
     summary = build_summary(case, documents)
     # Before enrichment: that rewrites extracted_fields in place into
-    # {"value", "confidence"} wrappers, while case_match reads the plain
-    # values documents.extracted_fields stores.
+    # {"value", "confidence"} wrappers, while case_match (and mapper.py, via
+    # build_summary above) reads the plain values document_repository
+    # already populated from the extracted_fields table.
     case_match = check_case_match(case, documents)
     enriched = _enrich_with_extracted_fields(documents)
     return {

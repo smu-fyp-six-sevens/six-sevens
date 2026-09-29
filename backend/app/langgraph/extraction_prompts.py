@@ -461,7 +461,7 @@ EXTRA_FIELD_GUIDANCE: dict[str, str] = {
 # "unrecognised", asking it to suggest a specific canonical type if the
 # content actually looks like one of these. Keep in sync with
 # EXTRACTION_SCHEMAS's keys (minus "unrecognised" itself) by hand; a
-# mismatch here means the model could suggest a type orchestrator.py can't
+# mismatch here means the model could suggest a type the langgraph pipeline can't
 # actually build an extraction prompt for.
 KNOWN_DOCUMENT_TYPES = [
     "bank_statement", "certificate_of_incorporation", "payslip", "passport", "nric",

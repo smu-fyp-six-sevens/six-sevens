@@ -6,6 +6,8 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
+from app import case_match as cm
+from app import case_service
 from app.case_match import (
     CheckOutcome,
     DocumentMatchStatus,
@@ -229,11 +231,12 @@ def test_incumbency_flagged_when_other_documents_agree_on_a_different_company_na
     assert "PLATINUM FITNESS GROUP" in result.incumbency.reasons[0]
 
 
-def test_incumbency_flagged_when_it_disagrees_with_case_company_name() -> None:
-    result = check_case_match(_case("ACNE Pte Ltd"), [_incumbency(), *_corroborating(3)])
+def test_case_name_is_ignored_when_verifying_incumbency() -> None:
+    # The case name is an officer-typed label, e.g. a placeholder — only the
+    # other documents' UEN/company name decide whether the certificate is right.
+    result = check_case_match(_case("Case 67"), [_incumbency(), *_corroborating(3)])
 
-    assert result.incumbency.status == IncumbencyStatus.MANUAL_REVIEW
-    assert "ACNE Pte Ltd" in result.incumbency.reasons[0]
+    assert result.incumbency.status == IncumbencyStatus.VERIFIED
 
 
 def test_incumbency_without_uen_goes_to_manual_review() -> None:
@@ -432,9 +435,12 @@ def test_document_with_nothing_to_compare_goes_to_manual_review() -> None:
 
 
 def test_case_match_endpoint() -> None:
+    # GET /cases/{id}/case-match delegates to case_service.get_case_match_for_case,
+    # which is the only thing that still imports case_repository/document_repository
+    # directly for this path (routers/cases.py itself only imports case_service).
     docs = [_incumbency(), *_corroborating(3)]
-    with patch("app.routers.cases.case_repository") as case_repo, patch(
-        "app.routers.cases.document_repository"
+    with patch("app.case_service.case_repository") as case_repo, patch(
+        "app.case_service.document_repository"
     ) as doc_repo:
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = docs
@@ -444,12 +450,12 @@ def test_case_match_endpoint() -> None:
     body = response.json()
     assert body["incumbency"]["status"] == "verified"
     assert len(body["documents"]) == 4
-    doc_repo.list_documents.assert_called_once_with("case-1")
+    doc_repo.list_documents.assert_called_once_with(case_id="case-1")
 
 
 def test_case_match_endpoint_404_for_unknown_case() -> None:
-    with patch("app.routers.cases.case_repository") as case_repo, patch(
-        "app.routers.cases.document_repository"
+    with patch("app.case_service.case_repository") as case_repo, patch(
+        "app.case_service.document_repository"
     ):
         case_repo.get_case.return_value = None
         response = client.get("/cases/nope/case-match")
@@ -457,12 +463,27 @@ def test_case_match_endpoint_404_for_unknown_case() -> None:
     assert response.status_code == 404
 
 
+def test_case_match_endpoint_db_failure_returns_502() -> None:
+    with patch("app.routers.cases.case_service") as mock_case_service:
+        mock_case_service.get_case_match_for_case.side_effect = RuntimeError("connection refused")
+        response = client.get("/cases/case-1/case-match")
+
+    assert response.status_code == 502
+
+
 def test_document_case_match_endpoint_returns_that_documents_entry() -> None:
+    # GET /documents/{id}/detection/case-match sits behind
+    # Depends(get_document_or_404) (fetches via _dependencies.document_repository)
+    # and then delegates to case_service.get_case_match_for_document, which does
+    # its own separate document_repository/case_repository fetches.
     stray = _doc("list_of_loans", {"uen": OTHER_UEN, "individual_name": "Tan Wei Ming"}, "stray")
     docs = [_incumbency(), *_corroborating(3), stray]
-    with patch("app.routers.detection.case_repository") as case_repo, patch(
-        "app.routers.detection.document_repository"
-    ) as doc_repo:
+    with (
+        patch("app.routers._dependencies.document_repository") as dep_doc_repo,
+        patch("app.case_service.document_repository") as doc_repo,
+        patch("app.case_service.case_repository") as case_repo,
+    ):
+        dep_doc_repo.get_document.return_value = stray
         doc_repo.get_document.return_value = stray
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = docs
@@ -478,24 +499,60 @@ def test_document_case_match_endpoint_returns_that_documents_entry() -> None:
 
 def test_document_case_match_endpoint_404_without_case() -> None:
     orphan = _doc("nric", {"nric_number": "S1234567A"}, "orphan").model_copy(update={"case_id": None})
-    with patch("app.routers.detection.case_repository"), patch(
-        "app.routers.detection.document_repository"
-    ) as doc_repo:
-        doc_repo.get_document.return_value = orphan
+    with patch("app.routers._dependencies.document_repository") as dep_doc_repo:
+        dep_doc_repo.get_document.return_value = orphan
         response = client.get("/documents/orphan/detection/case-match")
 
     assert response.status_code == 404
 
 
+def test_get_case_match_for_document_none_when_document_has_no_case() -> None:
+    orphan = _doc("nric", {"nric_number": "S1234567A"}, "orphan").model_copy(update={"case_id": None})
+    with patch("app.case_service.document_repository") as doc_repo:
+        doc_repo.get_document.return_value = orphan
+        assert case_service.get_case_match_for_document("orphan") is None
+
+
+def test_get_case_match_for_document_none_when_its_case_is_missing() -> None:
+    doc = _doc("payslip", {}, "doc-1")
+    with (
+        patch("app.case_service.document_repository") as doc_repo,
+        patch("app.case_service.case_repository") as case_repo,
+    ):
+        doc_repo.get_document.return_value = doc
+        case_repo.get_case.return_value = None
+        assert case_service.get_case_match_for_document("doc-1") is None
+
+
+def test_get_case_match_for_document_appends_document_missing_from_the_fetched_list() -> None:
+    stray = _doc("list_of_loans", {"uen": OTHER_UEN, "individual_name": "Tan Wei Ming"}, "stray")
+    with (
+        patch("app.case_service.document_repository") as doc_repo,
+        patch("app.case_service.case_repository") as case_repo,
+    ):
+        doc_repo.get_document.return_value = stray
+        case_repo.get_case.return_value = _case()
+        # Deliberately excludes `stray` — its own fetch by document_id
+        # succeeded, but this case's own document list doesn't have it yet
+        # (e.g. a replication lag), the defensive case get_case_match_for_document
+        # guards against.
+        doc_repo.list_documents.return_value = [_incumbency(), *_corroborating(3)]
+
+        result = case_service.get_case_match_for_document("stray")
+
+    assert result is not None
+    assert result.document_id == "stray"
+
+
 def test_case_snapshot_includes_case_match_computed_from_plain_fields() -> None:
-    from app import case_status
-    from app.fraud_detection.font_consistency_v2 import ExtractedField
+    from app import case_service
+    from app.fraud_detection.font_consistency import ExtractedField
 
     passport = _doc("passport", {"individual_name": "TEO KAI MING", "nric_number": "S7273147P"}, "pp")
     docs = [_incumbency(), *_corroborating(3), passport]
-    with patch("app.case_status.case_repository") as case_repo, patch(
-        "app.case_status.document_repository"
-    ) as doc_repo, patch("app.case_status.extracted_fields_repository") as fields_repo:
+    with patch("app.case_service.case_repository") as case_repo, patch(
+        "app.case_service.document_repository"
+    ) as doc_repo, patch("app.case_service.extracted_fields_repository") as fields_repo:
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = docs
         # Enrichment rewrites extracted_fields into {value, confidence}
@@ -503,9 +560,67 @@ def test_case_snapshot_includes_case_match_computed_from_plain_fields() -> None:
         fields_repo.get_extracted_fields_for_documents.return_value = {
             "pp": [ExtractedField(field_name="nric_number", field_type="string", field_value="S7273147P", confidence=0.9)]
         }
-        snapshot = case_status.build_case_snapshot("case-1")
+        snapshot = case_service.build_case_snapshot("case-1")
 
     assert snapshot["case_match"]["incumbency"]["status"] == "verified"
     passport_match = next(d for d in snapshot["case_match"]["documents"] if d["document_id"] == "pp")
     assert passport_match["status"] == "manual_review"
     assert passport_match["case_mismatch"] is True
+
+
+def test_rejected_incumbency_is_not_used_as_the_reference() -> None:
+    wrong = _incumbency({**INCUMBENCY_FIELDS, "uen": OTHER_UEN}, "wrong-inc").model_copy(
+        update={"status": DocumentStatus.REJECTED}
+    )
+    right = _incumbency(doc_id="right-inc")
+    result = check_case_match(_case(), [wrong, right, *_corroborating(3)])
+
+    assert result.incumbency.document_id == "right-inc"
+    assert result.incumbency.status == IncumbencyStatus.VERIFIED
+    rejected = _by_id(result, "wrong-inc")
+    assert rejected.status == DocumentMatchStatus.PENDING
+    assert not rejected.can_proceed_to_fraud_detection
+
+
+def test_rejected_documents_do_not_count_towards_verifying_incumbency() -> None:
+    docs = _corroborating(3)
+    docs[0] = docs[0].model_copy(update={"status": DocumentStatus.REJECTED})
+    result = check_case_match(_case(), [_incumbency(), *docs])
+
+    assert result.incumbency.status == IncumbencyStatus.INSUFFICIENT_EVIDENCE
+
+
+# --- small private-helper edge cases (pure functions, no fixtures needed) --
+
+
+def test_strings_flattens_only_the_string_items_of_a_list() -> None:
+    assert cm._strings([1, "a; b", None, ["nested, ignored"]]) == ["a", "b"]
+
+
+def test_normalize_uen_none_for_non_string_input() -> None:
+    assert cm.normalize_uen(12345) is None
+
+
+def test_normalize_uen_none_when_nothing_alphanumeric_remains() -> None:
+    assert cm.normalize_uen("!!!") is None
+
+
+def test_company_tokens_empty_for_non_string_input() -> None:
+    assert cm._company_tokens(None) == []
+
+
+def test_list_field_people_skips_non_dict_entries() -> None:
+    people = cm._list_field_people({"officers": [123, {"name": "Jane Tan"}]})
+    assert len(people) == 1
+    assert people[0].name == "Jane Tan"
+
+
+def test_is_personal_document_true_for_personal_bank_statement() -> None:
+    doc = _doc("bank_statement", {"individual_name": "Jane Tan"}, "bs")
+    assert cm._is_personal_document(doc, doc.extracted_fields) is True
+
+
+def test_compare_person_returns_none_without_id_or_name_to_compare() -> None:
+    person = cm._Person(name=None, id_number=None, name_field="x", id_field="y")
+    reference = cm.IncumbencyVerification(status=IncumbencyStatus.VERIFIED)
+    assert cm._compare_person(person, reference) is None

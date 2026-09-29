@@ -3,13 +3,47 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional, cast
 
 from . import extracted_fields_repository, storage_service
 from .models import DocumentRecord, DocumentStatus
 from .supabase_client import service_supabase_client, supabase_client
 
 logger = logging.getLogger(__name__)
+
+
+def _row(mapping: Any) -> dict:
+    """postgrest types a row as a loose JSON union rather than dict[str, Any]
+    — every row here is one we (or our own migrations) wrote, so this cast
+    just tells the type checker what's already true."""
+    return cast(dict, mapping)
+
+
+def _sync_case(case_id: Optional[str]) -> None:
+    """
+    Best-effort refresh of the case-level submission_finalized cache after a
+    write that can change a document's routing_status or
+    fulfilled_requirements. Never raises: the document write above already
+    succeeded and is the source of truth, and get_case_summary/build_summary
+    always recompute requirement coverage live from the documents themselves
+    rather than trusting this cached flag — so a failed resync here just
+    leaves it stale until the next successful write to this case's documents
+    self-heals it, not something worth failing the caller's request over.
+
+    Imports case_service locally rather than at module level — case_service
+    itself imports this module (it needs document_repository's own CRUD to
+    assemble a case's documents), and this is the only thing here that needs
+    case_service, so deferring it avoids a module-level circular import
+    between the two.
+    """
+    if case_id is None:
+        return
+    try:
+        from . import case_service
+
+        case_service.sync_submission_finalized(case_id)
+    except Exception:
+        logger.exception("Document write succeeded but failed to resync case %s", case_id)
 
 
 def create_document(
@@ -26,7 +60,7 @@ def create_document(
         "uploaded_at": now.isoformat(),
     }
     result = supabase_client.table("documents").insert(row).execute()
-    return DocumentRecord(**result.data[0])
+    return DocumentRecord(**_row(result.data[0]))
 
 
 def update_status(
@@ -38,7 +72,19 @@ def update_status(
     retry_count: Optional[int] = None,
     failure_reason: Optional[str] = None,
     document_type: Optional[str] = None,
-) -> None:
+    expected_current_statuses: Optional[list[DocumentStatus]] = None,
+) -> bool:
+    """
+    expected_current_statuses turns this into an atomic compare-and-swap:
+    the WHERE clause requires the row's current status to still be one of
+    these, so a caller that read a document's status and now wants to act
+    on it (cancel, retry) can't race a concurrent transition — e.g. two
+    simultaneous cancel requests, or a cancel landing after the pipeline
+    already reached ANALYZED. Returns whether the update actually matched a
+    row; callers that pass this should check it and treat False as
+    "the document's state changed underneath you, refetch and reconsider"
+    rather than assuming the transition happened.
+    """
     update: dict = {
         "status": status.value,
     }
@@ -53,12 +99,29 @@ def update_status(
     if document_type is not None:
         update["document_type"] = document_type
 
-    supabase_client.table("documents").update(update).eq("id", document_id).execute()
+    query = supabase_client.table("documents").update(update).eq("id", document_id)
+    if expected_current_statuses is not None:
+        query = query.in_("status", [s.value for s in expected_current_statuses])
+    result = query.execute()
+    # Only the ANALYZED transition can change requirement coverage (a
+    # document's routing_status/fulfilled_requirements are set
+    # earlier, by record_classification/update_extracted_fields) — every
+    # other status this function sets (queued/processing/extracting/failed)
+    # never did resync before either, so this deliberately doesn't sync on
+    # those to avoid extra writes with no coverage-affecting reason.
+    if status == DocumentStatus.ANALYZED and result.data:
+        _sync_case(_row(result.data[0]).get("case_id"))
+    return bool(result.data)
 
 def approve_document(document_id: str) -> None:
-    supabase_client.table("documents").update(
-        {"status": DocumentStatus.APPROVED.value}
-    ).eq("id", document_id).execute()
+    result = (
+        supabase_client.table("documents")
+        .update({"status": DocumentStatus.APPROVED.value})
+        .eq("id", document_id)
+        .execute()
+    )
+    if result.data:
+        _sync_case(_row(result.data[0]).get("case_id"))
 
 def reject_document(document_id: str) -> None:
     supabase_client.table("documents").update(
@@ -69,8 +132,8 @@ def record_classification(
     document_id: str,
     *,
     document_type: Optional[str],
-    confidence: Optional[float],
-    classification_outcome: str,
+    classification_confidence: Optional[float],
+    routing_status: str,
     evidence: Optional[list[str]] = None,
     fulfilled_requirements: Optional[list[str]] = None,
 ) -> None:
@@ -83,28 +146,35 @@ def record_classification(
     """
     update = {
         "document_type": document_type,
-        "confidence": confidence,
-        "classification_outcome": classification_outcome,
+        "classification_confidence": classification_confidence,
+        "routing_status": routing_status,
         "evidence": evidence or [],
         "fulfilled_requirements": fulfilled_requirements or [],
     }
-    supabase_client.table("documents").update(update).eq("id", document_id).execute()
+    result = supabase_client.table("documents").update(update).eq("id", document_id).execute()
+    if result.data:
+        _sync_case(_row(result.data[0]).get("case_id"))
 
 
 def update_extracted_fields(
     document_id: str,
-    extracted_fields: dict,
-    extraction_confidence: float,
+    extraction_confidence: Optional[float],
     fulfilled_requirements: Optional[list[str]] = None,
 ) -> None:
     """
-    Persists the Extraction-stage output into its own extraction_confidence
+    Persists the Extraction-stage confidence into its own extraction_confidence
     column — kept separate from record_classification's confidence (the
     Classifier's confidence in document_type) so neither stage's number
     overwrites the other's; both remain readable after the fact. Also used
     for a loan officer's manual correction (see routers/documents.py's PATCH
     endpoint), which passes extraction_confidence=1.0 since a human has now
     verified the values.
+
+    Does NOT write the field values themselves — the extracted_fields table
+    (see extracted_fields_repository.replace_extracted_fields, called
+    alongside this by every one of this function's callers) is the only
+    place those are persisted; get_document/list_documents read them back
+    from there, not from a documents column.
 
     fulfilled_requirements is optional (rather than always written here)
     since callers compute it from the extracted_fields they're passing in
@@ -113,19 +183,22 @@ def update_extracted_fields(
     given" write.
     """
     update: dict = {
-        "extracted_fields": extracted_fields,
-        "extraction_confidence": extraction_confidence,
+        "extraction_confidence": (
+            round(extraction_confidence, 2) if extraction_confidence is not None else None
+        ),
     }
     if fulfilled_requirements is not None:
         update["fulfilled_requirements"] = fulfilled_requirements
-    supabase_client.table("documents").update(update).eq("id", document_id).execute()
+    result = supabase_client.table("documents").update(update).eq("id", document_id).execute()
+    if result.data:
+        _sync_case(_row(result.data[0]).get("case_id"))
 
 
 def record_escalation(document_id: str, reason: str) -> None:
     """
     Marks that Extraction judged the classified document_type to be wrong
     at least once during processing, triggering a re-run of Intake
-    Coordinator (see orchestrator._process_document's escalation loop).
+    Coordinator (see the langgraph reclassify loop (nodes.record_escalation_node)).
     Persisted independently of the final outcome so the frontend can show
     "classification was re-run" even once the document reaches a terminal
     status under a different (or the same) document_type.
@@ -144,21 +217,6 @@ def update_metadata(document_id: str, metadata: dict) -> None:
     stages.
     """
     supabase_client.table("documents").update({"metadata": metadata}).eq(
-        "id", document_id
-    ).execute()
-
-
-def update_metadata_anomalies(document_id: str, result: dict) -> None:
-    """
-    Persists the Digital Authenticity Specialist's metadata-anomaly result
-    (see fraud_detection.metadata_analysis) as a single JSON blob shaped
-    exactly like the MetadataAnalysisResult response body — ready to hand to
-    a future lead-agent aggregator as-is rather than reconstructed from
-    several rows. Kept separate from `metadata` above (the raw exiftool
-    dict ingestion already stores) since this is a derived analysis of that
-    data, not the source data itself.
-    """
-    supabase_client.table("documents").update({"metadata_anomalies": result}).eq(
         "id", document_id
     ).execute()
 
@@ -185,28 +243,85 @@ def remove_document(document: DocumentRecord) -> None:
     result = service_supabase_client().table("documents").delete().eq("id", document.id).execute()
     if not result.data:
         raise RuntimeError(f"Document {document.id} was not deleted")
+    _sync_case(document.case_id)
 
 
-def get_document(document_id: str) -> Optional[DocumentRecord]:
+def remove_documents(documents: list[DocumentRecord]) -> None:
+    """
+    Batch version of remove_document, for deleting every document under a
+    case in one pass instead of one round-trip per document per step. Skips
+    the per-document _sync_case call — callers doing this in bulk (case
+    deletion) are removing the case itself right after, so resyncing its
+    submission_finalized flag in between would be wasted work.
+    """
+    if not documents:
+        return
+    document_ids = [document.id for document in documents]
+    extracted_fields_repository.delete_fields_for_documents(document_ids)
+    storage_paths = [document.storage_path for document in documents if document.storage_path]
+    if storage_paths:
+        try:
+            storage_service.delete_files(storage_paths)
+        except Exception:
+            logger.exception("Failed to delete stored files for documents %s", document_ids)
+    service_supabase_client().table("documents").delete().in_("id", document_ids).execute()
+
+
+def _attach_extracted_fields(documents: list[DocumentRecord]) -> list[DocumentRecord]:
+    """
+    Populates extracted_fields from the extracted_fields table — the only
+    place field values are persisted (see update_extracted_fields). Always
+    overwrites, including with None when a document has no rows there, so a
+    document's extracted_fields never reflects stale/legacy data that may
+    still sit in the documents.extracted_fields column.
+    """
+    if not documents:
+        return documents
+    fields_by_document = extracted_fields_repository.get_extracted_fields_dicts_for_documents(
+        [document.id for document in documents]
+    )
+    for document in documents:
+        document.extracted_fields = fields_by_document.get(document.id) or None
+    return documents
+
+
+def get_document(document_id: str, *, include_fields: bool = True) -> Optional[DocumentRecord]:
+    """
+    include_fields=False skips the extracted_fields table round-trip for
+    callers that only need status/document_type/etc. (the langgraph pipeline
+    nodes, the queue worker, detection's context loader) — cheap to opt out
+    of since it's a separate query, not part of the documents-table read
+    itself. Defaults to True since most callers (API responses, case-match,
+    mapper) do need it and forgetting to ask for it would silently produce
+    wrong data, whereas forgetting to opt out just costs an extra query.
+    """
     result = supabase_client.table("documents").select("*").eq("id", document_id).execute()
     if not result.data:
         return None
-    return DocumentRecord(**result.data[0])
+    document = DocumentRecord(**_row(result.data[0]))
+    if include_fields:
+        _attach_extracted_fields([document])
+    return document
 
 
-def get_documents_in_status(statuses: list[DocumentStatus]) -> list[DocumentRecord]:
+def get_documents_in_status(
+    statuses: list[DocumentStatus], *, include_fields: bool = True
+) -> list[DocumentRecord]:
     result = (
         supabase_client.table("documents")
         .select("*")
         .in_("status", [s.value for s in statuses])
         .execute()
     )
-    return [DocumentRecord(**row) for row in result.data]
+    documents = [DocumentRecord(**_row(row)) for row in result.data]
+    return _attach_extracted_fields(documents) if include_fields else documents
 
 
 def list_documents(
     case_id: Optional[str] = None,
     status: Optional[DocumentStatus] = None,
+    *,
+    include_fields: bool = True,
 ) -> list[DocumentRecord]:
     query = supabase_client.table("documents").select("*")
     if case_id is not None:
@@ -214,4 +329,5 @@ def list_documents(
     if status is not None:
         query = query.eq("status", status.value)
     result = query.execute()
-    return [DocumentRecord(**row) for row in result.data]
+    documents = [DocumentRecord(**_row(row)) for row in result.data]
+    return _attach_extracted_fields(documents) if include_fields else documents

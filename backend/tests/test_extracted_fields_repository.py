@@ -3,7 +3,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from app import extracted_fields_repository
-from app.fraud_detection.font_consistency_v2 import ExtractedField
+from app.fraud_detection.font_consistency import ExtractedField
 
 
 def test_replace_extracted_fields_deletes_then_inserts_one_row_per_field() -> None:
@@ -233,3 +233,21 @@ def test_delete_fields_for_document_removes_every_row_for_that_document() -> Non
     mock_client.table.return_value.delete.return_value.eq.assert_called_once_with(
         "document_id", "doc-1"
     )
+
+
+def test_delete_fields_for_documents_batches_the_delete_for_many_documents() -> None:
+    with patch("app.extracted_fields_repository.service_supabase_client") as mock_service:
+        mock_client = mock_service.return_value
+        extracted_fields_repository.delete_fields_for_documents(["doc-1", "doc-2"])
+
+    mock_client.table.assert_called_with("extracted_fields")
+    mock_client.table.return_value.delete.return_value.in_.assert_called_once_with(
+        "document_id", ["doc-1", "doc-2"]
+    )
+
+
+def test_delete_fields_for_documents_is_a_noop_for_an_empty_list() -> None:
+    with patch("app.extracted_fields_repository.service_supabase_client") as mock_service:
+        extracted_fields_repository.delete_fields_for_documents([])
+
+    mock_service.assert_not_called()

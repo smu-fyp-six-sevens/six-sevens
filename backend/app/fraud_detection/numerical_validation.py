@@ -38,7 +38,7 @@ from typing import Any, Literal
 from pydantic import BaseModel
 
 from ..ingestion.ingestion_service import ingest_document
-from .font_consistency_v2 import ExtractedField
+from .font_consistency import ExtractedField
 
 # Benford's Law: P(leading digit = d) = log10(1 + 1/d).
 BENFORD_EXPECTED: dict[int, float] = {
