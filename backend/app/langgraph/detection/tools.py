@@ -55,7 +55,9 @@ def clear_context(document_id: str) -> None:
 async def _document(document_id: str):
     entry = _context.setdefault(document_id, {})
     if "document" not in entry:
-        entry["document"] = await asyncio.to_thread(document_repository.get_document, document_id)
+        entry["document"] = await asyncio.to_thread(
+            document_repository.get_document, document_id, include_fields=False
+        )
     return entry["document"]
 
 

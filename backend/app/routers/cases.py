@@ -5,10 +5,10 @@ import logging
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 
-from .. import case_service
+from .. import case_service, document_repository
 from ._dependencies import get_case_or_404
 from ..case_match import CaseMatchResult
-from ..models import CaseRecord, CaseSummary, UpdateCaseRequest
+from ..models import IN_FLIGHT_STATUSES, CaseRecord, CaseSummary, UpdateCaseRequest
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 logger = logging.getLogger(__name__)
@@ -81,7 +81,32 @@ async def delete_case(case_id: str, case: CaseRecord = Depends(get_case_or_404))
     Removes a case from the active queue, along with every document that
     belongs to it. A following GET /cases or GET /cases/{id} no longer
     returns it.
+
+    Only allowed once every one of the case's documents has reached a
+    terminal state (ANALYZED, FAILED, REJECTED, CANCELLED, APPROVED) — same
+    reasoning as delete_document: deleting out from under a document a
+    worker is still actively writing to (status, extracted fields) would
+    race the pipeline and orphan a document row mid-flight. Cancel the
+    in-flight document(s) first, or wait for them to finish.
     """
+    try:
+        documents = await asyncio.to_thread(document_repository.list_documents, case_id)
+    except Exception as exc:
+        logger.exception("Failed to fetch documents for case %s", case_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch the case's documents. Check Supabase table access.",
+        ) from exc
+
+    if any(document.status in IN_FLIGHT_STATUSES for document in documents):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Case has a document that's still being processed; cancel it "
+                "first, or wait for it to finish, before deleting the case."
+            ),
+        )
+
     try:
         await asyncio.to_thread(case_service.delete_case, case_id)
     except Exception as exc:

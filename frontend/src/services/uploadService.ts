@@ -19,8 +19,8 @@ export interface DocumentRecord {
   case_id: string | null;
   filename: string;
   document_type: string | null;
-  confidence: number | null;
-  classification_outcome: 'accepted' | 'manual_review' | null;
+  classification_confidence: number | null;
+  routing_status: 'accepted' | 'manual_review' | null;
   storage_path: string | null;
   status: string;
   retry_count: number;
@@ -32,7 +32,7 @@ export interface DocumentRecord {
   fulfilled_requirements: string[];
   extracted_fields: Record<string, unknown> | null;
   // Extraction's own confidence in extracted_fields — separate from
-  // `confidence` above (the classifier's), never overwrites it.
+  // `classification_confidence` above (the classifier's), never overwrites it.
   extraction_confidence: number | null;
   escalation_reason: string | null;
   metadata: Record<string, unknown> | null;
@@ -154,7 +154,7 @@ export async function getDocumentCaseMatch(documentId: string): Promise<Document
   return (await response.json()) as DocumentCaseMatch;
 }
 
-// Overall routing outcome shown in the UI (view only). classification_outcome
+// Overall routing outcome shown in the UI (view only). routing_status
 // alone only records the classifier's decision — documents are always sent on
 // to extraction, so an 'accepted' classification can still end up needing
 // manual review. This folds in the later stages: a failed document or one
@@ -164,11 +164,11 @@ export async function getDocumentCaseMatch(documentId: string): Promise<Document
 // way: a document it sends to manual review (it belongs to another
 // company/individual, or the certificate of incumbency itself is in doubt)
 // reads as Manual Review — without touching the stored
-// classification_outcome, which the checklist still relies on.
+// routing_status, which the checklist still relies on.
 export function formatRoutingOutcome(
   document: Pick<
     DocumentRecord,
-    'status' | 'classification_outcome' | 'extracted_fields'
+    'status' | 'routing_status' | 'extracted_fields'
   >,
   caseMatch?: Pick<DocumentCaseMatch, 'status'> | null,
 ): string {
@@ -180,7 +180,7 @@ export function formatRoutingOutcome(
 
   if (
     document.status === 'failed' ||
-    document.classification_outcome === 'manual_review' ||
+    document.routing_status === 'manual_review' ||
     caseMatch?.status === 'manual_review' ||
     (lowestConfidence != null &&
       lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD)
@@ -188,7 +188,7 @@ export function formatRoutingOutcome(
     return 'Manual Review';
   }
 
-  if (document.classification_outcome === 'accepted') {
+  if (document.routing_status === 'accepted') {
     return document.status === 'analyzed' ? 'Accepted' : 'Pending';
   }
 
@@ -203,7 +203,48 @@ export const TERMINAL_DOCUMENT_STATUSES = new Set([
   'approved',
   'rejected',
   'failed',
+  'cancelled',
 ]);
+
+// Mirrors settings.STUCK_PROCESSING_RETRY_THRESHOLD_SECONDS in
+// backend/app/config.py — kept in sync manually. The backend is the actual
+// source of truth (routers/documents.py's retry endpoint enforces this
+// server-side and is the final word), this copy only drives when the UI
+// itself starts offering Retry / showing the "Stuck" badge without waiting
+// on a fetch round-trip.
+export const STUCK_PROCESSING_RETRY_THRESHOLD_MS = 10 * 60 * 1000;
+
+// True once a PROCESSING document has been sitting there long enough that
+// it's more likely orphaned (e.g. a backend restart abandoned it — see
+// queue_service.py's docstring) than genuinely still running. Mirrors
+// monitoring.is_stuck_processing_for_retry.
+export function isDocumentStuckProcessing(
+  document: Pick<DocumentRecord, 'status' | 'processing_started_at'>,
+): boolean {
+  if (document.status !== 'processing' || !document.processing_started_at) {
+    return false;
+  }
+  const startedAt = new Date(document.processing_started_at).getTime();
+  if (Number.isNaN(startedAt)) {
+    return false;
+  }
+  return Date.now() - startedAt > STUCK_PROCESSING_RETRY_THRESHOLD_MS;
+}
+
+// Mirrors routers/documents.py's cancel_document eligibility.
+export function canCancelDocument(status: string): boolean {
+  return status === 'queued' || status === 'processing';
+}
+
+// Mirrors routers/documents.py's retry_document eligibility: FAILED, or
+// PROCESSING for long enough to be considered stuck. Deliberately excludes
+// QUEUED/normal PROCESSING — a worker may genuinely still be running it;
+// cancel it first if you want to stop an actively-running document.
+export function canRetryDocument(
+  document: Pick<DocumentRecord, 'status' | 'processing_started_at'>,
+): boolean {
+  return document.status === 'failed' || isDocumentStuckProcessing(document);
+}
 
 // Single source of truth for how a raw backend DocumentStatus reads in the
 // UI — shared by the case's document table and the document details page,
@@ -231,6 +272,8 @@ export function formatDocumentStatus(status: string): string {
       return 'Rejected';
     case 'failed':
       return 'Failed';
+    case 'cancelled':
+      return 'Cancelled';
     default:
       return status;
   }
@@ -387,6 +430,50 @@ export async function getDocument(documentId: string): Promise<DocumentRecord> {
   }
 
   return (await response.json()) as DocumentRecord;
+}
+
+// Mirrors DocumentDownloadResponse in backend/app/models.py.
+export interface DocumentDownloadResponse {
+  document_id: string;
+  signed_url: string;
+  expires_in: number;
+}
+
+// inline=true asks the backend to omit Storage's `download` option, which
+// is what puts a Content-Disposition: attachment header on the response —
+// without it, a browser renders the file in place (an <iframe>/<img> can
+// load it directly) instead of downloading it. Used by the preview modal;
+// a plain download link should call this with inline=false (the default).
+export async function getDocumentDownloadUrl(
+  documentId: string,
+  { inline = false }: { inline?: boolean } = {},
+): Promise<DocumentDownloadResponse> {
+  const response = await authFetch(
+    `/documents/${documentId}/download${inline ? '?inline=true' : ''}`,
+  );
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to get a document URL (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as DocumentDownloadResponse;
+}
+
+// PDF -> <iframe> (native browser PDF viewer), image -> <img>. Anything
+// else (shouldn't happen — upload validation only accepts these) falls
+// back to "no inline preview, offer a download link instead".
+export type PreviewKind = 'pdf' | 'image' | 'unsupported';
+
+export function previewKindForFilename(filename: string): PreviewKind {
+  const lowered = filename.toLowerCase();
+  if (lowered.endsWith('.pdf')) {
+    return 'pdf';
+  }
+  if (/\.(png|jpe?g)$/.test(lowered)) {
+    return 'image';
+  }
+  return 'unsupported';
 }
 
 // Dev-only window into the langgraph-test branch's pipeline (see
@@ -587,6 +674,32 @@ export async function rejectDocument(
     throw new Error(
       `Reject failed (${response.status}): ${detail}`,
     );
+  }
+
+  return (await response.json()) as DocumentRecord;
+}
+
+export async function cancelDocument(documentId: string): Promise<DocumentRecord> {
+  const response = await authFetch(`/documents/${documentId}/cancel`, {
+    method: 'POST',
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to cancel document (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as DocumentRecord;
+}
+
+export async function retryDocument(documentId: string): Promise<DocumentRecord> {
+  const response = await authFetch(`/documents/${documentId}/retry`, {
+    method: 'POST',
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to retry document (${response.status}): ${detail}`);
   }
 
   return (await response.json()) as DocumentRecord;

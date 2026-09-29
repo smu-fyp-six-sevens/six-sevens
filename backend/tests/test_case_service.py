@@ -15,7 +15,7 @@ from app.models import (
     ADDITIONAL_DOCUMENT_TYPES,
     REQUIRED_DOCUMENT_TYPES,
     CaseDocumentsStatus,
-    ClassificationOutcome,
+    RoutingStatus,
     DocumentRecord,
     DocumentStatus,
     compute_fulfilled_requirements,
@@ -33,7 +33,7 @@ def _make_document(
     uploaded_seconds_ago: float = 0,
     queued_seconds_ago: float | None = None,
     processing_seconds_ago: float | None = None,
-    classification_outcome: ClassificationOutcome | None = None,
+    routing_status: RoutingStatus | None = None,
     document_type: str | None = None,
     fulfilled_requirements: list[str] | None = None,
     extracted_fields: dict | None = None,
@@ -50,7 +50,7 @@ def _make_document(
         processing_started_at=(
             (now - timedelta(seconds=processing_seconds_ago)) if processing_seconds_ago else None
         ),
-        classification_outcome=classification_outcome,
+        routing_status=routing_status,
         document_type=document_type,
         fulfilled_requirements=fulfilled_requirements or [],
         extracted_fields=extracted_fields,
@@ -154,7 +154,7 @@ def test_single_document_can_fulfil_multiple_requirements() -> None:
         _make_document(
             "doc-1",
             DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             document_type="nric",
             fulfilled_requirements=["id_document", "proof_of_address"],
             extracted_fields={
@@ -182,7 +182,7 @@ def test_manual_review_document_does_not_count_as_fulfilled() -> None:
         _make_document(
             "doc-1",
             DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.MANUAL_REVIEW,
+            routing_status=RoutingStatus.MANUAL_REVIEW,
             fulfilled_requirements=["bank_statement"],
         )
     ]
@@ -203,7 +203,7 @@ def test_additional_list_of_loans_is_ticked_but_never_missing() -> None:
         _make_document(
             "doc-1",
             DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             document_type="list_of_loans",
             fulfilled_requirements=["list_of_loans"],
         )
@@ -219,7 +219,7 @@ def test_passport_does_not_fulfil_proof_of_address() -> None:
         _make_document(
             "doc-1",
             DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             document_type="passport",
             fulfilled_requirements=["id_document"],
             extracted_fields={
@@ -242,7 +242,7 @@ def test_id_document_back_only_does_not_fulfil_requirement() -> None:
         _make_document(
             "doc-1",
             DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             document_type="nric",
             fulfilled_requirements=["id_document"],
             extracted_fields={"nric_number": "S8905952H", "document_side": "back"},
@@ -258,7 +258,7 @@ def test_id_document_front_and_back_together_fulfil_requirement() -> None:
         _make_document(
             "doc-1",
             DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             document_type="nric",
             fulfilled_requirements=["id_document"],
             # Same nric_number as doc-2 — same NRIC, two separate photos of
@@ -275,7 +275,7 @@ def test_id_document_front_and_back_together_fulfil_requirement() -> None:
         _make_document(
             "doc-2",
             DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             document_type="nric",
             fulfilled_requirements=["id_document"],
             extracted_fields={"nric_number": "S8905952H", "document_side": "back"},
@@ -297,7 +297,7 @@ def test_id_document_two_different_people_half_complete_each_does_not_fulfil() -
         _make_document(
             "doc-1",
             DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             document_type="nric",
             fulfilled_requirements=["id_document"],
             extracted_fields={"nric_number": "S8905952H", "document_side": "back"},
@@ -305,7 +305,7 @@ def test_id_document_two_different_people_half_complete_each_does_not_fulfil() -
         _make_document(
             "doc-2",
             DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             document_type="nric",
             fulfilled_requirements=["id_document"],
             extracted_fields={
@@ -330,14 +330,14 @@ def test_proof_of_address_requires_coverage_for_every_identity() -> None:
         _make_document(
             "doc-1",
             DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             document_type="nric",
             extracted_fields={"individual_name": "Jane Tan", "individual_address": "1 Main St"},
         ),
         _make_document(
             "doc-2",
             DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             document_type="nric",
             extracted_fields={"individual_name": "John Lim", "individual_address": None},
         ),
@@ -357,14 +357,14 @@ def test_proof_of_address_satisfied_by_separate_document_matched_by_name() -> No
         _make_document(
             "doc-1",
             DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             document_type="nric",
             extracted_fields={"individual_name": "Jane Tan", "individual_address": None},
         ),
         _make_document(
             "doc-2",
             DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             document_type="proof_of_address",
             extracted_fields={"individual_name": "  jane   tan  ", "individual_address": "1 Main St"},
         ),
@@ -379,21 +379,21 @@ def test_proof_of_address_with_multiple_identities_all_covered() -> None:
         _make_document(
             "doc-1",
             DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             document_type="nric",
             extracted_fields={"individual_name": "Jane Tan", "individual_address": "1 Main St"},
         ),
         _make_document(
             "doc-2",
             DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             document_type="nric",
             extracted_fields={"individual_name": "John Lim", "individual_address": None},
         ),
         _make_document(
             "doc-3",
             DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             document_type="proof_of_address",
             extracted_fields={"individual_name": "John Lim", "individual_address": "2 Side St"},
         ),
@@ -409,7 +409,7 @@ def test_proof_of_address_missing_when_no_identity_yet() -> None:
         _make_document(
             "doc-1",
             DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             document_type="proof_of_address",
             extracted_fields={"individual_name": "Jane Tan", "individual_address": "1 Main St"},
         ),
@@ -431,7 +431,7 @@ def _make_fully_covered_documents() -> list[DocumentRecord]:
         _make_document(
             f"doc-{i}",
             DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             document_type="nric" if requirement == "id_document" else requirement,
             fulfilled_requirements=[requirement],
             extracted_fields=(
@@ -467,7 +467,7 @@ def test_sync_submission_finalized_false_when_incomplete() -> None:
         _make_document(
             "doc-1",
             DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             fulfilled_requirements=["bank_statement"],
         )
     ]
@@ -548,7 +548,7 @@ def test_uploaded_additional_document_does_not_change_completeness() -> None:
         _make_document(
             "doc-1",
             DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             document_type="list_of_loans",
             fulfilled_requirements=["list_of_loans"],
         )
@@ -648,7 +648,7 @@ def test_accepted_company_proof_of_address_is_ticked_but_never_missing() -> None
         _make_document(
             "doc-1",
             DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             document_type="proof_of_address",
             fulfilled_requirements=["company_proof_of_address"],
             extracted_fields={"company_address": "10 Robinson Rd"},
@@ -707,7 +707,7 @@ def test_accepted_personal_source_of_wealth_is_ticked_but_never_missing() -> Non
         _make_document(
             "doc-1",
             DocumentStatus.ANALYZED,
-            classification_outcome=ClassificationOutcome.ACCEPTED,
+            routing_status=RoutingStatus.ACCEPTED,
             document_type="source_of_wealth",
             fulfilled_requirements=["source_of_personal_wealth"],
             extracted_fields={"account_holder_name": "Nurul Hassan"},

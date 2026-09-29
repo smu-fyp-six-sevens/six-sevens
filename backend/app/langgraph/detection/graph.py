@@ -196,7 +196,9 @@ def _second_look_request(state: DetectionState) -> dict:
 
 async def load_context_node(state: DetectionState) -> dict:
     document_id = state["document_id"]
-    document = await asyncio.to_thread(document_repository.get_document, document_id)
+    document = await asyncio.to_thread(
+        document_repository.get_document, document_id, include_fields=False
+    )
     if document is None:
         raise DetectionError("Document not found")
     if not document.storage_path:

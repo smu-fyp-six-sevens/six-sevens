@@ -20,7 +20,7 @@ from .. import document_repository, extracted_fields_repository, storage_service
 from ..config import settings
 from .extraction_prompts import schema_field_names
 from ..ingestion.ingestion_service import ingest_document
-from ..models import ClassificationOutcome, DocumentStatus, compute_fulfilled_requirements
+from ..models import DocumentStatus, RoutingStatus, compute_fulfilled_requirements
 
 logger = logging.getLogger("classifier_pipeline.langgraph.nodes")
 
@@ -64,7 +64,6 @@ async def persist_extracted_fields(document_id: str, document_type: str, extract
     await asyncio.to_thread(
         document_repository.update_extracted_fields,
         document_id,
-        extracted_fields,
         extraction_confidence,
         fulfilled_requirements,
     )
@@ -144,7 +143,7 @@ async def record_classification_result(document_id: str, classification: dict) -
     normalised to "unrecognised" (general field list). A *named* but
     unconfident guess is kept as-is so Extraction runs against that type's
     own schema and the frontend can show what the classifier thinks it is;
-    classification_outcome still records MANUAL_REVIEW for it.
+    routing_status still records MANUAL_REVIEW for it.
     """
     document_type = classification.get("document_type")
     confidence = classification.get("confidence")
@@ -160,7 +159,7 @@ async def record_classification_result(document_id: str, classification: dict) -
         document_type = "unrecognised"
         classification["document_type"] = document_type
 
-    outcome = ClassificationOutcome.ACCEPTED if accepted else ClassificationOutcome.MANUAL_REVIEW
+    outcome = RoutingStatus.ACCEPTED if accepted else RoutingStatus.MANUAL_REVIEW
     # Self-fulfilment only at this stage — individual_address isn't known
     # until Extraction runs, so proof_of_address cross-fulfilment gets
     # recomputed by persist_extracted_fields afterwards.
@@ -168,14 +167,10 @@ async def record_classification_result(document_id: str, classification: dict) -
         document_repository.record_classification,
         document_id,
         document_type=document_type,
-        confidence=confidence,
-        classification_outcome=outcome.value,
+        classification_confidence=confidence,
+        routing_status=outcome.value,
         evidence=classification.get("evidence", []),
         fulfilled_requirements=compute_fulfilled_requirements(document_type, None),
-        # reasoning intentionally not persisted for now — it goes into the
-        # langgraph trace instead (see finalise_classification_node).
-        # document_repository.record_classification still accepts it, so
-        # this is a one-line flip later.
     )
 
 
@@ -185,7 +180,9 @@ async def record_classification_result(document_id: str, classification: dict) -
 async def ingest_node(state: DocumentGraphState) -> dict:
     document_id = state["document_id"]
     trace.start(document_id)
-    document = await asyncio.to_thread(document_repository.get_document, document_id)
+    document = await asyncio.to_thread(
+        document_repository.get_document, document_id, include_fields=False
+    )
     if document is None:
         trace.record(document_id, "ingest", error=f"Document {document_id} not found")
         return {"status": "failed", "failure_reason": f"Document {document_id} not found"}

@@ -3,13 +3,19 @@ import { createPortal } from 'react-dom';
 import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
+import DocumentPreviewModal from '../components/DocumentPreviewModal';
 import { subscribeToCaseStatus } from '../services/caseSocket';
 import {
   deleteExtractedField,
   deleteDocument,
   addExtractedField,
   approveDocument,
+  cancelDocument,
+  canCancelDocument,
+  canRetryDocument,
+  isDocumentStuckProcessing,
   rejectDocument,
+  retryDocument,
   CLASSIFICATION_CONFIDENCE_THRESHOLD,
   DOCUMENT_TYPE_OPTIONS,
   EXTRACTION_CONFIDENCE_THRESHOLD,
@@ -657,9 +663,22 @@ export default function DocumentDetailsPage({
 
   const [isRejecting, setIsRejecting] = useState(false);
   const [rejectError, setRejectError] = useState<string | null>(null);
+
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+
+  // Forces a re-render every so often while PROCESSING so the "Stuck"
+  // badge/Retry button can appear once the threshold is crossed purely from
+  // time passing — isDocumentStuckProcessing itself reads Date.now() fresh
+  // on every render, this just makes sure a render actually happens.
+  const [, forceStuckRecheck] = useState(0);
   const [isDeletingDocument, setIsDeletingDocument] = useState(false);
   const [deleteDocumentError, setDeleteDocumentError] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   // Last extracted_fields the draft was built from — lets a live update reset
   // the draft only when the fields really changed (e.g. a rerun finishing),
   // not wipe an officer's in-progress edits on every unrelated case update.
@@ -761,8 +780,8 @@ export default function DocumentDetailsPage({
   // the Classifier's own confidence in document_type, compared the same way
   // the backend gates canCorrectType (see below).
   const lowClassificationConfidence =
-    document?.confidence != null &&
-    document.confidence < CLASSIFICATION_CONFIDENCE_THRESHOLD;
+    document?.classification_confidence != null &&
+    document.classification_confidence < CLASSIFICATION_CONFIDENCE_THRESHOLD;
 
   // Manual review is driven by the lowest confidence among this document's
   // own extracted fields — not a single document-wide extraction_confidence
@@ -786,8 +805,8 @@ export default function DocumentDetailsPage({
   const canCorrectType =
     (document?.status === 'analyzed' || document?.status === 'failed') &&
     !(
-      document.confidence != null &&
-      document.confidence >= CLASSIFICATION_CONFIDENCE_THRESHOLD
+      document.classification_confidence != null &&
+      document.classification_confidence >= CLASSIFICATION_CONFIDENCE_THRESHOLD
     );
 
   // What the dropdown currently shows: the officer's pick, else the existing
@@ -803,6 +822,14 @@ export default function DocumentDetailsPage({
     document?.status === 'queued' ||
     document?.status === 'processing' ||
     document?.status === 'extracting';
+
+  useEffect(() => {
+    if (document?.status !== 'processing') {
+      return;
+    }
+    const interval = window.setInterval(() => forceStuckRecheck((n) => n + 1), 15000);
+    return () => window.clearInterval(interval);
+  }, [document?.status]);
 
   useEffect(() => {
     if (!caseId || !isInFlight) {
@@ -931,6 +958,50 @@ export default function DocumentDetailsPage({
     setIsRejecting(false);
   }
 }
+
+  async function handleCancelDocument() {
+    if (!document) {
+      return;
+    }
+
+    setIsCancelling(true);
+    setCancelError(null);
+
+    try {
+      const updated = await cancelDocument(document.id);
+      setDocument(updated);
+    } catch (error) {
+      setCancelError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to cancel document.',
+      );
+    } finally {
+      setIsCancelling(false);
+    }
+  }
+
+  async function handleRetryDocument() {
+    if (!document) {
+      return;
+    }
+
+    setIsRetrying(true);
+    setRetryError(null);
+
+    try {
+      const updated = await retryDocument(document.id);
+      setDocument(updated);
+    } catch (error) {
+      setRetryError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to retry document.',
+      );
+    } finally {
+      setIsRetrying(false);
+    }
+  }
 
   async function handleSaveType() {
     if (!document || !chosenType) {
@@ -1117,16 +1188,25 @@ export default function DocumentDetailsPage({
       <div className="document-details-intro">
         <div className="document-details-title-row">
           <h1>Document Details</h1>
-          {document.status !== 'approved' && (
+          <div className="document-details-title-actions">
             <button
               type="button"
-              className="delete-record-button"
-              onClick={() => setDeleteConfirmOpen(true)}
-              disabled={isDeletingDocument}
+              className="preview-document-button"
+              onClick={() => setIsPreviewOpen(true)}
             >
-              {isDeletingDocument ? 'Deleting…' : 'Delete document'}
+              ⛶ Preview document
             </button>
-          )}
+            {document.status !== 'approved' && !isInFlight && (
+              <button
+                type="button"
+                className="delete-record-button"
+                onClick={() => setDeleteConfirmOpen(true)}
+                disabled={isDeletingDocument}
+              >
+                {isDeletingDocument ? 'Deleting…' : 'Delete document'}
+              </button>
+            )}
+          </div>
         </div>
         <p className="sub">
           View extracted data and review any fields that require
@@ -1167,8 +1247,11 @@ export default function DocumentDetailsPage({
                   ? 'document-status--failed'
                   : document.status === 'rejected'
                     ? 'document-status--rejected'
-                    : ''
-                  
+                    : document.status === 'cancelled'
+                      ? 'document-status--cancelled'
+                      : isDocumentStuckProcessing(document)
+                        ? 'document-status--stuck'
+                        : ''
             }`}
           >
             <span
@@ -1179,10 +1262,16 @@ export default function DocumentDetailsPage({
                     ? 'status-dot--failed'
                     : document.status === 'rejected'
                       ? 'status-dot--rejected'
-                      : ''
+                      : document.status === 'cancelled'
+                        ? 'status-dot--cancelled'
+                        : isDocumentStuckProcessing(document)
+                          ? 'status-dot--stuck'
+                          : ''
               }`}
             />
-            {formatDocumentStatus(document.status)}
+            {isDocumentStuckProcessing(document)
+              ? `${formatDocumentStatus(document.status)} (Stuck)`
+              : formatDocumentStatus(document.status)}
             {!TERMINAL_DOCUMENT_STATUSES.has(document.status) && '…'}
           </div>
         </div>
@@ -1242,8 +1331,8 @@ export default function DocumentDetailsPage({
               Classification Confidence
             </span>
             <strong>
-              {document.confidence != null
-                ? document.confidence.toFixed(2)
+              {document.classification_confidence != null
+                ? document.classification_confidence.toFixed(2)
                 : '—'}
             </strong>
           </div>
@@ -1301,7 +1390,7 @@ export default function DocumentDetailsPage({
               <div>
                 This document was classified as{' '}
                 {formatDocumentType(document.document_type)} with{' '}
-                {document.confidence!.toFixed(2)} confidence, below the
+                {document.classification_confidence!.toFixed(2)} confidence, below the
                 required {CLASSIFICATION_CONFIDENCE_THRESHOLD.toFixed(2)}.
               </div>
               {canCorrectType && !failureReason && (
@@ -1335,6 +1424,8 @@ export default function DocumentDetailsPage({
           <button
             type="button"
             className="add-field-button"
+            disabled={isInFlight}
+            title={isInFlight ? 'Fields can\'t be edited while the document is being processed.' : undefined}
             onClick={() => {
               setIsAddFieldOpen(true);
               setAddFieldError(null);
@@ -1545,7 +1636,7 @@ export default function DocumentDetailsPage({
                           setDeletingFieldId(null);
                         }
                       }}
-                      disabled={deletingFieldId === field.id}
+                      disabled={deletingFieldId === field.id || isInFlight}
                       title="Delete field"
                       aria-label={`Delete ${humanizeFieldKey(key)}`}
                     >
@@ -1610,10 +1701,11 @@ export default function DocumentDetailsPage({
                 String(field.value).trim() === '-';
 
               const canEditField =
-                isUnrecognisedDocument ||
-                isEmptyField ||
-                (field.confidence != null &&
-                  field.confidence < EXTRACTION_CONFIDENCE_THRESHOLD);
+                !isInFlight &&
+                (isUnrecognisedDocument ||
+                  isEmptyField ||
+                  (field.confidence != null &&
+                    field.confidence < EXTRACTION_CONFIDENCE_THRESHOLD));
 
               return (
                 <div
@@ -1705,7 +1797,7 @@ export default function DocumentDetailsPage({
             <button
               type="button"
               className="details-save-button"
-              disabled={isSaving}
+              disabled={isSaving || isInFlight}
               onClick={() => void handleSaveFields()}
             >
               {isSaving ? 'Saving…' : 'Save fields'}
@@ -1821,10 +1913,38 @@ export default function DocumentDetailsPage({
         {approveError && (
           <div className="save-error">{approveError}</div>
         )}
+        {cancelError && (
+          <div className="save-error">{cancelError}</div>
+        )}
+        {retryError && (
+          <div className="save-error">{retryError}</div>
+        )}
 
-        {document.status !== 'approved' && 
+        {document.status !== 'approved' &&
         document.status !== 'rejected' && (
           <div className="document-actions">
+            {canCancelDocument(document.status) && (
+              <button
+                type="button"
+                className="document-action--cancel"
+                disabled={isCancelling}
+                onClick={() => void handleCancelDocument()}
+              >
+                {isCancelling ? 'Cancelling…' : '⏹ Cancel Processing'}
+              </button>
+            )}
+
+            {canRetryDocument(document) && (
+              <button
+                type="button"
+                className="document-action--retry"
+                disabled={isRetrying}
+                onClick={() => void handleRetryDocument()}
+              >
+                {isRetrying ? 'Retrying…' : '↻ Retry Document'}
+              </button>
+            )}
+
             <button
               type="button"
               className="document-action--reject"
@@ -1854,6 +1974,14 @@ export default function DocumentDetailsPage({
             if (!isDeletingDocument) setDeleteConfirmOpen(false);
           }}
           onConfirm={() => void confirmDeleteDocument()}
+        />
+      )}
+
+      {isPreviewOpen && document && (
+        <DocumentPreviewModal
+          documentId={document.id}
+          filename={document.filename}
+          onClose={() => setIsPreviewOpen(false)}
         />
       )}
     </div>

@@ -66,16 +66,16 @@ def test_update_status_sends_only_status_when_no_optional_fields() -> None:
 
 
 def test_sync_case_is_a_noop_for_a_caseless_document() -> None:
-    with patch("app.document_repository.case_service") as mock_case_service:
+    with patch("app.case_service.sync_submission_finalized") as mock_case_service:
         document_repository._sync_case(None)
 
-    mock_case_service.sync_submission_finalized.assert_not_called()
+    mock_case_service.assert_not_called()
 
 
 def test_update_status_resyncs_the_case_when_the_new_status_is_analyzed() -> None:
     with (
         patch("app.document_repository.supabase_client") as mock_client,
-        patch("app.document_repository.case_service") as mock_case_service,
+        patch("app.case_service.sync_submission_finalized") as mock_case_service,
     ):
         mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
             _execute_result([_row(status="analyzed")])
@@ -83,7 +83,7 @@ def test_update_status_resyncs_the_case_when_the_new_status_is_analyzed() -> Non
 
         document_repository.update_status("doc-1", DocumentStatus.ANALYZED)
 
-    mock_case_service.sync_submission_finalized.assert_called_once_with("case-1")
+    mock_case_service.assert_called_once_with("case-1")
 
 
 def test_update_status_includes_every_optional_field_when_given() -> None:
@@ -114,7 +114,7 @@ def test_update_status_includes_every_optional_field_when_given() -> None:
 def test_approve_document_resyncs_the_case() -> None:
     with (
         patch("app.document_repository.supabase_client") as mock_client,
-        patch("app.document_repository.case_service") as mock_case_service,
+        patch("app.case_service.sync_submission_finalized") as mock_case_service,
     ):
         mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
             _execute_result([_row(status="approved")])
@@ -124,13 +124,13 @@ def test_approve_document_resyncs_the_case() -> None:
 
     mock_client.table.return_value.update.assert_called_once_with({"status": "approved"})
     mock_client.table.return_value.update.return_value.eq.assert_called_once_with("id", "doc-1")
-    mock_case_service.sync_submission_finalized.assert_called_once_with("case-1")
+    mock_case_service.assert_called_once_with("case-1")
 
 
 def test_approve_document_skips_resync_when_nothing_was_updated() -> None:
     with (
         patch("app.document_repository.supabase_client") as mock_client,
-        patch("app.document_repository.case_service") as mock_case_service,
+        patch("app.case_service.sync_submission_finalized") as mock_case_service,
     ):
         mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
             _execute_result([])
@@ -138,7 +138,7 @@ def test_approve_document_skips_resync_when_nothing_was_updated() -> None:
 
         document_repository.approve_document("missing")
 
-    mock_case_service.sync_submission_finalized.assert_not_called()
+    mock_case_service.assert_not_called()
 
 
 def test_reject_document_updates_status_only() -> None:
@@ -159,10 +159,14 @@ def test_get_document_returns_none_when_missing() -> None:
 
 
 def test_get_document_returns_record_when_found() -> None:
-    with patch("app.document_repository.supabase_client") as mock_client:
+    with (
+        patch("app.document_repository.supabase_client") as mock_client,
+        patch("app.document_repository.extracted_fields_repository") as mock_fields_repo,
+    ):
         mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = (
             _execute_result([_row(status="analyzed")])
         )
+        mock_fields_repo.get_extracted_fields_dicts_for_documents.return_value = {}
 
         result = document_repository.get_document("doc-1")
 
@@ -174,10 +178,33 @@ def test_get_document_returns_record_when_found() -> None:
         )
 
 
+def test_get_document_populates_extracted_fields_from_the_fields_table() -> None:
+    with (
+        patch("app.document_repository.supabase_client") as mock_client,
+        patch("app.document_repository.extracted_fields_repository") as mock_fields_repo,
+    ):
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = (
+            _execute_result([_row(status="analyzed", extracted_fields={"stale": "legacy"})])
+        )
+        mock_fields_repo.get_extracted_fields_dicts_for_documents.return_value = {
+            "doc-1": {"individual_name": "Jane Tan"}
+        }
+
+        result = document_repository.get_document("doc-1")
+
+        assert result is not None
+        # Sourced from the extracted_fields table, not the raw column above.
+        assert result.extracted_fields == {"individual_name": "Jane Tan"}
+
+
 def test_get_documents_in_status_queries_with_enum_values() -> None:
-    with patch("app.document_repository.supabase_client") as mock_client:
+    with (
+        patch("app.document_repository.supabase_client") as mock_client,
+        patch("app.document_repository.extracted_fields_repository") as mock_fields_repo,
+    ):
         mock_in = mock_client.table.return_value.select.return_value.in_
         mock_in.return_value.execute.return_value = _execute_result([_row(status="queued")])
+        mock_fields_repo.get_extracted_fields_dicts_for_documents.return_value = {}
 
         results = document_repository.get_documents_in_status(
             [DocumentStatus.QUEUED, DocumentStatus.PROCESSING]
@@ -189,10 +216,14 @@ def test_get_documents_in_status_queries_with_enum_values() -> None:
 
 
 def test_list_documents_with_no_filters_does_not_call_eq() -> None:
-    with patch("app.document_repository.supabase_client") as mock_client:
+    with (
+        patch("app.document_repository.supabase_client") as mock_client,
+        patch("app.document_repository.extracted_fields_repository") as mock_fields_repo,
+    ):
         mock_client.table.return_value.select.return_value.execute.return_value = (
             _execute_result([_row()])
         )
+        mock_fields_repo.get_extracted_fields_dicts_for_documents.return_value = {}
 
         results = document_repository.list_documents()
 
@@ -200,15 +231,12 @@ def test_list_documents_with_no_filters_does_not_call_eq() -> None:
         mock_client.table.return_value.select.return_value.eq.assert_not_called()
 
 
-def test_update_extracted_fields_sends_fields_and_extraction_confidence() -> None:
+def test_update_extracted_fields_sends_extraction_confidence_only() -> None:
     with patch("app.document_repository.supabase_client") as mock_client:
-        document_repository.update_extracted_fields(
-            "doc-1", {"individual_name": "Jane Tan"}, 0.9
-        )
+        document_repository.update_extracted_fields("doc-1", 0.9)
 
         update_payload = mock_client.table.return_value.update.call_args[0][0]
         assert update_payload == {
-            "extracted_fields": {"individual_name": "Jane Tan"},
             "extraction_confidence": 0.9,
         }
         mock_client.table.return_value.update.return_value.eq.assert_called_once_with(
@@ -219,12 +247,11 @@ def test_update_extracted_fields_sends_fields_and_extraction_confidence() -> Non
 def test_update_extracted_fields_includes_fulfilled_requirements_when_given() -> None:
     with patch("app.document_repository.supabase_client") as mock_client:
         document_repository.update_extracted_fields(
-            "doc-1", {"individual_name": "Jane Tan"}, 0.9, ["id_document", "proof_of_address"]
+            "doc-1", 0.9, ["id_document", "proof_of_address"]
         )
 
         update_payload = mock_client.table.return_value.update.call_args[0][0]
         assert update_payload == {
-            "extracted_fields": {"individual_name": "Jane Tan"},
             "extraction_confidence": 0.9,
             "fulfilled_requirements": ["id_document", "proof_of_address"],
         }
@@ -235,15 +262,15 @@ def test_record_classification_sends_fields_with_defaults() -> None:
         document_repository.record_classification(
             "doc-1",
             document_type="payslip",
-            confidence=0.9,
-            classification_outcome="accepted",
+            classification_confidence=0.9,
+            routing_status="accepted",
         )
 
         update_payload = mock_client.table.return_value.update.call_args[0][0]
         assert update_payload == {
             "document_type": "payslip",
-            "confidence": 0.9,
-            "classification_outcome": "accepted",
+            "classification_confidence": 0.9,
+            "routing_status": "accepted",
             "evidence": [],
             "fulfilled_requirements": [],
         }
@@ -257,8 +284,8 @@ def test_record_classification_includes_evidence_and_fulfilled_requirements() ->
         document_repository.record_classification(
             "doc-1",
             document_type="unrecognised",
-            confidence=0.2,
-            classification_outcome="manual_review",
+            classification_confidence=0.2,
+            routing_status="manual_review",
             evidence=["reads like a shipping manifest"],
             fulfilled_requirements=["id_document"],
         )
@@ -266,25 +293,11 @@ def test_record_classification_includes_evidence_and_fulfilled_requirements() ->
         update_payload = mock_client.table.return_value.update.call_args[0][0]
         assert update_payload == {
             "document_type": "unrecognised",
-            "confidence": 0.2,
-            "classification_outcome": "manual_review",
+            "classification_confidence": 0.2,
+            "routing_status": "manual_review",
             "evidence": ["reads like a shipping manifest"],
             "fulfilled_requirements": ["id_document"],
         }
-
-
-def test_record_classification_includes_reasoning_when_given() -> None:
-    with patch("app.document_repository.supabase_client") as mock_client:
-        document_repository.record_classification(
-            "doc-1",
-            document_type="payslip",
-            confidence=0.9,
-            classification_outcome="accepted",
-            reasoning="Matches payslip layout and net-pay wording.",
-        )
-
-        update_payload = mock_client.table.return_value.update.call_args[0][0]
-        assert update_payload["classification_reasoning"] == "Matches payslip layout and net-pay wording."
 
 
 def test_record_escalation_sends_reason() -> None:
@@ -426,7 +439,7 @@ def test_remove_documents_batches_fields_storage_and_row_deletes() -> None:
         patch("app.document_repository.extracted_fields_repository") as mock_fields,
         patch("app.document_repository.storage_service") as mock_storage,
         patch("app.document_repository.service_supabase_client") as mock_service,
-        patch("app.document_repository.case_service") as mock_case_service,
+        patch("app.case_service.sync_submission_finalized") as mock_case_service,
     ):
         document_repository.remove_documents(documents)
 
@@ -439,7 +452,7 @@ def test_remove_documents_batches_fields_storage_and_row_deletes() -> None:
     )
     # Batch removal skips the per-document case resync (see remove_documents'
     # docstring) — callers doing this in bulk delete the case right after.
-    mock_case_service.sync_submission_finalized.assert_not_called()
+    mock_case_service.assert_not_called()
 
 
 def test_remove_documents_skips_storage_call_when_no_document_has_a_storage_path() -> None:

@@ -4,8 +4,8 @@ Typed graph state (Phase 1 — skeleton).
 Deliberately small and PII-free (see LANGGRAPH_MIGRATION_PLAN.md section 3
 and 5): only ids, a storage reference, capped tool results and summaries.
 Never the document's raw text or its extracted fields — those stay in
-Postgres (extracted_fields table / documents.extracted_fields) or, for
-raw_text, in the run-scoped cache in `text_cache.py`. This is what actually
+Postgres (the extracted_fields table) or, for raw_text, in the run-scoped
+cache in `text_cache.py`. This is what actually
 gets checkpointed once persistence lands (phase 4), so keeping it small and
 free of PII is what keeps a Supabase-free-tier checkpoint table small and
 safe to log.

@@ -71,7 +71,9 @@ async def rerun_extraction(document_id: str) -> None:
 
 
 async def _rerun_extraction(document_id: str) -> None:
-    document = await asyncio.to_thread(document_repository.get_document, document_id)
+    document = await asyncio.to_thread(
+        document_repository.get_document, document_id, include_fields=False
+    )
     if document is None:
         logger.error("Document %s not found; cannot rerun extraction", document_id)
         return

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from . import document_repository
 from .config import settings
-from .models import IN_FLIGHT_STATUSES, DocumentRecord, StuckDocument
+from .models import IN_FLIGHT_STATUSES, DocumentRecord, DocumentStatus, StuckDocument
 
 _STUCK_ELIGIBLE_STATUSES = IN_FLIGHT_STATUSES
 
@@ -24,10 +24,30 @@ def is_stuck(doc: DocumentRecord) -> bool:
     return elapsed > settings.STUCK_THRESHOLD_SECONDS
 
 
+def is_stuck_processing_for_retry(doc: DocumentRecord) -> bool:
+    """
+    True if `doc` has been in PROCESSING longer than
+    settings.STUCK_PROCESSING_RETRY_THRESHOLD_SECONDS. Narrower than
+    is_stuck (PROCESSING only, not every in-flight status) and a much
+    longer threshold — this gates whether routers/documents.py's
+    retry_document can retry a document without waiting for it to reach
+    FAILED, distinct from get_stuck_documents' early-warning dashboard.
+    """
+    if doc.status != DocumentStatus.PROCESSING:
+        return False
+    reference_time = doc.processing_started_at or doc.queued_at or doc.uploaded_at
+    elapsed = (datetime.now(timezone.utc) - reference_time).total_seconds()
+    return elapsed > settings.STUCK_PROCESSING_RETRY_THRESHOLD_SECONDS
+
+
 def get_stuck_documents() -> list[StuckDocument]:
     """AC4: any stuck document is queryable here — so no accepted document
     can become invisible to monitoring."""
-    candidates = document_repository.get_documents_in_status(list(_STUCK_ELIGIBLE_STATUSES))
+    # Narrowed to StuckDocument below, which has no extracted_fields of its
+    # own — skip the extra query.
+    candidates = document_repository.get_documents_in_status(
+        list(_STUCK_ELIGIBLE_STATUSES), include_fields=False
+    )
 
     now = datetime.now(timezone.utc)
     stuck: list[StuckDocument] = []

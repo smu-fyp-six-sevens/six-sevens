@@ -20,13 +20,13 @@ from .models import (
     CaseDocumentsStatus,
     CaseRecord,
     CaseSummary,
-    ClassificationOutcome,
     DocumentRecord,
     DocumentStatus,
     DocumentType,
     IdDocumentCoverage,
     IDENTITY_DOCUMENT_REQUIREMENT,
     ProofOfAddressCoverage,
+    RoutingStatus,
 )
 from .monitoring import is_stuck
 
@@ -65,7 +65,7 @@ def compute_requirement_coverage(documents: list[DocumentRecord]) -> tuple[list[
     """
     fulfilled: set[str] = set()
     for doc in documents:
-        if doc.classification_outcome == ClassificationOutcome.ACCEPTED:
+        if doc.routing_status == RoutingStatus.ACCEPTED:
             fulfilled.update(doc.fulfilled_requirements)
 
     # Overrides whatever individual documents self-reported for this one
@@ -234,8 +234,9 @@ def build_case_snapshot(case_id: str) -> Optional[dict]:
         return None
     summary = build_summary(case, documents)
     # Before enrichment: that rewrites extracted_fields in place into
-    # {"value", "confidence"} wrappers, while case_match reads the plain
-    # values documents.extracted_fields stores.
+    # {"value", "confidence"} wrappers, while case_match (and mapper.py, via
+    # build_summary above) reads the plain values document_repository
+    # already populated from the extracted_fields table.
     case_match = check_case_match(case, documents)
     enriched = _enrich_with_extracted_fields(documents)
     return {
