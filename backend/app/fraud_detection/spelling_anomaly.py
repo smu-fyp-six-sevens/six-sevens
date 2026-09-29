@@ -33,8 +33,6 @@ _LEADING_WORD_RE = re.compile(r"^[a-z]+")
 
 
 class SpellingAnomaly(BaseModel):
-    page: int
-    section: int
     word: str
     surrounding_text: str
     suggested_correction: str | None = None
@@ -54,7 +52,8 @@ class _Candidate(BaseModel):
     legitimate rare word (a name, an address, unusual-but-real corporate
     terminology) that just isn't in either dictionary. See
     _looks_like_probable_proper_noun for how these two get told apart
-    without an LLM.
+    without an LLM. page/section are internal bookkeeping only (dedup key
+    while scanning) — not carried into the public SpellingAnomaly result.
     """
 
     page: int
@@ -247,8 +246,6 @@ async def check_spelling_anomalies(
         document_id=document_id,
         anomalies=[
             SpellingAnomaly(
-                page=c.page,
-                section=c.section,
                 word=c.word,
                 surrounding_text=c.surrounding_text,
                 suggested_correction=c.suggested_correction,

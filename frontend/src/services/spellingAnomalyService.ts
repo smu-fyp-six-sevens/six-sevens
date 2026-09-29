@@ -3,8 +3,6 @@ import { authFetch } from '../lib/api';
 // Mirrors SpellingAnomaly / SpellingAnomalyResult in
 // backend/app/fraud_detection/spelling_anomaly.py
 export interface SpellingAnomaly {
-  page: number;
-  section: number;
   word: string;
   surrounding_text: string;
   suggested_correction: string | null;
