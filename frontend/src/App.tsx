@@ -48,12 +48,14 @@ function CaseQueueRoute({
   isLoading,
   error,
   onRetry,
+  onCaseUpdated,
   onCaseDeleted,
 }: {
   cases: CaseRecord[];
   isLoading: boolean;
   error: string | null;
   onRetry: () => void;
+  onCaseUpdated: (caseId: string, companyName: string) => void;
   onCaseDeleted: (caseId: string) => void;
 }) {
   const navigate = useNavigate();
@@ -69,6 +71,7 @@ function CaseQueueRoute({
       }
       onOpenTestAnomaly={() => navigate('/test-anomalies')}
       onCreateCase={() => navigate('/create-case')}
+      onCaseUpdated={onCaseUpdated}
       onCaseDeleted={onCaseDeleted}
     />
   );
@@ -310,6 +313,13 @@ export default function App() {
                 isLoading={isLoading}
                 error={error}
                 onRetry={() => void loadCases()}
+                onCaseUpdated={(caseId, companyName) =>
+                  setCases((current) =>
+                    current.map((item) =>
+                      item.id === caseId ? { ...item, applicant: companyName } : item
+                    )
+                  )
+                }
                 onCaseDeleted={(caseId) =>
                   setCases((current) => current.filter((item) => item.id !== caseId))
                 }

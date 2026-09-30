@@ -1,495 +1,924 @@
 from __future__ import annotations
 
 import random
-from unittest.mock import patch
+from datetime import date
 
 from app.fraud_detection.font_consistency import ExtractedField
 from app.fraud_detection.numerical_validation import (
     BENFORD_MIN_SAMPLE,
-    NumericalValue,
+    REFERENCE_DATA,
     _benford,
-    _check_balance_sheet_identity,
-    _check_holdings,
-    _check_running_balance,
-    _check_share_allocation,
-    _extract_dates,
-    _parse_values,
+    _mrz_check_digit,
+    _nric_expected_letter,
     check_numerical_validation,
 )
 
 
-def _pages(*texts: str) -> list[dict]:
-    return [{"page_number": 1, "elements": [{"text": t} for t in texts]}]
+def _field(name: str, value, confidence: float = 0.95) -> ExtractedField:
+    return ExtractedField(field_name=name, field_type="string", field_value=value, confidence=confidence)
 
 
-def _values(numbers: list[float], kind: str = "currency") -> list[NumericalValue]:
-    return [
-        NumericalValue(raw=str(n), value=n, kind=kind, page=1, section=0, location="x")
-        for n in numbers
-    ]
+def _run(fields: list[ExtractedField], document_type: str | None = None):
+    return check_numerical_validation("doc-1", fields, document_type)
 
 
-def _run(pages: list[dict], fields: list[ExtractedField] | None = None):
-    with patch("app.fraud_detection.numerical_validation.ingest_document") as ingest:
-        ingest.return_value = {"raw_text": "x", "pages": pages}
-        return check_numerical_validation("doc-1", b"bytes", "doc.pdf", fields)
+def _codes(result, code: str) -> list:
+    return [f for f in result.findings if f.check_code == code]
 
 
-# AC1 — format validation and classification -----------------------------
+def _valid_nric(prefix: str, digits: str) -> str:
+    return f"{prefix}{digits}{_nric_expected_letter(prefix, digits)}"
 
 
-def test_classifies_currency_percentage_date_and_quantity() -> None:
-    values = _parse_values(
-        _pages("Opening balance $12,345.67 on 01-Jun-2026", "Rate 4.5% over 12 units")
-    )
-    by_kind = {v.kind for v in values}
-    assert by_kind == {"currency", "percentage", "date", "quantity"}
-
-    currency = next(v for v in values if v.kind == "currency")
-    assert currency.value == 12345.67
-    percentage = next(v for v in values if v.kind == "percentage")
-    assert percentage.value == 4.5
+# ---------------------------------------------------------------------------
+# GEN.* / ID.NRIC_CHECKSUM — universal checks
+# ---------------------------------------------------------------------------
 
 
-def test_flags_impossible_calendar_date() -> None:
-    result = _run(_pages("Statement dated 2026-02-30"))
-    assert len(result.findings) == 1
-    assert result.findings[0].finding_type == "format"
-    assert "not a valid calendar date" in result.findings[0].summary
-
-
-def test_accepts_both_day_first_and_month_first_dates() -> None:
-    # "12/25/2026" is nonsense read day-first but a normal US date, and
-    # nothing in a document says which convention it used — so both
-    # readings are accepted and only a date that works under neither
-    # (e.g. 32/25) is reported.
-    for text in ("Dated 25/12/2026", "Dated 12/25/2026"):
-        assert _extract_dates(text)[0] == [(text.split()[-1], True)]
-
-    assert _extract_dates("Dated 32/25/2026")[0] == [("32/25/2026", False)]
-
-
-def test_does_not_flag_unfamiliar_digit_grouping() -> None:
-    # A European decimal comma ("2,5") and East-Asian 4-digit grouping
-    # ("1,2345") are well-formed, not malformed — an earlier version of
-    # this check flagged both.
-    result = _run(_pages("Paid 2,5 EUR and 1,2345 JPY"))
-    assert [f for f in result.findings if f.finding_type == "format"] == []
-
-
-def test_parses_accounting_negatives_and_currency_words() -> None:
-    values = _parse_values(_pages("Debit (1,200.00) and SGD 3,400.50 credit"))
-    amounts = sorted(v.value for v in values if v.kind == "currency")
-    assert amounts == [-1200.00, 3400.50]
-
-
-# AC2/AC3/AC4 — arithmetic reconciliation --------------------------------
-
-
-def test_flags_running_balance_that_does_not_reconcile() -> None:
-    # The check that catches an edited transaction: change one amount and
-    # every balance below it stops adding up.
-    transactions = [
-        {"description": "Opening", "amount": 0, "balance": 10000.00},
-        {"description": "Salary", "amount": 5000.00, "balance": 15000.00},
-        {"description": "Rent", "amount": -2000.00, "balance": 14500.00},
-    ]
-    findings = _check_running_balance({"transactions": transactions})
+def test_nric_checksum_flags_invalid_check_letter() -> None:
+    valid = _valid_nric("S", "1234567")
+    invalid = valid[:-1] + ("A" if valid[-1] != "A" else "B")
+    result = _run([_field("nric_number", invalid, confidence=0.95)])
+    findings = _codes(result, "ID.NRIC_CHECKSUM")
     assert len(findings) == 1
-    assert findings[0].severity == "high"
-    # AC4: both the stated and the calculated value are recorded.
-    assert findings[0].stated == "14,500.00"
-    assert findings[0].expected == "13,000.00"
-    assert findings[0].field == "transactions[2].balance"
+    assert findings[0].severity == "impossible"
+    assert findings[0].expected == valid
 
 
-def test_running_balance_that_reconciles_is_clean() -> None:
+def test_nric_checksum_accepts_valid_checksum_for_every_prefix() -> None:
+    for prefix, digits in [("S", "1234567"), ("T", "7654321"), ("F", "9876543"),
+                            ("G", "1112223"), ("M", "5556667")]:
+        valid = _valid_nric(prefix, digits)
+        result = _run([_field("nric_number", valid)])
+        assert _codes(result, "ID.NRIC_CHECKSUM") == [], f"false positive for {valid}"
+
+
+def test_nric_checksum_scans_any_field_containing_an_nric() -> None:
+    # Runs on every document type, against any field whose value contains
+    # an NRIC-shaped token — not just a field literally named nric_number.
+    valid = _valid_nric("S", "1234567")
+    invalid = valid[:-1] + ("A" if valid[-1] != "A" else "B")
+    result = _run(
+        [_field("individual_name", f"Jane Tan ({invalid})")],
+        document_type="certificate_of_incumbency",
+    )
+    assert len(_codes(result, "ID.NRIC_CHECKSUM")) == 1
+
+
+def test_uen_format_accepts_real_shape_and_rejects_garbage() -> None:
+    result = _run([_field("uen", "202312345K")])
+    assert _codes(result, "ID.UEN_FORMAT") == []
+
+    result = _run([_field("uen", "NOTAUEN")])
+    assert len(_codes(result, "ID.UEN_FORMAT")) == 1
+
+
+def test_uen_format_rejects_implausible_year_prefix() -> None:
+    result = _run([_field("uen", "195012345K")])
+    assert len(_codes(result, "ID.UEN_FORMAT")) == 1
+
+
+def test_amount_parse_marks_unparseable_amount_as_needs_review() -> None:
+    result = _run([_field("net_pay", "not a number")])
+    findings = _codes(result, "GEN.AMOUNT_PARSE")
+    assert len(findings) == 1
+    assert findings[0].needs_review is True
+
+
+def test_amount_parse_does_not_flag_a_plain_percentage_rate() -> None:
+    result = _run([_field("interest_rate", "6.50% per annum")])
+    assert _codes(result, "GEN.AMOUNT_PARSE") == []
+
+
+def test_amount_parse_does_not_flag_a_reference_rate_formula() -> None:
+    # doc_gen_scripts' overdraft template renders this shape; the effective
+    # rate is the "(currently N%)" clause.
+    result = _run([_field("interest_rate", "Bank's Prime Rate + 2.50% (currently 6.72% p.a.)")])
+    assert _codes(result, "GEN.AMOUNT_PARSE") == []
+
+
+# ---------------------------------------------------------------------------
+# Skipping — the AC1/AC7 contract
+# ---------------------------------------------------------------------------
+
+
+def test_missing_fields_are_skipped_with_a_reason_not_silently_dropped() -> None:
+    result = _run([_field("company_name", "Acme")], document_type="bank_statement")
+    codes = {s.check_code for s in result.skipped_checks}
+    assert "BS.RUNNING_BALANCE" in codes
+    running_balance_skip = next(s for s in result.skipped_checks if s.check_code == "BS.RUNNING_BALANCE")
+    assert "transactions" in running_balance_skip.reason
+
+
+def test_unable_to_assess_when_nothing_at_all_extracted() -> None:
+    result = _run([])
+    assert result.unable_to_assess is True
+
+
+def test_reference_data_checks_skip_when_no_table_configured() -> None:
+    assert REFERENCE_DATA["bank_identifiers"] == {}
+    result = _run([_field("bank_name", "OCBC")], document_type="bank_statement")
+    skip = next(s for s in result.skipped_checks if s.check_code == "BS.BANK_IDENTIFIERS")
+    assert "not configured" in skip.reason
+
+
+# ---------------------------------------------------------------------------
+# needs_review downgrade
+# ---------------------------------------------------------------------------
+
+
+def test_low_confidence_field_downgrades_its_finding_to_needs_review() -> None:
+    valid = _valid_nric("S", "1234567")
+    invalid = valid[:-1] + ("A" if valid[-1] != "A" else "B")
+    result = _run([_field("nric_number", invalid, confidence=0.4)])
+    findings = _codes(result, "ID.NRIC_CHECKSUM")
+    assert len(findings) == 1
+    assert findings[0].needs_review is True
+
+
+def test_high_confidence_field_is_not_downgraded() -> None:
+    valid = _valid_nric("S", "1234567")
+    invalid = valid[:-1] + ("A" if valid[-1] != "A" else "B")
+    result = _run([_field("nric_number", invalid, confidence=0.99)])
+    findings = _codes(result, "ID.NRIC_CHECKSUM")
+    assert len(findings) == 1
+    assert findings[0].needs_review is False
+
+
+# ---------------------------------------------------------------------------
+# Bank statement — real-data-shaped behaviour
+# ---------------------------------------------------------------------------
+
+
+def test_running_balance_flags_a_tampered_transaction() -> None:
     transactions = [
         {"amount": 0, "balance": 10000.00},
         {"amount": 5000.00, "balance": 15000.00},
+        {"amount": -2000.00, "balance": 14500.00},
+    ]
+    result = _run([_field("transactions", transactions)], document_type="bank_statement")
+    findings = _codes(result, "BS.RUNNING_BALANCE")
+    assert len(findings) == 1
+    assert findings[0].severity == "impossible"
+
+
+def test_running_balance_reconciles_a_newest_first_statement() -> None:
+    newest_first = [
+        {"amount": -35.00, "balance": 22449.86},
+        {"amount": -304.06, "balance": 22484.86},
+        {"amount": -0.50, "balance": 22788.92},
+    ]
+    result = _run([_field("transactions", newest_first)], document_type="bank_statement")
+    assert _codes(result, "BS.RUNNING_BALANCE") == []
+
+
+def test_running_balance_reports_sign_inversion_as_direction() -> None:
+    transactions = [
+        {"amount": 0, "balance": 15153.28},
+        {"description": "ONLINE TRANSFER", "amount": -405.92, "balance": 15559.20},
+    ]
+    result = _run([_field("transactions", transactions)], document_type="bank_statement")
+    findings = _codes(result, "BS.RUNNING_BALANCE")
+    assert len(findings) == 1
+    assert findings[0].severity == "inconsistent"
+    assert "direction" in (findings[0].severity_note or "").lower()
+
+
+def test_running_balance_reports_systemic_break_once() -> None:
+    transactions = [{"amount": 1.0, "balance": float(i * 997)} for i in range(20)]
+    result = _run([_field("transactions", transactions)], document_type="bank_statement")
+    findings = _codes(result, "BS.RUNNING_BALANCE")
+    assert len(findings) == 1
+    assert findings[0].severity == "implausible"
+
+
+def test_open_close_reconciles() -> None:
+    transactions = [
+        {"amount": 5000.00, "balance": 15000.00},
         {"amount": -2000.00, "balance": 13000.00},
     ]
-    assert _check_running_balance({"transactions": transactions}) == []
+    result = _run([_field("transactions", transactions)], document_type="bank_statement")
+    assert _codes(result, "BS.OPEN_CLOSE") == []
 
 
-def test_running_balance_tolerates_a_rounding_cent() -> None:
+def test_open_close_flags_a_break() -> None:
     transactions = [
-        {"amount": 0, "balance": 100.00},
-        {"amount": 0.10, "balance": 100.11},
+        {"amount": 5000.00, "balance": 15000.00},
+        {"amount": -2000.00, "balance": 20000.00},
     ]
-    assert _check_running_balance({"transactions": transactions}) == []
+    result = _run([_field("transactions", transactions)], document_type="bank_statement")
+    assert len(_codes(result, "BS.OPEN_CLOSE")) == 1
 
 
-def test_running_balance_skips_rows_with_no_balance_shown() -> None:
-    # EXTRA_FIELD_GUIDANCE allows balance to be null when the statement
-    # doesn't print a running total on that line.
+def test_open_close_uses_stated_header_balances_when_present() -> None:
+    # transactions[0].balance - transactions[0].amount = 10,000, matching
+    # the stated opening_balance — but the stated ledger_balance (closing)
+    # disagrees with the last transaction's own running balance by more
+    # than the transaction arithmetic alone would explain.
     transactions = [
-        {"amount": 0, "balance": 500.00},
-        {"amount": 100.00, "balance": None},
-        {"amount": 50.00, "balance": 650.00},
+        {"amount": 5000.00, "balance": 15000.00},
+        {"amount": -2000.00, "balance": 13000.00},
     ]
-    assert _check_running_balance({"transactions": transactions}) == []
-
-
-def test_running_balance_carries_forward_through_a_line_with_no_balance() -> None:
-    # Regression: the unprinted line's own amount was being dropped, so the
-    # next line was compared against a stale total and wrongly flagged.
-    transactions = [
-        {"amount": 0, "balance": 500.00},
-        {"amount": 100.00, "balance": None},
-        {"amount": 50.00, "balance": 650.00},
-    ]
-    assert _check_running_balance({"transactions": transactions}) == []
-
-
-def test_one_edited_transaction_produces_one_finding_not_a_cascade() -> None:
-    # After reporting a break, the check resyncs to the stated figure —
-    # otherwise a single tampered amount would flag every line beneath it
-    # and bury the actual point of failure.
-    transactions = [
-        {"amount": 0, "balance": 1000.00},
-        {"amount": 100.00, "balance": 9999.00},
-        {"amount": 50.00, "balance": 10049.00},
-        {"amount": 25.00, "balance": 10074.00},
-    ]
-    findings = _check_running_balance({"transactions": transactions})
-    assert len(findings) == 1
-    assert findings[0].field == "transactions[1].balance"
-
-
-def test_running_balance_drops_the_thread_on_an_unreadable_amount() -> None:
-    transactions = [
-        {"amount": 0, "balance": 500.00},
-        {"amount": "n/a", "balance": None},
-        {"amount": 50.00, "balance": 9999.00},
-    ]
-    # The middle row leaves no usable running total, so the row after it
-    # has nothing trustworthy to be compared against.
-    assert _check_running_balance({"transactions": transactions}) == []
-
-
-def test_arithmetic_ignores_non_list_and_non_dict_field_shapes() -> None:
-    assert _check_running_balance({"transactions": "not a list"}) == []
-    assert _check_holdings({"holdings": ["not a row", 42]}) == []
-    assert _check_share_allocation({"issued_shares": 10, "subscribers": []}) == []
-
-
-def test_arithmetic_ignores_unparseable_and_boolean_values() -> None:
-    assert _check_balance_sheet_identity(
-        {"total_assets": True, "total_liabilities": 1, "net_asset_value": 5}
-    ) == []
-    assert _check_balance_sheet_identity(
-        {"total_assets": "not a number", "total_liabilities": 1, "net_asset_value": 5}
-    ) == []
-
-
-def test_arithmetic_reads_a_double_encoded_json_field() -> None:
-    # Some rows store a further JSON-encoded string on top of the column's
-    # own JSON — the quirk spelling_anomaly documents.
-    fields = [
-        ExtractedField(
-            field_name="transactions",
-            field_type="array",
-            field_value='[{"amount": 0, "balance": 100.0}, {"amount": 10.0, "balance": 999.0}]',
-            confidence=0.9,
-        )
-    ]
-    result = _run(_pages("Statement"), fields)
-    assert [f.finding_type for f in result.findings] == ["arithmetic"]
-
-
-def test_accounting_negative_in_a_string_field_is_read_as_negative() -> None:
-    transactions = [
-        {"amount": 0, "balance": "1,000.00"},
-        {"amount": "(250.00)", "balance": "750.00"},
-    ]
-    assert _check_running_balance({"transactions": transactions}) == []
-
-
-def test_flags_holding_whose_market_value_is_not_quantity_times_price() -> None:
-    holdings = [
-        {"name": "Acme", "quantity": 100, "closing_price": 12.50, "market_value": 1250.00},
-        {"name": "Beta", "quantity": 200, "closing_price": 3.00, "market_value": 900.00},
-    ]
-    findings = _check_holdings({"holdings": holdings})
-    assert len(findings) == 1
-    assert findings[0].stated == "900.00"
-    assert findings[0].expected == "600.00"
-
-
-def test_flags_net_asset_value_breaking_the_accounting_identity() -> None:
-    findings = _check_balance_sheet_identity(
-        {"total_assets": 500000, "total_liabilities": 200000, "net_asset_value": 310000}
+    result = _run(
+        [_field("transactions", transactions), _field("opening_balance", "10000.00"),
+         _field("ledger_balance", "99999.00")],
+        document_type="bank_statement",
     )
-    assert len(findings) == 1
-    assert findings[0].stated == "310,000.00"
-    assert findings[0].expected == "300,000.00"
+    assert len(_codes(result, "BS.STATED_CLOSING")) == 1
+    assert _codes(result, "BS.STATED_OPENING") == []
 
 
-def test_balance_sheet_identity_needs_all_three_figures() -> None:
-    assert _check_balance_sheet_identity({"total_assets": 500000}) == []
-
-
-def test_flags_subscriber_shares_not_summing_to_issued_shares() -> None:
-    findings = _check_share_allocation(
-        {"issued_shares": 500000, "subscribers": [{"shares": 300000}, {"shares": 150000}]}
-    )
-    assert len(findings) == 1
-    assert findings[0].stated == "500,000"
-    assert findings[0].expected == "450,000"
-
-
-def test_share_allocation_skipped_when_any_holding_is_unknown() -> None:
-    # A partial list would always "fail" for an entirely innocent reason.
-    assert _check_share_allocation(
-        {"issued_shares": 500000, "subscribers": [{"shares": 300000}, {"shares": None}]}
-    ) == []
-
-
-def test_arithmetic_reads_values_given_as_formatted_strings() -> None:
-    # Extracted field values aren't always JSON numbers.
+def test_open_close_flags_stated_opening_mismatch_with_first_transaction() -> None:
     transactions = [
-        {"amount": "0", "balance": "$1,000.00"},
-        {"amount": "$250.00", "balance": "$1,500.00"},
+        {"amount": 5000.00, "balance": 15000.00},
+        {"amount": -2000.00, "balance": 13000.00},
     ]
-    findings = _check_running_balance({"transactions": transactions})
+    result = _run(
+        [_field("transactions", transactions), _field("opening_balance", "50000.00")],
+        document_type="bank_statement",
+    )
+    findings = _codes(result, "BS.STATED_OPENING")
     assert len(findings) == 1
-    assert findings[0].expected == "1,250.00"
+    assert findings[0].expected == "10,000.00"
 
 
-def test_arithmetic_findings_reach_the_result_via_extracted_fields() -> None:
-    fields = [
-        ExtractedField(
-            field_name="transactions",
-            field_type="array",
-            field_value=[
-                {"amount": 0, "balance": 100.00},
-                {"amount": 10.00, "balance": 999.00},
-            ],
-            confidence=0.9,
-        )
+def test_totals_checks_stated_credits_debits_and_count() -> None:
+    transactions = [{"amount": 100.0, "balance": 100.0}, {"amount": -30.0, "balance": 70.0}]
+    result = _run(
+        [_field("transactions", transactions), _field("total_credits", "50")],
+        document_type="bank_statement",
+    )
+    assert len(_codes(result, "BS.TOTALS")) == 1
+
+
+def test_overdraft_limit_flags_balance_below_limit() -> None:
+    transactions = [{"amount": -100.0, "balance": -600.0}]
+    result = _run(
+        [_field("transactions", transactions), _field("overdraft_limit", "500")],
+        document_type="bank_statement",
+    )
+    assert len(_codes(result, "BS.OVERDRAFT_LIMIT")) == 1
+
+
+def test_available_vs_ledger_reconciles() -> None:
+    result = _run(
+        [_field("ledger_balance", "1000"), _field("available_balance", "800"), _field("holds", "200")],
+        document_type="bank_statement",
+    )
+    assert _codes(result, "BS.AVAILABLE_VS_LEDGER") == []
+
+
+def test_available_vs_ledger_flags_mismatch() -> None:
+    result = _run(
+        [_field("ledger_balance", "1000"), _field("available_balance", "900"), _field("holds", "200")],
+        document_type="bank_statement",
+    )
+    assert len(_codes(result, "BS.AVAILABLE_VS_LEDGER")) == 1
+
+
+def test_narrative_amount_flags_description_amount_mismatch() -> None:
+    transactions = [{"description": "CARD SGD 500", "amount": -100.0, "balance": 0.0}]
+    result = _run([_field("transactions", transactions)], document_type="bank_statement")
+    assert len(_codes(result, "BS.NARRATIVE_AMOUNT")) == 1
+
+
+def test_fee_schedule_flags_widely_varying_recurring_fee() -> None:
+    transactions = [
+        {"description": "MONTHLY SERVICE CHARGE", "amount": -5.0, "balance": 0.0},
+        {"description": "MONTHLY SERVICE CHARGE", "amount": -5.0, "balance": 0.0},
+        {"description": "MONTHLY SERVICE CHARGE", "amount": -50.0, "balance": 0.0},
     ]
-    result = _run(_pages("Statement"), fields)
-    assert [f.finding_type for f in result.findings] == ["arithmetic"]
+    result = _run([_field("transactions", transactions)], document_type="bank_statement")
+    assert len(_codes(result, "BS.FEE_SCHEDULE")) == 1
 
 
-# AC5 — Benford's Law ----------------------------------------------------
+def test_card_diversity_flags_one_card_per_transaction() -> None:
+    transactions = [
+        {"description": f"CARD 1234-XXXX-XXXX-{i:04d}", "amount": -1.0, "balance": 0.0}
+        for i in range(6)
+    ]
+    result = _run([_field("transactions", transactions)], document_type="bank_statement")
+    assert len(_codes(result, "BS.CARD_DIVERSITY")) == 1
 
 
-def test_benford_reports_all_nine_digits_with_counts_and_both_distributions() -> None:
-    random.seed(7)
-    natural = [10 ** random.uniform(0, 5) for _ in range(400)]
-    analysis, findings = _benford(_values(natural))
-
-    assert analysis.unable_to_assess is False
-    assert [row.digit for row in analysis.digits] == list(range(1, 10))
-    assert sum(row.count for row in analysis.digits) == analysis.sample_size
-    # Benford's own expected curve, independent of the sample.
-    assert round(analysis.digits[0].expected_percentage, 1) == 30.1
-    assert all(row.observed_percentage >= 0 for row in analysis.digits)
-    # Log-uniform magnitudes are the textbook conforming case.
-    assert analysis.conforms is True
-    assert findings == []
+def test_recurring_variance_flags_rent_that_moves_a_lot() -> None:
+    transactions = [
+        {"description": "RENT PAYMENT", "amount": -1000.0, "balance": 0.0},
+        {"description": "RENT PAYMENT", "amount": -1000.0, "balance": 0.0},
+        {"description": "RENT PAYMENT", "amount": -1500.0, "balance": 0.0},
+    ]
+    result = _run([_field("transactions", transactions)], document_type="bank_statement")
+    assert len(_codes(result, "BS.RECURRING_VARIANCE")) == 1
 
 
-def test_benford_does_not_flag_genuine_data_at_document_scale() -> None:
+def test_duplicates_flags_same_payee_and_amount_repeated() -> None:
+    transactions = [
+        {"description": "NETFLIX", "amount": -15.0, "balance": 0.0},
+        {"description": "NETFLIX", "amount": -15.0, "balance": 0.0},
+    ]
+    result = _run([_field("transactions", transactions)], document_type="bank_statement")
+    assert len(_codes(result, "STAT.DUPLICATES")) == 1
+
+
+def test_real_statements_from_production_reconcile() -> None:
     """
-    The test that drove the switch away from Nigrini's MAD bands. Those
-    bands assume audit-scale samples: measured against data that genuinely
-    follows Benford, median MAD is 0.032 at n=50 and 0.016 at n=200, both
-    past the 0.015 "nonconformity" line — so they flagged most legitimate
-    documents. Chi-square keeps the false-positive rate at its nominal 1%.
+    Regression pin: the exact real data that drove the ordering-direction
+    and sign-inversion fixes to BS.RUNNING_BALANCE. All three come back
+    clean or with exactly the one known genuine break.
     """
-    flagged = 0
-    trials = 60
-    for seed in range(trials):
-        random.seed(seed)
-        _, findings = _benford(_values([10 ** random.uniform(0, 6) for _ in range(150)]))
-        flagged += len(findings)
-
-    assert flagged / trials < 0.10, f"{flagged}/{trials} genuine samples flagged"
-
-
-def test_benford_records_the_statistic_it_judged_on() -> None:
-    random.seed(7)
-    analysis, _ = _benford(_values([10 ** random.uniform(0, 5) for _ in range(400)]))
-    assert analysis.chi_square is not None
-    assert analysis.chi_square_critical == 20.090
-    # MAD is still reported as a descriptive summary, just not the basis
-    # for the verdict.
-    assert analysis.mean_absolute_deviation is not None
-
-
-def test_benford_unable_to_assess_below_minimum_sample() -> None:
-    analysis, findings = _benford(_values([123.0, 456.0]))
-    assert analysis.unable_to_assess is True
-    assert str(BENFORD_MIN_SAMPLE) in analysis.unable_to_assess_reason
-    # AC5 still wants the full 1-9 table shape back.
-    assert [row.digit for row in analysis.digits] == list(range(1, 10))
-    assert findings == []
-
-
-def test_benford_flags_a_fabricated_distribution() -> None:
-    random.seed(7)
-    fabricated = [float(random.choice([5000, 6000, 7500, 8000, 9500])) for _ in range(400)]
-    analysis, findings = _benford(_values(fabricated))
-    assert analysis.conforms is False
-    assert len(findings) == 1
-    assert findings[0].finding_type == "benford"
-    # Suggestive only — deliberately not high severity, and carrying a note
-    # that it describes the distribution rather than any single figure.
-    assert findings[0].severity == "low"
-    assert findings[0].severity_note is not None
-
-
-def test_benford_ignores_structural_numbering() -> None:
-    # Clause numbers, page numbers and years are administratively assigned
-    # and have no reason to follow Benford. Running against a real
-    # FATCA/CRS form, counting them produced a "nonconforming" verdict on a
-    # perfectly genuine document.
-    analysis, findings = _benford(_values([float(n % 9 + 1) for n in range(400)], kind="quantity"))
-    assert analysis.unable_to_assess is True
-    assert findings == []
-
-
-def test_benford_excludes_dates_and_percentages() -> None:
-    analysis, _ = _benford(
-        _values([4.5] * 200, kind="percentage") + _values([1.0] * 200, kind="date")
-    )
-    assert analysis.unable_to_assess is True
-
-
-# AC6 — page and location ------------------------------------------------
-
-
-def test_format_findings_carry_page_and_location() -> None:
-    pages = [
-        {"page_number": 3, "elements": [{"text": "Issued 2026-02-30 by the registrar"}]}
+    newest_first = [
+        {"amount": -35.00, "balance": 22449.86},
+        {"amount": -304.06, "balance": 22484.86},
+        {"amount": -0.50, "balance": 22788.92},
     ]
-    result = _run(pages)
-    finding = result.findings[0]
-    assert finding.page == 3
-    assert "registrar" in finding.location
+    assert _codes(
+        _run([_field("transactions", newest_first)], document_type="bank_statement"),
+        "BS.RUNNING_BALANCE",
+    ) == []
 
-
-def test_arithmetic_findings_may_have_no_page() -> None:
-    # AC6 says "where available" — a finding derived from extracted fields
-    # has no single place in the text to point at.
-    findings = _check_balance_sheet_identity(
-        {"total_assets": 10, "total_liabilities": 1, "net_asset_value": 5}
+    sign_inverted = [
+        {"amount": 0, "balance": 15153.28},
+        {"description": "ONLINE TRANSFER", "amount": -405.92, "balance": 15559.20},
+        {"amount": 14.61, "balance": 15573.81},
+    ]
+    findings = _codes(
+        _run([_field("transactions", sign_inverted)], document_type="bank_statement"),
+        "BS.RUNNING_BALANCE",
     )
-    assert findings[0].page is None
-    assert findings[0].location is None
+    assert len(findings) == 1
+    assert findings[0].severity == "inconsistent"
 
 
-# AC7 — unable to assess -------------------------------------------------
+# ---------------------------------------------------------------------------
+# Benford's Law
+# ---------------------------------------------------------------------------
 
 
-def test_unable_to_assess_when_no_numbers_anywhere() -> None:
-    result = _run(_pages("This document contains no figures at all."))
-    assert result.unable_to_assess is True
-    assert "No numerical values" in result.unable_to_assess_reason
+def test_benford_flags_fabricated_round_amounts() -> None:
+    random.seed(7)
+    transactions = [
+        {"amount": float(random.choice([5000, 6000, 7500, 8000, 9500])), "balance": 0.0}
+        for _ in range(150)
+    ]
+    result = _run([_field("transactions", transactions)], document_type="bank_statement")
+    assert result.benford.conforms is False
+    assert len(_codes(result, "STAT.BENFORD_1D")) >= 1
+
+
+def test_benford_does_not_flag_genuine_log_uniform_amounts() -> None:
+    random.seed(7)
+    transactions = [{"amount": 10 ** random.uniform(0, 5), "balance": 0.0} for _ in range(200)]
+    result = _run([_field("transactions", transactions)], document_type="bank_statement")
+    assert result.benford.conforms is True
+    assert _codes(result, "STAT.BENFORD_1D") == []
+
+
+def test_benford_unable_to_assess_when_no_transactions_field() -> None:
+    result = _run([_field("company_name", "Acme")], document_type="bank_statement")
     assert result.benford.unable_to_assess is True
 
 
-def test_unable_to_assess_when_text_extraction_fails() -> None:
-    with patch("app.fraud_detection.numerical_validation.ingest_document") as ingest:
-        ingest.side_effect = RuntimeError("corrupt file")
-        result = check_numerical_validation("doc-1", b"bytes", "doc.pdf")
-
-    assert result.unable_to_assess is True
-    assert "corrupt file" in result.unable_to_assess_reason
+def test_benford_not_run_for_non_bank_statement_types() -> None:
+    result = _run([_field("company_name", "Acme")], document_type="payslip")
+    assert result.benford.unable_to_assess is True
+    assert result.benford_excluding_fees is None
 
 
-def test_still_assessable_when_only_extracted_fields_have_figures() -> None:
-    # An image-only scan whose text layer is unreadable can still have a
-    # good extraction pass behind it, and those figures can still fail to
-    # reconcile — so the whole check isn't unassessable just because the
-    # text gave us nothing.
-    fields = [
-        ExtractedField(
-            field_name="transactions",
-            field_type="array",
-            field_value=[
-                {"amount": 0, "balance": 100.00},
-                {"amount": 10.00, "balance": 999.00},
-            ],
-            confidence=0.9,
+def test_benford_unit_function_reports_all_nine_digits() -> None:
+    random.seed(1)
+    amounts = [10 ** random.uniform(0, 5) for _ in range(BENFORD_MIN_SAMPLE + 10)]
+    analysis, _ = _benford(amounts, "STAT.BENFORD_1D")
+    assert [d.digit for d in analysis.digits] == list(range(1, 10))
+    assert analysis.unable_to_assess is False
+
+
+# ---------------------------------------------------------------------------
+# Source of wealth
+# ---------------------------------------------------------------------------
+
+
+def test_holding_value_flags_quantity_times_price_mismatch() -> None:
+    holdings = [{"quantity": 100, "closing_price": 10.0, "market_value": 500.0}]
+    result = _run([_field("holdings", holdings)], document_type="source_of_wealth")
+    assert len(_codes(result, "SOW.HOLDING_VALUE")) == 1
+
+
+def test_portfolio_sum_reconciles() -> None:
+    holdings = [{"market_value": 500.0}, {"market_value": 500.0}]
+    result = _run(
+        [_field("holdings", holdings), _field("portfolio_value", "1000")],
+        document_type="source_of_wealth",
+    )
+    assert _codes(result, "SOW.PORTFOLIO_SUM") == []
+
+
+def test_nav_flags_mismatch() -> None:
+    result = _run(
+        [_field("cash_balance", "1000"), _field("portfolio_value", "5000"),
+         _field("net_asset_value", "5500")],
+        document_type="source_of_wealth",
+    )
+    assert len(_codes(result, "SOW.NAV")) == 1
+
+
+def test_fs_is_cast_flags_income_statement_that_does_not_cast() -> None:
+    result = _run(
+        [_field("revenue", "1000000"), _field("cost_of_sales", "600000"),
+         _field("operating_expenses", "200000"), _field("tax_expense", "17000"),
+         _field("profit_for_the_year", "999999")],
+        document_type="source_of_wealth",
+    )
+    assert len(_codes(result, "FS.IS_CAST")) == 1
+
+
+def test_fs_balances_flags_broken_identity() -> None:
+    result = _run(
+        [_field("total_assets", "1000"), _field("total_liabilities", "400"),
+         _field("total_equity", "500")],
+        document_type="source_of_wealth",
+    )
+    findings = _codes(result, "FS.BALANCES")
+    assert len(findings) == 1
+    # 10% of total assets — clearly material, no "this might just be
+    # rounding" qualifier.
+    assert findings[0].severity_note is None
+
+
+def test_fs_balances_prior_year_flags_broken_identity_independently() -> None:
+    # Current year reconciles; only the prior-year column is broken.
+    result = _run(
+        [_field("total_assets", "1000"), _field("total_liabilities", "400"), _field("total_equity", "600"),
+         _field("total_assets_prior_year", "2000"),
+         _field("total_liabilities_prior_year", "400"),
+         _field("total_equity_prior_year", "600")],
+        document_type="source_of_wealth",
+    )
+    assert _codes(result, "FS.BALANCES") == []
+    findings = _codes(result, "FS.BALANCES_PRIOR_YEAR")
+    assert len(findings) == 1
+    assert findings[0].expected == "1,000.00"
+
+
+def test_fs_balances_still_flags_a_small_discrepancy_with_a_materiality_note() -> None:
+    # A $200 gap on ~$2.4M total assets (~0.008%) used to fall entirely
+    # within the old 0.1%-of-assets tolerance and was silently dropped.
+    # It must now still be flagged, just annotated as small — the lead
+    # agent decides whether that's worth escalating, not this check.
+    result = _run(
+        [_field("total_assets", "2392800"), _field("total_liabilities", "1385300"),
+         _field("total_equity", "1007300")],
+        document_type="source_of_wealth",
+    )
+    findings = _codes(result, "FS.BALANCES")
+    assert len(findings) == 1
+    assert findings[0].severity_note is not None
+    assert "%" in findings[0].severity_note
+
+
+def test_fs_balances_skips_when_neither_year_extracted() -> None:
+    result = _run([_field("company_name", "Acme")], document_type="source_of_wealth")
+    codes = {s.check_code for s in result.skipped_checks}
+    assert "FS.BALANCES" in codes
+    assert "FS.BALANCES_PRIOR_YEAR" not in codes
+
+
+def test_fs_tax_expense_rate_flags_flat_rate_ignoring_exemption() -> None:
+    result = _run(
+        [_field("profit_before_tax", "1000000"), _field("tax_expense", "170000")],
+        document_type="source_of_wealth",
+    )
+    assert len(_codes(result, "FS.TAX_EXPENSE_RATE")) == 1
+
+
+def test_fs_re_rollforward_flags_broken_roll_forward() -> None:
+    result = _run(
+        [_field("retained_earnings_opening", "100000"), _field("profit_for_the_year", "50000"),
+         _field("dividends_paid", "0"), _field("retained_earnings_closing", "999999")],
+        document_type="source_of_wealth",
+    )
+    assert len(_codes(result, "FS.RE_ROLLFORWARD")) == 1
+
+
+def test_fs_ppe_rollforward_flags_negative_implied_additions() -> None:
+    result = _run(
+        [_field("ppe_opening", "100000"), _field("ppe_closing", "10000"),
+         _field("depreciation_expense", "5000")],
+        document_type="source_of_wealth",
+    )
+    assert len(_codes(result, "FS.PPE_ROLLFORWARD")) == 1
+
+
+def test_fs_debt_classification_flags_long_tenure_loan_with_no_non_current_portion() -> None:
+    result = _run(
+        [_field("borrowings_current", "50000"), _field("loan_tenure", "60")],
+        document_type="source_of_wealth",
+    )
+    assert len(_codes(result, "FS.DEBT_CLASSIFICATION")) == 1
+
+
+def test_fs_ratio_bands_flags_finance_costs_outside_band() -> None:
+    result = _run(
+        [_field("finance_costs", "100000"), _field("borrowings_opening", "100000"),
+         _field("borrowings_closing", "100000")],
+        document_type="source_of_wealth",
+    )
+    assert len(_codes(result, "FS.RATIO_BANDS")) == 1
+
+
+def test_fs_ratio_bands_flags_gross_margin_outside_band() -> None:
+    result = _run(
+        [_field("revenue", "100000"), _field("cost_of_sales", "200000")],
+        document_type="source_of_wealth",
+    )
+    assert len(_codes(result, "FS.RATIO_BANDS")) == 1
+
+
+def test_fs_note_refs_flags_a_reference_with_no_matching_note() -> None:
+    result = _run(
+        [_field("notes", [{"note_number": "3", "heading": "Revenue"}]),
+         _field("note_references", ["3", "7"])],
+        document_type="source_of_wealth",
+    )
+    findings = _codes(result, "FS.NOTE_REFS")
+    assert len(findings) == 1
+    assert "7" in findings[0].summary
+
+
+# ---------------------------------------------------------------------------
+# Notice of assessment
+# ---------------------------------------------------------------------------
+
+
+def test_noa_chain_matches_the_real_generator_formula_for_a_round_number() -> None:
+    # 100,000 ECI under the current scheme: exempt_first=7500 (75% of
+    # 10,000), exempt_next=45000 (50% of 90,000), after=47500,
+    # tax=8075.00, rebate=min(4037.50,40000)=4037.50, payable=4037.50.
+    result = _run(
+        [_field("eci", "100000"), _field("tax_payable", "4037.50")],
+        document_type="notice_of_assessment",
+    )
+    assert _codes(result, "NOA.PAYABLE") == []
+
+
+def test_noa_chain_flags_wrong_payable() -> None:
+    result = _run(
+        [_field("eci", "100000"), _field("tax_payable", "99999")],
+        document_type="notice_of_assessment",
+    )
+    assert len(_codes(result, "NOA.PAYABLE")) == 1
+
+
+# ---------------------------------------------------------------------------
+# Payslip
+# ---------------------------------------------------------------------------
+
+
+def test_payslip_net_flags_earnings_minus_deductions_mismatch() -> None:
+    result = _run(
+        [_field("net_pay", "5000"), _field("total_earnings", "6000"),
+         _field("total_deductions", "500"), _field("earnings_items", []),
+         _field("deductions_items", [])],
+        document_type="payslip",
+    )
+    assert len(_codes(result, "PAY.NET")) == 1
+
+
+def test_payslip_earnings_sum_flags_mismatch() -> None:
+    result = _run(
+        [_field("net_pay", "5000"),
+         _field("earnings_items", [{"amount": 3000}, {"amount": 2000}]),
+         _field("total_earnings", "4000")],
+        document_type="payslip",
+    )
+    assert len(_codes(result, "PAY.EARNINGS_SUM")) == 1
+
+
+def test_cpf_ceiling_skips_without_reference_year_configured() -> None:
+    result = _run(
+        [_field("employee_cpf", "5000"), _field("ordinary_wages", "10000"),
+         _field("pay_date", "2026-01-15")],
+        document_type="payslip",
+    )
+    skip = next((s for s in result.skipped_checks if s.check_code == "PAY.CPF_CEILING"), None)
+    assert skip is not None
+    assert "not configured" in skip.reason
+
+
+def test_cpf_ceiling_flags_excess_once_configured() -> None:
+    REFERENCE_DATA["cpf_ordinary_wage_ceiling"][2026] = 7400
+    try:
+        result = _run(
+            [_field("employee_cpf", "5000"), _field("ordinary_wages", "10000"),
+             _field("pay_date", "2026-01-15")],
+            document_type="payslip",
         )
-    ]
-    result = _run(_pages("no figures here"), fields)
-    assert result.unable_to_assess is False
-    assert len(result.findings) == 1
+        assert len(_codes(result, "PAY.CPF_CEILING")) == 1
+    finally:
+        REFERENCE_DATA["cpf_ordinary_wage_ceiling"].clear()
 
 
-def test_unparseable_and_out_of_range_tokens_are_handled() -> None:
-    # A year-like token that isn't a date, a malformed month name, and a
-    # bare separator shouldn't crash the scan.
-    result = _run(_pages("Ref 99/99/9999 and 01-Xyz-2026 and 1,"))
-    assert isinstance(result.values_analysed, int)
+def test_cpf_base_flags_contribution_calculated_on_basic_pay_alone() -> None:
+    result = _run(
+        [_field("employee_cpf", "200"), _field("basic_pay", "1000"), _field("ordinary_wages", "2000")],
+        document_type="payslip",
+    )
+    assert len(_codes(result, "PAY.CPF_BASE")) == 1
 
 
-def test_holdings_tolerate_rounded_display_values() -> None:
-    holdings = [{"quantity": 3, "closing_price": 33.333, "market_value": 100.00}]
-    assert _check_holdings({"holdings": holdings}) == []
+# ---------------------------------------------------------------------------
+# Credit report
+# ---------------------------------------------------------------------------
 
 
-def test_rejects_placeholder_year_zero_date() -> None:
-    # calendar.monthrange accepts year 0, so this reads as a valid date
-    # without an explicit bound — and "0000-01-01" is a classic
-    # uninitialised-default value rather than a real date.
-    assert _extract_dates("Dated 0000-01-01")[0] == [("0000-01-01", False)]
-    assert _extract_dates("Dated 1970-01-01")[0] == [("1970-01-01", True)]
+def test_cr_summary_counts_flags_mismatched_account_count() -> None:
+    result = _run(
+        [_field("accounts", [{}, {}]), _field("account_count", "5")],
+        document_type="credit_report",
+    )
+    assert len(_codes(result, "CR.SUMMARY_COUNTS")) == 1
 
 
-def test_to_float_guards_against_an_unparseable_body() -> None:
-    # Defensive contract: the number regex can only hand this well-formed
-    # digits today, but the helper must not raise if that ever changes.
-    from app.fraud_detection.numerical_validation import _to_float
-
-    assert _to_float("abc") is None
-    assert _to_float("1,234.50") == 1234.50
-
-
-def test_decode_passes_through_a_plain_string_field() -> None:
-    from app.fraud_detection.numerical_validation import _decode
-
-    assert _decode("not json at all") == "not json at all"
-    assert _decode('{"a": 1}') == {"a": 1}
+def test_cr_default_consistency_flags_zero_defaults_with_overdue_account() -> None:
+    result = _run(
+        [_field("accounts", [{"status": "Overdue"}]), _field("default_count", "0")],
+        document_type="credit_report",
+    )
+    assert len(_codes(result, "CR.DEFAULT_CONSISTENCY")) == 1
 
 
-def test_reconciling_balance_sheet_and_shares_produce_no_findings() -> None:
-    assert _check_balance_sheet_identity(
-        {"total_assets": 500000, "total_liabilities": 200000, "net_asset_value": 300000}
-    ) == []
-    assert _check_share_allocation(
-        {"issued_shares": 450000, "subscribers": [{"shares": 300000}, {"shares": 150000}]}
-    ) == []
+def test_cr_limit_vs_balance_flags_balance_over_limit() -> None:
+    result = _run(
+        [_field("accounts", [{"current_balance": 6000, "credit_limit": 5000}])],
+        document_type="credit_report",
+    )
+    assert len(_codes(result, "CR.LIMIT_VS_BALANCE")) == 1
 
 
-def test_holdings_skip_rows_missing_a_figure() -> None:
-    assert _check_holdings({"holdings": [{"quantity": 10, "closing_price": None}]}) == []
+def test_cr_score_flags_template_placeholder() -> None:
+    result = _run([_field("bureau_score", "Example Score 1500")], document_type="credit_report")
+    assert len(_codes(result, "CR.SCORE")) == 1
 
 
-def test_benford_tolerates_ordinary_drift_without_flagging() -> None:
-    # A real document drifts from the ideal curve; only a gap beyond
-    # chance at p<0.01 is reported.
-    random.seed(3)
-    values = [10 ** random.uniform(0, 4) for _ in range(200)]
-    analysis, findings = _benford(_values(values))
-    assert analysis.conforms is True
-    assert findings == []
+def test_cr_aggregate_sum_flags_mismatch_with_stated_total() -> None:
+    result = _run(
+        [_field("accounts", [{"current_balance": 1000}, {"current_balance": 2000}]),
+         _field("total_outstanding_balance", "5000")],
+        document_type="credit_report",
+    )
+    assert len(_codes(result, "CR.AGGREGATE_SUM")) == 1
 
 
-def test_value_scan_is_capped_on_a_pathological_document() -> None:
-    from app.fraud_detection.numerical_validation import _MAX_VALUES
+def test_cr_amortisation_flags_a_balance_fall_bigger_than_the_instalment() -> None:
+    result = _run(
+        [_field("accounts", [{
+            "monthly_instalment": 100,
+            "balance_history": [{"balance": 1000}, {"balance": 200}],
+        }])],
+        document_type="credit_report",
+    )
+    assert len(_codes(result, "CR.AMORTISATION")) == 1
 
-    huge = " ".join(f"{n}.00" for n in range(_MAX_VALUES + 500))
-    assert len(_parse_values(_pages(huge))) <= _MAX_VALUES
+
+def test_cr_linear_series_flags_a_mechanically_constant_balance_fall() -> None:
+    result = _run(
+        [_field("accounts", [{
+            "balance_history": [
+                {"balance": 1000}, {"balance": 900}, {"balance": 800},
+                {"balance": 700}, {"balance": 600},
+            ],
+        }])],
+        document_type="credit_report",
+    )
+    assert len(_codes(result, "CR.LINEAR_SERIES")) == 1
 
 
-def test_clean_document_is_assessed_not_unable() -> None:
-    result = _run(_pages("Total $1,234.56 paid"))
-    assert result.unable_to_assess is False
-    assert result.findings == []
-    assert result.values_analysed >= 1
+# ---------------------------------------------------------------------------
+# List of loans
+# ---------------------------------------------------------------------------
+
+
+def test_loan_annuity_flags_instalment_mismatch() -> None:
+    result = _run(
+        [_field("loan_amount", "100000"), _field("interest_rate", "5"),
+         _field("loan_tenure", "60"), _field("monthly_instalment", "1")],
+        document_type="list_of_loans",
+    )
+    assert len(_codes(result, "LOAN.ANNUITY")) == 1
+
+
+def test_loan_repayment_count_flags_mismatch() -> None:
+    result = _run(
+        [_field("loan_tenure", "12"), _field("repayment_schedule", [{}] * 6)],
+        document_type="list_of_loans",
+    )
+    assert len(_codes(result, "LOAN.REPAYMENT_COUNT")) == 1
+
+
+def test_loan_fee_flags_mismatch() -> None:
+    result = _run(
+        [_field("loan_amount", "100000"), _field("fee_percentage", "1"), _field("fee_amount", "500")],
+        document_type="list_of_loans",
+    )
+    assert len(_codes(result, "LOAN.FEE")) == 1
+
+
+def test_loan_rate_band_flags_out_of_band_rate() -> None:
+    result = _run(
+        [_field("interest_rate", "50"), _field("facility_type", "term_loan")],
+        document_type="list_of_loans",
+    )
+    assert len(_codes(result, "LOAN.RATE_BAND")) == 1
+
+
+def test_loan_rate_band_runs_against_a_reference_rate_formula() -> None:
+    # Previously silently skipped for every overdraft facility, since
+    # _as_number couldn't parse this shape at all — 6.72 is within the
+    # 5-15% overdraft band, so this should run and find nothing wrong.
+    result = _run(
+        [_field("interest_rate", "Bank's Prime Rate + 2.50% (currently 6.72% p.a.)"),
+         _field("facility_type", "overdraft")],
+        document_type="list_of_loans",
+    )
+    assert _codes(result, "LOAN.RATE_BAND") == []
+    assert "LOAN.RATE_BAND" not in {s.check_code for s in result.skipped_checks}
+
+
+def test_loan_scheme_params_flags_amount_over_the_schemes_cap() -> None:
+    REFERENCE_DATA["loan_scheme_params"]["Enterprise Financing Scheme"] = {"amount_cap": 500000}
+    try:
+        result = _run(
+            [_field("scheme_name", "Enterprise Financing Scheme"), _field("loan_amount", "900000")],
+            document_type="list_of_loans",
+        )
+        assert len(_codes(result, "LOAN.SCHEME_PARAMS")) == 1
+    finally:
+        REFERENCE_DATA["loan_scheme_params"].clear()
+
+
+# ---------------------------------------------------------------------------
+# Proof of address
+# ---------------------------------------------------------------------------
+
+
+def test_poa_balance_arithmetic_flags_mismatch() -> None:
+    result = _run(
+        [_field("previous_balance", "100"), _field("payment_received", "50"),
+         _field("outstanding_balance", "40")],
+        document_type="proof_of_address",
+    )
+    assert len(_codes(result, "POA.BALANCE_ARITHMETIC")) == 1
+
+
+def test_poa_usage_match_flags_stated_usage_not_matching_the_trend() -> None:
+    result = _run(
+        [_field("usage_this_period", "500"),
+         _field("consumption_trend", [{"month": "Jan", "usage": 200}])],
+        document_type="proof_of_address",
+    )
+    assert len(_codes(result, "POA.USAGE_MATCH")) == 1
+
+
+def test_poa_unit_rate_flags_an_implausible_tariff() -> None:
+    result = _run(
+        [_field("current_charges", "1000"), _field("usage_this_period", "1")],
+        document_type="proof_of_address",
+    )
+    assert len(_codes(result, "POA.UNIT_RATE")) == 1
+
+
+# ---------------------------------------------------------------------------
+# Certificate of incorporation / incumbency / constitution
+# ---------------------------------------------------------------------------
+
+
+def test_acra_share_sum_flags_mismatch() -> None:
+    result = _run(
+        [_field("shareholders", [{"shares": 300000}, {"shares": 100000}]),
+         _field("issued_shares", "500000")],
+        document_type="certificate_of_incumbency",
+    )
+    assert len(_codes(result, "ACRA.SHARE_SUM")) == 1
+
+
+def test_acra_officers_flags_no_director() -> None:
+    result = _run(
+        [_field("officers", [{"role": "Secretary"}]), _field("incorporation_date", "2020-01-01")],
+        document_type="certificate_of_incumbency",
+    )
+    assert len(_codes(result, "ACRA.OFFICERS")) == 1
+
+
+def test_acra_capital_per_share_flags_an_implausible_per_share_value() -> None:
+    result = _run(
+        [_field("share_capital", "2000000"), _field("issued_shares", "1")],
+        document_type="certificate_of_incumbency",
+    )
+    assert len(_codes(result, "ACRA.CAPITAL_PER_SHARE")) == 1
+
+
+def test_const_subscriber_sum_flags_mismatch() -> None:
+    result = _run(
+        [_field("subscribers", [{"shares": 300000}, {"shares": 100000}]),
+         _field("issued_shares", "500000")],
+        document_type="company_constitution",
+    )
+    assert len(_codes(result, "CONST.SUBSCRIBER_SUM")) == 1
+
+
+def test_const_quorum_flags_quorum_exceeding_subscribers() -> None:
+    result = _run(
+        [_field("subscribers", [{}, {}]), _field("quorum", "5")],
+        document_type="company_constitution",
+    )
+    assert len(_codes(result, "CONST.QUORUM")) == 1
+
+
+def test_const_capital_per_share_flags_an_implausible_per_share_value() -> None:
+    result = _run(
+        [_field("share_capital", "2000000"), _field("issued_shares", "1")],
+        document_type="company_constitution",
+    )
+    assert len(_codes(result, "CONST.CAPITAL_PER_SHARE")) == 1
+
+
+def _build_mrz(passport_no: str, dob: str, expiry: str) -> str:
+    line1 = "P<SGPTAN<<JOVI<<<<<<<<<<<<<<<<<<<<<<<<<<<<<".ljust(44, "<")[:44]
+    passport_no = passport_no.ljust(9, "<")[:9]
+    p_chk = _mrz_check_digit(passport_no)
+    dob_chk = _mrz_check_digit(dob)
+    exp_chk = _mrz_check_digit(expiry)
+    personal_no = "<" * 14
+    pn_chk = 0
+    composite_input = f"{passport_no}{p_chk}{dob}{dob_chk}{expiry}{exp_chk}{personal_no}{pn_chk}"
+    composite = _mrz_check_digit(composite_input)
+    line2 = f"{passport_no}{p_chk}SGP{dob}{dob_chk}M{expiry}{exp_chk}{personal_no}{pn_chk}{composite}"
+    return f"{line1}\n{line2}"
+
+
+def test_mrz_format_requires_two_44_character_lines() -> None:
+    result = _run([_field("mrz", "too short")], document_type="passport")
+    assert len(_codes(result, "ID.MRZ_FORMAT")) == 1
+
+
+def test_mrz_checkdigits_valid_mrz_passes_clean() -> None:
+    mrz = _build_mrz("E1234567A", "900101", "300101")
+    result = _run(
+        [_field("mrz", mrz), _field("passport_number", "E1234567A"),
+         _field("date_of_birth", "1990-01-01")],
+        document_type="passport",
+    )
+    assert _codes(result, "ID.MRZ_FORMAT") == []
+    assert _codes(result, "ID.MRZ_CHECKDIGITS") == []
+    assert _codes(result, "ID.MRZ_VS_VIZ") == []
+
+
+def test_mrz_checkdigits_flags_corrupted_check_digit() -> None:
+    mrz = _build_mrz("E1234567A", "900101", "300101")
+    lines = mrz.split("\n")
+    corrupted_char = "1" if lines[1][9] != "1" else "2"
+    lines[1] = lines[1][:9] + corrupted_char + lines[1][10:]
+    result = _run([_field("mrz", "\n".join(lines))], document_type="passport")
+    assert len(_codes(result, "ID.MRZ_CHECKDIGITS")) >= 1
+
+
+def test_mrz_vs_viz_flags_passport_number_mismatch() -> None:
+    mrz = _build_mrz("E1234567A", "900101", "300101")
+    result = _run(
+        [_field("mrz", mrz), _field("passport_number", "X9999999Z")], document_type="passport",
+    )
+    assert len(_codes(result, "ID.MRZ_VS_VIZ")) == 1
+
+
+# ---------------------------------------------------------------------------
+# FATCA/CRS
+# ---------------------------------------------------------------------------
+
+
+def test_fatca_tin_or_reason_flags_both_present() -> None:
+    result = _run(
+        [_field("tax_residences", [{"tin": "202312345K", "no_tin_reason": ["A"]}])],
+        document_type="fatca_crs_declaration",
+    )
+    assert len(_codes(result, "FATCA.TIN_OR_REASON")) == 1
+
+
+def test_fatca_entity_type_flags_multiple_selected() -> None:
+    result = _run(
+        [_field("entity_type", ["A", "B"])], document_type="fatca_crs_declaration",
+    )
+    assert len(_codes(result, "FATCA.ENTITY_TYPE")) == 1
+
+
+def test_fatca_entity_type_flags_passive_without_controlling_persons() -> None:
+    result = _run(
+        [_field("entity_type", "D")], document_type="fatca_crs_declaration",
+    )
+    assert len(_codes(result, "FATCA.ENTITY_TYPE")) == 1
+
+
+def test_fatca_us_person_flags_no_answer_with_a_us_tin() -> None:
+    result = _run(
+        [_field("specified_us_person", "No"), _field("us_tin", "123-45-6789")],
+        document_type="fatca_crs_declaration",
+    )
+    assert len(_codes(result, "FATCA.US_PERSON")) == 1

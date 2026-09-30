@@ -7,7 +7,7 @@ from statistics import median
 from typing import Iterable, Literal, TypeVar, cast
 
 import pymupdf
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_serializer
 
 logger = logging.getLogger("fraud_detection.layout_anomalies")
 
@@ -103,9 +103,10 @@ class LayoutAnomaly(BaseModel):
     or Spacing. Extra checks on the same area are `evidence.signals`, not
     extra rows.     Neighbouring full-width flagged clauses set `local_pattern` and
     `consecutive_run` on this finding; they need not share anomaly_type.
-    `detected` / `expected` / `deviation` hold the measurements;
-    `summary` is a single human-readable sentence (numbers live in the
-    structured fields, not duplicated here). `bbox` / `text` are for highlighting.
+    `detected` / `expected` / `deviation` hold the measurements on the
+    object. The JSON body keeps `summary` and a `checks` list
+    (check, detected, expected, difference) and leaves out the repeated
+    evidence dict. `bbox` / `text` are for highlighting.
     """
 
     anomaly_type: AnomalyType
@@ -120,6 +121,28 @@ class LayoutAnomaly(BaseModel):
     confidence: float
     evidence: dict
     summary: str
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler):
+        """HTTP body is one finding with a short check list.
+
+        The newline-joined detected/expected strings and the raw evidence
+        dict repeat the same measurements, so they stay on the object for
+        the checkers and drop out of the JSON.
+        """
+        del handler
+        signals = self.evidence.get("signals")
+        if not isinstance(signals, list) or not signals:
+            signals = [_signal_record(self)]
+        return {
+            "type": self.anomaly_type,
+            "page": self.page,
+            "where": self.location,
+            "text": self.text,
+            "summary": self.summary,
+            "confidence": self.confidence,
+            "checks": [_readable_check(signal) for signal in signals if isinstance(signal, dict)],
+        }
 
 
 class CheckAssessment(BaseModel):
@@ -173,9 +196,12 @@ class LayoutAnomalyResult(BaseModel):
 
     document_id: str
     anomalies: list[LayoutAnomaly]
-    elements: list[LayoutElement] = []
-    page_margins: list[PageMargins]
-    elements_analysed: int
+    # Full paragraph inventory and per-page margin tables stay available on
+    # the result object. They are omitted from the JSON so a finding is
+    # readable without scrolling past every line on the document.
+    elements: list[LayoutElement] = Field(default_factory=list, exclude=True)
+    page_margins: list[PageMargins] = Field(exclude=True)
+    elements_analysed: int = Field(exclude=True)
     indentation: CheckAssessment
     alignment: CheckAssessment
     margin: CheckAssessment
@@ -265,14 +291,16 @@ def check_layout_anomalies(document_id: str, file_bytes: bytes) -> LayoutAnomaly
     via asyncio.to_thread.
     """
     try:
-        doc = pymupdf.open(stream=file_bytes, filetype="pdf")
+        doc = _open_document(file_bytes)
     except Exception as exc:
-        reason = f"Failed to open document as a PDF: {type(exc).__name__}: {exc}"
+        reason = f"Failed to open document: {type(exc).__name__}: {exc}"
         logger.warning("Document %s: %s", document_id, reason, exc_info=True)
         return _empty_result(document_id, reason)
 
     try:
         blocks = _extract_blocks(doc)
+        if not blocks and _needs_ocr(doc, file_bytes):
+            blocks = _ocr_blocks(doc)
         if not blocks:
             has_images = any(page.get_images() for page in doc)
             reason = (
@@ -294,6 +322,8 @@ def check_layout_anomalies(document_id: str, file_bytes: bytes) -> LayoutAnomaly
         line_anomalies, line_check = _check_line_spacing(blocks)
         para_anomalies, para_check = _check_paragraph_spacing(blocks)
         margin_anomalies, margin_check = _check_margins(page_margins, blocks)
+        protrude_anomalies = _check_protruding_right(blocks)
+        shifted_line_anomalies = _check_shifted_lines(blocks)
         chrome_anomalies, chrome_check = _check_chrome_position(blocks)
         spacing_check = _merge_spacing_assessment(line_check, para_check)
         if not indent_check.unable_to_assess or not right_edge_check.unable_to_assess:
@@ -311,11 +341,22 @@ def check_layout_anomalies(document_id: str, file_bytes: bytes) -> LayoutAnomaly
             + para_anomalies
             + margin_anomalies
             + chrome_anomalies
+            + protrude_anomalies
+            + shifted_line_anomalies
         )
         anomalies = _coalesce_signals(anomalies)
         _mark_local_consecutive(anomalies)
         elements = _compile_elements(blocks)
 
+        checks = (indent_check, align_check, margin_check, spacing_check)
+        unable = all(check.unable_to_assess for check in checks)
+        reason = None
+        if unable:
+            reason = (
+                "Not enough comparable text to assess layout. "
+                "A one-page document can still be checked from its own lines; "
+                "margins need a second page."
+            )
         return LayoutAnomalyResult(
             document_id=document_id,
             anomalies=anomalies,
@@ -326,7 +367,8 @@ def check_layout_anomalies(document_id: str, file_bytes: bytes) -> LayoutAnomaly
             alignment=align_check,
             margin=margin_check,
             spacing=spacing_check,
-            unable_to_assess=False,
+            unable_to_assess=unable,
+            unable_to_assess_reason=reason,
         )
     except Exception as exc:
         logger.exception("Layout anomaly check failed for document %s", document_id)
@@ -334,6 +376,110 @@ def check_layout_anomalies(document_id: str, file_bytes: bytes) -> LayoutAnomaly
         return _empty_result(document_id, reason)
     finally:
         doc.close()
+
+
+def _open_document(file_bytes: bytes) -> pymupdf.Document:
+    """Open a PDF or a photo. The layout rules do not depend on the container."""
+    if file_bytes.startswith(b"\x89PNG"):
+        filetype = "png"
+    elif file_bytes.startswith(b"\xff\xd8\xff"):
+        filetype = "jpeg"
+    elif file_bytes.startswith((b"II*\x00", b"MM\x00*")):
+        filetype = "tiff"
+    elif file_bytes.startswith(b"GIF8"):
+        filetype = "gif"
+    else:
+        filetype = "pdf"
+    return pymupdf.open(stream=file_bytes, filetype=filetype)
+
+
+def _needs_ocr(doc: pymupdf.Document, file_bytes: bytes) -> bool:
+    """A photo, or a page whose picture covers most of the sheet, has no text layer."""
+    if not file_bytes.startswith(b"%PDF"):
+        return True
+    for page in doc:
+        # pymupdf's get_text() stub is overloaded on the (non-literal-typed)
+        # `option` string, so pyright can't narrow the "text" mode's return
+        # to str — it's always a str at runtime for this mode.
+        text = cast(str, page.get_text("text"))
+        if text.strip():
+            continue
+        for info in page.get_image_info() or []:
+            bbox = info.get("bbox")
+            if not bbox:
+                continue
+            width = float(bbox[2]) - float(bbox[0])
+            height = float(bbox[3]) - float(bbox[1])
+            if width >= page.rect.width * 0.5 and height >= page.rect.height * 0.5:
+                return True
+    return False
+
+
+def _ocr_blocks(doc: pymupdf.Document) -> list[_Block]:
+    """Word boxes from OCR, in page coordinates, for the same layout checks."""
+    try:
+        import numpy as np
+        from rapidocr import RapidOCR
+    except ImportError:
+        logger.warning("OCR is unavailable, so an image-only document cannot be assessed")
+        return []
+
+    engine = RapidOCR()
+    blocks: list[_Block] = []
+    # pymupdf.Document supports old-style iteration (__getitem__/__len__) at
+    # runtime but its stub doesn't declare __iter__, which enumerate()'s
+    # signature requires — index it directly instead.
+    for page_index in range(len(doc)):
+        page = doc[page_index]
+        pix = page.get_pixmap(alpha=False)
+        if pix.n != 3:
+            pix = pymupdf.Pixmap(pymupdf.csRGB, pix)
+        image = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
+        try:
+            result = engine(image)
+        except Exception:
+            logger.exception("OCR failed on page %s", page_index + 1)
+            continue
+        boxes = getattr(result, "boxes", None)
+        texts = getattr(result, "txts", None)
+        if boxes is None or texts is None:
+            continue
+        scale_x = float(page.rect.width) / float(pix.width) if pix.width else 1.0
+        scale_y = float(page.rect.height) / float(pix.height) if pix.height else 1.0
+        page_width = float(page.rect.width)
+        page_height = float(page.rect.height)
+        for box, raw_text in zip(boxes, texts):
+            text = (raw_text or "").strip()
+            if not text or box is None:
+                continue
+            xs = [float(point[0]) * scale_x for point in box]
+            ys = [float(point[1]) * scale_y for point in box]
+            bbox = (min(xs), min(ys), max(xs), max(ys))
+            if bbox[2] - bbox[0] < 1 or bbox[3] - bbox[1] < 1:
+                continue
+            line = _Line(
+                text=text,
+                bbox=bbox,
+                page=page_index,
+                page_width=page_width,
+                page_height=page_height,
+                size=max(8.0, (bbox[3] - bbox[1]) * 0.8),
+            )
+            blocks.append(
+                _Block(
+                    lines=[line],
+                    bbox=bbox,
+                    page=page_index,
+                    page_width=page_width,
+                    page_height=page_height,
+                    text=text,
+                    role=_position_band(bbox, page_height),
+                    size=line.size,
+                )
+            )
+    _apply_heading_and_cover_roles(blocks)
+    _mark_repeating_chrome(blocks)
+    return blocks
 
 
 def _extract_blocks(doc: pymupdf.Document) -> list[_Block]:
@@ -392,6 +538,7 @@ def _extract_blocks(doc: pymupdf.Document) -> list[_Block]:
     blocks = _merge_adjacent_blocks(blocks)
     blocks = _split_leading_headings(blocks)
     _apply_heading_and_cover_roles(blocks)
+    _mark_repeating_chrome(blocks)
     return blocks
 
 
@@ -654,6 +801,31 @@ def _union_bbox(bboxes) -> BBox:
     return (min(xs0), min(ys0), max(xs1), max(ys1))
 
 
+def _mark_repeating_chrome(blocks: list[_Block]) -> None:
+    """Text that repeats at the same height on several pages is running furniture.
+
+    Column headings and registration lines sit in the body band, but they are
+    the same on every page, so they are not paragraphs to indent against.
+    """
+    pages = {block.page for block in blocks}
+    if len(pages) < 2:
+        return
+    grouped: dict[str, list[_Block]] = {}
+    for block in blocks:
+        key = " ".join(block.text.split()).lower()
+        if len(key) < 8:
+            continue
+        grouped.setdefault(key, []).append(block)
+    for items in grouped.values():
+        if len({block.page for block in items}) < 2:
+            continue
+        ys = [block.y0 for block in items]
+        if max(ys) - min(ys) > 24:
+            continue
+        for block in items:
+            block.role = "header" if block.y0 < block.page_height * 0.5 else "footer"
+
+
 def _position_band(bbox: BBox, page_height: float) -> Literal["header", "footer", "body"]:
     mid_y = (bbox[1] + bbox[3]) / 2
     if mid_y <= page_height * HEADER_RATIO:
@@ -691,10 +863,83 @@ def _page_margins(blocks: list[_Block]) -> list[PageMargins]:
 
 
 def _body_blocks(blocks: list[_Block]) -> list[_Block]:
-    # Indentation and alignment only compare body to body. Headers,
-    # footers, table cells, signatures, clause headings and cover titles
-    # are different layout roles.
-    return [b for b in blocks if b.role == "body" and b.char_count >= MIN_BLOCK_CHARS]
+    """Lines that can be compared with each other.
+
+    Body paragraphs are the usual set. A one-page form often has only one
+    of those and the rest tagged as headings, so those headings join the
+    comparison when body copy alone is not enough. Running headers and
+    footers stay out.
+    """
+    body = [b for b in blocks if b.role == "body" and b.char_count >= MIN_BLOCK_CHARS]
+    if len(body) >= 2:
+        return body
+    others = [
+        b
+        for b in blocks
+        if b.role in {"heading", "cover", "table"} and b.char_count >= MIN_BLOCK_CHARS
+    ]
+    if len(body) + len(others) >= 2:
+        return body + others
+    return body
+
+
+# A left edge shared by this many blocks is a column (dates, descriptions,
+# amounts), not one shoved paragraph. Two full-width clauses still count
+# as an indent run.
+_COLUMN_MIN_MEMBERS = 3
+_SHORT_COLUMN_MIN_MEMBERS = 2
+
+
+def _cluster_by_left(blocks: list[_Block]) -> list[list[_Block]]:
+    clusters: list[list[_Block]] = []
+    for block in sorted(blocks, key=lambda b: b.x0):
+        if clusters and block.x0 - clusters[-1][0].x0 < INDENT_THRESHOLD_PT:
+            clusters[-1].append(block)
+        else:
+            clusters.append([block])
+    return clusters
+
+
+def _page_columns(blocks: list[_Block]) -> list[float]:
+    """Repeated left edges on a multi-column page.
+
+    Empty when the page has a single body column, so a one-off indent
+    among uniform paragraphs still uses the neighbour comparison.
+    A pair of short amount lines joins the columns. A pair of full-width
+    clauses does not — that is the consecutive-indent signal.
+    """
+    clusters = _cluster_by_left(blocks)
+    wide = [cluster for cluster in clusters if len(cluster) >= _COLUMN_MIN_MEMBERS]
+    if not wide:
+        return []
+    columns = [float(median(b.x0 for b in cluster)) for cluster in wide]
+    for cluster in clusters:
+        if len(cluster) < _SHORT_COLUMN_MIN_MEMBERS or len(cluster) >= _COLUMN_MIN_MEMBERS:
+            continue
+        if median(b.width for b in cluster) >= _CLAUSE_STRETCH_MIN_WIDTH_PT:
+            continue
+        columns.append(float(median(b.x0 for b in cluster)))
+    return columns
+
+
+def _column_of(block: _Block, columns: list[float]) -> float | None:
+    if not columns:
+        return None
+    nearest = min(columns, key=lambda column: abs(block.x0 - column))
+    if abs(block.x0 - nearest) < INDENT_THRESHOLD_PT:
+        return nearest
+    return None
+
+
+def _column_groups(blocks: list[_Block], columns: list[float]) -> list[list[_Block]]:
+    """Blocks on each column. A line on no column is judged against the nearest one."""
+    grouped: dict[float, list[_Block]] = {column: [] for column in columns}
+    for block in blocks:
+        home = _column_of(block, columns)
+        if home is None:
+            home = min(columns, key=lambda column: abs(block.x0 - column))
+        grouped[home].append(block)
+    return [group for group in grouped.values() if group]
 
 
 def _content_column(blocks: list[_Block]) -> tuple[float, float] | None:
@@ -741,7 +986,7 @@ def _check_indentation(blocks: list[_Block]) -> tuple[list[LayoutAnomaly], Check
         return [], CheckAssessment(
             unable_to_assess=True,
             unable_to_assess_reason=(
-                "Not enough comparable body paragraphs to assess indentation "
+                "Not enough comparable lines to assess indentation "
                 f"({len(body)} found, need at least 2)"
             ),
         )
@@ -754,12 +999,67 @@ def _check_indentation(blocks: list[_Block]) -> tuple[list[LayoutAnomaly], Check
     flagged = False
     for page_blocks in by_page.values():
         page_blocks = sorted(page_blocks, key=lambda b: (b.y0, b.x0))
+        columns = _page_columns(page_blocks)
+        if len(columns) >= 2:
+            # Dates, descriptions, and amounts each keep their own left
+            # edge. Only a line that sits on none of those columns is an indent.
+            flagged = True
+            for block in page_blocks:
+                if _column_of(block, columns) is not None:
+                    continue
+                nearest = min(columns, key=lambda column: abs(block.x0 - column))
+                signed_left = block.x0 - nearest
+                if abs(signed_left) < INDENT_THRESHOLD_PT:
+                    continue
+                # A short label or amount sitting between columns is not a
+                # shoved paragraph. Only a line that fills the content span is.
+                span = max(b.x1 for b in page_blocks) - min(b.x0 for b in page_blocks)
+                if span <= 0 or block.width < SHORT_WIDTH_RATIO * span:
+                    continue
+                matching = sum(
+                    1 for peer in page_blocks if _column_of(peer, columns) == nearest
+                )
+                comparable = len(page_blocks)
+                anomalies.append(
+                    _anomaly(
+                        "Indentation",
+                        block,
+                        detected=_pt(block.x0),
+                        expected=_pt(nearest),
+                        baseline=(
+                            f"{_pct(matching, comparable)} of comparable body paragraphs "
+                            f"start at {_pt(nearest)}"
+                        ),
+                        deviation=_signed_pt(signed_left),
+                        confidence=_delta_confidence(
+                            abs(signed_left),
+                            INDENT_THRESHOLD_PT,
+                            matching / comparable if comparable else 0.0,
+                        ),
+                        evidence={
+                            "kind": "indentation",
+                            "side": "left",
+                            "left_indent_pt": round(block.x0, 2),
+                            "expected_left_indent_pt": round(nearest, 2),
+                            "left_delta_pt": round(signed_left, 2),
+                            "comparable_count": comparable,
+                            "matching_count": matching,
+                        },
+                    )
+                )
+            continue
         column = _content_column(page_blocks)
         if column is None:
             continue
         content_left, content_right = column
         full = [b for b in page_blocks if _width_band(b, content_left, content_right) == "full"]
         if len(full) < 2:
+            # A one-page form is short labels, not full-width clauses.
+            # Compare those labels when they share a left edge.
+            short_findings = _short_line_indents(page_blocks)
+            if short_findings is not None:
+                flagged = True
+                anomalies.extend(short_findings)
             continue
         flagged = True
         page_left = _dominant(_bucket_pt(b.x0) for b in full)
@@ -830,6 +1130,65 @@ def _check_indentation(blocks: list[_Block]) -> tuple[list[LayoutAnomaly], Check
     return anomalies, _assessed()
 
 
+def _short_line_indents(page_blocks: list[_Block]) -> list[LayoutAnomaly] | None:
+    """Left-edge outliers among short lines that share a width.
+
+    None means there is no majority edge, so indentation stays unassessed.
+    An empty list means the lines were compared and none is shifted.
+    A line much wider or narrower than the majority is a different column
+    (a value beside a label), not an indent.
+    """
+    if len(page_blocks) < 4:
+        return None
+    expected_left = _dominant(_bucket_pt(block.x0) for block in page_blocks)
+    if expected_left is None:
+        return None
+    matching = [
+        block
+        for block in page_blocks
+        if abs(block.x0 - expected_left) < INDENT_THRESHOLD_PT
+    ]
+    if not _has_strong_majority(len(matching), len(page_blocks)):
+        return None
+    typical_width = float(median(block.width for block in matching))
+    anomalies: list[LayoutAnomaly] = []
+    for block in page_blocks:
+        signed = block.x0 - expected_left
+        if abs(signed) < INDENT_THRESHOLD_PT:
+            continue
+        width_gap = abs(block.width - typical_width)
+        if width_gap > max(40.0, 0.45 * typical_width):
+            continue
+        anomalies.append(
+            _anomaly(
+                "Indentation",
+                block,
+                detected=_pt(block.x0),
+                expected=_pt(expected_left),
+                baseline=(
+                    f"{_pct(len(matching), len(page_blocks))} of comparable lines "
+                    f"start at {_pt(expected_left)}"
+                ),
+                deviation=_signed_pt(signed),
+                confidence=_delta_confidence(
+                    abs(signed),
+                    INDENT_THRESHOLD_PT,
+                    len(matching) / len(page_blocks),
+                ),
+                evidence={
+                    "kind": "indentation",
+                    "side": "left",
+                    "left_indent_pt": round(block.x0, 2),
+                    "expected_left_indent_pt": round(expected_left, 2),
+                    "left_delta_pt": round(signed, 2),
+                    "comparable_count": len(page_blocks),
+                    "matching_count": len(matching),
+                },
+            )
+        )
+    return anomalies
+
+
 def _consistent_right_edge(block: _Block) -> float | None:
     """
     Right edge of a wrapped column, ignoring a short last line. A single
@@ -895,6 +1254,8 @@ def _check_right_edge(blocks: list[_Block]) -> tuple[list[LayoutAnomaly], CheckA
             matching = sum(
                 1 for _, edge in edged if abs(edge - float(expected_right)) < INDENT_THRESHOLD_PT
             )
+            if not _has_strong_majority(matching, len(edged)):
+                continue
             majority_frac = matching / len(edged)
             anomalies.append(
                 _anomaly(
@@ -934,6 +1295,727 @@ def _check_right_edge(blocks: list[_Block]) -> tuple[list[LayoutAnomaly], CheckA
     return anomalies, _assessed()
 
 
+def _check_protruding_right(blocks: list[_Block]) -> list[LayoutAnomaly]:
+    """A paragraph whose right edge sticks past the document's usual edge.
+
+    A horizontal shift often leaves the left edge on the label and only
+    lengthens the line. That shows up here, named on the paragraph, rather
+    than as a blank page-margin finding. A whole page that is wider is left
+    to the margin check.
+    """
+    body = _body_blocks(blocks)
+    by_page: dict[int, list[_Block]] = {}
+    for block in body:
+        by_page.setdefault(block.page, []).append(block)
+    if len(by_page) < 2:
+        return []
+
+    page_max = {
+        page: max(block.x1 for block in page_blocks)
+        for page, page_blocks in by_page.items()
+    }
+    established = float(median(page_max.values()))
+    anomalies: list[LayoutAnomaly] = []
+    for page_blocks in by_page.values():
+        protruding = [
+            block
+            for block in page_blocks
+            if block.x1 - established >= INDENT_THRESHOLD_PT
+        ]
+        if len(protruding) == 0 or len(protruding) > 2:
+            continue
+        for block in protruding:
+            signed = block.x1 - established
+            anomalies.append(
+                _anomaly(
+                    "Indentation",
+                    block,
+                    detected=_pt(block.x1),
+                    expected=_pt(established),
+                    baseline=(
+                        f"Other pages end at {_pt(established)}"
+                    ),
+                    deviation=_signed_pt(signed),
+                    confidence=_delta_confidence(signed, INDENT_THRESHOLD_PT, 1.0),
+                    evidence={
+                        "kind": "right-edge",
+                        "side": "right",
+                        "right_edge_pt": round(block.x1, 2),
+                        "expected_right_edge_pt": round(established, 2),
+                        "right_delta_pt": round(signed, 2),
+                        "comparable_count": len(page_max),
+                        "matching_count": sum(
+                            1
+                            for edge in page_max.values()
+                            if abs(edge - established) < INDENT_THRESHOLD_PT
+                        ),
+                    },
+                    location=f"Right edge of body paragraph near y={round(block.y0)}",
+                )
+            )
+    return anomalies
+
+
+def _block_for_line(block: _Block, line: _Line) -> _Block:
+    return block.model_copy(update={"lines": [line], "bbox": line.bbox, "text": line.text})
+
+
+def _line_width(line: _Line) -> float:
+    return line.bbox[2] - line.bbox[0]
+
+
+# How far a neighbouring line may sit and still be the one this line
+# moved away from. A 14pt vertical shove on top of a normal leading
+# still lands inside this window.
+_SHIFT_NEIGHBOR_WINDOW_PT = 56.0
+# A left-edge gap bigger than this is another column, not a shove.
+_SHIFT_MAX_HORIZONTAL_PT = 96.0
+# A value that leaves its own column by more than this has joined the
+# next column, not slid off the one it shares with the lines beside it.
+_COLUMN_SHIFT_MAX_PT = 48.0
+# Nearest stacked line further than this belongs to another section.
+_SHIFT_MAX_VERTICAL_REACH_PT = 120.0
+_STACK_OVERLAP_PT = 24.0
+
+
+def _check_shifted_lines(blocks: list[_Block]) -> list[LayoutAnomaly]:
+    """Name one line that moved up, down, left, or right.
+
+    A line inside a larger block is compared with the lines in that block.
+    A line that extraction kept as its own block is compared with the
+    nearest line on the page that shares its horizontal span. A first-line
+    indent still ends with the paragraph, so it is not a shift. Several
+    lines that share a left edge are a column, not one moved line.
+    """
+    anomalies: list[LayoutAnomaly] = []
+    for block in blocks:
+        if block.role in {"header", "footer"}:
+            continue
+        lines = [line for line in block.lines if line.text.strip()]
+        if len(lines) < 2 or block.width <= 0:
+            continue
+        anomalies.extend(_line_indent_inside_block(block, lines))
+        anomalies.extend(_line_past_block_edge(block, lines))
+    anomalies.extend(_check_cross_block_shifts(blocks))
+    anomalies.extend(_check_column_line_shifts(blocks))
+    return anomalies
+
+
+def _check_column_line_shifts(blocks: list[_Block]) -> list[LayoutAnomaly]:
+    """A value that no longer starts with the column beside it.
+
+    Labels and values on a form share a left edge with the lines beside
+    them. One line that starts a short way off that nearby edge, and does
+    not still end with the column, has left it. A match further up the
+    page does not count. A hanging indent still ends on the column's
+    right edge, and the next column over is further away than a shove.
+    """
+    anomalies: list[LayoutAnomaly] = []
+    for entries in _page_line_entries(blocks).values():
+        columns = _line_left_columns([line for _, line in entries])
+        if not columns:
+            continue
+        for block, line in entries:
+            if _letters_in(line) < MIN_BLOCK_CHARS or _line_width(line) < 80:
+                continue
+            if _line_on_nearby_column(line, columns):
+                continue
+            chosen = _nearest_column(line, columns)
+            if chosen is None:
+                continue
+            edge, members = chosen
+            signed = line.bbox[0] - edge
+            if _still_ends_with_column(block, line, members, entries):
+                continue
+            anomalies.append(
+                _anomaly(
+                    "Indentation",
+                    _block_for_line(block, line),
+                    detected=_pt(line.bbox[0]),
+                    expected=_pt(edge),
+                    baseline=f"The other lines in this column start at {_pt(edge)}",
+                    deviation=_signed_pt(signed),
+                    confidence=_delta_confidence(signed, INDENT_THRESHOLD_PT, 1.0),
+                    evidence={
+                        "kind": "indentation",
+                        "side": "left",
+                        "left_indent_pt": round(line.bbox[0], 2),
+                        "expected_left_indent_pt": round(edge, 2),
+                        "left_delta_pt": round(signed, 2),
+                        "comparable_count": len(members) + 1,
+                        "matching_count": len(members),
+                    },
+                )
+            )
+    return anomalies
+
+
+def _line_left_columns(lines: list[_Line]) -> list[tuple[float, list[_Line]]]:
+    """Left edges shared by at least three lines. Each edge is a column."""
+    clusters: list[list[_Line]] = []
+    for line in sorted(lines, key=lambda item: item.bbox[0]):
+        if clusters and line.bbox[0] - clusters[-1][0].bbox[0] < INDENT_THRESHOLD_PT:
+            clusters[-1].append(line)
+        else:
+            clusters.append([line])
+    columns: list[tuple[float, list[_Line]]] = []
+    for cluster in clusters:
+        if len(cluster) < _COLUMN_MIN_MEMBERS:
+            continue
+        edge = float(median(line.bbox[0] for line in cluster))
+        columns.append((edge, cluster))
+    return columns
+
+
+def _nearby_column_members(line: _Line, members: list[_Line]) -> list[_Line]:
+    """Column lines within reach of this one. A shared edge far up the page is not this column."""
+    return [
+        member
+        for member in members
+        if member is not line
+        and 2 < abs(member.bbox[1] - line.bbox[1]) <= _SHIFT_NEIGHBOR_WINDOW_PT
+    ]
+
+
+def _line_on_nearby_column(line: _Line, columns: list[tuple[float, list[_Line]]]) -> bool:
+    for edge, members in columns:
+        if abs(line.bbox[0] - edge) >= INDENT_THRESHOLD_PT:
+            continue
+        if len(_nearby_column_members(line, members)) >= _COLUMN_MIN_MEMBERS - 1:
+            return True
+    return False
+
+
+def _nearest_column(
+    line: _Line, columns: list[tuple[float, list[_Line]]]
+) -> tuple[float, list[_Line]] | None:
+    chosen: tuple[float, list[_Line]] | None = None
+    chosen_dist = _COLUMN_SHIFT_MAX_PT
+    for _edge, members in columns:
+        nearby = _nearby_column_members(line, members)
+        if len(nearby) < _COLUMN_MIN_MEMBERS - 1:
+            continue
+        edge = float(median(member.bbox[0] for member in nearby))
+        dist = abs(line.bbox[0] - edge)
+        if dist < INDENT_THRESHOLD_PT or dist > chosen_dist:
+            continue
+        chosen = (edge, nearby)
+        chosen_dist = dist
+    return chosen
+
+
+def _still_ends_with_column(
+    block: _Block,
+    line: _Line,
+    members: list[_Line],
+    entries: list[tuple[_Block, _Line]],
+) -> bool:
+    """A hanging indent still ends where the column ends.
+
+    A value that left its column moved its right edge too. The column
+    counts as flush only when its own nearby lines agree on that edge.
+    """
+    homes = {id(item): owner for owner, item in entries}
+    for member in members:
+        if homes.get(id(member)) is not block:
+            continue
+        if abs(line.bbox[2] - member.bbox[2]) < INDENT_THRESHOLD_PT:
+            return True
+    rights = [member.bbox[2] for member in members]
+    if max(rights) - min(rights) >= INDENT_THRESHOLD_PT:
+        return False
+    return abs(line.bbox[2] - float(median(rights))) < INDENT_THRESHOLD_PT
+
+
+def _is_sentence_line(block: _Block, line: _Line) -> bool:
+    """A slid label is not a sentence. Short tokens fail both gates."""
+    letters = len(line.text.replace(" ", "").replace("\xa0", ""))
+    if letters < MIN_BLOCK_CHARS:
+        return False
+    width = _line_width(line)
+    return width >= 120 and width >= 0.4 * block.width
+
+
+def _line_indent_inside_block(block: _Block, lines: list[_Line]) -> list[LayoutAnomaly]:
+    anomalies: list[LayoutAnomaly] = []
+    for line in lines:
+        if not _is_sentence_line(block, line):
+            continue
+        same_left = [
+            other
+            for other in lines
+            if abs(other.bbox[0] - line.bbox[0]) < INDENT_THRESHOLD_PT
+        ]
+        if len(same_left) != 1:
+            continue
+        anchors = [
+            other
+            for other in lines
+            if abs(other.bbox[1] - line.bbox[1]) > 2
+            and abs(other.bbox[1] - line.bbox[1]) <= _SHIFT_NEIGHBOR_WINDOW_PT
+            and line.bbox[0] - other.bbox[0] >= INDENT_THRESHOLD_PT
+        ]
+        if not anchors:
+            continue
+        if _shares_right_edge_with_full_line(block, line, lines):
+            continue
+        baseline = float(median(other.bbox[0] for other in anchors))
+        signed = line.bbox[0] - baseline
+        anomalies.append(
+            _anomaly(
+                "Indentation",
+                _block_for_line(block, line),
+                detected=_pt(line.bbox[0]),
+                expected=_pt(baseline),
+                baseline=(
+                    f"The neighbouring line in this block starts at {_pt(baseline)}"
+                ),
+                deviation=_signed_pt(signed),
+                confidence=_delta_confidence(signed, INDENT_THRESHOLD_PT, 1.0),
+                evidence={
+                    "kind": "indentation",
+                    "side": "left",
+                    "left_indent_pt": round(line.bbox[0], 2),
+                    "expected_left_indent_pt": round(baseline, 2),
+                    "left_delta_pt": round(signed, 2),
+                    "comparable_count": len(lines),
+                    "matching_count": len(anchors),
+                },
+            )
+        )
+    return anomalies
+
+
+def _shares_right_edge_with_full_line(
+    block: _Block, line: _Line, lines: list[_Line]
+) -> bool:
+    """A first-line indent still ends with the rest of the paragraph."""
+    for other in lines:
+        if other is line or not _is_sentence_line(block, other):
+            continue
+        if line.bbox[0] - other.bbox[0] < INDENT_THRESHOLD_PT:
+            continue
+        if abs(line.bbox[2] - other.bbox[2]) < INDENT_THRESHOLD_PT:
+            return True
+    return False
+
+
+def _line_past_block_edge(block: _Block, lines: list[_Line]) -> list[LayoutAnomaly]:
+    # Body paragraphs are already compared as whole blocks. This names a
+    # line inside a table or other merged block, where the block edge is
+    # the line but the block text is not.
+    if block.role == "body":
+        return []
+    wide = [line for line in lines if _is_sentence_line(block, line)]
+    if len(wide) < 3:
+        return []
+    top = max(wide, key=lambda line: line.bbox[2])
+    others = [line for line in wide if line is not top]
+    if max(line.bbox[2] for line in others) - min(line.bbox[2] for line in others) > INDENT_THRESHOLD_PT:
+        return []
+    edge = float(median(line.bbox[2] for line in others))
+    signed = top.bbox[2] - edge
+    if signed < INDENT_THRESHOLD_PT:
+        return []
+    matching = sum(1 for line in others if abs(line.bbox[2] - edge) < INDENT_THRESHOLD_PT)
+    return [
+        _anomaly(
+            "Indentation",
+            _block_for_line(block, top),
+            detected=_pt(top.bbox[2]),
+            expected=_pt(edge),
+            baseline=(
+                f"{_pct(matching, len(wide))} of lines in this block end at {_pt(edge)}"
+            ),
+            deviation=_signed_pt(signed),
+            confidence=_delta_confidence(signed, INDENT_THRESHOLD_PT, matching / len(wide)),
+            evidence={
+                "kind": "right-edge",
+                "side": "right",
+                "right_edge_pt": round(top.bbox[2], 2),
+                "expected_right_edge_pt": round(edge, 2),
+                "right_delta_pt": round(signed, 2),
+                "comparable_count": len(wide),
+                "matching_count": matching,
+            },
+            location=f"Right edge of body paragraph near y={round(top.bbox[1])}",
+        )
+    ]
+
+
+def _x_overlap(a: _Line, b: _Line) -> float:
+    return min(a.bbox[2], b.bbox[2]) - max(a.bbox[0], b.bbox[0])
+
+
+def _stacked(a: _Line, b: _Line) -> bool:
+    return _x_overlap(a, b) >= _STACK_OVERLAP_PT
+
+
+def _vertical_overlap(a: _Line, b: _Line) -> float:
+    return min(a.bbox[3], b.bbox[3]) - max(a.bbox[1], b.bbox[1])
+
+
+def _page_line_entries(blocks: list[_Block]) -> dict[int, list[tuple[_Block, _Line]]]:
+    pages: dict[int, list[tuple[_Block, _Line]]] = {}
+    for block in blocks:
+        if block.role in {"header", "footer"}:
+            continue
+        for line in block.lines:
+            if line.text.strip():
+                pages.setdefault(line.page, []).append((block, line))
+    return pages
+
+
+def _check_cross_block_shifts(blocks: list[_Block]) -> list[LayoutAnomaly]:
+    """A line kept as its own block, compared with the lines around it.
+
+    Horizontal: the line is the only wide line at its left edge, and the
+    nearest line that shares its span starts further left or right.
+    Vertical: the line collides with the line above or below, or it sits
+    in a lopsided gap between them. A paragraph break is a large gap
+    followed by a normal one, so the smaller gap still matches the page.
+    """
+    anomalies: list[LayoutAnomaly] = []
+    for entries in _page_line_entries(blocks).values():
+        sentence = [(block, line) for block, line in entries if _is_sentence_line(block, line)]
+        alone = [
+            (block, line)
+            for block, line in sentence
+            if sum(1 for item in block.lines if item.text.strip()) == 1
+        ]
+        anomalies.extend(_horizontal_line_shifts(entries, sentence, alone))
+        anomalies.extend(_vertical_line_shifts(entries, sentence))
+        anomalies.extend(_check_split_lines(entries))
+    return anomalies
+
+
+def _horizontal_line_shifts(
+    entries: list[tuple[_Block, _Line]],
+    sentence: list[tuple[_Block, _Line]],
+    alone: list[tuple[_Block, _Line]],
+) -> list[LayoutAnomaly]:
+    anomalies: list[LayoutAnomaly] = []
+    for block, line in alone:
+        same_left = [
+            other
+            for _, other in sentence
+            if abs(other.bbox[0] - line.bbox[0]) < INDENT_THRESHOLD_PT / 2
+        ]
+        if len(same_left) != 1:
+            continue
+        neighbor = _nearest_stacked_line(line, entries)
+        if neighbor is None:
+            continue
+        signed = line.bbox[0] - neighbor.bbox[0]
+        if abs(signed) < INDENT_THRESHOLD_PT or abs(signed) > _SHIFT_MAX_HORIZONTAL_PT:
+            continue
+        if signed > 0 and _shares_right_edge_with_full_line(block, line, [item for _, item in sentence]):
+            continue
+        if signed < 0 and not _rigid_left_slide(line, neighbor, sentence):
+            continue
+        anomalies.append(
+            _anomaly(
+                "Indentation",
+                _block_for_line(block, line),
+                detected=_pt(line.bbox[0]),
+                expected=_pt(neighbor.bbox[0]),
+                baseline=f"The nearest line on this span starts at {_pt(neighbor.bbox[0])}",
+                deviation=_signed_pt(signed),
+                confidence=_delta_confidence(signed, INDENT_THRESHOLD_PT, 1.0),
+                evidence={
+                    "kind": "indentation",
+                    "side": "left",
+                    "left_indent_pt": round(line.bbox[0], 2),
+                    "expected_left_indent_pt": round(neighbor.bbox[0], 2),
+                    "left_delta_pt": round(signed, 2),
+                    "comparable_count": len(sentence),
+                    "matching_count": 1,
+                },
+            )
+        )
+    return anomalies
+
+
+def _nearest_stacked_line(
+    line: _Line, entries: list[tuple[_Block, _Line]]
+) -> _Line | None:
+    nearest: _Line | None = None
+    nearest_dy = _SHIFT_MAX_VERTICAL_REACH_PT
+    for _, other in entries:
+        if other is line or not _stacked(line, other):
+            continue
+        dy = abs(other.bbox[1] - line.bbox[1])
+        if dy <= 2 or dy > nearest_dy:
+            continue
+        nearest = other
+        nearest_dy = dy
+    return nearest
+
+
+def _rigid_left_slide(
+    line: _Line,
+    neighbor: _Line,
+    sentence: list[tuple[_Block, _Line]],
+) -> bool:
+    """Both edges moved left together. A hanging indent still ends flush.
+
+    The nearest line can be a short last line of the paragraph. A slide
+    is judged against the wide line of a similar length, whose right
+    edge moved with the left.
+    """
+    peer = _similar_width_sentence(line, sentence)
+    if peer is None and any(
+        other is neighbor and _is_sentence_line(block, other) for block, other in sentence
+    ):
+        peer = neighbor
+    if peer is None:
+        return False
+    left_delta = peer.bbox[0] - line.bbox[0]
+    right_delta = peer.bbox[2] - line.bbox[2]
+    if left_delta < INDENT_THRESHOLD_PT or right_delta < INDENT_THRESHOLD_PT:
+        return False
+    return abs(left_delta - right_delta) <= INDENT_THRESHOLD_PT
+
+
+def _similar_width_sentence(
+    line: _Line, sentence: list[tuple[_Block, _Line]]
+) -> _Line | None:
+    """Nearest wide line whose length matches this one."""
+    width = _line_width(line)
+    pool: list[_Line] = []
+    for block, other in sentence:
+        if other is line or not _is_sentence_line(block, other):
+            continue
+        dy = abs(other.bbox[1] - line.bbox[1])
+        if dy <= 2 or dy > _SHIFT_MAX_VERTICAL_REACH_PT or not _stacked(line, other):
+            continue
+        pool.append(other)
+    if not pool:
+        return None
+    return min(pool, key=lambda other: (abs(_line_width(other) - width), abs(other.bbox[1] - line.bbox[1])))
+
+
+def _vertical_line_shifts(
+    entries: list[tuple[_Block, _Line]],
+    sentence: list[tuple[_Block, _Line]],
+) -> list[LayoutAnomaly]:
+    gaps = _stacked_gaps(entries)
+    typical = float(median(gaps)) if len(gaps) >= 3 else None
+    anomalies: list[LayoutAnomaly] = []
+    for block, line in sentence:
+        collided = _collision_delta(line, entries)
+        signed = collided if collided is not None else _lopsided_gap_delta(line, entries, typical)
+        if signed is None:
+            signed = _same_edge_pocket(line, entries)
+        if signed is None:
+            continue
+        if collided is None and abs(signed) < 8:
+            continue
+        anomalies.append(
+            _anomaly(
+                "Spacing",
+                _block_for_line(block, line),
+                detected=_pt(line.bbox[1]),
+                expected=_pt(line.bbox[1] - signed),
+                baseline="The lines above and below leave a different gap on each side",
+                deviation=_signed_pt(signed),
+                confidence=_delta_confidence(signed, INDENT_THRESHOLD_PT, 1.0),
+                evidence={
+                    "kind": "vertical",
+                    "vertical_delta_pt": round(signed, 2),
+                    "comparable_count": len(gaps) if gaps else len(sentence),
+                    "matching_count": 1,
+                },
+                location=f"Vertical position of line near y={round(line.bbox[1])}",
+            )
+        )
+    return anomalies
+
+
+def _stacked_gaps(entries: list[tuple[_Block, _Line]]) -> list[float]:
+    ordered = sorted(entries, key=lambda item: item[1].bbox[1])
+    gaps: list[float] = []
+    for (_, prev), (_, curr) in zip(ordered, ordered[1:]):
+        if not _stacked(prev, curr):
+            continue
+        gap = curr.bbox[1] - prev.bbox[1]
+        if 0 < gap <= 80:
+            gaps.append(gap)
+    return gaps
+
+
+def _collision_delta(line: _Line, entries: list[tuple[_Block, _Line]]) -> float | None:
+    """Positive when this line sits below the line it overlaps."""
+    closest: float | None = None
+    for _, other in entries:
+        if other is line or not _stacked(line, other):
+            continue
+        dy = line.bbox[1] - other.bbox[1]
+        if abs(dy) < 0.5 or abs(dy) > 24:
+            continue
+        if _vertical_overlap(line, other) < 2:
+            continue
+        if closest is None or abs(dy) < abs(closest):
+            closest = dy
+    return closest
+
+
+def _lopsided_gap_delta(
+    line: _Line,
+    entries: list[tuple[_Block, _Line]],
+    typical: float | None,
+) -> float | None:
+    prev = next_line = None
+    for _, other in entries:
+        if other is line or not _stacked(line, other):
+            continue
+        if (
+            line.bbox[1] - _SHIFT_MAX_VERTICAL_REACH_PT
+            < other.bbox[1]
+            < line.bbox[1] - 2
+            and (prev is None or other.bbox[1] > prev.bbox[1])
+        ):
+            prev = other
+        elif (
+            line.bbox[1] + 2
+            < other.bbox[1]
+            < line.bbox[1] + _SHIFT_MAX_VERTICAL_REACH_PT
+            and (next_line is None or other.bbox[1] < next_line.bbox[1])
+        ):
+            next_line = other
+    if prev is None or next_line is None:
+        return None
+    gap_before = line.bbox[1] - prev.bbox[1]
+    gap_after = next_line.bbox[1] - line.bbox[1]
+    if gap_before <= 0 or gap_after <= 0:
+        return None
+    if abs(gap_before - gap_after) < INDENT_THRESHOLD_PT:
+        return None
+    smaller = min(gap_before, gap_after)
+    larger = max(gap_before, gap_after)
+    if typical is not None and smaller + 1 >= typical:
+        return None
+    if typical is None and smaller >= 10:
+        return None
+    # A section break, then a normal line, is not one line shoved off centre.
+    if typical is not None and larger > 3 * typical and abs(smaller - typical) <= 4:
+        return None
+    return line.bbox[1] - (prev.bbox[1] + next_line.bbox[1]) / 2
+
+
+def _same_edge_lines(line: _Line, entries: list[tuple[_Block, _Line]]) -> list[_Line]:
+    """Lines that share this left edge, nearest first in reading order."""
+    peers = [
+        other
+        for _, other in entries
+        if other is not line and abs(other.bbox[0] - line.bbox[0]) <= INDENT_THRESHOLD_PT / 2
+    ]
+    return sorted(peers, key=lambda other: other.bbox[1])
+
+
+def _same_edge_pocket(line: _Line, entries: list[tuple[_Block, _Line]]) -> float | None:
+    """A line shoved into the space between two paragraphs.
+
+    The lines above still share its left edge and a normal leading. Both
+    the gap above this line and the gap below it are at least 12pt larger
+    than that leading, so the line is sitting low in an opened pocket.
+    A new paragraph only opens the gap above it.
+    """
+    peers = _same_edge_lines(line, entries)
+    above = [other for other in peers if other.bbox[1] < line.bbox[1] - 2]
+    below = [other for other in peers if other.bbox[1] > line.bbox[1] + 2]
+    if len(above) < 2 or not below:
+        return None
+    prev2, prev = above[-2], above[-1]
+    nxt = below[0]
+    if nxt.bbox[1] - line.bbox[1] > _SHIFT_MAX_VERTICAL_REACH_PT:
+        return None
+    if line.bbox[1] - prev2.bbox[1] > _SHIFT_MAX_VERTICAL_REACH_PT:
+        return None
+    rhythm = prev.bbox[1] - prev2.bbox[1]
+    if rhythm < 8 or rhythm > 22:
+        return None
+    gap_before = line.bbox[1] - prev.bbox[1]
+    gap_after = nxt.bbox[1] - line.bbox[1]
+    if gap_before < rhythm + INDENT_THRESHOLD_PT:
+        return None
+    if gap_after < rhythm + INDENT_THRESHOLD_PT:
+        return None
+    return gap_before - rhythm
+
+
+def _check_split_lines(entries: list[tuple[_Block, _Line]]) -> list[LayoutAnomaly]:
+    """A sentence broken so one piece sits on a different baseline.
+
+    The two pieces still meet end to end. A wrapped line starts again at
+    the left margin, so it does not meet the line above at its right edge.
+    """
+    anomalies: list[LayoutAnomaly] = []
+    seen: set[int] = set()
+    for index, (block, line) in enumerate(entries):
+        if id(line) in seen:
+            continue
+        for other_block, other in entries[index + 1 :]:
+            pair = _abutting_pair(block, line, other_block, other)
+            if pair is None:
+                continue
+            moved_block, moved, signed = pair
+            seen.add(id(line))
+            seen.add(id(other))
+            anomalies.append(
+                _anomaly(
+                    "Spacing",
+                    _block_for_line(moved_block, moved),
+                    detected=_pt(moved.bbox[1]),
+                    expected=_pt(moved.bbox[1] - signed),
+                    baseline="The rest of this line sits on a different baseline",
+                    deviation=_signed_pt(signed),
+                    confidence=_delta_confidence(signed, INDENT_THRESHOLD_PT, 1.0),
+                    evidence={
+                        "kind": "vertical",
+                        "vertical_delta_pt": round(signed, 2),
+                        "comparable_count": 2,
+                        "matching_count": 1,
+                    },
+                    location=f"Vertical position of line near y={round(moved.bbox[1])}",
+                )
+            )
+            break
+    return anomalies
+
+
+def _abutting_pair(
+    block: _Block,
+    line: _Line,
+    other_block: _Block,
+    other: _Line,
+) -> tuple[_Block, _Line, float] | None:
+    dy = line.bbox[1] - other.bbox[1]
+    if abs(dy) < INDENT_THRESHOLD_PT or abs(dy) > 40:
+        return None
+    left, left_block, right = (
+        (line, block, other) if line.bbox[0] <= other.bbox[0] else (other, other_block, line)
+    )
+    gap = right.bbox[0] - left.bbox[2]
+    if gap < -4 or gap > 8:
+        return None
+    if _line_width(left) < 120 or _line_width(right) < 60:
+        return None
+    if _letters_in(left) < MIN_BLOCK_CHARS or _letters_in(right) < MIN_BLOCK_CHARS:
+        return None
+    # The wider piece is the sentence that left the shared baseline.
+    if _line_width(left) >= _line_width(right):
+        moved, moved_block, other_y = left, left_block, right.bbox[1]
+    else:
+        right_block = other_block if right is other else block
+        moved, moved_block, other_y = right, right_block, left.bbox[1]
+    return moved_block, moved, moved.bbox[1] - other_y
+
+
+def _letters_in(line: _Line) -> int:
+    return len(line.text.replace(" ", "").replace("\xa0", ""))
+
+
 def _line_leadings(block: _Block) -> list[float]:
     """Baseline-to-baseline distance between consecutive lines in a block."""
     ordered = sorted(block.lines, key=lambda line: line.bbox[1])
@@ -962,60 +2044,67 @@ def _check_line_spacing(blocks: list[_Block]) -> tuple[list[LayoutAnomaly], Chec
         by_page.setdefault(block.page, []).append(block)
 
     assessed_any = False
-    for page_blocks in by_page.values():
-        page_blocks = sorted(page_blocks, key=lambda b: (b.y0, b.x0))
-        leadings_by_block = [(b, _line_leadings(b)) for b in page_blocks]
-        all_leadings = [lead for _, leads in leadings_by_block for lead in leads]
-        if len(all_leadings) < 3:
+    for raw_blocks in by_page.values():
+        raw_blocks = sorted(raw_blocks, key=lambda b: (b.y0, b.x0))
+        columns = _page_columns(raw_blocks)
+        # A statement's date and description columns do not share a line
+        # rhythm. Spacing on those pages is the table, not a tampered paragraph.
+        if len(columns) >= 2:
             continue
-        assessed_any = True
-        page_expected = float(median(all_leadings))
-        for index, (block, leads) in enumerate(leadings_by_block):
-            if not leads:
+        groups = [raw_blocks]
+        for page_blocks in groups:
+            leadings_by_block = [(b, _line_leadings(b)) for b in page_blocks]
+            all_leadings = [lead for _, leads in leadings_by_block for lead in leads]
+            if len(all_leadings) < 3:
                 continue
-            window_leads = [
-                lead
-                for j, (_, other) in enumerate(leadings_by_block)
-                if j != index and abs(j - index) <= _LOCAL_WINDOW
-                for lead in other
-            ]
-            expected = float(median(window_leads)) if window_leads else page_expected
-            worst = max(leads, key=lambda lead: abs(lead - expected))
-            signed = worst - expected
-            if abs(signed) < LINE_SPACING_THRESHOLD_PT:
-                continue
-            matching = sum(
-                1
-                for lead in all_leadings
-                if abs(lead - expected) < LINE_SPACING_THRESHOLD_PT
-            )
-            anomalies.append(
-                _anomaly(
-                    "Spacing",
-                    block,
-                    detected=_pt(worst),
-                    expected=_pt(expected),
-                    baseline=(
-                        f"{_pct(matching, len(all_leadings))} of line gaps on this page "
-                        f"are ≈{_pt(expected)}"
-                    ),
-                    deviation=_signed_pt(signed),
-                    confidence=_delta_confidence(
-                        abs(signed),
-                        LINE_SPACING_THRESHOLD_PT,
-                        matching / len(all_leadings),
-                    ),
-                    evidence={
-                        "kind": "line-spacing",
-                        "detected_leading_pt": round(worst, 2),
-                        "expected_leading_pt": round(expected, 2),
-                        "leading_delta_pt": round(signed, 2),
-                        "block_median_leading_pt": round(float(median(leads)), 2),
-                        "comparable_count": len(all_leadings),
-                        "matching_count": matching,
-                    },
-                    location=f"Line spacing in body paragraph near y={round(block.y0)}",
+            assessed_any = True
+            page_expected = float(median(all_leadings))
+            for index, (block, leads) in enumerate(leadings_by_block):
+                if not leads:
+                    continue
+                window_leads = [
+                    lead
+                    for j, (_, other) in enumerate(leadings_by_block)
+                    if j != index and abs(j - index) <= _LOCAL_WINDOW
+                    for lead in other
+                ]
+                expected = float(median(window_leads)) if window_leads else page_expected
+                worst = max(leads, key=lambda lead: abs(lead - expected))
+                signed = worst - expected
+                if abs(signed) < LINE_SPACING_THRESHOLD_PT:
+                    continue
+                matching = sum(
+                    1
+                    for lead in all_leadings
+                    if abs(lead - expected) < LINE_SPACING_THRESHOLD_PT
                 )
+                anomalies.append(
+                    _anomaly(
+                        "Spacing",
+                        block,
+                        detected=_pt(worst),
+                        expected=_pt(expected),
+                        baseline=(
+                            f"{_pct(matching, len(all_leadings))} of line gaps on this page "
+                            f"are ≈{_pt(expected)}"
+                        ),
+                        deviation=_signed_pt(signed),
+                        confidence=_delta_confidence(
+                            abs(signed),
+                            LINE_SPACING_THRESHOLD_PT,
+                            matching / len(all_leadings),
+                        ),
+                        evidence={
+                            "kind": "line-spacing",
+                            "detected_leading_pt": round(worst, 2),
+                            "expected_leading_pt": round(expected, 2),
+                            "leading_delta_pt": round(signed, 2),
+                            "block_median_leading_pt": round(float(median(leads)), 2),
+                            "comparable_count": len(all_leadings),
+                            "matching_count": matching,
+                        },
+                        location=f"Line spacing in body paragraph near y={round(block.y0)}",
+                    )
             )
 
     if not assessed_any:
@@ -1047,72 +2136,78 @@ def _check_paragraph_spacing(
         by_page.setdefault(block.page, []).append(block)
 
     assessed_any = False
-    for page_blocks in by_page.values():
-        page_blocks = sorted(page_blocks, key=lambda b: (b.y0, b.x0))
-        if len(page_blocks) < 3:
+    for raw_blocks in by_page.values():
+        raw_blocks = sorted(raw_blocks, key=lambda b: (b.y0, b.x0))
+        columns = _page_columns(raw_blocks)
+        if len(columns) >= 2:
             continue
-        gaps: list[tuple[_Block, _Block, float]] = []
-        for prev, curr in zip(page_blocks, page_blocks[1:]):
-            gap = curr.y0 - prev.y1
-            if gap < 0:
+        groups = [raw_blocks]
+        for page_blocks in groups:
+            page_blocks = sorted(page_blocks, key=lambda b: (b.y0, b.x0))
+            if len(page_blocks) < 3:
                 continue
-            gaps.append((prev, curr, gap))
-        if len(gaps) < 2:
-            continue
-        assessed_any = True
-        typical = float(median(gap for _, _, gap in gaps))
-        section_cut = max(typical * _PARA_SECTION_BREAK_MULT, PARA_SPACING_THRESHOLD_PT * 2)
-        comparable = [(prev, curr, gap) for prev, curr, gap in gaps if gap <= section_cut]
-        if len(comparable) < 2:
-            continue
-        expected_page = float(median(gap for _, _, gap in comparable))
-        for index, (prev, curr, gap) in enumerate(comparable):
-            window = [
-                g
-                for j, (_, _, g) in enumerate(comparable)
-                if j != index and abs(j - index) <= _LOCAL_WINDOW
-            ]
-            expected = float(median(window)) if window else expected_page
-            signed = gap - expected
-            if abs(signed) < PARA_SPACING_THRESHOLD_PT:
+            gaps: list[tuple[_Block, _Block, float]] = []
+            for prev, curr in zip(page_blocks, page_blocks[1:]):
+                gap = curr.y0 - prev.y1
+                if gap < 0:
+                    continue
+                gaps.append((prev, curr, gap))
+            if len(gaps) < 2:
                 continue
-            matching = sum(
-                1 for _, _, g in comparable if abs(g - expected) < PARA_SPACING_THRESHOLD_PT
-            )
-            space = "before" if signed > 0 else "after"
-            anomalies.append(
-                _anomaly(
-                    "Spacing",
-                    curr,
-                    detected=_pt(gap),
-                    expected=_pt(expected),
-                    baseline=(
-                        f"{_pct(matching, len(comparable))} of paragraph gaps on this page "
-                        f"are ≈{_pt(expected)}"
-                    ),
-                    deviation=_signed_pt(signed),
-                    confidence=_delta_confidence(
-                        abs(signed),
-                        PARA_SPACING_THRESHOLD_PT,
-                        matching / len(comparable),
-                    ),
-                    evidence={
-                        "kind": "paragraph-spacing",
-                        "space": "before" if signed > 0 else "after",
-                        "gap_before_pt": round(gap, 2),
-                        "gap_after_prev_pt": round(gap, 2),
-                        "expected_gap_pt": round(expected, 2),
-                        "gap_delta_pt": round(signed, 2),
-                        "comparable_count": len(comparable),
-                        "matching_count": matching,
-                        "previous_text": _snippet(prev.text, 40),
-                    },
-                    location=(
-                        f"Paragraph spacing near y={round(curr.y0)} "
-                        f"(space {space} '{_snippet(curr.text, 40)}')"
-                    ),
+            assessed_any = True
+            typical = float(median(gap for _, _, gap in gaps))
+            section_cut = max(typical * _PARA_SECTION_BREAK_MULT, PARA_SPACING_THRESHOLD_PT * 2)
+            comparable = [(prev, curr, gap) for prev, curr, gap in gaps if gap <= section_cut]
+            if len(comparable) < 2:
+                continue
+            expected_page = float(median(gap for _, _, gap in comparable))
+            for index, (prev, curr, gap) in enumerate(comparable):
+                window = [
+                    g
+                    for j, (_, _, g) in enumerate(comparable)
+                    if j != index and abs(j - index) <= _LOCAL_WINDOW
+                ]
+                expected = float(median(window)) if window else expected_page
+                signed = gap - expected
+                if abs(signed) < PARA_SPACING_THRESHOLD_PT:
+                    continue
+                matching = sum(
+                    1 for _, _, g in comparable if abs(g - expected) < PARA_SPACING_THRESHOLD_PT
                 )
-            )
+                space = "before" if signed > 0 else "after"
+                anomalies.append(
+                    _anomaly(
+                        "Spacing",
+                        curr,
+                        detected=_pt(gap),
+                        expected=_pt(expected),
+                        baseline=(
+                            f"{_pct(matching, len(comparable))} of paragraph gaps on this page "
+                            f"are ≈{_pt(expected)}"
+                        ),
+                        deviation=_signed_pt(signed),
+                        confidence=_delta_confidence(
+                            abs(signed),
+                            PARA_SPACING_THRESHOLD_PT,
+                            matching / len(comparable),
+                        ),
+                        evidence={
+                            "kind": "paragraph-spacing",
+                            "space": "before" if signed > 0 else "after",
+                            "gap_before_pt": round(gap, 2),
+                            "gap_after_prev_pt": round(gap, 2),
+                            "expected_gap_pt": round(expected, 2),
+                            "gap_delta_pt": round(signed, 2),
+                            "comparable_count": len(comparable),
+                            "matching_count": matching,
+                            "previous_text": _snippet(prev.text, 40),
+                        },
+                        location=(
+                            f"Paragraph spacing near y={round(curr.y0)} "
+                            f"(space {space} '{_snippet(curr.text, 40)}')"
+                        ),
+                    )
+                )
 
     if not assessed_any:
         return [], CheckAssessment(
@@ -1139,8 +2234,9 @@ _PRIMARY_RANK = {
     "alignment": 2,
     "right-edge": 3,
     "indentation": 4,
-    "line-spacing": 5,
-    "paragraph-spacing": 6,
+    "vertical": 5,
+    "line-spacing": 6,
+    "paragraph-spacing": 7,
 }
 
 
@@ -1186,12 +2282,81 @@ def _signal_record(anomaly: LayoutAnomaly) -> dict:
     }
 
 
+def _readable_check(signal: dict) -> dict:
+    """One check, without the numeric fields that repeat detected/expected."""
+    check = {
+        "check": str(signal.get("kind") or signal.get("anomaly_type") or "check").replace("-", " "),
+        "detected": signal.get("detected"),
+        "expected": signal.get("expected"),
+        "difference": signal.get("deviation"),
+    }
+    comparable = signal.get("comparable_count")
+    matching = signal.get("matching_count")
+    if isinstance(comparable, int) and isinstance(matching, int):
+        check["matches"] = f"{matching} of {comparable}"
+    pages = signal.get("pages_analysed")
+    agreeing = signal.get("pages_matching_baseline")
+    if isinstance(pages, int) and isinstance(agreeing, int):
+        check["matches"] = f"{agreeing} of {pages} pages"
+    return {key: value for key, value in check.items() if value is not None}
+
+
+def _opening(text: str) -> str:
+    return " ".join(text.replace("\xa0", " ").split())[:60]
+
+
+def _bbox_area(bbox: BBox) -> float:
+    return max(0.0, bbox[2] - bbox[0]) * max(0.0, bbox[3] - bbox[1])
+
+
+def _bbox_contains(outer: BBox, inner: BBox) -> bool:
+    return (
+        inner[0] >= outer[0] - 2
+        and inner[1] >= outer[1] - 2
+        and inner[2] <= outer[2] + 2
+        and inner[3] <= outer[3] + 2
+        and _bbox_area(inner) < _bbox_area(outer)
+    )
+
+
+def _absorb_line_into_paragraph(anomalies: list[LayoutAnomaly]) -> None:
+    """A line finding inside a paragraph finding is the same area."""
+    by_page: dict[int, list[LayoutAnomaly]] = {}
+    for anomaly in anomalies:
+        by_page.setdefault(anomaly.page, []).append(anomaly)
+    for items in by_page.values():
+        for inner in items:
+            opening = _opening(inner.text or "")
+            if len(opening) < 20:
+                continue
+            host = None
+            host_area = None
+            for outer in items:
+                if outer is inner:
+                    continue
+                outer_opening = _opening(outer.text or "")
+                if len(outer_opening) < 20:
+                    continue
+                if not _bbox_contains(outer.bbox, inner.bbox):
+                    continue
+                if opening not in outer_opening and outer_opening not in opening:
+                    continue
+                area = _bbox_area(outer.bbox)
+                if host_area is None or area < host_area:
+                    host = outer
+                    host_area = area
+            if host is not None:
+                inner.bbox = host.bbox
+
+
 def _coalesce_signals(anomalies: list[LayoutAnomaly]) -> list[LayoutAnomaly]:
     """
     Several checks on the same paragraph (indent + right-edge + spacing)
     become one finding with evidence.signals, not three anomaly rows.
     Consecutive runs stay as separate findings; they are enrichment only.
+    A line named inside a paragraph is the same finding as that paragraph.
     """
+    _absorb_line_into_paragraph(anomalies)
     groups: dict[tuple[int, BBox], list[LayoutAnomaly]] = {}
     order: list[tuple[int, BBox]] = []
     for anomaly in anomalies:
@@ -1321,7 +2486,7 @@ def _check_alignment(blocks: list[_Block]) -> tuple[list[LayoutAnomaly], CheckAs
         return [], CheckAssessment(
             unable_to_assess=True,
             unable_to_assess_reason=(
-                "Not enough comparable body paragraphs to assess alignment "
+                "Not enough comparable lines to assess alignment "
                 f"({len(body)} found, need at least 2)"
             ),
         )
@@ -1332,80 +2497,85 @@ def _check_alignment(blocks: list[_Block]) -> tuple[list[LayoutAnomaly], CheckAs
         by_page.setdefault(block.page, []).append(block)
 
     classified_any = False
-    for page_blocks in by_page.values():
-        page_blocks = sorted(page_blocks, key=lambda b: (b.y0, b.x0))
-        column = _content_column(page_blocks)
-        if column is None:
-            continue
-        content_left, content_right = column
-
-        labelled: list[tuple[_Block, Alignment, Literal["full", "short"]]] = []
-        for block in page_blocks:
-            alignment = _classify_block_alignment(block, content_left, content_right)
-            if alignment is None:
+    for raw_blocks in by_page.values():
+        raw_blocks = sorted(raw_blocks, key=lambda b: (b.y0, b.x0))
+        columns = _page_columns(raw_blocks)
+        groups = (
+            _column_groups(raw_blocks, columns) if len(columns) >= 2 else [raw_blocks]
+        )
+        for page_blocks in groups:
+            column = _content_column(page_blocks)
+            if column is None:
                 continue
-            labelled.append((block, alignment, _width_band(block, content_left, content_right)))
+            content_left, content_right = column
 
-        if not labelled:
-            continue
+            labelled: list[tuple[_Block, Alignment, Literal["full", "short"]]] = []
+            for block in page_blocks:
+                alignment = _classify_block_alignment(block, content_left, content_right)
+                if alignment is None:
+                    continue
+                labelled.append((block, alignment, _width_band(block, content_left, content_right)))
 
-        full_peers: list[tuple[_Block, Alignment]] = [
-            (block, alignment) for block, alignment, band in labelled if band == "full"
-        ]
-        short_peers: list[tuple[_Block, Alignment]] = [
-            (block, alignment) for block, alignment, band in labelled if band == "short"
-        ]
-        full_aligns: list[Alignment] = [alignment for _, alignment in full_peers]
-        full_expected = _dominant(full_aligns) if len(full_peers) >= 2 else None
-
-        for peers in (full_peers, short_peers):
-            if len(peers) < 2:
+            if not labelled:
                 continue
-            classified_any = True
-            peer_aligns: list[Alignment] = [alignment for _, alignment in peers]
-            expected = _dominant(peer_aligns)
-            if expected is None:
-                continue
-            matching = sum(1 for _, a in peers if a == expected)
-            if not _has_strong_majority(matching, len(peers)):
-                continue
-            for block, alignment in peers:
-                if alignment == expected:
-                    continue
-                if _alignment_mismatch_unreliable(
-                    block, alignment, expected, content_left
-                ):
-                    continue
-                anomalies.append(
-                    _alignment_anomaly(block, alignment, expected, peers)
-                )
 
-        # A centred/right-aligned insertion among full-width body copy is
-        # often itself short (its lines don't fill the column), so it
-        # never enters the full-band comparison above. Flag it against
-        # the full-band majority when it looks like a paragraph, not a
-        # one-line heading or date.
-        if full_expected is not None and _has_strong_majority(
-            sum(1 for _, a in full_peers if a == full_expected),
-            len(full_peers),
-        ):
-            classified_any = True
-            already = {(a.page, a.bbox) for a in anomalies}
-            for block, alignment in short_peers:
-                if alignment == full_expected:
+            full_peers: list[tuple[_Block, Alignment]] = [
+                (block, alignment) for block, alignment, band in labelled if band == "full"
+            ]
+            short_peers: list[tuple[_Block, Alignment]] = [
+                (block, alignment) for block, alignment, band in labelled if band == "short"
+            ]
+            full_aligns: list[Alignment] = [alignment for _, alignment in full_peers]
+            full_expected = _dominant(full_aligns) if len(full_peers) >= 2 else None
+
+            for peers in (full_peers, short_peers):
+                if len(peers) < 2:
                     continue
-                if _alignment_mismatch_unreliable(
-                    block, alignment, full_expected, content_left
-                ):
+                classified_any = True
+                peer_aligns: list[Alignment] = [alignment for _, alignment in peers]
+                expected = _dominant(peer_aligns)
+                if expected is None:
                     continue
-                if not (len(block.lines) >= 2 or block.char_count >= 80):  # pragma: no cover
+                matching = sum(1 for _, a in peers if a == expected)
+                if not _has_strong_majority(matching, len(peers)):
                     continue
-                key = (block.page + 1, tuple(round(v, 2) for v in block.bbox))
-                if key in already:
-                    continue
-                anomalies.append(
-                    _alignment_anomaly(block, alignment, full_expected, full_peers)
-                )
+                for block, alignment in peers:
+                    if alignment == expected:
+                        continue
+                    if _alignment_mismatch_unreliable(
+                        block, alignment, expected, content_left
+                    ):
+                        continue
+                    anomalies.append(
+                        _alignment_anomaly(block, alignment, expected, peers)
+                    )
+
+            # A centred/right-aligned insertion among full-width body copy is
+            # often itself short (its lines don't fill the column), so it
+            # never enters the full-band comparison above. Flag it against
+            # the full-band majority when it looks like a paragraph, not a
+            # one-line heading or date.
+            if full_expected is not None and _has_strong_majority(
+                sum(1 for _, a in full_peers if a == full_expected),
+                len(full_peers),
+            ):
+                classified_any = True
+                already = {(a.page, a.bbox) for a in anomalies}
+                for block, alignment in short_peers:
+                    if alignment == full_expected:
+                        continue
+                    if _alignment_mismatch_unreliable(
+                        block, alignment, full_expected, content_left
+                    ):
+                        continue
+                    if not (len(block.lines) >= 2 or block.char_count >= 80):
+                        continue
+                    key = (block.page + 1, tuple(round(v, 2) for v in block.bbox))
+                    if key in already:
+                        continue
+                    anomalies.append(
+                        _alignment_anomaly(block, alignment, full_expected, full_peers)
+                    )
 
     if not classified_any:
         return [], CheckAssessment(
@@ -1423,7 +2593,11 @@ def _check_row_alignment(blocks: list[_Block]) -> list[LayoutAnomaly]:
     right-hand amount sitting higher or lower than its left-hand label.
     Pair each body/table block with the nearest item to its right on the
     same visual row and compare tops and baselines directly (not against
-    a cluster median, which halves a two-item gap).
+    a cluster median, which halves a two-item gap). A short all-caps
+    heading joins that row, beside a body line or another heading. A
+    heading has moved only when both edges leave the line beside it, so a
+    wordmark whose baselines still meet stays quiet. Running headers stay
+    out.
     """
     candidates = [
         b
@@ -1436,12 +2610,31 @@ def _check_row_alignment(blocks: list[_Block]) -> list[LayoutAnomaly]:
 
     anomalies: list[LayoutAnomaly] = []
     seen: set[tuple[int, BBox, BBox]] = set()
-    for group_blocks in by_group.values():
+    groups: list[tuple[list[_Block], bool]] = [
+        (group, False) for group in by_group.values()
+    ]
+    groups.extend((group, True) for group in _heading_row_groups(blocks).values())
+    for group_blocks, heading_row in groups:
+        measured: list[tuple[_Block, _Block, tuple[float, float]]] = []
         for left, right in _nearest_row_pairs(group_blocks):
-            deltas = _vertical_misalignment(left, right)
+            if heading_row and left.role != "heading" and right.role != "heading":
+                continue
+            # A short heading inside the box of a tall paragraph is not on
+            # that paragraph's row. The line beside it has its middle here.
+            if heading_row and _mid_y_gap(left, right) > (
+                max(min(left.height, right.height), ROW_ALIGN_THRESHOLD_PT) * 1.1
+            ):
+                continue
+            deltas = (
+                _both_edges_off(left, right)
+                if heading_row
+                else _vertical_misalignment(left, right)
+            )
             if deltas is None:
                 continue
-            top_delta, baseline_delta = deltas
+            measured.append((left, right, deltas))
+        rhythms = _row_offset_rhythms([deltas for _, _, deltas in measured])
+        for left, right, (top_delta, baseline_delta) in measured:
             key = (right.page, left.bbox, right.bbox)
             if key in seen:
                 continue
@@ -1449,6 +2642,10 @@ def _check_row_alignment(blocks: list[_Block]) -> list[LayoutAnomaly]:
             primary = (
                 top_delta if abs(top_delta) >= abs(baseline_delta) else baseline_delta
             )
+            # The same stagger on many rows is how a statement's columns sit,
+            # not one amount shoved off its label.
+            if _matches_row_rhythm(primary, rhythms):
+                continue
             location = (
                 f"Same-row pair near y={round(left.y0)} "
                 f"({_snippet(right.text, 40)} vs {_snippet(left.text, 40)})"
@@ -1487,6 +2684,59 @@ def _check_row_alignment(blocks: list[_Block]) -> list[LayoutAnomaly]:
                 )
             )
     return anomalies
+
+
+def _heading_row_groups(blocks: list[_Block]) -> dict[int, list[_Block]]:
+    """Body, table, and heading lines on a page that has a heading.
+
+    The heading is compared with whichever of those sits beside it. Headers
+    and footers stay out.
+    """
+    pages: dict[int, list[_Block]] = {}
+    for block in blocks:
+        if block.role not in {"body", "table", "heading"}:
+            continue
+        if block.height < 2.0 or not block.text.strip():
+            continue
+        pages.setdefault(block.page, []).append(block)
+    return {
+        page: items
+        for page, items in pages.items()
+        if any(block.role == "heading" for block in items)
+    }
+
+
+def _both_edges_off(left: _Block, right: _Block) -> tuple[float, float] | None:
+    """A line that left the row takes its top and its baseline with it."""
+    top_delta = right.y0 - left.y0
+    baseline_delta = right.y1 - left.y1
+    if (
+        abs(top_delta) >= ROW_ALIGN_THRESHOLD_PT
+        and abs(baseline_delta) >= ROW_ALIGN_THRESHOLD_PT
+    ):
+        return top_delta, baseline_delta
+    return None
+
+
+def _row_offset_rhythms(deltas: list[tuple[float, float]]) -> list[float]:
+    """Offsets shared by three or more rows are the column's usual stagger."""
+    if len(deltas) < 3:
+        return []
+    primaries = [
+        top if abs(top) >= abs(base) else base
+        for top, base in deltas
+    ]
+    clusters: list[list[float]] = []
+    for value in sorted(primaries):
+        if clusters and abs(value - clusters[-1][0]) < ROW_ALIGN_THRESHOLD_PT:
+            clusters[-1].append(value)
+        else:
+            clusters.append([value])
+    return [float(median(cluster)) for cluster in clusters if len(cluster) >= 3]
+
+
+def _matches_row_rhythm(value: float, rhythms: list[float]) -> bool:
+    return any(abs(value - rhythm) < ROW_ALIGN_THRESHOLD_PT for rhythm in rhythms)
 
 
 def _nearest_row_pairs(blocks: list[_Block]) -> list[tuple[_Block, _Block]]:
@@ -1648,11 +2898,14 @@ def _is_title_page(blocks: list[_Block]) -> bool:
     if page_width <= 0:
         return False
     cut = page_width * _TITLE_PAGE_SHORT_RATIO
-    # Covers are stacked short lines. One full-width block means body copy,
-    # a form, or an instruction page — not a title stack.
-    if any(b.width >= cut for b in blocks):
+    # A cover is stacked short lines. One single-line company name can sit
+    # among them. A tall paragraph, or several wide lines, is a body page.
+    wide = [block for block in blocks if block.width >= cut]
+    if any(len(block.lines) >= 2 or block.height > 36 for block in wide):
         return False
-    short = sum(1 for b in blocks if b.width < cut)
+    if len(wide) > 1:
+        return False
+    short = len(blocks) - len(wide)
     return short / len(blocks) >= _TITLE_PAGE_SHORT_FRACTION
 
 
@@ -2189,6 +3442,7 @@ def _abs_pt_phrase(evidence: dict, deviation: str) -> str:
         "right_delta_pt",
         "leading_delta_pt",
         "gap_delta_pt",
+        "vertical_delta_pt",
         "mid_delta_pt",
         "delta_pt",
         "top_delta_pt",
@@ -2250,6 +3504,11 @@ def _summary_sentence(kind: str, evidence: dict, delta: str) -> str:
             f"Line spacing in this paragraph differs from comparable body "
             f"paragraphs by {delta}."
         )
+    if kind == "vertical":
+        signed = evidence.get("vertical_delta_pt")
+        if isinstance(signed, (int, float)) and signed < 0:
+            return f"This line sits {delta} higher than the lines around it."
+        return f"This line sits {delta} lower than the lines around it."
     if kind == "paragraph-spacing":
         where = evidence.get("space")
         if where in {"before", "after"}:

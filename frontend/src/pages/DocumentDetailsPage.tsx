@@ -4,6 +4,7 @@ import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DocumentPreviewModal from '../components/DocumentPreviewModal';
+import KebabMenu from '../components/KebabMenu';
 import { subscribeToCaseStatus } from '../services/caseSocket';
 import {
   deleteExtractedField,
@@ -31,7 +32,7 @@ import {
   updateDocumentType,
   updateExtractedFields,
 } from '../services/uploadService';
-import type { DetectionReport, DocumentRecord, LangGraphTrace } from '../services/uploadService';
+import type { DetectionReport, DocumentCaseMatch, DocumentRecord, LangGraphTrace } from '../services/uploadService';
 
 interface DocumentDetailsPageProps {
   selectedCase: CaseRecord;
@@ -1196,23 +1197,28 @@ export default function DocumentDetailsPage({
         <div className="document-details-title-row">
           <h1>Document Details</h1>
           <div className="document-details-title-actions">
-            <button
-              type="button"
-              className="preview-document-button"
-              onClick={() => setIsPreviewOpen(true)}
-            >
-              ⛶ Preview document
-            </button>
-            {document.status !== 'approved' && !isInFlight && (
-              <button
-                type="button"
-                className="delete-record-button"
-                onClick={() => setDeleteConfirmOpen(true)}
-                disabled={isDeletingDocument}
-              >
-                {isDeletingDocument ? 'Deleting…' : 'Delete document'}
-              </button>
-            )}
+            <KebabMenu
+              label={isDeletingDocument ? 'Deleting document' : 'Document actions'}
+              disabled={isDeletingDocument}
+              items={[
+                {
+                  id: 'preview',
+                  label: 'Preview document',
+                  onSelect: () => setIsPreviewOpen(true),
+                },
+                ...(document.status !== 'approved' && !isInFlight
+                  ? [
+                      {
+                        id: 'delete',
+                        label: isDeletingDocument ? 'Deleting…' : 'Delete document',
+                        danger: true,
+                        disabled: isDeletingDocument,
+                        onSelect: () => setDeleteConfirmOpen(true),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
           </div>
         </div>
         <p className="sub">
