@@ -11,6 +11,7 @@ from app.fraud_detection.numerical_validation import (
     BenfordAnalysis,
     NumericalValidationResult,
 )
+from app.fraud_detection.date_anomalies import DateAnomalyResult
 from app.fraud_detection.spelling_anomaly import SpellingAnomaly, SpellingAnomalyResult
 from app.main import app
 
@@ -22,7 +23,7 @@ def test_test_spelling_anomaly_success() -> None:
         document_id="ignored",
         anomalies=[
             SpellingAnomaly(
-                page=1, section=0, word="Helllo",
+                word="Helllo",
                 surrounding_text="Helllo there", suggested_correction="hello",
             )
         ],
@@ -214,6 +215,7 @@ def test_test_numerical_validation_success() -> None:
         document_id="ignored",
         values_analysed=7,
         findings=[],
+        skipped_checks=[],
         benford=BenfordAnalysis(
             sample_size=0,
             digits=[],
@@ -226,38 +228,66 @@ def test_test_numerical_validation_success() -> None:
     with patch(
         "app.routers.extraction.check_numerical_validation", return_value=result
     ) as mock_check:
-        response = client.post(
-            "/extraction/test-numerical-validation",
-            files={"file": ("statement.pdf", io.BytesIO(b"%PDF-1.4 fake"), "application/pdf")},
-        )
+        response = client.post("/extraction/test-numerical-validation")
 
     assert response.status_code == 200
     assert response.json()["values_analysed"] == 7
     args = mock_check.call_args[0]
-    assert args[1] == b"%PDF-1.4 fake"
-    assert args[2] == "statement.pdf"
-    # No classified document behind an ad-hoc upload, so no extracted
-    # fields are forwarded and the arithmetic checks have nothing to run on.
-    assert len(args) == 3
+    # No classified document behind an ad-hoc dev call, so no extracted
+    # fields are forwarded and no document_type unless the caller supplied
+    # one — every per-type check has nothing to run on.
+    assert args[1] is None
+    assert args[2] is None
 
 
-def test_test_numerical_validation_rejects_unsupported_content_type() -> None:
-    with patch("app.routers.extraction.check_numerical_validation") as mock_check:
+def test_test_numerical_validation_forwards_optional_document_type() -> None:
+    result = NumericalValidationResult(
+        document_id="ignored", values_analysed=0, findings=[], skipped_checks=[],
+        benford=BenfordAnalysis(sample_size=0, digits=[], unable_to_assess=True,
+                                 unable_to_assess_reason="Too few values"),
+        unable_to_assess=False,
+    )
+    with patch(
+        "app.routers.extraction.check_numerical_validation", return_value=result
+    ) as mock_check:
         response = client.post(
             "/extraction/test-numerical-validation",
-            files={"file": ("virus.exe", io.BytesIO(b"MZ"), "application/octet-stream")},
+            data={"document_type": "bank_statement"},
         )
 
-    assert response.status_code == 415
-    mock_check.assert_not_called()
+    assert response.status_code == 200
+    assert mock_check.call_args[0][2] == "bank_statement"
 
 
-def test_test_numerical_validation_rejects_empty_file() -> None:
-    with patch("app.routers.extraction.check_numerical_validation") as mock_check:
+def test_test_date_anomalies_success() -> None:
+    result = DateAnomalyResult(
+        document_id="ignored", dates_extracted=[], findings=[], skipped_checks=[],
+        unable_to_assess=False,
+    )
+
+    with patch(
+        "app.routers.extraction.check_date_anomalies", return_value=result
+    ) as mock_check:
+        response = client.post("/extraction/test-date-anomalies")
+
+    assert response.status_code == 200
+    args = mock_check.call_args[0]
+    assert args[1] is None
+    assert args[2] is None
+
+
+def test_test_date_anomalies_forwards_optional_document_type() -> None:
+    result = DateAnomalyResult(
+        document_id="ignored", dates_extracted=[], findings=[], skipped_checks=[],
+        unable_to_assess=False,
+    )
+    with patch(
+        "app.routers.extraction.check_date_anomalies", return_value=result
+    ) as mock_check:
         response = client.post(
-            "/extraction/test-numerical-validation",
-            files={"file": ("statement.pdf", io.BytesIO(b""), "application/pdf")},
+            "/extraction/test-date-anomalies",
+            data={"document_type": "bank_statement"},
         )
 
-    assert response.status_code == 400
-    mock_check.assert_not_called()
+    assert response.status_code == 200
+    assert mock_check.call_args[0][2] == "bank_statement"
