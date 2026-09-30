@@ -38,9 +38,8 @@ dependencies = [
   "opentelemetry-sdk>=1.27,<2.0",
   "opentelemetry-instrumentation-fastapi>=0.48b0",
   "opentelemetry-exporter-gcp-trace>=1.7,<2.0",
-  # Mock-document generators (doc_gen_scripts, scripts/generate_from_mastersheet.py),
-  # exercised by tests/test_regression_document_generation.py. Already in
-  # requirements.txt; CI installs from this file.
+  # Mock-document generators (doc_gen_scripts). Already in requirements.txt;
+  # CI installs from this file.
   "openpyxl>=3.1",
   "pandas>=2.1",
 ]

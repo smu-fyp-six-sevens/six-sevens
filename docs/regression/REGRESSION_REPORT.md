@@ -10,29 +10,30 @@
 | Manual test cases | Sprint 1 | Sprint 2 | Total |
 |---|---|---|---|
 | In the sprint sheets | 38 | 60 | 98 |
-| Automated and passing | 28 | 46 | 74 |
-| Automated, defect found | 2 | 3 | 5 |
-| Retired (tooling removed from the product) | 8 | 11 | 19 |
+| Out of scope (test-data tooling, checked manually) | 19 | 21 | 40 |
+| **In scope** | **19** | **39** | **58** |
+| Automated and passing | 19 | 37 | 56 |
+| Automated, defect found | 0 | 2 | 2 |
 
-Counted per test case ID. TD-001 – TD-006 appear in both sheets and are counted in each; in Sprint 1, DT-006 – DT-011 repeat TD-001 – TD-006 under Development Test IDs.
+Counted per test case ID. Out of scope: document generation, the mastersheet and fraud injection (TD-001 – TD-006, DT-001 – DT-028). These were done manually to build the test document sets the system is tested with; they aren't system features, so they aren't regression-tested.
 
 | Suite | Tests | Passed | Known defects (expected failures) |
 |---|---|---|---|
-| Backend — pytest (all) | 878 | 877 | 1 (REG-005) |
-| └ tagged `sprint1` / `sprint2` | 26 / 83 | 108 of 109 | 1 |
+| Backend — pytest (all) | 866 | 866 | 0 |
+| └ tagged `sprint1` / `sprint2` | 19 / 78 | 97 | 0 |
 | Frontend — Playwright | 49 | 47 | 2 (REG-001, REG-002) |
 
-**Defects:** 3 open (REG-001, REG-002, REG-005), 2 closed because the tool they were in was retired (REG-003, REG-004).
+**Defects:** 2 open (REG-001, REG-002).
 
 ### Acceptance criteria
 
 | AC | Status |
 |---|---|
-| AC1 — Sprint 1 regression tested | ✅ Every Sprint 1 case automated, or retired with its tooling |
-| AC2 — Sprint 2 regression tested | ✅ Every Sprint 2 case automated, or retired with its tooling (AI cases now included, with mocked AI responses) |
-| AC3 — previously passed cases still pass | ✅ Both suites run on every PR; 3 open regressions, below |
+| AC1 — Sprint 1 regression tested | ✅ Every in-scope Sprint 1 case automated and passing |
+| AC2 — Sprint 2 regression tested | ✅ Every in-scope Sprint 2 case automated, including the AI cases (mocked AI responses) |
+| AC3 — previously passed cases still pass | ✅ Both suites run on every PR; 2 open regressions, below |
 | AC4 — defects emailed | ✅ A failing PR check emails whoever pushed it (GitHub notifications) |
-| AC5 — re-run after defects fixed | ⏳ Waiting on fixes for REG-001, REG-002, REG-005 |
+| AC5 — re-run after defects fixed | ⏳ Waiting on fixes for REG-001 and REG-002 |
 
 ## How the regression suite works
 
@@ -45,21 +46,12 @@ Counted per test case ID. TD-001 – TD-006 appear in both sheets and are counte
 
 ## Results by test case
 
-✅ pass · ❌ defect · ⊘ retired
+✅ pass · ❌ defect
 
 ### Sprint 1
 
 | ID | Story | Scenario | Automated by | Result |
 |---|---|---|---|---|
-| TD-001 / DT-010 | SCRUM-15 | Unrecognised template matches no defined type | `test_regression_mastersheet.py` | ✅ |
-| TD-002 / DT-011 | SCRUM-15 | Unrecognised documents labelled in masterlist | `test_regression_mastersheet.py` | ✅ |
-| TD-003 / DT-006 | SCRUM-13 | Every generated document logged in masterlist | — | ⊘ generator and check script retired |
-| TD-004 / DT-007 | SCRUM-13 | Each case record has required company/applicant info | `test_regression_mastersheet.py` | ✅ |
-| TD-005 / DT-008 | SCRUM-13 | Each document linked to the correct case | `test_regression_mastersheet.py` | ✅ |
-| TD-006 / DT-009 | SCRUM-13 | Fraud details recorded, or none | `test_regression_mastersheet.py` | ❌ REG-005 |
-| DT-001 – DT-003, DT-005 | SCRUM-10/12 | Templates per type, synthetic values, reproducible output, sets match mastersheet | — | ⊘ generator retired |
-| DT-004 | SCRUM-12 | ≥36 complete sets across 11 types | `test_regression_mastersheet.py` | ✅ |
-| DT-012 – DT-013 | SCRUM-14 | Fraud injection (PDF) | — | ⊘ injection tool excluded from tests (dev-only) |
 | DI-001 – DI-016 | SCRUM-6 | Upload page | `e2e/specs/upload.spec.ts`; `test_regression_upload.py`; `test_documents.py`, `test_ingestion.py` | ✅ all 16 |
 | DI-017 | SCRUM-8 | Clean files classified with type, confidence and routing | `test_regression_ai_pipeline.py` (C001 set, unrecognised, below threshold, tool use) | ✅ |
 | MA-001 | SCRUM-17 | Stored document queued | `test_queue_service.py` | ✅ |
@@ -69,15 +61,7 @@ Counted per test case ID. TD-001 – TD-006 appear in both sheets and are counte
 
 | ID | Story | Scenario | Automated by | Result |
 |---|---|---|---|---|
-| TD-001, 002, 004, 005 | SCRUM-13/15 | (same as Sprint 1) | `test_regression_mastersheet.py` | ✅ |
-| TD-003 | SCRUM-13 | (same as Sprint 1) | — | ⊘ retired |
-| TD-006 | SCRUM-13 | (same as Sprint 1) | `test_regression_mastersheet.py` | ❌ REG-005 |
-| DT-014 – DT-019 | SCRUM-121 | Fraud injection on PNG/JPG | — | ⊘ injection tool excluded from tests (dev-only) |
-| DT-020 – DT-022 | SCRUM-112 | Optional documents / NOA generated | — | ⊘ generator retired |
-| DT-023 – DT-026 | SCRUM-120 | ≥15 new cases, optional types, realistic names, fraud tags | `test_regression_mastersheet.py` | ✅ (C042 → REG-005) |
-| DT-027 | SCRUM-115 | Generated in PDF/PNG/JPG/JPEG | — | ⊘ generator retired |
-| DT-028 | SCRUM-115 | Formats follow per-type assumptions | `test_regression_mastersheet.py` | ✅ |
-| DT-029 | SCRUM-115 | All formats go through ingestion | `upload.spec.ts`; `test_ingestion.py`; `test_regression_ai_pipeline.py` | ✅ |
+| DT-029 | SCRUM-115 | PDF, PNG, JPG and JPEG go through ingestion | `upload.spec.ts`; `test_ingestion.py`; `test_regression_ai_pipeline.py` | ✅ |
 | DT-030 | SCRUM-115 | Type and file info kept after ingestion | `test_regression_ai_pipeline.py` | ✅ |
 | DT-031 | SCRUM-115 | DOCX/XLSX/TXT rejected | `upload.spec.ts` | ✅ |
 | CM-001 – CM-013 | SCRUM-78/83/96 | View, open, create cases | `case-management.spec.ts`; `test_cases.py` | ✅ (CM-007/009 placeholder = intended; CM-011 UI-level) |
@@ -101,16 +85,10 @@ Counted per test case ID. TD-001 – TD-006 appear in both sheets and are counte
 |---|---|---|---|---|---|
 | REG-001 | Open | High | DI-026 | SCRUM-20 / SCRUM-26 | A document with a flagged, empty required field can still be approved: the button is only disabled while processing, and the approve endpoint only checks that processing finished. |
 | REG-002 | Open | Medium | DI-025 | SCRUM-20 | Save fields requires every field to be filled, including ones that are correctly empty (e.g. no former name), so a correction can't be saved without a placeholder. |
-| REG-003 | Closed — retired | Low | TD-003 / DT-006 | SCRUM-13 | `scripts/verify_documents.py` pointed at a missing v9 mastersheet. The script was removed in refactor `61d730b`. |
-| REG-004 | Closed — retired | Low | DT-003 | SCRUM-10 | The Certificate of Incorporation's receipt number was random on each generation. The generator was removed in refactor `61d730b`. |
-| REG-005 | Open | Low (test data) | TD-006 / DT-009, DT-026 | SCRUM-13 / SCRUM-120 | Mastersheet row `BizFile_994116.pdf` (C042) is marked Fraud Injected = Y with no fraud type or description. |
 
-## Retired test cases
+## Out of scope
 
-Removed from the product by teammates after Sprint 2, so there is nothing left to regression-test:
-
-- **Mock-document generator** (`scripts/generate_from_mastersheet.py`, `verify_documents.py`), deleted in refactor `61d730b`: TD-003 / DT-006, DT-001 – DT-003, DT-005, DT-020 – DT-022, DT-027. The mastersheet itself is still tested.
-- **Fraud-injection tool**, kept in the repo but its tests excluded from normal runs as dev-only tooling (`conftest.py` `collect_ignore`, `9dee1c7`): DT-012 – DT-019. Its 159 tests still pass when run directly.
+Document generation, the mastersheet and fraud injection — TD-001 – TD-006 and DT-001 – DT-028 (SCRUM-10, 12, 13, 14, 15, 112, 115, 120, 121). These were done manually to produce the test document sets used with the system, not features of the system itself, so they aren't regression-tested. (DT-029 – DT-031 stay in scope: they test how the system handles each file format.)
 
 ## Changes needed after merging `main`
 
@@ -133,4 +111,4 @@ cd backend && python -m pytest -m "sprint1 or sprint2"
 cd ../frontend && npm run test:e2e
 ```
 
-After REG-001, REG-002 and REG-005 are fixed, each one's expected-failure test reports "passed unexpectedly": remove its marker, re-run until both suites are fully green, and record that run here (AC5).
+After REG-001 and REG-002 are fixed, each one's expected-failure test reports "passed unexpectedly": remove its marker, re-run until both suites are fully green, and record that run here (AC5).

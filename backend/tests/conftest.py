@@ -236,8 +236,8 @@ _EXISTING_REGRESSION_TESTS: dict[str, list[tuple[str, str, str]]] = {
     "test_queue_service.py::test_enqueue_marks_queued_and_puts_document_id_on_queue": [
         ("sprint1", "SCRUM-17", "MA-001"),
     ],
-    # SCRUM-14 / SCRUM-121 fraud injection (DT-012 – DT-019): retired from the
-    # regression — its tests are excluded by collect_ignore above (dev-only tool).
+    # Document generation, the mastersheet and fraud injection (TD-001 – TD-006,
+    # DT-001 – DT-028) are out of scope: test-data tooling, checked manually.
     # SCRUM-78 / SCRUM-96 case management API (CM-001 – CM-013)
     "test_cases.py::test_list_cases": [("sprint2", "SCRUM-78", "CM-001")],
     "test_cases.py::test_get_case_returns_summary_with_documents_status": [("sprint2", "SCRUM-83", "CM-005")],

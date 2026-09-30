@@ -261,44 +261,40 @@
   <section aria-labelledby="summary-h">
     <div class="section-head">
       <h2 id="summary-h">Summary</h2>
-      <p class="muted">Counted per test case ID from the sprint sheets.</p>
+      <p class="muted">Counted per test case ID from the sprint sheets. Document generation, the mastersheet and fraud injection are out of scope: they were done manually to build the test document sets, not system features.</p>
     </div>
     <div class="verdict">
-      <div><span class="figure">98</span><span class="label">Test cases in the sprint sheets</span></div>
-      <div><span class="figure pass">74</span><span class="label">Automated and passing</span></div>
-      <div><span class="figure fig-defect">3</span><span class="label">Open defects, affecting 5 test cases (2 more closed)</span></div>
-      <div><span class="figure retired">19</span><span class="label">Retired: the tooling they tested was removed</span></div>
+      <div><span class="figure">58</span><span class="label">Test cases in scope (of 98 in the sheets)</span></div>
+      <div><span class="figure pass">56</span><span class="label">Automated and passing</span></div>
+      <div><span class="figure fig-defect">2</span><span class="label">Defects found, reported to their owners</span></div>
+      <div><span class="figure retired">40</span><span class="label">Out of scope: test-data tooling, checked manually</span></div>
     </div>
 
-    <div class="bars" role="img" aria-label="Sprint 1: 28 passing, 2 defect, 8 retired of 38. Sprint 2: 46 passing, 3 defect, 11 retired of 60.">
+    <div class="bars" role="img" aria-label="In scope. Sprint 1: 19 of 19 passing. Sprint 2: 37 passing and 2 defects, of 39.">
       <div class="bar-row">
         <span class="bar-name">Sprint 1</span>
         <div class="bar-track">
-          <span class="seg-pass" style="flex: 0 0 73.68%">28</span>
-          <span class="seg-defect" style="flex: 0 0 5.26%">2</span>
-          <span class="seg-retired" style="flex: 0 0 21.06%">8</span>
+          <span class="seg-pass" style="flex: 0 0 100%">19</span>
         </div>
       </div>
       <div class="bar-row">
         <span class="bar-name">Sprint 2</span>
         <div class="bar-track">
-          <span class="seg-pass" style="flex: 0 0 76.67%">46</span>
-          <span class="seg-defect" style="flex: 0 0 5%">3</span>
-          <span class="seg-retired" style="flex: 0 0 18.33%">11</span>
+          <span class="seg-pass" style="flex: 0 0 94.87%">37</span>
+          <span class="seg-defect" style="flex: 0 0 5.13%">2</span>
         </div>
       </div>
       <div class="legend">
         <span><i style="background: var(--pass)"></i>Passing</span>
         <span><i style="background: var(--defect)"></i>Defect found</span>
-        <span><i style="background: var(--retired)"></i>Retired</span>
-        <span>Sprint 1: 38 cases · Sprint 2: 60 cases</span>
+        <span>In scope · Sprint 1: 19 cases · Sprint 2: 39 cases</span>
       </div>
     </div>
 
     <div class="verdict">
       <div>
-        <span class="figure">878</span>
-        <span class="label">Backend tests (pytest) · 877 pass, 1 known defect<br>26 tagged Sprint 1 · 83 tagged Sprint 2 · real LangGraph pipeline, mocked AI</span>
+        <span class="figure">866</span>
+        <span class="label">Backend tests (pytest) · all pass<br>19 tagged Sprint 1 · 78 tagged Sprint 2 · real LangGraph pipeline, mocked AI</span>
       </div>
       <div>
         <span class="figure">49</span>
@@ -312,17 +308,17 @@
     <div class="acs">
       <div class="ac">
         <span class="ac-id">AC1</span>
-        <span class="ac-text"><span>All Sprint 1 functionality is regression tested</span><span class="muted">Every case automated, or retired along with the tooling it tested.</span></span>
+        <span class="ac-text"><span>All Sprint 1 functionality is regression tested</span><span class="muted">Every in-scope case automated and passing.</span></span>
         <span class="pill pass">Done</span>
       </div>
       <div class="ac">
         <span class="ac-id">AC2</span>
-        <span class="ac-text"><span>All Sprint 2 functionality is regression tested</span><span class="muted">Every case automated, including the AI cases (mocked AI responses), or retired.</span></span>
+        <span class="ac-text"><span>All Sprint 2 functionality is regression tested</span><span class="muted">Every in-scope case automated, including the AI cases (mocked AI responses).</span></span>
         <span class="pill pass">Done</span>
       </div>
       <div class="ac">
         <span class="ac-id">AC3</span>
-        <span class="ac-text"><span>Previously passed test cases still pass</span><span class="muted">Both suites run on every pull request. 3 regressions are open.</span></span>
+        <span class="ac-text"><span>Previously passed test cases still pass</span><span class="muted">Both suites run on every pull request. 2 regressions are open.</span></span>
         <span class="pill pass">Done</span>
       </div>
       <div class="ac">
@@ -332,7 +328,7 @@
       </div>
       <div class="ac">
         <span class="ac-id">AC5</span>
-        <span class="ac-text"><span>Regression completed after defects are fixed</span><span class="muted">Waiting on the owners to fix REG-001, REG-002 and REG-005, then a final re-run.</span></span>
+        <span class="ac-text"><span>Regression completed after defects are fixed</span><span class="muted">Waiting on the owners to fix REG-001 and REG-002, then a final re-run.</span></span>
         <span class="pill pending">Waiting on fixes</span>
       </div>
     </div>
@@ -341,7 +337,7 @@
   <section aria-labelledby="defects-h">
     <div class="section-head">
       <h2 id="defects-h">Defects found</h2>
-      <p class="muted">Reported to the owning stories, not fixed here. Each open defect is pinned by a test marked as an expected failure, which flags itself once it's fixed. Two were closed when the tool they were in was retired.</p>
+      <p class="muted">Reported to the owning stories, not fixed here. Each is pinned by a test marked as an expected failure, which flags itself once it's fixed.</p>
     </div>
     <div class="defects" id="defects"></div>
   </section>
@@ -361,7 +357,6 @@
         <button type="button" data-status="all" aria-pressed="true">All results</button>
         <button type="button" data-status="pass" aria-pressed="false">Passing</button>
         <button type="button" data-status="defect" aria-pressed="false">Defect</button>
-        <button type="button" data-status="retired" aria-pressed="false">Retired</button>
       </div>
       <input id="search" type="search" placeholder="Search ID, story or scenario" aria-label="Search test cases">
       <span class="count" id="count" aria-live="polite"></span>
@@ -388,11 +383,8 @@
         </ul>
       </div>
       <div style="display: grid; gap: 12px">
-        <h2>Retired test cases</h2>
-        <ul class="plain">
-          <li><b>Mock-document generator</b> (<code>generate_from_mastersheet.py</code>, <code>verify_documents.py</code>), deleted in refactor <code>61d730b</code>: TD-003 / DT-006, DT-001 – DT-003, DT-005, DT-020 – DT-022, DT-027. The mastersheet itself is still tested.</li>
-          <li><b>Fraud-injection tool</b>, kept in the repo but its tests excluded from normal runs as dev-only tooling: DT-012 – DT-019. Its 159 tests still pass when run directly.</li>
-        </ul>
+        <h2>Out of scope</h2>
+        <p class="muted">Document generation, the mastersheet and fraud injection: TD-001 – TD-006 and DT-001 – DT-028 (SCRUM-10, 12, 13, 14, 15, 112, 115, 120, 121). These were done manually to produce the test document sets used with the system, not features of the system itself. DT-029 – DT-031 stay in scope, since they test how the system handles each file format.</p>
         <h2>Observations</h2>
         <ul class="plain">
           <li><b>Save confirmation disappears (DI-024).</b> After a successful save, the review section closes, taking the "Changes saved" message with it.</li>
@@ -430,58 +422,16 @@
       body: 'Save fields requires every field to be filled, including ones that are correctly empty, such as Company Former Name for a company that never had one. After fixing the flagged UEN, the officer has to type a placeholder before they can save.',
       where: 'DocumentDetailsPage.tsx handleSaveFields',
     },
-    {
-      id: 'REG-005', sev: 'Low', sevNote: 'test data', status: 'Open', cases: 'TD-006 / DT-009, DT-026', owner: 'SCRUM-13 / SCRUM-120',
-      title: 'A mastersheet row is marked as fraud with no fraud details',
-      body: 'Row BizFile_994116.pdf (C042, Meridian Family Clinic, Certificate of Incorporation) has Fraud Injected = Y but no Detection Dimension or Fraud Description. It is C042\'s only fraud row.',
-      where: 'doc_gen_scripts/v16_document_mastersheet.xlsx',
-    },
-    {
-      id: 'REG-003', sev: 'Low', sevNote: 'dev tooling', status: 'Closed', cases: 'TD-003 / DT-006', owner: 'SCRUM-13',
-      title: 'The masterlist check script crashed',
-      body: 'scripts/verify_documents.py pointed at a v9 mastersheet that isn\'t in the repo. Closed: the script was removed in refactor 61d730b.',
-      where: 'scripts/verify_documents.py (removed)',
-    },
-    {
-      id: 'REG-004', sev: 'Low', sevNote: 'dev tooling', status: 'Closed', cases: 'DT-003', owner: 'SCRUM-10',
-      title: 'The Certificate of Incorporation wasn\'t reproducible',
-      body: 'Its receipt number used unseeded random, so it changed on every generation. Closed: the generator was removed in refactor 61d730b.',
-      where: 'scripts/generate_from_mastersheet.py (removed)',
-    },
   ];
 
   const AI = 'test_regression_ai_pipeline.py';
-  const MS = 'test_regression_mastersheet.py';
-  const GEN = 'Mock-document generator removed in refactor 61d730b.';
-  const INJ = 'Fraud-injection tool\'s tests excluded from normal runs as dev-only (159 still pass when run directly).';
   const CASES = [
     // Sprint 1
-    [1, 'TD-001 / DT-010', 2, 'SCRUM-15', 'Unrecognised template matches no defined document type', MS, 'pass'],
-    [1, 'TD-002 / DT-011', 2, 'SCRUM-15', 'Unrecognised documents labelled in the masterlist', MS, 'pass'],
-    [1, 'TD-003 / DT-006', 2, 'SCRUM-13', 'Every generated document is logged in the masterlist', '—', 'retired', null, GEN],
-    [1, 'TD-004 / DT-007', 2, 'SCRUM-13', 'Each case record has the required company and applicant details', MS, 'pass'],
-    [1, 'TD-005 / DT-008', 2, 'SCRUM-13', 'Each document is linked to the correct case', MS, 'pass'],
-    [1, 'TD-006 / DT-009', 2, 'SCRUM-13', 'Fraud details recorded, or none', MS, 'defect', 'REG-005', 'Every other row is correct.'],
-    [1, 'DT-001 – DT-003', 3, 'SCRUM-10', 'Templates for each type, accept synthetic values, same inputs give the same output', '—', 'retired', null, GEN],
-    [1, 'DT-004', 1, 'SCRUM-12', 'At least 36 complete sets across all 11 types', MS, 'pass'],
-    [1, 'DT-005', 1, 'SCRUM-12', 'Documents in a set are consistent with the mastersheet', '—', 'retired', null, GEN],
-    [1, 'DT-012 – DT-013', 2, 'SCRUM-14', 'Fraud injection into PDF documents', '—', 'retired', null, INJ],
     [1, 'DI-001 – DI-016', 16, 'SCRUM-6', 'Upload page: components, drag-and-drop, Browse, formats, 25MB limit, per-file status, retry, completion feedback, full workflow', 'e2e/specs/upload.spec.ts · test_regression_upload.py · test_documents.py · test_ingestion.py', 'pass'],
     [1, 'DI-017', 1, 'SCRUM-8', 'Clean files are recorded with their type, confidence and routing', `${AI} · C001 set, unrecognised, below threshold, tool use`, 'pass', null, 'AI replies mocked.'],
     [1, 'MA-001', 1, 'SCRUM-17', 'A stored document is added to the queue', 'test_queue_service.py', 'pass'],
     [1, 'MA-002', 1, 'SCRUM-17', 'A queued document is handed to the classifier within 1s', AI, 'pass'],
     // Sprint 2
-    [2, 'TD-001, 002, 004, 005', 4, 'SCRUM-13 / 15', 'Masterlist and unrecognised-document checks (repeat of Sprint 1)', MS, 'pass'],
-    [2, 'TD-003', 1, 'SCRUM-13', 'Every generated document is logged in the masterlist', '—', 'retired', null, GEN],
-    [2, 'TD-006', 1, 'SCRUM-13', 'Fraud details recorded, or none', MS, 'defect', 'REG-005'],
-    [2, 'DT-014 – DT-019', 6, 'SCRUM-121', 'Fraud injection on PNG/JPG documents', '—', 'retired', null, INJ],
-    [2, 'DT-020 – DT-022', 3, 'SCRUM-112', 'Optional documents and the corporate NOA are generated', '—', 'retired', null, GEN],
-    [2, 'DT-023', 1, 'SCRUM-120', 'At least 15 new cases', MS, 'pass', null, '34 new cases (C037 – C070).'],
-    [2, 'DT-024', 1, 'SCRUM-120', 'New cases include the new optional document types', MS, 'pass'],
-    [2, 'DT-025', 1, 'SCRUM-120', 'Realistic document names', MS, 'pass'],
-    [2, 'DT-026', 1, 'SCRUM-120', 'Fraud cases are tagged with a fraud dimension', MS, 'pass', null, 'C042 is covered by REG-005.'],
-    [2, 'DT-027', 1, 'SCRUM-115', 'Documents generated in PDF, PNG, JPG and JPEG', '—', 'retired', null, GEN],
-    [2, 'DT-028', 1, 'SCRUM-115', 'File formats follow the per-type assumptions', MS, 'pass'],
     [2, 'DT-029', 1, 'SCRUM-115', 'All formats go through ingestion', `upload.spec.ts · test_ingestion.py · ${AI}`, 'pass'],
     [2, 'DT-030', 1, 'SCRUM-115', 'Document type and file info are kept after ingestion', AI, 'pass'],
     [2, 'DT-031', 1, 'SCRUM-115', 'DOCX, XLSX and TXT files are rejected', 'upload.spec.ts DT-031', 'pass'],
