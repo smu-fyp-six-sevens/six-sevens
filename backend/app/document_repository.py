@@ -184,7 +184,7 @@ def update_extracted_fields(
     """
     update: dict = {
         "extraction_confidence": (
-            round(extraction_confidence, 2) if extraction_confidence is not None else None
+            round(extraction_confidence, 3) if extraction_confidence is not None else None
         ),
     }
     if fulfilled_requirements is not None:

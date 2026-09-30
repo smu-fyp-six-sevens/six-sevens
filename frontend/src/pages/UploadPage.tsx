@@ -4,6 +4,7 @@ import AppHeader from '../components/AppHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DropZone from '../components/DropZone';
 import FileRow from '../components/FileRow';
+import KebabMenu from '../components/KebabMenu';
 import { subscribeToCaseStatus } from '../services/caseSocket';
 import type { CaseStatusSubscription } from '../services/caseSocket';
 import {
@@ -196,50 +197,6 @@ function describeIssue(issue: FileIssue): string {
     case 'duplicate':
       return 'This exact file has already been uploaded for this case.';
   }
-}
-
-function DocumentRowDelete({
-  filename,
-  isDeleting,
-  onDelete,
-}: {
-  filename: string;
-  isDeleting: boolean;
-  onDelete: () => void;
-}) {
-  return (
-    <span className="document-row-actions">
-      <button
-        type="button"
-        className={`delete-document-button${isDeleting ? ' is-visible' : ''}`}
-        aria-label={isDeleting ? `Deleting ${filename}` : `Delete ${filename}`}
-        disabled={isDeleting}
-        onClick={(event) => {
-          event.stopPropagation();
-          onDelete();
-        }}
-        onKeyDown={(event) => event.stopPropagation()}
-      >
-        <svg
-          viewBox="0 0 24 24"
-          width="24"
-          height="24"
-          aria-hidden="true"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M4 7h16" />
-          <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-          <path d="M7 7l1 12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-12" />
-          <path d="M10 11v6" />
-          <path d="M14 11v6" />
-        </svg>
-      </button>
-    </span>
-  );
 }
 
 export default function UploadPage({
@@ -823,22 +780,24 @@ async function handleApproveAllEligibleDocuments() {
                 {selectedCase.applicant}
               </p>
               <div className="case-header-actions">
-                <button type="button" className="edit-case-button" onClick={() => setIsEditingCase(true)}>
-                  ✎ Edit case details
-                </button>
-                <button
-                  type="button"
-                  className="delete-record-button"
-                  onClick={() => setCaseDeleteOpen(true)}
-                  disabled={isDeletingCase || caseHasInFlightDocument}
-                  title={
-                    caseHasInFlightDocument
-                      ? "Case has a document that's still being processed; cancel it first, or wait for it to finish."
-                      : undefined
-                  }
-                >
-                  {isDeletingCase ? 'Deleting…' : 'Delete case'}
-                </button>
+                <KebabMenu
+                  label={isDeletingCase ? 'Deleting case' : 'Case actions'}
+                  disabled={isDeletingCase}
+                  items={[
+                    {
+                      id: 'edit',
+                      label: 'Edit case details',
+                      onSelect: () => setIsEditingCase(true),
+                    },
+                    {
+                      id: 'delete',
+                      label: isDeletingCase ? 'Deleting…' : 'Delete case',
+                      danger: true,
+                      disabled: isDeletingCase || caseHasInFlightDocument,
+                      onSelect: () => setCaseDeleteOpen(true),
+                    },
+                  ]}
+                />
               </div>
             </div>
           )}
@@ -1004,7 +963,6 @@ async function handleApproveAllEligibleDocuments() {
                         <span>Filename</span>
                         <span>Document Type</span>
                         <span>Status</span>
-                        <span>Classification Confidence</span>
                         <span>Routing Outcome</span>
                         <span className="sr-only">Actions</span>
                       </div>
@@ -1080,25 +1038,16 @@ async function handleApproveAllEligibleDocuments() {
                                 <span className="document-status-stuck-badge">Stuck</span>
                               )}
 
-                              {canCancelDocument(status) && (
-                                <button
-                                  type="button"
-                                  className="document-row-status-action"
-                                  disabled={isCancellingRow}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    void handleCancelDocument(document.id);
-                                  }}
-                                  onKeyDown={(event) => event.stopPropagation()}
-                                >
-                                  {isCancellingRow ? 'Cancelling…' : 'Cancel'}
-                                </button>
-                              )}
-
                               {canRetryDocument(document) && (
                                 <button
                                   type="button"
-                                  className="document-row-status-action document-row-status-action--retry"
+                                  className="document-row-action-icon document-row-action-icon--retry"
+                                  aria-label={
+                                    isRetryingRow
+                                      ? `Retrying ${document.filename}`
+                                      : `Retry ${document.filename}`
+                                  }
+                                  title={isRetryingRow ? 'Retrying…' : 'Retry'}
                                   disabled={isRetryingRow}
                                   onClick={(event) => {
                                     event.stopPropagation();
@@ -1106,28 +1055,95 @@ async function handleApproveAllEligibleDocuments() {
                                   }}
                                   onKeyDown={(event) => event.stopPropagation()}
                                 >
-                                  {isRetryingRow ? 'Retrying…' : 'Retry'}
+                                  <svg
+                                    viewBox="0 0 24 24"
+                                    aria-hidden="true"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  >
+                                    <path d="M20 11A8 8 0 1 0 18.6 16" />
+                                    <path d="M20 5v6h-6" />
+                                  </svg>
                                 </button>
                               )}
-                            </span>
-
-                            <span className="document-confidence">
-                              {document.classification_confidence != null
-                                ? document.classification_confidence.toFixed(2)
-                                : '—'}
                             </span>
 
                             <span className="document-routing">
                               {routingOutcome}
                             </span>
 
-                            {isTerminal && (
-                              <DocumentRowDelete
-                                filename={document.filename}
-                                isDeleting={deletingDocumentId === document.id}
-                                onDelete={() => setDocumentToDelete(document)}
-                              />
-                            )}
+                            <span className="document-row-actions">
+                              {canCancelDocument(status) && (
+                                <button
+                                  type="button"
+                                  className="document-row-action-icon document-row-action-icon--cancel"
+                                  aria-label={
+                                    isCancellingRow
+                                      ? `Cancelling ${document.filename}`
+                                      : `Cancel ${document.filename}`
+                                  }
+                                  title={isCancellingRow ? 'Cancelling…' : 'Cancel'}
+                                  disabled={isCancellingRow}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void handleCancelDocument(document.id);
+                                  }}
+                                  onKeyDown={(event) => event.stopPropagation()}
+                                >
+                                  <svg
+                                    viewBox="0 0 24 24"
+                                    aria-hidden="true"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                  >
+                                    <path d="M6 6l12 12" />
+                                    <path d="M18 6L6 18" />
+                                  </svg>
+                                </button>
+                              )}
+
+                              {isTerminal && (
+                                <button
+                                  type="button"
+                                  className="document-row-action-icon document-row-action-icon--delete"
+                                  aria-label={
+                                    deletingDocumentId === document.id
+                                      ? `Deleting ${document.filename}`
+                                      : `Delete ${document.filename}`
+                                  }
+                                  title={
+                                    deletingDocumentId === document.id ? 'Deleting…' : 'Delete'
+                                  }
+                                  disabled={deletingDocumentId === document.id}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setDocumentToDelete(document);
+                                  }}
+                                  onKeyDown={(event) => event.stopPropagation()}
+                                >
+                                  <svg
+                                    viewBox="0 0 24 24"
+                                    aria-hidden="true"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="1.8"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  >
+                                    <path d="M4 7h16" />
+                                    <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                                    <path d="M7 7l1 12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-12" />
+                                    <path d="M10 11v6" />
+                                    <path d="M14 11v6" />
+                                  </svg>
+                                </button>
+                              )}
+                            </span>
                           </div>
                         );
                       })}
@@ -1150,7 +1166,6 @@ async function handleApproveAllEligibleDocuments() {
                         <span>Filename</span>
                         <span>Document Type</span>
                         <span>Status</span>
-                        <span>Classification Confidence</span>
                         <span>Routing Outcome</span>
                         <span className="sr-only">Actions</span>
                       </div>
@@ -1183,16 +1198,9 @@ async function handleApproveAllEligibleDocuments() {
                             <span>Approved</span>
                           </span>
 
-                          <span className="document-confidence">
-                            {document.classification_confidence != null
-                              ? document.classification_confidence.toFixed(2)
-                              : '—'}
-                          </span>
-
                           <span className="document-routing">
                             Approved
                           </span>
-                          <span />
                         </div>
                       ))}
                     </div>
