@@ -77,7 +77,9 @@ def print_regions(result: ImageManipulationResult, colour: bool) -> None:
         detail = "n/a" if region.detail_ratio is None else f"{region.detail_ratio:.3f}"
         # Why a region was excluded matters more than the fact of it: a size
         # exclusion and a repetition exclusion have different consequences.
-        if not region.comparable:
+        if region.covered_by_xref is not None:
+            verdict = f"no (hidden under xref {region.covered_by_xref})"
+        elif not region.comparable:
             verdict = "no (under size floor)"
         elif region.pages_used_on > 1:
             verdict = "baseline only (repeats)"
@@ -108,7 +110,7 @@ def print_gate(result: ImageManipulationResult, colour: bool) -> None:
     if result.unable_to_assess:
         print(_colour(f"     UNABLE TO ASSESS: {result.unable_to_assess_reason}", YELLOW, colour))
     elif len(distinct) < result.tolerances.min_comparable_regions:
-        print("     comparative checks skipped, but the intrinsic check found "
+        print("     comparative checks skipped, but a self-contained check found "
               "something — so this is a finding, not Unable to Assess")
     else:
         print("     comparative checks can run")

@@ -571,3 +571,116 @@ def test_three_jpegs_still_name_the_odd_one_out():
     found = [i for i in result.indicators if i.indicator == "Compression Mismatch"]
     assert len(found) == 1
     assert found[0].severity == "high"
+
+
+# --- replacements drawn over the original -------------------------------------
+#
+# The usual way to swap one image in an existing PDF: paint the original out
+# and draw a new image on top of it. The original stays in the file,
+# underneath, and is the replacement's one certain comparison partner.
+
+_CREST = pymupdf.Rect(182, 283, 206, 303)  # 480pt2 — below the size floor
+
+
+def _png(width: int, height: int, shade: int = 180, alpha: bool = False) -> bytes:
+    image = Image.new("RGBA" if alpha else "RGB", (width, height),
+                      (shade, shade - 20, shade - 40, 128) if alpha else (shade, shade - 20, shade - 40))
+    for x in range(0, width, 7):
+        for y in range(0, height, 5):
+            image.putpixel((x, y), ((x * 3) % 255, (y * 5) % 255, 120, 255)[: 4 if alpha else 3])
+    buffer = io.BytesIO()
+    image.save(buffer, "PNG")
+    return buffer.getvalue()
+
+
+def _paint_over(page, rect, stream) -> None:
+    """What an editor or the injection tool does: cover the slot, then redraw it."""
+    cover = pymupdf.Rect(rect.x0 - 0.8, rect.y0 - 0.8, rect.x1 + 0.8, rect.y1 + 0.8)
+    page.draw_rect(cover, color=None, fill=(1, 1, 1), overlay=True)
+    page.insert_image(cover, stream=stream, keep_proportion=False)
+
+
+def test_small_crest_replaced_at_lower_resolution_is_flagged():
+    """
+    A crest under the size floor was never examined before. Against the
+    original hidden beneath it, it needs no floor and no majority — and the
+    document holds nothing else to compare with, so this would otherwise be
+    Unable to Assess.
+    """
+    def place(page):
+        page.insert_image(_CREST, stream=_png(300, 250))
+        _paint_over(page, _CREST, _png(52, 44))
+
+    result = check_image_manipulation("doc", _pdf(place))
+    assert result.unable_to_assess is False
+    assert len(result.indicators) == 1
+    finding = result.indicators[0]
+    assert finding.indicator == "Resolution Mismatch"
+    assert finding.severity == "high"
+    assert "hidden underneath" in finding.expected
+    assert finding.bbox[0] < _CREST.x0  # the visible replacement, not the original
+
+
+def test_hidden_original_is_marked_and_left_out_of_comparison():
+    def place(page):
+        page.insert_image(_CREST, stream=_png(300, 250))
+        _paint_over(page, _CREST, _png(52, 44))
+
+    result = check_image_manipulation("doc", _pdf(place))
+    hidden = [r for r in result.regions if r.covered_by_xref is not None]
+    assert len(hidden) == 1
+    assert hidden[0].pixel_width == 300
+    assert hidden[0].comparable is False
+
+
+def test_replacement_recompressed_as_jpeg_reports_both_indicators():
+    """Re-rendered AND re-encoded: two separate facts, two indicators (AC5)."""
+    def place(page):
+        page.insert_image(_CREST, stream=_png(300, 250))
+        _paint_over(page, _CREST, _jpeg(52, 44, 16))
+
+    result = check_image_manipulation("doc", _pdf(place))
+    assert sorted(_indicators(result)) == ["Compression Mismatch", "Resolution Mismatch"]
+
+
+def test_replacement_at_same_resolution_but_different_codec_is_compression_only():
+    def place(page):
+        page.insert_image(_CREST, stream=_png(300, 250))
+        _paint_over(page, _CREST, _jpeg(310, 258, 60))
+
+    result = check_image_manipulation("doc", _pdf(place))
+    assert _indicators(result) == ["Compression Mismatch"]
+
+
+def test_identical_overlay_is_left_to_the_overlay_check():
+    """
+    Same resolution and codec as the original: nothing this module measures
+    differs. Whether stacking by itself is suspicious is SCRUM-65's Image
+    Overlay indicator.
+    """
+    def place(page):
+        page.insert_image(_CREST, stream=_png(300, 250))
+        _paint_over(page, _CREST, _png(310, 258, 190))
+
+    result = check_image_manipulation("doc", _pdf(place))
+    assert result.indicators == []
+
+
+def test_transparent_image_on_top_does_not_hide_the_one_below():
+    """A signature over a stamp shows the stamp through it — not a replacement."""
+    def place(page):
+        page.insert_image(_CREST, stream=_png(300, 250))
+        page.insert_image(_CREST, stream=_png(52, 44, alpha=True))
+
+    result = check_image_manipulation("doc", _pdf(place))
+    assert all(r.covered_by_xref is None for r in result.regions)
+    assert result.indicators == []
+
+
+def test_large_panel_drawn_over_small_artwork_is_not_a_replacement():
+    def place(page):
+        page.insert_image(_CREST, stream=_png(300, 250))
+        page.insert_image(pymupdf.Rect(150, 250, 350, 450), stream=_png(100, 100))
+
+    result = check_image_manipulation("doc", _pdf(place))
+    assert all(r.covered_by_xref is None for r in result.regions)

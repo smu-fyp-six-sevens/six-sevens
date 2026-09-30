@@ -68,6 +68,16 @@ _MIN_DETAIL_PIXELS = 64
 # regions can agree and still outvote a third.
 _MIN_CONFIDENT_ATTRIBUTION = 4
 
+# An image counts as hidden when a later image covers this much of it...
+_MIN_HIDDEN_FRACTION = 0.9
+# ...and the covering image is no more than this many times its area. Above
+# that the later image is a panel or a page-sized background drawn over
+# small artwork, not a replacement for it. A replacement is drawn over the
+# same slot, give or take the few points of padding needed to hide the
+# original's edges. None of the 205 clean documents in this repo's corpus
+# has any pair that meets both conditions.
+_MAX_COVER_AREA_RATIO = 2.5
+
 
 class Tolerances(BaseModel):
     """
@@ -160,6 +170,13 @@ class ImageRegion(BaseModel):
     # Regions below the size floor, and template furniture, are kept (AC1
     # asks for identification) but excluded from comparison (AC6).
     comparable: bool
+    # Set when a later, opaque image is drawn over this one (see
+    # _hidden_placements). A hidden region is not part of what the reader
+    # sees, so it is excluded from comparison — but it is the original that
+    # the visible region replaced, which _check_covered_regions compares
+    # against directly.
+    covered_by_xref: int | None = None
+    covered_by_bbox: BBox | None = None
 
 
 class ImageManipulationIndicator(BaseModel):
@@ -318,6 +335,56 @@ def _detail_ratio(data: bytes) -> float | None:
     return round(fine / coarse, 4)
 
 
+def _hidden_placements(page: pymupdf.Page) -> list[tuple[int, BBox, int, BBox]]:
+    """
+    Image placements that a later image is drawn straight over, as
+    (hidden xref, hidden bbox, covering xref, covering bbox).
+
+    The commonest way to alter one image in an existing PDF is not to edit
+    it but to draw a new one on top: the original stays in the file,
+    painted out, and the reader only sees the replacement. That leaves the
+    original sitting directly underneath — the one thing the altered region
+    can be compared against with certainty, whatever its size and however
+    few other images the document holds.
+
+    get_image_info lists placements in drawing order, so "later" means
+    "drawn on top". A covering image with a transparency mask is skipped:
+    a signature laid over a stamp shows the stamp through it rather than
+    replacing it.
+    """
+    try:
+        infos = page.get_image_info(xrefs=True)
+    except Exception:
+        logger.debug("Page %s: image draw order unavailable", page.number, exc_info=True)
+        return []
+
+    hidden: list[tuple[int, BBox, int, BBox]] = []
+    for i, below in enumerate(infos):
+        below_rect = pymupdf.Rect(below["bbox"])
+        if below_rect.is_empty:
+            continue
+        for above in infos[i + 1:]:
+            above_rect = pymupdf.Rect(above["bbox"])
+            if above["xref"] == below["xref"] or above_rect.is_empty or above.get("has-mask"):
+                continue
+            covered = (below_rect & above_rect).get_area() / below_rect.get_area()
+            if (
+                covered >= _MIN_HIDDEN_FRACTION
+                and above_rect.get_area() <= _MAX_COVER_AREA_RATIO * below_rect.get_area()
+            ):
+                hidden.append((
+                    below["xref"], tuple(below_rect), above["xref"], tuple(above_rect),
+                ))
+                break
+    return hidden
+
+
+def _same_bbox(a: BBox, b: BBox) -> bool:
+    # get_image_rects and get_image_info compute the same box by different
+    # routes, so allow for float noise.
+    return all(abs(x - y) < 0.5 for x, y in zip(a, b))
+
+
 def _collect_regions(doc: pymupdf.Document, tolerances: Tolerances) -> list[ImageRegion]:
     """AC1 — every embedded image, with where and how large it is drawn."""
     regions: list[ImageRegion] = []
@@ -325,8 +392,10 @@ def _collect_regions(doc: pymupdf.Document, tolerances: Tolerances) -> list[Imag
     # and a template asset reappears on every page, so measure each distinct
     # asset once.
     detail_by_xref: dict[int, float | None] = {}
+    hidden: dict[int, list[tuple[int, BBox, int, BBox]]] = {}
 
     for page in doc:
+        hidden[page.number] = _hidden_placements(page)
         for image in page.get_images(full=True):
             xref = image[0]
             try:
@@ -411,6 +480,20 @@ def _collect_regions(doc: pymupdf.Document, tolerances: Tolerances) -> list[Imag
         pages_by_xref.setdefault(region.xref, set()).add(region.page)
     for region in regions:
         region.pages_used_on = len(pages_by_xref[region.xref])
+
+    # Third pass: mark placements painted over by a later image. They are
+    # not what the reader sees, so they leave the comparison pool.
+    for region in regions:
+        for xref, bbox, above_xref, above_bbox in hidden.get(region.page, ()):
+            if region.xref == xref and _same_bbox(region.bbox, bbox):
+                logger.debug(
+                    "region: page=%s xref=%s is hidden under xref=%s", region.page,
+                    region.xref, above_xref,
+                )
+                region.covered_by_xref = above_xref
+                region.covered_by_bbox = above_bbox
+                region.comparable = False
+                break
 
     return regions
 
@@ -546,6 +629,133 @@ def _check_intrinsic_resolution(
             )
         )
 
+    return indicators
+
+
+def _check_covered_regions(
+    regions: list[ImageRegion], tolerances: Tolerances
+) -> list[ImageManipulationIndicator]:
+    """
+    AC2/AC3, measured against the original — a visible image compared with
+    the image it was drawn over (see _hidden_placements).
+
+    The comparative checks judge a region against its neighbours and have
+    to hedge when there are few of them. Here the comparison partner is the
+    region's own predecessor in the same slot, so there is no majority to
+    find and no ambiguity about which one changed: the visible one is the
+    replacement. That also makes it the one check that reaches small marks
+    — a crest or a seal below the size floor — which are exactly what gets
+    swapped on an official document.
+
+    Runs regardless of size and repetition, like the intrinsic check. A
+    replacement can differ from its original in resolution, compression or
+    both; each is reported as its own indicator (AC5), since they are
+    separate facts about how the replacement was made.
+    """
+    indicators: list[ImageManipulationIndicator] = []
+    for hidden in regions:
+        if hidden.covered_by_xref is None or hidden.covered_by_bbox is None:
+            continue
+        visible = next(
+            (
+                region for region in regions
+                if region.page == hidden.page
+                and region.xref == hidden.covered_by_xref
+                and _same_bbox(region.bbox, hidden.covered_by_bbox)
+            ),
+            None,
+        )
+        if visible is None:
+            continue
+
+        base_evidence = {
+            "xref": visible.xref,
+            "hidden_xref": hidden.xref,
+            "hidden_bbox": hidden.bbox,
+            "pixel_dimensions": f"{visible.pixel_width}x{visible.pixel_height}",
+            "hidden_pixel_dimensions": f"{hidden.pixel_width}x{hidden.pixel_height}",
+        }
+        ratio = _ratio_against(visible.effective_dpi, hidden.effective_dpi)
+        logger.debug(
+            "covered: page=%s xref=%s (%.1f DPI, %s) over hidden xref=%s (%.1f DPI, %s): "
+            "%.2fx apart vs tolerance %.2fx",
+            visible.page, visible.xref, visible.effective_dpi, visible.codec,
+            hidden.xref, hidden.effective_dpi, hidden.codec, ratio, tolerances.dpi_ratio,
+        )
+
+        if ratio >= tolerances.dpi_ratio:
+            direction = "higher" if visible.effective_dpi > hidden.effective_dpi else "lower"
+            indicators.append(
+                ImageManipulationIndicator(
+                    indicator="Resolution Mismatch",
+                    page=visible.page,
+                    bbox=visible.bbox,
+                    detected=f"{visible.effective_dpi:.0f} DPI",
+                    expected=(
+                        f"{hidden.effective_dpi:.0f} DPI (the original image hidden "
+                        "underneath it)"
+                    ),
+                    deviation=f"{ratio:.1f}x {direction}; drawn over the original",
+                    severity="high",
+                    summary=(
+                        f"Page {visible.page + 1}: an image is drawn directly over another "
+                        f"image in the same position, hiding it. The visible image is "
+                        f"{visible.effective_dpi:.0f} DPI; the hidden original underneath is "
+                        f"{hidden.effective_dpi:.0f} DPI, {ratio:.1f}x apart. The region has "
+                        "been replaced after the document was produced."
+                    ),
+                    evidence={
+                        **base_evidence,
+                        "effective_dpi": visible.effective_dpi,
+                        "hidden_effective_dpi": hidden.effective_dpi,
+                        "ratio": round(ratio, 2),
+                        "tolerance_ratio": tolerances.dpi_ratio,
+                    },
+                )
+            )
+
+        codec_differs = visible.codec != hidden.codec
+        tables_differ = (
+            visible.quantisation_signature is not None
+            and hidden.quantisation_signature is not None
+            and visible.quantisation_signature != hidden.quantisation_signature
+        )
+        if not (codec_differs or tables_differ):
+            # Same compression as the original. If the resolution matched
+            # too, the overlay itself is still unusual, but judging it is
+            # SCRUM-65's Image Overlay indicator, not a resolution or
+            # compression one.
+            continue
+        detected, expected = (
+            (f"{visible.codec} encoding", f"{hidden.codec} (the original hidden underneath it)")
+            if codec_differs else
+            (f"JPEG quantisation table {visible.quantisation_signature}",
+             f"{hidden.quantisation_signature} (the original hidden underneath it)")
+        )
+        indicators.append(
+            ImageManipulationIndicator(
+                indicator="Compression Mismatch",
+                page=visible.page,
+                bbox=visible.bbox,
+                detected=detected,
+                expected=expected,
+                deviation="compressed differently from the original it was drawn over",
+                severity="high",
+                summary=(
+                    f"Page {visible.page + 1}: an image is drawn directly over another image "
+                    "in the same position, hiding it, and was compressed differently from "
+                    "the original underneath. The region has been replaced after the "
+                    "document was produced."
+                ),
+                evidence={
+                    **base_evidence,
+                    "codec": visible.codec,
+                    "hidden_codec": hidden.codec,
+                    "quantisation_signature": visible.quantisation_signature,
+                    "hidden_quantisation_signature": hidden.quantisation_signature,
+                },
+            )
+        )
     return indicators
 
 
@@ -721,7 +931,9 @@ def _check_compression(
     if len(jpegs) >= tolerances.min_comparable_regions:
         counts: dict[str, int] = {}
         for region in jpegs:
-            counts[region.quantisation_signature] = counts.get(region.quantisation_signature, 0) + 1
+            signature = region.quantisation_signature
+            if signature is not None:  # always true here; narrows the type
+                counts[signature] = counts.get(signature, 0) + 1
         majority_signature, majority_count = max(counts.items(), key=lambda item: item[1])
         # A clean split (two of each) is not a majority and not evidence.
         if majority_count <= len(jpegs) / 2:
@@ -1004,15 +1216,18 @@ def check_image_manipulation(
         # comparison that never happened.
         comparable = _baseline([region for region in regions if region.comparable])
 
-        # Runs first and unconditionally: it needs no comparison partner, so
-        # it is the one check that still works on a document the comparative
-        # checks cannot touch. Running it before them also means that where
-        # both would fire on one region, the self-contained explanation is
-        # the one kept (see _dedupe).
-        intrinsic = _check_intrinsic_resolution(regions, tolerances)
+        # These run first and unconditionally: neither needs the rest of the
+        # document to compare against, so they still work on a document the
+        # comparative checks cannot touch. Running them before those also
+        # means that where both would fire on one region, the self-contained
+        # explanation is the one kept (see _dedupe). A replacement measured
+        # against the original it hides is the strongest evidence here, so
+        # it goes first of all.
+        intrinsic = _check_covered_regions(regions, tolerances)
+        intrinsic += _check_intrinsic_resolution(regions, tolerances)
         logger.debug(
             "document %s: gate -> %d distinct comparable asset(s), %d needed for the "
-            "comparative checks; intrinsic check found %d",
+            "comparative checks; self-contained checks found %d",
             document_id, len(comparable), tolerances.min_comparable_regions, len(intrinsic),
         )
 
@@ -1029,8 +1244,8 @@ def check_image_manipulation(
                     "the surrounding content looks like.",
                     tolerances, regions, pages,
                 )
-            # The comparative checks could not run, but the intrinsic one did
-            # and found something. The document was assessed, so reporting
+            # The comparative checks could not run, but a self-contained one
+            # did and found something. The document was assessed, so reporting
             # Unable to Assess next to a finding would tell an officer to
             # disregard it.
             return ImageManipulationResult(
