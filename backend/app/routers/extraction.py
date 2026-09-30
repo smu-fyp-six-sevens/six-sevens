@@ -9,6 +9,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 
 from ..config import settings
+from ..fraud_detection.image_manipulation import ImageManipulationResult, check_image_manipulation
 from ..fraud_detection.metadata_analysis import MetadataAnalysisResult, check_metadata_anomalies
 from ..fraud_detection.layout_anomalies import LayoutAnomalyResult, check_layout_anomalies
 from ..fraud_detection.numerical_validation import NumericalValidationResult, check_numerical_validation
@@ -180,4 +181,17 @@ async def test_layout_anomalies(file: UploadFile = File(...)) -> LayoutAnomalyRe
     file_bytes, _filename, _content_type = await _read_and_validate_upload(file)
     return await asyncio.to_thread(
         check_layout_anomalies, str(uuid.uuid4()), file_bytes
+    )
+
+
+@router.post("/test-image-manipulation", response_model=ImageManipulationResult)
+async def test_image_manipulation(file: UploadFile = File(...)) -> ImageManipulationResult:
+    """
+    Dev/QA upload: same `ImageManipulationResult` as
+    GET /documents/{id}/detection/image-manipulation. `document_id` is a
+    fresh UUID for this request, not a stored document.
+    """
+    file_bytes, _filename, _content_type = await _read_and_validate_upload(file)
+    return await asyncio.to_thread(
+        check_image_manipulation, str(uuid.uuid4()), file_bytes
     )

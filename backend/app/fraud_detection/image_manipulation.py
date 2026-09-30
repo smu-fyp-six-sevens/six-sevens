@@ -30,7 +30,7 @@ import pymupdf
 from PIL import Image, ImageChops, ImageStat
 from pydantic import BaseModel, Field
 
-logger = logging.getLogger("fraud_detection.image_manipulation_pdf")
+logger = logging.getLogger("fraud_detection.image_manipulation")
 
 BBox = tuple[float, float, float, float]
 # AC5: the indicator recorded against each finding.

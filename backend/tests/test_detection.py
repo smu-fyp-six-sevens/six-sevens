@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock,patch
 from fastapi.testclient import TestClient
 
 from app.fraud_detection.font_consistency import ExtractedField, FontConsistencyResult
+from app.fraud_detection.image_manipulation import ImageManipulationResult, Tolerances
 from app.fraud_detection.metadata_analysis import MetadataAnalysisResult
 from app.fraud_detection.layout_anomalies import CheckAssessment, LayoutAnomalyResult
 from app.fraud_detection.numerical_validation import (
@@ -418,3 +419,37 @@ def test_get_numerical_validation_fetch_and_not_found_errors() -> None:
         mock_check.assert_not_called()
 
 
+def test_image_manipulation_happy_path() -> None:
+    result = ImageManipulationResult(
+        document_id="doc-1",
+        regions=[],
+        indicators=[],
+        pages_checked=1,
+        tolerances=Tolerances(),
+        unable_to_assess=True,
+        unable_to_assess_reason="No embedded images found across 1 page(s)",
+    )
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch("app.routers.detection.storage_service") as mock_storage,
+        patch(
+            "app.routers.detection.check_image_manipulation", return_value=result
+        ) as mock_check,
+    ):
+        mock_repo.get_document.return_value = _document()
+        mock_storage.download_file.return_value = b"%PDF-1.4"
+
+        response = client.get("/documents/doc-1/detection/image-manipulation")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["document_id"] == "doc-1"
+    assert body["unable_to_assess"] is True
+    mock_check.assert_called_once_with("doc-1", b"%PDF-1.4")
+
+
+def test_image_manipulation_document_missing() -> None:
+    with patch("app.routers._dependencies.document_repository") as mock_repo:
+        mock_repo.get_document.return_value = None
+        response = client.get("/documents/doc-1/detection/image-manipulation")
+    assert response.status_code == 404

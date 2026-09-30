@@ -3,7 +3,7 @@ Run the PDF image-manipulation check over documents on disk and show every
 step it took, without needing the API or the frontend.
 
 The detector itself logs its reasoning at DEBUG through
-`fraud_detection.image_manipulation_pdf`; this script turns that on, prints it
+`fraud_detection.image_manipulation`; this script turns that on, prints it
 interleaved with a readable per-document report, and summarises at the end. So
 the `--trace` output you see here is the same trace you get from the API once
 that logger is at DEBUG — nothing is reconstructed for the CLI's benefit.
@@ -33,13 +33,13 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from app.fraud_detection.image_manipulation_pdf import (
+from app.fraud_detection.image_manipulation import (
     ImageManipulationResult,
     Tolerances,
     check_image_manipulation,
 )
 
-LOGGER_NAME = "fraud_detection.image_manipulation_pdf"
+LOGGER_NAME = "fraud_detection.image_manipulation"
 
 BOLD, DIM, RESET = "\033[1m", "\033[2m", "\033[0m"
 RED, YELLOW, GREEN, GREY = "\033[31m", "\033[33m", "\033[32m", "\033[90m"
