@@ -233,7 +233,7 @@ export function isDocumentStuckProcessing(
 
 // Mirrors routers/documents.py's cancel_document eligibility.
 export function canCancelDocument(status: string): boolean {
-  return status === 'queued' || status === 'processing';
+  return status === 'queued' || status === 'processing' || status === 'extracting';
 }
 
 // Mirrors routers/documents.py's retry_document eligibility: FAILED, or

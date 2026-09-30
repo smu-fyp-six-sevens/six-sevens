@@ -47,3 +47,18 @@ export async function testMetadataAnomaly(
 
   return (await response.json()) as MetadataAnalysisResult;
 }
+
+// Dev-only: runs the real GET endpoint against an existing document_id
+// (its actual stored file + document_type), instead of an ad-hoc upload.
+// Used by TestAnomalyPage's optional "document ID" field — not part of
+// the delivered app flow.
+export async function getMetadataAnomaly(documentId: string): Promise<MetadataAnalysisResult> {
+  const response = await authFetch(`/documents/${documentId}/detection/metadata-anomaly`);
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Metadata anomaly check failed (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as MetadataAnalysisResult;
+}

@@ -13,6 +13,8 @@ from ..fraud_detection.image_manipulation import ImageManipulationResult, check_
 from ..fraud_detection.metadata_analysis import MetadataAnalysisResult, check_metadata_anomalies
 from ..fraud_detection.layout_anomalies import LayoutAnomalyResult, check_layout_anomalies
 from ..fraud_detection.numerical_validation import NumericalValidationResult, check_numerical_validation
+from ..fraud_detection.date_anomalies import DateAnomalyResult, check_date_anomalies
+
 from ..fraud_detection.spelling_anomaly import SpellingAnomalyResult, check_spelling_anomalies
 ##why are these parked here
 
@@ -151,19 +153,41 @@ async def test_metadata_anomaly(
     return check_metadata_anomalies(str(uuid.uuid4()), metadata, document_type or None)
     
 @router.post("/test-numerical-validation", response_model=NumericalValidationResult)
-async def test_numerical_validation(file: UploadFile = File(...)) -> NumericalValidationResult:
+async def test_numerical_validation(
+    document_type: Optional[str] = Form(None),
+) -> NumericalValidationResult:
     """
-    Dev/QA upload: same `NumericalValidationResult` as
+    Dev/QA endpoint: same `NumericalValidationResult` as
     GET /documents/{id}/detection/numerical-validation.
 
-    Runs without extracted fields, since there's no classified document
-    behind an ad-hoc upload — so the format and Benford passes run, but the
-    arithmetic reconciliation checks (which need structured fields like a
-    statement's transactions) will find nothing to compare here.
+    No file upload — the check runs entirely from extracted_fields, which
+    there's none of for an ad-hoc dev call, so every per-type check reports
+    SKIPPED (nothing to read fields from). document_type is optional here
+    for the same reason metadata_analysis's dev endpoint takes one: it lets
+    this tool at least confirm which checks WOULD be wired up for a type,
+    without pretending there's real extracted data behind them.
     """
-    file_bytes, filename, _content_type = await _read_and_validate_upload(file)
     return await asyncio.to_thread(
-        check_numerical_validation, str(uuid.uuid4()), file_bytes, filename
+        check_numerical_validation, str(uuid.uuid4()), None, document_type or None
+    )
+
+
+@router.post("/test-date-anomalies", response_model=DateAnomalyResult)
+async def test_date_anomalies(
+    document_type: Optional[str] = Form(None),
+) -> DateAnomalyResult:
+    """
+    Dev/QA endpoint: same `DateAnomalyResult` as
+    GET /documents/{id}/detection/date-anomalies.
+
+    No file upload — the check runs entirely from extracted_fields, which
+    there's none of for an ad-hoc dev call, so every per-type check reports
+    SKIPPED, and labelled date extraction (AC1/AC2) has nothing to read
+    from either. document_type is optional for the same reason
+    numerical-validation's dev endpoint takes one.
+    """
+    return await asyncio.to_thread(
+        check_date_anomalies, str(uuid.uuid4()), None, document_type or None
     )
 
 
@@ -174,9 +198,9 @@ async def test_layout_anomalies(file: UploadFile = File(...)) -> LayoutAnomalyRe
     GET /documents/{id}/detection/layout-anomalies. `document_id` is a
     fresh UUID for this request, not a stored document.
 
-    Several checks on the same area become one finding with
-    `evidence.signals`. Neighbouring flagged paragraphs add
-    `local_pattern` / `consecutive_run` enrichment, not a new type.
+    The JSON lists each finding as `type`, `page`, `where`, `text`,
+    `summary`, and `checks` (detected, expected, difference). Several
+    checks on the same area stay one finding.
     """
     file_bytes, _filename, _content_type = await _read_and_validate_upload(file)
     return await asyncio.to_thread(

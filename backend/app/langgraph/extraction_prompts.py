@@ -40,7 +40,26 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # models.compute_fulfilled_requirements uses exactly this
         # company-vs-individual split to tell the two apart.
         "required": ["bank_name", "account_number", "transactions"],
-        "additional": ["company_name", "individual_name", "individual_address"],
+        # statement_period_* through transaction_count (not doc_gen-verified
+        # — added for fraud_detection.numerical_validation's BS.* checks,
+        # e.g. BS.PERIOD_BOUNDS/BS.OVERDRAFT_LIMIT/BS.TOTALS): only extract
+        # these where the statement actually prints them; omit rather than
+        # guess.
+        # opening_balance is doc_gen-verified only for the OCBC-style
+        # statement (docgen_bankstatement_ocbc.py prints an explicit
+        # "Opening Balance" header field, ctx['opening']) — the other
+        # template (docgen_bankstatement.py) computes the same value
+        # internally but never prints it as its own labelled field, so
+        # extract it only where the statement actually shows it. There's
+        # no separate "closing balance" field: both templates print that
+        # same figure under the "Ledger Balance"/"Available Balance"
+        # labels already captured below.
+        "additional": [
+            "company_name", "individual_name", "individual_address",
+            "statement_period_start", "statement_period_end", "overdraft_limit",
+            "opening_balance", "ledger_balance", "available_balance", "holds",
+            "total_credits", "total_debits", "transaction_count",
+        ],
     },
     "certificate_of_incorporation": {
         # generate_from_mastersheet.py actually calls coi_generator.py, not
@@ -50,8 +69,11 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # overridden by the caller, so it's always present. former_names is
         # genuinely probabilistic there (rng.random() >= 0.4 -> no former
         # name ~60% of the time), a real subtype-dependent field.
-        "required": ["company_name", "uen", "incorporation_date", "company_type", "company_former_name", "incorporating_act", "certificate_date"],
-        "additional": ["company_former_name"],
+        "required": ["company_name", "uen", "incorporation_date", "company_type", "incorporating_act", "certificate_date"],
+        # company_former_name_change_date (not doc_gen-verified — added for
+        # COI.EVENT_AFTER_ISSUE/COI.DATE_LOGIC): the date a former-name
+        # change took effect, where the certificate shows one at all.
+        "additional": ["company_former_name", "company_former_name_change_date"],
     },
     "payslip": {
         # employee_name/employer_name/net figures are all rendered by every
@@ -60,7 +82,14 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # Employer Address or a company_facts() fallback) is only actually
         # rendered by build_payslip_1/3, not build_payslip_2.
         "required": ["individual_name", "company_name", "net_pay"],
-        "additional": ["company_address"],
+        # earnings_items through pay_date (not doc_gen-verified — added for
+        # fraud_detection.numerical_validation's PAY.* checks): the itemised
+        # breakdown behind net_pay, where the payslip shows one.
+        "additional": [
+            "company_address", "earnings_items", "deductions_items",
+            "total_earnings", "total_deductions", "employee_cpf",
+            "ordinary_wages", "basic_pay", "pay_period_end", "pay_date",
+        ],
     },
     # Split from a single former "id_document" type — passport and NRIC
     # need separate schemas because passport_generator.py's own comment
@@ -71,14 +100,10 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
     # They still fulfil the same case-checklist requirement though — see
     # models.IDENTITY_DOCUMENT_TYPES/IDENTITY_DOCUMENT_REQUIREMENT.
     "passport": {
-        "required": ["individual_name", "passport_number", "nric_number", "date_of_birth", "nationality", "mrz"],
-        # No document_side here, unlike nric's — a passport bio page is
-        # always self-contained (never split into a separate front/back
-        # upload), so there's nothing genuinely variable for the LLM to
-        # judge from the text; mapper._collect_identity_state hardcodes
-        # sides={"single"} for every accepted passport instead of relying
-        # on an extracted field for a fact that's structurally always true.
-        "additional": [],
+        "required": ["individual_name", "passport_number", 
+                     "date_of_birth", "nationality", "mrz", "date_of_expiry",
+                     "date_of_issue", "place_of_birth", "sex",],
+        "additional": ["nric_number",],
     },
     "nric": {
         # Grounded directly in nric_generator.py's _draw_front/_draw_back,
@@ -102,7 +127,7 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # front page missing individual_name is still worth escalating on.
         "required": ["nric_number"],
         "additional": [
-            "individual_name", "date_of_birth", "country",
+            "individual_name", "date_of_birth", "country","race", "sex",
             "individual_address", "date_of_issue", "document_side",
         ],
     },
@@ -121,7 +146,15 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
             "company_name", "company_address", "tin", "declaration_date",
             "country_of_incorporation",
         ],
-        "additional": [],
+        # tax_residences through form_version_date (not doc_gen-verified —
+        # added for fraud_detection.numerical_validation's FATCA.* checks):
+        # the form's own multi-jurisdiction/entity-classification sections,
+        # which this schema didn't previously capture beyond the single
+        # `tin` field above.
+        "additional": [
+            "tax_residences", "entity_type", "controlling_persons",
+            "specified_us_person", "us_tin", "form_version_date",
+        ],
     },
     "certificate_of_incumbency": {
         # docgen_acra_profile.py sets every one of these unconditionally —
@@ -132,10 +165,21 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # facts with no fallback.
         "required": [
             "company_name", "uen", "incorporation_date", "company_type",
-            "company_address", "individual_name", "individual_address",
-            "id_number", "share_capital", "share_class",
+            "company_address", "shareholder_name", "shareholder_address",
+            "nric_number", "share_capital", "share_class",
         ],
-        "additional": [],
+        # shareholders/officers (not doc_gen-verified — added for
+        # fraud_detection.numerical_validation's ACRA.* checks): array forms
+        # of the same shareholder/officer facts shareholder_name/
+        # shareholder_address above only capture as a single person — same
+        # "a flat field can't hold more than one person" reasoning as
+        # company_constitution's "subscribers" below. Only extract these
+        # where the document actually lists more than the one shareholder/
+        # officer required already captures.
+        "additional": [
+            "company_former_name", "shareholders", "officers",
+            "document_date", "last_agm_date", "last_annual_return_date", "financial_year_end",
+        ],
     },
     "company_constitution": {
         # docgen_constitution.py's subscribers list (facts["holders"]) is
@@ -166,7 +210,10 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
             "company_name", "uen", "incorporation_date", "company_address",
             "share_capital", "issued_shares", "subscribers",
         ],
-        "additional": ["company_type", "notes"],
+        # quorum/adoption_date/execution_date (not doc_gen-verified — added
+        # for fraud_detection.numerical_validation's CONST.QUORUM/
+        # CONST.DATE_LOGIC checks).
+        "additional": ["company_type", "notes", "quorum", "adoption_date", "execution_date"],
     },
     # Serves two subtypes (personal vs. company proof of address) that reuse
     # the *same* generator field slot for either an individual or a company
@@ -177,7 +224,15 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
     # model can't express "at least one of these two pairs must be present.")
     "proof_of_address": {
         "required": [],
-        "additional": ["individual_name", "individual_address", "company_name", "company_address"],
+        # billing_period_end through contract_end_date (not doc_gen-verified
+        # — added for fraud_detection.numerical_validation's POA.* checks):
+        # the utility-bill figures a genuine bill itemises.
+        "additional": [
+            "individual_name", "individual_address", "company_name", "company_address",
+            "billing_period_end", "bill_date", "usage_this_period", "consumption_trend",
+            "previous_balance", "payment_received", "outstanding_balance",
+            "current_charges", "total_payable", "due_date", "contract_end_date",
+        ],
     },
     "source_of_wealth": {
         # corp_source_of_wealth/balance_sheet_income_statement_generator.py
@@ -197,11 +252,34 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # which tells the model not to escalate on that basis alone when
         # it's clearly this individual-account variant instead.
         "required": ["company_name", "uen"],
+        # cost_of_sales through equity_items/total_equity (not doc_gen-
+        # verified — added for fraud_detection.numerical_validation's FS.*
+        # checks): the full income-statement/balance-sheet line items behind
+        # the headline revenue/net_profit/total_assets figures above. Only
+        # extract where the statement actually itemises to this level.
         "additional": [
             "individual_address", "revenue", "net_profit",
             "total_assets", "total_liabilities", "share_capital", "notes",
             "broker_name", "account_number", "account_holder_name",
-            "cash_balance", "portfolio_value", "net_asset_value", "holdings",
+            "cash_balance", "portfolio_value", "net_asset_value", "holdings", "margin_loan",
+            "cost_of_sales", "operating_expenses", "tax_expense", "profit_before_tax",
+            "profit_for_the_year", "profit_for_the_year_prior_year",
+            "retained_earnings_opening", "retained_earnings_closing",
+            "retained_earnings_closing_prior_year", "ppe_opening", "ppe_closing",
+            "depreciation_expense", "borrowings_current", "borrowings_non_current",
+            "finance_costs", "loan_tenure", "financial_year_end", "signing_date", "note_references",
+            "current_assets_items", "total_current_assets",
+            "non_current_assets_items", "total_non_current_assets",
+            "current_liabilities_items", "total_current_liabilities",
+            "non_current_liabilities_items", "total_non_current_liabilities",
+            "equity_items", "total_equity",
+            # *_prior_year (not doc_gen-verified — added for FS.BALANCES to
+            # also check the comparative column, same reasoning as
+            # profit_for_the_year_prior_year/retained_earnings_closing_prior_year
+            # above): a two-column statement (FY26/FY25 side by side) states
+            # a full prior-year balance sheet, not just its own headline
+            # figures — extract it where shown.
+            "total_assets_prior_year", "total_liabilities_prior_year", "total_equity_prior_year",
         ],
     },
     "credit_report": {
@@ -229,7 +307,14 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
             "individual_name", "id_number", "date_of_birth", "nationality",
             "individual_address", "defaults", "bankruptcy_proceedings",
         ],
-        "additional": ["accounts"],
+        # account_count through bureau_score (not doc_gen-verified — added
+        # for fraud_detection.numerical_validation's CR.* checks): the
+        # report's own summary counters and score block.
+        "additional": [
+            "accounts", "account_count", "enquiry_count", "default_count",
+            "earliest_account_date", "total_outstanding_balance", "report_date", "bureau_score",
+            "previous_enquiries","narratives",
+        ],
     },
     "list_of_loans": {
         # All three loan-letter templates (efs/overdraft/term_loan_facility_
@@ -250,7 +335,22 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # Rather than growing this schema's flat field list every time a
         # template adds another named term, loan_terms is a catch-all array
         # for whatever named contractual terms are actually present.
-        "additional": ["interest_rate", "loan_tenure", "loan_terms"],
+        # monthly_instalment through offer_validity_days (not doc_gen-
+        # verified — added for fraud_detection.numerical_validation's
+        # LOAN.* checks). offer_date IS doc_gen-verified though — every
+        # template's letterhead() helper (loan_letter_common.py) renders
+        # it as the letter's own "Date:" line, right after "Our Ref:".
+        # review_date is doc_gen-verified for the overdraft variant only
+        # (overdraft_facility_generator.py; term_loan/EFS use a fixed
+        # tenure instead, see loan_tenure above) — see EXTRA_FIELD_GUIDANCE
+        # below for how to tell "Date:" apart from Review Date and the
+        # Validity-of-Offer window, which are not the same field.
+        "additional": [
+            "interest_rate", "loan_tenure", "loan_terms",
+            "monthly_instalment", "repayment_schedule", "fee_percentage", "fee_amount",
+            "facility_type", "scheme_name", "offer_date", "acceptance_date", "offer_validity_days",
+            "review_date",
+        ],
         # prob change in the future to others like {lender, amount, currency, status}
     },
     "notice_of_assessment": {
@@ -268,7 +368,10 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
             "company_name", "tax_reference_number", "company_address", "year_of_assessment",
             "noa_date", "eci", "tax_payable",
         ],
-        "additional": ["tax_computation"],
+        # previous_assessment_date (not doc_gen-verified — added for
+        # fraud_detection.numerical_validation's NOA.DATE_LOGIC check):
+        # only present when this notice refers back to an earlier one.
+        "additional": ["tax_computation", "previous_assessment_date"],
     },
     # Fallback for documents the Classifier couldn't match to any category
     # above (document_type == "unrecognised"). Nothing is "required" since
@@ -444,7 +547,17 @@ EXTRA_FIELD_GUIDANCE: dict[str, str] = {
         'in the document, e.g. "Purpose", "Repayment", "Security") and "value" '
         "(that term's text as shown). Capture whatever named terms are "
         "actually present — the exact set varies by facility type (term loan, "
-        "overdraft, EFS) — rather than expecting a fixed list."
+        "overdraft, EFS) — rather than expecting a fixed list.\n\n"
+        '"offer_date" is the letter\'s own dateline — the "Date:" line near '
+        'the top, right after "Our Ref:" — not any other date on the page. '
+        'Do not confuse it with "Review Date" (a future annual-review '
+        "checkpoint, its own separate field, review_date) or the wording "
+        "under \"Validity of Offer\" (a relative window like \"30 days from "
+        "the date of this letter\", not an absolute date — leave "
+        'offer_validity_days as that number of days, not a date). '
+        '"acceptance_date" is the date next to the signatory\'s own '
+        'signature in the "Acceptance" section at the end, not the '
+        "letter's own dateline."
     ),
     "notice_of_assessment": (
         'For "tax_computation", its "value" should be an array of objects — '
@@ -489,7 +602,17 @@ _FIELD_WRAPPER_INSTRUCTIONS = (
     '{"value": <the extracted value, or null if not present>, "confidence": <float '
     "0.0-1.0, your confidence that this specific value is correct and clearly "
     "supported by the text>} — do not return a bare value, always wrap it like "
-    "this, for every field regardless of which tier it came from."
+    "this, for every field regardless of which tier it came from.\n\n"
+    "Every value must be a literal transcription of what the document itself "
+    "states — never your own commentary, correction, or judgement about "
+    "whether a value looks wrong, inconsistent, or anomalous. If a date, "
+    "figure, or other value looks like a typo, a miscalculation, or doesn't "
+    "match something else in the document, extract it exactly as printed "
+    "anyway (lower confidence is fine if the print quality itself is poor, "
+    "but not because the value looks suspicious) — do not silently correct "
+    "it to what you think was intended, and do not add a separate field "
+    "describing the discrepancy. Spotting and explaining anomalies is a "
+    "separate, later, deterministic step; this step is transcription only."
 )
 
 
