@@ -3,14 +3,18 @@ import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DropZone from '../components/DropZone';
-import KebabMenu from '../components/KebabMenu';
 import FileRow from '../components/FileRow';
 import { subscribeToCaseStatus } from '../services/caseSocket';
 import type { CaseStatusSubscription } from '../services/caseSocket';
 import {
   approveDocument,
+  cancelDocument,
+  canCancelDocument,
+  canRetryDocument,
   deleteCase,
   deleteDocument,
+  isDocumentStuckProcessing,
+  retryDocument,
   ADDITIONAL_DOCUMENT_TYPES,
   REQUIRED_DOCUMENT_TYPES,
   EXTRACTION_CONFIDENCE_THRESHOLD,
@@ -157,7 +161,7 @@ function acceptedIdentityNames(documents: DocumentRecord[]): string[] {
   for (const document of documents) {
     if (
       document.status !== 'analyzed' ||
-      document.classification_outcome !== 'accepted' ||
+      document.routing_status !== 'accepted' ||
       (document.document_type !== 'nric' && document.document_type !== 'passport')
     ) {
       continue;
@@ -192,6 +196,50 @@ function describeIssue(issue: FileIssue): string {
     case 'duplicate':
       return 'This exact file has already been uploaded for this case.';
   }
+}
+
+function DocumentRowDelete({
+  filename,
+  isDeleting,
+  onDelete,
+}: {
+  filename: string;
+  isDeleting: boolean;
+  onDelete: () => void;
+}) {
+  return (
+    <span className="document-row-actions">
+      <button
+        type="button"
+        className={`delete-document-button${isDeleting ? ' is-visible' : ''}`}
+        aria-label={isDeleting ? `Deleting ${filename}` : `Delete ${filename}`}
+        disabled={isDeleting}
+        onClick={(event) => {
+          event.stopPropagation();
+          onDelete();
+        }}
+        onKeyDown={(event) => event.stopPropagation()}
+      >
+        <svg
+          viewBox="0 0 24 24"
+          width="24"
+          height="24"
+          aria-hidden="true"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M4 7h16" />
+          <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+          <path d="M7 7l1 12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-12" />
+          <path d="M10 11v6" />
+          <path d="M14 11v6" />
+        </svg>
+      </button>
+    </span>
+  );
 }
 
 export default function UploadPage({
@@ -264,6 +312,14 @@ export default function UploadPage({
   const [approvingDocumentId, setApprovingDocumentId] = useState<string | null>(null);
   const [approveError, setApproveError] = useState<string | null>(null);
   const [isApprovingAll, setIsApprovingAll] = useState(false);
+  const [cancellingDocumentId, setCancellingDocumentId] = useState<string | null>(null);
+  const [cancelActionError, setCancelActionError] = useState<string | null>(null);
+  const [retryingDocumentId, setRetryingDocumentId] = useState<string | null>(null);
+  const [retryActionError, setRetryActionError] = useState<string | null>(null);
+  // Forces a re-render every so often while any document is PROCESSING, so
+  // a "Stuck"/Retry-eligible document surfaces purely from time passing —
+  // isDocumentStuckProcessing itself reads Date.now() fresh each render.
+  const [, setStuckTick] = useState(0);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const [isDeletingCase, setIsDeletingCase] = useState(false);
@@ -282,7 +338,7 @@ export default function UploadPage({
   const flaggedDocuments = Array.from(documentDetails.values()).filter((document) => {
     const lowestConfidence = lowestFieldConfidence(document.extracted_fields);
     return (
-      document.classification_outcome === 'manual_review' ||
+      document.routing_status === 'manual_review' ||
       caseMatchNeedsReview(document) ||
       (lowestConfidence != null && lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD)
     );
@@ -435,6 +491,68 @@ export default function UploadPage({
   } finally {
     if (isMountedRef.current) {
       setApprovingDocumentId(null);
+    }
+  }
+}
+
+async function handleCancelDocument(documentId: string) {
+  setCancellingDocumentId(documentId);
+  setCancelActionError(null);
+
+  try {
+    const updated = await cancelDocument(documentId);
+
+    if (!isMountedRef.current) {
+      return;
+    }
+
+    setDocumentDetails((current) => {
+      const next = new Map(current);
+      next.set(documentId, updated);
+      return next;
+    });
+  } catch (err) {
+    if (!isMountedRef.current) {
+      return;
+    }
+
+    setCancelActionError(
+      err instanceof Error ? err.message : 'Failed to cancel document.',
+    );
+  } finally {
+    if (isMountedRef.current) {
+      setCancellingDocumentId(null);
+    }
+  }
+}
+
+async function handleRetryDocument(documentId: string) {
+  setRetryingDocumentId(documentId);
+  setRetryActionError(null);
+
+  try {
+    const updated = await retryDocument(documentId);
+
+    if (!isMountedRef.current) {
+      return;
+    }
+
+    setDocumentDetails((current) => {
+      const next = new Map(current);
+      next.set(documentId, updated);
+      return next;
+    });
+  } catch (err) {
+    if (!isMountedRef.current) {
+      return;
+    }
+
+    setRetryActionError(
+      err instanceof Error ? err.message : 'Failed to retry document.',
+    );
+  } finally {
+    if (isMountedRef.current) {
+      setRetryingDocumentId(null);
     }
   }
 }
@@ -629,6 +747,21 @@ async function handleApproveAllEligibleDocuments() {
     a.uploaded_at.localeCompare(b.uploaded_at),
   );
 
+  const anyDocumentProcessing = documents.some((document) => document.status === 'processing');
+  // Mirrors routers/cases.py's delete_case guard: every status not in
+  // TERMINAL_DOCUMENT_STATUSES is in-flight (the two sets are exact
+  // complements of DocumentStatus).
+  const caseHasInFlightDocument = documents.some(
+    (document) => !TERMINAL_DOCUMENT_STATUSES.has(document.status),
+  );
+  useEffect(() => {
+    if (!anyDocumentProcessing) {
+      return;
+    }
+    const interval = window.setInterval(() => setStuckTick((n) => n + 1), 15000);
+    return () => window.clearInterval(interval);
+  }, [anyDocumentProcessing]);
+
   const extractedDocuments = documents.filter(
     (document) => document.status !== 'approved',
   );
@@ -693,19 +826,19 @@ async function handleApproveAllEligibleDocuments() {
                 <button type="button" className="edit-case-button" onClick={() => setIsEditingCase(true)}>
                   ✎ Edit case details
                 </button>
-                <KebabMenu
-                  label={isDeletingCase ? 'Deleting case' : 'Case actions'}
-                  disabled={isDeletingCase}
-                  items={[
-                    {
-                      id: 'delete',
-                      label: isDeletingCase ? 'Deleting…' : 'Delete case',
-                      danger: true,
-                      disabled: isDeletingCase,
-                      onSelect: () => setCaseDeleteOpen(true),
-                    },
-                  ]}
-                />
+                <button
+                  type="button"
+                  className="delete-record-button"
+                  onClick={() => setCaseDeleteOpen(true)}
+                  disabled={isDeletingCase || caseHasInFlightDocument}
+                  title={
+                    caseHasInFlightDocument
+                      ? "Case has a document that's still being processed; cancel it first, or wait for it to finish."
+                      : undefined
+                  }
+                >
+                  {isDeletingCase ? 'Deleting…' : 'Delete case'}
+                </button>
               </div>
             </div>
           )}
@@ -859,6 +992,12 @@ async function handleApproveAllEligibleDocuments() {
                     {approveError && (
                       <div className="toast show mixed">⚠ {approveError}</div>
                     )}
+                    {cancelActionError && (
+                      <div className="toast show mixed">⚠ {cancelActionError}</div>
+                    )}
+                    {retryActionError && (
+                      <div className="toast show mixed">⚠ {retryActionError}</div>
+                    )}
 
                     <div className="documents-table">
                       <div className="documents-table-header">
@@ -874,6 +1013,9 @@ async function handleApproveAllEligibleDocuments() {
                         const status = document.status;
                         const isTerminal = TERMINAL_DOCUMENT_STATUSES.has(status);
                         const isApproving = approvingDocumentId === document.id;
+                        const isStuck = isDocumentStuckProcessing(document);
+                        const isCancellingRow = cancellingDocumentId === document.id;
+                        const isRetryingRow = retryingDocumentId === document.id;
                         const caseMatch = caseMatches.get(document.id);
                         const routingOutcome = formatRoutingOutcome(document, caseMatch);
                         const manualReviewTitle =
@@ -921,7 +1063,11 @@ async function handleApproveAllEligibleDocuments() {
                                     ? 'status-dot--success'
                                     : status === 'failed'
                                       ? 'status-dot--failed'
-                                      : ''
+                                      : status === 'cancelled'
+                                        ? 'status-dot--cancelled'
+                                        : isStuck
+                                          ? 'status-dot--stuck'
+                                          : ''
                                 }`}
                               />
 
@@ -929,11 +1075,45 @@ async function handleApproveAllEligibleDocuments() {
                                 {formatDocumentStatus(status)}
                                 {!isTerminal && '…'}
                               </span>
+
+                              {isStuck && (
+                                <span className="document-status-stuck-badge">Stuck</span>
+                              )}
+
+                              {canCancelDocument(status) && (
+                                <button
+                                  type="button"
+                                  className="document-row-status-action"
+                                  disabled={isCancellingRow}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void handleCancelDocument(document.id);
+                                  }}
+                                  onKeyDown={(event) => event.stopPropagation()}
+                                >
+                                  {isCancellingRow ? 'Cancelling…' : 'Cancel'}
+                                </button>
+                              )}
+
+                              {canRetryDocument(document) && (
+                                <button
+                                  type="button"
+                                  className="document-row-status-action document-row-status-action--retry"
+                                  disabled={isRetryingRow}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void handleRetryDocument(document.id);
+                                  }}
+                                  onKeyDown={(event) => event.stopPropagation()}
+                                >
+                                  {isRetryingRow ? 'Retrying…' : 'Retry'}
+                                </button>
+                              )}
                             </span>
 
                             <span className="document-confidence">
-                              {document.confidence != null
-                                ? document.confidence.toFixed(2)
+                              {document.classification_confidence != null
+                                ? document.classification_confidence.toFixed(2)
                                 : '—'}
                             </span>
 
@@ -941,26 +1121,13 @@ async function handleApproveAllEligibleDocuments() {
                               {routingOutcome}
                             </span>
 
-                            <KebabMenu
-                              label={
-                                deletingDocumentId === document.id
-                                  ? `Deleting ${document.filename}`
-                                  : `Actions for ${document.filename}`
-                              }
-                              disabled={deletingDocumentId === document.id}
-                              items={[
-                                {
-                                  id: 'delete',
-                                  label:
-                                    deletingDocumentId === document.id
-                                      ? 'Deleting…'
-                                      : 'Delete document',
-                                  danger: true,
-                                  disabled: deletingDocumentId === document.id,
-                                  onSelect: () => setDocumentToDelete(document),
-                                },
-                              ]}
-                            />
+                            {isTerminal && (
+                              <DocumentRowDelete
+                                filename={document.filename}
+                                isDeleting={deletingDocumentId === document.id}
+                                onDelete={() => setDocumentToDelete(document)}
+                              />
+                            )}
                           </div>
                         );
                       })}
@@ -1017,8 +1184,8 @@ async function handleApproveAllEligibleDocuments() {
                           </span>
 
                           <span className="document-confidence">
-                            {document.confidence != null
-                              ? document.confidence.toFixed(2)
+                            {document.classification_confidence != null
+                              ? document.classification_confidence.toFixed(2)
                               : '—'}
                           </span>
 
@@ -1101,16 +1268,16 @@ async function handleApproveAllEligibleDocuments() {
                   // Classification problems first — a case-match reason is
                   // only meaningful once the document type is right.
                   const reason =
-                    document.classification_outcome !== 'manual_review' &&
+                    document.routing_status !== 'manual_review' &&
                     caseMatch &&
                     caseMatchNeedsReview(document)
                       ? `${caseMatch.reason}. Please verify the document belongs to this case before approving.`
-                      : document.classification_outcome === 'manual_review'
+                      : document.routing_status === 'manual_review'
                       ? document.document_type === 'unrecognised'
                         ? 'Document type could not be confidently recognised. Please verify the document type before approving.'
-                        : document.confidence != null &&
-                            document.confidence < CLASSIFICATION_CONFIDENCE_THRESHOLD
-                          ? `Classification confidence (${document.confidence.toFixed(
+                        : document.classification_confidence != null &&
+                            document.classification_confidence < CLASSIFICATION_CONFIDENCE_THRESHOLD
+                          ? `Classification confidence (${document.classification_confidence.toFixed(
                               2,
                             )}) is below the required threshold of ${CLASSIFICATION_CONFIDENCE_THRESHOLD.toFixed(
                               2,

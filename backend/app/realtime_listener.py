@@ -3,10 +3,11 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from realtime import AsyncRealtimeChannel
+from realtime._async.channel import AsyncRealtimeChannel
+from realtime.types import PostgresChangesPayload, RealtimePostgresChangesListenEvent
 from supabase import AsyncClient
 
-from . import case_status
+from . import case_service
 from .case_broadcaster import broadcaster
 from .supabase_client import build_async_supabase_client
 
@@ -38,7 +39,7 @@ async def _debounced_publish(case_id: str) -> None:
         return
 
     try:
-        snapshot = await asyncio.to_thread(case_status.build_case_snapshot, case_id)
+        snapshot = await asyncio.to_thread(case_service.build_case_snapshot, case_id)
     except Exception:
         logger.exception("Failed to build case snapshot for case %s", case_id)
         return
@@ -49,7 +50,7 @@ async def _debounced_publish(case_id: str) -> None:
         broadcaster.publish(case_id, snapshot)
 
 
-def _on_change(payload: dict) -> None:
+def _on_change(payload: PostgresChangesPayload) -> None:
     """
     Registered as the postgres_changes callback — called synchronously by
     realtime-py from within its own message-handling loop (not awaited), so
@@ -86,8 +87,12 @@ async def start() -> None:
 
     _client = await build_async_supabase_client()
     _channel = _client.channel("case-status-changes")
-    _channel.on_postgres_changes("*", callback=_on_change, table="documents", schema="public")
-    _channel.on_postgres_changes("*", callback=_on_change, table="cases", schema="public")
+    _channel.on_postgres_changes(
+        RealtimePostgresChangesListenEvent.All, callback=_on_change, table="documents", schema="public"
+    )
+    _channel.on_postgres_changes(
+        RealtimePostgresChangesListenEvent.All, callback=_on_change, table="cases", schema="public"
+    )
     await _channel.subscribe()
     logger.info("Realtime listener subscribed to documents/cases changes")
 

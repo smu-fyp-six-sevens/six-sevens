@@ -6,31 +6,61 @@ import uuid
 from typing import Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from pydantic import BaseModel, Field
 
 from ..config import settings
 from ..fraud_detection.metadata_analysis import MetadataAnalysisResult, check_metadata_anomalies
 from ..fraud_detection.layout_anomalies import LayoutAnomalyResult, check_layout_anomalies
-from ..fraud_detection.numerical_validation import (
-    NumericalValidationResult,
-    check_numerical_validation,
-)
+from ..fraud_detection.numerical_validation import NumericalValidationResult, check_numerical_validation
 from ..fraud_detection.spelling_anomaly import SpellingAnomalyResult, check_spelling_anomalies
+##why are these parked here
+
 from ..ingestion.ingestion_service import ingest_document
 from ..ingestion.metadata_extractor import extract_metadata
-from ..models import ExtractionTestResponse
 
 router = APIRouter(prefix="/extraction", tags=["extraction"])
 logger = logging.getLogger(__name__)
 
 
-async def _read_and_validate_upload(file: UploadFile) -> bytes:
-    if file.content_type not in settings.ALLOWED_CONTENT_TYPES:
+class ExtractionTestPage(BaseModel):
+    """
+    One page's worth of extraction output. `elements` shape depends on
+    extraction_method: native-PDF elements carry font/size/flags, OCR
+    elements carry a per-line confidence score — kept as free-form dicts
+    here rather than a union model since this endpoint is a debugging
+    window onto whatever ingest_document actually returned.
+    """
+
+    page_number: int
+    text: str
+    elements: list[dict] = Field(default_factory=list)
+
+
+class ExtractionTestResponse(BaseModel):
+    """Mirrors the dict returned by ingestion.ingestion_service.ingest_document."""
+
+    file_name: str
+    file_type: str
+    metadata: dict = Field(default_factory=dict)
+    extraction_method: str
+    raw_text: str
+    pages: list[ExtractionTestPage]
+    needs_review: bool
+    status: str
+
+
+async def _read_and_validate_upload(file: UploadFile) -> tuple[bytes, str, str]:
+    """Returns (file_bytes, filename, content_type) — all validated non-empty,
+    unlike UploadFile's own optional filename/content_type attributes."""
+    content_type = file.content_type
+    if content_type not in settings.ALLOWED_CONTENT_TYPES:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=f"Unsupported content type: {file.content_type}",
+            detail=f"Unsupported content type: {content_type}",
         )
 
-    if not file.filename:
+    filename = file.filename
+    if not filename:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Uploaded file must include a filename",
@@ -47,7 +77,7 @@ async def _read_and_validate_upload(file: UploadFile) -> bytes:
             detail=f"File exceeds {settings.MAX_FILE_SIZE_BYTES} byte limit",
         )
 
-    return file_bytes
+    return file_bytes, filename, content_type
 
 
 @router.post("/test", response_model=ExtractionTestResponse)
@@ -56,18 +86,18 @@ async def test_extraction(file: UploadFile = File(...)) -> ExtractionTestRespons
     Dev/QA endpoint: runs just the raw-text extraction step (native PDF
     text, OCR fallback for scanned PDFs, or straight OCR for images) on an
     uploaded file and returns the result directly. Bypasses Supabase
-    storage, the document queue, and Dify entirely — this exists so the
-    extraction stage can be eyeballed on its own before it ever reaches
-    classification/LLM extraction.
+    storage, the document queue, and the LangGraph pipeline entirely — this
+    exists so the extraction stage can be eyeballed on its own before it
+    ever reaches classification/LLM extraction.
     """
-    file_bytes = await _read_and_validate_upload(file)
+    file_bytes, filename, content_type = await _read_and_validate_upload(file)
 
     try:
         result = await asyncio.to_thread(
-            ingest_document, file_bytes, file.filename, file.content_type
+            ingest_document, file_bytes, filename, content_type
         )
     except Exception as exc:
-        logger.exception("Extraction test failed for %s", file.filename)
+        logger.exception("Extraction test failed for %s", filename)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"Extraction failed: {exc}",
@@ -89,11 +119,11 @@ async def test_spelling_anomaly(file: UploadFile = File(...)) -> SpellingAnomaly
     to have extracted anything from), so it'll flag more proper nouns here
     than the real endpoint would for the same file.
     """
-    file_bytes = await _read_and_validate_upload(file)
+    file_bytes, filename, _content_type = await _read_and_validate_upload(file)
 
     # A random id purely for log messages inside check_spelling_anomalies —
     # no document exists to key it to here.
-    return await check_spelling_anomalies(str(uuid.uuid4()), file_bytes, file.filename)
+    return await check_spelling_anomalies(str(uuid.uuid4()), file_bytes, filename)
 
 
 @router.post("/test-metadata-anomaly", response_model=MetadataAnalysisResult)
@@ -115,8 +145,8 @@ async def test_metadata_anomaly(
     metadata_analysis.INSTITUTION_ORIGINATED_DOCUMENT_TYPES), which would
     otherwise be unreachable from the dev tool.
     """
-    file_bytes = await _read_and_validate_upload(file)
-    metadata = await asyncio.to_thread(extract_metadata, file_bytes, file.filename)
+    file_bytes, filename, _content_type = await _read_and_validate_upload(file)
+    metadata = await asyncio.to_thread(extract_metadata, file_bytes, filename)
     return check_metadata_anomalies(str(uuid.uuid4()), metadata, document_type or None)
     
 @router.post("/test-numerical-validation", response_model=NumericalValidationResult)
@@ -130,9 +160,9 @@ async def test_numerical_validation(file: UploadFile = File(...)) -> NumericalVa
     arithmetic reconciliation checks (which need structured fields like a
     statement's transactions) will find nothing to compare here.
     """
-    file_bytes = await _read_and_validate_upload(file)
+    file_bytes, filename, _content_type = await _read_and_validate_upload(file)
     return await asyncio.to_thread(
-        check_numerical_validation, str(uuid.uuid4()), file_bytes, file.filename
+        check_numerical_validation, str(uuid.uuid4()), file_bytes, filename
     )
 
 
@@ -147,7 +177,7 @@ async def test_layout_anomalies(file: UploadFile = File(...)) -> LayoutAnomalyRe
     `summary`, and `checks` (detected, expected, difference). Several
     checks on the same area stay one finding.
     """
-    file_bytes = await _read_and_validate_upload(file)
+    file_bytes, _filename, _content_type = await _read_and_validate_upload(file)
     return await asyncio.to_thread(
         check_layout_anomalies, str(uuid.uuid4()), file_bytes
     )

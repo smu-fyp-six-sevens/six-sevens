@@ -2239,3 +2239,28 @@ def test_chrome_tie_is_assessed_without_a_false_shift() -> None:
     findings, check = lr._check_chrome_position(headers)
     assert check.unable_to_assess is False
     assert findings == []
+
+
+def test_split_leading_headings_leaves_too_short_a_remainder_unsplit() -> None:
+    heading_line = _line((72, 100, 300, 112), text="2. NAME")
+    short_rest_line = _line((72, 114, 120, 126), text="Ok.")
+    block = _block([heading_line, short_rest_line])
+    assert lr._split_leading_headings([block]) == [block]
+
+
+def test_is_clause_heading_text_rejects_blank_text() -> None:
+    assert lr._is_clause_heading_text("   ") is False
+
+
+def test_has_strong_majority_needs_at_least_two_comparable_peers() -> None:
+    assert lr._has_strong_majority(matching=1, comparable=1) is False
+
+
+def test_check_indentation_skips_a_shift_that_does_not_reach_the_column_right() -> None:
+    baseline = [
+        _block([_line((72, 100 + i * 30, 540, 112 + i * 30))]) for i in range(3)
+    ]
+    shifted_but_short = _block([_line((92, 190, 520, 202))])
+    anomalies, check = lr._check_indentation([*baseline, shifted_but_short])
+    assert check.unable_to_assess is False
+    assert anomalies == []

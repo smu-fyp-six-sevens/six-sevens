@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Optional
+from typing import Any, Optional, cast
 
 from .supabase_client import service_supabase_client, supabase_client
-from .fraud_detection.font_consistency_v2 import ExtractedField
+from .fraud_detection.font_consistency import ExtractedField
+
+
+def _row(mapping: Any) -> dict:
+    """postgrest types a row as a loose JSON union rather than dict[str, Any]
+    — every row here is one we (or our own migrations) wrote, so this cast
+    just tells the type checker what's already true."""
+    return cast(dict, mapping)
+
 
 def _infer_field_type(value: object) -> str:
     if value is None:
@@ -29,10 +37,11 @@ def replace_extracted_fields(
     required_field_names: set[str],
 ) -> None:
     """
-    Mirrors a document's extracted_fields into the normalised extracted_fields
-    table — one row per field, rather than the single jsonb blob on
-    documents.extracted_fields — so individual fields can be queried,
-    joined, or reported on directly.
+    Persists a document's extracted field values as one row per field —
+    the sole place field values live (documents.extracted_fields is not
+    written; document_repository.get_document/list_documents read it back
+    from here) — so individual fields can be queried, joined, or reported
+    on directly.
 
     Replaces (delete-then-insert) rather than upserts: re-processing a
     document (a reclassification escalation, or a loan officer's manual
@@ -72,7 +81,7 @@ def get_extracted_fields(document_id: str) -> list[ExtractedField]:
     """
     Extra columns on the extracted_fields table (id, document_id, idx,
     extracted_at, field_category, ...) are dropped automatically —
-    ExtractedField only declares what font_consistency_v2 actually uses.
+    ExtractedField only declares what font_consistency actually uses.
     """
     result = (
         supabase_client.table("extracted_fields")
@@ -80,7 +89,7 @@ def get_extracted_fields(document_id: str) -> list[ExtractedField]:
         .eq("document_id", document_id)
         .execute()
     )
-    return [ExtractedField(**row) for row in result.data]
+    return [ExtractedField(**_row(row)) for row in result.data]
 
 
 def get_extracted_fields_for_documents(
@@ -102,9 +111,26 @@ def get_extracted_fields_for_documents(
         .execute()
     )
     by_document: dict[str, list[ExtractedField]] = defaultdict(list)
-    for row in result.data:
+    for raw_row in result.data:
+        row = _row(raw_row)
         by_document[row["document_id"]].append(ExtractedField(**row))
     return by_document
+
+def get_extracted_fields_dict(document_id: str) -> dict:
+    """Plain {field_name: value} shape — what documents.extracted_fields
+    used to hold before it was retired in favour of this table."""
+    return {field.field_name: field.field_value for field in get_extracted_fields(document_id)}
+
+
+def get_extracted_fields_dicts_for_documents(document_ids: list[str]) -> dict[str, dict]:
+    """Batched version of get_extracted_fields_dict, for document_repository's
+    list_documents/get_documents_in_status to enrich a whole page in one query."""
+    by_document = get_extracted_fields_for_documents(document_ids)
+    return {
+        document_id: {field.field_name: field.field_value for field in fields}
+        for document_id, fields in by_document.items()
+    }
+
 
 def add_extracted_field(
     document_id: str,
@@ -119,7 +145,10 @@ def add_extracted_field(
     Manually added fields are treated as human-verified,
     so their confidence is always 1.0.
     """
-    supabase_client.table("extracted_fields").insert({
+    # field_value is intentionally `object` (any JSON-serialisable value a
+    # human can enter) — too wide for postgrest's strict JSON param type, so
+    # cast the row itself rather than narrow the public parameter.
+    supabase_client.table("extracted_fields").insert(cast(dict, {
         "document_id": document_id,
         "field_name": field_name,
         "field_value": field_value,
@@ -128,13 +157,22 @@ def add_extracted_field(
             "required" if field_name in required_field_names else "additional"
         ),
         "field_type": _infer_field_type(field_value),
-    }).execute()
+    })).execute()
 
 
 def delete_fields_for_document(document_id: str) -> None:
     """Removes every extracted-field row for a document that is being deleted."""
     service_supabase_client().table("extracted_fields").delete().eq(
         "document_id", document_id
+    ).execute()
+
+
+def delete_fields_for_documents(document_ids: list[str]) -> None:
+    """Batch version of delete_fields_for_document — one round-trip for many documents."""
+    if not document_ids:
+        return
+    service_supabase_client().table("extracted_fields").delete().in_(
+        "document_id", document_ids
     ).execute()
 
 

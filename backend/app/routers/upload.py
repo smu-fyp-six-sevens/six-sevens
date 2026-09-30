@@ -2,25 +2,38 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from postgrest.exceptions import APIError
+from pydantic import BaseModel
 
-from .. import case_repository, document_repository, storage_service
+from .. import case_service, document_repository, storage_service
 from ..config import settings
-from ..models import BulkUploadItemResult, BulkUploadResponse, DocumentRecord, UploadResponse
+from ..models import DocumentRecord, DocumentStatus
 from ..queue_service import document_queue
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 logger = logging.getLogger(__name__)
 
 
+class BulkUploadItemResult(BaseModel):
+    filename: str
+    success: bool
+    document_id: Optional[str] = None
+    status: Optional[DocumentStatus] = None
+    error: Optional[str] = None
+
+
+class BulkUploadResponse(BaseModel):
+    results: list[BulkUploadItemResult]
+
+
 async def _ingest_one(case_id: str | None, file: UploadFile) -> DocumentRecord:
     """
-    Validate -> store -> queue -> (async) hand off to the Classifier Agent.
-
-    Shared by the single- and bulk-upload endpoints. Raises HTTPException on
-    any validation or storage/queue failure.
+    Validate -> store -> queue -> (async) hand off to the Classifier Agent
+    for one file, called once per file by upload_documents_batch. Raises
+    HTTPException on any validation or storage/queue failure.
     """
     if file.content_type not in settings.ALLOWED_CONTENT_TYPES:
         raise HTTPException(
@@ -44,7 +57,7 @@ async def _ingest_one(case_id: str | None, file: UploadFile) -> DocumentRecord:
         )
 
     if case_id is not None:
-        case = await asyncio.to_thread(case_repository.get_case, case_id)
+        case = await asyncio.to_thread(case_service.get_case, case_id)
         if case is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -116,16 +129,6 @@ async def _cleanup_storage_object(storage_path: str) -> None:
         )
 
 
-@router.post("/upload", response_model=UploadResponse, status_code=status.HTTP_202_ACCEPTED)
-async def upload_document(case_id: str | None = Form(None), file: UploadFile = File(...)) -> UploadResponse:
-    """
-    Returns as soon as the document is queued (AC1) — it does not wait for
-    classification to complete.
-    """
-    document = await _ingest_one(case_id, file)
-    return UploadResponse(document_id=document.id, status=document.status)
-
-
 @router.post(
     "/upload-batch", response_model=BulkUploadResponse, status_code=status.HTTP_202_ACCEPTED
 )
@@ -134,9 +137,10 @@ async def upload_documents_batch(
     files: list[UploadFile] = File(default_factory=list),
 ) -> BulkUploadResponse:
     """
-    Same as /upload, but for multiple files under one case_id in a single
-    request. Each file is validated/stored/queued independently — one bad
-    file does not fail the rest of the batch.
+    Validates/stores/queues one or more files under one case_id in a single
+    request (AC1: returns as soon as they're queued, without waiting for
+    classification to complete). Each file is handled independently — one
+    bad file does not fail the rest of the batch.
     """
     if not files:
         raise HTTPException(

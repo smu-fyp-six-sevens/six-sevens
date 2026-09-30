@@ -8,6 +8,14 @@ interface CaseCardProps {
   isDeleting: boolean;
 }
 
+const CASE_ID_CLASS: Record<string, string> = {
+  'Ready for review': 'case-id--green',
+  'In progress': 'case-id--blue',
+  'Documents failed': 'case-id--red',
+  'Processing stuck': 'case-id--amber',
+  'Documents pending': 'case-id--grey',
+};
+
 function formatCreationDate(caseRecord: CaseRecord): string {
   const createdAt = (caseRecord as CaseRecord & {
     created_at?: string | null;
@@ -46,7 +54,11 @@ export default function CaseCard({
         onClick={() => onOpen(caseRecord)}
         aria-label={`Open case ${caseLabel}, ${caseRecord.applicant}`}
       >
-        <span className="case-id">
+        <span
+          className={`case-id ${
+            CASE_ID_CLASS[caseRecord.status] ?? 'case-id--grey'
+          }`}
+        >
           {caseRecord.caseNumber}
         </span>
 

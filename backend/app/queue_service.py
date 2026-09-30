@@ -6,8 +6,9 @@ import time
 from collections import deque
 from datetime import datetime, timezone
 
-from . import document_repository, orchestrator
+from . import document_repository
 from .config import settings
+from .langgraph import pipeline as langgraph_pipeline
 from .models import DocumentStatus, ProcessingErrorEntry
 
 logger = logging.getLogger("classifier_pipeline.queue")
@@ -20,12 +21,10 @@ class DocumentQueue:
 
     This satisfies AC1 (document enters a queue for async processing) and
     AC2 (dequeue -> hand off within a target window) for a single-instance
-    deployment. Once handed off, orchestrator.process_document owns
-    classification/extraction/retry/terminal-status — this layer no longer
-    retries invocations itself (see orchestrator.py for why). Concurrent
-    workers are safe here: DifyClient opens a fresh httpx.AsyncClient per
-    call (no shared connection to race on), and the shared Supabase client
-    is pinned to HTTP/1.1 (see supabase_client.py) specifically so
+    deployment. Once handed off, langgraph pipeline.process_document owns
+    classification/extraction/terminal-status — this layer doesn't retry
+    anything itself. Concurrent workers are safe here: the shared Supabase
+    client is pinned to HTTP/1.1 (see supabase_client.py) specifically so
     concurrent requests don't corrupt a shared HTTP/2 connection. For
     multi-instance/production use, swap this for a durable queue (e.g.
     Cloud Pub/Sub, as scoped for the Cloud Native award) so queued items
@@ -39,6 +38,11 @@ class DocumentQueue:
         # write to (or that are worth surfacing outside per-document status).
         # Same durability trade-off as the queue itself — lost on restart.
         self._recent_errors: deque[ProcessingErrorEntry] = deque(maxlen=100)
+        # document_id -> the task currently running _process_document for it,
+        # so cancel_document() can interrupt an in-flight run. A document
+        # that's QUEUED but not yet dequeued has no entry here — cancelling
+        # it is handled by _process_document's own status check on dequeue.
+        self._active_tasks: dict[str, asyncio.Task] = {}
 
     def start(self) -> None:
         if self._worker_tasks:
@@ -75,14 +79,23 @@ class DocumentQueue:
         while True:
             document_id = await self._queue.get()
             dequeued_at = time.monotonic()
+            task = asyncio.ensure_future(self._process_document(document_id, dequeued_at))
+            self._active_tasks[document_id] = task
             try:
-                await self._process_document(document_id, dequeued_at)
+                await task
+            except asyncio.CancelledError:
+                # cancel_document() cancelled us — it already wrote the
+                # CANCELLED status itself before doing so, so there's
+                # nothing left for the worker to persist here.
+                logger.info(
+                    "Worker %d: processing of document %s was cancelled", worker_id, document_id
+                )
             except Exception as exc:  # noqa: BLE001 — never let one bad item kill the worker
                 logger.exception(
                     "Worker %d: unhandled error processing document %s", worker_id, document_id
                 )
                 self._record_error(document_id, str(exc))
-                # Last-resort safety net: orchestrator.process_document already
+                # Last-resort safety net: langgraph_pipeline.process_document already
                 # catches its own exceptions and marks FAILED, but errors raised
                 # before/outside that call (e.g. get_document here) would
                 # otherwise leave the document stuck at a non-terminal status
@@ -100,19 +113,51 @@ class DocumentQueue:
                         worker_id, document_id,
                     )
             finally:
+                self._active_tasks.pop(document_id, None)
                 self._queue.task_done()
 
+    def cancel_document(self, document_id: str) -> None:
+        """
+        Best-effort interrupt of an in-flight run. Only meaningful once the
+        document has actually been dequeued (has an entry here) — a document
+        still sitting in self._queue has no task to cancel; _process_document
+        checks the document's status itself right after dequeuing and skips
+        it if it's no longer QUEUED (e.g. already cancelled), so no explicit
+        handling is needed for that case here.
+
+        Cancelling a task only takes effect at its next `await` point — a
+        Supabase call already dispatched via asyncio.to_thread can't be
+        interrupted mid-flight and will still complete in its worker thread,
+        it's just no longer waited on. The document's status was already
+        written as CANCELLED by the caller before this runs, so that stray
+        write (if any) can't resurrect a non-terminal status.
+        """
+        task = self._active_tasks.get(document_id)
+        if task is not None and not task.done():
+            task.cancel()
+
     async def _process_document(self, document_id: str, dequeued_at: float) -> None:
-        document = await asyncio.to_thread(document_repository.get_document, document_id)
+        document = await asyncio.to_thread(
+            document_repository.get_document, document_id, include_fields=False
+        )
         if document is None:
             message = f"Document {document_id} not found when dequeued (row may have been deleted)"
             logger.error(message)
             self._record_error(document_id, message)
             return
 
-        # AC2: mark processing before handing off to the orchestrator.
+        if document.status != DocumentStatus.QUEUED:
+            # Cancelled (or otherwise moved on) while it sat in the
+            # in-memory queue waiting for a worker — nothing to do.
+            logger.info(
+                "Document %s no longer queued (status=%s) at dequeue — skipping",
+                document_id, document.status.value,
+            )
+            return
+
+        # AC2: mark processing before handing off to the pipeline.
         # invoke_time_seconds is logged so "within 1 second of dequeue" is
-        # measurable in tests/monitoring, independent of Dify's own latency.
+        # measurable in tests/monitoring, independent of the pipeline's own latency.
         processing_started_at = datetime.now(timezone.utc)
         await asyncio.to_thread(
             document_repository.update_status,
@@ -127,11 +172,9 @@ class DocumentQueue:
                 document_id, invoke_time_seconds, settings.DEQUEUE_TO_INVOKE_TARGET_SECONDS,
             )
 
-        # orchestrator.process_document owns classify -> extract -> escalate
-        # -> terminal status (ANALYZED/FAILED) from here. It catches its own
-        # DifyInvocationErrors and translates them into a FAILED status
-        # rather than raising, so no retry loop is needed at this layer.
-        await orchestrator.process_document(document_id)
+        # Owns classify -> extract -> terminal status (ANALYZED/FAILED) from
+        # here, and never raises, so no retry loop is needed at this layer.
+        await langgraph_pipeline.process_document(document_id)
 
 
 document_queue = DocumentQueue()

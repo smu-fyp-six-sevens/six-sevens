@@ -22,7 +22,6 @@ jobs:
       SUPABASE_URL: https://example.supabase.co
       SUPABASE_PUBLISHABLE_KEY: placeholder-key
       SUPABASE_STORAGE_BUCKET: documents
-      DIFY_BASE_URL: https://api.dify.ai/v1
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -40,8 +39,12 @@ jobs:
       - name: Run backend tests
         run: pytest --cov=app --cov-report=
 
-      - name: Show coverage report (sorted by coverage, descending)
-        run: coverage report --show-missing --sort=-cover
+      - name: Show coverage report (sorted by coverage, ascending)
+        run: coverage report --show-missing --sort=cover
+
+      - name: Type check (pyright) — warning only, does not fail the build
+        continue-on-error: true
+        run: npx --yes pyright --pythonpath "$(python -c 'import sys; print(sys.executable)')" app
 
   frontend-ci:
     name: Frontend CI

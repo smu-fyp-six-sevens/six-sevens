@@ -486,6 +486,58 @@ h1 {
   border-radius: 5px;
   flex-shrink: 0;
 }
+.case-id--ready {
+  background: #ecfdf5;
+  color: #18794e;
+  border: 1px solid #a7e3c5;
+}
+
+.case-id--in-progress {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #b8d4ff;
+}
+
+.case-id--failed {
+  background: #fef2f2;
+  color: #b42318;
+  border: 1px solid #f0b8b8;
+}
+
+.case-id--pending {
+  background: #f3f4f6;
+  color: #667085;
+  border: 1px solid #d5d9e0;
+}
+.case-id--green {
+  background: #ecfdf5;
+  color: #18794e;
+  border: 1px solid #a7e3c5;
+}
+
+.case-id--blue {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #b8d4ff;
+}
+
+.case-id--red {
+  background: #fef2f2;
+  color: #b42318;
+  border: 1px solid #f0b8b8;
+}
+
+.case-id--amber {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #f2d18a;
+}
+
+.case-id--grey {
+  background: #f3f4f6;
+  color: #667085;
+  border: 1px solid #d5d9e0;
+}
 
 .case-main {
   flex: 1;
@@ -1481,6 +1533,51 @@ h1 {
   background: #dc2626;
 }
 
+.status-dot--cancelled {
+  background: #6b7280;
+}
+
+.status-dot--stuck {
+  background: #d97706;
+}
+
+.document-status-stuck-badge {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #b45309;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.document-row-status-action {
+  padding: 3px 9px;
+  border: 1px solid #b9c2ce;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #25344e;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.document-row-status-action:hover:not(:disabled) {
+  background: #f6f7f9;
+}
+
+.document-row-status-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.document-row-status-action--retry {
+  border-color: #172f58;
+  color: #172f58;
+}
+
 
 .document-confidence {
   color: #17294d;
@@ -1538,6 +1635,30 @@ h1 {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+}
+
+.document-details-title-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.preview-document-button {
+  padding: 8px 14px;
+  border: 1px solid #b9c2ce;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #25344e;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.preview-document-button:hover {
+  background: #f6f7f9;
+  border-color: #8f9aaa;
 }
 
 .document-details-intro h1 {
@@ -1615,6 +1736,16 @@ h1 {
 .document-status--failed {
   background: #fef2f2;
   color: #dc2626;
+}
+
+.document-status--cancelled {
+  background: #f1f2f4;
+  color: #4b5568;
+}
+
+.document-status--stuck {
+  background: #fff7ed;
+  color: #b45309;
 }
 
 .status-dot {
@@ -2225,6 +2356,140 @@ h1 {
   cursor: not-allowed;
 }
 
+.preview-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(23, 41, 77, 0.6);
+}
+
+.preview-modal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: min(92vw, 900px);
+  height: min(88vh, 1000px);
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 16px 48px rgba(23, 41, 77, 0.32);
+  overflow: hidden;
+}
+
+.preview-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e0e5eb;
+}
+
+.preview-modal-filename {
+  min-width: 0;
+  overflow: hidden;
+  color: #17294d;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-modal-header-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview-modal-download {
+  padding: 6px 12px;
+  border: 1px solid #b9c2ce;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #25344e;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.preview-modal-download:hover:not(:disabled) {
+  background: #f6f7f9;
+}
+
+.preview-modal-download:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.preview-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: #6b778c;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.preview-modal-close:hover {
+  background: #f7f8fa;
+}
+
+.preview-modal-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: #eef0f3;
+}
+
+.preview-modal-frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.preview-modal-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #eef0f3;
+}
+
+.preview-modal-message,
+.preview-modal-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  color: #52627a;
+  font-size: 14px;
+  text-align: center;
+}
+
+.preview-modal-error {
+  color: #9b3030;
+}
+
+@media (max-width: 640px) {
+  .preview-modal {
+    height: 92vh;
+  }
+}
+
 .array-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -2497,7 +2762,9 @@ h1 {
 }
 
 .document-action--reject,
-.document-action--approve {
+.document-action--approve,
+.document-action--cancel,
+.document-action--retry {
   min-width: 145px;
   padding: 10px 18px;
   border-radius: 7px;
@@ -2526,6 +2793,32 @@ h1 {
 
 .document-action--approve:hover {
   background: #102544;
+}
+
+.document-action--cancel {
+  border: 1px solid #d97706;
+  background: #ffffff;
+  color: #b45309;
+}
+
+.document-action--cancel:hover {
+  background: #fff7ed;
+}
+
+.document-action--retry {
+  border: 1px solid #172f58;
+  background: #ffffff;
+  color: #172f58;
+}
+
+.document-action--retry:hover {
+  background: #eef2f8;
+}
+
+.document-action--cancel:disabled,
+.document-action--retry:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Error / loading states */
@@ -2573,7 +2866,9 @@ h1 {
   }
 
   .document-action--reject,
-  .document-action--approve {
+  .document-action--approve,
+  .document-action--cancel,
+  .document-action--retry {
     width: 100%;
   }
 }

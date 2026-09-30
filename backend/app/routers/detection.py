@@ -3,15 +3,19 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
-from .. import case_repository, document_repository, extracted_fields_repository, storage_service
-from ..case_match import DocumentCaseMatch, check_case_match
-from ..fraud_detection.font_consistency import FontConsistencyResult, check_font_consistency
-from ..fraud_detection.font_consistency_v2 import (
+
+from ..langgraph import trace as langgraph_trace
+from ..langgraph.detection.graph import DetectionError, run_detection
+from ..models import IN_FLIGHT_STATUSES, DocumentRecord
+from .. import case_service, extracted_fields_repository, storage_service
+from ._dependencies import get_document_or_404
+from ..case_match import DocumentCaseMatch
+from ..fraud_detection.font_consistency import (
     ExtractedField,
-    FontConsistencyResultV2,
-    check_font_consistency_v2,
+    FontConsistencyResult,
+    check_font_consistency,
 )
 from ..fraud_detection.metadata_analysis import MetadataAnalysisResult, check_metadata_anomalies
 from ..fraud_detection.layout_anomalies import LayoutAnomalyResult, check_layout_anomalies
@@ -22,40 +26,23 @@ from ..fraud_detection.numerical_validation import (
 from ..fraud_detection.spelling_anomaly import SpellingAnomalyResult, check_spelling_anomalies
 
 router = APIRouter(prefix="/documents", tags=["detection"])
+cases_router = APIRouter(prefix="/cases", tags=["detection"])
 logger = logging.getLogger(__name__)
 
 
-async def _fetch_document_bytes(document_id: str) -> bytes:
-    try:
-        document = await asyncio.to_thread(document_repository.get_document, document_id)
-    except Exception as exc:
-        logger.exception("Failed to fetch document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch the document. Check Supabase table access.",
-        ) from exc
-
-    if document is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+async def _download_document_bytes(document: DocumentRecord) -> bytes:
     if document.storage_path is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Document has no stored file"
         )
-
     try:
         return await asyncio.to_thread(storage_service.download_file, document.storage_path)
     except Exception as exc:
-        logger.exception("Failed to download document %s from storage", document_id)
+        logger.exception("Failed to download document %s from storage", document.id)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to fetch the document from storage",
         ) from exc
-
-
-@router.get("/{document_id}/detection/font-consistency", response_model=FontConsistencyResult)
-async def get_font_consistency(document_id: str) -> FontConsistencyResult:
-    file_bytes = await _fetch_document_bytes(document_id)
-    return await asyncio.to_thread(check_font_consistency, document_id, file_bytes)
 
 
 async def _fetch_extracted_fields(document_id: str) -> list[ExtractedField]:
@@ -72,13 +59,15 @@ async def _fetch_extracted_fields(document_id: str) -> list[ExtractedField]:
 
 
 @router.get(
-    "/{document_id}/detection/font-consistency-v2", response_model=FontConsistencyResultV2
+    "/{document_id}/detection/font-consistency", response_model=FontConsistencyResult
 )
-async def get_font_consistency_v2(document_id: str) -> FontConsistencyResultV2:
-    file_bytes = await _fetch_document_bytes(document_id)
+async def get_font_consistency(
+    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+) -> FontConsistencyResult:
+    file_bytes = await _download_document_bytes(document)
     extracted_fields = await _fetch_extracted_fields(document_id)
     return await asyncio.to_thread(
-        check_font_consistency_v2, document_id, file_bytes, extracted_fields
+        check_font_consistency, document_id, file_bytes, extracted_fields
     )
 
 
@@ -86,7 +75,9 @@ async def get_font_consistency_v2(document_id: str) -> FontConsistencyResultV2:
     "/{document_id}/detection/layout-anomalies",
     response_model=LayoutAnomalyResult,
 )
-async def get_layout_anomalies(document_id: str) -> LayoutAnomalyResult:
+async def get_layout_anomalies(
+    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+) -> LayoutAnomalyResult:
     """
     On-demand layout anomaly check (not part of the automatic pipeline).
 
@@ -96,14 +87,16 @@ async def get_layout_anomalies(document_id: str) -> LayoutAnomalyResult:
     Empty `anomalies` with `unable_to_assess: false` means the checks ran
     and nothing crossed a threshold — not that the document is clean.
     """
-    file_bytes = await _fetch_document_bytes(document_id)
+    file_bytes = await _download_document_bytes(document)
     return await asyncio.to_thread(check_layout_anomalies, document_id, file_bytes)
 
 
 @router.get(
     "/{document_id}/detection/spelling-anomaly", response_model=SpellingAnomalyResult
 )
-async def get_spelling_anomaly(document_id: str) -> SpellingAnomalyResult:
+async def get_spelling_anomaly(
+    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+) -> SpellingAnomalyResult:
     """
     On-demand, like the font-consistency checks above — not part of the
     automatic classification/extraction pipeline, and a pure read/compute:
@@ -113,30 +106,73 @@ async def get_spelling_anomaly(document_id: str) -> SpellingAnomalyResult:
     FastAPI's response_model) — safe for another service/agent to call
     directly and repeatedly without side effects.
     """
-    try:
-        document = await asyncio.to_thread(document_repository.get_document, document_id)
-    except Exception as exc:
-        logger.exception("Failed to fetch document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch the document. Check Supabase table access.",
-        ) from exc
-
-    if document is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
-
-    file_bytes = await _fetch_document_bytes(document_id)
+    file_bytes = await _download_document_bytes(document)
     extracted_fields = await _fetch_extracted_fields(document_id)
     return await check_spelling_anomalies(
         document_id, file_bytes, document.filename, extracted_fields
     )
 
 
+# A pipeline run is still in flight for these — detection needs finished extraction.
+_DETECTION_BLOCKED_STATUSES = IN_FLIGHT_STATUSES
+
+
+@router.post("/{document_id}/detection/run")
+async def run_document_detection(
+    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+) -> dict:
+    """
+    Runs the Lead Investigator + specialists over one document and returns the
+    combined report (also stored on the document's langgraph trace, so it
+    survives restarts — see langgraph/detection/graph.py). Nothing is written
+    to the documents table.
+    """
+    if document.status in _DETECTION_BLOCKED_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Document is still being processed; run detection once extraction has finished.",
+        )
+    try:
+        return await run_detection(document_id)
+    except DetectionError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Detection failed for document %s", document_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Detection failed: {exc}"
+        ) from exc
+
+
+@router.get("/{document_id}/detection/report")
+async def get_document_detection_report(document_id: str) -> dict:
+    try:
+        trace = await asyncio.to_thread(langgraph_trace.get_persisted, document_id)
+    except Exception:  # noqa: BLE001 — table unreachable: fall back to in-memory
+        trace = None
+    trace = trace or langgraph_trace.get(document_id)
+    report = (trace or {}).get("detection_report")
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No detection report for this document yet.")
+    return report
+
+
+@cases_router.get("/{case_id}/detection/reports")
+async def get_case_detection_reports(case_id: str) -> list[dict]:
+    """Every stored detection report for a case's documents, for one combined view."""
+    try:
+        return await asyncio.to_thread(langgraph_trace.get_case_detection_reports, case_id)
+    except Exception as exc:
+        logger.exception("Failed to load detection reports for case %s", case_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to load detection reports."
+        ) from exc
 @router.get(
     "/{document_id}/detection/numerical-validation",
     response_model=NumericalValidationResult,
 )
-async def get_numerical_validation(document_id: str) -> NumericalValidationResult:
+async def get_numerical_validation(
+    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+) -> NumericalValidationResult:
     """
     Content Validation Specialist. On-demand and side-effect free, like the
     spelling and layout checks — the result is returned as JSON for a lead
@@ -148,19 +184,7 @@ async def get_numerical_validation(document_id: str) -> NumericalValidationResul
     balance, a portfolio's quantity x price). Extracted fields degrade
     gracefully: without them the format and Benford passes still run.
     """
-    try:
-        document = await asyncio.to_thread(document_repository.get_document, document_id)
-    except Exception as exc:
-        logger.exception("Failed to fetch document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch the document. Check Supabase table access.",
-        ) from exc
-
-    if document is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
-
-    file_bytes = await _fetch_document_bytes(document_id)
+    file_bytes = await _download_document_bytes(document)
     extracted_fields = await _fetch_extracted_fields(document_id)
     return await asyncio.to_thread(
         check_numerical_validation,
@@ -174,22 +198,20 @@ async def get_numerical_validation(document_id: str) -> NumericalValidationResul
 @router.get(
     "/{document_id}/detection/metadata-anomaly", response_model=MetadataAnalysisResult
 )
-async def get_metadata_anomaly(document_id: str) -> MetadataAnalysisResult:
+async def get_metadata_anomaly(
+    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+) -> MetadataAnalysisResult:
     """
     Digital Authenticity Specialist. Unlike the checks above, this doesn't
     download or re-process the file at all — file metadata (author,
-    creator, producer, dates, software) is already captured once, up
-    front, for every document by ingestion.metadata_extractor and sits on
-    document.metadata (see orchestrator._ingest_document_text); this just
-    reads that and runs the local pattern/rule checks in
-    fraud_detection.metadata_analysis over it.
+    creator, producer, dates, software) is already captured once, up front,
+    for every document by ingestion.metadata_extractor and sits on
+    document.metadata; this just reads that and runs the local pattern/rule
+    checks in fraud_detection.metadata_analysis over it.
 
-    AC6: unlike the read-only checks above (spelling-anomaly explicitly
-    writes nothing), this one persists its result — the user story asked
-    for it to be stored ready for a future lead-agent aggregator to pull.
-    Persistence is best-effort: a write failure is logged but doesn't fail
-    the request, since the officer viewing this page shouldn't lose the
-    result they can already see over a transient DB error.
+    Like the other checks above, this is read-only: the result is returned
+    as JSON for a lead agent to consume and nothing is written to the
+    database.
 
     document_type is passed through because some rules only apply to
     documents an institution issued (see
@@ -197,32 +219,13 @@ async def get_metadata_anomaly(document_id: str) -> MetadataAnalysisResult:
     the type is correct by the time this runs — the intended flow is that
     an officer confirms classification before anomaly checks are run.
     """
-    try:
-        document = await asyncio.to_thread(document_repository.get_document, document_id)
-    except Exception as exc:
-        logger.exception("Failed to fetch document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch the document. Check Supabase table access.",
-        ) from exc
-
-    if document is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
-
-    result = check_metadata_anomalies(document_id, document.metadata, document.document_type)
-
-    try:
-        await asyncio.to_thread(
-            document_repository.update_metadata_anomalies, document_id, result.model_dump()
-        )
-    except Exception:
-        logger.exception("Failed to persist metadata anomaly result for document %s", document_id)
-
-    return result
+    return check_metadata_anomalies(document_id, document.metadata, document.document_type)
 
 
 @router.get("/{document_id}/detection/case-match", response_model=DocumentCaseMatch)
-async def get_case_match(document_id: str) -> DocumentCaseMatch:
+async def get_case_match(
+    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+) -> DocumentCaseMatch:
     """
     Whether this document belongs to its case's company and individuals —
     the gate before fraud detection (see case_match.py). The check needs
@@ -230,33 +233,12 @@ async def get_case_match(document_id: str) -> DocumentCaseMatch:
     trusted once other documents corroborate it), so this runs the whole
     case's check and returns this document's entry. Read-only.
     """
-    try:
-        document = await asyncio.to_thread(document_repository.get_document, document_id)
-        case = (
-            await asyncio.to_thread(case_repository.get_case, document.case_id)
-            if document is not None and document.case_id
-            else None
-        )
-        documents = (
-            await asyncio.to_thread(document_repository.list_documents, case.id)
-            if case is not None
-            else []
-        )
-    except Exception as exc:
-        logger.exception("Failed to fetch document %s for case-match", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch the document. Check Supabase table access.",
-        ) from exc
-
-    if document is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
-    if case is None:
+    if document.case_id is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Document is not attached to a case"
         )
 
-    if all(d.id != document.id for d in documents):
-        documents.append(document)
-    result = check_case_match(case, documents)
-    return next(m for m in result.documents if m.document_id == document_id)
+    match = await asyncio.to_thread(case_service.get_case_match_for_document, document_id)
+    if match is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    return match

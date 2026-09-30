@@ -13,7 +13,7 @@ from symspellpy import SymSpell, Verbosity
 
 from ..ingestion.ingestion_service import ingest_document
 from .domain_terms import DOMAIN_TERMS
-from .font_consistency_v2 import ExtractedField
+from .font_consistency import ExtractedField
 
 logger = logging.getLogger("fraud_detection.spelling_anomaly")
 
@@ -112,7 +112,7 @@ def _decode_field_text(value: object) -> str | None:
     field_value comes back from the JSON-typed extracted_fields column as
     whatever native type the stored JSON value is, and some string values
     are themselves JSON-encoded a second time (e.g. '"ACME Pte Ltd"' instead
-    of 'ACME Pte Ltd') — same quirk font_consistency_v2._field_search_text
+    of 'ACME Pte Ltd') — same quirk font_consistency._field_search_text
     documents. One decode attempt, falling back to the value itself.
     """
     if isinstance(value, str):

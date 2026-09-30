@@ -3,14 +3,19 @@ import { createPortal } from 'react-dom';
 import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
-import KebabMenu from '../components/KebabMenu';
+import DocumentPreviewModal from '../components/DocumentPreviewModal';
 import { subscribeToCaseStatus } from '../services/caseSocket';
 import {
   deleteExtractedField,
   deleteDocument,
   addExtractedField,
   approveDocument,
+  cancelDocument,
+  canCancelDocument,
+  canRetryDocument,
+  isDocumentStuckProcessing,
   rejectDocument,
+  retryDocument,
   CLASSIFICATION_CONFIDENCE_THRESHOLD,
   DOCUMENT_TYPE_OPTIONS,
   EXTRACTION_CONFIDENCE_THRESHOLD,
@@ -20,10 +25,13 @@ import {
   formatRoutingOutcome,
   getDocument,
   getDocumentCaseMatch,
+  getDetectionReport,
+  getLangGraphTrace,
+  runDetection,
   updateDocumentType,
   updateExtractedFields,
 } from '../services/uploadService';
-import type { DocumentCaseMatch, DocumentRecord } from '../services/uploadService';
+import type { DetectionReport, DocumentCaseMatch, DocumentRecord, LangGraphTrace } from '../services/uploadService';
 
 interface DocumentDetailsPageProps {
   selectedCase: CaseRecord;
@@ -638,14 +646,39 @@ export default function DocumentDetailsPage({
   const [isSavingType, setIsSavingType] = useState(false);
   const [typeError, setTypeError] = useState<string | null>(null);
 
+  // langgraph-test branch debug aid (see backend/app/langgraph/trace.py) —
+  // shows which pipeline route this document actually took. Not present
+  // once a document went through the old Dify path or after a backend
+  // restart, so a missing trace is expected, not an error.
+  const [langGraphTrace, setLangGraphTrace] = useState<LangGraphTrace | null>(null);
+
+  // Detection Agent (dev aid, backend/app/langgraph/detection): the stored
+  // report for this document, and the in-flight state of a manual run.
+  const [detectionReport, setDetectionReport] = useState<DetectionReport | null>(null);
+  const [isRunningDetection, setIsRunningDetection] = useState(false);
+  const [detectionError, setDetectionError] = useState<string | null>(null);
+
   const [isApproving, setIsApproving] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
 
   const [isRejecting, setIsRejecting] = useState(false);
   const [rejectError, setRejectError] = useState<string | null>(null);
+
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+
+  // Forces a re-render every so often while PROCESSING so the "Stuck"
+  // badge/Retry button can appear once the threshold is crossed purely from
+  // time passing — isDocumentStuckProcessing itself reads Date.now() fresh
+  // on every render, this just makes sure a render actually happens.
+  const [, forceStuckRecheck] = useState(0);
   const [isDeletingDocument, setIsDeletingDocument] = useState(false);
   const [deleteDocumentError, setDeleteDocumentError] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   // Last extracted_fields the draft was built from — lets a live update reset
   // the draft only when the fields really changed (e.g. a rerun finishing),
   // not wipe an officer's in-progress edits on every unrelated case update.
@@ -747,8 +780,8 @@ export default function DocumentDetailsPage({
   // the Classifier's own confidence in document_type, compared the same way
   // the backend gates canCorrectType (see below).
   const lowClassificationConfidence =
-    document?.confidence != null &&
-    document.confidence < CLASSIFICATION_CONFIDENCE_THRESHOLD;
+    document?.classification_confidence != null &&
+    document.classification_confidence < CLASSIFICATION_CONFIDENCE_THRESHOLD;
 
   // Manual review is driven by the lowest confidence among this document's
   // own extracted fields — not a single document-wide extraction_confidence
@@ -772,8 +805,8 @@ export default function DocumentDetailsPage({
   const canCorrectType =
     (document?.status === 'analyzed' || document?.status === 'failed') &&
     !(
-      document.confidence != null &&
-      document.confidence >= CLASSIFICATION_CONFIDENCE_THRESHOLD
+      document.classification_confidence != null &&
+      document.classification_confidence >= CLASSIFICATION_CONFIDENCE_THRESHOLD
     );
 
   // What the dropdown currently shows: the officer's pick, else the existing
@@ -789,6 +822,14 @@ export default function DocumentDetailsPage({
     document?.status === 'queued' ||
     document?.status === 'processing' ||
     document?.status === 'extracting';
+
+  useEffect(() => {
+    if (document?.status !== 'processing') {
+      return;
+    }
+    const interval = window.setInterval(() => forceStuckRecheck((n) => n + 1), 15000);
+    return () => window.clearInterval(interval);
+  }, [document?.status]);
 
   useEffect(() => {
     if (!caseId || !isInFlight) {
@@ -817,6 +858,62 @@ export default function DocumentDetailsPage({
     return () => subscription.unsubscribe();
   }, [caseId, isInFlight, documentId]);
 
+  useEffect(() => {
+    let cancelled = false;
+    getDetectionReport(documentId)
+      .then((report) => {
+        if (!cancelled) setDetectionReport(report);
+      })
+      .catch(() => {
+        // Dev-only aid — a fetch failure here shouldn't disturb the page.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [documentId]);
+
+  async function handleRunDetection() {
+    setIsRunningDetection(true);
+    setDetectionError(null);
+    try {
+      setDetectionReport(await runDetection(documentId));
+    } catch (error) {
+      setDetectionError(error instanceof Error ? error.message : 'Detection failed');
+    } finally {
+      setIsRunningDetection(false);
+    }
+  }
+
+  // Poll the langgraph trace while the pipeline is running (there's no
+  // websocket event for it), and once more right after it finishes so the
+  // final route/steps show up without a manual refresh.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTrace() {
+      try {
+        const result = await getLangGraphTrace(documentId);
+        if (!cancelled) {
+          setLangGraphTrace(result);
+        }
+      } catch {
+        // Dev-only aid — a fetch failure here shouldn't disturb the page.
+      }
+    }
+
+    void loadTrace();
+    if (!isInFlight) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const interval = window.setInterval(() => void loadTrace(), 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [documentId, isInFlight, document?.status]);
 
   async function handleApproveDocument() {
     if (!document) {
@@ -861,6 +958,50 @@ export default function DocumentDetailsPage({
     setIsRejecting(false);
   }
 }
+
+  async function handleCancelDocument() {
+    if (!document) {
+      return;
+    }
+
+    setIsCancelling(true);
+    setCancelError(null);
+
+    try {
+      const updated = await cancelDocument(document.id);
+      setDocument(updated);
+    } catch (error) {
+      setCancelError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to cancel document.',
+      );
+    } finally {
+      setIsCancelling(false);
+    }
+  }
+
+  async function handleRetryDocument() {
+    if (!document) {
+      return;
+    }
+
+    setIsRetrying(true);
+    setRetryError(null);
+
+    try {
+      const updated = await retryDocument(document.id);
+      setDocument(updated);
+    } catch (error) {
+      setRetryError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to retry document.',
+      );
+    } finally {
+      setIsRetrying(false);
+    }
+  }
 
   async function handleSaveType() {
     if (!document || !chosenType) {
@@ -1047,21 +1188,25 @@ export default function DocumentDetailsPage({
       <div className="document-details-intro">
         <div className="document-details-title-row">
           <h1>Document Details</h1>
-          {document.status !== 'approved' && (
-            <KebabMenu
-              label={isDeletingDocument ? 'Deleting document' : 'Document actions'}
-              disabled={isDeletingDocument}
-              items={[
-                {
-                  id: 'delete',
-                  label: isDeletingDocument ? 'Deleting…' : 'Delete document',
-                  danger: true,
-                  disabled: isDeletingDocument,
-                  onSelect: () => setDeleteConfirmOpen(true),
-                },
-              ]}
-            />
-          )}
+          <div className="document-details-title-actions">
+            <button
+              type="button"
+              className="preview-document-button"
+              onClick={() => setIsPreviewOpen(true)}
+            >
+              ⛶ Preview document
+            </button>
+            {document.status !== 'approved' && !isInFlight && (
+              <button
+                type="button"
+                className="delete-record-button"
+                onClick={() => setDeleteConfirmOpen(true)}
+                disabled={isDeletingDocument}
+              >
+                {isDeletingDocument ? 'Deleting…' : 'Delete document'}
+              </button>
+            )}
+          </div>
         </div>
         <p className="sub">
           View extracted data and review any fields that require
@@ -1102,8 +1247,11 @@ export default function DocumentDetailsPage({
                   ? 'document-status--failed'
                   : document.status === 'rejected'
                     ? 'document-status--rejected'
-                    : ''
-                  
+                    : document.status === 'cancelled'
+                      ? 'document-status--cancelled'
+                      : isDocumentStuckProcessing(document)
+                        ? 'document-status--stuck'
+                        : ''
             }`}
           >
             <span
@@ -1114,10 +1262,16 @@ export default function DocumentDetailsPage({
                     ? 'status-dot--failed'
                     : document.status === 'rejected'
                       ? 'status-dot--rejected'
-                      : ''
+                      : document.status === 'cancelled'
+                        ? 'status-dot--cancelled'
+                        : isDocumentStuckProcessing(document)
+                          ? 'status-dot--stuck'
+                          : ''
               }`}
             />
-            {formatDocumentStatus(document.status)}
+            {isDocumentStuckProcessing(document)
+              ? `${formatDocumentStatus(document.status)} (Stuck)`
+              : formatDocumentStatus(document.status)}
             {!TERMINAL_DOCUMENT_STATUSES.has(document.status) && '…'}
           </div>
         </div>
@@ -1157,8 +1311,8 @@ export default function DocumentDetailsPage({
                   {isSavingType
                     ? 'Saving…'
                     : chosenType === document.document_type
-                      ? 'Confirm & re-run extraction'
-                      : 'Save & re-run extraction'}
+                      ? 'Confirm doc type'
+                      : 'Confirm doc type and rerun'}
                 </button>
 
                 {typeError && (
@@ -1177,8 +1331,8 @@ export default function DocumentDetailsPage({
               Classification Confidence
             </span>
             <strong>
-              {document.confidence != null
-                ? document.confidence.toFixed(2)
+              {document.classification_confidence != null
+                ? document.classification_confidence.toFixed(2)
                 : '—'}
             </strong>
           </div>
@@ -1236,7 +1390,7 @@ export default function DocumentDetailsPage({
               <div>
                 This document was classified as{' '}
                 {formatDocumentType(document.document_type)} with{' '}
-                {document.confidence!.toFixed(2)} confidence, below the
+                {document.classification_confidence!.toFixed(2)} confidence, below the
                 required {CLASSIFICATION_CONFIDENCE_THRESHOLD.toFixed(2)}.
               </div>
               {canCorrectType && !failureReason && (
@@ -1270,6 +1424,8 @@ export default function DocumentDetailsPage({
           <button
             type="button"
             className="add-field-button"
+            disabled={isInFlight}
+            title={isInFlight ? 'Fields can\'t be edited while the document is being processed.' : undefined}
             onClick={() => {
               setIsAddFieldOpen(true);
               setAddFieldError(null);
@@ -1480,7 +1636,7 @@ export default function DocumentDetailsPage({
                           setDeletingFieldId(null);
                         }
                       }}
-                      disabled={deletingFieldId === field.id}
+                      disabled={deletingFieldId === field.id || isInFlight}
                       title="Delete field"
                       aria-label={`Delete ${humanizeFieldKey(key)}`}
                     >
@@ -1545,10 +1701,11 @@ export default function DocumentDetailsPage({
                 String(field.value).trim() === '-';
 
               const canEditField =
-                isUnrecognisedDocument ||
-                isEmptyField ||
-                (field.confidence != null &&
-                  field.confidence < EXTRACTION_CONFIDENCE_THRESHOLD);
+                !isInFlight &&
+                (isUnrecognisedDocument ||
+                  isEmptyField ||
+                  (field.confidence != null &&
+                    field.confidence < EXTRACTION_CONFIDENCE_THRESHOLD));
 
               return (
                 <div
@@ -1640,7 +1797,7 @@ export default function DocumentDetailsPage({
             <button
               type="button"
               className="details-save-button"
-              disabled={isSaving}
+              disabled={isSaving || isInFlight}
               onClick={() => void handleSaveFields()}
             >
               {isSaving ? 'Saving…' : 'Save fields'}
@@ -1650,16 +1807,144 @@ export default function DocumentDetailsPage({
       )}
 
       {/* =====================================================
+          LangGraph trace (langgraph-test branch debug aid, not styled —
+          see backend/app/langgraph/trace.py)
+          ===================================================== */}
+
+      <section className="details-card" style={{ fontFamily: 'monospace', fontSize: '0.85em' }}>
+        <h2 style={{ marginTop: 0 }}>LangGraph trace (debug)</h2>
+        {!langGraphTrace ? (
+          <p>No langgraph trace yet for this document (not processed via langgraph in this backend process, or not started yet).</p>
+        ) : (
+          <>
+            <div>rule_top_type / strength: {String(langGraphTrace.rule_top_type ?? '—')} / {String(langGraphTrace.rule_top_strength ?? '—')}</div>
+            <div>certain_type: {String(langGraphTrace.certain_type ?? '—')}</div>
+            <div>llm_top_type / strength (only if the agent called it): {String(langGraphTrace.llm_top_type ?? '—')} / {String(langGraphTrace.llm_top_strength ?? '—')}</div>
+            <div>vision_top_type / strength (only if the agent called it): {String(langGraphTrace.vision_top_type ?? '—')} / {String(langGraphTrace.vision_top_strength ?? '—')}</div>
+            <div>final_status: {String(langGraphTrace.final_status ?? '—')}</div>
+            <div>
+              classification_reasoning (debug only — not saved to the database yet):{' '}
+              {String(langGraphTrace.classification_reasoning ?? '—')}
+            </div>
+            <details style={{ marginTop: '0.5em' }}>
+              <summary>Full step log ({langGraphTrace.steps.length} steps)</summary>
+              <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                {JSON.stringify(langGraphTrace.steps, null, 2)}
+              </pre>
+            </details>
+          </>
+        )}
+      </section>
+
+      {/* =====================================================
+          Detection Agent (dev aid, not styled — see
+          backend/app/langgraph/detection/graph.py)
+          ===================================================== */}
+
+      <section className="details-card" style={{ fontFamily: 'monospace', fontSize: '0.85em' }}>
+        <h2 style={{ marginTop: 0 }}>Detection (dev)</h2>
+        <button type="button" onClick={() => void handleRunDetection()} disabled={isRunningDetection || isInFlight}>
+          {isRunningDetection ? 'Investigating…' : detectionReport ? 'Re-run detection' : 'Run detection'}
+        </button>
+        {detectionError && <p style={{ color: 'crimson' }}>{detectionError}</p>}
+        {!detectionReport ? (
+          <p>No detection report yet for this document.</p>
+        ) : (
+          <>
+            <p>
+              <strong>Verdict: {detectionReport.verdict.toUpperCase()}</strong> — {detectionReport.summary}
+            </p>
+            <div>Specialists consulted:</div>
+            <ul>
+              {detectionReport.consulted.map((c) => (
+                <li key={c.specialist}>
+                  {c.title}{c.second_look ? ' (second look)' : ''} — {c.reason} [tools: {c.tools_called.join(', ') || 'none'}]
+                </li>
+              ))}
+              {detectionReport.consulted.length === 0 && <li>none</li>}
+            </ul>
+            {detectionReport.plan_deviation &&
+              (detectionReport.plan_deviation.added.length > 0 || detectionReport.plan_deviation.dropped.length > 0) && (
+                <p>
+                  Deviated from the default team — added: {detectionReport.plan_deviation.added.join(', ') || 'none'};
+                  dropped: {detectionReport.plan_deviation.dropped.join(', ') || 'none'}
+                </p>
+              )}
+            <div>Specialists not consulted:</div>
+            <ul>
+              {detectionReport.skipped.map((s) => (
+                <li key={s.specialist}>{s.title} — {s.reason}</li>
+              ))}
+              {detectionReport.skipped.length === 0 && <li>none</li>}
+            </ul>
+            {detectionReport.second_look && (
+              <p>
+                Second look: {detectionReport.second_look.from} → {detectionReport.second_look.to} —{' '}
+                {detectionReport.second_look.question} ({detectionReport.second_look.reason})
+              </p>
+            )}
+            <div>Findings ({detectionReport.findings.length}):</div>
+            <ul>
+              {detectionReport.findings.map((f) => (
+                <li key={`${f.tool}-${f.id}`}>
+                  [{f.severity}] {f.summary} — {f.rationale} ({f.specialists.join(', ')})
+                </li>
+              ))}
+              {detectionReport.findings.length === 0 && <li>none</li>}
+            </ul>
+            {detectionReport.unable_to_assess.length > 0 && (
+              <>
+                <div>Could not assess:</div>
+                <ul>
+                  {detectionReport.unable_to_assess.map((u, i) => (
+                    <li key={i}>{u.specialist} / {u.tool ?? 'tool'} — {u.reason ?? 'unknown reason'}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </>
+        )}
+      </section>
+
+      {/* =====================================================
           Document actions
           ===================================================== */}
 
         {approveError && (
           <div className="save-error">{approveError}</div>
         )}
+        {cancelError && (
+          <div className="save-error">{cancelError}</div>
+        )}
+        {retryError && (
+          <div className="save-error">{retryError}</div>
+        )}
 
-        {document.status !== 'approved' && 
+        {document.status !== 'approved' &&
         document.status !== 'rejected' && (
           <div className="document-actions">
+            {canCancelDocument(document.status) && (
+              <button
+                type="button"
+                className="document-action--cancel"
+                disabled={isCancelling}
+                onClick={() => void handleCancelDocument()}
+              >
+                {isCancelling ? 'Cancelling…' : '⏹ Cancel Processing'}
+              </button>
+            )}
+
+            {canRetryDocument(document) && (
+              <button
+                type="button"
+                className="document-action--retry"
+                disabled={isRetrying}
+                onClick={() => void handleRetryDocument()}
+              >
+                {isRetrying ? 'Retrying…' : '↻ Retry Document'}
+              </button>
+            )}
+
             <button
               type="button"
               className="document-action--reject"
@@ -1689,6 +1974,14 @@ export default function DocumentDetailsPage({
             if (!isDeletingDocument) setDeleteConfirmOpen(false);
           }}
           onConfirm={() => void confirmDeleteDocument()}
+        />
+      )}
+
+      {isPreviewOpen && document && (
+        <DocumentPreviewModal
+          documentId={document.id}
+          filename={document.filename}
+          onClose={() => setIsPreviewOpen(false)}
         />
       )}
     </div>
