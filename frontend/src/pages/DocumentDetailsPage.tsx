@@ -28,7 +28,6 @@ import {
   getDocumentCaseMatch,
   getDetectionReport,
   getLangGraphTrace,
-  runDetection,
   updateDocumentType,
   updateExtractedFields,
 } from '../services/uploadService';
@@ -653,11 +652,8 @@ export default function DocumentDetailsPage({
   // restart, so a missing trace is expected, not an error.
   const [langGraphTrace, setLangGraphTrace] = useState<LangGraphTrace | null>(null);
 
-  // Detection Agent (dev aid, backend/app/langgraph/detection): the stored
-  // report for this document, and the in-flight state of a manual run.
+  // Detection Agent: the stored report for this document.
   const [detectionReport, setDetectionReport] = useState<DetectionReport | null>(null);
-  const [isRunningDetection, setIsRunningDetection] = useState(false);
-  const [detectionError, setDetectionError] = useState<string | null>(null);
 
   const [isApproving, setIsApproving] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
@@ -880,17 +876,6 @@ export default function DocumentDetailsPage({
     };
   }, [documentId]);
 
-  async function handleRunDetection() {
-    setIsRunningDetection(true);
-    setDetectionError(null);
-    try {
-      setDetectionReport(await runDetection(documentId));
-    } catch (error) {
-      setDetectionError(error instanceof Error ? error.message : 'Detection failed');
-    } finally {
-      setIsRunningDetection(false);
-    }
-  }
 
   // Poll the langgraph trace while the pipeline is running (there's no
   // websocket event for it), and once more right after it finishes so the
@@ -1862,12 +1847,8 @@ export default function DocumentDetailsPage({
           backend/app/langgraph/detection/graph.py)
           ===================================================== */}
 
-      <section className="details-card" style={{ fontFamily: 'monospace', fontSize: '0.85em' }}>
-        <h2 style={{ marginTop: 0 }}>Detection (dev)</h2>
-        <button type="button" onClick={() => void handleRunDetection()} disabled={isRunningDetection || isInFlight}>
-          {isRunningDetection ? 'Investigating…' : detectionReport ? 'Re-run detection' : 'Run detection'}
-        </button>
-        {detectionError && <p style={{ color: 'crimson' }}>{detectionError}</p>}
+        <section className="details-card" style={{ fontFamily: 'monospace', fontSize: '0.85em' }}>
+          <h2 style={{ marginTop: 0 }}>Detection</h2>
         {!detectionReport ? (
           <p>No detection report yet for this document.</p>
         ) : (

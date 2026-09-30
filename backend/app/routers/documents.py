@@ -24,6 +24,7 @@ from ..models import (
 )
 from ..langgraph import pipeline as langgraph_pipeline
 from ..langgraph import trace as langgraph_trace
+from ..langgraph.detection.graph import run_detection
 from ..queue_service import document_queue
 
 # "unrecognised" is the "Other" catch-all: Extraction has a generic schema for it.
@@ -33,7 +34,14 @@ _TYPE_OVERRIDE_BLOCKED_STATUSES = IN_FLIGHT_STATUSES
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 logger = logging.getLogger(__name__)
-
+async def _start_detection_after_approval(document_id: str) -> None:
+    try:
+        await run_detection(document_id)
+    except Exception:
+        logger.exception(
+            "Fraud detection failed for approved document %s",
+            document_id,
+        )
 
 class DocumentDownloadResponse(BaseModel):
     document_id: str
@@ -461,7 +469,9 @@ def _missing_required_fields(
 
 @router.post("/{document_id}/approve", response_model=DocumentRecord)
 async def approve_document(
-    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+    document_id: str,
+    background_tasks: BackgroundTasks,
+    document: DocumentRecord = Depends(get_document_or_404),
 ) -> DocumentRecord:
     """
     Approves a completed document after loan officer review.
@@ -497,6 +507,11 @@ async def approve_document(
 
         await asyncio.to_thread(
             document_repository.approve_document,
+            document_id,
+        )
+
+        background_tasks.add_task(
+            _start_detection_after_approval,
             document_id,
         )
 
