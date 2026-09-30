@@ -684,3 +684,106 @@ def test_large_panel_drawn_over_small_artwork_is_not_a_replacement():
 
     result = check_image_manipulation("doc", _pdf(place))
     assert all(r.covered_by_xref is None for r in result.regions)
+
+
+# --- standalone PNG / JPEG uploads -------------------------------------------
+#
+# One flat picture, compared against itself. The page is rendered from a PDF
+# so its text carries the anti-aliased edges of real content; the forgery is
+# what the injection tool's resolution_mismatch does — a region shrunk to a
+# third and blown back up without smoothing.
+
+_PATCH = (180, 150, 620, 330)
+
+
+def _scan(fmt: str = "PNG", patch: bool = False, quality: int = 90) -> bytes:
+    doc = pymupdf.open()
+    page = doc.new_page(width=420, height=300)
+    page.draw_rect(pymupdf.Rect(8, 8, 412, 292), color=(0.6, 0.5, 0.6), width=1)
+    for row in range(9):
+        page.insert_text((24, 40 + row * 28), f"FIELD {row}  S78{row}5632F  NG BEE LENG {row * 7}",
+                         fontsize=13)
+    pix = page.get_pixmap(dpi=150)
+    doc.close()
+    image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+    if patch:
+        crop = image.crop(_PATCH)
+        small = crop.resize((crop.width // 3, crop.height // 3), Image.BILINEAR)
+        image.paste(small.resize(crop.size, Image.NEAREST), _PATCH[:2])
+    buffer = io.BytesIO()
+    image.save(buffer, fmt, **({"quality": quality} if fmt == "JPEG" else {}))
+    return buffer.getvalue()
+
+
+def _overlaps(bbox, box) -> bool:
+    return not (bbox[2] <= box[0] or bbox[0] >= box[2] or bbox[3] <= box[1] or bbox[1] >= box[3])
+
+
+@pytest.mark.parametrize("fmt", ["PNG", "JPEG"])
+def test_clean_image_upload_produces_no_indicators(fmt):
+    result = check_image_manipulation("doc", _scan(fmt))
+    assert result.unable_to_assess is False
+    assert result.indicators == []
+    assert result.bbox_units == "px"
+    assert len(result.regions) == 1  # AC1: the upload itself
+    assert result.regions[0].codec == fmt.lower()
+
+
+@pytest.mark.parametrize("fmt", ["PNG", "JPEG"])
+def test_enlarged_region_in_image_upload_is_flagged(fmt):
+    result = check_image_manipulation("doc", _scan(fmt, patch=True))
+    assert _indicators(result) == ["Resolution Mismatch"]
+    finding = result.indicators[0]
+    assert _overlaps(finding.bbox, _PATCH)  # AC4, in pixels
+    assert finding.page == 0
+
+
+def test_image_upload_finding_stays_inside_the_pasted_region():
+    """The untouched text around the patch must not be swept into the finding."""
+    finding = check_image_manipulation("doc", _scan(patch=True)).indicators[0]
+    window = 64  # one window of slack either side
+    assert finding.bbox[0] >= _PATCH[0] - window and finding.bbox[2] <= _PATCH[2] + window
+    assert finding.bbox[1] >= _PATCH[1] - window and finding.bbox[3] <= _PATCH[3] + window
+
+
+def test_pixel_sharp_border_alone_is_not_flagged():
+    """
+    A ruled line or card edge is a run of isolated steps along ONE axis. The
+    both-axes rule is what keeps it from reading as an enlarged region.
+    """
+    image = Image.new("RGB", (600, 400), (248, 230, 232))
+    for x in range(40, 560):
+        for y in (60, 61, 300, 301):
+            image.putpixel((x, y), (120, 40, 60))
+    buffer = io.BytesIO()
+    image.save(buffer, "PNG")
+    result = check_image_manipulation("doc", buffer.getvalue())
+    assert result.indicators == []
+
+
+def test_blank_image_upload_is_unable_to_assess():
+    buffer = io.BytesIO()
+    Image.new("RGB", (800, 600), (255, 255, 255)).save(buffer, "PNG")
+    result = check_image_manipulation("doc", buffer.getvalue())
+    assert result.unable_to_assess is True
+    assert "edge detail" in result.unable_to_assess_reason
+
+
+def test_tiny_image_upload_is_unable_to_assess():
+    buffer = io.BytesIO()
+    Image.new("RGB", (100, 80), (200, 10, 10)).save(buffer, "JPEG")
+    result = check_image_manipulation("doc", buffer.getvalue())
+    assert result.unable_to_assess is True
+    assert "100x80" in result.unable_to_assess_reason
+
+
+def test_corrupt_image_upload_is_unable_to_assess():
+    result = check_image_manipulation("doc", b"\x89PNG\r\n\x1a\n" + b"\x00" * 64)
+    assert result.unable_to_assess is True
+    assert "decode" in result.unable_to_assess_reason
+
+
+def test_raster_tolerances_are_configurable():
+    found = check_image_manipulation("doc", _scan(patch=True)).indicators[0]
+    larger = Tolerances(min_flagged_windows=found.evidence["windows"] + 1)
+    assert check_image_manipulation("doc", _scan(patch=True), larger).indicators == []

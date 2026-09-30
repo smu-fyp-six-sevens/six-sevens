@@ -1,5 +1,5 @@
 """
-Run the PDF image-manipulation check over documents on disk and show every
+Run the image-manipulation check over PDFs, PNGs and JPEGs on disk and show every
 step it took, without needing the API or the frontend.
 
 The detector itself logs its reasoning at DEBUG through
@@ -157,6 +157,17 @@ def dump_regions(pdf: Path, result: ImageManipulationResult, out_dir: Path) -> N
     import pymupdf
 
     out_dir.mkdir(parents=True, exist_ok=True)
+    if result.bbox_units == "px":
+        # A PNG/JPEG upload has no embedded assets; write out what each
+        # finding points at instead.
+        from PIL import Image
+
+        with Image.open(pdf) as image:
+            for n, indicator in enumerate(result.indicators):
+                crop = out_dir / f"{pdf.stem}_finding{n}.png"
+                image.crop(tuple(int(v) for v in indicator.bbox)).save(crop)
+                print(f"     wrote {crop.name}")
+        return
     doc = pymupdf.open(pdf)
     try:
         seen: set[int] = set()
@@ -180,12 +191,16 @@ def dump_regions(pdf: Path, result: ImageManipulationResult, out_dir: Path) -> N
 
 # --- driver ------------------------------------------------------------------
 
+_SUPPORTED = {".pdf", ".png", ".jpg", ".jpeg"}
+
+
 def collect_pdfs(paths: list[str], recursive: bool) -> list[Path]:
     pdfs: list[Path] = []
     for raw in paths:
         path = Path(raw).expanduser()
         if path.is_dir():
-            pdfs += sorted(path.rglob("*.pdf") if recursive else path.glob("*.pdf"))
+            found = path.rglob("*") if recursive else path.glob("*")
+            pdfs += sorted(p for p in found if p.suffix.lower() in _SUPPORTED)
         elif path.is_file():
             pdfs.append(path)
         else:
@@ -214,7 +229,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("paths", nargs="+", help="PDF files, or directories of them")
+    parser.add_argument("paths", nargs="+", help="PDF/PNG/JPEG files, or directories of them")
     parser.add_argument("-r", "--recursive", action="store_true",
                         help="descend into subdirectories")
     parser.add_argument("-t", "--trace", action="store_true",
