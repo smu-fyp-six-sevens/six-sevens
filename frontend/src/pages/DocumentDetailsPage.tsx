@@ -31,7 +31,7 @@ import {
   updateDocumentType,
   updateExtractedFields,
 } from '../services/uploadService';
-import type { DetectionReport, DocumentRecord, LangGraphTrace } from '../services/uploadService';
+import type { DetectionReport, DocumentCaseMatch, DocumentRecord, LangGraphTrace } from '../services/uploadService';
 
 interface DocumentDetailsPageProps {
   selectedCase: CaseRecord;

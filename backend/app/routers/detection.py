@@ -85,9 +85,9 @@ async def get_layout_anomalies(
     """
     On-demand layout anomaly check (not part of the automatic pipeline).
 
-    Returns `LayoutAnomalyResult`. Several checks on the same area become
-    one finding with `evidence.signals`. Neighbouring flagged paragraphs
-    add `local_pattern` / `consecutive_run` enrichment, not a new type.
+    Returns `LayoutAnomalyResult`. The JSON lists each finding as `type`,
+    `page`, `where`, `text`, `summary`, and `checks` (detected, expected,
+    difference). Several checks on the same area stay one finding.
     Empty `anomalies` with `unable_to_assess: false` means the checks ran
     and nothing crossed a threshold — not that the document is clean.
     """
