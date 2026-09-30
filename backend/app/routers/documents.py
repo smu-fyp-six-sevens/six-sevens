@@ -11,7 +11,11 @@ from .. import document_repository, extracted_fields_repository, monitoring, sto
 
 from ._dependencies import get_document_or_404
 from ..config import settings
-from ..langgraph.extraction_prompts import KNOWN_DOCUMENT_TYPES, schema_field_names
+from ..langgraph.extraction_prompts import (
+    EXTRACTION_SCHEMAS,
+    KNOWN_DOCUMENT_TYPES,
+    schema_field_names,
+)
 from ..models import (
     IN_FLIGHT_STATUSES,
     AddExtractedFieldRequest,
@@ -249,9 +253,9 @@ async def update_extracted_fields(
             request.extracted_fields,
             field_confidences=field_confidences,
             default_confidence=None,
-            required_field_names=set(
+            required_field_names = set(
                 schema_field_names(document.document_type or "")
-            ),
+            )
         )
     except Exception as exc:
         logger.exception("Failed to update extracted fields for document %s", document_id)
@@ -297,7 +301,7 @@ async def add_extracted_field(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="A field with this name already exists.",
             )
-
+        
         required_field_names = set(
             schema_field_names(document.document_type or "")
         )
@@ -432,7 +436,7 @@ def _missing_required_fields(
     extracted_fields,
 ) -> list[str]:
     required_field_names = set(
-        schema_field_names(document_type or "")
+        EXTRACTION_SCHEMAS.get(document_type or "", {}).get("required", [])
     )
 
     if not required_field_names:
