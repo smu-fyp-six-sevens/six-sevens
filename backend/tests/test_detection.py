@@ -11,6 +11,7 @@ from app.fraud_detection.numerical_validation import (
     BenfordAnalysis,
     NumericalValidationResult,
 )
+from app.fraud_detection.date_anomalies import DateAnomalyResult
 from app.fraud_detection.spelling_anomaly import SpellingAnomaly, SpellingAnomalyResult
 from app.main import app
 from app.models import DocumentRecord, DocumentStatus
@@ -150,7 +151,7 @@ def test_get_spelling_anomaly_success_returns_result_with_no_persistence() -> No
         document_id="doc-1",
         anomalies=[
             SpellingAnomaly(
-                page=1, section=0, word="Helllo",
+                word="Helllo",
                 surrounding_text="Helllo there", suggested_correction="hello",
             )
         ],
@@ -313,6 +314,7 @@ def _numerical_result() -> NumericalValidationResult:
     return NumericalValidationResult(
         document_id="doc-1",
         values_analysed=12,
+        skipped_checks=[],
         findings=[],
         benford=BenfordAnalysis(
             sample_size=0,
@@ -324,7 +326,7 @@ def _numerical_result() -> NumericalValidationResult:
     )
 
 
-def test_get_numerical_validation_passes_file_and_extracted_fields() -> None:
+def test_get_numerical_validation_passes_extracted_fields_and_document_type() -> None:
     fields = [
         ExtractedField(
             field_name="transactions", field_type="array", field_value=[], confidence=0.9
@@ -332,7 +334,6 @@ def test_get_numerical_validation_passes_file_and_extracted_fields() -> None:
     ]
     with (
         patch("app.routers._dependencies.document_repository") as mock_repo,
-        patch("app.routers.detection.storage_service") as mock_storage,
         patch("app.routers.detection.extracted_fields_repository") as mock_fields,
         patch(
             "app.routers.detection.check_numerical_validation",
@@ -340,25 +341,21 @@ def test_get_numerical_validation_passes_file_and_extracted_fields() -> None:
         ) as mock_check,
     ):
         mock_repo.get_document.return_value = _document()
-        mock_storage.download_file.return_value = b"%PDF-1.4"
         mock_fields.get_extracted_fields.return_value = fields
 
         response = client.get("/documents/doc-1/detection/numerical-validation")
 
     assert response.status_code == 200
     assert response.json()["values_analysed"] == 12
-    # Both sources reach the check: the file for figures in the text, the
-    # extracted fields for the ones that must reconcile.
+    # No file download — works from extracted_fields and document_type alone.
     args = mock_check.call_args[0]
-    assert args[1] == b"%PDF-1.4"
-    assert args[2] == "statement.pdf"
-    assert args[3] == fields
+    assert args[1] == fields
+    assert args[2] is None
 
 
 def test_get_numerical_validation_degrades_when_fields_fetch_fails() -> None:
     with (
         patch("app.routers._dependencies.document_repository") as mock_repo,
-        patch("app.routers.detection.storage_service") as mock_storage,
         patch("app.routers.detection.extracted_fields_repository") as mock_fields,
         patch(
             "app.routers.detection.check_numerical_validation",
@@ -366,19 +363,17 @@ def test_get_numerical_validation_degrades_when_fields_fetch_fails() -> None:
         ) as mock_check,
     ):
         mock_repo.get_document.return_value = _document()
-        mock_storage.download_file.return_value = b"%PDF-1.4"
         mock_fields.get_extracted_fields.side_effect = RuntimeError("fields down")
 
         response = client.get("/documents/doc-1/detection/numerical-validation")
 
     assert response.status_code == 200
-    assert mock_check.call_args[0][3] == []
+    assert mock_check.call_args[0][1] == []
 
 
 def test_get_numerical_validation_writes_nothing() -> None:
     with (
         patch("app.routers._dependencies.document_repository") as mock_repo,
-        patch("app.routers.detection.storage_service") as mock_storage,
         patch("app.routers.detection.extracted_fields_repository") as mock_fields,
         patch(
             "app.routers.detection.check_numerical_validation",
@@ -386,7 +381,6 @@ def test_get_numerical_validation_writes_nothing() -> None:
         ),
     ):
         mock_repo.get_document.return_value = _document()
-        mock_storage.download_file.return_value = b"%PDF-1.4"
         mock_fields.get_extracted_fields.return_value = []
 
         response = client.get("/documents/doc-1/detection/numerical-validation")
@@ -417,4 +411,79 @@ def test_get_numerical_validation_fetch_and_not_found_errors() -> None:
         )
         mock_check.assert_not_called()
 
+
+def _date_anomaly_result() -> DateAnomalyResult:
+    return DateAnomalyResult(
+        document_id="doc-1",
+        dates_extracted=[],
+        findings=[],
+        skipped_checks=[],
+        unable_to_assess=False,
+    )
+
+
+def test_get_date_anomalies_passes_extracted_fields_and_document_type() -> None:
+    fields = [
+        ExtractedField(
+            field_name="incorporation_date", field_type="string", field_value="2020-01-01", confidence=0.9
+        )
+    ]
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch("app.routers.detection.extracted_fields_repository") as mock_fields,
+        patch(
+            "app.routers.detection.check_date_anomalies",
+            return_value=_date_anomaly_result(),
+        ) as mock_check,
+    ):
+        mock_repo.get_document.return_value = _document()
+        mock_fields.get_extracted_fields.return_value = fields
+
+        response = client.get("/documents/doc-1/detection/date-anomalies")
+
+    assert response.status_code == 200
+    # No file download — works from extracted_fields and document_type alone.
+    args = mock_check.call_args[0]
+    assert args[1] == fields
+    assert args[2] is None
+
+
+def test_get_date_anomalies_writes_nothing() -> None:
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch("app.routers.detection.extracted_fields_repository") as mock_fields,
+        patch(
+            "app.routers.detection.check_date_anomalies",
+            return_value=_date_anomaly_result(),
+        ),
+    ):
+        mock_repo.get_document.return_value = _document()
+        mock_fields.get_extracted_fields.return_value = []
+
+        response = client.get("/documents/doc-1/detection/date-anomalies")
+
+    assert response.status_code == 200
+    mock_repo.update_extracted_fields.assert_not_called()
+
+
+def test_get_date_anomalies_fetch_and_not_found_errors() -> None:
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch("app.routers.detection.check_date_anomalies") as mock_check,
+    ):
+        mock_repo.get_document.side_effect = RuntimeError("db down")
+        assert (
+            client.get("/documents/doc-1/detection/date-anomalies").status_code == 502
+        )
+        mock_check.assert_not_called()
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch("app.routers.detection.check_date_anomalies") as mock_check,
+    ):
+        mock_repo.get_document.return_value = None
+        assert (
+            client.get("/documents/missing/detection/date-anomalies").status_code == 404
+        )
+        mock_check.assert_not_called()
 

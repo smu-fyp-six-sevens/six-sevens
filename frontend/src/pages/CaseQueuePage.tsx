@@ -14,6 +14,7 @@ interface CaseQueuePageProps {
   onOpenCase: (caseRecord: CaseRecord) => void;
   onOpenTestAnomaly: () => void;
   onCreateCase: () => void;
+  onCaseUpdated: (caseId: string, companyName: string) => void;
   onCaseDeleted: (caseId: string) => void;
 }
 
@@ -86,6 +87,7 @@ export default function CaseQueuePage({
   onOpenCase,
   onOpenTestAnomaly,
   onCreateCase,
+  onCaseUpdated,
   onCaseDeleted,
 }: CaseQueuePageProps) {
   const [search, setSearch] = useState('');
@@ -240,7 +242,7 @@ export default function CaseQueuePage({
         </form>
 
         <div className="queue-filters">
-          <div className="filter-row">
+          <div className="queue-filters-main">
             <span className="filter-label">Filter by status</span>
 
             <div className="status-chips">
@@ -264,23 +266,25 @@ export default function CaseQueuePage({
             </div>
           </div>
 
-          <div className="filter-row">
+          <div className="queue-filters-sort">
             <span className="filter-label">Creation date</span>
 
             <button
               type="button"
-              className="sort-arrow-btn"
+              className="sort-toggle-btn"
               aria-label={
                 sortOrder === 'asc'
                   ? 'Sorted by creation date, oldest first. Click for newest first.'
                   : 'Sorted by creation date, newest first. Click for oldest first.'
               }
-              title={sortOrder === 'asc' ? 'Oldest first' : 'Newest first'}
               onClick={() =>
                 setSortOrder((current) => (current === 'asc' ? 'desc' : 'asc'))
               }
             >
-              {sortOrder === 'asc' ? '↑' : '↓'}
+              {sortOrder === 'asc' ? 'Oldest first' : 'Newest first'}
+              <span className="sort-toggle-arrow" aria-hidden="true">
+                {sortOrder === 'asc' ? '↑' : '↓'}
+              </span>
             </button>
           </div>
         </div>
@@ -323,6 +327,7 @@ export default function CaseQueuePage({
               caseRecord={caseRecord}
               onOpen={onOpenCase}
               onDelete={setCaseToDelete}
+              onCaseUpdated={onCaseUpdated}
               isDeleting={deletingCaseId === caseRecord.id}
             />
           ))

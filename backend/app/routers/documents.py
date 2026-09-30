@@ -639,25 +639,30 @@ async def cancel_document(
     document_id: str, document: DocumentRecord = Depends(get_document_or_404)
 ) -> DocumentRecord:
     """
-    Stops a document that's still QUEUED or PROCESSING. The status write is
-    an atomic compare-and-swap (only applies if the document is still in one
-    of those two statuses), so two concurrent cancels — or a cancel racing
-    the pipeline reaching a terminal status on its own — can't both "win".
-    Only once that write succeeds do we attempt to interrupt an in-flight
-    run (see queue_service.DocumentQueue.cancel_document); a QUEUED document
-    that hasn't been dequeued yet needs no interruption, since
-    queue_service._process_document checks status on dequeue and skips it.
+    Stops a document that's still QUEUED, PROCESSING, or EXTRACTING. The
+    status write is an atomic compare-and-swap (only applies if the document
+    is still in one of those statuses), so two concurrent cancels — or a
+    cancel racing the pipeline reaching a terminal status on its own — can't
+    both "win". Only once that write succeeds do we attempt to interrupt an
+    in-flight run (see queue_service.DocumentQueue.cancel_document); a
+    QUEUED document that hasn't been dequeued yet needs no interruption,
+    since queue_service._process_document checks status on dequeue and
+    skips it.
     """
     updated = await asyncio.to_thread(
         document_repository.update_status,
         document_id,
         DocumentStatus.CANCELLED,
-        expected_current_statuses=[DocumentStatus.QUEUED, DocumentStatus.PROCESSING],
+        expected_current_statuses=[
+            DocumentStatus.QUEUED,
+            DocumentStatus.PROCESSING,
+            DocumentStatus.EXTRACTING,
+        ],
     )
     if not updated:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Document can only be cancelled while queued or processing.",
+            detail="Document can only be cancelled while queued, processing, or extracting.",
         )
 
     document_queue.cancel_document(document_id)

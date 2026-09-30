@@ -38,6 +38,21 @@ def test_dehyphenate_spans_leaves_real_trailing_hyphen_before_capital() -> None:
     assert result == ["Well-", "Known company"]
 
 
+def test_dehyphenate_spans_joins_a_narrow_table_column_wrap_with_no_hyphen() -> None:
+    # A table cell too narrow for "Standard Chartered" wraps it across three
+    # spans with no hyphen character at all ("Standar" / "d Charte" / "red").
+    result = _dehyphenate_spans(["Standar", "d Charte", "red"])
+    assert result == ["Standard", " Chartered", ""]
+
+
+def test_dehyphenate_spans_does_not_join_two_genuinely_separate_short_words() -> None:
+    # "as" and "sign" are both real words on their own — joining them would
+    # only misfire if the *fragment alone* already failed as a real word,
+    # which isn't the case here, so this must be left untouched.
+    result = _dehyphenate_spans(["as", "sign a form"])
+    assert result == ["as", "sign a form"]
+
+
 def test_find_candidates_skips_domain_terms_and_correct_words() -> None:
     pages = [
         {
@@ -158,6 +173,15 @@ def test_looks_like_probable_proper_noun_false_when_lowercase() -> None:
     candidates = [c for c in _find_candidates(pages, known_terms=set()) if not c.word[0].isupper()]
     assert candidates
     assert all(_looks_like_probable_proper_noun(c) is False for c in candidates)
+
+
+def test_looks_like_probable_proper_noun_true_for_short_acronym_with_suggestion() -> None:
+    # "HH" is a credit-bureau risk-grade legend code, not prose — even
+    # though SymSpell finds an unrelated close match ("he"), a short
+    # all-caps token is excluded outright.
+    pages = [{"page_number": 1, "elements": [{"text": "Grade HH applies"}]}]
+    hh = next(c for c in _find_candidates(pages, known_terms=set()) if c.word == "HH")
+    assert _looks_like_probable_proper_noun(hh) is True
 
 
 def test_filter_candidates_drops_only_probable_proper_nouns() -> None:

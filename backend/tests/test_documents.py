@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from starlette.datastructures import Headers
 
 from app.config import settings
+from app.langgraph.extraction_prompts import schema_field_names
 from app.fraud_detection.font_consistency import ExtractedField
 from app.main import app
 from app.models import CaseRecord, DocumentRecord, DocumentStatus, compute_fulfilled_requirements
@@ -332,7 +333,7 @@ def test_update_extracted_fields_success() -> None:
         {"individual_name": "Jane Tan (corrected)"},
         field_confidences={"individual_name": 1.0},
         default_confidence=None,
-        required_field_names={"individual_name", "company_name", "net_pay", "company_address"},
+        required_field_names=set(schema_field_names("payslip")),
     )
     # A manual correction can change requirement coverage (e.g. adding an
     # address that was missing) just as much as the automated pipeline can —
@@ -385,7 +386,7 @@ def test_update_extracted_fields_preserves_confidence_for_already_reviewed_field
         {"individual_name": "Jane Tan"},
         field_confidences={"individual_name": 0.98},
         default_confidence=None,
-        required_field_names={"individual_name", "company_name", "net_pay", "company_address"},
+        required_field_names=set(schema_field_names("payslip")),
     )
 
 
@@ -432,7 +433,7 @@ def test_update_extracted_fields_bumps_confidence_for_low_confidence_existing_fi
         {"net_pay": "5000"},
         field_confidences={"net_pay": 1.0},
         default_confidence=None,
-        required_field_names={"individual_name", "company_name", "net_pay", "company_address"},
+        required_field_names=set(schema_field_names("payslip")),
     )
 
 
@@ -479,7 +480,7 @@ def test_update_extracted_fields_treats_blank_existing_value_as_editable() -> No
         {"company_address": "1 Raffles Place"},
         field_confidences={"company_address": 1.0},
         default_confidence=None,
-        required_field_names={"individual_name", "company_name", "net_pay", "company_address"},
+        required_field_names=set(schema_field_names("payslip")),
     )
 
 
@@ -844,7 +845,7 @@ def test_add_extracted_field_inserts_and_returns_refetched_document() -> None:
         "doc-1",
         "net_pay",
         5000,
-        required_field_names={"individual_name", "company_name", "net_pay", "company_address"},
+        required_field_names=set(schema_field_names("payslip")),
     )
     # Manually entered fields are human-verified, hence confidence 1.0.
     mock_repo.update_extracted_fields.assert_called_once_with(

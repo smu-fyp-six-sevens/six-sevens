@@ -29,12 +29,16 @@ _sym_spell.load_dictionary(str(_DICTIONARY_PATH), term_index=0, count_index=1)
 
 _WORD_RE = re.compile(r"[A-Za-z]+(?:'[A-Za-z]+)?")
 _TRAILING_HYPHENATED_WORD_RE = re.compile(r"[A-Za-z]{2,}-$")
+_TRAILING_WORD_RE = re.compile(r"[A-Za-z]{2,}$")
 _LEADING_WORD_RE = re.compile(r"^[a-z]+")
+# A short, fully-uppercase token (HH, GG, SGX, HDB...) reads as an acronym
+# or a legend/grade code in a formal document, not prose a typo could occur
+# in — even when it happens to be edit-distance-close to some unrelated
+# short dictionary word (e.g. "HH" -> "he").
+_ACRONYM_RE = re.compile(r"^[A-Z]{1,4}$")
 
 
 class SpellingAnomaly(BaseModel):
-    page: int
-    section: int
     word: str
     surrounding_text: str
     suggested_correction: str | None = None
@@ -54,7 +58,8 @@ class _Candidate(BaseModel):
     legitimate rare word (a name, an address, unusual-but-real corporate
     terminology) that just isn't in either dictionary. See
     _looks_like_probable_proper_noun for how these two get told apart
-    without an LLM.
+    without an LLM. page/section are internal bookkeeping only (dedup key
+    while scanning) — not carried into the public SpellingAnomaly result.
     """
 
     page: int
@@ -78,27 +83,64 @@ def _content_type_from_filename(filename: str) -> str:
     return guessed or "application/octet-stream"
 
 
-def _dehyphenate_spans(texts: list[str]) -> list[str]:
+def _is_recognized_word(word: str, known_terms: set[str]) -> bool:
+    normalized = word.lower()
+    if normalized in DOMAIN_TERMS or normalized in known_terms:
+        return True
+    exact = _sym_spell.lookup(normalized, Verbosity.TOP, max_edit_distance=0)
+    return bool(exact)
+
+
+def _dehyphenate_spans(texts: list[str], known_terms: set[str] | None = None) -> list[str]:
     """
-    A span ending in "<word>-" immediately followed by a lowercase-starting
-    next span is treated as a word split across a line break (a real
-    hyphenated compound word ending a sentence is normally followed by a
-    capital letter or punctuation, not a lowercase continuation) — the
-    hyphen is dropped and the fragments joined so the pair tokenizes as one
-    whole word. Heuristic, not a full typesetting-aware solve; the
-    reassembled word is attributed to the first span's (page, section).
+    Joins a word split across two spans back into one, two different ways:
+
+    1. A span ending in "<word>-" immediately followed by a lowercase-
+       starting next span is treated as a word split across a line break (a
+       real hyphenated compound word ending a sentence is normally followed
+       by a capital letter or punctuation, not a lowercase continuation) —
+       the hyphen is dropped and the fragments joined.
+    2. A narrow table column (a "Bank" cell, say) can force a mid-word wrap
+       with no hyphen character at all — e.g. "Standar" / "d Charte" / "red"
+       for "Standard Chartered". There's no hyphen to key off here, so this
+       is only safe to join when the trailing fragment ISN'T already a
+       recognised word on its own but the joined result IS one: two
+       genuinely separate short words concatenated essentially never also
+       happen to form a third recognised word, so this doesn't misfire on
+       ordinary short-word-next-to-short-word text.
+
+    Heuristic, not a full typesetting-aware solve; the reassembled word is
+    attributed to the first span's (page, section).
     """
+    known_terms = known_terms or set()
     texts = list(texts)
     for i in range(len(texts) - 1):
         stripped = texts[i].rstrip()
+        ws_tail = texts[i][len(stripped):]
+
         trailing_match = _TRAILING_HYPHENATED_WORD_RE.search(stripped)
-        if not trailing_match:
+        if trailing_match:
+            leading_match = _LEADING_WORD_RE.match(texts[i + 1])
+            if not leading_match:
+                continue
+            fragment = trailing_match.group(0)[:-1]  # drop the trailing hyphen
+            texts[i] = stripped[: trailing_match.start()] + fragment + leading_match.group(0) + ws_tail
+            texts[i + 1] = texts[i + 1][leading_match.end():]
+            continue
+
+        bare_match = _TRAILING_WORD_RE.search(stripped)
+        if not bare_match:
             continue
         leading_match = _LEADING_WORD_RE.match(texts[i + 1])
         if not leading_match:
             continue
-        fragment = trailing_match.group(0)[:-1]  # drop the trailing hyphen
-        texts[i] = stripped[: trailing_match.start()] + fragment + leading_match.group(0)
+        fragment = bare_match.group(0)
+        if _is_recognized_word(fragment, known_terms):
+            continue  # already a real word on its own — not a mid-word cut
+        joined = fragment + leading_match.group(0)
+        if not _is_recognized_word(joined, known_terms):
+            continue  # joining doesn't produce a recognised word either
+        texts[i] = stripped[: bare_match.start()] + joined + ws_tail
         texts[i + 1] = texts[i + 1][leading_match.end():]
     return texts
 
@@ -150,7 +192,7 @@ def _find_candidates(pages: list[dict], known_terms: set[str]) -> list[_Candidat
     for page in pages:
         page_number = page.get("page_number", 0)
         elements = page.get("elements") or [{"text": page.get("text", "")}]
-        texts = _dehyphenate_spans([element.get("text", "") for element in elements])
+        texts = _dehyphenate_spans([element.get("text", "") for element in elements], known_terms)
         for section, text in enumerate(texts):
             flat_spans.append((page_number, section, text))
 
@@ -201,7 +243,17 @@ def _looks_like_probable_proper_noun(candidate: _Candidate) -> bool:
     names, streets, and company names that _known_terms_from_extracted_fields
     doesn't happen to cover (e.g. a witness or co-signatory who isn't
     captured in any extracted field).
+
+    A short, fully-uppercase token is excluded outright, suggestion or not:
+    formal documents are full of acronyms and legend/grade codes (HDB, SGX,
+    or a credit bureau's HH/GG/FF/... risk-grade scale) that SymSpell's
+    short-string matching will always find *some* unrelated "closest"
+    dictionary word for (e.g. "HH" -> "he"), which is noise rather than a
+    typo signal — nobody mistypes a 2-4 letter acronym into another real
+    word.
     """
+    if _ACRONYM_RE.match(candidate.word):
+        return True
     return candidate.word[:1].isupper() and candidate.suggested_correction is None
 
 
@@ -247,8 +299,6 @@ async def check_spelling_anomalies(
         document_id=document_id,
         anomalies=[
             SpellingAnomaly(
-                page=c.page,
-                section=c.section,
                 word=c.word,
                 surrounding_text=c.surrounding_text,
                 suggested_correction=c.suggested_correction,

@@ -23,6 +23,10 @@ from ..fraud_detection.numerical_validation import (
     NumericalValidationResult,
     check_numerical_validation,
 )
+from ..fraud_detection.date_anomalies import (
+    DateAnomalyResult,
+    check_date_anomalies,
+)
 from ..fraud_detection.spelling_anomaly import SpellingAnomalyResult, check_spelling_anomalies
 
 router = APIRouter(prefix="/documents", tags=["detection"])
@@ -81,9 +85,9 @@ async def get_layout_anomalies(
     """
     On-demand layout anomaly check (not part of the automatic pipeline).
 
-    Returns `LayoutAnomalyResult`. Several checks on the same area become
-    one finding with `evidence.signals`. Neighbouring flagged paragraphs
-    add `local_pattern` / `consecutive_run` enrichment, not a new type.
+    Returns `LayoutAnomalyResult`. The JSON lists each finding as `type`,
+    `page`, `where`, `text`, `summary`, and `checks` (detected, expected,
+    difference). Several checks on the same area stay one finding.
     Empty `anomalies` with `unable_to_assess: false` means the checks ran
     and nothing crossed a threshold — not that the document is clean.
     """
@@ -178,20 +182,47 @@ async def get_numerical_validation(
     spelling and layout checks — the result is returned as JSON for a lead
     agent to consume and nothing is written to the database.
 
-    Takes both the file (for the figures in the text, and the page each one
-    sits on) and the document's extracted fields (for the figures that are
-    supposed to reconcile against each other — a statement's running
-    balance, a portfolio's quantity x price). Extracted fields degrade
-    gracefully: without them the format and Benford passes still run.
+    Works from the document's extracted fields alone (trusted as already
+    human-reviewed) — no file download or re-ingestion. document_type
+    decides which of the per-type checks in
+    numerical_validation.DOCUMENT_TYPE_CHECKS apply, the same officer-
+    confirmed value metadata_analysis uses for its own type-scoped rules.
     """
-    file_bytes = await _download_document_bytes(document)
     extracted_fields = await _fetch_extracted_fields(document_id)
     return await asyncio.to_thread(
         check_numerical_validation,
         document_id,
-        file_bytes,
-        document.filename,
         extracted_fields,
+        document.document_type,
+    )
+
+
+@router.get(
+    "/{document_id}/detection/date-anomalies",
+    response_model=DateAnomalyResult,
+)
+async def get_date_anomalies(
+    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+) -> DateAnomalyResult:
+    """
+    Content Validation Specialist — "Detect Date Anomalies". On-demand and
+    side-effect free, same contract as numerical-validation above: the
+    result is returned as JSON for a lead agent to consume, nothing is
+    written to the database.
+
+    Split out of numerical_validation's date-logic checks into their own
+    module (date_anomalies.py) so this dimension has its own user story,
+    ACs, and endpoint, mirroring numerical-validation's own split from the
+    combined checks it started life with. Works from extracted fields
+    alone (trusted as already human-reviewed) — no file download or
+    re-ingestion.
+    """
+    extracted_fields = await _fetch_extracted_fields(document_id)
+    return await asyncio.to_thread(
+        check_date_anomalies,
+        document_id,
+        extracted_fields,
+        document.document_type,
     )
 
 
@@ -202,7 +233,7 @@ async def get_metadata_anomaly(
     document_id: str, document: DocumentRecord = Depends(get_document_or_404)
 ) -> MetadataAnalysisResult:
     """
-    Digital Authenticity Specialist. Unlike the checks above, this doesn't
+    Digital Authenticity Specialist. Like the checks above, this doesn't
     download or re-process the file at all — file metadata (author,
     creator, producer, dates, software) is already captured once, up front,
     for every document by ingestion.metadata_extractor and sits on
