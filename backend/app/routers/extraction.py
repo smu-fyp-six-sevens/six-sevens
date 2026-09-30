@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from ..config import settings
 from ..fraud_detection.image_manipulation import ImageManipulationResult, check_image_manipulation
+from ..fraud_detection.image_tampering import ImageTamperingResult, check_image_tampering
 from ..fraud_detection.metadata_analysis import MetadataAnalysisResult, check_metadata_anomalies
 from ..fraud_detection.layout_anomalies import LayoutAnomalyResult, check_layout_anomalies
 from ..fraud_detection.numerical_validation import NumericalValidationResult, check_numerical_validation
@@ -218,4 +219,17 @@ async def test_image_manipulation(file: UploadFile = File(...)) -> ImageManipula
     file_bytes, _filename, _content_type = await _read_and_validate_upload(file)
     return await asyncio.to_thread(
         check_image_manipulation, str(uuid.uuid4()), file_bytes
+    )
+
+
+@router.post("/test-image-tampering", response_model=ImageTamperingResult)
+async def test_image_tampering(file: UploadFile = File(...)) -> ImageTamperingResult:
+    """
+    Dev/QA upload: same `ImageTamperingResult` as
+    GET /documents/{id}/detection/image-tampering. `document_id` is a
+    fresh UUID for this request, not a stored document.
+    """
+    file_bytes, _filename, _content_type = await _read_and_validate_upload(file)
+    return await asyncio.to_thread(
+        check_image_tampering, str(uuid.uuid4()), file_bytes
     )

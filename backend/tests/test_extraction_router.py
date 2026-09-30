@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 
 from app.fraud_detection.image_manipulation import ImageManipulationResult, Tolerances
+from app.fraud_detection.image_tampering import ImageTamperingResult, Tolerances as TamperingTolerances
 from app.fraud_detection.metadata_analysis import MetadataAnalysisResult
 from app.fraud_detection.layout_anomalies import CheckAssessment, LayoutAnomalyResult
 from app.fraud_detection.numerical_validation import (
@@ -316,3 +317,29 @@ def test_test_image_manipulation_success() -> None:
     assert response.json()["unable_to_assess"] is False
     mock_check.assert_called_once()
     assert mock_check.call_args[0][1] == b"%PDF-1.4 fake"
+
+
+def test_test_image_tampering_success() -> None:
+    result = ImageTamperingResult(
+        document_id="ignored",
+        regions=[],
+        indicators=[],
+        pages_checked=1,
+        tolerances=TamperingTolerances(),
+        unable_to_assess=False,
+        bbox_units="px",
+    )
+
+    with patch(
+        "app.routers.extraction.check_image_tampering", return_value=result
+    ) as mock_check:
+        response = client.post(
+            "/extraction/test-image-tampering",
+            files={"file": ("nric.png", io.BytesIO(b"\x89PNG fake"), "image/png")},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["bbox_units"] == "px"
+    mock_check.assert_called_once()
+    assert mock_check.call_args[0][1] == b"\x89PNG fake"
+

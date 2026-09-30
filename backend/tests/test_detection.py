@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.fraud_detection.font_consistency import ExtractedField, FontConsistencyResult
 from app.fraud_detection.image_manipulation import ImageManipulationResult, Tolerances
+from app.fraud_detection.image_tampering import ImageTamperingResult, Tolerances as TamperingTolerances
 from app.fraud_detection.metadata_analysis import MetadataAnalysisResult
 from app.fraud_detection.layout_anomalies import CheckAssessment, LayoutAnomalyResult
 from app.fraud_detection.numerical_validation import (
@@ -523,4 +524,37 @@ def test_get_date_anomalies_fetch_and_not_found_errors() -> None:
             client.get("/documents/missing/detection/date-anomalies").status_code == 404
         )
         mock_check.assert_not_called()
+
+
+def test_image_tampering_happy_path() -> None:
+    result = ImageTamperingResult(
+        document_id="doc-1",
+        regions=[],
+        indicators=[],
+        pages_checked=1,
+        tolerances=TamperingTolerances(),
+        unable_to_assess=False,
+    )
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch("app.routers.detection.storage_service") as mock_storage,
+        patch(
+            "app.routers.detection.check_image_tampering", return_value=result
+        ) as mock_check,
+    ):
+        mock_repo.get_document.return_value = _document()
+        mock_storage.download_file.return_value = b"%PDF-1.4"
+
+        response = client.get("/documents/doc-1/detection/image-tampering")
+
+    assert response.status_code == 200
+    assert response.json()["unable_to_assess"] is False
+    mock_check.assert_called_once_with("doc-1", b"%PDF-1.4")
+
+
+def test_image_tampering_document_missing() -> None:
+    with patch("app.routers._dependencies.document_repository") as mock_repo:
+        mock_repo.get_document.return_value = None
+        response = client.get("/documents/doc-1/detection/image-tampering")
+    assert response.status_code == 404
 

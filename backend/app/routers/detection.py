@@ -21,6 +21,7 @@ from ..fraud_detection.image_manipulation import (
     ImageManipulationResult,
     check_image_manipulation,
 )
+from ..fraud_detection.image_tampering import ImageTamperingResult, check_image_tampering
 from ..fraud_detection.metadata_analysis import MetadataAnalysisResult, check_metadata_anomalies
 from ..fraud_detection.layout_anomalies import LayoutAnomalyResult, check_layout_anomalies
 from ..fraud_detection.numerical_validation import (
@@ -115,6 +116,25 @@ async def get_image_manipulation(
     """
     file_bytes = await _download_document_bytes(document)
     return await asyncio.to_thread(check_image_manipulation, document_id, file_bytes)
+
+
+@router.get(
+    "/{document_id}/detection/image-tampering",
+    response_model=ImageTamperingResult,
+)
+async def get_image_tampering(
+    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+) -> ImageTamperingResult:
+    """
+    On-demand, side-effect free: looks for images edited into the document
+    after it was produced — painted over and replaced, stretched or
+    rotated, pasted with a visible seam, or with altered brightness, colour
+    or noise. Empty `indicators` with `unable_to_assess: false` means the
+    checks ran and nothing crossed a tolerance — not that the document is
+    clean.
+    """
+    file_bytes = await _download_document_bytes(document)
+    return await asyncio.to_thread(check_image_tampering, document_id, file_bytes)
 
 
 @router.get(
