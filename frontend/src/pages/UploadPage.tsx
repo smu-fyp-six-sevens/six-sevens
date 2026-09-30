@@ -1006,6 +1006,7 @@ async function handleApproveAllEligibleDocuments() {
                         <span>Status</span>
                         <span>Classification Confidence</span>
                         <span>Routing Outcome</span>
+                        <span className="sr-only">Actions</span>
                       </div>
 
                       {extractedDocuments.map((document) => {
@@ -1151,6 +1152,7 @@ async function handleApproveAllEligibleDocuments() {
                         <span>Status</span>
                         <span>Classification Confidence</span>
                         <span>Routing Outcome</span>
+                        <span className="sr-only">Actions</span>
                       </div>
 
                       {approvedDocuments.map((document) => (
@@ -1190,6 +1192,7 @@ async function handleApproveAllEligibleDocuments() {
                           <span className="document-routing">
                             Approved
                           </span>
+                          <span />
                         </div>
                       ))}
                     </div>

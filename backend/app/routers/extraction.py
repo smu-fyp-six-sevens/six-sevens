@@ -173,9 +173,9 @@ async def test_layout_anomalies(file: UploadFile = File(...)) -> LayoutAnomalyRe
     GET /documents/{id}/detection/layout-anomalies. `document_id` is a
     fresh UUID for this request, not a stored document.
 
-    Several checks on the same area become one finding with
-    `evidence.signals`. Neighbouring flagged paragraphs add
-    `local_pattern` / `consecutive_run` enrichment, not a new type.
+    The JSON lists each finding as `type`, `page`, `where`, `text`,
+    `summary`, and `checks` (detected, expected, difference). Several
+    checks on the same area stay one finding.
     """
     file_bytes, _filename, _content_type = await _read_and_validate_upload(file)
     return await asyncio.to_thread(
