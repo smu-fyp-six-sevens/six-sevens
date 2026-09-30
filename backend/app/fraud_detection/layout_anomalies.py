@@ -398,7 +398,11 @@ def _needs_ocr(doc: pymupdf.Document, file_bytes: bytes) -> bool:
     if not file_bytes.startswith(b"%PDF"):
         return True
     for page in doc:
-        if (page.get_text("text") or "").strip():
+        # pymupdf's get_text() stub is overloaded on the (non-literal-typed)
+        # `option` string, so pyright can't narrow the "text" mode's return
+        # to str — it's always a str at runtime for this mode.
+        text = cast(str, page.get_text("text"))
+        if text.strip():
             continue
         for info in page.get_image_info() or []:
             bbox = info.get("bbox")
@@ -422,7 +426,11 @@ def _ocr_blocks(doc: pymupdf.Document) -> list[_Block]:
 
     engine = RapidOCR()
     blocks: list[_Block] = []
-    for page_index, page in enumerate(doc):
+    # pymupdf.Document supports old-style iteration (__getitem__/__len__) at
+    # runtime but its stub doesn't declare __iter__, which enumerate()'s
+    # signature requires — index it directly instead.
+    for page_index in range(len(doc)):
+        page = doc[page_index]
         pix = page.get_pixmap(alpha=False)
         if pix.n != 3:
             pix = pymupdf.Pixmap(pymupdf.csRGB, pix)
@@ -2334,7 +2342,7 @@ def _absorb_line_into_paragraph(anomalies: list[LayoutAnomaly]) -> None:
                 if opening not in outer_opening and outer_opening not in opening:
                     continue
                 area = _bbox_area(outer.bbox)
-                if host is None or area < host_area:
+                if host_area is None or area < host_area:
                     host = outer
                     host_area = area
             if host is not None:

@@ -47,7 +47,7 @@ import calendar
 import math
 import re
 from datetime import date
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, Protocol, Self, TypeVar
 
 from pydantic import BaseModel
 
@@ -330,10 +330,29 @@ def _on_or_after(later: date | None, earlier: date | None) -> bool | None:
 # ---------------------------------------------------------------------------
 
 
+class _ReviewableFinding(Protocol):
+    """
+    The minimal shape _apply_needs_review needs — NumericalFinding and
+    date_anomalies.DateFinding are separate (structurally identical)
+    Pydantic classes, not a shared base class, since date_anomalies.py
+    already imports this function from here and a reverse import would be
+    circular. A Protocol lets one function serve both without either
+    concrete type depending on the other.
+    """
+
+    field: str | None
+    needs_review: bool
+
+    def model_copy(self, *, update: dict[str, Any]) -> Self: ...
+
+
+FindingT = TypeVar("FindingT", bound=_ReviewableFinding)
+
+
 def _apply_needs_review(
-    findings: list[NumericalFinding],
+    findings: list[FindingT],
     confidences: dict[str, float],
-) -> list[NumericalFinding]:
+) -> list[FindingT]:
     """
     A failing value is downgraded to needs_review rather than reported as a
     confident anomaly when the top-level field it came from has extraction
@@ -351,7 +370,7 @@ def _apply_needs_review(
     if not findings:
         return findings
 
-    updated: list[NumericalFinding] = []
+    updated: list[FindingT] = []
 
     for finding in findings:
         base_field = (finding.field or "").split("[")[0]
@@ -704,11 +723,14 @@ def _check_open_close(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck |
     rows = _rows(values[0])
     amounts = [_as_number(r.get("amount")) for r in rows]
     balances = [_as_number(r.get("balance")) for r in rows]
-    if not rows or any(a is None for a in amounts) or balances[0] is None or balances[-1] is None:
+    first_balance = balances[0] if balances else None
+    last_balance = balances[-1] if balances else None
+    if not rows or any(a is None for a in amounts) or first_balance is None or last_balance is None:
         return [], _skip_missing("BS.OPEN_CLOSE", "transactions[].amount/.balance")
+    amounts = [a for a in amounts if a is not None]
 
-    derived_opening = balances[0] - amounts[0]
-    derived_closing = balances[-1]
+    derived_opening = first_balance - amounts[0]
+    derived_closing = last_balance
     stated_opening = _as_number(ctx.fields.get("opening_balance"))
     stated_closing = _as_number(ctx.fields.get("ledger_balance"))
 
@@ -1070,9 +1092,11 @@ def _check_duplicates(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck |
     seen: dict[tuple[str, float], int] = {}
     findings = []
     for i, row in enumerate(_rows(values[0])):
-        key = (str(row.get("description") or "").strip().lower(), _as_number(row.get("amount")))
-        if key[1] is None or not key[0]:
+        description = str(row.get("description") or "").strip().lower()
+        amount = _as_number(row.get("amount"))
+        if amount is None or not description:
             continue
+        key = (description, amount)
         if key in seen:
             findings.append(_finding(
                 "STAT.DUPLICATES", "signal",
@@ -1196,7 +1220,7 @@ def _check_portfolio_sum(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedChec
     market_values = [_as_number(r.get("market_value")) for r in _rows(rows)]
     if stated is None or any(v is None for v in market_values) or not market_values:
         return [], _skip_missing("SOW.PORTFOLIO_SUM", "holdings[].market_value")
-    total = sum(market_values)
+    total = sum(v for v in market_values if v is not None)
     if abs(total - stated) > _MONEY_TOLERANCE:
         return [_finding(
             "SOW.PORTFOLIO_SUM", "impossible",
@@ -1244,7 +1268,7 @@ def _check_fs_is_cast(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck |
             continue
         ran_any = True
         revenue, cost_of_sales, opex, tax, profit = (_as_number(v) for v in values)
-        if None in (revenue, cost_of_sales, opex, tax, profit):
+        if revenue is None or cost_of_sales is None or opex is None or tax is None or profit is None:
             continue
         gross_profit = revenue - cost_of_sales
         profit_before_tax = gross_profit - opex
@@ -1286,7 +1310,7 @@ def _check_fs_bs_cast(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck |
         stated = _as_number(stated_raw)
         if stated is None or any(a is None for a in amounts) or not amounts:
             continue
-        total = sum(amounts)
+        total = sum(a for a in amounts if a is not None)
         if abs(total - stated) > _MONEY_TOLERANCE:
             findings.append(_finding(
                 "FS.BS_CAST", "impossible",
@@ -1304,7 +1328,7 @@ def _check_fs_balance_identity(
     code: str, field: str, assets_raw: Any, liabilities_raw: Any, equity_raw: Any,
 ) -> list[NumericalFinding]:
     assets, liabilities, equity = (_as_number(v) for v in (assets_raw, liabilities_raw, equity_raw))
-    if None in (assets, liabilities, equity):
+    if assets is None or liabilities is None or equity is None:
         return []
     expected = liabilities + equity
     if abs(assets - expected) > _MONEY_TOLERANCE:
@@ -1367,7 +1391,7 @@ def _check_fs_re_rollforward(ctx: _Ctx) -> tuple[list[NumericalFinding], Skipped
             "dividends_paid", "retained_earnings_closing",
         )
     opening, profit, dividends, closing = (_as_number(v) for v in values)
-    if None in (opening, profit, dividends, closing):
+    if opening is None or profit is None or dividends is None or closing is None:
         return [], _skip_missing("FS.RE_ROLLFORWARD", "retained_earnings (unparseable)")
 
     findings = []
@@ -1401,7 +1425,7 @@ def _check_fs_ppe_rollforward(ctx: _Ctx) -> tuple[list[NumericalFinding], Skippe
     if values is None:
         return [], _skip_missing("FS.PPE_ROLLFORWARD", "ppe_opening", "ppe_closing", "depreciation_expense")
     opening, closing, depreciation = (_as_number(v) for v in values)
-    if None in (opening, closing, depreciation):
+    if opening is None or closing is None or depreciation is None:
         return [], _skip_missing("FS.PPE_ROLLFORWARD", "ppe_* (unparseable)")
     implied_additions = closing - opening + depreciation
     if implied_additions < -_MONEY_TOLERANCE:
@@ -1475,7 +1499,7 @@ def _check_fs_ratio_bands(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedChe
     if finance is not None:
         ran_any = True
         costs, opening, closing = (_as_number(v) for v in finance)
-        if None not in (costs, opening, closing) and (opening + closing) > 0:
+        if costs is not None and opening is not None and closing is not None and (opening + closing) > 0:
             ratio = costs / ((opening + closing) / 2)
             lo, hi = _RATIO_BANDS["finance_cost_ratio"]
             if not lo <= ratio <= hi:
@@ -1490,7 +1514,7 @@ def _check_fs_ratio_bands(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedChe
     if dep is not None:
         ran_any = True
         depreciation, ppe = (_as_number(v) for v in dep)
-        if None not in (depreciation, ppe) and ppe > 0:
+        if depreciation is not None and ppe is not None and ppe > 0:
             ratio = depreciation / ppe
             lo, hi = _RATIO_BANDS["depreciation_ratio"]
             if not lo <= ratio <= hi:
@@ -1505,7 +1529,7 @@ def _check_fs_ratio_bands(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedChe
     if margin is not None:
         ran_any = True
         revenue, cost = (_as_number(v) for v in margin)
-        if None not in (revenue, cost) and revenue > 0:
+        if revenue is not None and cost is not None and revenue > 0:
             ratio = (revenue - cost) / revenue
             lo, hi = _RATIO_BANDS["gross_margin"]
             if not lo <= ratio <= hi:
@@ -1680,7 +1704,7 @@ def _check_payslip_sums(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck
     if earnings_items is not None and total_earnings is not None:
         amounts = [_as_number(r.get("amount")) for r in _rows(earnings_items)]
         if amounts and all(a is not None for a in amounts):
-            total = sum(amounts)
+            total = sum(a for a in amounts if a is not None)
             if abs(total - total_earnings) > _MONEY_TOLERANCE:
                 findings.append(_finding(
                     "PAY.EARNINGS_SUM", "impossible",
@@ -1692,7 +1716,7 @@ def _check_payslip_sums(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck
     if deductions_items is not None and total_deductions is not None:
         amounts = [_as_number(r.get("amount")) for r in _rows(deductions_items)]
         if amounts and all(a is not None for a in amounts):
-            total = sum(amounts)
+            total = sum(a for a in amounts if a is not None)
             if abs(total - total_deductions) > _MONEY_TOLERANCE:
                 findings.append(_finding(
                     "PAY.DEDUCTIONS_SUM", "impossible",
@@ -1748,7 +1772,7 @@ def _check_cpf_base(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck | N
     if values is None:
         return [], _skip_missing("PAY.CPF_BASE", "employee_cpf", "basic_pay", "ordinary_wages")
     cpf, basic, ordinary = (_as_number(v) for v in values)
-    if None in (cpf, basic, ordinary) or basic <= 0 or ordinary <= basic:
+    if cpf is None or basic is None or ordinary is None or basic <= 0 or ordinary <= basic:
         return [], _skip_missing("PAY.CPF_BASE", "employee_cpf/basic_pay/ordinary_wages (unparseable)")
     rate_on_basic = cpf / basic
     rate_on_ordinary = cpf / ordinary
@@ -1860,7 +1884,7 @@ def _check_cr_aggregate_sum(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedC
     balances = [_as_number(r.get("current_balance")) for r in _rows(values[0])]
     if any(b is None for b in balances) or not balances:
         return [], _skip_missing("CR.AGGREGATE_SUM", "accounts[].current_balance (unparseable)")
-    total = sum(balances)
+    total = sum(b for b in balances if b is not None)
     if abs(total - aggregate) > max(_MONEY_TOLERANCE, abs(total) * 0.01):
         return [_finding(
             "CR.AGGREGATE_SUM", "impossible",
@@ -1999,7 +2023,7 @@ def _check_loan_annuity(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck
         return [], _skip_missing("LOAN.ANNUITY", "loan_amount", "interest_rate", "loan_tenure",
                                   "monthly_instalment")
     principal, rate_pct, tenure, stated = (_as_number(v) for v in values)
-    if None in (principal, rate_pct, tenure, stated) or tenure <= 0:
+    if principal is None or rate_pct is None or tenure is None or stated is None or tenure <= 0:
         return [], _skip_missing("LOAN.ANNUITY", "loan fields (unparseable)")
     monthly_rate = (rate_pct / 100) / 12
     expected = _annuity_instalment(principal, monthly_rate, int(tenure))
@@ -2040,7 +2064,7 @@ def _check_loan_fee(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck | N
     if values is None:
         return [], _skip_missing("LOAN.FEE", "loan_amount", "fee_percentage", "fee_amount")
     principal, fee_pct, stated_fee = (_as_number(v) for v in values)
-    if None in (principal, fee_pct, stated_fee):
+    if principal is None or fee_pct is None or stated_fee is None:
         return [], _skip_missing("LOAN.FEE", "loan fee fields (unparseable)")
     expected = principal * fee_pct / 100
     if abs(expected - stated_fee) > max(_MONEY_TOLERANCE, expected * 0.01):
@@ -2143,7 +2167,7 @@ def _check_poa_balance_arithmetic(ctx: _Ctx) -> tuple[list[NumericalFinding], Sk
     if v1 is not None:
         ran_any = True
         previous, payment, outstanding = (_as_number(v) for v in v1)
-        if None not in (previous, payment, outstanding):
+        if previous is not None and payment is not None and outstanding is not None:
             expected = previous - payment
             if abs(expected - outstanding) > _MONEY_TOLERANCE:
                 findings.append(_finding(
@@ -2156,7 +2180,7 @@ def _check_poa_balance_arithmetic(ctx: _Ctx) -> tuple[list[NumericalFinding], Sk
     if v2 is not None:
         ran_any = True
         outstanding, current, total = (_as_number(v) for v in v2)
-        if None not in (outstanding, current, total):
+        if outstanding is not None and current is not None and total is not None:
             expected = outstanding + current
             if abs(expected - total) > _MONEY_TOLERANCE:
                 findings.append(_finding(
@@ -2222,7 +2246,7 @@ def _check_acra_share_sum(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedChe
     shares = [_as_number(r.get("shares")) for r in _rows(rows)]
     if issued is None or not shares or any(s is None for s in shares):
         return [], _skip_missing("ACRA.SHARE_SUM", "shareholders[].shares (unparseable)")
-    total = sum(shares)
+    total = sum(s for s in shares if s is not None)
     if abs(total - issued) > _MONEY_TOLERANCE:
         return [_finding(
             "ACRA.SHARE_SUM", "impossible",
@@ -2301,7 +2325,7 @@ def _check_const_subscriber_sum(ctx: _Ctx) -> tuple[list[NumericalFinding], Skip
     shares = [_as_number(r.get("shares")) for r in subscriber_rows]
     if issued is None or not subscriber_rows or any(s is None for s in shares):
         return [], _skip_missing("CONST.SUBSCRIBER_SUM", "subscribers[].shares (incomplete)")
-    total = sum(shares)
+    total = sum(s for s in shares if s is not None)
     if abs(total - issued) > _MONEY_TOLERANCE:
         return [_finding(
             "CONST.SUBSCRIBER_SUM", "impossible",
