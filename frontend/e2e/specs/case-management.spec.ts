@@ -142,16 +142,16 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
         filename: 'Fashion-Purchase-Order.pdf',
         status: 'analyzed',
         document_type: 'unrecognised',
-        confidence: 0.4,
-        classification_outcome: 'manual_review',
+        classification_confidence: 0.4,
+        routing_status: 'manual_review',
       }),
       makeDocument({
         case_id: harbor.id,
         filename: 'C014_CertIncorp.pdf',
         status: 'analyzed',
         document_type: 'certificate_of_incorporation',
-        confidence: 0.97,
-        classification_outcome: 'accepted',
+        classification_confidence: 0.97,
+        routing_status: 'accepted',
       }),
     );
 

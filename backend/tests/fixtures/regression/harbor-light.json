@@ -40,8 +40,7 @@
   "documents": {
     "5d2dee2e-b850-4c8b-913f-71e71e2e8d07": {
       "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
-      "classification_outcome": "accepted",
-      "confidence": 0.98,
+      "classification_confidence": 0.98,
       "document_type": "source_of_wealth",
       "escalation_reason": null,
       "evidence": [
@@ -270,14 +269,14 @@
       "processing_started_at": "2026-09-25T06:53:52.000944Z",
       "queued_at": "2026-09-25T06:53:51.477986Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/C014_SourceWealth_BS.pdf",
       "uploaded_at": "2026-09-25T06:53:51.360867Z"
     },
     "71bc280f-36e1-4df0-bfa4-feed7fe1e481": {
       "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "list_of_loans",
       "escalation_reason": null,
       "evidence": [
@@ -431,14 +430,14 @@
       "processing_started_at": "2026-09-25T06:53:52.071198Z",
       "queued_at": "2026-09-25T06:53:51.507329Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/C014_ListLoans_1 (1).pdf",
       "uploaded_at": "2026-09-25T06:53:51.384482Z"
     },
     "d700d399-12b9-4eb8-b2b2-37e05f654d83": {
       "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "certificate_of_incumbency",
       "escalation_reason": null,
       "evidence": [
@@ -648,14 +647,14 @@
       "processing_started_at": "2026-09-25T06:53:51.807129Z",
       "queued_at": "2026-09-25T06:53:51.517862Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/C014_CertIncumbency.pdf",
       "uploaded_at": "2026-09-25T06:53:51.359494Z"
     },
     "e6001e0b-3c13-4053-870a-4c3b1719714c": {
       "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
-      "classification_outcome": "accepted",
-      "confidence": 0.985,
+      "classification_confidence": 0.985,
       "document_type": "certificate_of_incorporation",
       "escalation_reason": null,
       "evidence": [
@@ -738,14 +737,14 @@
       "processing_started_at": "2026-09-25T06:53:52.031538Z",
       "queued_at": "2026-09-25T06:53:51.833474Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/C014_CertIncorp.pdf",
       "uploaded_at": "2026-09-25T06:53:51.735348Z"
     },
     "ead6c799-3b2f-40d9-bda1-b36435f08ec1": {
       "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "passport",
       "escalation_reason": null,
       "evidence": [
@@ -833,6 +832,7 @@
       "processing_started_at": "2026-09-25T06:54:31.414055Z",
       "queued_at": "2026-09-25T06:53:51.974164Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/Passport_5187.jpeg",
       "uploaded_at": "2026-09-25T06:53:51.596117Z"
@@ -841,8 +841,7 @@
   "rows": [
     {
       "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "certificate_of_incumbency",
       "escalation_reason": null,
       "evidence": [
@@ -916,14 +915,14 @@
       "processing_started_at": "2026-09-25T06:53:51.807129Z",
       "queued_at": "2026-09-25T06:53:51.517862Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/C014_CertIncumbency.pdf",
       "uploaded_at": "2026-09-25T06:53:51.359494Z"
     },
     {
       "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "passport",
       "escalation_reason": null,
       "evidence": [
@@ -959,14 +958,14 @@
       "processing_started_at": "2026-09-25T06:54:31.414055Z",
       "queued_at": "2026-09-25T06:53:51.974164Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/Passport_5187.jpeg",
       "uploaded_at": "2026-09-25T06:53:51.596117Z"
     },
     {
       "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
-      "classification_outcome": "accepted",
-      "confidence": 0.98,
+      "classification_confidence": 0.98,
       "document_type": "source_of_wealth",
       "escalation_reason": null,
       "evidence": [
@@ -1083,14 +1082,14 @@
       "processing_started_at": "2026-09-25T06:53:52.000944Z",
       "queued_at": "2026-09-25T06:53:51.477986Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/C014_SourceWealth_BS.pdf",
       "uploaded_at": "2026-09-25T06:53:51.360867Z"
     },
     {
       "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "list_of_loans",
       "escalation_reason": null,
       "evidence": [
@@ -1172,14 +1171,14 @@
       "processing_started_at": "2026-09-25T06:53:52.071198Z",
       "queued_at": "2026-09-25T06:53:51.507329Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/C014_ListLoans_1 (1).pdf",
       "uploaded_at": "2026-09-25T06:53:51.384482Z"
     },
     {
       "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
-      "classification_outcome": "accepted",
-      "confidence": 0.985,
+      "classification_confidence": 0.985,
       "document_type": "certificate_of_incorporation",
       "escalation_reason": null,
       "evidence": [
@@ -1214,6 +1213,7 @@
       "processing_started_at": "2026-09-25T06:53:52.031538Z",
       "queued_at": "2026-09-25T06:53:51.833474Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/C014_CertIncorp.pdf",
       "uploaded_at": "2026-09-25T06:53:51.735348Z"
@@ -1401,8 +1401,7 @@
     "documents": [
       {
         "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
-        "classification_outcome": "accepted",
-        "confidence": 0.95,
+        "classification_confidence": 0.95,
         "document_type": "certificate_of_incumbency",
         "escalation_reason": null,
         "evidence": [
@@ -1578,14 +1577,14 @@
         "processing_started_at": "2026-09-25T06:53:51.807129Z",
         "queued_at": "2026-09-25T06:53:51.517862Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/C014_CertIncumbency.pdf",
         "uploaded_at": "2026-09-25T06:53:51.359494Z"
       },
       {
         "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
-        "classification_outcome": "accepted",
-        "confidence": 0.95,
+        "classification_confidence": 0.95,
         "document_type": "passport",
         "escalation_reason": null,
         "evidence": [
@@ -1660,14 +1659,14 @@
         "processing_started_at": "2026-09-25T06:54:31.414055Z",
         "queued_at": "2026-09-25T06:53:51.974164Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/Passport_5187.jpeg",
         "uploaded_at": "2026-09-25T06:53:51.596117Z"
       },
       {
         "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
-        "classification_outcome": "accepted",
-        "confidence": 0.98,
+        "classification_confidence": 0.98,
         "document_type": "source_of_wealth",
         "escalation_reason": null,
         "evidence": [
@@ -1868,14 +1867,14 @@
         "processing_started_at": "2026-09-25T06:53:52.000944Z",
         "queued_at": "2026-09-25T06:53:51.477986Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/C014_SourceWealth_BS.pdf",
         "uploaded_at": "2026-09-25T06:53:51.360867Z"
       },
       {
         "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
-        "classification_outcome": "accepted",
-        "confidence": 0.95,
+        "classification_confidence": 0.95,
         "document_type": "list_of_loans",
         "escalation_reason": null,
         "evidence": [
@@ -2011,14 +2010,14 @@
         "processing_started_at": "2026-09-25T06:53:52.071198Z",
         "queued_at": "2026-09-25T06:53:51.507329Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/C014_ListLoans_1 (1).pdf",
         "uploaded_at": "2026-09-25T06:53:51.384482Z"
       },
       {
         "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
-        "classification_outcome": "accepted",
-        "confidence": 0.985,
+        "classification_confidence": 0.985,
         "document_type": "certificate_of_incorporation",
         "escalation_reason": null,
         "evidence": [
@@ -2089,6 +2088,7 @@
         "processing_started_at": "2026-09-25T06:53:52.031538Z",
         "queued_at": "2026-09-25T06:53:51.833474Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/C014_CertIncorp.pdf",
         "uploaded_at": "2026-09-25T06:53:51.735348Z"

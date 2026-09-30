@@ -18,6 +18,8 @@
     --deferred: #9a6508;
     --deferred-bg: #fbf0da;
     --code-bg: #efece4;
+    --retired: #6b7280;
+    --retired-bg: #eceae4;
     --sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
     --mono: 'IBM Plex Mono', SFMono-Regular, Consolas, Menlo, monospace;
   }
@@ -38,6 +40,8 @@
       --deferred: #e2b04f;
       --deferred-bg: #36290f;
       --code-bg: #222c40;
+      --retired: #9aa4b8;
+      --retired-bg: #232a38;
     }
   }
   :root[data-theme="dark"] {
@@ -56,6 +60,8 @@
     --deferred: #e2b04f;
     --deferred-bg: #36290f;
     --code-bg: #222c40;
+    --retired: #9aa4b8;
+    --retired-bg: #232a38;
   }
 
   * { box-sizing: border-box; }
@@ -111,8 +117,9 @@
   .figure { font-size: 34px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
   .figure small { font-size: 16px; font-weight: 500; color: var(--ink-soft); }
   .figure.pass { color: var(--pass); }
-  .figure.defect { color: var(--defect); }
+  .figure.fig-defect { color: var(--defect); }
   .figure.deferred { color: var(--deferred); }
+  .figure.retired { color: var(--retired); }
   .label { font-size: 13px; color: var(--ink-soft); }
 
   /* Sprint bars */
@@ -127,6 +134,7 @@
   .seg-pass { background: var(--pass); color: var(--surface); }
   .seg-defect { background: var(--defect); color: var(--surface); }
   .seg-deferred { background: var(--deferred); color: var(--surface); }
+  .seg-retired { background: var(--retired); color: var(--surface); }
   .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink-soft); padding-left: 88px; }
   .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
 
@@ -148,6 +156,8 @@
   .pill.defect { background: var(--defect-bg); color: var(--defect); }
   .pill.deferred { background: var(--deferred-bg); color: var(--deferred); }
   .pill.pending { background: var(--steel-bg); color: var(--steel); }
+  .pill.retired { background: var(--retired-bg); color: var(--retired); }
+  .pill.closed { background: var(--retired-bg); color: var(--retired); }
 
   /* Defects */
   .defects { display: grid; gap: 12px; }
@@ -159,6 +169,8 @@
   .defect[data-sev="High"] { --sev: var(--defect); }
   .defect[data-sev="Medium"] { --sev: var(--deferred); }
   .defect[data-sev="Low"] { --sev: var(--steel); }
+  .defect.is-closed { opacity: 0.72; }
+  .defect.is-closed .stripe { background: var(--retired); }
   .defect-body { padding: 16px 20px; display: grid; gap: 10px; }
   .defect-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
   .defect-id { font-family: var(--mono); font-weight: 500; font-size: 14px; }
@@ -235,13 +247,13 @@
     <div class="eyebrow">SCRUM-206 · Conduct Regression Testing</div>
     <h1>Sprint 1 &amp; 2 regression results</h1>
     <p class="muted" style="max-width: 72ch">
-      Every Sprint 1 and Sprint 2 manual test case, re-run as automated tests. Features that need the AI
-      pipeline are set aside until the LangGraph migration is merged.
+      Every Sprint 1 and Sprint 2 manual test case, re-run as automated tests against the latest code,
+      including the LangGraph AI pipeline with its AI responses mocked.
     </p>
     <div class="meta">
-      <span>Run <b>28 Sep 2026</b></span>
+      <span>Run <b>30 Sep 2026</b></span>
       <span>Branch <b class="mono">SCRUM-206-Conduct-Regression-Testing</b></span>
-      <span>Based on <b class="mono">017c9ad</b></span>
+      <span>Up to date with main <b class="mono">f233702</b> (LangGraph merged)</span>
       <span>Sources <b>Test Cases – Sprint 1.xlsx, Sprint 2.xlsx</b></span>
     </div>
   </header>
@@ -253,40 +265,40 @@
     </div>
     <div class="verdict">
       <div><span class="figure">98</span><span class="label">Test cases in the sprint sheets</span></div>
-      <div><span class="figure pass">78</span><span class="label">Automated and passing</span></div>
-      <div><span class="figure defect">5</span><span class="label">Defects, found in 9 test cases and reported to their owners</span></div>
-      <div><span class="figure deferred">11</span><span class="label">Deferred until LangGraph (need the AI pipeline)</span></div>
+      <div><span class="figure pass">74</span><span class="label">Automated and passing</span></div>
+      <div><span class="figure fig-defect">3</span><span class="label">Open defects, affecting 5 test cases (2 more closed)</span></div>
+      <div><span class="figure retired">19</span><span class="label">Retired: the tooling they tested was removed</span></div>
     </div>
 
-    <div class="bars" role="img" aria-label="Sprint 1: 31 passing, 5 defects, 2 deferred of 38. Sprint 2: 47 passing, 4 defects, 9 deferred of 60.">
+    <div class="bars" role="img" aria-label="Sprint 1: 28 passing, 2 defect, 8 retired of 38. Sprint 2: 46 passing, 3 defect, 11 retired of 60.">
       <div class="bar-row">
         <span class="bar-name">Sprint 1</span>
         <div class="bar-track">
-          <span class="seg-pass" style="flex: 0 0 81.58%">31</span>
-          <span class="seg-defect" style="flex: 0 0 13.16%">5</span>
-          <span class="seg-deferred" style="flex: 0 0 5.26%">2</span>
+          <span class="seg-pass" style="flex: 0 0 73.68%">28</span>
+          <span class="seg-defect" style="flex: 0 0 5.26%">2</span>
+          <span class="seg-retired" style="flex: 0 0 21.06%">8</span>
         </div>
       </div>
       <div class="bar-row">
         <span class="bar-name">Sprint 2</span>
         <div class="bar-track">
-          <span class="seg-pass" style="flex: 0 0 78.33%">47</span>
-          <span class="seg-defect" style="flex: 0 0 6.67%">4</span>
-          <span class="seg-deferred" style="flex: 0 0 15%">9</span>
+          <span class="seg-pass" style="flex: 0 0 76.67%">46</span>
+          <span class="seg-defect" style="flex: 0 0 5%">3</span>
+          <span class="seg-retired" style="flex: 0 0 18.33%">11</span>
         </div>
       </div>
       <div class="legend">
         <span><i style="background: var(--pass)"></i>Passing</span>
         <span><i style="background: var(--defect)"></i>Defect found</span>
-        <span><i style="background: var(--deferred)"></i>Deferred (AI)</span>
+        <span><i style="background: var(--retired)"></i>Retired</span>
         <span>Sprint 1: 38 cases · Sprint 2: 60 cases</span>
       </div>
     </div>
 
     <div class="verdict">
       <div>
-        <span class="figure">910</span>
-        <span class="label">Backend tests (pytest) · 907 pass, 3 known defects<br>85 tagged Sprint 1 · 119 tagged Sprint 2</span>
+        <span class="figure">878</span>
+        <span class="label">Backend tests (pytest) · 877 pass, 1 known defect<br>26 tagged Sprint 1 · 83 tagged Sprint 2 · real LangGraph pipeline, mocked AI</span>
       </div>
       <div>
         <span class="figure">49</span>
@@ -300,17 +312,17 @@
     <div class="acs">
       <div class="ac">
         <span class="ac-id">AC1</span>
-        <span class="ac-text"><span>All Sprint 1 functionality is regression tested</span><span class="muted">Every case automated except the AI hand-off (DI-017, MA-002).</span></span>
+        <span class="ac-text"><span>All Sprint 1 functionality is regression tested</span><span class="muted">Every case automated, or retired along with the tooling it tested.</span></span>
         <span class="pill pass">Done</span>
       </div>
       <div class="ac">
         <span class="ac-id">AC2</span>
-        <span class="ac-text"><span>All Sprint 2 functionality is regression tested</span><span class="muted">Every case automated except AI extraction and auto-trigger (9 cases).</span></span>
+        <span class="ac-text"><span>All Sprint 2 functionality is regression tested</span><span class="muted">Every case automated, including the AI cases (mocked AI responses), or retired.</span></span>
         <span class="pill pass">Done</span>
       </div>
       <div class="ac">
         <span class="ac-id">AC3</span>
-        <span class="ac-text"><span>Previously passed test cases still pass</span><span class="muted">Both suites run on every pull request. This run found 5 regressions.</span></span>
+        <span class="ac-text"><span>Previously passed test cases still pass</span><span class="muted">Both suites run on every pull request. 3 regressions are open.</span></span>
         <span class="pill pass">Done</span>
       </div>
       <div class="ac">
@@ -320,7 +332,7 @@
       </div>
       <div class="ac">
         <span class="ac-id">AC5</span>
-        <span class="ac-text"><span>Regression completed after defects are fixed</span><span class="muted">Waiting on the owners to fix REG-001 – REG-005, then a final re-run.</span></span>
+        <span class="ac-text"><span>Regression completed after defects are fixed</span><span class="muted">Waiting on the owners to fix REG-001, REG-002 and REG-005, then a final re-run.</span></span>
         <span class="pill pending">Waiting on fixes</span>
       </div>
     </div>
@@ -329,7 +341,7 @@
   <section aria-labelledby="defects-h">
     <div class="section-head">
       <h2 id="defects-h">Defects found</h2>
-      <p class="muted">Reported to the owning stories, not fixed here. Each is pinned by a test marked as an expected failure, which flags itself once the defect is fixed.</p>
+      <p class="muted">Reported to the owning stories, not fixed here. Each open defect is pinned by a test marked as an expected failure, which flags itself once it's fixed. Two were closed when the tool they were in was retired.</p>
     </div>
     <div class="defects" id="defects"></div>
   </section>
@@ -349,7 +361,7 @@
         <button type="button" data-status="all" aria-pressed="true">All results</button>
         <button type="button" data-status="pass" aria-pressed="false">Passing</button>
         <button type="button" data-status="defect" aria-pressed="false">Defect</button>
-        <button type="button" data-status="deferred" aria-pressed="false">Deferred</button>
+        <button type="button" data-status="retired" aria-pressed="false">Retired</button>
       </div>
       <input id="search" type="search" placeholder="Search ID, story or scenario" aria-label="Search test cases">
       <span class="count" id="count" aria-live="polite"></span>
@@ -367,24 +379,26 @@
   <section aria-labelledby="notes-h">
     <div class="cols">
       <div style="display: grid; gap: 12px">
-        <h2 id="notes-h">Deferred until LangGraph</h2>
-        <p class="muted">These test the classification and extraction AI itself. Write them after the <code>langgraph-test</code> branch is merged, against the classify step and <code>extract.run_extraction</code> rather than Dify, so they survive the migration.</p>
+        <h2 id="notes-h">How the AI is tested</h2>
+        <p class="muted">The real LangGraph pipeline runs end to end: queue, text extraction, rule classifier, classify agent, extraction, and saving the results. Only Claude's replies are scripted, and the extraction replies reuse real results saved from Supabase.</p>
         <ul class="plain">
-          <li><b>SCRUM-8</b> DI-017 classification accuracy</li>
-          <li><b>SCRUM-17</b> MA-002 hand-off to the classifier</li>
-          <li><b>SCRUM-9</b> DI-018, DI-019, DI-022, DI-027, DI-028, DI-029 extraction</li>
-          <li><b>SCRUM-19</b> MA-003, MA-004 auto-trigger extraction</li>
-          <li><b>SCRUM-115</b> DT-030, and the classification half of DT-029</li>
+          <li><b>What it proves:</b> given what the AI answers, the pipeline records the right type, confidence, routing, status changes and fields.</li>
+          <li><b>What it doesn't:</b> whether Claude still gives the right answers for the real documents. That's the manual live run at the end of each sprint.</li>
+          <li><b>No credits spent:</b> the tests block any real Claude request, even with a real API key in <code>.env</code>.</li>
         </ul>
       </div>
       <div style="display: grid; gap: 12px">
+        <h2>Retired test cases</h2>
+        <ul class="plain">
+          <li><b>Mock-document generator</b> (<code>generate_from_mastersheet.py</code>, <code>verify_documents.py</code>), deleted in refactor <code>61d730b</code>: TD-003 / DT-006, DT-001 – DT-003, DT-005, DT-020 – DT-022, DT-027. The mastersheet itself is still tested.</li>
+          <li><b>Fraud-injection tool</b>, kept in the repo but its tests excluded from normal runs as dev-only tooling: DT-012 – DT-019. Its 159 tests still pass when run directly.</li>
+        </ul>
         <h2>Observations</h2>
         <ul class="plain">
-          <li><b>Save confirmation disappears (DI-024).</b> After a successful save, the review section closes once nothing is flagged, taking the "Changes saved" message with it. The save itself works.</li>
-          <li><b>Unique case ID (CM-011).</b> Uniqueness comes from a database trigger, which the mocked frontend suite can't exercise; checked at UI level only.</li>
-          <li><b>Risk summary and audit trail (CM-007, CM-009)</b> pass: each section exists and shows its placeholder, which is the current intended behaviour.</li>
-          <li><b>Replacement test data.</b> Cases C060/C064 and several test files were lost in the Supabase reset; real cases GLDB-02 (Anchorpoint) and GLDB-16 (Harbor Light) are saved in the repo instead.</li>
-          <li><b>CI fix.</b> <code>openpyxl</code> and <code>pandas</code> were missing from <code>pyproject.toml</code>, so CI couldn't load the document generators; added.</li>
+          <li><b>Save confirmation disappears (DI-024).</b> After a successful save, the review section closes, taking the "Changes saved" message with it.</li>
+          <li><b>DI-029 wording.</b> The sheet's scenario says "lowest", but its expected result and the code both use the average of the field confidences.</li>
+          <li><b>CM-011</b> is checked at UI level only; uniqueness is a database trigger. <b>CM-007 / CM-009</b> show their placeholders, the intended behaviour for now.</li>
+          <li><b>After merging main:</b> renamed document fields, new endpoints and two removed upload tests were brought into the suite.</li>
         </ul>
       </div>
     </div>
@@ -405,102 +419,104 @@
 <script>
   const DEFECTS = [
     {
-      id: 'REG-001', sev: 'High', cases: 'DI-026', owner: 'SCRUM-20 / SCRUM-26',
+      id: 'REG-001', sev: 'High', status: 'Open', cases: 'DI-026', owner: 'SCRUM-20 / SCRUM-26',
       title: 'A document can be approved while a required field is still missing',
       body: 'With a flagged, empty required field, "✓ Approve Document" still works. The button is only disabled while the document is processing, and the approve endpoint only checks that processing has finished. It passed in Sprint 2 only because approve wasn\'t implemented yet.',
       where: 'DocumentDetailsPage.tsx (approve button) · routers/documents.py approve_document',
     },
     {
-      id: 'REG-002', sev: 'Medium', cases: 'DI-025', owner: 'SCRUM-20',
+      id: 'REG-002', sev: 'Medium', status: 'Open', cases: 'DI-025', owner: 'SCRUM-20',
       title: 'An empty optional field blocks saving a correction',
       body: 'Save fields requires every field to be filled, including ones that are correctly empty, such as Company Former Name for a company that never had one. After fixing the flagged UEN, the officer has to type a placeholder before they can save.',
       where: 'DocumentDetailsPage.tsx handleSaveFields',
     },
     {
-      id: 'REG-003', sev: 'Low', sevNote: 'dev tooling', cases: 'TD-003 / DT-006', owner: 'SCRUM-13',
-      title: 'The masterlist check script crashes',
-      body: 'scripts/verify_documents.py points at v9_document_mastersheet.xlsx, which isn\'t in the repo (only v16), so it fails with FileNotFoundError. Its filename rules are also out of date: it expects C001-P1_NRIC, while the generator writes C001-P1_NRICPassport.',
-      where: 'scripts/verify_documents.py',
-    },
-    {
-      id: 'REG-004', sev: 'Low', sevNote: 'dev tooling', cases: 'DT-003', owner: 'SCRUM-10',
-      title: 'The Certificate of Incorporation isn\'t reproducible',
-      body: 'Its receipt number uses unseeded random, so it changes every time the document is generated. The other 12 documents in a case come out identical each time.',
-      where: 'doc_gen_scripts/certificate_of_incorporation/coi_generator.py _generate_receipt_no',
-    },
-    {
-      id: 'REG-005', sev: 'Low', sevNote: 'test data', cases: 'TD-006 / DT-009, DT-026', owner: 'SCRUM-13 / SCRUM-120',
+      id: 'REG-005', sev: 'Low', sevNote: 'test data', status: 'Open', cases: 'TD-006 / DT-009, DT-026', owner: 'SCRUM-13 / SCRUM-120',
       title: 'A mastersheet row is marked as fraud with no fraud details',
       body: 'Row BizFile_994116.pdf (C042, Meridian Family Clinic, Certificate of Incorporation) has Fraud Injected = Y but no Detection Dimension or Fraud Description. It is C042\'s only fraud row.',
       where: 'doc_gen_scripts/v16_document_mastersheet.xlsx',
     },
+    {
+      id: 'REG-003', sev: 'Low', sevNote: 'dev tooling', status: 'Closed', cases: 'TD-003 / DT-006', owner: 'SCRUM-13',
+      title: 'The masterlist check script crashed',
+      body: 'scripts/verify_documents.py pointed at a v9 mastersheet that isn\'t in the repo. Closed: the script was removed in refactor 61d730b.',
+      where: 'scripts/verify_documents.py (removed)',
+    },
+    {
+      id: 'REG-004', sev: 'Low', sevNote: 'dev tooling', status: 'Closed', cases: 'DT-003', owner: 'SCRUM-10',
+      title: 'The Certificate of Incorporation wasn\'t reproducible',
+      body: 'Its receipt number used unseeded random, so it changed on every generation. Closed: the generator was removed in refactor 61d730b.',
+      where: 'scripts/generate_from_mastersheet.py (removed)',
+    },
   ];
 
-  const DG = 'test_regression_document_generation.py';
+  const AI = 'test_regression_ai_pipeline.py';
+  const MS = 'test_regression_mastersheet.py';
+  const GEN = 'Mock-document generator removed in refactor 61d730b.';
+  const INJ = 'Fraud-injection tool\'s tests excluded from normal runs as dev-only (159 still pass when run directly).';
   const CASES = [
     // Sprint 1
-    [1, 'TD-001 / DT-010', 2, 'SCRUM-15', 'Unrecognised template matches no defined document type', `${DG} · unrecognised_templates_match_no_defined_document_type`, 'pass'],
-    [1, 'TD-002 / DT-011', 2, 'SCRUM-15', 'Unrecognised documents labelled in the masterlist', `${DG} · unrecognised_documents_are_listed_under_the_unrecognised_sheets`, 'pass'],
-    [1, 'TD-003 / DT-006', 2, 'SCRUM-13', 'Every generated document is logged in the masterlist', `${DG} · every_generated_document_is_logged_in_the_masterlist · masterlist_check_script_runs…`, 'defect', 'REG-003', 'The documents are all logged; the check script itself crashes.'],
-    [1, 'TD-004 / DT-007', 2, 'SCRUM-13', 'Each case record has the required company and applicant details', `${DG} · every_case_record_has_the_required_company_and_applicant_details`, 'pass'],
-    [1, 'TD-005 / DT-008', 2, 'SCRUM-13', 'Each document is linked to the correct case', `${DG} · every_document_row_is_linked_to_an_existing_case`, 'pass'],
-    [1, 'TD-006 / DT-009', 2, 'SCRUM-13', 'Fraud details recorded, or none', `${DG} · every_document_row_records_its_fraud_details_or_none`, 'defect', 'REG-005', 'Every other row is correct.'],
-    [1, 'DT-001', 1, 'SCRUM-10', 'A template exists for each of the 11 document types', `${DG} · a_template_produces_each_of_the_11_document_types (×11)`, 'pass'],
-    [1, 'DT-002', 1, 'SCRUM-10', 'Templates accept synthetic field values', `${DG} · templates_contain_the_supplied_synthetic_values`, 'pass'],
-    [1, 'DT-003', 1, 'SCRUM-10', 'The same inputs produce the same documents', `${DG} · the_same_inputs_produce_the_same_documents`, 'defect', 'REG-004', '12 of 13 documents are identical; the Certificate of Incorporation isn\'t.'],
-    [1, 'DT-004', 1, 'SCRUM-12', 'At least 36 complete sets across all 11 types', `${DG} · at_least_36_complete_sets_across_all_11_document_types`, 'pass'],
-    [1, 'DT-005', 1, 'SCRUM-12', 'Documents in a set are consistent with the mastersheet', `${DG} · every_company_document_in_a_set_matches_the_mastersheet (×6) · personal_documents_in_a_set_match_the_applicant`, 'pass'],
-    [1, 'DT-012', 1, 'SCRUM-14', 'Each defect type can be injected on demand', 'test_fraud_injections.py · all_defect_types_inject_on_each_format · every_defect_type_has_an_injector', 'pass'],
-    [1, 'DT-013', 1, 'SCRUM-14', 'Injection targets only the specified field', 'test_fraud_injections.py (changed-keys checks) · test_injection_router.py', 'pass'],
-    [1, 'DI-001 – DI-016', 16, 'SCRUM-6', 'Upload page: components, drag-and-drop, Browse, formats, 25MB limit, per-file status, retry, completion feedback, full workflow', 'e2e/specs/upload.spec.ts (one test per ID) · test_documents.py upload tests · test_ingestion.py', 'pass'],
-    [1, 'DI-017', 1, 'SCRUM-8', 'Clean files are classified correctly', '—', 'deferred', null, 'Needs the AI classifier.'],
-    [1, 'MA-001', 1, 'SCRUM-17', 'A stored document is added to the queue', 'test_queue_service.py · enqueue_marks_queued_and_puts_document_id_on_queue', 'pass'],
-    [1, 'MA-002', 1, 'SCRUM-17', 'A queued document is handed to the Classifier Agent within 1s', '—', 'deferred', null, 'Needs the AI classifier.'],
+    [1, 'TD-001 / DT-010', 2, 'SCRUM-15', 'Unrecognised template matches no defined document type', MS, 'pass'],
+    [1, 'TD-002 / DT-011', 2, 'SCRUM-15', 'Unrecognised documents labelled in the masterlist', MS, 'pass'],
+    [1, 'TD-003 / DT-006', 2, 'SCRUM-13', 'Every generated document is logged in the masterlist', '—', 'retired', null, GEN],
+    [1, 'TD-004 / DT-007', 2, 'SCRUM-13', 'Each case record has the required company and applicant details', MS, 'pass'],
+    [1, 'TD-005 / DT-008', 2, 'SCRUM-13', 'Each document is linked to the correct case', MS, 'pass'],
+    [1, 'TD-006 / DT-009', 2, 'SCRUM-13', 'Fraud details recorded, or none', MS, 'defect', 'REG-005', 'Every other row is correct.'],
+    [1, 'DT-001 – DT-003', 3, 'SCRUM-10', 'Templates for each type, accept synthetic values, same inputs give the same output', '—', 'retired', null, GEN],
+    [1, 'DT-004', 1, 'SCRUM-12', 'At least 36 complete sets across all 11 types', MS, 'pass'],
+    [1, 'DT-005', 1, 'SCRUM-12', 'Documents in a set are consistent with the mastersheet', '—', 'retired', null, GEN],
+    [1, 'DT-012 – DT-013', 2, 'SCRUM-14', 'Fraud injection into PDF documents', '—', 'retired', null, INJ],
+    [1, 'DI-001 – DI-016', 16, 'SCRUM-6', 'Upload page: components, drag-and-drop, Browse, formats, 25MB limit, per-file status, retry, completion feedback, full workflow', 'e2e/specs/upload.spec.ts · test_regression_upload.py · test_documents.py · test_ingestion.py', 'pass'],
+    [1, 'DI-017', 1, 'SCRUM-8', 'Clean files are recorded with their type, confidence and routing', `${AI} · C001 set, unrecognised, below threshold, tool use`, 'pass', null, 'AI replies mocked.'],
+    [1, 'MA-001', 1, 'SCRUM-17', 'A stored document is added to the queue', 'test_queue_service.py', 'pass'],
+    [1, 'MA-002', 1, 'SCRUM-17', 'A queued document is handed to the classifier within 1s', AI, 'pass'],
     // Sprint 2
-    [2, 'TD-001, 002, 004, 005', 4, 'SCRUM-13 / 15', 'Masterlist and unrecognised-document checks (repeat of Sprint 1)', 'Same tests as Sprint 1', 'pass'],
-    [2, 'TD-003', 1, 'SCRUM-13', 'Every generated document is logged in the masterlist', 'Same tests as Sprint 1', 'defect', 'REG-003'],
-    [2, 'TD-006', 1, 'SCRUM-13', 'Fraud details recorded, or none', 'Same tests as Sprint 1', 'defect', 'REG-005'],
-    [2, 'DT-014 – DT-019', 6, 'SCRUM-121', 'Fraud injection on PNG/JPG: chosen field, value and location, structure kept, correct file format', 'test_fraud_injections.py · all_defect_types_inject_on_each_format[png, jpg] · test_injectors.py · test_injection_router.py', 'pass'],
-    [2, 'DT-020 – DT-021', 2, 'SCRUM-112', 'Personal source of wealth and corporate proof of address are generated', `${DG} · optional_documents_are_generated_from_the_mastersheet (×3)`, 'pass'],
-    [2, 'DT-022', 1, 'SCRUM-112', 'Corporate NOA is generated with its fields', `${DG} · corporate_noa_is_generated_with_its_mastersheet_fields`, 'pass'],
-    [2, 'DT-023', 1, 'SCRUM-120', 'At least 15 new cases', `${DG} · at_least_15_new_cases_were_added`, 'pass', null, '34 new cases (C037 – C070).'],
-    [2, 'DT-024', 1, 'SCRUM-120', 'New cases include the new optional document types', `${DG} · new_cases_include_the_new_optional_document_types`, 'pass'],
-    [2, 'DT-025', 1, 'SCRUM-120', 'Realistic document names', `${DG} · new_cases_use_realistic_submission_filenames`, 'pass'],
-    [2, 'DT-026', 1, 'SCRUM-120', 'Fraud cases are tagged with a fraud dimension', `${DG} · fraud_cases_are_tagged_with_a_known_fraud_dimension`, 'pass', null, 'C042 is covered by REG-005.'],
-    [2, 'DT-027', 1, 'SCRUM-115', 'Documents generated in PDF, PNG, JPG and JPEG', `${DG} · documents_are_generated_in_pdf_png_jpg_and_jpeg`, 'pass'],
-    [2, 'DT-028', 1, 'SCRUM-115', 'File formats follow the per-type assumptions', `${DG} · generated_formats_follow_the_document_format_assumptions`, 'pass'],
-    [2, 'DT-029', 1, 'SCRUM-115', 'All formats go through ingestion', 'upload.spec.ts DT-029 · test_ingestion.py native PDF, scanned PDF, image', 'pass', null, 'The classification step is deferred (AI).'],
-    [2, 'DT-030', 1, 'SCRUM-115', 'Document type and file info are kept after ingestion', '—', 'deferred', null, 'The type comes from the AI classifier.'],
+    [2, 'TD-001, 002, 004, 005', 4, 'SCRUM-13 / 15', 'Masterlist and unrecognised-document checks (repeat of Sprint 1)', MS, 'pass'],
+    [2, 'TD-003', 1, 'SCRUM-13', 'Every generated document is logged in the masterlist', '—', 'retired', null, GEN],
+    [2, 'TD-006', 1, 'SCRUM-13', 'Fraud details recorded, or none', MS, 'defect', 'REG-005'],
+    [2, 'DT-014 – DT-019', 6, 'SCRUM-121', 'Fraud injection on PNG/JPG documents', '—', 'retired', null, INJ],
+    [2, 'DT-020 – DT-022', 3, 'SCRUM-112', 'Optional documents and the corporate NOA are generated', '—', 'retired', null, GEN],
+    [2, 'DT-023', 1, 'SCRUM-120', 'At least 15 new cases', MS, 'pass', null, '34 new cases (C037 – C070).'],
+    [2, 'DT-024', 1, 'SCRUM-120', 'New cases include the new optional document types', MS, 'pass'],
+    [2, 'DT-025', 1, 'SCRUM-120', 'Realistic document names', MS, 'pass'],
+    [2, 'DT-026', 1, 'SCRUM-120', 'Fraud cases are tagged with a fraud dimension', MS, 'pass', null, 'C042 is covered by REG-005.'],
+    [2, 'DT-027', 1, 'SCRUM-115', 'Documents generated in PDF, PNG, JPG and JPEG', '—', 'retired', null, GEN],
+    [2, 'DT-028', 1, 'SCRUM-115', 'File formats follow the per-type assumptions', MS, 'pass'],
+    [2, 'DT-029', 1, 'SCRUM-115', 'All formats go through ingestion', `upload.spec.ts · test_ingestion.py · ${AI}`, 'pass'],
+    [2, 'DT-030', 1, 'SCRUM-115', 'Document type and file info are kept after ingestion', AI, 'pass'],
     [2, 'DT-031', 1, 'SCRUM-115', 'DOCX, XLSX and TXT files are rejected', 'upload.spec.ts DT-031', 'pass'],
     [2, 'CM-001 – CM-004', 4, 'SCRUM-78', 'Search by name or ID, only matches shown, open a case, filter by status', 'case-management.spec.ts · test_cases.py', 'pass'],
     [2, 'CM-005 – CM-009', 5, 'SCRUM-83', 'Case details: open, selected case only, risk summary, flagged anomalies, audit trail', 'case-management.spec.ts', 'pass', null, 'CM-007 and CM-009 show their placeholder, the intended behaviour for now.'],
     [2, 'CM-010 – CM-013', 4, 'SCRUM-96', 'Create a case, unique ID, stored and reopened, appears in the queue', 'case-management.spec.ts · test_cases.py', 'pass', null, 'CM-011 is checked at UI level; uniqueness itself is a database trigger.'],
-    [2, 'DI-018', 1, 'SCRUM-9', 'Type-specific fields are extracted', '—', 'deferred', null, 'Needs the AI extractor.'],
-    [2, 'DI-019', 1, 'SCRUM-9', 'Extraction still runs on unrecognised documents', '—', 'deferred', null, 'Needs the AI extractor.'],
+    [2, 'DI-018', 1, 'SCRUM-9', 'Each type is extracted against its own fields', `${AI} · payslip, FATCA, credit report`, 'pass', null, 'AI replies mocked with real extraction results.'],
+    [2, 'DI-019', 1, 'SCRUM-9', 'Unrecognised documents are still extracted', AI, 'pass'],
     [2, 'DI-020', 1, 'SCRUM-9', 'Each extracted field shows its confidence', 'document-review.spec.ts DI-020', 'pass'],
     [2, 'DI-021', 1, 'SCRUM-9', 'A missing field shows "—" and the document isn\'t failed', 'document-review.spec.ts DI-021', 'pass'],
-    [2, 'DI-022', 1, 'SCRUM-9', 'Extraction works for PNG, JPG and scanned PDF', '—', 'deferred', null, 'Needs the AI extractor.'],
+    [2, 'DI-022', 1, 'SCRUM-9', 'PNG, JPG and scanned PDF are read and extracted', AI, 'pass'],
     [2, 'DI-023', 1, 'SCRUM-20', 'A missing required field is flagged and identified', 'document-review.spec.ts DI-023', 'pass'],
     [2, 'DI-024', 1, 'SCRUM-20', 'An officer can fill in a flagged field and it is kept', 'document-review.spec.ts DI-024', 'pass'],
     [2, 'DI-025', 1, 'SCRUM-20', 'A completed document can proceed', 'document-review.spec.ts DI-025 (two tests)', 'defect', 'REG-002', 'Passes when only the flagged field was empty; fails when another field is correctly empty.'],
     [2, 'DI-026', 1, 'SCRUM-20', 'A document with a missing field can\'t proceed', 'document-review.spec.ts DI-026 (save, approve)', 'defect', 'REG-001', 'Saving is blocked correctly; approving isn\'t.'],
-    [2, 'DI-027 – DI-029', 3, 'SCRUM-9', 'Incumbency and NRIC front/back extraction, confidence calculation', '—', 'deferred', null, 'Needs the AI extractor.'],
+    [2, 'DI-027', 1, 'SCRUM-9', 'A certificate of incumbency is classified correctly and its officers saved', AI, 'pass'],
+    [2, 'DI-028', 1, 'SCRUM-9', 'Both sides of an NRIC are extracted', AI, 'pass'],
+    [2, 'DI-029', 1, 'SCRUM-9', 'Document confidence is the average of its field confidences', AI, 'pass', null, 'The sheet\'s scenario says "lowest"; its expected result and the code say average.'],
     [2, 'DI-030', 1, 'SCRUM-9', 'Array fields list every value', 'document-review.spec.ts DI-030', 'pass'],
     [2, 'DI-031 – DI-034', 4, 'SCRUM-114', 'Required vs optional documents, optional not blocking, optional mapped, overall status', 'checklist.spec.ts · test_regression_checklist.py', 'pass'],
     [2, 'DI-035 – DI-038', 4, 'SCRUM-118', 'Type and requirement identified, NRIC fulfils ID and proof of address, recorded against the right case, not shown missing', 'checklist.spec.ts · test_regression_checklist.py · test_mapper.py', 'pass'],
-    [2, 'MA-003 – MA-004', 2, 'SCRUM-19', 'Extraction starts automatically after classification', '—', 'deferred', null, 'Needs the AI pipeline.'],
+    [2, 'MA-003 – MA-004', 2, 'SCRUM-19', 'Extraction starts automatically after classification, also for unrecognised documents; reclassify on disagreement', AI, 'pass'],
   ];
 
-  const LABEL = { pass: 'Pass', defect: 'Defect', deferred: 'Deferred' };
+  const LABEL = { pass: 'Pass', defect: 'Defect', retired: 'Retired' };
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   document.getElementById('defects').innerHTML = DEFECTS.map((d) => `
-    <article class="defect" data-sev="${d.sev}">
+    <article class="defect${d.status === 'Closed' ? ' is-closed' : ''}" data-sev="${d.sev}">
       <div class="stripe"></div>
       <div class="defect-body">
         <div class="defect-top">
           <span class="defect-id">${d.id}</span>
           <span class="sev">${d.sev}${d.sevNote ? ' · ' + d.sevNote : ''}</span>
+          <span class="pill ${d.status === 'Open' ? 'defect' : 'closed'}">${d.status}</span>
         </div>
         <h3 class="defect-title">${esc(d.title)}</h3>
         <p>${esc(d.body)}</p>

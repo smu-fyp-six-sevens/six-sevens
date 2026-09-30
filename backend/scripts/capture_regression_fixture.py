@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import case_repository, case_status, document_repository  # noqa: E402
+from app import case_repository, case_service, document_repository  # noqa: E402
 from app.auth import require_auth  # noqa: E402
 from app.main import app  # noqa: E402
 
@@ -63,7 +63,7 @@ def capture(greenlink_case_id: str, name: str) -> Path:
             documents[row.id] = _scrub(response.json())
     app.dependency_overrides.pop(require_auth, None)
 
-    snapshot = case_status.build_case_snapshot(case_id)
+    snapshot = case_service.build_case_snapshot(case_id)
     snapshot["documents"] = [_scrub(d) for d in snapshot["documents"]]
 
     fixture = {

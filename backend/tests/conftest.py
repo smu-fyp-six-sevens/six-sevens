@@ -62,6 +62,44 @@ class _BlockedSupabaseAccess:
         self._raise()
 
 
+class RealAICallBlocked(RuntimeError):
+    pass
+
+
+def _refuse_real_claude(*args, **kwargs):
+    raise RealAICallBlocked(
+        "Test attempted a real Claude request. Mock the AI response instead: patch "
+        "the model (e.g. patch('langchain_anthropic.ChatAnthropic', return_value=<fake>) "
+        "or patch('app.langgraph._anthropic.build_chat_anthropic', return_value=<fake>)), "
+        "or patch the step itself (extract.run_extraction, the classify subgraph)."
+    )
+
+
+@pytest.fixture(autouse=True)
+def _block_real_ai_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Same idea as _block_real_supabase_network below, for Claude: a local
+    .env carries a real ANTHROPIC_API_KEY, so a test that forgets to mock
+    the AI would quietly call Claude and spend credits.
+
+    Blocks the point where a real request would be sent — ChatAnthropic's
+    generate/stream methods — rather than where the client is built, so a
+    test may fake the model at any level (the ChatAnthropic class,
+    build_chat_anthropic, or a whole pipeline step) and only a genuinely
+    unmocked call is refused. Belt and braces: no API key, and the SDK
+    pointed at an unroutable host.
+    """
+    from langchain_anthropic import ChatAnthropic
+
+    from app.config import settings
+
+    for method in ("_generate", "_agenerate", "_stream", "_astream"):
+        monkeypatch.setattr(ChatAnthropic, method, _refuse_real_claude)
+    monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://anthropic.invalid")
+
+
 @pytest.fixture(autouse=True)
 def _block_real_supabase_network(monkeypatch: pytest.MonkeyPatch) -> None:
     """
@@ -192,25 +230,18 @@ def isolated_injection_templates(
 _EXISTING_REGRESSION_TESTS: dict[str, list[tuple[str, str, str]]] = {
     # SCRUM-6 Upload Documents (backend side of DI-008/009/012/013)
     "test_documents.py::test_upload_batch_partial_failure": [("sprint1", "SCRUM-6", "DI-013")],
-    "test_documents.py::test_upload_rejects_missing_filename_and_oversized_file": [("sprint1", "SCRUM-6", "DI-009")],
     "test_documents.py::test_upload_batch_rejects_too_many_files": [("sprint1", "SCRUM-6", "DI-004")],
-    "test_documents.py::test_upload_storage_failure_returns_502": [("sprint1", "SCRUM-6", "DI-012")],
     "test_ingestion.py::test_ingest_rejects_unsupported_type": [("sprint1", "SCRUM-6", "DI-008")],
     # SCRUM-17 Auto-trigger classification: stored document is queued (MA-001)
     "test_queue_service.py::test_enqueue_marks_queued_and_puts_document_id_on_queue": [
         ("sprint1", "SCRUM-17", "MA-001"),
     ],
-    # SCRUM-14 (PDF) and SCRUM-121 (PNG/JPG) fraud injection
-    "test_fraud_injections.py": [
-        ("sprint1", "SCRUM-14", "DT-012 / DT-013"),
-        ("sprint2", "SCRUM-121", "DT-014 – DT-019"),
-    ],
-    "test_injectors.py": [("sprint1", "SCRUM-14", "DT-012"), ("sprint2", "SCRUM-121", "DT-014 / DT-015")],
-    "test_injection_router.py": [("sprint1", "SCRUM-14", "DT-013"), ("sprint2", "SCRUM-121", "DT-016")],
+    # SCRUM-14 / SCRUM-121 fraud injection (DT-012 – DT-019): retired from the
+    # regression — its tests are excluded by collect_ignore above (dev-only tool).
     # SCRUM-78 / SCRUM-96 case management API (CM-001 – CM-013)
     "test_cases.py::test_list_cases": [("sprint2", "SCRUM-78", "CM-001")],
     "test_cases.py::test_get_case_returns_summary_with_documents_status": [("sprint2", "SCRUM-83", "CM-005")],
-    "test_cases.py::test_create_case_with_company_name": [("sprint2", "SCRUM-96", "CM-010 / CM-012")],
+    "test_cases.py::test_create_case_endpoint_with_company_name": [("sprint2", "SCRUM-96", "CM-010 / CM-012")],
     # SCRUM-115 generated PDF/PNG/JPG documents go through ingestion (DT-029)
     "test_ingestion.py::test_ingest_native_pdf": [("sprint2", "SCRUM-115", "DT-029")],
     "test_ingestion.py::test_ingest_scanned_pdf_uses_ocr": [("sprint2", "SCRUM-115", "DT-029")],
@@ -220,6 +251,9 @@ _EXISTING_REGRESSION_TESTS: dict[str, list[tuple[str, str, str]]] = {
 }
 
 
+# tryfirst: the tags must be on each test before pytest's own -m filtering
+# (also a collection hook) decides what to deselect.
+@pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     for item in items:
         path = Path(str(item.fspath)).name

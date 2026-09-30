@@ -35,8 +35,8 @@ export interface DocumentRow {
   case_id: string | null;
   filename: string;
   document_type: string | null;
-  confidence: number | null;
-  classification_outcome: 'accepted' | 'manual_review' | null;
+  classification_confidence: number | null;
+  routing_status: 'accepted' | 'manual_review' | null;
   storage_path: string | null;
   status: string;
   retry_count: number;
@@ -92,8 +92,8 @@ export function makeDocument(overrides: Partial<DocumentRow> = {}): DocumentRow 
     case_id: null,
     filename: 'document.pdf',
     document_type: null,
-    confidence: null,
-    classification_outcome: null,
+    classification_confidence: null,
+    routing_status: null,
     storage_path: 'placeholder/path.pdf',
     status: 'queued',
     retry_count: 0,
@@ -116,6 +116,10 @@ export class MockBackend {
   documents: DocumentRow[] = [];
   /** Case-match result per case id, sent in the WebSocket snapshot. */
   caseMatch: Record<string, unknown> = {};
+  /** Fraud-detection report per document id (GET/POST .../detection/...); none = 404. */
+  detectionReports: Record<string, unknown> = {};
+  /** LangGraph pipeline trace per document id (GET .../langgraph-trace); none = 404. */
+  traces: Record<string, unknown> = {};
   /** Per-filename upload results; files not listed here upload successfully. */
   uploadOutcomes: Record<string, UploadOutcome> = {};
   /** When set, upload-batch waits for this before answering (to observe "Uploading"). */
@@ -289,9 +293,40 @@ export class MockBackend {
       }
       if (method === 'PATCH' && rest === '/document-type') {
         document.document_type = (body as { document_type: string }).document_type;
-        document.classification_outcome = 'accepted';
-        document.confidence = 1.0;
+        document.routing_status = 'accepted';
+        document.classification_confidence = 1.0;
         document.status = 'extracting';
+        return json(document);
+      }
+      // Fraud-detection report and LangGraph trace: the real backend answers
+      // 404 until the document has one, which the page shows as "none yet".
+      if (method === 'GET' && rest === '/detection/report') {
+        const report = this.detectionReports[documentId];
+        return report ? json(report) : json({ detail: 'No detection report' }, 404);
+      }
+      if (method === 'POST' && rest === '/detection/run') {
+        const report = this.detectionReports[documentId];
+        return report ? json(report) : json({ detail: 'Detection not mocked for this test' }, 500);
+      }
+      if (method === 'GET' && rest === '/langgraph-trace') {
+        const trace = this.traces[documentId];
+        return trace ? json(trace) : json({ detail: 'No trace' }, 404);
+      }
+      // Same rules as routers/documents.py: retry a failed document back
+      // into the queue; cancel one that's still in flight.
+      if (method === 'POST' && rest === '/retry') {
+        if (document.status !== 'failed') {
+          return json({ detail: 'Only failed or stuck documents can be retried.' }, 409);
+        }
+        document.status = 'queued';
+        document.failure_reason = null;
+        return json(document);
+      }
+      if (method === 'POST' && rest === '/cancel') {
+        if (!['queued', 'processing', 'extracting'].includes(document.status)) {
+          return json({ detail: 'Document can only be cancelled while queued, processing, or extracting.' }, 409);
+        }
+        document.status = 'cancelled';
         return json(document);
       }
       if (method === 'GET' && rest === '/detection/case-match') {

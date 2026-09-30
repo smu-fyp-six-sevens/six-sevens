@@ -218,8 +218,8 @@ test.describe('Upload documents @sprint1 @SCRUM-6', () => {
     // case snapshot, and finish processing there.
     for (const document of backend.documents) {
       document.status = 'analyzed';
-      document.classification_outcome = 'accepted';
-      document.confidence = 0.95;
+      document.routing_status = 'accepted';
+      document.classification_confidence = 0.95;
     }
     backend.push(theCase.id);
     const table = page.locator('.documents-table');

@@ -21,13 +21,13 @@ from pathlib import Path
 
 import pytest
 
-from app.case_status import build_summary
+from app.case_service import build_summary
 from app.models import (
     ADDITIONAL_DOCUMENT_TYPES,
     REQUIRED_DOCUMENT_TYPES,
     CaseDocumentsStatus,
     CaseRecord,
-    ClassificationOutcome,
+    RoutingStatus,
     DocumentRecord,
     compute_fulfilled_requirements,
 )
@@ -202,7 +202,7 @@ def test_fulfilled_requirements_are_never_also_listed_as_missing():
 def test_only_accepted_documents_fulfil_requirements():
     case, documents, _ = _load("harbor-light")
     cert = _by_name(documents, "C014_CertIncorp")
-    cert.classification_outcome = ClassificationOutcome.MANUAL_REVIEW
+    cert.routing_status = RoutingStatus.MANUAL_REVIEW
 
     summary = build_summary(case, documents)
 

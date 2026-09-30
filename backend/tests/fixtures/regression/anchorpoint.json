@@ -41,8 +41,7 @@
   "documents": {
     "07c41b35-10d7-427c-b407-44a715e54042": {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.83,
+      "classification_confidence": 0.83,
       "document_type": "proof_of_address",
       "escalation_reason": null,
       "evidence": [
@@ -150,14 +149,14 @@
       "processing_started_at": "2026-09-21T06:06:56.356659Z",
       "queued_at": "2026-09-21T06:01:46.526819Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/POR_UtilityBill_20251028.jpg",
       "uploaded_at": "2026-09-21T06:01:46.354239Z"
     },
     "081e3c8b-d9d6-471d-b10e-9791fd9569c0": {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "passport",
       "escalation_reason": null,
       "evidence": [
@@ -245,14 +244,14 @@
       "processing_started_at": "2026-09-21T06:05:41.106674Z",
       "queued_at": "2026-09-21T06:01:46.423416Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/Passport_6086.png",
       "uploaded_at": "2026-09-21T06:01:46.257080Z"
     },
     "0f069abe-67c0-4d35-8fa5-0e1cc7450167": {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "source_of_wealth",
       "escalation_reason": null,
       "evidence": [
@@ -453,14 +452,14 @@
       "processing_started_at": "2026-09-21T06:08:48.778915Z",
       "queued_at": "2026-09-21T06:01:46.630934Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/MuhammadD_Wealth_Statement_scan.pdf",
       "uploaded_at": "2026-09-21T06:01:46.482426Z"
     },
     "2123ddb7-3525-4625-a404-e9132af410fa": {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "certificate_of_incumbency",
       "escalation_reason": null,
       "evidence": [
@@ -642,14 +641,14 @@
       "processing_started_at": "2026-09-21T06:01:46.598727Z",
       "queued_at": "2026-09-21T06:01:45.963988Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf",
       "uploaded_at": "2026-09-21T06:01:45.784826Z"
     },
     "2ac7fbe4-0021-4638-8c0d-1a0c759fd834": {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "nric",
       "escalation_reason": null,
       "evidence": [
@@ -707,14 +706,14 @@
       "processing_started_at": "2026-09-21T06:04:42.383934Z",
       "queued_at": "2026-09-21T06:01:46.263091Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/MuhammadD_NRIC_front.jpg",
       "uploaded_at": "2026-09-21T06:01:46.114182Z"
     },
     "2d5d65c0-1f1b-4851-afe1-2b736053b707": {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "fatca_crs_declaration",
       "escalation_reason": null,
       "evidence": [
@@ -797,14 +796,14 @@
       "processing_started_at": "2026-09-21T06:07:36.927693Z",
       "queued_at": "2026-09-21T06:01:46.613539Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/FATCA_Form_20250522.pdf",
       "uploaded_at": "2026-09-21T06:01:46.222299Z"
     },
     "4f9675e5-5258-4373-b78c-512f0f3a76c5": {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.965,
+      "classification_confidence": 0.965,
       "document_type": "source_of_wealth",
       "escalation_reason": null,
       "evidence": [
@@ -984,14 +983,14 @@
       "processing_started_at": "2026-09-21T06:07:18.293036Z",
       "queued_at": "2026-09-21T06:01:46.617285Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/SimS_SourceOfWealth.pdf",
       "uploaded_at": "2026-09-21T06:01:46.230303Z"
     },
     "52721a52-5b84-422b-bbc2-32cbd0a6424c": {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "list_of_loans",
       "escalation_reason": null,
       "evidence": [
@@ -1127,14 +1126,14 @@
       "processing_started_at": "2026-09-21T06:01:46.687456Z",
       "queued_at": "2026-09-21T06:01:46.132023Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/LoanOffer_8415_3.pdf",
       "uploaded_at": "2026-09-21T06:01:45.978348Z"
     },
     "6729ad3c-90f0-476f-be94-a40f1fb9f1d7": {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.85,
+      "classification_confidence": 0.85,
       "document_type": "bank_statement",
       "escalation_reason": null,
       "evidence": [
@@ -1419,14 +1418,14 @@
       "processing_started_at": "2026-09-21T06:06:30.020263Z",
       "queued_at": "2026-09-21T06:01:46.443112Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/Statement_128262.pdf",
       "uploaded_at": "2026-09-21T06:01:46.289297Z"
     },
     "6fb522a7-b119-4934-8983-6cd66b47fa36": {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.85,
+      "classification_confidence": 0.85,
       "document_type": "certificate_of_incorporation",
       "escalation_reason": null,
       "evidence": [
@@ -1499,14 +1498,14 @@
       "processing_started_at": "2026-09-21T06:05:15.851259Z",
       "queued_at": "2026-09-21T06:01:46.356395Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/BizFile_333996.pdf",
       "uploaded_at": "2026-09-21T06:01:45.961984Z"
     },
     "8a231074-5864-43be-9409-875a1f16282a": {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.99,
+      "classification_confidence": 0.99,
       "document_type": "notice_of_assessment",
       "escalation_reason": null,
       "evidence": [
@@ -1671,14 +1670,14 @@
       "processing_started_at": "2026-09-21T06:03:04.440876Z",
       "queued_at": "2026-09-21T06:01:46.167315Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/Anchorpoint_IRAS_NOA.pdf",
       "uploaded_at": "2026-09-21T06:01:45.779659Z"
     },
     "961669a1-0407-44fe-a36a-36d292c3afe8": {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "credit_report",
       "escalation_reason": null,
       "evidence": [
@@ -1927,14 +1926,14 @@
       "processing_started_at": "2026-09-21T06:05:00.089817Z",
       "queued_at": "2026-09-21T06:01:46.290297Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/Credit_Bureau_Report_8027.pdf",
       "uploaded_at": "2026-09-21T06:01:46.133103Z"
     },
     "a040eca4-fde0-4e17-8c41-6a1bc521f514": {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "list_of_loans",
       "escalation_reason": null,
       "evidence": [
@@ -2076,14 +2075,14 @@
       "processing_started_at": "2026-09-21T06:04:35.267604Z",
       "queued_at": "2026-09-21T06:01:46.259083Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/FacilityLetter_AIB_2026-03-09_1.pdf",
       "uploaded_at": "2026-09-21T06:01:46.113184Z"
     },
     "a2f4c277-f066-49ec-99e2-02deb53c300b": {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.93,
+      "classification_confidence": 0.93,
       "document_type": "nric",
       "escalation_reason": null,
       "evidence": [
@@ -2127,14 +2126,14 @@
       "processing_started_at": "2026-09-21T06:05:57.620967Z",
       "queued_at": "2026-09-21T06:01:46.388969Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/MuhammadD_NRIC_back.jpg",
       "uploaded_at": "2026-09-21T06:01:46.216302Z"
     },
     "bb1ac8db-facc-4ceb-82d7-2d73382d0316": {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.94,
+      "classification_confidence": 0.94,
       "document_type": "list_of_loans",
       "escalation_reason": null,
       "evidence": [
@@ -2266,14 +2265,14 @@
       "processing_started_at": "2026-09-21T06:01:46.619496Z",
       "queued_at": "2026-09-21T06:01:46.035643Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/LoanFacility_56439_2.pdf",
       "uploaded_at": "2026-09-21T06:01:45.866567Z"
     },
     "bc57290c-73a6-48a1-95ea-0b5b399f6590": {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "company_constitution",
       "escalation_reason": null,
       "evidence": [
@@ -2379,14 +2378,14 @@
       "processing_started_at": "2026-09-21T06:03:23.936247Z",
       "queued_at": "2026-09-21T06:01:46.217312Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/AnchorpointInsuranceBrokers_Constitution_20260805.pdf",
       "uploaded_at": "2026-09-21T06:01:46.062486Z"
     },
     "bfcaf497-79b3-4e48-ac24-61482cbbb1b7": {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "source_of_wealth",
       "escalation_reason": null,
       "evidence": [
@@ -2645,14 +2644,14 @@
       "processing_started_at": "2026-09-21T06:08:54.188077Z",
       "queued_at": "2026-09-21T06:01:46.478471Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/Financials_BalanceSheet_617.pdf",
       "uploaded_at": "2026-09-21T06:01:46.067486Z"
     },
     "c130a771-b834-409d-8023-64104d3edead": {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.85,
+      "classification_confidence": 0.85,
       "document_type": "bank_statement",
       "escalation_reason": null,
       "evidence": [
@@ -2907,14 +2906,14 @@
       "processing_started_at": "2026-09-21T06:02:36.025311Z",
       "queued_at": "2026-09-21T06:01:46.187461Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/MuhammadD_ProofAddr_BankStmt_2956.pdf",
       "uploaded_at": "2026-09-21T06:01:46.033642Z"
     },
     "d24bcc04-badc-4b0d-9e53-bb8c60efba99": {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.83,
+      "classification_confidence": 0.83,
       "document_type": "proof_of_address",
       "escalation_reason": null,
       "evidence": [
@@ -3037,14 +3036,14 @@
       "processing_started_at": "2026-09-21T06:01:46.867685Z",
       "queued_at": "2026-09-21T06:01:46.064419Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/Company_UtilityBill_45040.pdf",
       "uploaded_at": "2026-09-21T06:01:45.864387Z"
     },
     "f12ae1d0-246f-46d8-92ab-a0b993306f8c": {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.985,
+      "classification_confidence": 0.985,
       "document_type": "payslip",
       "escalation_reason": null,
       "evidence": [
@@ -3152,6 +3151,7 @@
       "processing_started_at": "2026-09-21T06:03:50.310506Z",
       "queued_at": "2026-09-21T06:01:46.231304Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/MuhammadD_Payslip_Jan2026.pdf",
       "uploaded_at": "2026-09-21T06:01:46.090205Z"
@@ -3160,8 +3160,7 @@
   "rows": [
     {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "passport",
       "escalation_reason": null,
       "evidence": [
@@ -3197,14 +3196,14 @@
       "processing_started_at": "2026-09-21T06:05:41.106674Z",
       "queued_at": "2026-09-21T06:01:46.423416Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/Passport_6086.png",
       "uploaded_at": "2026-09-21T06:01:46.257080Z"
     },
     {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "certificate_of_incumbency",
       "escalation_reason": null,
       "evidence": [
@@ -3286,14 +3285,14 @@
       "processing_started_at": "2026-09-21T06:01:46.598727Z",
       "queued_at": "2026-09-21T06:01:45.963988Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf",
       "uploaded_at": "2026-09-21T06:01:45.784826Z"
     },
     {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "nric",
       "escalation_reason": null,
       "evidence": [
@@ -3323,14 +3322,14 @@
       "processing_started_at": "2026-09-21T06:04:42.383934Z",
       "queued_at": "2026-09-21T06:01:46.263091Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/MuhammadD_NRIC_front.jpg",
       "uploaded_at": "2026-09-21T06:01:46.114182Z"
     },
     {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.85,
+      "classification_confidence": 0.85,
       "document_type": "bank_statement",
       "escalation_reason": null,
       "evidence": [
@@ -3555,14 +3554,14 @@
       "processing_started_at": "2026-09-21T06:06:30.020263Z",
       "queued_at": "2026-09-21T06:01:46.443112Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/Statement_128262.pdf",
       "uploaded_at": "2026-09-21T06:01:46.289297Z"
     },
     {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.93,
+      "classification_confidence": 0.93,
       "document_type": "nric",
       "escalation_reason": null,
       "evidence": [
@@ -3590,14 +3589,14 @@
       "processing_started_at": "2026-09-21T06:05:57.620967Z",
       "queued_at": "2026-09-21T06:01:46.388969Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/MuhammadD_NRIC_back.jpg",
       "uploaded_at": "2026-09-21T06:01:46.216302Z"
     },
     {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.94,
+      "classification_confidence": 0.94,
       "document_type": "list_of_loans",
       "escalation_reason": null,
       "evidence": [
@@ -3665,14 +3664,14 @@
       "processing_started_at": "2026-09-21T06:01:46.619496Z",
       "queued_at": "2026-09-21T06:01:46.035643Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/LoanFacility_56439_2.pdf",
       "uploaded_at": "2026-09-21T06:01:45.866567Z"
     },
     {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "list_of_loans",
       "escalation_reason": null,
       "evidence": [
@@ -3744,14 +3743,14 @@
       "processing_started_at": "2026-09-21T06:01:46.687456Z",
       "queued_at": "2026-09-21T06:01:46.132023Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/LoanOffer_8415_3.pdf",
       "uploaded_at": "2026-09-21T06:01:45.978348Z"
     },
     {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.83,
+      "classification_confidence": 0.83,
       "document_type": "proof_of_address",
       "escalation_reason": null,
       "evidence": [
@@ -3794,14 +3793,14 @@
       "processing_started_at": "2026-09-21T06:01:46.867685Z",
       "queued_at": "2026-09-21T06:01:46.064419Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/Company_UtilityBill_45040.pdf",
       "uploaded_at": "2026-09-21T06:01:45.864387Z"
     },
     {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.85,
+      "classification_confidence": 0.85,
       "document_type": "bank_statement",
       "escalation_reason": null,
       "evidence": [
@@ -3996,14 +3995,14 @@
       "processing_started_at": "2026-09-21T06:02:36.025311Z",
       "queued_at": "2026-09-21T06:01:46.187461Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/MuhammadD_ProofAddr_BankStmt_2956.pdf",
       "uploaded_at": "2026-09-21T06:01:46.033642Z"
     },
     {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "company_constitution",
       "escalation_reason": null,
       "evidence": [
@@ -4053,14 +4052,14 @@
       "processing_started_at": "2026-09-21T06:03:23.936247Z",
       "queued_at": "2026-09-21T06:01:46.217312Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/AnchorpointInsuranceBrokers_Constitution_20260805.pdf",
       "uploaded_at": "2026-09-21T06:01:46.062486Z"
     },
     {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.85,
+      "classification_confidence": 0.85,
       "document_type": "certificate_of_incorporation",
       "escalation_reason": null,
       "evidence": [
@@ -4093,14 +4092,14 @@
       "processing_started_at": "2026-09-21T06:05:15.851259Z",
       "queued_at": "2026-09-21T06:01:46.356395Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/BizFile_333996.pdf",
       "uploaded_at": "2026-09-21T06:01:45.961984Z"
     },
     {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.99,
+      "classification_confidence": 0.99,
       "document_type": "notice_of_assessment",
       "escalation_reason": null,
       "evidence": [
@@ -4181,14 +4180,14 @@
       "processing_started_at": "2026-09-21T06:03:04.440876Z",
       "queued_at": "2026-09-21T06:01:46.167315Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/Anchorpoint_IRAS_NOA.pdf",
       "uploaded_at": "2026-09-21T06:01:45.779659Z"
     },
     {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.985,
+      "classification_confidence": 0.985,
       "document_type": "payslip",
       "escalation_reason": null,
       "evidence": [
@@ -4228,14 +4227,14 @@
       "processing_started_at": "2026-09-21T06:03:50.310506Z",
       "queued_at": "2026-09-21T06:01:46.231304Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/MuhammadD_Payslip_Jan2026.pdf",
       "uploaded_at": "2026-09-21T06:01:46.090205Z"
     },
     {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "list_of_loans",
       "escalation_reason": null,
       "evidence": [
@@ -4305,14 +4304,14 @@
       "processing_started_at": "2026-09-21T06:04:35.267604Z",
       "queued_at": "2026-09-21T06:01:46.259083Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/FacilityLetter_AIB_2026-03-09_1.pdf",
       "uploaded_at": "2026-09-21T06:01:46.113184Z"
     },
     {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "credit_report",
       "escalation_reason": null,
       "evidence": [
@@ -4417,14 +4416,14 @@
       "processing_started_at": "2026-09-21T06:05:00.089817Z",
       "queued_at": "2026-09-21T06:01:46.290297Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/Credit_Bureau_Report_8027.pdf",
       "uploaded_at": "2026-09-21T06:01:46.133103Z"
     },
     {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.965,
+      "classification_confidence": 0.965,
       "document_type": "source_of_wealth",
       "escalation_reason": null,
       "evidence": [
@@ -4524,14 +4523,14 @@
       "processing_started_at": "2026-09-21T06:07:18.293036Z",
       "queued_at": "2026-09-21T06:01:46.617285Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/SimS_SourceOfWealth.pdf",
       "uploaded_at": "2026-09-21T06:01:46.230303Z"
     },
     {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "fatca_crs_declaration",
       "escalation_reason": null,
       "evidence": [
@@ -4566,14 +4565,14 @@
       "processing_started_at": "2026-09-21T06:07:36.927693Z",
       "queued_at": "2026-09-21T06:01:46.613539Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/FATCA_Form_20250522.pdf",
       "uploaded_at": "2026-09-21T06:01:46.222299Z"
     },
     {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "source_of_wealth",
       "escalation_reason": null,
       "evidence": [
@@ -4690,14 +4689,14 @@
       "processing_started_at": "2026-09-21T06:08:48.778915Z",
       "queued_at": "2026-09-21T06:01:46.630934Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/MuhammadD_Wealth_Statement_scan.pdf",
       "uploaded_at": "2026-09-21T06:01:46.482426Z"
     },
     {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.95,
+      "classification_confidence": 0.95,
       "document_type": "source_of_wealth",
       "escalation_reason": null,
       "evidence": [
@@ -4824,14 +4823,14 @@
       "processing_started_at": "2026-09-21T06:08:54.188077Z",
       "queued_at": "2026-09-21T06:01:46.478471Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/Financials_BalanceSheet_617.pdf",
       "uploaded_at": "2026-09-21T06:01:46.067486Z"
     },
     {
       "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-      "classification_outcome": "accepted",
-      "confidence": 0.83,
+      "classification_confidence": 0.83,
       "document_type": "proof_of_address",
       "escalation_reason": null,
       "evidence": [
@@ -4871,6 +4870,7 @@
       "processing_started_at": "2026-09-21T06:06:56.356659Z",
       "queued_at": "2026-09-21T06:01:46.526819Z",
       "retry_count": 0,
+      "routing_status": "accepted",
       "status": "analyzed",
       "storage_path": "regression-fixture/POR_UtilityBill_20251028.jpg",
       "uploaded_at": "2026-09-21T06:01:46.354239Z"
@@ -5365,8 +5365,7 @@
     "documents": [
       {
         "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-        "classification_outcome": "accepted",
-        "confidence": 0.95,
+        "classification_confidence": 0.95,
         "document_type": "passport",
         "escalation_reason": null,
         "evidence": [
@@ -5441,14 +5440,14 @@
         "processing_started_at": "2026-09-21T06:05:41.106674Z",
         "queued_at": "2026-09-21T06:01:46.423416Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/Passport_6086.png",
         "uploaded_at": "2026-09-21T06:01:46.257080Z"
       },
       {
         "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-        "classification_outcome": "accepted",
-        "confidence": 0.95,
+        "classification_confidence": 0.95,
         "document_type": "certificate_of_incumbency",
         "escalation_reason": null,
         "evidence": [
@@ -5605,14 +5604,14 @@
         "processing_started_at": "2026-09-21T06:01:46.598727Z",
         "queued_at": "2026-09-21T06:01:45.963988Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf",
         "uploaded_at": "2026-09-21T06:01:45.784826Z"
       },
       {
         "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-        "classification_outcome": "accepted",
-        "confidence": 0.95,
+        "classification_confidence": 0.95,
         "document_type": "nric",
         "escalation_reason": null,
         "evidence": [
@@ -5663,14 +5662,14 @@
         "processing_started_at": "2026-09-21T06:04:42.383934Z",
         "queued_at": "2026-09-21T06:01:46.263091Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/MuhammadD_NRIC_front.jpg",
         "uploaded_at": "2026-09-21T06:01:46.114182Z"
       },
       {
         "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-        "classification_outcome": "accepted",
-        "confidence": 0.85,
+        "classification_confidence": 0.85,
         "document_type": "bank_statement",
         "escalation_reason": null,
         "evidence": [
@@ -5940,14 +5939,14 @@
         "processing_started_at": "2026-09-21T06:06:30.020263Z",
         "queued_at": "2026-09-21T06:01:46.443112Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/Statement_128262.pdf",
         "uploaded_at": "2026-09-21T06:01:46.289297Z"
       },
       {
         "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-        "classification_outcome": "accepted",
-        "confidence": 0.93,
+        "classification_confidence": 0.93,
         "document_type": "nric",
         "escalation_reason": null,
         "evidence": [
@@ -5987,14 +5986,14 @@
         "processing_started_at": "2026-09-21T06:05:57.620967Z",
         "queued_at": "2026-09-21T06:01:46.388969Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/MuhammadD_NRIC_back.jpg",
         "uploaded_at": "2026-09-21T06:01:46.216302Z"
       },
       {
         "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-        "classification_outcome": "accepted",
-        "confidence": 0.94,
+        "classification_confidence": 0.94,
         "document_type": "list_of_loans",
         "escalation_reason": null,
         "evidence": [
@@ -6110,14 +6109,14 @@
         "processing_started_at": "2026-09-21T06:01:46.619496Z",
         "queued_at": "2026-09-21T06:01:46.035643Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/LoanFacility_56439_2.pdf",
         "uploaded_at": "2026-09-21T06:01:45.866567Z"
       },
       {
         "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-        "classification_outcome": "accepted",
-        "confidence": 0.95,
+        "classification_confidence": 0.95,
         "document_type": "list_of_loans",
         "escalation_reason": null,
         "evidence": [
@@ -6237,14 +6236,14 @@
         "processing_started_at": "2026-09-21T06:01:46.687456Z",
         "queued_at": "2026-09-21T06:01:46.132023Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/LoanOffer_8415_3.pdf",
         "uploaded_at": "2026-09-21T06:01:45.978348Z"
       },
       {
         "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-        "classification_outcome": "accepted",
-        "confidence": 0.83,
+        "classification_confidence": 0.83,
         "document_type": "proof_of_address",
         "escalation_reason": null,
         "evidence": [
@@ -6347,14 +6346,14 @@
         "processing_started_at": "2026-09-21T06:01:46.867685Z",
         "queued_at": "2026-09-21T06:01:46.064419Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/Company_UtilityBill_45040.pdf",
         "uploaded_at": "2026-09-21T06:01:45.864387Z"
       },
       {
         "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-        "classification_outcome": "accepted",
-        "confidence": 0.85,
+        "classification_confidence": 0.85,
         "document_type": "bank_statement",
         "escalation_reason": null,
         "evidence": [
@@ -6594,14 +6593,14 @@
         "processing_started_at": "2026-09-21T06:02:36.025311Z",
         "queued_at": "2026-09-21T06:01:46.187461Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/MuhammadD_ProofAddr_BankStmt_2956.pdf",
         "uploaded_at": "2026-09-21T06:01:46.033642Z"
       },
       {
         "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-        "classification_outcome": "accepted",
-        "confidence": 0.95,
+        "classification_confidence": 0.95,
         "document_type": "company_constitution",
         "escalation_reason": null,
         "evidence": [
@@ -6693,14 +6692,14 @@
         "processing_started_at": "2026-09-21T06:03:23.936247Z",
         "queued_at": "2026-09-21T06:01:46.217312Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/AnchorpointInsuranceBrokers_Constitution_20260805.pdf",
         "uploaded_at": "2026-09-21T06:01:46.062486Z"
       },
       {
         "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-        "classification_outcome": "accepted",
-        "confidence": 0.85,
+        "classification_confidence": 0.85,
         "document_type": "certificate_of_incorporation",
         "escalation_reason": null,
         "evidence": [
@@ -6763,14 +6762,14 @@
         "processing_started_at": "2026-09-21T06:05:15.851259Z",
         "queued_at": "2026-09-21T06:01:46.356395Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/BizFile_333996.pdf",
         "uploaded_at": "2026-09-21T06:01:45.961984Z"
       },
       {
         "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-        "classification_outcome": "accepted",
-        "confidence": 0.99,
+        "classification_confidence": 0.99,
         "document_type": "notice_of_assessment",
         "escalation_reason": null,
         "evidence": [
@@ -6914,14 +6913,14 @@
         "processing_started_at": "2026-09-21T06:03:04.440876Z",
         "queued_at": "2026-09-21T06:01:46.167315Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/Anchorpoint_IRAS_NOA.pdf",
         "uploaded_at": "2026-09-21T06:01:45.779659Z"
       },
       {
         "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-        "classification_outcome": "accepted",
-        "confidence": 0.985,
+        "classification_confidence": 0.985,
         "document_type": "payslip",
         "escalation_reason": null,
         "evidence": [
@@ -7012,14 +7011,14 @@
         "processing_started_at": "2026-09-21T06:03:50.310506Z",
         "queued_at": "2026-09-21T06:01:46.231304Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/MuhammadD_Payslip_Jan2026.pdf",
         "uploaded_at": "2026-09-21T06:01:46.090205Z"
       },
       {
         "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-        "classification_outcome": "accepted",
-        "confidence": 0.95,
+        "classification_confidence": 0.95,
         "document_type": "list_of_loans",
         "escalation_reason": null,
         "evidence": [
@@ -7143,14 +7142,14 @@
         "processing_started_at": "2026-09-21T06:04:35.267604Z",
         "queued_at": "2026-09-21T06:01:46.259083Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/FacilityLetter_AIB_2026-03-09_1.pdf",
         "uploaded_at": "2026-09-21T06:01:46.113184Z"
       },
       {
         "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-        "classification_outcome": "accepted",
-        "confidence": 0.95,
+        "classification_confidence": 0.95,
         "document_type": "credit_report",
         "escalation_reason": null,
         "evidence": [
@@ -7363,14 +7362,14 @@
         "processing_started_at": "2026-09-21T06:05:00.089817Z",
         "queued_at": "2026-09-21T06:01:46.290297Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/Credit_Bureau_Report_8027.pdf",
         "uploaded_at": "2026-09-21T06:01:46.133103Z"
       },
       {
         "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-        "classification_outcome": "accepted",
-        "confidence": 0.965,
+        "classification_confidence": 0.965,
         "document_type": "source_of_wealth",
         "escalation_reason": null,
         "evidence": [
@@ -7530,14 +7529,14 @@
         "processing_started_at": "2026-09-21T06:07:18.293036Z",
         "queued_at": "2026-09-21T06:01:46.617285Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/SimS_SourceOfWealth.pdf",
         "uploaded_at": "2026-09-21T06:01:46.230303Z"
       },
       {
         "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-        "classification_outcome": "accepted",
-        "confidence": 0.95,
+        "classification_confidence": 0.95,
         "document_type": "fatca_crs_declaration",
         "escalation_reason": null,
         "evidence": [
@@ -7608,14 +7607,14 @@
         "processing_started_at": "2026-09-21T06:07:36.927693Z",
         "queued_at": "2026-09-21T06:01:46.613539Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/FATCA_Form_20250522.pdf",
         "uploaded_at": "2026-09-21T06:01:46.222299Z"
       },
       {
         "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-        "classification_outcome": "accepted",
-        "confidence": 0.95,
+        "classification_confidence": 0.95,
         "document_type": "source_of_wealth",
         "escalation_reason": null,
         "evidence": [
@@ -7795,14 +7794,14 @@
         "processing_started_at": "2026-09-21T06:08:48.778915Z",
         "queued_at": "2026-09-21T06:01:46.630934Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/MuhammadD_Wealth_Statement_scan.pdf",
         "uploaded_at": "2026-09-21T06:01:46.482426Z"
       },
       {
         "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-        "classification_outcome": "accepted",
-        "confidence": 0.95,
+        "classification_confidence": 0.95,
         "document_type": "source_of_wealth",
         "escalation_reason": null,
         "evidence": [
@@ -8028,14 +8027,14 @@
         "processing_started_at": "2026-09-21T06:08:54.188077Z",
         "queued_at": "2026-09-21T06:01:46.478471Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/Financials_BalanceSheet_617.pdf",
         "uploaded_at": "2026-09-21T06:01:46.067486Z"
       },
       {
         "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
-        "classification_outcome": "accepted",
-        "confidence": 0.83,
+        "classification_confidence": 0.83,
         "document_type": "proof_of_address",
         "escalation_reason": null,
         "evidence": [
@@ -8126,6 +8125,7 @@
         "processing_started_at": "2026-09-21T06:06:56.356659Z",
         "queued_at": "2026-09-21T06:01:46.526819Z",
         "retry_count": 0,
+        "routing_status": "accepted",
         "status": "analyzed",
         "storage_path": "regression-fixture/POR_UtilityBill_20251028.jpg",
         "uploaded_at": "2026-09-21T06:01:46.354239Z"
