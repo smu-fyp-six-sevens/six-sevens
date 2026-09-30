@@ -439,6 +439,58 @@ h1 {
   border-radius: 5px;
   flex-shrink: 0;
 }
+.case-id--ready {
+  background: #ecfdf5;
+  color: #18794e;
+  border: 1px solid #a7e3c5;
+}
+
+.case-id--in-progress {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #b8d4ff;
+}
+
+.case-id--failed {
+  background: #fef2f2;
+  color: #b42318;
+  border: 1px solid #f0b8b8;
+}
+
+.case-id--pending {
+  background: #f3f4f6;
+  color: #667085;
+  border: 1px solid #d5d9e0;
+}
+.case-id--green {
+  background: #ecfdf5;
+  color: #18794e;
+  border: 1px solid #a7e3c5;
+}
+
+.case-id--blue {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #b8d4ff;
+}
+
+.case-id--red {
+  background: #fef2f2;
+  color: #b42318;
+  border: 1px solid #f0b8b8;
+}
+
+.case-id--amber {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #f2d18a;
+}
+
+.case-id--grey {
+  background: #f3f4f6;
+  color: #667085;
+  border: 1px solid #d5d9e0;
+}
 
 .case-main {
   flex: 1;
