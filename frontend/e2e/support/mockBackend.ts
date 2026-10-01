@@ -1,4 +1,35 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Page, Route, WebSocketRoute } from '@playwright/test';
+
+/**
+ * Each document type's required extraction fields, exported from the
+ * backend's EXTRACTION_SCHEMAS (kept in sync by
+ * backend/tests/test_regression_fixtures.py), so approval is blocked by
+ * exactly the same rule as routers/documents.py.
+ */
+const REQUIRED_FIELDS: Record<string, string[]> = JSON.parse(
+  readFileSync(
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../backend/tests/fixtures/regression/required_fields.json'),
+    'utf8',
+  ),
+);
+
+/** Same rule as routers/documents.py _missing_required_fields. */
+export function missingRequiredFields(document: { document_type: string | null; extracted_fields: Record<string, unknown> | null }): string[] {
+  const fields = document.extracted_fields ?? {};
+  return [...(REQUIRED_FIELDS[document.document_type ?? ''] ?? [])].sort().filter((name) => {
+    if (!(name in fields)) return true;
+    const raw = fields[name];
+    const value = raw && typeof raw === 'object' && 'value' in (raw as object) ? (raw as { value: unknown }).value : raw;
+    if (value === null || value === undefined) return true;
+    if (typeof value === 'string' && !value.trim()) return true;
+    if (Array.isArray(value) && value.length === 0) return true;
+    if (typeof value === 'object' && !Array.isArray(value) && Object.keys(value as object).length === 0) return true;
+    return false;
+  });
+}
 
 /**
  * A fake backend for one test: an in-memory "database" plus handlers for
@@ -253,12 +284,19 @@ export class MockBackend {
       const [, documentId, rest = ''] = documentMatch;
       const document = this.documents.find((d) => d.id === documentId);
       if (!document) return json({ detail: 'Document not found' }, 404);
-      if (method === 'GET' && rest === '') return json(document);
+      if (method === 'GET' && rest === '') return json({ ...document, missing_required_fields: missingRequiredFields(document) });
       if (method === 'DELETE' && rest === '') {
         this.documents = this.documents.filter((d) => d.id !== documentId);
         return route.fulfill({ status: 204, headers: corsHeaders() });
       }
       if (method === 'POST' && rest === '/approve') {
+        if (document.status !== 'analyzed') {
+          return json({ detail: 'Only completed documents can be approved.' }, 400);
+        }
+        const missing = missingRequiredFields(document);
+        if (missing.length > 0) {
+          return json({ detail: `Cannot approve document. Required fields are missing or empty: ${missing.join(', ')}` }, 400);
+        }
         document.status = 'approved';
         return json(document);
       }

@@ -1,8 +1,8 @@
 # Regression Report — Sprint 1 & Sprint 2
 
 **Story:** SCRUM-206 Conduct Regression Testing
-**Branch:** `SCRUM-206-Conduct-Regression-Testing`, up to date with `main` at `f233702` (LangGraph merged)
-**Run date:** 2026-09-30
+**Branch:** `SCRUM-206-Conduct-Regression-Testing`, up to date with `main` at `6ab9dfd`
+**Run date:** 2026-10-01
 **Source test cases:** `Test Cases - Sprint 1.xlsx`, `Test Cases - Sprint 2.xlsx`
 
 ## Summary
@@ -12,18 +12,18 @@
 | In the sprint sheets | 38 | 60 | 98 |
 | Out of scope (test-data tooling, checked manually) | 19 | 21 | 40 |
 | **In scope** | **19** | **39** | **58** |
-| Automated and passing | 19 | 37 | 56 |
-| Automated, defect found | 0 | 2 | 2 |
+| Automated and passing | 19 | 38 | 57 |
+| Automated, defect found | 0 | 1 | 1 |
 
 Counted per test case ID. Out of scope: document generation, the mastersheet and fraud injection (TD-001 – TD-006, DT-001 – DT-028). These were done manually to build the test document sets the system is tested with; they aren't system features, so they aren't regression-tested.
 
 | Suite | Tests | Passed | Known defects (expected failures) |
 |---|---|---|---|
-| Backend — pytest (all) | 866 | 866 | 0 |
-| └ tagged `sprint1` / `sprint2` | 19 / 78 | 97 | 0 |
-| Frontend — Playwright | 49 | 47 | 2 (REG-001, REG-002) |
+| Backend — pytest (all) | 871 | 868 | 3 (REG-003) |
+| └ tagged `sprint1` / `sprint2` | 19 / 83 | 99 | 3 (REG-003) |
+| Frontend — Playwright | 50 | 48 | 2 (REG-002, REG-003) |
 
-**Defects:** 2 open (REG-001, REG-002).
+**Defects:** REG-001 fixed and re-tested; 2 open (REG-002, and REG-003 — new, introduced by REG-001's fix).
 
 ### Acceptance criteria
 
@@ -33,7 +33,7 @@ Counted per test case ID. Out of scope: document generation, the mastersheet and
 | AC2 — Sprint 2 regression tested | ✅ Every in-scope Sprint 2 case automated, including the AI cases (mocked AI responses) |
 | AC3 — previously passed cases still pass | ✅ Both suites run on every PR; 2 open regressions, below |
 | AC4 — defects emailed | ✅ A failing PR check emails whoever pushed it (GitHub notifications) |
-| AC5 — re-run after defects fixed | ⏳ Waiting on fixes for REG-001 and REG-002 |
+| AC5 — re-run after defects fixed | ⏳ REG-001 fixed and re-tested (its expected-failure test flagged the fix, then was turned into a normal test). Waiting on REG-002 and REG-003 |
 
 ## How the regression suite works
 
@@ -70,8 +70,8 @@ Counted per test case ID. Out of scope: document generation, the mastersheet and
 | DI-020, DI-021 | SCRUM-9 | Field confidence shown; missing field "—" | `document-review.spec.ts` | ✅ |
 | DI-022 | SCRUM-9 | PNG/JPG/scanned PDF extracted | `test_regression_ai_pipeline.py` | ✅ |
 | DI-023, DI-024 | SCRUM-20 | Missing field flagged; officer can fix it | `document-review.spec.ts` | ✅ |
-| DI-025 | SCRUM-20 | Completed document can proceed | `document-review.spec.ts` | ❌ REG-002 |
-| DI-026 | SCRUM-20 | Can't proceed with a field missing | `document-review.spec.ts` | ❌ REG-001 |
+| DI-025 | SCRUM-20 | Completed document can proceed | `document-review.spec.ts`; `test_regression_approval.py` | ❌ REG-002, REG-003 |
+| DI-026 | SCRUM-20 | Can't proceed with a field missing | `document-review.spec.ts`; `test_regression_approval.py` | ✅ (REG-001 fixed) |
 | DI-027 | SCRUM-9 | Incumbency classified and officers saved | `test_regression_ai_pipeline.py` | ✅ |
 | DI-028 | SCRUM-9 | NRIC front and back extracted | `test_regression_ai_pipeline.py` | ✅ |
 | DI-029 | SCRUM-9 | Document confidence = average of field confidences | `test_regression_ai_pipeline.py` | ✅ (the sheet's scenario says "lowest"; its expected result and the code say average) |
@@ -83,8 +83,9 @@ Counted per test case ID. Out of scope: document generation, the mastersheet and
 
 | ID | Status | Severity | Test case | Owner | Defect |
 |---|---|---|---|---|---|
-| REG-001 | Open | High | DI-026 | SCRUM-20 / SCRUM-26 | A document with a flagged, empty required field can still be approved: the button is only disabled while processing, and the approve endpoint only checks that processing finished. |
+| REG-001 | **Fixed** (re-tested 2026-10-01) | High | DI-026 | SCRUM-20 / SCRUM-26 | A document with a flagged, empty required field could still be approved. Fixed on main by SCRUM-26 "block approval for missing required fields": Approve is now disabled with a warning naming the missing fields, and the endpoint refuses. |
 | REG-002 | Open | Medium | DI-025 | SCRUM-20 | Save fields requires every field to be filled, including ones that are correctly empty (e.g. no former name), so a correction can't be saved without a placeholder. |
+| REG-003 | Open — **new** | High | DI-025 | SCRUM-26 | Introduced by REG-001's fix. The approval check blocks complete documents: a clean credit report (`defaults = []`, the schema's own "normal, expected value") and personal source-of-wealth statements (correctly no `company_name`/`uen`) are treated as missing required fields, so they can never be approved. Confirmed against the real `_missing_required_fields` with real captured documents. |
 
 ## Out of scope
 
@@ -111,4 +112,4 @@ cd backend && python -m pytest -m "sprint1 or sprint2"
 cd ../frontend && npm run test:e2e
 ```
 
-After REG-001 and REG-002 are fixed, each one's expected-failure test reports "passed unexpectedly": remove its marker, re-run until both suites are fully green, and record that run here (AC5).
+After REG-002 and REG-003 are fixed, each one's expected-failure test reports "passed unexpectedly": remove its marker, re-run until both suites are fully green, and record that run here (AC5).

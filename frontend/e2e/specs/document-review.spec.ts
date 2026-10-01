@@ -37,6 +37,10 @@ function certWithMissingUen(backend: MockBackend, fixtureName: 'anchorpoint' | '
   const cert = fixture.document(fixtureName === 'anchorpoint' ? 'BizFile_333996' : 'C014_CertIncorp');
   const fields = cert.extracted_fields as Record<string, { value: unknown; confidence: number | null }>;
   fields.uen = { ...fields.uen, value: null, confidence: 0.35 };
+  // Captured before SCRUM-26 made these two fields required; a fresh
+  // extraction returns them, so supply them as it would.
+  fields.incorporating_act ??= { value: 'Companies Act 1967', confidence: 0.98 };
+  fields.certificate_date ??= { value: '26 Mar 2016', confidence: 0.98 };
   return { fixture, cert };
 }
 
@@ -153,22 +157,28 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
   });
 
   test('DI-026 a document with a missing required field cannot be approved @DI-026', async ({ page, backend }) => {
-    test.fail(
-      true,
-      'REG-001 (known defect, reported to SCRUM-20/SCRUM-26 owners): Approve Document stays enabled, and ' +
-        'POST /documents/{id}/approve accepts, a document with a flagged empty required field.',
-    );
+    // REG-001 — fixed on main by SCRUM-26 (block approval for missing
+    // required fields); this was an expected-failure test until then.
     const { fixture, cert } = certWithMissingUen(backend);
     await page.goto(fixture.documentUrl(cert));
 
-    const approve = page.getByRole('button', { name: '✓ Approve Document' });
-    // Expected (sheet): "The system prevents the document from proceeding
-    // to the next analysis stage" while a required field is missing.
-    if (await approve.isEnabled()) {
-      await approve.click();
-    }
-    await expect(page.locator('.document-status')).not.toContainText(/approved/i);
+    await expect(page.getByRole('button', { name: '✓ Approve Document' })).toBeDisabled();
+    await expect(page.locator('.approval-warning')).toContainText('Cannot approve yet');
+    await expect(page.locator('.approval-warning strong')).toHaveText('UEN');
     expect(backend.requestsTo('POST', `/documents/${cert.id}/approve`)).toHaveLength(0);
+  });
+
+  test('DI-025 a clean credit report (no defaults on record) can be approved @DI-025', async ({ page, backend }) => {
+    test.fail(
+      true,
+      'REG-003 (known defect, reported to SCRUM-26 owner): the approval check treats defaults = [] ' +
+        '(no defaults, the normal case) as a missing required field, so a clean credit report can never be approved.',
+    );
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const report = fixture.document('Credit_Bureau_Report');
+    await page.goto(fixture.documentUrl(report));
+
+    await expect(page.getByRole('button', { name: '✓ Approve Document' })).toBeEnabled({ timeout: 2000 });
   });
 
   test('DI-025 a field that is legitimately empty does not block saving a correction @DI-025', async ({ page, backend }) => {

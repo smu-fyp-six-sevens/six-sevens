@@ -251,9 +251,9 @@
       including the LangGraph AI pipeline with its AI responses mocked.
     </p>
     <div class="meta">
-      <span>Run <b>30 Sep 2026</b></span>
+      <span>Run <b>1 Oct 2026</b></span>
       <span>Branch <b class="mono">SCRUM-206-Conduct-Regression-Testing</b></span>
-      <span>Up to date with main <b class="mono">f233702</b> (LangGraph merged)</span>
+      <span>Up to date with main <b class="mono">6ab9dfd</b></span>
       <span>Sources <b>Test Cases – Sprint 1.xlsx, Sprint 2.xlsx</b></span>
     </div>
   </header>
@@ -265,12 +265,12 @@
     </div>
     <div class="verdict">
       <div><span class="figure">58</span><span class="label">Test cases in scope (of 98 in the sheets)</span></div>
-      <div><span class="figure pass">56</span><span class="label">Automated and passing</span></div>
-      <div><span class="figure fig-defect">2</span><span class="label">Defects found, reported to their owners</span></div>
+      <div><span class="figure pass">57</span><span class="label">Automated and passing</span></div>
+      <div><span class="figure fig-defect">2</span><span class="label">Open defects (1 more found and since fixed)</span></div>
       <div><span class="figure retired">40</span><span class="label">Out of scope: test-data tooling, checked manually</span></div>
     </div>
 
-    <div class="bars" role="img" aria-label="In scope. Sprint 1: 19 of 19 passing. Sprint 2: 37 passing and 2 defects, of 39.">
+    <div class="bars" role="img" aria-label="In scope. Sprint 1: 19 of 19 passing. Sprint 2: 38 passing and 1 with defects, of 39.">
       <div class="bar-row">
         <span class="bar-name">Sprint 1</span>
         <div class="bar-track">
@@ -280,8 +280,8 @@
       <div class="bar-row">
         <span class="bar-name">Sprint 2</span>
         <div class="bar-track">
-          <span class="seg-pass" style="flex: 0 0 94.87%">37</span>
-          <span class="seg-defect" style="flex: 0 0 5.13%">2</span>
+          <span class="seg-pass" style="flex: 0 0 97.44%">38</span>
+          <span class="seg-defect" style="flex: 0 0 2.56%">1</span>
         </div>
       </div>
       <div class="legend">
@@ -293,12 +293,12 @@
 
     <div class="verdict">
       <div>
-        <span class="figure">866</span>
-        <span class="label">Backend tests (pytest) · all pass<br>19 tagged Sprint 1 · 78 tagged Sprint 2 · real LangGraph pipeline, mocked AI</span>
+        <span class="figure">871</span>
+        <span class="label">Backend tests (pytest) · 868 pass, 3 known-defect (REG-003)<br>19 tagged Sprint 1 · 83 tagged Sprint 2 · real LangGraph pipeline, mocked AI</span>
       </div>
       <div>
-        <span class="figure">49</span>
-        <span class="label">Frontend tests (Playwright) · 47 pass, 2 known defects<br>Real app against a mocked backend</span>
+        <span class="figure">50</span>
+        <span class="label">Frontend tests (Playwright) · 48 pass, 2 known defects<br>Real app against a mocked backend</span>
       </div>
     </div>
   </section>
@@ -328,7 +328,7 @@
       </div>
       <div class="ac">
         <span class="ac-id">AC5</span>
-        <span class="ac-text"><span>Regression completed after defects are fixed</span><span class="muted">Waiting on the owners to fix REG-001 and REG-002, then a final re-run.</span></span>
+        <span class="ac-text"><span>Regression completed after defects are fixed</span><span class="muted">REG-001 fixed and re-tested. Waiting on REG-002 and REG-003, then a final re-run.</span></span>
         <span class="pill pending">Waiting on fixes</span>
       </div>
     </div>
@@ -411,16 +411,22 @@
 <script>
   const DEFECTS = [
     {
-      id: 'REG-001', sev: 'High', status: 'Open', cases: 'DI-026', owner: 'SCRUM-20 / SCRUM-26',
-      title: 'A document can be approved while a required field is still missing',
-      body: 'With a flagged, empty required field, "✓ Approve Document" still works. The button is only disabled while the document is processing, and the approve endpoint only checks that processing has finished. It passed in Sprint 2 only because approve wasn\'t implemented yet.',
-      where: 'DocumentDetailsPage.tsx (approve button) · routers/documents.py approve_document',
+      id: 'REG-003', sev: 'High', status: 'Open', cases: 'DI-025', owner: 'SCRUM-26',
+      title: 'Complete documents can never be approved (new, caused by REG-001\'s fix)',
+      body: 'The new approval check treats some complete documents as missing required fields. A clean credit report has defaults = [] (the schema\'s own "normal, expected value"), and a personal source-of-wealth statement correctly has no company name or UEN, yet both are blocked forever. Confirmed with the real backend check and real captured documents.',
+      where: 'routers/documents.py _missing_required_fields · langgraph/extraction_prompts.py required fields',
     },
     {
       id: 'REG-002', sev: 'Medium', status: 'Open', cases: 'DI-025', owner: 'SCRUM-20',
       title: 'An empty optional field blocks saving a correction',
       body: 'Save fields requires every field to be filled, including ones that are correctly empty, such as Company Former Name for a company that never had one. After fixing the flagged UEN, the officer has to type a placeholder before they can save.',
       where: 'DocumentDetailsPage.tsx handleSaveFields',
+    },
+    {
+      id: 'REG-001', sev: 'High', status: 'Fixed', cases: 'DI-026', owner: 'SCRUM-20 / SCRUM-26',
+      title: 'A document could be approved while a required field was missing',
+      body: 'Fixed on main by SCRUM-26 "block approval for missing required fields": Approve is now disabled with a warning naming the missing fields, and the approve endpoint refuses. Its expected-failure test flagged the fix ("passed unexpectedly") and is now a normal passing test.',
+      where: 'DocumentDetailsPage.tsx · routers/documents.py approve_document',
     },
   ];
 
@@ -445,8 +451,8 @@
     [2, 'DI-022', 1, 'SCRUM-9', 'PNG, JPG and scanned PDF are read and extracted', AI, 'pass'],
     [2, 'DI-023', 1, 'SCRUM-20', 'A missing required field is flagged and identified', 'document-review.spec.ts DI-023', 'pass'],
     [2, 'DI-024', 1, 'SCRUM-20', 'An officer can fill in a flagged field and it is kept', 'document-review.spec.ts DI-024', 'pass'],
-    [2, 'DI-025', 1, 'SCRUM-20', 'A completed document can proceed', 'document-review.spec.ts DI-025 (two tests)', 'defect', 'REG-002', 'Passes when only the flagged field was empty; fails when another field is correctly empty.'],
-    [2, 'DI-026', 1, 'SCRUM-20', 'A document with a missing field can\'t proceed', 'document-review.spec.ts DI-026 (save, approve)', 'defect', 'REG-001', 'Saving is blocked correctly; approving isn\'t.'],
+    [2, 'DI-025', 1, 'SCRUM-20', 'A completed document can proceed', 'document-review.spec.ts DI-025 · test_regression_approval.py', 'defect', 'REG-002 · REG-003', 'Passes for a normal completed document; fails when a field is correctly empty (save), and for a clean credit report or personal wealth statement (approve).'],
+    [2, 'DI-026', 1, 'SCRUM-20', 'A document with a missing field can\'t proceed', 'document-review.spec.ts DI-026 · test_regression_approval.py', 'pass', null, 'REG-001 fixed: Approve is disabled and the endpoint refuses.'],
     [2, 'DI-027', 1, 'SCRUM-9', 'A certificate of incumbency is classified correctly and its officers saved', AI, 'pass'],
     [2, 'DI-028', 1, 'SCRUM-9', 'Both sides of an NRIC are extracted', AI, 'pass'],
     [2, 'DI-029', 1, 'SCRUM-9', 'Document confidence is the average of its field confidences', AI, 'pass', null, 'The sheet\'s scenario says "lowest"; its expected result and the code say average.'],
@@ -460,13 +466,13 @@
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   document.getElementById('defects').innerHTML = DEFECTS.map((d) => `
-    <article class="defect${d.status === 'Closed' ? ' is-closed' : ''}" data-sev="${d.sev}">
+    <article class="defect${d.status !== 'Open' ? ' is-closed' : ''}" data-sev="${d.sev}">
       <div class="stripe"></div>
       <div class="defect-body">
         <div class="defect-top">
           <span class="defect-id">${d.id}</span>
           <span class="sev">${d.sev}${d.sevNote ? ' · ' + d.sevNote : ''}</span>
-          <span class="pill ${d.status === 'Open' ? 'defect' : 'closed'}">${d.status}</span>
+          <span class="pill ${d.status === 'Open' ? 'defect' : 'pass'}">${d.status}</span>
         </div>
         <h3 class="defect-title">${esc(d.title)}</h3>
         <p>${esc(d.body)}</p>
