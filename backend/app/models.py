@@ -397,6 +397,36 @@ class UpdateDocumentTypeRequest(BaseModel):
     document_type: str
 
 
+class MoveDocumentRequest(BaseModel):
+    """Reassigns a document to a different case — see routers/documents.py's move_document."""
+
+    case_id: str
+
+
+class BulkActionFailure(BaseModel):
+    document_id: str
+    reason: str
+
+
+class BulkMoveRequest(BaseModel):
+    document_ids: list[str]
+    case_id: str
+
+
+class BulkMoveResponse(BaseModel):
+    moved: list[str]
+    failed: list[BulkActionFailure]
+
+
+class BulkDeleteRequest(BaseModel):
+    document_ids: list[str]
+
+
+class BulkDeleteResponse(BaseModel):
+    deleted: list[str]
+    failed: list[BulkActionFailure]
+
+
 class StuckDocument(BaseModel):
     id: str
     case_id: Optional[str] = None

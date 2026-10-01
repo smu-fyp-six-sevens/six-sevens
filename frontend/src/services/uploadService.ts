@@ -37,6 +37,11 @@ export interface DocumentRecord {
   extraction_confidence: number | null;
   escalation_reason: string | null;
   metadata: Record<string, unknown> | null;
+  // Only present on documents pushed via the case-status websocket (see
+  // backend/app/case_service.py's build_case_snapshot) — not a real
+  // documents-table column, computed there from the langgraph trace so list
+  // views can show "Scanning"/"Detected" without an extra fetch per row.
+  has_detection_report?: boolean;
 }
 
 // Mirrors REQUIRED_DOCUMENT_TYPES in backend/app/models.py — the fixed
@@ -278,6 +283,42 @@ export function formatDocumentStatus(status: string): string {
     default:
       return status;
   }
+}
+
+// A document sitting in APPROVED status is, from an officer's point of view,
+// still doing something: the Detection Agent runs as a background task right
+// after approval but (deliberately) writes nothing to the documents table —
+// see backend/app/langgraph/detection/graph.py — so "approved" alone can't
+// tell a just-approved document apart from one whose detection already
+// finished. "scanning"/"detected" are frontend-only display stages derived
+// from whether a detection report exists yet, not real DocumentStatus values.
+export type DocumentDetectionStage = 'scanning' | 'detected' | null;
+
+export function documentDetectionStage(
+  status: string,
+  hasDetectionReport: boolean,
+): DocumentDetectionStage {
+  if (status !== 'approved') {
+    return null;
+  }
+  return hasDetectionReport ? 'detected' : 'scanning';
+}
+
+export function formatDocumentStatusLabel(status: string, hasDetectionReport: boolean): string {
+  const stage = documentDetectionStage(status, hasDetectionReport);
+  if (stage === 'scanning') return 'Scanning';
+  if (stage === 'detected') return 'Detected';
+  return formatDocumentStatus(status);
+}
+
+// Same "…" suffix / non-terminal treatment formatDocumentStatus's other
+// callers already use, extended so "approved but still scanning" reads as
+// in-progress too instead of looking done.
+export function isDocumentStatusInProgress(status: string, hasDetectionReport: boolean): boolean {
+  if (documentDetectionStage(status, hasDetectionReport) === 'scanning') {
+    return true;
+  }
+  return !TERMINAL_DOCUMENT_STATUSES.has(status);
 }
 
 // Mirrors settings.CLASSIFICATION_CONFIDENCE_THRESHOLD in backend/app/config.py —
@@ -761,6 +802,92 @@ export async function updateDocumentType(
   }
 
   return (await response.json()) as DocumentRecord;
+}
+
+export async function moveDocument(documentId: string, caseId: string): Promise<DocumentRecord> {
+  const response = await authFetch(`/documents/${documentId}/move`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ case_id: caseId }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to move document (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as DocumentRecord;
+}
+
+export interface BulkActionFailure {
+  document_id: string;
+  reason: string;
+}
+
+export interface BulkMoveResponse {
+  moved: string[];
+  failed: BulkActionFailure[];
+}
+
+export interface BulkDeleteResponse {
+  deleted: string[];
+  failed: BulkActionFailure[];
+}
+
+// One request for the whole selection — the backend resyncs every affected
+// case exactly once after the batch lands, not once per document (see
+// routers/documents.py's bulk_move_documents/bulk_delete_documents).
+export async function bulkMoveDocuments(
+  documentIds: string[],
+  caseId: string,
+): Promise<BulkMoveResponse> {
+  const response = await authFetch('/documents/bulk-move', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ document_ids: documentIds, case_id: caseId }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to move documents (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as BulkMoveResponse;
+}
+
+export async function bulkDeleteDocuments(documentIds: string[]): Promise<BulkDeleteResponse> {
+  const response = await authFetch('/documents/bulk-delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ document_ids: documentIds }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to delete documents (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as BulkDeleteResponse;
+}
+
+// Lightweight view of a case for the "move document" picker — not the full
+// CaseSummary (App.tsx's CaseRecord), which also computes checklist
+// coverage this picker has no use for.
+export interface CaseOption {
+  id: string;
+  greenlink_case_id: string;
+  company_name: string | null;
+}
+
+export async function listCaseOptions(): Promise<CaseOption[]> {
+  const response = await authFetch('/cases');
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to list cases (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as CaseOption[];
 }
 
 export async function uploadDocuments(

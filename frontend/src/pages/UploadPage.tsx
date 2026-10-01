@@ -13,17 +13,22 @@ import {
   canCancelDocument,
   canRetryDocument,
   deleteCase,
-  deleteDocument,
   isDocumentStuckProcessing,
   retryDocument,
   ADDITIONAL_DOCUMENT_TYPES,
   REQUIRED_DOCUMENT_TYPES,
   EXTRACTION_CONFIDENCE_THRESHOLD,
   TERMINAL_DOCUMENT_STATUSES,
+  documentDetectionStage,
   formatDocumentStatus,
+  formatDocumentStatusLabel,
+  isDocumentStatusInProgress,
   formatDocumentType,
   formatRoutingOutcome,
   lowestFieldConfidence,
+  bulkDeleteDocuments,
+  bulkMoveDocuments,
+  listCaseOptions,
   updateCase,
   updateExtractedFields,
   uploadDocuments,
@@ -31,6 +36,7 @@ import {
 } from '../services/uploadService';
 import type {
   BulkUploadItemResult,
+  CaseOption,
   DocumentCaseMatch,
   DocumentRecord,
 } from '../services/uploadService';
@@ -268,7 +274,6 @@ export default function UploadPage({
   const [wsConnected, setWsConnected] = useState(false);
   const [approvingDocumentId, setApprovingDocumentId] = useState<string | null>(null);
   const [approveError, setApproveError] = useState<string | null>(null);
-  const [isApprovingAll, setIsApprovingAll] = useState(false);
   const [cancellingDocumentId, setCancellingDocumentId] = useState<string | null>(null);
   const [cancelActionError, setCancelActionError] = useState<string | null>(null);
   const [retryingDocumentId, setRetryingDocumentId] = useState<string | null>(null);
@@ -278,10 +283,22 @@ export default function UploadPage({
   // isDocumentStuckProcessing itself reads Date.now() fresh each render.
   const [, setStuckTick] = useState(0);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const [isDeletingCase, setIsDeletingCase] = useState(false);
   const [caseDeleteOpen, setCaseDeleteOpen] = useState(false);
-  const [documentToDelete, setDocumentToDelete] = useState<DocumentRecord | null>(null);
+  // Bulk selection — replaces the old per-row action icons (cancel stays
+  // per-row below, it's a one-click "emergency stop" on an in-flight
+  // document, a different lifecycle stage from these terminal-document
+  // actions, and doesn't make sense as a batch).
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<Set<string>>(new Set());
+  const [documentsToDelete, setDocumentsToDelete] = useState<DocumentRecord[]>([]);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [isApprovingSelected, setIsApprovingSelected] = useState(false);
+  const [isMoveDialogOpen, setIsMoveDialogOpen] = useState(false);
+  const [caseOptions, setCaseOptions] = useState<CaseOption[] | null>(null);
+  const [isLoadingCaseOptions, setIsLoadingCaseOptions] = useState(false);
+  const [moveTargetCaseId, setMoveTargetCaseId] = useState('');
+  const [isMovingDocuments, setIsMovingDocuments] = useState(false);
+  const [moveError, setMoveError] = useState<string | null>(null);
   // Case-match result per document (see backend/app/case_match.py), pushed
   // with every case snapshot — folded into the displayed routing outcome.
   const [caseMatches, setCaseMatches] = useState<Map<string, DocumentCaseMatch>>(new Map());
@@ -514,55 +531,17 @@ async function handleRetryDocument(documentId: string) {
   }
 }
 
-async function handleApproveAllEligibleDocuments() {
-  const eligibleDocuments = extractedDocuments.filter(
-    (document) =>
-      document.status === 'analyzed' &&
-      // With the case-match result, so a document flagged as belonging to
-      // another company/individual is never swept up in a bulk approval.
-      formatRoutingOutcome(document, caseMatches.get(document.id)) === 'Accepted',
+// A document is "eligible" (for selecting, then approving) once it's
+// analyzed and its case-match is clean — a document flagged as belonging to
+// another company/individual is never swept up this way.
+function isEligibleForApproval(
+  document: DocumentRecord,
+  caseMatches: Map<string, DocumentCaseMatch>,
+): boolean {
+  return (
+    document.status === 'analyzed' &&
+    formatRoutingOutcome(document, caseMatches.get(document.id)) === 'Accepted'
   );
-
-  if (eligibleDocuments.length === 0) {
-    return;
-  }
-
-  setIsApprovingAll(true);
-  setApproveError(null);
-
-  try {
-    const updatedDocuments = await Promise.all(
-      eligibleDocuments.map((document) => approveDocument(document.id)),
-    );
-
-    if (!isMountedRef.current) {
-      return;
-    }
-
-    setDocumentDetails((current) => {
-      const next = new Map(current);
-
-      for (const updated of updatedDocuments) {
-        next.set(updated.id, updated);
-      }
-
-      return next;
-    });
-  } catch (err) {
-    if (!isMountedRef.current) {
-      return;
-    }
-
-    setApproveError(
-      err instanceof Error
-        ? err.message
-        : 'Failed to approve eligible documents.',
-    );
-  } finally {
-    if (isMountedRef.current) {
-      setIsApprovingAll(false);
-    }
-  }
 }
   function getFieldDraft(
     documentId: string,
@@ -671,33 +650,182 @@ async function handleApproveAllEligibleDocuments() {
     }
   }
 
-  async function confirmDeleteDocument() {
-    if (!documentToDelete) return;
+  function clearDocumentSelection() {
+    setSelectedDocumentIds(new Set());
+  }
 
-    const document = documentToDelete;
-    setDeletingDocumentId(document.id);
+  function toggleDocumentSelected(documentId: string) {
+    setSelectedDocumentIds((current) => {
+      const next = new Set(current);
+      if (next.has(documentId)) {
+        next.delete(documentId);
+      } else {
+        next.add(documentId);
+      }
+      return next;
+    });
+  }
+
+  async function confirmDeleteDocuments() {
+    if (documentsToDelete.length === 0) return;
+
+    const targets = documentsToDelete;
+    setIsBulkDeleting(true);
     setDeleteError(null);
 
     try {
-      await deleteDocument(document.id);
+      const result = await bulkDeleteDocuments(targets.map((document) => document.id));
+      const deletedIds = new Set(result.deleted);
+
+      if (deletedIds.size > 0) {
+        setDocumentDetails((current) => {
+          const next = new Map(current);
+          for (const id of deletedIds) next.delete(id);
+          return next;
+        });
+        setCaseMatches((current) => {
+          const next = new Map(current);
+          for (const id of deletedIds) next.delete(id);
+          return next;
+        });
+        setSelectedDocumentIds((current) => {
+          const next = new Set(current);
+          for (const id of deletedIds) next.delete(id);
+          return next;
+        });
+        caseSocketRef.current?.refresh();
+      }
+
+      if (result.failed.length > 0) {
+        setDeleteError(
+          result.failed.length === targets.length
+            ? 'Failed to delete the selected document(s).'
+            : `${result.failed.length} of ${targets.length} documents could not be deleted.`,
+        );
+      }
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete the selected document(s).');
+    }
+
+    setDocumentsToDelete([]);
+    setIsBulkDeleting(false);
+  }
+
+  function handleSelectAllEligible() {
+    setSelectedDocumentIds(
+      new Set(
+        extractedDocuments
+          .filter((document) => isEligibleForApproval(document, caseMatches))
+          .map((document) => document.id),
+      ),
+    );
+  }
+
+  async function handleApproveSelected() {
+    const eligible = extractedDocuments.filter(
+      (document) => selectedDocumentIds.has(document.id) && isEligibleForApproval(document, caseMatches),
+    );
+    if (eligible.length === 0) return;
+
+    setIsApprovingSelected(true);
+    setApproveError(null);
+
+    try {
+      const updatedDocuments = await Promise.all(
+        eligible.map((document) => approveDocument(document.id)),
+      );
+      if (!isMountedRef.current) return;
+
       setDocumentDetails((current) => {
         const next = new Map(current);
-        next.delete(document.id);
+        for (const updated of updatedDocuments) next.set(updated.id, updated);
         return next;
       });
-      setCaseMatches((current) => {
-        const next = new Map(current);
-        next.delete(document.id);
+      setSelectedDocumentIds((current) => {
+        const next = new Set(current);
+        for (const updated of updatedDocuments) next.delete(updated.id);
         return next;
       });
-      caseSocketRef.current?.refresh();
-      setDocumentToDelete(null);
     } catch (err) {
-      setDocumentToDelete(null);
-      setDeleteError(err instanceof Error ? err.message : 'Failed to delete document.');
+      if (!isMountedRef.current) return;
+      setApproveError(err instanceof Error ? err.message : 'Failed to approve selected documents.');
     } finally {
-      setDeletingDocumentId(null);
+      if (isMountedRef.current) setIsApprovingSelected(false);
     }
+  }
+
+  async function openMoveDialog() {
+    setMoveError(null);
+    setMoveTargetCaseId('');
+    setIsMoveDialogOpen(true);
+    if (caseOptions !== null) return;
+
+    setIsLoadingCaseOptions(true);
+    try {
+      const options = await listCaseOptions();
+      if (isMountedRef.current) {
+        setCaseOptions(options.filter((option) => option.id !== selectedCase.id));
+      }
+    } catch (err) {
+      if (isMountedRef.current) {
+        setMoveError(err instanceof Error ? err.message : 'Failed to load cases.');
+      }
+    } finally {
+      if (isMountedRef.current) setIsLoadingCaseOptions(false);
+    }
+  }
+
+  async function confirmMoveSelected() {
+    if (!moveTargetCaseId) return;
+
+    const eligible = extractedDocuments.filter(
+      (document) => selectedDocumentIds.has(document.id) && TERMINAL_DOCUMENT_STATUSES.has(document.status),
+    );
+    if (eligible.length === 0) {
+      setIsMoveDialogOpen(false);
+      return;
+    }
+
+    setIsMovingDocuments(true);
+    setMoveError(null);
+
+    try {
+      const result = await bulkMoveDocuments(eligible.map((document) => document.id), moveTargetCaseId);
+      const movedIds = new Set(result.moved);
+
+      if (movedIds.size > 0) {
+        setDocumentDetails((current) => {
+          const next = new Map(current);
+          for (const id of movedIds) next.delete(id);
+          return next;
+        });
+        setCaseMatches((current) => {
+          const next = new Map(current);
+          for (const id of movedIds) next.delete(id);
+          return next;
+        });
+        setSelectedDocumentIds((current) => {
+          const next = new Set(current);
+          for (const id of movedIds) next.delete(id);
+          return next;
+        });
+        caseSocketRef.current?.refresh();
+      }
+
+      if (result.failed.length > 0) {
+        setMoveError(
+          result.failed.length === eligible.length
+            ? 'Failed to move the selected document(s).'
+            : `${result.failed.length} of ${eligible.length} documents could not be moved.`,
+        );
+      } else {
+        setIsMoveDialogOpen(false);
+      }
+    } catch (err) {
+      setMoveError(err instanceof Error ? err.message : 'Failed to move the selected document(s).');
+    }
+
+    setIsMovingDocuments(false);
   }
 
   const documents = Array.from(documentDetails.values()).sort((a, b) =>
@@ -726,6 +854,21 @@ async function handleApproveAllEligibleDocuments() {
   const approvedDocuments = documents.filter(
     (document) => document.status === 'approved',
   );
+
+  const selectedExtractedDocuments = extractedDocuments.filter((document) =>
+    selectedDocumentIds.has(document.id),
+  );
+  const allExtractedSelected =
+    extractedDocuments.length > 0 && selectedExtractedDocuments.length === extractedDocuments.length;
+  const eligibleForApprovalCount = extractedDocuments.filter((document) =>
+    isEligibleForApproval(document, caseMatches),
+  ).length;
+  const selectedApprovableCount = selectedExtractedDocuments.filter((document) =>
+    isEligibleForApproval(document, caseMatches),
+  ).length;
+  const selectedMovableOrDeletableCount = selectedExtractedDocuments.filter((document) =>
+    TERMINAL_DOCUMENT_STATUSES.has(document.status),
+  ).length;
 
   const completedCount = results.length + rejections.length;
   const successfulCount = results.filter((result) => result.success).length;
@@ -922,19 +1065,84 @@ async function handleApproveAllEligibleDocuments() {
                       </div>
 
                       <div className="documents-card-actions">
-                        <button
-                          type="button"
-                          className="approve-all-btn"
-                          onClick={() => void handleApproveAllEligibleDocuments()}
-                          disabled={
-                            isApprovingAll ||
-                            !extractedDocuments.some((document) => document.status === 'analyzed')
-                          }
-                        >
-                          {isApprovingAll
-                            ? 'Approving…'
-                            : 'Approve all eligible documents'}
-                        </button>
+                        <div className="bulk-icon-toolbar">
+                          {selectedDocumentIds.size > 0 && (
+                            <button
+                              type="button"
+                              className="bulk-icon-clear"
+                              title="Clear selection"
+                              onClick={clearDocumentSelection}
+                            >
+                              Clear ({selectedDocumentIds.size})
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            className="bulk-icon-btn"
+                            title="Select all eligible for approval"
+                            aria-label="Select all eligible for approval"
+                            disabled={eligibleForApprovalCount === 0}
+                            onClick={handleSelectAllEligible}
+                          >
+                            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M9 11l3 3L22 4" />
+                              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                            </svg>
+                            <span className="bulk-icon-count">{eligibleForApprovalCount}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="bulk-icon-btn bulk-icon-btn--approve"
+                            title="Approve selected"
+                            aria-label="Approve selected"
+                            disabled={isApprovingSelected || selectedApprovableCount === 0}
+                            onClick={() => void handleApproveSelected()}
+                          >
+                            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M4 12l5 5L20 6" />
+                            </svg>
+                            <span className="bulk-icon-count">{selectedApprovableCount}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="bulk-icon-btn"
+                            title="Move selected to another case"
+                            aria-label="Move selected to another case"
+                            disabled={selectedMovableOrDeletableCount === 0}
+                            onClick={() => void openMoveDialog()}
+                          >
+                            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M5 12h14" />
+                              <path d="M13 6l6 6-6 6" />
+                            </svg>
+                            <span className="bulk-icon-count">{selectedMovableOrDeletableCount}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="bulk-icon-btn bulk-icon-btn--danger"
+                            title="Delete selected"
+                            aria-label="Delete selected"
+                            disabled={selectedMovableOrDeletableCount === 0}
+                            onClick={() => setDocumentsToDelete(
+                              selectedExtractedDocuments.filter((document) =>
+                                TERMINAL_DOCUMENT_STATUSES.has(document.status),
+                              ),
+                            )}
+                          >
+                            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M4 7h16" />
+                              <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                              <path d="M7 7l1 12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-12" />
+                              <path d="M10 11v6" />
+                              <path d="M14 11v6" />
+                            </svg>
+                            <span className="bulk-icon-count">{selectedMovableOrDeletableCount}</span>
+                          </button>
+                        </div>
                         <span
                           className={`mock-badge${wsConnected ? ' live' : ''}`}
                           title={
@@ -958,13 +1166,26 @@ async function handleApproveAllEligibleDocuments() {
                       <div className="toast show mixed">⚠ {retryActionError}</div>
                     )}
 
-                    <div className="documents-table">
+                    <div className="documents-table documents-table--selectable">
                       <div className="documents-table-header">
+                        <label className="document-select-cell">
+                          <input
+                            type="checkbox"
+                            aria-label="Select all extracted files"
+                            checked={allExtractedSelected}
+                            onChange={() =>
+                              setSelectedDocumentIds(
+                                allExtractedSelected
+                                  ? new Set()
+                                  : new Set(extractedDocuments.map((document) => document.id)),
+                              )
+                            }
+                          />
+                        </label>
                         <span>Filename</span>
                         <span>Document Type</span>
                         <span>Status</span>
                         <span>Routing Outcome</span>
-                        <span className="sr-only">Actions</span>
                       </div>
 
                       {extractedDocuments.map((document) => {
@@ -981,6 +1202,8 @@ async function handleApproveAllEligibleDocuments() {
                             ? caseMatch.reason
                             : 'Requires manual review';
 
+                        const isSelected = selectedDocumentIds.has(document.id);
+
                         return (
                           <div
                             key={document.id}
@@ -996,6 +1219,23 @@ async function handleApproveAllEligibleDocuments() {
                               }
                             }}
                           >
+                            <label
+                              className="document-select-cell"
+                              // A <label> wrapping the checkbox makes the whole padded
+                              // cell a click target, not just the tiny checkbox square
+                              // (fat-finger protection) — native behavior, no extra JS
+                              // needed beyond stopping it from also opening the row.
+                              onClick={(event) => event.stopPropagation()}
+                              onKeyDown={(event) => event.stopPropagation()}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                aria-label={`Select ${document.filename}`}
+                                onChange={() => toggleDocumentSelected(document.id)}
+                              />
+                            </label>
+
                             <span className="document-filename">
                               {routingOutcome === 'Manual Review' && (
                                 <span
@@ -1069,13 +1309,7 @@ async function handleApproveAllEligibleDocuments() {
                                   </svg>
                                 </button>
                               )}
-                            </span>
 
-                            <span className="document-routing">
-                              {routingOutcome}
-                            </span>
-
-                            <span className="document-row-actions">
                               {canCancelDocument(status) && (
                                 <button
                                   type="button"
@@ -1106,43 +1340,10 @@ async function handleApproveAllEligibleDocuments() {
                                   </svg>
                                 </button>
                               )}
+                            </span>
 
-                              {isTerminal && (
-                                <button
-                                  type="button"
-                                  className="document-row-action-icon document-row-action-icon--delete"
-                                  aria-label={
-                                    deletingDocumentId === document.id
-                                      ? `Deleting ${document.filename}`
-                                      : `Delete ${document.filename}`
-                                  }
-                                  title={
-                                    deletingDocumentId === document.id ? 'Deleting…' : 'Delete'
-                                  }
-                                  disabled={deletingDocumentId === document.id}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    setDocumentToDelete(document);
-                                  }}
-                                  onKeyDown={(event) => event.stopPropagation()}
-                                >
-                                  <svg
-                                    viewBox="0 0 24 24"
-                                    aria-hidden="true"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="1.8"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                  >
-                                    <path d="M4 7h16" />
-                                    <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                                    <path d="M7 7l1 12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-12" />
-                                    <path d="M10 11v6" />
-                                    <path d="M14 11v6" />
-                                  </svg>
-                                </button>
-                              )}
+                            <span className="document-routing">
+                              {routingOutcome}
                             </span>
                           </div>
                         );
@@ -1161,48 +1362,64 @@ async function handleApproveAllEligibleDocuments() {
                       </div>
                     </div>
 
-                    <div className="documents-table">
+                    <div className="documents-table documents-table--selectable">
                       <div className="documents-table-header">
+                        {/* Empty spacer matching the Extracted Files table's checkbox
+                            column, so both tables' columns line up — see .documents-table--selectable. */}
+                        <span className="document-select-cell" />
                         <span>Filename</span>
                         <span>Document Type</span>
                         <span>Status</span>
                         <span>Routing Outcome</span>
-                        <span className="sr-only">Actions</span>
                       </div>
 
-                      {approvedDocuments.map((document) => (
-                        <div
-                          key={document.id}
-                          className="documents-table-row documents-table-row--clickable"
-                          role="button"
-                          tabIndex={0}
-                          aria-label={`View ${document.filename}`}
-                          onClick={() => onOpenDocument(document.id)}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault();
-                              onOpenDocument(document.id);
-                            }
-                          }}
-                        >
-                          <span className="document-filename">
-                            {document.filename}
-                          </span>
+                      {approvedDocuments.map((document) => {
+                        const hasDetectionReport = document.has_detection_report ?? false;
+                        const detectionStage = documentDetectionStage(document.status, hasDetectionReport);
 
-                          <span className="document-type-cell">
-                            {formatDocumentType(document.document_type)}
-                          </span>
+                        return (
+                          <div
+                            key={document.id}
+                            className="documents-table-row documents-table-row--clickable"
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`View ${document.filename}`}
+                            onClick={() => onOpenDocument(document.id)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                onOpenDocument(document.id);
+                              }
+                            }}
+                          >
+                            <span className="document-select-cell" />
 
-                          <span className="document-status-cell">
-                            <span className="status-dot status-dot--success" />
-                            <span>Approved</span>
-                          </span>
+                            <span className="document-filename">
+                              {document.filename}
+                            </span>
 
-                          <span className="document-routing">
-                            Approved
-                          </span>
-                        </div>
-                      ))}
+                            <span className="document-type-cell">
+                              {formatDocumentType(document.document_type)}
+                            </span>
+
+                            <span className="document-status-cell">
+                              <span
+                                className={`status-dot ${
+                                  detectionStage === 'detected' ? 'status-dot--success' : ''
+                                }`}
+                              />
+                              <span>
+                                {formatDocumentStatusLabel(document.status, hasDetectionReport)}
+                                {isDocumentStatusInProgress(document.status, hasDetectionReport) && '…'}
+                              </span>
+                            </span>
+
+                            <span className="document-routing">
+                              Approved
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </section>
                 )}
@@ -1210,30 +1427,6 @@ async function handleApproveAllEligibleDocuments() {
             )}
 
 
-
-          <section className="summary-card">
-            <div className="summary-card-header">
-              <div className="summary-card-title">
-                <span className="summary-icon summary-icon--risk">
-                  ▥
-                </span>
-                <h2>Customer Risk Summary</h2>
-              </div>
-            </div>
-
-            <div className="summary-message summary-message--info">
-              <span className="summary-message-icon">ⓘ</span>
-
-              <div>
-                <strong>Risk summary not available yet.</strong>
-
-                <p>
-                  Risk analysis results will appear here once document
-                  extraction and fraud analysis are completed.
-                </p>
-              </div>
-            </div>
-          </section>
 
           <section className="summary-card">
             <div className="summary-card-header">
@@ -1339,6 +1532,30 @@ async function handleApproveAllEligibleDocuments() {
                 })}
               </div>
             )}
+          </section>
+
+          <section className="summary-card">
+            <div className="summary-card-header">
+              <div className="summary-card-title">
+                <span className="summary-icon summary-icon--risk">
+                  ▥
+                </span>
+                <h2>Customer Risk Summary</h2>
+              </div>
+            </div>
+
+            <div className="summary-message summary-message--info">
+              <span className="summary-message-icon">ⓘ</span>
+
+              <div>
+                <strong>Risk summary not available yet.</strong>
+
+                <p>
+                  Risk analysis results will appear here once document
+                  extraction and fraud analysis are completed.
+                </p>
+              </div>
+            </div>
           </section>
 
           <section className="summary-card">
@@ -1518,16 +1735,72 @@ async function handleApproveAllEligibleDocuments() {
         />
       )}
 
-      {documentToDelete && (
+      {documentsToDelete.length > 0 && (
         <ConfirmDialog
-          title="Delete this document?"
-          message={`${documentToDelete.filename} will be removed from this case and cannot be recovered.`}
-          isConfirming={deletingDocumentId === documentToDelete.id}
+          title={documentsToDelete.length === 1 ? 'Delete this document?' : `Delete ${documentsToDelete.length} documents?`}
+          message={
+            documentsToDelete.length === 1
+              ? `${documentsToDelete[0].filename} will be removed from this case and cannot be recovered.`
+              : `${documentsToDelete.length} documents will be removed from this case and cannot be recovered.`
+          }
+          isConfirming={isBulkDeleting}
           onCancel={() => {
-            if (deletingDocumentId === null) setDocumentToDelete(null);
+            if (!isBulkDeleting) setDocumentsToDelete([]);
           }}
-          onConfirm={() => void confirmDeleteDocument()}
+          onConfirm={() => void confirmDeleteDocuments()}
         />
+      )}
+
+      {isMoveDialogOpen && (
+        <div
+          className="confirm-dialog-backdrop"
+          onClick={() => {
+            if (!isMovingDocuments) setIsMoveDialogOpen(false);
+          }}
+        >
+          <div className="confirm-dialog" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <h2>Move {selectedMovableOrDeletableCount} document(s) to another case</h2>
+            {isLoadingCaseOptions ? (
+              <p>Loading cases…</p>
+            ) : moveError && !caseOptions ? (
+              <p className="save-error">{moveError}</p>
+            ) : (
+              <>
+                <select
+                  value={moveTargetCaseId}
+                  onChange={(event) => setMoveTargetCaseId(event.target.value)}
+                  disabled={isMovingDocuments}
+                >
+                  <option value="">Select a case…</option>
+                  {(caseOptions ?? []).map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.company_name || option.greenlink_case_id} ({option.greenlink_case_id})
+                    </option>
+                  ))}
+                </select>
+                {moveError && <p className="save-error">{moveError}</p>}
+              </>
+            )}
+            <div className="confirm-dialog-actions">
+              <button
+                type="button"
+                className="confirm-dialog-danger"
+                disabled={isMovingDocuments || !moveTargetCaseId}
+                onClick={() => void confirmMoveSelected()}
+              >
+                {isMovingDocuments ? 'Moving…' : 'Move'}
+              </button>
+              <button
+                type="button"
+                className="confirm-dialog-cancel"
+                disabled={isMovingDocuments}
+                onClick={() => setIsMoveDialogOpen(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );

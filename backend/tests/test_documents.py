@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import io
 from datetime import datetime
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, call, patch
 
 import pytest
 from fastapi import HTTPException, UploadFile
@@ -1162,6 +1162,125 @@ def test_delete_document_db_failure_returns_502() -> None:
         mock_repo.remove_document.side_effect = RuntimeError("db down")
 
         response = client.delete("/documents/doc-1")
+
+    assert response.status_code == 502
+
+
+def test_move_document_success_pushes_both_case_snapshots() -> None:
+    document = _make_document()
+    document.status = DocumentStatus.ANALYZED
+    document.case_id = "case-1"
+    moved = document.model_copy(update={"case_id": "case-2"})
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+        patch("app.routers.documents.case_service") as mock_case_service,
+        patch("app.routers.documents.broadcaster") as mock_broadcaster,
+    ):
+        mock_dep_repo.get_document.return_value = document
+        mock_repo.get_document.return_value = moved
+        mock_fields_repo.get_extracted_fields.return_value = []
+        mock_case_service.get_case.return_value = _make_case(case_id="case-2")
+        mock_case_service.build_case_snapshot.side_effect = lambda case_id: {"case": {"id": case_id}}
+
+        response = client.post("/documents/doc-1/move", json={"case_id": "case-2"})
+
+    assert response.status_code == 200
+    mock_repo.move_document.assert_called_once_with("doc-1", "case-2")
+    # document_repository.move_document (mocked here) already resyncs the
+    # new case itself via its own _sync_case call — only the old case still
+    # needs resyncing from the router, since its own Realtime event (if any)
+    # never carries this document's old case_id.
+    mock_case_service.sync_submission_finalized.assert_called_once_with("case-1")
+    assert mock_case_service.build_case_snapshot.call_args_list == [call("case-1")]
+    assert mock_broadcaster.publish.call_args_list == [
+        call("case-1", {"case": {"id": "case-1"}}),
+    ]
+
+
+def test_move_document_rejects_an_approved_document() -> None:
+    document = _make_document()
+    document.status = DocumentStatus.APPROVED
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
+
+        response = client.post("/documents/doc-1/move", json={"case_id": "case-2"})
+
+    assert response.status_code == 409
+    mock_repo.move_document.assert_not_called()
+
+
+def test_move_document_rejects_an_in_flight_document() -> None:
+    document = _make_document()
+    document.status = DocumentStatus.EXTRACTING
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
+
+        response = client.post("/documents/doc-1/move", json={"case_id": "case-2"})
+
+    assert response.status_code == 409
+    mock_repo.move_document.assert_not_called()
+
+
+def test_move_document_rejects_the_same_case() -> None:
+    document = _make_document()
+    document.status = DocumentStatus.ANALYZED
+    document.case_id = "case-1"
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
+
+        response = client.post("/documents/doc-1/move", json={"case_id": "case-1"})
+
+    assert response.status_code == 400
+    mock_repo.move_document.assert_not_called()
+
+
+def test_move_document_target_case_not_found() -> None:
+    document = _make_document()
+    document.status = DocumentStatus.ANALYZED
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.case_service") as mock_case_service,
+    ):
+        mock_dep_repo.get_document.return_value = document
+        mock_case_service.get_case.return_value = None
+
+        response = client.post("/documents/doc-1/move", json={"case_id": "missing-case"})
+
+    assert response.status_code == 404
+    mock_repo.move_document.assert_not_called()
+
+
+def test_move_document_db_failure_returns_502() -> None:
+    document = _make_document()
+    document.status = DocumentStatus.ANALYZED
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.case_service") as mock_case_service,
+    ):
+        mock_dep_repo.get_document.return_value = document
+        mock_case_service.get_case.return_value = _make_case(case_id="case-2")
+        mock_repo.move_document.side_effect = RuntimeError("db down")
+
+        response = client.post("/documents/doc-1/move", json={"case_id": "case-2"})
 
     assert response.status_code == 502
 

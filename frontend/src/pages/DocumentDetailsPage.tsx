@@ -20,8 +20,9 @@ import {
   CLASSIFICATION_CONFIDENCE_THRESHOLD,
   DOCUMENT_TYPE_OPTIONS,
   EXTRACTION_CONFIDENCE_THRESHOLD,
-  TERMINAL_DOCUMENT_STATUSES,
-  formatDocumentStatus,
+  documentDetectionStage,
+  formatDocumentStatusLabel,
+  isDocumentStatusInProgress,
   formatDocumentType,
   formatRoutingOutcome,
   getDocument,
@@ -928,6 +929,9 @@ export default function DocumentDetailsPage({
     document?.status === 'processing' ||
     document?.status === 'extracting';
 
+  const hasDetectionReport = detectionReport !== null;
+  const detectionStage = document ? documentDetectionStage(document.status, hasDetectionReport) : null;
+
   useEffect(() => {
     if (document?.status !== 'processing') {
       return;
@@ -1328,7 +1332,7 @@ export default function DocumentDetailsPage({
 
           <div
             className={`document-status ${
-              document.status === 'analyzed'
+              document.status === 'analyzed' || detectionStage === 'detected'
                 ? 'document-status--success'
                 : document.status === 'failed'
                   ? 'document-status--failed'
@@ -1343,7 +1347,7 @@ export default function DocumentDetailsPage({
           >
             <span
               className={`status-dot ${
-                document.status === 'analyzed'
+                document.status === 'analyzed' || detectionStage === 'detected'
                   ? 'status-dot--success'
                   : document.status === 'failed'
                     ? 'status-dot--failed'
@@ -1357,9 +1361,9 @@ export default function DocumentDetailsPage({
               }`}
             />
             {isDocumentStuckProcessing(document)
-              ? `${formatDocumentStatus(document.status)} (Stuck)`
-              : formatDocumentStatus(document.status)}
-            {!TERMINAL_DOCUMENT_STATUSES.has(document.status) && '…'}
+              ? `${formatDocumentStatusLabel(document.status, hasDetectionReport)} (Stuck)`
+              : formatDocumentStatusLabel(document.status, hasDetectionReport)}
+            {isDocumentStatusInProgress(document.status, hasDetectionReport) && '…'}
           </div>
         </div>
 

@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from typing import Optional
 
 from . import case_repository, document_repository, extracted_fields_repository
 from .case_match import CaseMatchResult, DocumentCaseMatch, check_case_match
 from .config import settings
+from .langgraph import trace as langgraph_trace
+
+logger = logging.getLogger("classifier_pipeline.case_service")
 from .mapper import (
     compute_id_document_identity_coverage,
     compute_id_document_identity_progress,
@@ -239,11 +243,28 @@ def build_case_snapshot(case_id: str) -> Optional[dict]:
     # already populated from the extracted_fields table.
     case_match = check_case_match(case, documents)
     enriched = _enrich_with_extracted_fields(documents)
+    # has_detection_report isn't a documents-table column (detection
+    # deliberately writes nothing there — see langgraph/detection/graph.py)
+    # — it's computed here so the frontend can tell "approved, detection
+    # still running" apart from "approved, detection done" without its own
+    # poll loop; this snapshot already pushes over the case-status websocket.
+    try:
+        detected_ids = {
+            report["document_id"] for report in langgraph_trace.get_case_detection_reports(case_id)
+        }
+    except Exception:
+        logger.exception("Failed to load detection reports for case %s", case_id)
+        detected_ids = set()
+    document_dumps = []
+    for document in enriched:
+        dump = document.model_dump(mode="json")
+        dump["has_detection_report"] = document.id in detected_ids
+        document_dumps.append(dump)
     return {
         "type": "snapshot",
         "case": summary.model_dump(mode="json"),
         "case_match": case_match.model_dump(mode="json"),
-        "documents": [document.model_dump(mode="json") for document in enriched],
+        "documents": document_dumps,
     }
 
 

@@ -127,7 +127,51 @@ def reject_document(document_id: str) -> None:
     supabase_client.table("documents").update(
         {"status": DocumentStatus.REJECTED.value}
     ).eq("id", document_id).execute()
-    
+
+
+def get_documents_by_ids(
+    document_ids: list[str], *, include_fields: bool = True
+) -> list[DocumentRecord]:
+    if not document_ids:
+        return []
+    result = supabase_client.table("documents").select("*").in_("id", document_ids).execute()
+    documents = [DocumentRecord(**_row(row)) for row in result.data]
+    return _attach_extracted_fields(documents) if include_fields else documents
+
+
+def move_documents(document_ids: list[str], case_id: str) -> None:
+    """
+    Bulk version of move_document — one UPDATE for every document, and no
+    per-document case resync: a caller moving N documents resyncs each
+    affected case once after the whole batch lands, not once per document
+    (see routers/documents.py's bulk_move_documents).
+    """
+    if not document_ids:
+        return
+    supabase_client.table("documents").update({"case_id": case_id}).in_(
+        "id", document_ids
+    ).execute()
+
+
+def move_document(document_id: str, case_id: str) -> None:
+    """
+    Reassigns a document to a different case — e.g. corrects a document
+    uploaded under the wrong case. Syncs both ends: the old case no longer
+    counts it (see routers/documents.py's move_document, which also pushes a
+    fresh snapshot for the old case over the websocket — Realtime's own
+    change event only carries the document's new case_id, so the old case
+    would otherwise never hear about losing it), the new case now does.
+    """
+    result = (
+        supabase_client.table("documents")
+        .update({"case_id": case_id})
+        .eq("id", document_id)
+        .execute()
+    )
+    if result.data:
+        _sync_case(case_id)
+
+
 def record_classification(
     document_id: str,
     *,
