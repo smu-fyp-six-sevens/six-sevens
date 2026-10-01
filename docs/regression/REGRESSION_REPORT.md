@@ -19,11 +19,11 @@ Counted per test case ID. Out of scope: document generation, the mastersheet and
 
 | Suite | Tests | Passed | Known defects (expected failures) |
 |---|---|---|---|
-| Backend — pytest (all) | 871 | 868 | 3 (REG-003) |
+| Backend — pytest (all) | 876 | 873 | 3 (REG-003) |
 | └ tagged `sprint1` / `sprint2` | 19 / 83 | 99 | 3 (REG-003) |
 | Frontend — Playwright | 50 | 48 | 2 (REG-002, REG-003) |
 
-**Defects:** REG-001 fixed and re-tested; 2 open (REG-002, and REG-003 — new, introduced by REG-001's fix).
+**Defects:** 2 open (REG-002, REG-003). REG-001 fixed by its owner and re-tested. REG-004 (case match, found during this regression) fixed in this story.
 
 ### Acceptance criteria
 
@@ -81,11 +81,12 @@ Counted per test case ID. Out of scope: document generation, the mastersheet and
 
 ## Defects
 
-| ID | Status | Severity | Test case | Owner | Defect |
-|---|---|---|---|---|---|
-| REG-001 | **Fixed** (re-tested 2026-10-01) | High | DI-026 | SCRUM-20 / SCRUM-26 | A document with a flagged, empty required field could still be approved. Fixed on main by SCRUM-26 "block approval for missing required fields": Approve is now disabled with a warning naming the missing fields, and the endpoint refuses. |
-| REG-002 | Open | Medium | DI-025 | SCRUM-20 | Save fields requires every field to be filled, including ones that are correctly empty (e.g. no former name), so a correction can't be saved without a placeholder. |
-| REG-003 | Open — **new** | High | DI-025 | SCRUM-26 | Introduced by REG-001's fix. The approval check blocks complete documents: a clean credit report (`defaults = []`, the schema's own "normal, expected value") and personal source-of-wealth statements (correctly no `company_name`/`uen`) are treated as missing required fields, so they can never be approved. Confirmed against the real `_missing_required_fields` with real captured documents. |
+| ID | Severity | Status | What goes wrong | Example | Test case | Owner |
+|---|---|---|---|---|---|---|
+| REG-001 | High | **Fixed by owner** (jianing0825, SCRUM-26), re-tested and passing | A document could be approved even when a required field was empty. | A certificate with no UEN could still be approved. | DI-026 | SCRUM-20 / SCRUM-26 |
+| REG-002 | Medium | Open | A correction can't be saved if **any** field is empty, even one that is correctly blank. | A company that never had a former name: the officer fixes the UEN, but can't save until they type something into "Former Name". | DI-025 | SCRUM-20 |
+| REG-003 | High | Open (new, caused by REG-001's fix) | Some **complete** documents can never be approved, because the new check mistakes "nothing to report" for "missing information". | **Credit report:** a person with no defaults is blocked because "Defaults" is empty. **Personal wealth statement:** a personal investment account is blocked because it has no company name or UEN, which it shouldn't have. | DI-025 | SCRUM-26 |
+| REG-004 | High | **Fixed in this story** | The case-match check only recognised one person on the certificate of incumbency, so other directors and shareholders were wrongly flagged as "case mismatch". | Tan Wei Jun (shareholder, S8000000A) uploaded her NRIC and it was flagged as not on the certificate. Cause: the extraction schema on main now returns officers/shareholders with their ID under `identification_no`, which case match didn't read. Fixed in `case_match.py`; regression tests use the real certificate's fields. | (SCRUM-110 case match) | SCRUM-110 |
 
 ## Out of scope
 

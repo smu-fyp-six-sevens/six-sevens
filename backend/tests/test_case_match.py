@@ -386,6 +386,60 @@ def test_real_incumbency_individuals_matched_by_id(fields, expected) -> None:
     assert _by_id(result, nric.id).status == expected
 
 
+# Copied from a real documents.extracted_fields row (C001_CertIncumbency.pdf,
+# 1 Oct 2026) in the current extraction schema: people come back as
+# officers/shareholders lists keyed "identification_no", plus one flat
+# shareholder_name/nric_number pair for the first shareholder only.
+CURRENT_SCHEMA_INCUMBENCY_FIELDS = {
+    "company_name": "GOLDEN HARVEST TRADING PTE LTD",
+    "uen": "201812345A",
+    "nric_number": "S8012345A",
+    "shareholder_name": "TAN WEI MING",
+    "shareholder_address": "31 LORONG CHUAN, #06-52, SINGAPORE 148107",
+    "officers": [
+        {"name": "TAN WEI MING", "position_held": "Director", "identification_no": "S8012345A"},
+        {"name": "TEO LI XUAN", "position_held": "Secretary", "identification_no": "S6627954G"},
+    ],
+    "shareholders": [
+        {"name": "TAN WEI MING", "no_of_shares": "375,000", "identification_no": "S8012345A"},
+        {"name": "TAN WEI JUN", "no_of_shares": "125,000", "identification_no": "S8000000A"},
+    ],
+}
+
+
+@pytest.mark.story("SCRUM-110", "regression: case match after extraction schema change")
+def test_current_schema_incumbency_lists_every_person_with_their_id() -> None:
+    result = check_case_match(
+        _case(), [_incumbency(CURRENT_SCHEMA_INCUMBENCY_FIELDS), *_corroborating(3, uen="201812345A")]
+    )
+
+    assert sorted((p.name, p.id_number) for p in result.incumbency.individuals) == [
+        ("TAN WEI JUN", "S8000000A"),
+        ("TAN WEI MING", "S8012345A"),
+        ("TEO LI XUAN", "S6627954G"),
+    ]
+
+
+@pytest.mark.story("SCRUM-110", "regression: case match after extraction schema change")
+@pytest.mark.parametrize(
+    "nric_fields, expected",
+    [
+        # The NRIC that was wrongly flagged: second shareholder, not the first.
+        ({"individual_name": "TAN WEI JUN", "nric_number": "S8000000A"}, DocumentMatchStatus.MATCH),
+        ({"nric_number": "S6627954G"}, DocumentMatchStatus.MATCH),  # secretary, ID only
+        ({"individual_name": "TAN WEI MING", "nric_number": "S8012345A"}, DocumentMatchStatus.MATCH),
+        ({"individual_name": "TEO KAI MING", "nric_number": "S7273147P"}, DocumentMatchStatus.MANUAL_REVIEW),
+    ],
+)
+def test_current_schema_incumbency_matches_each_person_by_id(nric_fields, expected) -> None:
+    nric = _doc("nric", nric_fields)
+    docs = [_incumbency(CURRENT_SCHEMA_INCUMBENCY_FIELDS), *_corroborating(3, uen="201812345A"), nric]
+
+    result = check_case_match(_case(), docs)
+
+    assert _by_id(result, nric.id).status == expected
+
+
 def test_officers_list_shape_also_supported() -> None:
     fields = {
         "company_name": "ACME Trading Pte Ltd",

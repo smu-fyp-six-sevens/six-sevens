@@ -266,7 +266,7 @@
     <div class="verdict">
       <div><span class="figure">58</span><span class="label">Test cases in scope (of 98 in the sheets)</span></div>
       <div><span class="figure pass">57</span><span class="label">Automated and passing</span></div>
-      <div><span class="figure fig-defect">2</span><span class="label">Open defects (1 more found and since fixed)</span></div>
+      <div><span class="figure fig-defect">2</span><span class="label">Open defects (2 more found and since fixed)</span></div>
       <div><span class="figure retired">40</span><span class="label">Out of scope: test-data tooling, checked manually</span></div>
     </div>
 
@@ -293,8 +293,8 @@
 
     <div class="verdict">
       <div>
-        <span class="figure">871</span>
-        <span class="label">Backend tests (pytest) · 868 pass, 3 known-defect (REG-003)<br>19 tagged Sprint 1 · 83 tagged Sprint 2 · real LangGraph pipeline, mocked AI</span>
+        <span class="figure">876</span>
+        <span class="label">Backend tests (pytest) · 873 pass, 3 known-defect (REG-003)<br>19 tagged Sprint 1 · 83 tagged Sprint 2 · real LangGraph pipeline, mocked AI</span>
       </div>
       <div>
         <span class="figure">50</span>
@@ -328,7 +328,7 @@
       </div>
       <div class="ac">
         <span class="ac-id">AC5</span>
-        <span class="ac-text"><span>Regression completed after defects are fixed</span><span class="muted">REG-001 fixed and re-tested. Waiting on REG-002 and REG-003, then a final re-run.</span></span>
+        <span class="ac-text"><span>Regression completed after defects are fixed</span><span class="muted">REG-001 fixed by its owner and re-tested. Waiting on REG-002 and REG-003, then a final re-run.</span></span>
         <span class="pill pending">Waiting on fixes</span>
       </div>
     </div>
@@ -412,20 +412,26 @@
   const DEFECTS = [
     {
       id: 'REG-003', sev: 'High', status: 'Open', cases: 'DI-025', owner: 'SCRUM-26',
-      title: 'Complete documents can never be approved (new, caused by REG-001\'s fix)',
-      body: 'The new approval check treats some complete documents as missing required fields. A clean credit report has defaults = [] (the schema\'s own "normal, expected value"), and a personal source-of-wealth statement correctly has no company name or UEN, yet both are blocked forever. Confirmed with the real backend check and real captured documents.',
-      where: 'routers/documents.py _missing_required_fields · langgraph/extraction_prompts.py required fields',
+      title: 'Some complete documents can never be approved',
+      body: 'Caused by REG-001\'s fix. The new check mistakes "nothing to report" for "missing information". Credit report: a person with no defaults is blocked because "Defaults" is empty. Personal wealth statement: a personal investment account is blocked because it has no company name or UEN, which it shouldn\'t have.',
+      where: 'routers/documents.py _missing_required_fields · required fields in extraction_prompts.py',
     },
     {
       id: 'REG-002', sev: 'Medium', status: 'Open', cases: 'DI-025', owner: 'SCRUM-20',
-      title: 'An empty optional field blocks saving a correction',
-      body: 'Save fields requires every field to be filled, including ones that are correctly empty, such as Company Former Name for a company that never had one. After fixing the flagged UEN, the officer has to type a placeholder before they can save.',
+      title: 'A correction can\'t be saved if any field is empty',
+      body: 'Even a field that is correctly blank blocks saving. Example: a company that never had a former name. The officer fixes the UEN, but can\'t save until they type something into "Former Name".',
       where: 'DocumentDetailsPage.tsx handleSaveFields',
     },
     {
+      id: 'REG-004', sev: 'High', status: 'Fixed', cases: 'SCRUM-110 case match', owner: 'SCRUM-110',
+      title: 'Case match only recognised one person on the certificate of incumbency',
+      body: 'Other directors and shareholders were wrongly flagged as "case mismatch". Example: Tan Wei Jun (shareholder, S8000000A) was flagged as not on the certificate. Cause: the extraction schema on main now returns officers/shareholders with their ID under "identification_no", which case match didn\'t read. Fixed in this story, with regression tests using the real certificate\'s fields.',
+      where: 'backend/app/case_match.py',
+    },
+    {
       id: 'REG-001', sev: 'High', status: 'Fixed', cases: 'DI-026', owner: 'SCRUM-20 / SCRUM-26',
-      title: 'A document could be approved while a required field was missing',
-      body: 'Fixed on main by SCRUM-26 "block approval for missing required fields": Approve is now disabled with a warning naming the missing fields, and the approve endpoint refuses. Its expected-failure test flagged the fix ("passed unexpectedly") and is now a normal passing test.',
+      title: 'A document could be approved even when a required field was empty',
+      body: 'Example: a certificate with no UEN could still be approved. Fixed by its owner (jianing0825, SCRUM-26): Approve is now disabled with a warning naming the missing fields, and the approve endpoint refuses. Re-tested and passing.',
       where: 'DocumentDetailsPage.tsx · routers/documents.py approve_document',
     },
   ];
