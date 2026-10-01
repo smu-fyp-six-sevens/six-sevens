@@ -30,6 +30,7 @@ export interface DocumentRecord {
   failure_reason: string | null;
   evidence: string[];
   fulfilled_requirements: string[];
+  missing_required_fields: string[];
   extracted_fields: Record<string, unknown> | null;
   // Extraction's own confidence in extracted_fields — separate from
   // `classification_confidence` above (the classifier's), never overwrites it.
@@ -565,6 +566,43 @@ export async function runDetection(documentId: string): Promise<DetectionReport>
   }
 
   return (await response.json()) as DetectionReport;
+}
+
+export type IndividualCheckId =
+  | 'font-consistency'
+  | 'layout-anomalies'
+  | 'spelling-anomaly'
+  | 'numerical-validation'
+  | 'date-anomalies'
+  | 'metadata-anomaly';
+
+export const INDIVIDUAL_DETECTION_CHECKS: { id: IndividualCheckId; label: string }[] = [
+  { id: 'font-consistency', label: 'Font consistency' },
+  { id: 'layout-anomalies', label: 'Layout anomalies' },
+  { id: 'spelling-anomaly', label: 'Spelling anomaly' },
+  { id: 'numerical-validation', label: 'Numerical validation' },
+  { id: 'date-anomalies', label: 'Date anomalies' },
+  { id: 'metadata-anomaly', label: 'Metadata anomaly' },
+];
+
+// Each check has its own result shape (FontConsistencyResult, LayoutAnomalyResult, ...) —
+// returned as unknown since the caller only needs to display it, not act on specific fields.
+export async function runIndividualDetectionCheck(
+  documentId: string,
+  checkId: IndividualCheckId,
+): Promise<unknown> {
+  const response = await authFetch(`/documents/${documentId}/detection/${checkId}`);
+
+  if (response.status === 409) {
+    const detail = await response.text();
+    throw new Error(detail || 'Run full detection first before running an individual check.');
+  }
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Check failed (${response.status}): ${detail}`);
+  }
+
+  return await response.json();
 }
 
 export async function listDocuments(caseId: string): Promise<DocumentRecord[]> {

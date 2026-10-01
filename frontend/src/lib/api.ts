@@ -5,12 +5,6 @@
 
 export const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 
-// Hides internal dev-only tools (e.g. the spelling-anomaly test link) from
-// the sponsor-facing cloud build — see frontend/Dockerfile and
-// .github/workflows/deploy.yml. False (tools shown) unless explicitly baked
-// in as "true" at build time.
-export const hideDevFeatures = import.meta.env.VITE_HIDE_DEV_FEATURES === 'true';
-
 const TOKEN_KEY = 'authToken';
 
 export function getToken(): string | null {

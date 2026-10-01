@@ -10,7 +10,17 @@ from . import auth, health, realtime_listener, telemetry
 from .config import settings
 from .health import check_db_connection
 from .queue_service import document_queue
-from .routers import extraction, injection, cases, detection, documents, monitoring, upload, ws
+from .routers import injection, cases, detection, documents, extraction, monitoring, upload, ws
+
+# No handler was ever configured for this app's own loggers, so INFO-level
+# calls (pipeline/detection progress) were silently dropped — only
+# logger.exception(...) ever reached the console, via logging's "last
+# resort" stderr handler, which only fires at WARNING+ and prints bare
+# messages with no logger name or timestamp.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 logger = logging.getLogger(__name__)
 

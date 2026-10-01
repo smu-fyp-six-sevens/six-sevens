@@ -1181,7 +1181,11 @@ def test_approve_document_success() -> None:
         mock_repo.get_document.return_value = document.model_copy(
             update={"status": DocumentStatus.APPROVED}
         )
-        mock_fields_repo.get_extracted_fields.return_value = []
+        mock_fields_repo.get_extracted_fields.return_value = [
+            ExtractedField(field_name="individual_name", field_type="string", field_value="Jane", confidence=0.9),
+            ExtractedField(field_name="company_name", field_type="string", field_value="Acme", confidence=0.9),
+            ExtractedField(field_name="net_pay", field_type="string", field_value="1000", confidence=0.9),
+        ]
 
         response = client.post("/documents/doc-1/approve")
 

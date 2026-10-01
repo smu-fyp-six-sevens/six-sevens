@@ -97,9 +97,9 @@ class ExtractedDate(BaseModel):
 
 class DateAnomalyResult(BaseModel):
     """
-    Shared response for GET /documents/{id}/detection/date-anomalies and
-    POST /extraction/test-date-anomalies. Nothing is persisted — a pure
-    read/compute, like the spelling/layout/numerical checks.
+    Response for GET /documents/{id}/detection/date-anomalies. Nothing is
+    persisted — a pure read/compute, like the spelling/layout/numerical
+    checks.
     """
 
     document_id: str

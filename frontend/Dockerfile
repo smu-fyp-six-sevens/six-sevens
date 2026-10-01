@@ -10,13 +10,6 @@ WORKDIR /app
 ARG VITE_API_URL=http://localhost:8000
 ENV VITE_API_URL=$VITE_API_URL
 
-# Hides internal dev-only tools (e.g. the spelling-anomaly test link) from
-# the sponsor-facing cloud build — set true only in deploy.yml's frontend
-# build step. Defaults false so local `npm run dev` and a plain
-# `docker compose build` still show them.
-ARG VITE_HIDE_DEV_FEATURES=false
-ENV VITE_HIDE_DEV_FEATURES=$VITE_HIDE_DEV_FEATURES
-
 COPY frontend/package.json ./package.json
 COPY frontend/tsconfig.json ./tsconfig.json
 COPY frontend/vite.config.ts ./vite.config.ts
