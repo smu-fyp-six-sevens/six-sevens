@@ -10,10 +10,11 @@ roadmap (Detection Agent, Per-Case Pipeline, 5-service Pub/Sub split) stays docu
 
 - **Postgres checkpointing + pruning** — not built. Crash recovery currently just fails the
   document the normal way; no time-travel, no thread cleanup.
-- **Detection → approval wiring** — Detection Agent runs (lead + 3 specialists), but only from a
-  dev endpoint/panel. Not gated on officer approval yet: no `pending_review`/`detecting` document
-  statuses, findings live only in the `langgraph_trace` table's `detection_report`, nothing
-  written to the `documents` table.
+- ~~**Detection → approval wiring**~~ — resolved: approving a document now fires the Detection
+  Agent automatically as a background task (`routers/documents.py::_start_detection_after_approval`).
+  Still no `pending_review`/`detecting` document statuses, and findings still live only on the
+  `langgraph_trace` table's `detection_report`, nothing written to the `documents` table — that
+  part of the original gap is unchanged, just no longer manual.
 - **Per-provider rate limiting** — no shared Anthropic semaphore/rate limiter across the 4 queue
   workers yet (detection fans out up to 3x per document on top of that).
 - **Cache-hit-ratio metrics** — prompt caching + `cache_gate.py` are built and working; recording
@@ -67,6 +68,10 @@ Not started, no urgency until the Cloud Native award work picks up:
 - `document_repository.update_status` only ever writes fields passed as non-`None`, so it can't
   clear a stale `failure_reason` from a prior attempt — a document that fails, then later
   succeeds on retry, still shows its old failure reason. Pre-existing, cosmetic, not fixed.
+- Same staleness shape in the detection trace: a `detection_error` from a failed run isn't cleared
+  when a later run succeeds (the success check just takes priority — see
+  `FRAUD_DETECTION_MAP.md` §2/§3). Fine for the common case; an officer who re-triggers a crashed
+  run, gets a *second* failure, won't see that it's the new failure if an old report also exists.
 
 ## Local dev reference (LangGraph pipeline)
 
@@ -75,9 +80,11 @@ Not started, no urgency until the Cloud Native award work picks up:
 - Debug trace: any document's details page has a "LangGraph trace (debug)" panel — in-memory only
   (`app/langgraph/trace.py`), resets on backend restart, shows which tools the classify agent
   called and why, step-by-step.
-- Detection Agent: "Detection (dev)" panel on an `analyzed` document's details page, or
-  `POST /documents/{id}/detection/run`. Report stored on the document's langgraph trace, not the
-  `documents` table (see "Detection → approval wiring" above).
+- Detection Agent: runs automatically on approval, or manually via the "Run detection"/"Retry
+  detection" button on the (still dev-styled) Detection panel on a document's details page, or
+  `POST /documents/{id}/detection/run` directly. Report stored on the document's langgraph trace,
+  not the `documents` table (see "Detection → approval wiring" above). A crashed run is recorded
+  and retryable rather than silently vanishing — see `FRAUD_DETECTION_MAP.md` §2.
 - OpenTelemetry: off by default, `OTEL_ENABLED=true` to try locally (prints to console); add
   `GOOGLE_CLOUD_PROJECT=<id>` to export to real Cloud Trace instead (needs
   `roles/cloudtrace.agent`, falls back to console if credentials aren't set up).

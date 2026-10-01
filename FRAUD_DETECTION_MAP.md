@@ -1,12 +1,12 @@
 # Fraud Detection — Implementation Map
 
-Snapshot of where fraud/anomaly detection logic lives and is tested, as of 2026-09-30.
+Snapshot of where fraud/anomaly detection logic lives and is tested, as of 2026-10-01.
 
 ## 1. Core check modules — `backend/app/fraud_detection/`
 
 | File | Dimension | Tests |
 |---|---|---|
-| `layout_anomalies.py` | Indentation/alignment/margin/spacing deviations in PDF layout | 108 |
+| `layout_anomalies.py` | Indentation/alignment/margin/spacing deviations + text overlay | 112 |
 | `numerical_validation.py` | Deterministic arithmetic/identity checks over extracted fields (balances, totals) | 88 |
 | `metadata_analysis.py` | File-embedded metadata (author/producer/create-modify dates) tamper signals | 54 |
 | `date_anomalies.py` | Date extraction/labeling and logical date consistency (future dates, end-before-start) | 38 |
@@ -14,96 +14,97 @@ Snapshot of where fraud/anomaly detection logic lives and is tested, as of 2026-
 | `font_consistency.py` | Font family/size/emphasis (bold/italic/underline) inconsistency | 16 |
 | `domain_terms.py` | Not a check — allow-list of legal/financial jargon feeding `spelling_anomaly.py` | — |
 
+Text overlay lives inside `layout_anomalies.py` rather than its own module — it shares that
+file's ~650-line PDF→blocks/lines extraction pipeline with every other layout check, and the
+overlay-specific logic on top of that is only ~130 lines. Splitting it out would mean duplicating
+that extraction pipeline, not avoiding duplication.
+
 No image-manipulation or AI-generated-content check exists yet.
 
-`case_match.py` (696 lines, 46 tests) — cross-document validation: verifies each case
-document's company/individuals against the certificate of incumbency (UEN/name/ID fuzzy
-matching). Gates fraud detection per its own docstring.
+`case_match.py` (696 lines, 46 tests) — cross-document validation: verifies each case document's
+company/individuals against the certificate of incumbency (UEN/name/ID fuzzy matching). Gates
+fraud detection per its own docstring.
 
 ## 2. LangGraph Detection Agent — `backend/app/langgraph/detection/`
 
-- **`tools.py`** — wired to the real checks. All 6 `@tool` wrappers (`font_consistency_tool`,
-  `layout_anomalies_tool`, `spelling_tool`, `date_consistency_tool`, `transaction_balance_tool`,
-  `metadata_tool`) call the matching `fraud_detection/*.py` function directly, same calling
-  convention as `routers/detection.py`'s own endpoints. `transaction_balance_tool` filters
-  `check_numerical_validation`'s findings down to `BS.RUNNING_BALANCE` only, since the other
-  numerical checks it also runs (ACRA/CR/FATCA/FS/LOAN/NOA/PAY) are out of this tool's scope.
-  Each check's own deterministic severity (e.g. `impossible`/`inconsistent`, or `high`/`medium`/
-  `low` for metadata) is passed through as `severity_hint`, kept distinct from the specialist's
-  own `info/low/medium/high` scale added later.
-- **`specialists.py`** — 3 `Specialist` dataclasses (`layout_rendering`, `content_validation`,
+- **`tools.py`** — 6 `@tool` wrappers (`font_consistency_tool`, `layout_anomalies_tool`,
+  `spelling_tool`, `date_consistency_tool`, `transaction_balance_tool`, `metadata_tool`), each
+  calling the matching `fraud_detection/*.py` function directly — same convention
+  `routers/detection.py`'s own endpoints use. `transaction_balance_tool` filters
+  `check_numerical_validation`'s findings down to `BS.RUNNING_BALANCE` only (the other numerical
+  checks it runs — ACRA/CR/FATCA/FS/LOAN/NOA/PAY — are out of this tool's scope). Each check's own
+  deterministic severity is passed through as `severity_hint`, kept distinct from the specialist's
+  own `info/low/medium/high` scale.
+  - **Fixed bug**: every finding dict is contractually required to carry `"summary"` (module
+    docstring; the lead's review prompt and the frontend both index it unconditionally), but
+    `font_consistency_tool`/`spelling_tool`/`metadata_tool` never set it — crashed real detection
+    runs with `KeyError: 'summary'` in `graph.py::_compact_reports`. Fixed by adding a real summary
+    to all three, plus an assertion in `_with_ids` so a future tool forgetting it fails loudly
+    instead of crashing mid-run. Covered by `tests/test_detection_tools.py` (new).
+- **`specialists.py`** — 3 `Specialist`s (`layout_rendering`, `content_validation`,
   `digital_authenticity`), each a tool-calling subgraph bound to a subset of tools.
-  `layout_rendering` now has both `font_consistency_tool` and `layout_anomalies_tool`.
   `run_specialist()` compiles/caches one graph per specialist.
 - **`graph.py`** — Lead Investigator graph: `load_context → lead_plan → [specialists via Send]
   → lead_review → optional second look → synthesize`. Lead picks a specialist team per document
-  type via an LLM call, dispatches in parallel, deterministically merges findings into a final
-  verdict (`flagged`/`inconclusive`/`clean`). `run_detection(document_id)` is the entry point
-  wired into `POST /documents/{id}/detection/run`.
+  type via an LLM call, dispatches specialists in parallel, deterministically merges findings
+  into a final verdict (`flagged`/`inconclusive`/`clean`). `run_detection(document_id)` is the
+  entry point wired into `POST /documents/{id}/detection/run`.
+  - **Fixed bug**: `DetectionState.reports` (the fan-in key every parallel specialist writes a
+    finding list into) was declared `Required[Annotated[list, operator.add]]` — LangGraph only
+    recognizes a reducer when `Annotated` is the *outer* type, so `Required[Annotated[...]]`
+    silently fell back to a no-reducer `LastValue` channel and crashed
+    (`InvalidUpdateError: At key 'reports'...`) the moment 2+ specialists ran in the same step.
+    Fixed by swapping the nesting to `Annotated[Required[list], operator.add]`.
+  - **Error handling**: a crash inside `run_detection` is now recorded on the document's trace
+    (`detection_error` step, see `langgraph/trace.py`) before re-raising, so a failed run is
+    distinguishable from one that never ran. `GET .../detection/report` returns 502 with the
+    failure reason when a `detection_error` exists and no report does, 404 only when neither
+    exists. The frontend's Detection panel surfaces this and offers a retry button either way.
 
 ## 3. API surface — `backend/app/routers/detection.py`
 
-Real, working checks (same `fraud_detection/*.py` and `case_match.py` functions the LangGraph
-tools above now also call):
+- `GET /documents/{id}/detection/{font-consistency,layout-anomalies,spelling-anomaly,
+  numerical-validation,date-anomalies,metadata-anomaly}` — individual on-demand checks, gated by
+  `_require_detection_has_run`: a loan officer can trigger one specific check, but only after
+  `POST /detection/run` has produced a `detection_report` for that document at least once (409
+  otherwise) — a manual single-check run can refine an existing finding, it can't substitute for
+  the agent's own pass.
+- `GET /documents/{id}/detection/case-match` — ungated (wraps
+  `case_service.get_case_match_for_document`).
+- `POST /documents/{id}/detection/run` → `langgraph.detection.graph.run_detection`. Also fires
+  automatically as a background task right after a document is approved
+  (`routers/documents.py::_start_detection_after_approval`).
+- `GET /documents/{id}/detection/report` → the persisted `detection_report` (see §2 for its
+  404-vs-502 split) · `GET /cases/{case_id}/detection/reports` → all reports for a case.
 
-- `GET /documents/{id}/detection/font-consistency`
-- `GET /documents/{id}/detection/layout-anomalies`
-- `GET /documents/{id}/detection/spelling-anomaly`
-- `GET /documents/{id}/detection/numerical-validation`
-- `GET /documents/{id}/detection/date-anomalies`
-- `GET /documents/{id}/detection/metadata-anomaly`
-- `GET /documents/{id}/detection/case-match` (wraps `case_service.get_case_match_for_document`)
+No dev/QA duplicate of any of this remains — the old `/extraction/test-*` endpoints and the
+`/extraction/test` router itself (plus their only frontend callers, `TestAnomalyPage.tsx` and
+`ExtractionTestPage.tsx`, and all their dedicated service files) have been deleted outright.
 
-Agentic path (now produces real findings, see §2):
+## 4. Frontend — `DocumentDetailsPage.tsx`'s Detection section
 
-- `POST /documents/{id}/detection/run` → `langgraph.detection.graph.run_detection`
-- `GET /documents/{id}/detection/report` → reads persisted langgraph trace's `detection_report`
-- `GET /cases/{case_id}/detection/reports` → all stored reports for a case
+Unstyled/debug-styled, covers the full workflow:
+- Renders `detectionReport` (`getDetectionReport`), auto-fetched on load; shows the failure reason
+  and a "Run detection"/"Retry detection" button when the last run crashed or never ran (`runDetection`).
+- "Run an individual check" — six buttons (§3's gated list, via `runIndividualDetectionCheck`),
+  disabled with an explanatory message until `detectionReport` exists; each result renders in its
+  own collapsible `<details>`.
 
-`backend/app/routers/extraction.py`'s `/test-*` dev/QA endpoints (duplicated the same checks on
-ad-hoc uploads, no persisted document/case) have been removed now that the real endpoints above
-and the LangGraph tools both cover the same ground — only `/extraction/test` (raw-text
-extraction, unrelated to fraud detection) remains. `frontend/src/pages/TestAnomalyPage.tsx`
-still calls the removed paths and will 404 until it's updated or retired (frontend intentionally
-not touched here).
+## 5. Test coverage — `backend/tests/`
 
-## 4. Test coverage — `backend/tests/`
+Counts match §1's table for the check modules themselves. Beyond those: `test_case_match.py` (46),
+`test_langgraph.py` (37, pipeline-wide not detection-specific), `test_detection.py` (19,
+`routers/detection.py` endpoints), `test_detection_tools.py` (4, the `tools.py` "summary" contract
+fix above only — not general coverage), `test_fraud_injections.py`/`test_injection_router.py`/
+`test_injectors.py` (15/8/7, synthetic-fraud generation — see §6).
 
-| Test file | Covers | # tests |
-|---|---|---|
-| `test_layout_anomalies.py` | `fraud_detection/layout_anomalies.py` | 108 |
-| `test_numerical_validation.py` | `fraud_detection/numerical_validation.py` | 88 |
-| `test_metadata_analysis.py` | `fraud_detection/metadata_analysis.py` | 54 |
-| `test_case_match.py` | `case_match.py` | 46 |
-| `test_langgraph.py` | LangGraph pipeline generally (not detection-specific) | 37 |
-| `test_date_anomalies.py` | `fraud_detection/date_anomalies.py` | 38 |
-| `test_spelling_anomaly.py` | `fraud_detection/spelling_anomaly.py` | 24 |
-| `test_detection.py` | `routers/detection.py` endpoints | 19 |
-| `test_font_consistency.py` | `fraud_detection/font_consistency.py` | 16 |
-| `test_fraud_injections.py` | synthetic-fraud injection correctness | 15 |
-| `test_injection_router.py` | `routers/injection.py` | 8 |
-| `test_injectors.py` | `injection/injectors.py` | 7 |
-
-No dedicated test file exercises `langgraph/detection/tools.py`, `specialists.py`, or
-`graph.py` beyond generic coverage in `test_langgraph.py`/`test_detection.py`.
-
-## 5. Frontend surface
-
-`frontend/src/pages/TestAnomalyPage.tsx` — dev/QA page ("Test anomaly detection") that hits the
-now-removed `/test-*` extraction-router endpoints (see §3) — currently broken, not yet updated.
-No dedicated "Detection Report" panel exists yet;
-`DocumentDetailsPage.tsx` is the likely eventual home for rendering `/detection/report` results.
+No dedicated test file exercises `specialists.py` or `graph.py` beyond the generic coverage
+above — the main gap left in this area, along with no test covering the `reports`-reducer fix
+in §2 specifically.
 
 ## 6. Synthetic fraud data — `backend/app/injection/`
 
-Generates the test/training data the checks above are validated against: `injectors.py`
-(defect classes injecting layout/font/text/metadata manipulations into PDFs, built on `pdf.py`
-and `field_text.py`), `schemas.py`, `service.py`, `store.py`. Exposed via
+Generates the test/training data the checks above are validated against: `injectors.py` (defect
+classes injecting layout/font/text/metadata manipulations into PDFs, built on `pdf.py` and
+`field_text.py`), `schemas.py`, `service.py`, `store.py`. Exposed via
 `backend/app/routers/injection.py` (`/api/dev` prefix).
-
-## Bottom line
-
-The individual fraud-detection checks are real, implemented, and well-tested, and the agentic
-orchestration layer (`langgraph/detection/`) now calls them directly — `POST /detection/run`
-produces real findings. No dedicated unit tests for `tools.py`/`specialists.py`/`graph.py` yet
-(see §4) — the main gap left in this area.

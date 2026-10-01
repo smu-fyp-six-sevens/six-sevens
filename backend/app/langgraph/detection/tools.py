@@ -99,12 +99,34 @@ def _result(tool_name: str, findings: list[dict], *, unable: str | None = None) 
 
 
 def _with_ids(tool_name: str, findings: list[dict]) -> list[dict]:
+    # "summary" is part of every tool's contract (module docstring) — the lead's
+    # review prompt and the frontend both index findings by it unconditionally,
+    # so a tool that forgets it crashes detection downstream instead of here.
+    for finding in findings:
+        assert "summary" in finding, f"{tool_name} finding missing required 'summary' key: {finding}"
     return [{"id": f"{tool_name}-{i + 1}", **finding} for i, finding in enumerate(findings)]
 
 
 def _short(text: Any) -> str:
     text = " ".join(str(text).split())
     return text if len(text) <= _MAX_TEXT else text[: _MAX_TEXT - 1] + "…"
+
+
+def _font_deviation_summary(
+    deviation_type: str, detected: dict, expected: dict, field_name: str | None, occurrence_count: int
+) -> str:
+    where = f"'{field_name}'" if field_name else "text"
+    changed = [
+        f"{label} {detected.get(key)!r} vs. expected {expected.get(key)!r}"
+        for key, label in (
+            ("font", "font"), ("size", "size"), ("bold", "bold"),
+            ("italic", "italic"), ("underline", "underline"),
+        )
+        if detected.get(key) != expected.get(key)
+    ]
+    detail = "; ".join(changed) if changed else deviation_type
+    plural = "s" if occurrence_count != 1 else ""
+    return f"{deviation_type.capitalize()} deviation on {where}: {detail} ({occurrence_count} occurrence{plural})."
 
 
 # --- Layout & Rendering -----------------------------------------------------
@@ -134,6 +156,10 @@ async def font_consistency_tool(document_id: Annotated[str, InjectedState("docum
             "locations": [
                 {"page": loc.page + 1, "text": _short(loc.text)} for loc in anomaly.locations[:5]
             ],
+            "summary": _font_deviation_summary(
+                anomaly.deviation_type, anomaly.detected, anomaly.expected,
+                anomaly.field_name, anomaly.occurrence_count,
+            ),
         }
         for anomaly in result.anomalies
     ]
@@ -142,7 +168,7 @@ async def font_consistency_tool(document_id: Annotated[str, InjectedState("docum
 
 @tool
 async def layout_anomalies_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
-    """Checks the document's text positioning for indentation, alignment, margin and paragraph-spacing that clash with the rest of the document — a classic sign of an inserted or edited clause. Only meaningful for PDFs with native text."""
+    """Checks the document's text positioning for indentation, alignment, margin and paragraph-spacing that clash with the rest of the document, and for overlapping/overlaid text blocks — all classic signs of an inserted, edited, or pasted-over clause. Only meaningful for PDFs with native text."""
     file_bytes = await _file_bytes(document_id)
     if file_bytes is None:
         return _result("layout_anomalies_tool", [], unable="Document file is not available in storage")
@@ -181,6 +207,11 @@ async def spelling_tool(document_id: Annotated[str, InjectedState("document_id")
             "word": anomaly.word,
             "context": _short(anomaly.surrounding_text),
             "suggested_correction": anomaly.suggested_correction,
+            "summary": (
+                f'Possible misspelling "{anomaly.word}"'
+                + (f' (suggested: "{anomaly.suggested_correction}")' if anomaly.suggested_correction else "")
+                + "."
+            ),
         }
         for anomaly in result.anomalies
     ]
@@ -275,6 +306,7 @@ async def metadata_tool(document_id: Annotated[str, InjectedState("document_id")
             "value": anomaly.value,
             "reason": anomaly.reason,
             "severity_hint": anomaly.severity,
+            "summary": f"{anomaly.field}: {anomaly.reason}",
         }
         for anomaly in result.anomalies
     ]

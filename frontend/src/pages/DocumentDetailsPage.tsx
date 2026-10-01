@@ -30,14 +30,49 @@ import {
   getLangGraphTrace,
   updateDocumentType,
   updateExtractedFields,
+  runDetection,
+  runIndividualDetectionCheck,
+  INDIVIDUAL_DETECTION_CHECKS,
 } from '../services/uploadService';
-import type { DetectionReport, DocumentCaseMatch, DocumentRecord, LangGraphTrace } from '../services/uploadService';
+import type {
+  DetectionReport,
+  DocumentCaseMatch,
+  DocumentRecord,
+  IndividualCheckId,
+  LangGraphTrace,
+} from '../services/uploadService';
 
 interface DocumentDetailsPageProps {
   selectedCase: CaseRecord;
   documentId: string;
   onBack: () => void;
   onDocumentDeleted: () => void;
+}
+
+function RefreshButton({
+  isRefreshing,
+  onClick,
+  label,
+}: {
+  isRefreshing: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      className={`panel-refresh-button${isRefreshing ? ' is-refreshing' : ''}`}
+      aria-label={isRefreshing ? `Refreshing ${label}` : `Refresh ${label}`}
+      title={isRefreshing ? 'Refreshing…' : 'Refresh'}
+      disabled={isRefreshing}
+      onClick={onClick}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 11A8 8 0 1 0 18.6 16" />
+        <path d="M20 5v6h-6" />
+      </svg>
+    </button>
+  );
 }
 
 
@@ -651,9 +686,75 @@ export default function DocumentDetailsPage({
   // once a document went through the old Dify path or after a backend
   // restart, so a missing trace is expected, not an error.
   const [langGraphTrace, setLangGraphTrace] = useState<LangGraphTrace | null>(null);
+  const [isRefreshingTrace, setIsRefreshingTrace] = useState(false);
+
+  const refreshLangGraphTrace = async () => {
+    setIsRefreshingTrace(true);
+    try {
+      const result = await getLangGraphTrace(documentId);
+      setLangGraphTrace(result);
+    } catch {
+      // Dev-only aid — a fetch failure here shouldn't disturb the page.
+    } finally {
+      setIsRefreshingTrace(false);
+    }
+  };
 
   // Detection Agent: the stored report for this document.
   const [detectionReport, setDetectionReport] = useState<DetectionReport | null>(null);
+  // Set when a run crashed (distinct from simply not having run yet) — see
+  // GET .../detection/report's 502-vs-404 split in routers/detection.py.
+  const [detectionError, setDetectionError] = useState<string | null>(null);
+  const [isRunningDetection, setIsRunningDetection] = useState(false);
+
+  const handleRunDetection = async () => {
+    setIsRunningDetection(true);
+    setDetectionError(null);
+    try {
+      const report = await runDetection(documentId);
+      setDetectionReport(report);
+    } catch (err) {
+      setDetectionError(err instanceof Error ? err.message : 'Detection failed.');
+    } finally {
+      setIsRunningDetection(false);
+    }
+  };
+
+  const [isRefreshingDetection, setIsRefreshingDetection] = useState(false);
+
+  const refreshDetectionReport = async () => {
+    setIsRefreshingDetection(true);
+    try {
+      const report = await getDetectionReport(documentId);
+      setDetectionReport(report);
+      setDetectionError(null);
+    } catch (err) {
+      setDetectionError(err instanceof Error ? err.message : 'Detection failed.');
+    } finally {
+      setIsRefreshingDetection(false);
+    }
+  };
+
+  // Individual on-demand checks: a loan officer can re-run one specific check,
+  // but only once the agent's full detection pass has produced detectionReport.
+  const [runningCheckId, setRunningCheckId] = useState<IndividualCheckId | null>(null);
+  const [individualCheckError, setIndividualCheckError] = useState<string | null>(null);
+  const [individualCheckResults, setIndividualCheckResults] = useState<
+    Partial<Record<IndividualCheckId, unknown>>
+  >({});
+
+  const handleRunIndividualCheck = async (checkId: IndividualCheckId) => {
+    setRunningCheckId(checkId);
+    setIndividualCheckError(null);
+    try {
+      const result = await runIndividualDetectionCheck(documentId, checkId);
+      setIndividualCheckResults((prev) => ({ ...prev, [checkId]: result }));
+    } catch (err) {
+      setIndividualCheckError(err instanceof Error ? err.message : 'Check failed.');
+    } finally {
+      setRunningCheckId(null);
+    }
+  };
 
   const [isApproving, setIsApproving] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
@@ -868,8 +969,10 @@ export default function DocumentDetailsPage({
       .then((report) => {
         if (!cancelled) setDetectionReport(report);
       })
-      .catch(() => {
-        // Dev-only aid — a fetch failure here shouldn't disturb the page.
+      .catch((err) => {
+        if (!cancelled) {
+          setDetectionError(err instanceof Error ? err.message : 'Detection failed.');
+        }
       });
     return () => {
       cancelled = true;
@@ -877,36 +980,22 @@ export default function DocumentDetailsPage({
   }, [documentId]);
 
 
-  // Poll the langgraph trace while the pipeline is running (there's no
-  // websocket event for it), and once more right after it finishes so the
-  // final route/steps show up without a manual refresh.
+  // Fetched once on load; no polling — this is a dev debug aid (not pushed
+  // over the case-status websocket), so pick up later steps via the Refresh
+  // button on the panel instead.
   useEffect(() => {
     let cancelled = false;
-
-    async function loadTrace() {
-      try {
-        const result = await getLangGraphTrace(documentId);
-        if (!cancelled) {
-          setLangGraphTrace(result);
-        }
-      } catch {
+    getLangGraphTrace(documentId)
+      .then((result) => {
+        if (!cancelled) setLangGraphTrace(result);
+      })
+      .catch(() => {
         // Dev-only aid — a fetch failure here shouldn't disturb the page.
-      }
-    }
-
-    void loadTrace();
-    if (!isInFlight) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const interval = window.setInterval(() => void loadTrace(), 2000);
+      });
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
     };
-  }, [documentId, isInFlight, document?.status]);
+  }, [documentId]);
 
   async function handleApproveDocument() {
     if (!document) {
@@ -1817,7 +1906,8 @@ export default function DocumentDetailsPage({
           see backend/app/langgraph/trace.py)
           ===================================================== */}
 
-      <section className="details-card" style={{ fontFamily: 'monospace', fontSize: '0.85em' }}>
+      <section className="details-card" style={{ fontFamily: 'monospace', fontSize: '0.85em', position: 'relative' }}>
+        <RefreshButton isRefreshing={isRefreshingTrace} onClick={() => void refreshLangGraphTrace()} label="langgraph trace" />
         <h2 style={{ marginTop: 0 }}>LangGraph trace (debug)</h2>
         {!langGraphTrace ? (
           <p>No langgraph trace yet for this document (not processed via langgraph in this backend process, or not started yet).</p>
@@ -1847,10 +1937,23 @@ export default function DocumentDetailsPage({
           backend/app/langgraph/detection/graph.py)
           ===================================================== */}
 
-        <section className="details-card" style={{ fontFamily: 'monospace', fontSize: '0.85em' }}>
+        <section className="details-card" style={{ fontFamily: 'monospace', fontSize: '0.85em', position: 'relative' }}>
+          <RefreshButton isRefreshing={isRefreshingDetection} onClick={() => void refreshDetectionReport()} label="detection" />
           <h2 style={{ marginTop: 0 }}>Detection</h2>
+        {detectionError && (
+          <p style={{ color: 'crimson' }}>{detectionError}</p>
+        )}
         {!detectionReport ? (
-          <p>No detection report yet for this document.</p>
+          <>
+            <p>
+              {detectionError
+                ? 'The last detection run did not finish.'
+                : 'No detection report yet for this document.'}
+            </p>
+            <button type="button" disabled={isRunningDetection} onClick={() => void handleRunDetection()}>
+              {isRunningDetection ? 'Running…' : detectionError ? 'Retry detection' : 'Run detection'}
+            </button>
+          </>
         ) : (
           <>
             <p>
@@ -1903,6 +2006,39 @@ export default function DocumentDetailsPage({
                   ))}
                 </ul>
               </>
+            )}
+          </>
+        )}
+
+        <h3 style={{ marginBottom: '0.25em' }}>Run an individual check</h3>
+        {!detectionReport ? (
+          <p>Run full detection above first — individual checks unlock once a report exists.</p>
+        ) : (
+          <>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5em' }}>
+              {INDIVIDUAL_DETECTION_CHECKS.map((check) => (
+                <button
+                  key={check.id}
+                  type="button"
+                  disabled={runningCheckId !== null}
+                  onClick={() => void handleRunIndividualCheck(check.id)}
+                >
+                  {runningCheckId === check.id ? 'Running…' : check.label}
+                </button>
+              ))}
+            </div>
+            {individualCheckError && (
+              <p style={{ color: 'crimson' }}>{individualCheckError}</p>
+            )}
+            {INDIVIDUAL_DETECTION_CHECKS.map((check) =>
+              individualCheckResults[check.id] !== undefined ? (
+                <details key={check.id} style={{ marginTop: '0.5em' }}>
+                  <summary>{check.label} result</summary>
+                  <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                    {JSON.stringify(individualCheckResults[check.id], null, 2)}
+                  </pre>
+                </details>
+              ) : null,
             )}
           </>
         )}

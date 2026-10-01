@@ -201,9 +201,19 @@ async def get_document_detection_report(document_id: str) -> dict:
         trace = None
     trace = trace or langgraph_trace.get(document_id)
     report = (trace or {}).get("detection_report")
-    if not report:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No detection report for this document yet.")
-    return report
+    if report:
+        return report
+    # A report always wins over a stale error from an earlier failed attempt
+    # (above) — only fall back to reporting the error when there's no report
+    # at all, so the frontend can tell "crashed" apart from "never run yet"
+    # instead of both looking like the same 404 forever.
+    error = (trace or {}).get("detection_error")
+    if error:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Detection failed: {error}. Run detection again.",
+        )
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No detection report for this document yet.")
 
 
 @cases_router.get("/{case_id}/detection/reports")

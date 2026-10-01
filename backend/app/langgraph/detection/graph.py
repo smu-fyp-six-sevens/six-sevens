@@ -55,7 +55,10 @@ class DetectionState(TypedDict, total=False):
     document_id: Required[str]
     context: dict
     plan: dict
-    reports: Required[Annotated[list, operator.add]]
+    # Annotated must wrap Required, not the other way round — LangGraph reads
+    # the outer annotation to find the reducer, and Required[Annotated[...]]
+    # silently loses it, leaving concurrent specialist writes to collide.
+    reports: Annotated[Required[list], operator.add]
     second_look_used: Required[bool]
     second_look: dict | None
     lead_summary: str
@@ -250,9 +253,14 @@ async def lead_plan_node(state: DetectionState) -> dict:
     context = _context(state)
     plan = _normalise_plan(await _ask_lead(prompt, {"document": context}, span_name="detection.lead_plan"))
     plan["deviation"] = _plan_deviation(plan, context["default_team"])
+    consult_names = [c["specialist"] for c in plan["consult"]]
+    logger.info(
+        "Document %s: lead plan — consulting %s, skipping %s",
+        state["document_id"], consult_names or "none", [s["specialist"] for s in plan["skip"]],
+    )
     trace.record(
         state["document_id"], "detection_plan",
-        detection_consult=[c["specialist"] for c in plan["consult"]],
+        detection_consult=consult_names,
         detection_skip=[s["specialist"] for s in plan["skip"]],
         detection_deviation=plan["deviation"],
     )
@@ -275,9 +283,17 @@ def _dispatch(state: DetectionState):
 
 
 async def specialist_node(payload: dict) -> dict:
+    logger.info(
+        "Document %s: %s specialist starting%s",
+        payload["document_id"], payload["name"], " (second look)" if payload.get("second_look") else "",
+    )
     report = await run_specialist(payload["name"], payload["document_id"], payload["document_type"], payload["brief"])
     if payload.get("second_look"):
         report = {**report, "second_look": True}
+    logger.info(
+        "Document %s: %s specialist done — %d finding(s), tools called: %s",
+        payload["document_id"], payload["name"], len(report["findings"]), report["tools_called"] or "none",
+    )
     trace.record(
         payload["document_id"], "detection_specialist",
         specialist=payload["name"], tools_called=report["tools_called"],
@@ -348,6 +364,11 @@ async def lead_review_node(state: DetectionState) -> dict:
     }, span_name="detection.lead_review")
     summary = (raw or {}).get("summary") or ""
     request = None if used else _validated_second_look((raw or {}).get("second_look"), state["reports"])
+    logger.info(
+        "Document %s: lead review done%s",
+        state["document_id"],
+        f" — requesting a second look from {request['to']}" if request else "",
+    )
     update: dict = {"lead_summary": summary}
     if request:
         update["second_look"] = request
@@ -472,6 +493,10 @@ def merge_reports(state: DetectionState) -> dict:
 
 async def synthesize_node(state: DetectionState) -> dict:
     result = merge_reports(state)
+    logger.info(
+        "Document %s: detection done — verdict %s, %d finding(s)",
+        state["document_id"], result["verdict"], len(result["findings"]),
+    )
     trace.record(
         state["document_id"], "detection_done",
         detection_verdict=result["verdict"], detection_report=result,
@@ -516,17 +541,26 @@ def get_detection_graph():
 
 async def run_detection(document_id: str) -> dict:
     """Investigates one document and returns the combined report. Raises DetectionError if it can't be investigated."""
+    logger.info("Document %s: detection run starting", document_id)
     await asyncio.to_thread(trace.resume, document_id)
     trace.record(document_id, "detection_start")
     with telemetry.get_tracer().start_as_current_span("detection.run") as span:
         span.set_attribute("document_id", document_id)
         try:
-            final = await get_detection_graph().ainvoke(
-                {"document_id": document_id, "reports": [], "second_look_used": False},
-                config={"recursion_limit": _RECURSION_LIMIT},
-            )
-        finally:
-            detection_tools.clear_context(document_id)
+            try:
+                final = await get_detection_graph().ainvoke(
+                    {"document_id": document_id, "reports": [], "second_look_used": False},
+                    config={"recursion_limit": _RECURSION_LIMIT},
+                )
+            finally:
+                detection_tools.clear_context(document_id)
+        except Exception as exc:
+            # Recorded so GET .../detection/report (and the frontend) can tell
+            # "crashed" apart from "never run" instead of both looking like a
+            # silent 404 forever — see routers/detection.py.
+            logger.exception("Detection graph run failed for document %s", document_id)
+            trace.record(document_id, "detection_error", error=f"{type(exc).__name__}: {exc}")
+            raise
         result = final["result"]
         span.set_attribute("verdict", result["verdict"])
         span.set_attribute("finding_count", len(result["findings"]))

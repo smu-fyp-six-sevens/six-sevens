@@ -32,6 +32,13 @@ def _document(**kwargs) -> DocumentRecord:
     return DocumentRecord(**values)
 
 
+def _mark_detection_already_ran(mock_trace) -> None:
+    """Satisfies _require_detection_has_run's gate for the individual-check
+    endpoints below — a full detection pass must have produced a report
+    before an on-demand single check is allowed to run."""
+    mock_trace.get_persisted.return_value = {"detection_report": {"verdict": "clean"}}
+
+
 def test_font_consistency_uses_extracted_fields() -> None:
     result = FontConsistencyResult(
         document_id="doc-1",
@@ -45,10 +52,12 @@ def test_font_consistency_uses_extracted_fields() -> None:
         patch("app.routers.detection.storage_service") as mock_storage,
         patch("app.routers.detection.extracted_fields_repository") as mock_fields,
         patch("app.routers.detection.check_font_consistency", return_value=result) as mock_check,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
     ):
         mock_repo.get_document.return_value = _document()
         mock_storage.download_file.return_value = b"%PDF-1.4"
         mock_fields.get_extracted_fields.return_value = fields
+        _mark_detection_already_ran(mock_trace)
 
         response = client.get("/documents/doc-1/detection/font-consistency")
 
@@ -69,10 +78,12 @@ def test_font_consistency_degrades_when_fields_fetch_fails() -> None:
         patch("app.routers.detection.storage_service") as mock_storage,
         patch("app.routers.detection.extracted_fields_repository") as mock_fields,
         patch("app.routers.detection.check_font_consistency", return_value=result) as mock_check,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
     ):
         mock_repo.get_document.return_value = _document()
         mock_storage.download_file.return_value = b"%PDF-1.4"
         mock_fields.get_extracted_fields.side_effect = RuntimeError("fields down")
+        _mark_detection_already_ran(mock_trace)
 
         response = client.get("/documents/doc-1/detection/font-consistency")
 
@@ -100,9 +111,11 @@ def test_layout_anomalies_happy_path() -> None:
         patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.storage_service") as mock_storage,
         patch("app.routers.detection.check_layout_anomalies", return_value=result) as mock_check,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
     ):
         mock_repo.get_document.return_value = _document()
         mock_storage.download_file.return_value = b"%PDF-1.4"
+        _mark_detection_already_ran(mock_trace)
 
         response = client.get("/documents/doc-1/detection/layout-anomalies")
 
@@ -123,16 +136,22 @@ def test_font_consistency_fetch_errors() -> None:
         mock_repo.get_document.return_value = None
         assert client.get("/documents/doc-1/detection/font-consistency").status_code == 404
 
-    with patch("app.routers._dependencies.document_repository") as mock_repo:
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
+    ):
         mock_repo.get_document.return_value = _document(storage_path=None)
+        _mark_detection_already_ran(mock_trace)
         assert client.get("/documents/doc-1/detection/font-consistency").status_code == 404
 
     with (
         patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.storage_service") as mock_storage,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
     ):
         mock_repo.get_document.return_value = _document()
         mock_storage.download_file.side_effect = RuntimeError("storage down")
+        _mark_detection_already_ran(mock_trace)
         assert client.get("/documents/doc-1/detection/font-consistency").status_code == 502
 
 def _make_document(document_id: str = "doc-1") -> DocumentRecord:
@@ -165,11 +184,13 @@ def test_get_spelling_anomaly_success_returns_result_with_no_persistence() -> No
         patch(
             "app.routers.detection.check_spelling_anomalies", new_callable=AsyncMock
         ) as mock_check,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
     ):
         mock_repo.get_document.return_value = _make_document()
         mock_storage.download_file.return_value = b"%PDF-1.4 fake bytes"
         mock_fields_repo.get_extracted_fields.return_value = []
         mock_check.return_value = result
+        _mark_detection_already_ran(mock_trace)
 
         response = client.get("/documents/doc-1/detection/spelling-anomaly")
 
@@ -218,9 +239,11 @@ def test_get_spelling_anomaly_storage_failure_returns_502() -> None:
         patch(
             "app.routers.detection.check_spelling_anomalies", new_callable=AsyncMock
         ) as mock_check,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
     ):
         mock_repo.get_document.return_value = _make_document()
         mock_storage.download_file.side_effect = RuntimeError("bucket unreachable")
+        _mark_detection_already_ran(mock_trace)
 
         response = client.get("/documents/doc-1/detection/spelling-anomaly")
 
@@ -244,8 +267,10 @@ def test_get_metadata_anomaly_success_persists_result() -> None:
         patch(
             "app.routers.detection.check_metadata_anomalies", return_value=result
         ) as mock_check,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
     ):
         mock_repo.get_document.return_value = _make_document()
+        _mark_detection_already_ran(mock_trace)
 
         response = client.get("/documents/doc-1/detection/metadata-anomaly")
 
@@ -275,8 +300,10 @@ def test_get_metadata_anomaly_passes_stored_metadata_and_document_type_through()
         patch(
             "app.routers.detection.check_metadata_anomalies", return_value=result
         ) as mock_check,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
     ):
         mock_repo.get_document.return_value = document
+        _mark_detection_already_ran(mock_trace)
 
         response = client.get("/documents/doc-1/detection/metadata-anomaly")
 
@@ -339,9 +366,11 @@ def test_get_numerical_validation_passes_extracted_fields_and_document_type() ->
             "app.routers.detection.check_numerical_validation",
             return_value=_numerical_result(),
         ) as mock_check,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
     ):
         mock_repo.get_document.return_value = _document()
         mock_fields.get_extracted_fields.return_value = fields
+        _mark_detection_already_ran(mock_trace)
 
         response = client.get("/documents/doc-1/detection/numerical-validation")
 
@@ -361,9 +390,11 @@ def test_get_numerical_validation_degrades_when_fields_fetch_fails() -> None:
             "app.routers.detection.check_numerical_validation",
             return_value=_numerical_result(),
         ) as mock_check,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
     ):
         mock_repo.get_document.return_value = _document()
         mock_fields.get_extracted_fields.side_effect = RuntimeError("fields down")
+        _mark_detection_already_ran(mock_trace)
 
         response = client.get("/documents/doc-1/detection/numerical-validation")
 
@@ -379,9 +410,11 @@ def test_get_numerical_validation_writes_nothing() -> None:
             "app.routers.detection.check_numerical_validation",
             return_value=_numerical_result(),
         ),
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
     ):
         mock_repo.get_document.return_value = _document()
         mock_fields.get_extracted_fields.return_value = []
+        _mark_detection_already_ran(mock_trace)
 
         response = client.get("/documents/doc-1/detection/numerical-validation")
 
@@ -435,9 +468,11 @@ def test_get_date_anomalies_passes_extracted_fields_and_document_type() -> None:
             "app.routers.detection.check_date_anomalies",
             return_value=_date_anomaly_result(),
         ) as mock_check,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
     ):
         mock_repo.get_document.return_value = _document()
         mock_fields.get_extracted_fields.return_value = fields
+        _mark_detection_already_ran(mock_trace)
 
         response = client.get("/documents/doc-1/detection/date-anomalies")
 
@@ -456,9 +491,11 @@ def test_get_date_anomalies_writes_nothing() -> None:
             "app.routers.detection.check_date_anomalies",
             return_value=_date_anomaly_result(),
         ),
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
     ):
         mock_repo.get_document.return_value = _document()
         mock_fields.get_extracted_fields.return_value = []
+        _mark_detection_already_ran(mock_trace)
 
         response = client.get("/documents/doc-1/detection/date-anomalies")
 
