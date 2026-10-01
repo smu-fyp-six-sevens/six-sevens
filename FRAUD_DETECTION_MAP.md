@@ -19,7 +19,8 @@ file's ~650-line PDF→blocks/lines extraction pipeline with every other layout 
 overlay-specific logic on top of that is only ~130 lines. Splitting it out would mean duplicating
 that extraction pipeline, not avoiding duplication.
 
-No image-manipulation or AI-generated-content check exists yet.
+`image_manipulation.py` (SCRUM-64) covers resolution and compression mismatches between a file's
+images (embedded PDF images or a standalone PNG/JPEG). No AI-generated-content check exists yet.
 
 `case_match.py` (696 lines, 46 tests) — cross-document validation: verifies each case document's
 company/individuals against the certificate of incumbency (UEN/name/ID fuzzy matching). Gates
@@ -27,8 +28,9 @@ fraud detection per its own docstring.
 
 ## 2. LangGraph Detection Agent — `backend/app/langgraph/detection/`
 
-- **`tools.py`** — 6 `@tool` wrappers (`font_consistency_tool`, `layout_anomalies_tool`,
-  `spelling_tool`, `date_consistency_tool`, `transaction_balance_tool`, `metadata_tool`), each
+- **`tools.py`** — 7 `@tool` wrappers (`font_consistency_tool`, `layout_anomalies_tool`,
+  `spelling_tool`, `date_consistency_tool`, `transaction_balance_tool`, `metadata_tool`,
+  `image_manipulation_tool`), each
   calling the matching `fraud_detection/*.py` function directly — same convention
   `routers/detection.py`'s own endpoints use. `transaction_balance_tool` filters
   `check_numerical_validation`'s findings down to `BS.RUNNING_BALANCE` only (the other numerical

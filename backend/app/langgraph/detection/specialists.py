@@ -73,9 +73,11 @@ SPECIALISTS: dict[str, Specialist] = {
         title="Digital Authenticity Analyst",
         expertise=(
             "The file itself rather than its contents: embedded metadata, producing software, and "
-            "creation-versus-modification timing that betray editing. Applies to any uploaded file."
+            "creation-versus-modification timing that betray editing, plus resolution and "
+            "compression mismatches between the file's images (a spliced-in photo, signature or "
+            "figure, or one enlarged from a smaller source). Applies to any uploaded file, PDF or image."
         ),
-        tools=(detection_tools.metadata_tool,),
+        tools=(detection_tools.metadata_tool, detection_tools.image_manipulation_tool),
     ),
 }
 

@@ -34,6 +34,7 @@ from langgraph.prebuilt import InjectedState
 from ... import document_repository, extracted_fields_repository, storage_service
 from ...fraud_detection.date_anomalies import check_date_anomalies
 from ...fraud_detection.font_consistency import check_font_consistency
+from ...fraud_detection.image_manipulation import check_image_manipulation
 from ...fraud_detection.layout_anomalies import check_layout_anomalies
 from ...fraud_detection.metadata_analysis import check_metadata_anomalies
 from ...fraud_detection.numerical_validation import check_numerical_validation
@@ -311,3 +312,35 @@ async def metadata_tool(document_id: Annotated[str, InjectedState("document_id")
         for anomaly in result.anomalies
     ]
     return _result("metadata_tool", _with_ids("metadata_tool", findings))
+
+
+@tool
+async def image_manipulation_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
+    """Compares the resolution and compression of the images in the file against each other — the images embedded in a PDF, or a standalone PNG/JPEG upload — and checks each for signs of having been enlarged. A region drawn at a very different DPI, compressed differently, or pasted over an original image is a classic sign of a spliced-in photo, signature or figure. Works on PDFs and image uploads."""
+    file_bytes = await _file_bytes(document_id)
+    if file_bytes is None:
+        return _result("image_manipulation_tool", [], unable="Document file is not available in storage")
+
+    result = await asyncio.to_thread(check_image_manipulation, document_id, file_bytes)
+    if result.unable_to_assess:
+        return _result(
+            "image_manipulation_tool", [], unable=result.unable_to_assess_reason or "Unable to assess"
+        )
+
+    # `evidence` is left out: it's raw measurement detail for the on-demand
+    # endpoint, and detected/expected/deviation already state the finding.
+    findings = [
+        {
+            "indicator": indicator.indicator,
+            "page": indicator.page + 1,
+            "bbox": indicator.bbox,
+            "bbox_units": result.bbox_units,
+            "detected": indicator.detected,
+            "expected": indicator.expected,
+            "deviation": indicator.deviation,
+            "severity_hint": indicator.severity,
+            "summary": indicator.summary,
+        }
+        for indicator in result.indicators
+    ]
+    return _result("image_manipulation_tool", _with_ids("image_manipulation_tool", findings))

@@ -5,6 +5,11 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.fraud_detection.font_consistency import AnomalyLocation, FontAnomalyV2, FontConsistencyResult
+from app.fraud_detection.image_manipulation import (
+    ImageManipulationIndicator,
+    ImageManipulationResult,
+    Tolerances,
+)
 from app.fraud_detection.metadata_analysis import MetadataAnalysisResult, MetadataAnomaly
 from app.fraud_detection.spelling_anomaly import SpellingAnomaly, SpellingAnomalyResult
 from app.langgraph.detection import tools
@@ -79,6 +84,64 @@ def test_metadata_tool_findings_include_summary() -> None:
         output = asyncio.run(tools.metadata_tool.ainvoke({"document_id": "doc-1"}))
 
     assert output["findings"][0]["summary"]
+
+
+@pytest.mark.asyncio
+async def test_image_manipulation_tool_maps_indicators_to_findings() -> None:
+    result = ImageManipulationResult(
+        document_id="doc-1",
+        regions=[],
+        indicators=[
+            ImageManipulationIndicator(
+                indicator="Resolution Mismatch",
+                page=0,
+                bbox=(10.0, 20.0, 110.0, 70.0),
+                detected="72 DPI",
+                expected="300 DPI",
+                deviation="4.2x lower",
+                severity="high",
+                summary="Region drawn at 72 DPI among 300 DPI images.",
+                evidence={"xref": 12},
+            )
+        ],
+        pages_checked=1,
+        tolerances=Tolerances(),
+        unable_to_assess=False,
+    )
+    with (
+        patch.object(tools, "_file_bytes", AsyncMock(return_value=b"x")),
+        patch.object(tools, "check_image_manipulation", return_value=result),
+    ):
+        output = await tools.image_manipulation_tool.ainvoke({"document_id": "doc-1"})
+
+    finding = output["findings"][0]
+    assert finding["id"] == "image_manipulation_tool-1"
+    assert finding["summary"]
+    assert finding["page"] == 1
+    assert finding["severity_hint"] == "high"
+    assert "evidence" not in finding
+
+
+@pytest.mark.asyncio
+async def test_image_manipulation_tool_reports_unable_to_assess() -> None:
+    result = ImageManipulationResult(
+        document_id="doc-1",
+        regions=[],
+        indicators=[],
+        pages_checked=1,
+        tolerances=Tolerances(),
+        unable_to_assess=True,
+        unable_to_assess_reason="Only one image region; nothing to compare against",
+    )
+    with (
+        patch.object(tools, "_file_bytes", AsyncMock(return_value=b"x")),
+        patch.object(tools, "check_image_manipulation", return_value=result),
+    ):
+        output = await tools.image_manipulation_tool.ainvoke({"document_id": "doc-1"})
+
+    assert output["unable_to_assess"] is True
+    assert output["reason"] == "Only one image region; nothing to compare against"
+    assert output["findings"] == []
 
 
 def test_with_ids_rejects_finding_missing_summary() -> None:
