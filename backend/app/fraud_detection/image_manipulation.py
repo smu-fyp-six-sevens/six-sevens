@@ -1,6 +1,6 @@
 # image_manipulation.py
 """
-Digital Authenticity specialist (detection agent tool: image_manipulation_tool) — resolution and compression inconsistencies
+Layout & Rendering Specialist — resolution and compression inconsistencies
 between the images embedded in one document.
 
 A document assembled honestly is internally consistent: every image in it
