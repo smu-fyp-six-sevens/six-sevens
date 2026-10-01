@@ -11,7 +11,11 @@ from .. import document_repository, extracted_fields_repository, monitoring, sto
 
 from ._dependencies import get_document_or_404
 from ..config import settings
-from ..langgraph.extraction_prompts import KNOWN_DOCUMENT_TYPES, schema_field_names
+from ..langgraph.extraction_prompts import (
+    EXTRACTION_SCHEMAS,
+    KNOWN_DOCUMENT_TYPES,
+    schema_field_names,
+)
 from ..models import (
     IN_FLIGHT_STATUSES,
     AddExtractedFieldRequest,
@@ -24,6 +28,7 @@ from ..models import (
 )
 from ..langgraph import pipeline as langgraph_pipeline
 from ..langgraph import trace as langgraph_trace
+from ..langgraph.detection.graph import run_detection
 from ..queue_service import document_queue
 
 # "unrecognised" is the "Other" catch-all: Extraction has a generic schema for it.
@@ -33,7 +38,14 @@ _TYPE_OVERRIDE_BLOCKED_STATUSES = IN_FLIGHT_STATUSES
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 logger = logging.getLogger(__name__)
-
+async def _start_detection_after_approval(document_id: str) -> None:
+    try:
+        await run_detection(document_id)
+    except Exception:
+        logger.exception(
+            "Fraud detection failed for approved document %s",
+            document_id,
+        )
 
 class DocumentDownloadResponse(BaseModel):
     document_id: str
@@ -99,6 +111,11 @@ async def get_document(document_id: str) -> DocumentRecord:
             }
             for field in extracted_fields
         }
+
+    document.missing_required_fields = _missing_required_fields(
+        document.document_type,
+        extracted_fields,
+    )
 
     return document
 
@@ -236,9 +253,9 @@ async def update_extracted_fields(
             request.extracted_fields,
             field_confidences=field_confidences,
             default_confidence=None,
-            required_field_names=set(
+            required_field_names = set(
                 schema_field_names(document.document_type or "")
-            ),
+            )
         )
     except Exception as exc:
         logger.exception("Failed to update extracted fields for document %s", document_id)
@@ -284,7 +301,7 @@ async def add_extracted_field(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="A field with this name already exists.",
             )
-
+        
         required_field_names = set(
             schema_field_names(document.document_type or "")
         )
@@ -414,9 +431,51 @@ async def delete_extracted_field(
             detail="Failed to delete extracted field. Check Supabase table access.",
         ) from exc
 
+def _missing_required_fields(
+    document_type: str | None,
+    extracted_fields,
+) -> list[str]:
+    required_field_names = set(
+        EXTRACTION_SCHEMAS.get(document_type or "", {}).get("required", [])
+    )
+
+    if not required_field_names:
+        return []
+
+    fields_by_name = {
+        field.field_name: field
+        for field in extracted_fields
+    }
+
+    missing: list[str] = []
+
+    for field_name in sorted(required_field_names):
+        field = fields_by_name.get(field_name)
+
+        if field is None:
+            missing.append(field_name)
+            continue
+
+        value = field.field_value
+
+        if value is None:
+            missing.append(field_name)
+            continue
+
+        if isinstance(value, str) and not value.strip():
+            missing.append(field_name)
+            continue
+
+        if isinstance(value, (list, dict)) and not value:
+            missing.append(field_name)
+
+    return missing
+
 @router.post("/{document_id}/approve", response_model=DocumentRecord)
 async def approve_document(
-    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+    document_id: str,
+    background_tasks: BackgroundTasks,
+    document: DocumentRecord = Depends(get_document_or_404),
 ) -> DocumentRecord:
     """
     Approves a completed document after loan officer review.
@@ -430,13 +489,40 @@ async def approve_document(
         )
 
     try:
+        extracted_fields = await asyncio.to_thread(
+            extracted_fields_repository.get_extracted_fields,
+            document_id,
+        )
+
+        missing_required_fields = _missing_required_fields(
+            document.document_type,
+            extracted_fields,
+        )
+
+        if missing_required_fields:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Cannot approve document. Required fields are missing "
+                    "or empty: "
+                    + ", ".join(missing_required_fields)
+                ),
+            )
+
         await asyncio.to_thread(
             document_repository.approve_document,
             document_id,
         )
 
+        background_tasks.add_task(
+            _start_detection_after_approval,
+            document_id,
+        )
+
         return await get_document(document_id)
 
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception("Failed to approve document %s", document_id)
         raise HTTPException(

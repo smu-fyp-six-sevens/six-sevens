@@ -2829,12 +2829,36 @@ h1 {
   background: #eef2f8;
 }
 
+.document-action--approve:disabled,
 .document-action--cancel:disabled,
 .document-action--retry:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
+.document-action--approve:disabled {
+  border-color: #c7cdd6;
+  background: #d1d5db;
+  color: #6b7280;
+}
+
+.approval-warning {
+  margin: 0 0 8px;
+  color: #f21039;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.approval-warning strong {
+  color: #e0114f;
+  font-weight: 600;
+}
+
+.document-actions-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
 /* Error / loading states */
 
 .document-details-error {

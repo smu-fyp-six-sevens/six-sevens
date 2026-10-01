@@ -28,7 +28,6 @@ import {
   getDocumentCaseMatch,
   getDetectionReport,
   getLangGraphTrace,
-  runDetection,
   updateDocumentType,
   updateExtractedFields,
 } from '../services/uploadService';
@@ -653,11 +652,8 @@ export default function DocumentDetailsPage({
   // restart, so a missing trace is expected, not an error.
   const [langGraphTrace, setLangGraphTrace] = useState<LangGraphTrace | null>(null);
 
-  // Detection Agent (dev aid, backend/app/langgraph/detection): the stored
-  // report for this document, and the in-flight state of a manual run.
+  // Detection Agent: the stored report for this document.
   const [detectionReport, setDetectionReport] = useState<DetectionReport | null>(null);
-  const [isRunningDetection, setIsRunningDetection] = useState(false);
-  const [detectionError, setDetectionError] = useState<string | null>(null);
 
   const [isApproving, setIsApproving] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
@@ -735,6 +731,12 @@ export default function DocumentDetailsPage({
   const [caseMatch, setCaseMatch] = useState<DocumentCaseMatch | null>(null);
   const hasCase = Boolean(document?.case_id);
   const documentStatus = document?.status;
+  const isApproved = document?.status === 'approved';
+  const canApprove =
+    document?.status === 'analyzed' &&
+    (document.missing_required_fields?.length ?? 0) === 0;
+
+  const missingRequiredFields = document?.missing_required_fields ?? [];
   const extractedFieldsJson = JSON.stringify(document?.extracted_fields ?? null);
 
   useEffect(() => {
@@ -804,6 +806,7 @@ export default function DocumentDetailsPage({
   // threshold — the backend enforces both. Saving sets confidence to 1.0, so
   // the dropdown goes away afterwards.
   const canCorrectType =
+    !isApproved &&
     (document?.status === 'analyzed' || document?.status === 'failed') &&
     !(
       document.classification_confidence != null &&
@@ -873,17 +876,6 @@ export default function DocumentDetailsPage({
     };
   }, [documentId]);
 
-  async function handleRunDetection() {
-    setIsRunningDetection(true);
-    setDetectionError(null);
-    try {
-      setDetectionReport(await runDetection(documentId));
-    } catch (error) {
-      setDetectionError(error instanceof Error ? error.message : 'Detection failed');
-    } finally {
-      setIsRunningDetection(false);
-    }
-  }
 
   // Poll the langgraph trace while the pipeline is running (there's no
   // websocket event for it), and once more right after it finishes so the
@@ -1045,7 +1037,7 @@ export default function DocumentDetailsPage({
   }
 
   async function handleSaveFields() {
-    if (!document) {
+    if (!document || isApproved) {
       return;
     }
 
@@ -1427,20 +1419,26 @@ export default function DocumentDetailsPage({
             </span>
           )}
 
-          <button
-            type="button"
-            className="add-field-button"
-            disabled={isInFlight}
-            title={isInFlight ? 'Fields can\'t be edited while the document is being processed.' : undefined}
-            onClick={() => {
-              setIsAddFieldOpen(true);
-              setAddFieldError(null);
-              setNewFieldName('');
-              setNewFieldValue('');
-            }}
-          >
-            + Add field
-          </button>
+          {!isApproved && (
+            <button
+              type="button"
+              className="add-field-button"
+              disabled={isInFlight}
+              title={
+                isInFlight
+                  ? 'Fields can\'t be edited while the document is being processed.'
+                  : undefined
+              }
+              onClick={() => {
+                setIsAddFieldOpen(true);
+                setAddFieldError(null);
+                setNewFieldName('');
+                setNewFieldValue('');
+              }}
+            >
+              + Add field
+            </button>
+          )}
         </div>
 
         {isAddFieldOpen && (
@@ -1598,7 +1596,7 @@ export default function DocumentDetailsPage({
                     '—'
                   )}
 
-                  {field.id && (
+                  {!isApproved && field.id && (
                     <button
                       type="button"
                       className="delete-field-button"
@@ -1660,7 +1658,7 @@ export default function DocumentDetailsPage({
           Manual review
           ===================================================== */}
 
-      {(needsManualReview || isUnrecognisedDocument) && (
+      {!isApproved && (needsManualReview || isUnrecognisedDocument) && (
         <section className="details-card details-card--review">
           <div className="details-section-heading details-section-heading--warning">
             <span className="details-section-icon">⚠</span>
@@ -1728,7 +1726,7 @@ export default function DocumentDetailsPage({
                     <ArrayFieldEditButton
                       label={humanizeFieldKey(key)}
                       draftJson={fieldDraft[key] ?? '[]'}
-                      disabled={isSaving || !canEditField}
+                      disabled={isSaving || isApproved || !canEditField}
                       onChange={(json) => handleFieldChange(key, json)}
                     />
                   ) : isArrayOfLabelValueStrings(field.value) ? (
@@ -1800,6 +1798,7 @@ export default function DocumentDetailsPage({
               )}
             </div>
 
+          {!isApproved && (
             <button
               type="button"
               className="details-save-button"
@@ -1808,6 +1807,7 @@ export default function DocumentDetailsPage({
             >
               {isSaving ? 'Saving…' : 'Save fields'}
             </button>
+          )}
           </div>
         </section>
       )}
@@ -1847,12 +1847,8 @@ export default function DocumentDetailsPage({
           backend/app/langgraph/detection/graph.py)
           ===================================================== */}
 
-      <section className="details-card" style={{ fontFamily: 'monospace', fontSize: '0.85em' }}>
-        <h2 style={{ marginTop: 0 }}>Detection (dev)</h2>
-        <button type="button" onClick={() => void handleRunDetection()} disabled={isRunningDetection || isInFlight}>
-          {isRunningDetection ? 'Investigating…' : detectionReport ? 'Re-run detection' : 'Run detection'}
-        </button>
-        {detectionError && <p style={{ color: 'crimson' }}>{detectionError}</p>}
+        <section className="details-card" style={{ fontFamily: 'monospace', fontSize: '0.85em' }}>
+          <h2 style={{ marginTop: 0 }}>Detection</h2>
         {!detectionReport ? (
           <p>No detection report yet for this document.</p>
         ) : (
@@ -1951,23 +1947,37 @@ export default function DocumentDetailsPage({
               </button>
             )}
 
-            <button
-              type="button"
-              className="document-action--reject"
-              disabled={isRejecting || isApproving}
-              onClick={() => void handleRejectDocument()}
-            >
-              {isRejecting ? 'Rejecting…' : '✕ Reject Document'}
-            </button>
+            {document.status === 'analyzed' && missingRequiredFields.length > 0 && (
+              <div className="approval-warning">
+                Cannot approve yet. Please complete the following required field
+                {missingRequiredFields.length > 1 ? 's' : ''}:{' '}
+                <strong>
+                  {missingRequiredFields
+                    .map((fieldName) => humanizeFieldKey(fieldName))
+                    .join(', ')}
+                </strong>
+              </div>
+            )}
 
-            <button
-              type="button"
-              className="document-action--approve"
-              disabled={isApproving || document.status !== 'analyzed'}
-              onClick={() => void handleApproveDocument()}
-            >
-              {isApproving ? 'Approving…' : '✓ Approve Document'}
-            </button>
+            <div className="document-actions-row">
+              <button
+                type="button"
+                className="document-action--reject"
+                disabled={isRejecting || isApproving}
+                onClick={() => void handleRejectDocument()}
+              >
+                {isRejecting ? 'Rejecting…' : '✕ Reject Document'}
+              </button>
+
+              <button
+                type="button"
+                className="document-action--approve"
+                disabled={isApproving || !canApprove}
+                onClick={() => void handleApproveDocument()}
+              >
+                {isApproving ? 'Approving…' : '✓ Approve Document'}
+              </button>
+            </div>
           </div>
         )}
 
