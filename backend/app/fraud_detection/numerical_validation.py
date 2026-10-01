@@ -1308,38 +1308,51 @@ def _check_fs_is_cast(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck |
     return findings, None
 
 
+# Keys into the single consolidated balance_sheet_items array — each row's
+# "section" is expected to be one of these, matched case-insensitively.
+_BS_SECTIONS = (
+    ("current assets", "current_assets", "total_current_assets"),
+    ("non-current assets", "non_current_assets", "total_non_current_assets"),
+    ("current liabilities", "current_liabilities", "total_current_liabilities"),
+    ("non-current liabilities", "non_current_liabilities", "total_non_current_liabilities"),
+    ("equity", "equity", "total_equity"),
+)
+
+
+def _bs_section_rows(ctx: _Ctx, section: str) -> list[dict]:
+    return [
+        row for row in _rows(ctx.fields.get("balance_sheet_items"))
+        if str(row.get("section", "")).strip().lower().replace(" ", "_") == section
+    ]
+
+
 def _check_fs_bs_cast(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck | None]:
-    """FS.BS_CAST. Each balance sheet section adds up to its stated
+    """FS.BS_CAST. Each balance sheet section (grouped from the single
+    balance_sheet_items array by its "section" key) adds up to its stated
     total."""
     findings = []
     ran_any = False
-    for section, item_field, total_field in (
-        ("current assets", "current_assets_items", "total_current_assets"),
-        ("non-current assets", "non_current_assets_items", "total_non_current_assets"),
-        ("current liabilities", "current_liabilities_items", "total_current_liabilities"),
-        ("non-current liabilities", "non_current_liabilities_items", "total_non_current_liabilities"),
-        ("equity", "equity_items", "total_equity"),
-    ):
-        items, stated_raw = ctx.fields.get(item_field), ctx.fields.get(total_field)
-        if items is None or stated_raw is None:
+    for label, section, total_field in _BS_SECTIONS:
+        rows = _bs_section_rows(ctx, section)
+        stated_raw = ctx.fields.get(total_field)
+        if not rows or stated_raw is None:
             continue
         ran_any = True
-        rows = _rows(items)
         amounts = [_as_number(r.get("amount")) for r in rows]
         stated = _as_number(stated_raw)
-        if stated is None or any(a is None for a in amounts) or not amounts:
+        if stated is None or any(a is None for a in amounts):
             continue
         total = sum(a for a in amounts if a is not None)
         if abs(total - stated) > _MONEY_TOLERANCE:
             findings.append(_finding(
                 "FS.BS_CAST", "impossible",
-                f"{section.capitalize()} items sum to {_money(total)}, but the stated total is "
+                f"{label.capitalize()} items sum to {_money(total)}, but the stated total is "
                 f"{_money(stated)}",
                 field=total_field, stated=_money(stated), expected=_money(total),
                 severity_note=_materiality_note(total - stated, total),
             ))
     if not ran_any:
-        return [], _skip_missing("FS.BS_CAST", "*_items", "total_*")
+        return [], _skip_missing("FS.BS_CAST", "balance_sheet_items", "total_*")
     return findings, None
 
 
@@ -1572,13 +1585,18 @@ def _check_fs_ratio_bands(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedChe
 
 def _check_fs_note_refs(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck | None]:
     """FS.NOTE_REFS. Every note referenced elsewhere in the statements must
-    exist in the notes."""
-    values = _need(ctx, "FS.NOTE_REFS", "notes", "note_references")
-    if values is None:
-        return [], _skip_missing("FS.NOTE_REFS", "notes", "note_references")
-    notes, references = values
+    exist in the notes. There's no standalone note_references field —
+    references live as each line item's own "note" column, in both
+    income_statement_items and balance_sheet_items."""
+    notes = ctx.fields.get("notes")
+    item_rows = [
+        *_rows(ctx.fields.get("income_statement_items")),
+        *_rows(ctx.fields.get("balance_sheet_items")),
+    ]
+    if notes is None or not item_rows:
+        return [], _skip_missing("FS.NOTE_REFS", "notes", "income_statement_items/balance_sheet_items")
     note_numbers = {str(n.get("note_number")).strip() for n in _rows(notes) if n.get("note_number")}
-    referenced = {str(r).strip() for r in references} if isinstance(references, list) else set()
+    referenced = {str(r.get("note")).strip() for r in item_rows if r.get("note")}
     missing = referenced - note_numbers
     if missing:
         return [_finding(

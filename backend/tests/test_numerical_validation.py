@@ -547,12 +547,33 @@ def test_fs_ratio_bands_flags_gross_margin_outside_band() -> None:
 def test_fs_note_refs_flags_a_reference_with_no_matching_note() -> None:
     result = _run(
         [_field("notes", [{"note_number": "3", "heading": "Revenue"}]),
-         _field("note_references", ["3", "7"])],
+         _field("income_statement_items", [{"label": "Revenue", "amount": 100000, "note": "3"}]),
+         _field("balance_sheet_items", [
+             {"section": "equity", "label": "Share capital", "amount": 1000, "note": "7"},
+         ])],
         document_type="source_of_wealth",
     )
     findings = _codes(result, "FS.NOTE_REFS")
     assert len(findings) == 1
     assert "7" in findings[0].summary
+
+
+def test_fs_bs_cast_flags_a_section_that_does_not_sum_to_its_total() -> None:
+    result = _run(
+        [_field("balance_sheet_items", [
+            {"section": "current_assets", "label": "Cash", "amount": 1000},
+            {"section": "current_assets", "label": "Trade receivables", "amount": 500},
+        ]),
+         _field("total_current_assets", "999999")],
+        document_type="source_of_wealth",
+    )
+    assert len(_codes(result, "FS.BS_CAST")) == 1
+
+
+def test_fs_bs_cast_skips_when_nothing_extracted() -> None:
+    result = _run([_field("company_name", "Acme")], document_type="source_of_wealth")
+    codes = {s.check_code for s in result.skipped_checks}
+    assert "FS.BS_CAST" in codes
 
 
 # ---------------------------------------------------------------------------
