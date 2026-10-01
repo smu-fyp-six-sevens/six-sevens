@@ -45,11 +45,20 @@ SPECIALISTS: dict[str, Specialist] = {
         title="Layout & Rendering Analyst",
         expertise=(
             "How the document is physically rendered: fonts, font sizes, emphasis and spacing that "
-            "deviate from the rest of the page. Needs a PDF with native text; most useful on "
-            "documents with printed figures or names that someone might have edited "
+            "deviate from the rest of the page, indentation, alignment and margins that clash "
+            "with the rest of the document, overlapping/overlaid text blocks (a sign of "
+            "pasting new content over an original figure or name), and images whose resolution "
+            "or compression doesn't match the rest of the document (a spliced-in photo, signature "
+            "or figure, or one enlarged from a smaller source). The font and layout checks need a "
+            "PDF with native text; the image check also works on PNG/JPEG uploads. Most useful on "
+            "documents with printed figures, names or photos that someone might have edited "
             "(statements, payslips, certificates, IDs)."
         ),
-        tools=(detection_tools.font_consistency_tool,),
+        tools=(
+            detection_tools.font_consistency_tool,
+            detection_tools.layout_anomalies_tool,
+            detection_tools.image_manipulation_tool,
+        ),
     ),
     "content_validation": Specialist(
         name="content_validation",

@@ -10,7 +10,17 @@ from . import auth, health, realtime_listener, telemetry
 from .config import settings
 from .health import check_db_connection
 from .queue_service import document_queue
-from .routers import extraction, injection, cases, detection, documents, monitoring, upload, ws
+from .routers import injection, cases, detection, documents, monitoring, upload, ws
+
+# No handler was ever configured for this app's own loggers, so INFO-level
+# calls (pipeline/detection progress) were silently dropped — only
+# logger.exception(...) ever reached the console, via logging's "last
+# resort" stderr handler, which only fires at WARNING+ and prints bare
+# messages with no logger name or timestamp.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +75,6 @@ app.include_router(monitoring.router, dependencies=_protected)
 app.include_router(detection.router, dependencies=_protected)
 app.include_router(detection.cases_router, dependencies=_protected)
 app.include_router(injection.router, dependencies=_protected)
-app.include_router(extraction.router, dependencies=_protected)
 # Not in _protected as a whole: the WebSocket route can't carry an
 # Authorization header from the browser, so it checks its own short-lived
 # ticket query param instead (see routers/ws.py) — its sibling POST

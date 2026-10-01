@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import AppHeader from '../components/AppHeader';
 import CaseCard from '../components/CaseCard';
 import ConfirmDialog from '../components/ConfirmDialog';
-import { hideDevFeatures } from '../lib/api';
 import { deleteCase } from '../services/uploadService';
 import type { CaseRecord } from '../App';
 
@@ -12,7 +11,6 @@ interface CaseQueuePageProps {
   error: string | null;
   onRetry: () => void;
   onOpenCase: (caseRecord: CaseRecord) => void;
-  onOpenTestAnomaly: () => void;
   onCreateCase: () => void;
   onCaseUpdated: (caseId: string, companyName: string) => void;
   onCaseDeleted: (caseId: string) => void;
@@ -85,7 +83,6 @@ export default function CaseQueuePage({
   error,
   onRetry,
   onOpenCase,
-  onOpenTestAnomaly,
   onCreateCase,
   onCaseUpdated,
   onCaseDeleted,
@@ -291,11 +288,6 @@ export default function CaseQueuePage({
 
         <div className="queue-label">
           Assigned to you ({matches.length})
-          {!hideDevFeatures && (
-            <button type="button" className="dev-tool-link" onClick={onOpenTestAnomaly}>
-              Test anomaly detection →
-            </button>
-          )}
         </div>
 
         {deleteError && (

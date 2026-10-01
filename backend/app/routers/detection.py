@@ -67,17 +67,53 @@ async def _fetch_extracted_fields(document_id: str) -> list[ExtractedField]:
         return []
 
 
+async def _trace_check(document_id: str, step: str, **fields: object) -> None:
+    """Records an on-demand check on the document's langgraph trace — same
+    table classify/extract/detection-run steps land on (see langgraph/trace.py)."""
+    await asyncio.to_thread(langgraph_trace.resume, document_id)
+    langgraph_trace.record(document_id, step, **fields)
+
+
+async def _require_detection_has_run(
+    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+) -> DocumentRecord:
+    """
+    Gate for the individual on-demand checks below: a loan officer can run
+    one specific check manually, but only after the full Lead Investigator
+    pass (POST /detection/run) has completed at least once for this
+    document — never the other way round. Checked by looking for a stored
+    detection_report on the document's langgraph trace (same signal
+    GET .../detection/report uses).
+    """
+    try:
+        persisted = await asyncio.to_thread(langgraph_trace.get_persisted, document_id)
+    except Exception:  # noqa: BLE001 — table unreachable: fall back to in-memory
+        persisted = None
+    trace_data = persisted or langgraph_trace.get(document_id)
+    if not (trace_data or {}).get("detection_report"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Run full detection first before running an individual check.",
+        )
+    return document
+
+
 @router.get(
     "/{document_id}/detection/font-consistency", response_model=FontConsistencyResult
 )
 async def get_font_consistency(
-    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
 ) -> FontConsistencyResult:
     file_bytes = await _download_document_bytes(document)
     extracted_fields = await _fetch_extracted_fields(document_id)
-    return await asyncio.to_thread(
+    result = await asyncio.to_thread(
         check_font_consistency, document_id, file_bytes, extracted_fields
     )
+    await _trace_check(
+        document_id, "check_font_consistency",
+        unable_to_assess=result.unable_to_assess, finding_count=len(result.anomalies),
+    )
+    return result
 
 
 @router.get(
@@ -85,7 +121,7 @@ async def get_font_consistency(
     response_model=LayoutAnomalyResult,
 )
 async def get_layout_anomalies(
-    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
 ) -> LayoutAnomalyResult:
     """
     On-demand layout anomaly check (not part of the automatic pipeline).
@@ -97,7 +133,12 @@ async def get_layout_anomalies(
     and nothing crossed a threshold — not that the document is clean.
     """
     file_bytes = await _download_document_bytes(document)
-    return await asyncio.to_thread(check_layout_anomalies, document_id, file_bytes)
+    result = await asyncio.to_thread(check_layout_anomalies, document_id, file_bytes)
+    await _trace_check(
+        document_id, "check_layout_anomalies",
+        unable_to_assess=result.unable_to_assess, finding_count=len(result.anomalies),
+    )
+    return result
 
 
 @router.get(
@@ -141,7 +182,7 @@ async def get_image_tampering(
     "/{document_id}/detection/spelling-anomaly", response_model=SpellingAnomalyResult
 )
 async def get_spelling_anomaly(
-    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
 ) -> SpellingAnomalyResult:
     """
     On-demand, like the font-consistency checks above — not part of the
@@ -154,9 +195,14 @@ async def get_spelling_anomaly(
     """
     file_bytes = await _download_document_bytes(document)
     extracted_fields = await _fetch_extracted_fields(document_id)
-    return await check_spelling_anomalies(
+    result = await check_spelling_anomalies(
         document_id, file_bytes, document.filename, extracted_fields
     )
+    await _trace_check(
+        document_id, "check_spelling_anomaly",
+        unable_to_assess=result.unable_to_assess, finding_count=len(result.anomalies),
+    )
+    return result
 
 
 # A pipeline run is still in flight for these — detection needs finished extraction.
@@ -197,9 +243,19 @@ async def get_document_detection_report(document_id: str) -> dict:
         trace = None
     trace = trace or langgraph_trace.get(document_id)
     report = (trace or {}).get("detection_report")
-    if not report:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No detection report for this document yet.")
-    return report
+    if report:
+        return report
+    # A report always wins over a stale error from an earlier failed attempt
+    # (above) — only fall back to reporting the error when there's no report
+    # at all, so the frontend can tell "crashed" apart from "never run yet"
+    # instead of both looking like the same 404 forever.
+    error = (trace or {}).get("detection_error")
+    if error:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Detection failed: {error}. Run detection again.",
+        )
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No detection report for this document yet.")
 
 
 @cases_router.get("/{case_id}/detection/reports")
@@ -217,7 +273,7 @@ async def get_case_detection_reports(case_id: str) -> list[dict]:
     response_model=NumericalValidationResult,
 )
 async def get_numerical_validation(
-    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
 ) -> NumericalValidationResult:
     """
     Content Validation Specialist. On-demand and side-effect free, like the
@@ -231,12 +287,17 @@ async def get_numerical_validation(
     confirmed value metadata_analysis uses for its own type-scoped rules.
     """
     extracted_fields = await _fetch_extracted_fields(document_id)
-    return await asyncio.to_thread(
+    result = await asyncio.to_thread(
         check_numerical_validation,
         document_id,
         extracted_fields,
         document.document_type,
     )
+    await _trace_check(
+        document_id, "check_numerical_validation",
+        unable_to_assess=result.unable_to_assess, finding_count=len(result.findings),
+    )
+    return result
 
 
 @router.get(
@@ -244,7 +305,7 @@ async def get_numerical_validation(
     response_model=DateAnomalyResult,
 )
 async def get_date_anomalies(
-    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
 ) -> DateAnomalyResult:
     """
     Content Validation Specialist — "Detect Date Anomalies". On-demand and
@@ -260,19 +321,24 @@ async def get_date_anomalies(
     re-ingestion.
     """
     extracted_fields = await _fetch_extracted_fields(document_id)
-    return await asyncio.to_thread(
+    result = await asyncio.to_thread(
         check_date_anomalies,
         document_id,
         extracted_fields,
         document.document_type,
     )
+    await _trace_check(
+        document_id, "check_date_anomalies",
+        unable_to_assess=result.unable_to_assess, finding_count=len(result.findings),
+    )
+    return result
 
 
 @router.get(
     "/{document_id}/detection/metadata-anomaly", response_model=MetadataAnalysisResult
 )
 async def get_metadata_anomaly(
-    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
 ) -> MetadataAnalysisResult:
     """
     Digital Authenticity Specialist. Like the checks above, this doesn't
@@ -292,7 +358,12 @@ async def get_metadata_anomaly(
     the type is correct by the time this runs — the intended flow is that
     an officer confirms classification before anomaly checks are run.
     """
-    return check_metadata_anomalies(document_id, document.metadata, document.document_type)
+    result = check_metadata_anomalies(document_id, document.metadata, document.document_type)
+    await _trace_check(
+        document_id, "check_metadata_anomaly",
+        unable_to_assess=result.unable_to_assess, finding_count=len(result.anomalies),
+    )
+    return result
 
 
 @router.get("/{document_id}/detection/case-match", response_model=DocumentCaseMatch)

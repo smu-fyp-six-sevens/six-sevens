@@ -364,6 +364,7 @@ class DocumentRecord(BaseModel):
     # case-list enrichment separately rewrap it as {value, confidence} for
     # the API response.
     extracted_fields: Optional[dict] = None
+    missing_required_fields: list[str] = Field(default_factory=list)
     # Extraction's own confidence in the values it pulled into extracted_fields
     # — distinct from (and no longer overwrites) the classifier's
     # `classification_confidence` above. Set to 1.0 when a loan officer
