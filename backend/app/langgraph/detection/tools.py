@@ -7,40 +7,42 @@ never from the model). Every tool returns the same shape:
      "findings": [{"id": "<tool>-<n>", "summary": str, ...detail}], "truncated": int}
 
 Findings are size-capped and fact-only; severity and rationale are added by
-the specialist that called the tool, never by the tool itself. "Unable to
-assess" is its own result, never a pass. Text inside findings is document
-content and must be treated as untrusted data by whatever reads it.
+the specialist that called the tool, never by the tool itself. A check's own
+deterministic severity vocabulary (numerical/date findings carry
+impossible/inconsistent/implausible/signal; metadata anomalies carry
+high/medium/low) is passed through as a fact under `severity_hint` — kept
+distinct from the specialist's own `info/low/medium/high` scale, which is
+added later in specialists._collect_node and must not be shadowed by it.
+"Unable to assess" is its own result, never a pass. Text inside findings is
+document content and must be treated as untrusted data by whatever reads it.
 
-STATUS: the five tools below are stubbed — their prior implementations were
-confirmed incorrect and have been pulled out pending a rewire (see
-BACKEND_CLEANUP_PLAN.md Step 5). Each stub keeps its real signature, @tool
-decorator and docstring (so the lead/specialists still see it as a normal
-tool and the graphs still compile), and honestly reports
-`unable_to_assess=True` instead of silently returning a wrong result. The
-shared plumbing below (`_document`, `_extracted_fields`, `_file_bytes`,
-`_result`, `_with_ids`, `_short`, `_field_value`, `_number`, `_parse_date`)
-is kept even though nothing currently calls it, since the rewire will need
-it — the previous (incorrect) tool bodies are in git history, not here.
+Each tool is a thin adapter onto the real, already-tested check in
+`fraud_detection/*.py` — same functions and calling convention as
+`routers/detection.py`'s on-demand endpoints, just fed from the per-run
+context cache below instead of a request's `Depends(get_document_or_404)`.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-from datetime import datetime
 from typing import Annotated, Any
 
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
 from ... import document_repository, extracted_fields_repository, storage_service
+from ...fraud_detection.date_anomalies import check_date_anomalies
+from ...fraud_detection.font_consistency import check_font_consistency
+from ...fraud_detection.layout_anomalies import check_layout_anomalies
+from ...fraud_detection.metadata_analysis import check_metadata_anomalies
+from ...fraud_detection.numerical_validation import check_numerical_validation
+from ...fraud_detection.spelling_anomaly import check_spelling_anomalies
 
 logger = logging.getLogger("classifier_pipeline.langgraph.detection.tools")
 
 MAX_FINDINGS = 15
 _MAX_TEXT = 80
-_PENDING_REWIRE = "Not yet correctly implemented — pending rewire"
 
 # Per-run cache so several specialists calling tools on the same document
 # don't each re-download the file or re-read the row. Cleared by
@@ -105,53 +107,54 @@ def _short(text: Any) -> str:
     return text if len(text) <= _MAX_TEXT else text[: _MAX_TEXT - 1] + "…"
 
 
-def _field_value(fields: list, name: str) -> Any:
-    for field in fields:
-        if field.field_name == name:
-            value = field.field_value
-            if isinstance(value, str) and value.strip()[:1] in ('[', '{', '"'):
-                try:
-                    return json.loads(value)
-                except json.JSONDecodeError:
-                    return value
-            return value
-    return None
-
-
-def _number(value: Any) -> float | None:
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
-        return float(value)
-    if isinstance(value, str):
-        cleaned = value.replace(",", "").replace("$", "").strip()
-        try:
-            return float(cleaned)
-        except ValueError:
-            return None
-    return None
-
-
-_DATE_FORMATS = ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d %b %Y", "%d %B %Y", "%b %d, %Y", "%B %d, %Y", "%d.%m.%Y")
-
-
-def _parse_date(value: Any):
-    if not isinstance(value, str):
-        return None
-    text = value.strip()
-    for fmt in _DATE_FORMATS:
-        try:
-            return datetime.strptime(text, fmt).date()
-        except ValueError:
-            continue
-    return None
-
-
 # --- Layout & Rendering -----------------------------------------------------
 
 
 @tool
 async def font_consistency_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
     """Checks the document's rendered text for font, font-size and emphasis inconsistencies — text that deviates from the surrounding row/region or from how the document renders the same kind of field elsewhere (a classic sign of edited text). Only meaningful for PDFs with native text."""
-    return _result("font_consistency_tool", [], unable=_PENDING_REWIRE)
+    file_bytes = await _file_bytes(document_id)
+    if file_bytes is None:
+        return _result("font_consistency_tool", [], unable="Document file is not available in storage")
+
+    fields = await _extracted_fields(document_id)
+    result = await asyncio.to_thread(check_font_consistency, document_id, file_bytes, fields)
+    if result.unable_to_assess:
+        return _result(
+            "font_consistency_tool", [], unable=result.unable_to_assess_reason or "Unable to assess"
+        )
+
+    findings = [
+        {
+            "deviation_type": anomaly.deviation_type,
+            "detected": anomaly.detected,
+            "expected": anomaly.expected,
+            "occurrence_count": anomaly.occurrence_count,
+            "field_name": anomaly.field_name,
+            "locations": [
+                {"page": loc.page + 1, "text": _short(loc.text)} for loc in anomaly.locations[:5]
+            ],
+        }
+        for anomaly in result.anomalies
+    ]
+    return _result("font_consistency_tool", _with_ids("font_consistency_tool", findings))
+
+
+@tool
+async def layout_anomalies_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
+    """Checks the document's text positioning for indentation, alignment, margin and paragraph-spacing that clash with the rest of the document — a classic sign of an inserted or edited clause. Only meaningful for PDFs with native text."""
+    file_bytes = await _file_bytes(document_id)
+    if file_bytes is None:
+        return _result("layout_anomalies_tool", [], unable="Document file is not available in storage")
+
+    result = await asyncio.to_thread(check_layout_anomalies, document_id, file_bytes)
+    if result.unable_to_assess:
+        return _result(
+            "layout_anomalies_tool", [], unable=result.unable_to_assess_reason or "Unable to assess"
+        )
+
+    findings = [anomaly.model_dump() for anomaly in result.anomalies]
+    return _result("layout_anomalies_tool", _with_ids("layout_anomalies_tool", findings))
 
 
 # --- Content Validation -----------------------------------------------------
@@ -160,19 +163,96 @@ async def font_consistency_tool(document_id: Annotated[str, InjectedState("docum
 @tool
 async def spelling_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
     """Finds words in the document that look misspelled (after ignoring legal/financial terms, names and the document's own extracted values). Genuine typos in a formal issued document can indicate tampering or forgery."""
-    return _result("spelling_tool", [], unable=_PENDING_REWIRE)
+    document = await _document(document_id)
+    if document is None:
+        return _result("spelling_tool", [], unable="Document not found")
+
+    file_bytes = await _file_bytes(document_id)
+    if file_bytes is None:
+        return _result("spelling_tool", [], unable="Document file is not available in storage")
+
+    fields = await _extracted_fields(document_id)
+    result = await check_spelling_anomalies(document_id, file_bytes, document.filename, fields)
+    if result.unable_to_assess:
+        return _result("spelling_tool", [], unable=result.unable_to_assess_reason or "Unable to assess")
+
+    findings = [
+        {
+            "word": anomaly.word,
+            "context": _short(anomaly.surrounding_text),
+            "suggested_correction": anomaly.suggested_correction,
+        }
+        for anomaly in result.anomalies
+    ]
+    return _result("spelling_tool", _with_ids("spelling_tool", findings))
 
 
 @tool
 async def date_consistency_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
     """Checks the dates extracted from the document for logical problems: dates in the future, an expiry before its issue date, a certificate dated before the company existed, a birth date after issue."""
-    return _result("date_consistency_tool", [], unable=_PENDING_REWIRE)
+    document = await _document(document_id)
+    if document is None:
+        return _result("date_consistency_tool", [], unable="Document not found")
+
+    fields = await _extracted_fields(document_id)
+    result = await asyncio.to_thread(
+        check_date_anomalies, document_id, fields, document.document_type
+    )
+    if result.unable_to_assess:
+        return _result(
+            "date_consistency_tool", [], unable=result.unable_to_assess_reason or "Unable to assess"
+        )
+
+    findings = [
+        {
+            "check_code": finding.check_code,
+            "severity_hint": finding.severity,
+            "field": finding.field,
+            "stated": finding.stated,
+            "expected": finding.expected,
+            "needs_review": finding.needs_review,
+            "summary": finding.summary,
+        }
+        for finding in result.findings
+    ]
+    return _result("date_consistency_tool", _with_ids("date_consistency_tool", findings))
 
 
 @tool
 async def transaction_balance_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
     """Recomputes a bank statement's running balance from its extracted transactions (previous balance + amount should equal the next balance) and reports rows where the arithmetic doesn't hold — a strong sign a figure was altered."""
-    return _result("transaction_balance_tool", [], unable=_PENDING_REWIRE)
+    document = await _document(document_id)
+    if document is None:
+        return _result("transaction_balance_tool", [], unable="Document not found")
+
+    fields = await _extracted_fields(document_id)
+    result = await asyncio.to_thread(
+        check_numerical_validation, document_id, fields, document.document_type
+    )
+    if result.unable_to_assess:
+        return _result(
+            "transaction_balance_tool", [], unable=result.unable_to_assess_reason or "Unable to assess"
+        )
+
+    balance_findings = [f for f in result.findings if f.check_code == "BS.RUNNING_BALANCE"]
+    if not balance_findings:
+        skipped = next((s for s in result.skipped_checks if s.check_code == "BS.RUNNING_BALANCE"), None)
+        if skipped is not None:
+            return _result("transaction_balance_tool", [], unable=skipped.reason)
+        return _result("transaction_balance_tool", [])
+
+    findings = [
+        {
+            "severity_hint": finding.severity,
+            "field": finding.field,
+            "stated": finding.stated,
+            "expected": finding.expected,
+            "needs_review": finding.needs_review,
+            "summary": finding.summary,
+        }
+        for finding in balance_findings
+    ]
+    return _result("transaction_balance_tool", _with_ids("transaction_balance_tool", findings))
 
 
 # --- Digital Authenticity ---------------------------------------------------
@@ -181,4 +261,21 @@ async def transaction_balance_tool(document_id: Annotated[str, InjectedState("do
 @tool
 async def metadata_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
     """Inspects the file's embedded metadata (author, creation/modification dates, producing software) for signs of editing: consumer editing software in the producer chain, or a modification date well after creation."""
-    return _result("metadata_tool", [], unable=_PENDING_REWIRE)
+    document = await _document(document_id)
+    if document is None:
+        return _result("metadata_tool", [], unable="Document not found")
+
+    result = check_metadata_anomalies(document_id, document.metadata, document.document_type)
+    if result.unable_to_assess:
+        return _result("metadata_tool", [], unable=result.unable_to_assess_reason or "Unable to assess")
+
+    findings = [
+        {
+            "field": anomaly.field,
+            "value": anomaly.value,
+            "reason": anomaly.reason,
+            "severity_hint": anomaly.severity,
+        }
+        for anomaly in result.anomalies
+    ]
+    return _result("metadata_tool", _with_ids("metadata_tool", findings))

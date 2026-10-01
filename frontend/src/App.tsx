@@ -9,7 +9,6 @@ import {
 } from 'react-router-dom';
 
 import CaseQueuePage from './pages/CaseQueuePage';
-import TestAnomalyPage from './pages/TestAnomalyPage';
 import UploadPage from './pages/UploadPage';
 import CreateCasePage from './pages/CreateCasePage';
 import DocumentDetailsPage from './pages/DocumentDetailsPage';
@@ -69,7 +68,6 @@ function CaseQueueRoute({
       onOpenCase={(selectedCase) =>
         navigate(`/cases/${selectedCase.caseNumber ?? selectedCase.id}`)
       }
-      onOpenTestAnomaly={() => navigate('/test-anomalies')}
       onCreateCase={() => navigate('/create-case')}
       onCaseUpdated={onCaseUpdated}
       onCaseDeleted={onCaseDeleted}
@@ -184,16 +182,6 @@ function CreateCaseRoute({
         onReloadCases();
         navigate('/cases');
       }}
-    />
-  );
-}
-
-function TestAnomalyRoute() {
-  const navigate = useNavigate();
-
-  return (
-    <TestAnomalyPage
-      onBack={() => navigate('/cases')}
     />
   );
 }
@@ -378,15 +366,6 @@ export default function App() {
                 onCreated={() => undefined}
                 onReloadCases={() => void loadCases()}
               />
-            </RequireAuth>
-          }
-        />
-
-        <Route
-          path="/test-anomalies"
-          element={
-            <RequireAuth isAuthed={isAuthed}>
-              <TestAnomalyRoute />
             </RequireAuth>
           }
         />

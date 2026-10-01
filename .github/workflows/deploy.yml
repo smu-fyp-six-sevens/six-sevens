@@ -91,7 +91,7 @@ jobs:
         run: |
           IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/frontend:${GITHUB_SHA}"
           docker build -f frontend/Dockerfile --build-arg VITE_API_URL="$BACKEND_URL" \
-            --build-arg VITE_HIDE_DEV_FEATURES=true -t "$IMAGE" .
+            -t "$IMAGE" .
           docker push "$IMAGE"
           echo "FRONTEND_IMAGE=$IMAGE" >> "$GITHUB_ENV"
 

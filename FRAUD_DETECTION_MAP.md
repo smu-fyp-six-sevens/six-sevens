@@ -22,27 +22,29 @@ matching). Gates fraud detection per its own docstring.
 
 ## 2. LangGraph Detection Agent — `backend/app/langgraph/detection/`
 
-- **`tools.py`** — **stubbed, not wired to real logic.** All 5 `@tool` wrappers
-  (`font_consistency_tool`, `spelling_tool`, `date_consistency_tool`,
-  `transaction_balance_tool`, `metadata_tool`) return `unable_to_assess=True` with reason
-  `"Not yet correctly implemented — pending rewire"` (constant `_PENDING_REWIRE`). None of the
-  real `fraud_detection/*.py` functions are called from this agent. Shared plumbing helpers
-  (`_document`, `_extracted_fields`, `_file_bytes`, etc.) exist but are currently unused.
+- **`tools.py`** — wired to the real checks. All 6 `@tool` wrappers (`font_consistency_tool`,
+  `layout_anomalies_tool`, `spelling_tool`, `date_consistency_tool`, `transaction_balance_tool`,
+  `metadata_tool`) call the matching `fraud_detection/*.py` function directly, same calling
+  convention as `routers/detection.py`'s own endpoints. `transaction_balance_tool` filters
+  `check_numerical_validation`'s findings down to `BS.RUNNING_BALANCE` only, since the other
+  numerical checks it also runs (ACRA/CR/FATCA/FS/LOAN/NOA/PAY) are out of this tool's scope.
+  Each check's own deterministic severity (e.g. `impossible`/`inconsistent`, or `high`/`medium`/
+  `low` for metadata) is passed through as `severity_hint`, kept distinct from the specialist's
+  own `info/low/medium/high` scale added later.
 - **`specialists.py`** — 3 `Specialist` dataclasses (`layout_rendering`, `content_validation`,
-  `digital_authenticity`), each a tool-calling subgraph bound to a subset of the (stubbed)
-  tools. `run_specialist()` compiles/caches one graph per specialist.
+  `digital_authenticity`), each a tool-calling subgraph bound to a subset of tools.
+  `layout_rendering` now has both `font_consistency_tool` and `layout_anomalies_tool`.
+  `run_specialist()` compiles/caches one graph per specialist.
 - **`graph.py`** — Lead Investigator graph: `load_context → lead_plan → [specialists via Send]
   → lead_review → optional second look → synthesize`. Lead picks a specialist team per document
   type via an LLM call, dispatches in parallel, deterministically merges findings into a final
   verdict (`flagged`/`inconclusive`/`clean`). `run_detection(document_id)` is the entry point
-  wired into `POST /documents/{id}/detection/run`. Orchestration logic works end-to-end, but
-  since every tool is stubbed, every specialist currently reports "unable to assess" — no real
-  findings are produced by this path today.
+  wired into `POST /documents/{id}/detection/run`.
 
 ## 3. API surface — `backend/app/routers/detection.py`
 
-Real, working checks (bypass the stubbed LangGraph tools entirely, call `fraud_detection/*.py`
-and `case_match.py` directly):
+Real, working checks (same `fraud_detection/*.py` and `case_match.py` functions the LangGraph
+tools above now also call):
 
 - `GET /documents/{id}/detection/font-consistency`
 - `GET /documents/{id}/detection/layout-anomalies`
@@ -52,16 +54,18 @@ and `case_match.py` directly):
 - `GET /documents/{id}/detection/metadata-anomaly`
 - `GET /documents/{id}/detection/case-match` (wraps `case_service.get_case_match_for_document`)
 
-Agentic path (produces no real findings yet, see §2):
+Agentic path (now produces real findings, see §2):
 
 - `POST /documents/{id}/detection/run` → `langgraph.detection.graph.run_detection`
 - `GET /documents/{id}/detection/report` → reads persisted langgraph trace's `detection_report`
 - `GET /cases/{case_id}/detection/reports` → all stored reports for a case
 
-`backend/app/routers/extraction.py` exposes parallel dev/QA endpoints calling the same real
-fraud_detection functions on ad-hoc uploads (no persisted document/case): `POST
-/test-spelling-anomaly`, `/test-metadata-anomaly`, `/test-numerical-validation`,
-`/test-date-anomalies`, `/test-layout-anomalies`.
+`backend/app/routers/extraction.py`'s `/test-*` dev/QA endpoints (duplicated the same checks on
+ad-hoc uploads, no persisted document/case) have been removed now that the real endpoints above
+and the LangGraph tools both cover the same ground — only `/extraction/test` (raw-text
+extraction, unrelated to fraud detection) remains. `frontend/src/pages/TestAnomalyPage.tsx`
+still calls the removed paths and will 404 until it's updated or retired (frontend intentionally
+not touched here).
 
 ## 4. Test coverage — `backend/tests/`
 
@@ -81,13 +85,13 @@ fraud_detection functions on ad-hoc uploads (no persisted document/case): `POST
 | `test_injectors.py` | `injection/injectors.py` | 7 |
 
 No dedicated test file exercises `langgraph/detection/tools.py`, `specialists.py`, or
-`graph.py` beyond generic coverage in `test_langgraph.py`/`test_detection.py` — consistent with
-the tool layer being a known-stubbed work in progress.
+`graph.py` beyond generic coverage in `test_langgraph.py`/`test_detection.py`.
 
 ## 5. Frontend surface
 
 `frontend/src/pages/TestAnomalyPage.tsx` — dev/QA page ("Test anomaly detection") that hits the
-ad-hoc `/test-*` extraction-router endpoints. No dedicated "Detection Report" panel exists yet;
+now-removed `/test-*` extraction-router endpoints (see §3) — currently broken, not yet updated.
+No dedicated "Detection Report" panel exists yet;
 `DocumentDetailsPage.tsx` is the likely eventual home for rendering `/detection/report` results.
 
 ## 6. Synthetic fraud data — `backend/app/injection/`
@@ -99,9 +103,7 @@ and `field_text.py`), `schemas.py`, `service.py`, `store.py`. Exposed via
 
 ## Bottom line
 
-The individual fraud-detection checks are real, implemented, and well-tested. The *agentic*
-orchestration layer (`langgraph/detection/`) that's supposed to call them is fully wired
-end-to-end but its tool layer is stubbed — `POST /detection/run` completes without erroring but
-returns no real findings. Rewiring `tools.py` to call the real `fraud_detection/*.py` functions
-(reusing `numerical_validation.py`'s existing balance-check logic instead of reimplementing it,
-per the earlier cleanup plan) is the concrete next step to make the agentic path functional.
+The individual fraud-detection checks are real, implemented, and well-tested, and the agentic
+orchestration layer (`langgraph/detection/`) now calls them directly — `POST /detection/run`
+produces real findings. No dedicated unit tests for `tools.py`/`specialists.py`/`graph.py` yet
+(see §4) — the main gap left in this area.

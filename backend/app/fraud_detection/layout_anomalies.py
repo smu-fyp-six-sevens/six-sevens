@@ -185,8 +185,7 @@ class LayoutElement(BaseModel):
 
 class LayoutAnomalyResult(BaseModel):
     """
-    Shared response for GET /documents/{id}/detection/layout-anomalies
-    and POST /extraction/test-layout-anomalies.
+    Response for GET /documents/{id}/detection/layout-anomalies.
 
     Each of indentation / alignment / margin / spacing can be Unable to
     Assess while the other families still return findings. Empty anomalies
@@ -302,7 +301,7 @@ def check_layout_anomalies(document_id: str, file_bytes: bytes) -> LayoutAnomaly
         if not blocks and _needs_ocr(doc, file_bytes):
             blocks = _ocr_blocks(doc)
         if not blocks:
-            has_images = any(page.get_images() for page in doc)
+            has_images = any(page.get_images() for page in _pages(doc))
             reason = (
                 f"No extractable text layout found ({doc.page_count} page(s), "
                 f"has embedded images: {has_images}) -- likely a scanned/"
@@ -393,11 +392,29 @@ def _open_document(file_bytes: bytes) -> pymupdf.Document:
     return pymupdf.open(stream=file_bytes, filetype=filetype)
 
 
+def _page(doc: pymupdf.Document, index: int) -> pymupdf.Page:
+    """
+    pymupdf.Document.__getitem__ is declared via inline @typing.overload in
+    its own source (no separate .pyi), with a default value on the int
+    overload and the slice/tuple overloads gated behind a sys.version_info
+    check — pyright can't cleanly resolve this for either direct indexing or
+    the old-style __getitem__-based iteration protocol (no __iter__ is
+    declared), and infers the element type as the whole overload-return
+    union instead of narrowing to Page. One cast, used everywhere a page is
+    pulled out of a Document, instead of re-deriving this at each call site.
+    """
+    return cast(pymupdf.Page, doc[index])
+
+
+def _pages(doc: pymupdf.Document) -> list[pymupdf.Page]:
+    return [_page(doc, i) for i in range(len(doc))]
+
+
 def _needs_ocr(doc: pymupdf.Document, file_bytes: bytes) -> bool:
     """A photo, or a page whose picture covers most of the sheet, has no text layer."""
     if not file_bytes.startswith(b"%PDF"):
         return True
-    for page in doc:
+    for page in _pages(doc):
         # pymupdf's get_text() stub is overloaded on the (non-literal-typed)
         # `option` string, so pyright can't narrow the "text" mode's return
         # to str — it's always a str at runtime for this mode.
@@ -426,11 +443,8 @@ def _ocr_blocks(doc: pymupdf.Document) -> list[_Block]:
 
     engine = RapidOCR()
     blocks: list[_Block] = []
-    # pymupdf.Document supports old-style iteration (__getitem__/__len__) at
-    # runtime but its stub doesn't declare __iter__, which enumerate()'s
-    # signature requires — index it directly instead.
     for page_index in range(len(doc)):
-        page = doc[page_index]
+        page = _page(doc, page_index)
         pix = page.get_pixmap(alpha=False)
         if pix.n != 3:
             pix = pymupdf.Pixmap(pymupdf.csRGB, pix)

@@ -2,23 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import uuid
-from typing import Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 
 from ..config import settings
-from ..fraud_detection.metadata_analysis import MetadataAnalysisResult, check_metadata_anomalies
-from ..fraud_detection.layout_anomalies import LayoutAnomalyResult, check_layout_anomalies
-from ..fraud_detection.numerical_validation import NumericalValidationResult, check_numerical_validation
-from ..fraud_detection.date_anomalies import DateAnomalyResult, check_date_anomalies
-
-from ..fraud_detection.spelling_anomaly import SpellingAnomalyResult, check_spelling_anomalies
-##why are these parked here
-
 from ..ingestion.ingestion_service import ingest_document
-from ..ingestion.metadata_extractor import extract_metadata
 
 router = APIRouter(prefix="/extraction", tags=["extraction"])
 logger = logging.getLogger(__name__)
@@ -107,101 +96,3 @@ async def test_extraction(file: UploadFile = File(...)) -> ExtractionTestRespons
 
     return ExtractionTestResponse(**result)
 
-
-@router.post("/test-spelling-anomaly", response_model=SpellingAnomalyResult)
-async def test_spelling_anomaly(file: UploadFile = File(...)) -> SpellingAnomalyResult:
-    """
-    Dev/QA endpoint, same spirit as /test above: runs the spelling-anomaly
-    check (see fraud_detection.spelling_anomaly) on an uploaded file and
-    returns the result directly — no case, no persisted document, and
-    (unlike the real GET /documents/{id}/detection/spelling-anomaly
-    endpoint) nothing written to the flags table, since there's no real
-    document_id/case_id to attach a flag to here. Also runs without any
-    extracted_fields to cross-reference against (there's no real document
-    to have extracted anything from), so it'll flag more proper nouns here
-    than the real endpoint would for the same file.
-    """
-    file_bytes, filename, _content_type = await _read_and_validate_upload(file)
-
-    # A random id purely for log messages inside check_spelling_anomalies —
-    # no document exists to key it to here.
-    return await check_spelling_anomalies(str(uuid.uuid4()), file_bytes, filename)
-
-
-@router.post("/test-metadata-anomaly", response_model=MetadataAnalysisResult)
-async def test_metadata_anomaly(
-    file: UploadFile = File(...),
-    document_type: Optional[str] = Form(None),
-) -> MetadataAnalysisResult:
-    """
-    Dev/QA endpoint, same spirit as /test-spelling-anomaly above: unlike the
-    real GET /documents/{id}/detection/metadata-anomaly endpoint (which
-    reads metadata already captured at ingestion time), this one runs
-    exiftool on the upload directly since there's no real document here for
-    ingestion to have already captured anything against — no case, no
-    persisted document, nothing written to the database.
-
-    document_type is optional here because there's no classified document
-    to take it from; supplying it lets this tool exercise the rules that
-    only apply to institution-issued documents (see
-    metadata_analysis.INSTITUTION_ORIGINATED_DOCUMENT_TYPES), which would
-    otherwise be unreachable from the dev tool.
-    """
-    file_bytes, filename, _content_type = await _read_and_validate_upload(file)
-    metadata = await asyncio.to_thread(extract_metadata, file_bytes, filename)
-    return check_metadata_anomalies(str(uuid.uuid4()), metadata, document_type or None)
-    
-@router.post("/test-numerical-validation", response_model=NumericalValidationResult)
-async def test_numerical_validation(
-    document_type: Optional[str] = Form(None),
-) -> NumericalValidationResult:
-    """
-    Dev/QA endpoint: same `NumericalValidationResult` as
-    GET /documents/{id}/detection/numerical-validation.
-
-    No file upload — the check runs entirely from extracted_fields, which
-    there's none of for an ad-hoc dev call, so every per-type check reports
-    SKIPPED (nothing to read fields from). document_type is optional here
-    for the same reason metadata_analysis's dev endpoint takes one: it lets
-    this tool at least confirm which checks WOULD be wired up for a type,
-    without pretending there's real extracted data behind them.
-    """
-    return await asyncio.to_thread(
-        check_numerical_validation, str(uuid.uuid4()), None, document_type or None
-    )
-
-
-@router.post("/test-date-anomalies", response_model=DateAnomalyResult)
-async def test_date_anomalies(
-    document_type: Optional[str] = Form(None),
-) -> DateAnomalyResult:
-    """
-    Dev/QA endpoint: same `DateAnomalyResult` as
-    GET /documents/{id}/detection/date-anomalies.
-
-    No file upload — the check runs entirely from extracted_fields, which
-    there's none of for an ad-hoc dev call, so every per-type check reports
-    SKIPPED, and labelled date extraction (AC1/AC2) has nothing to read
-    from either. document_type is optional for the same reason
-    numerical-validation's dev endpoint takes one.
-    """
-    return await asyncio.to_thread(
-        check_date_anomalies, str(uuid.uuid4()), None, document_type or None
-    )
-
-
-@router.post("/test-layout-anomalies", response_model=LayoutAnomalyResult)
-async def test_layout_anomalies(file: UploadFile = File(...)) -> LayoutAnomalyResult:
-    """
-    Dev/QA upload: same `LayoutAnomalyResult` as
-    GET /documents/{id}/detection/layout-anomalies. `document_id` is a
-    fresh UUID for this request, not a stored document.
-
-    The JSON lists each finding as `type`, `page`, `where`, `text`,
-    `summary`, and `checks` (detected, expected, difference). Several
-    checks on the same area stay one finding.
-    """
-    file_bytes, _filename, _content_type = await _read_and_validate_upload(file)
-    return await asyncio.to_thread(
-        check_layout_anomalies, str(uuid.uuid4()), file_bytes
-    )

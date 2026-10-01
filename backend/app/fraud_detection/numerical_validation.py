@@ -100,9 +100,9 @@ class BenfordAnalysis(BaseModel):
 
 class NumericalValidationResult(BaseModel):
     """
-    Shared response for GET /documents/{id}/detection/numerical-validation
-    and POST /extraction/test-numerical-validation. Nothing is persisted —
-    a pure read/compute, like the spelling and layout checks.
+    Response for GET /documents/{id}/detection/numerical-validation.
+    Nothing is persisted — a pure read/compute, like the spelling and
+    layout checks.
 
     Two independent Benford passes over transaction amounts (all amounts,
     and amounts with likely bank fees excluded) are named benford /

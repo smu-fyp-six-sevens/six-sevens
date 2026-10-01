@@ -1280,23 +1280,6 @@ h1 {
   box-shadow: 0 0 0 3px rgba(61, 90, 128, 0.15);
 }
 
-.dev-tool-link {
-  font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
-  font-size: 11px;
-  text-transform: none;
-  letter-spacing: normal;
-  background: none;
-  border: none;
-  color: var(--steel);
-  cursor: pointer;
-  padding: 0;
-}
-
-.dev-tool-link:hover {
-  color: var(--steel-dark);
-  text-decoration: underline;
-}
-
 .sr-only {
   position: absolute;
   width: 1px;
