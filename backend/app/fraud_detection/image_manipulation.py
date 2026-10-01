@@ -1,0 +1,2519 @@
+# image_manipulation.py
+"""
+Layout & Rendering Specialist — the images in a document. Two checks share
+this module and its region extraction:
+
+  check_image_manipulation (SCRUM-64): resolution and compression
+      inconsistencies between the images embedded in one document.
+  check_image_tampering (SCRUM-65): images edited in after the fact —
+      painted over and replaced, stretched or rotated, pasted with a visible
+      seam, or with altered brightness, colour, sharpness or noise. See the
+      SCRUM-65 section below.
+
+The rest of this docstring describes SCRUM-64.
+
+A document assembled honestly is internally consistent: every image in it
+went through the same scanner, the same export, the same compression pass.
+A region that was pasted in from somewhere else usually did not, and that
+shows up in two measurable ways — the pixels-per-inch it is actually drawn
+at, and the way it was compressed.
+
+Neither signal means anything in isolation. A 600 DPI logo beside a 150 DPI
+photograph is an ordinary document, not a forgery, so every check here is
+comparative: a region is only reported when it disagrees with the rest of
+the SAME document by more than a configured tolerance (AC6). Where there is
+nothing to compare against, the check says so rather than guessing (AC7).
+
+Image/geometry based, no LLM tokens. Synchronous and CPU-bound — callers
+should run this via asyncio.to_thread, the same as the other checks here.
+"""
+from __future__ import annotations
+
+import hashlib
+import io
+import logging
+import math
+from statistics import median
+from typing import Literal
+
+import numpy as np
+import pymupdf
+from PIL import Image, ImageChops, ImageFilter, ImageStat
+from pydantic import BaseModel, Field
+
+logger = logging.getLogger("fraud_detection.image_manipulation")
+
+BBox = tuple[float, float, float, float]
+# AC5: the indicator recorded against each finding.
+IndicatorType = Literal["Resolution Mismatch", "Compression Mismatch"]
+Severity = Literal["high", "medium", "low"]
+
+# JPEG segment markers used by _jpeg_quantisation_tables.
+_JPEG_SOI = 0xD8
+_JPEG_SOS = 0xDA
+_JPEG_DQT = 0xDB
+_JPEG_STANDALONE = {0x01, *range(0xD0, 0xD8)}
+
+# Codecs whose stored size reflects a QUALITY setting rather than image
+# content. Only these are eligible for the bytes-per-pixel comparison —
+# see _check_compression, signal 3.
+_LOSSY_CODECS = frozenset({"jpeg", "jpg", "jpx", "jp2", "jxr"})
+
+# Round-trip factors for the detail measurement in _detail_ratio: one octave
+# down, and three. 2 is the finest scale that can be measured at all; 8 is
+# coarse enough that even a heavily enlarged region still holds real detail
+# there, which is what makes the two comparable.
+_DETAIL_FINE_FACTOR = 2
+_DETAIL_COARSE_FACTOR = 8
+# Below this, dividing by 8 leaves too few pixels for the coarse measurement
+# to mean anything.
+_MIN_DETAIL_PIXELS = 64
+
+# Below this many comparable assets, a median is too easily moved by the very
+# region being judged: altering one of three values shifts the midpoint enough
+# that a different, untouched region becomes the most distant from it. The
+# finding is still real — the document IS internally inconsistent — but which
+# region is the altered one stops being knowable from resolution alone, so it
+# is reported as an inconsistency across a named set rather than as an
+# accusation against one region. Four is the smallest count at which two
+# regions can agree and still outvote a third.
+_MIN_CONFIDENT_ATTRIBUTION = 4
+
+# An image counts as hidden when a later image covers this much of it...
+_MIN_HIDDEN_FRACTION = 0.9
+# ...and the covering image is no more than this many times its area. Above
+# that the later image is a panel or a page-sized background drawn over
+# small artwork, not a replacement for it. A replacement is drawn over the
+# same slot, give or take the few points of padding needed to hide the
+# original's edges. None of the 205 clean documents in this repo's corpus
+# has any pair that meets both conditions.
+_MAX_COVER_AREA_RATIO = 2.5
+
+
+class Tolerances(BaseModel):
+    """
+    AC6 — what counts as normal variation.
+
+    Defaults are deliberately loose. Scanning, photocopying, resizing and
+    ordinary PDF generation all shift these numbers around, and a check that
+    an officer learns to ignore is worse than no check, so each threshold is
+    set where an innocent explanation stops being plausible rather than
+    where a difference first becomes measurable.
+    """
+
+    # A region must differ from the document's baseline by this FACTOR, not
+    # this margin. 2.0 = at least double or half the surrounding resolution;
+    # resizing a photo to fit a template rarely crosses that on its own.
+    dpi_ratio: float = Field(default=2.0, gt=1.0)
+    # Same idea for stored bytes per pixel, wider because compression varies
+    # far more than geometry across legitimate sources.
+    bytes_per_pixel_ratio: float = Field(default=3.0, gt=1.0)
+    # Below this displayed area (in points squared) a region is a logo, a
+    # crest or an icon. Those are placed by the template rather than by
+    # whoever filled the document in, and legitimately differ from body
+    # content in both resolution and compression — a vector-sharp letterhead
+    # logo beside a 150 DPI scan is an ordinary document, so comparing them
+    # produces noise, not findings. Such regions are still identified (AC1),
+    # just excluded from comparison (AC6).
+    #
+    # 1500pt² is calibrated against this repo's own generated documents
+    # (doc_gen_scripts), whose real content regions are:
+    #   certificate of incorporation  18225pt² crest, 1897pt² ACRA stamp
+    #   NRIC card                     2716-5581pt² portrait and crest
+    #   corporate bank statement      2364pt² logo
+    #   credit report                 2252pt² bureau logo
+    # The smallest of those is the 1897pt² stamp, so the floor sits just
+    # under it. Earlier defaults of 5000 and 2000 each excluded real
+    # content — 5000 blanked every document this pipeline produces, and
+    # 2000 left a single-page certificate with only one comparable region,
+    # which is never assessable. Template furniture is excluded by page
+    # repetition (see _flaggable) rather than by size, so this floor only
+    # has to clear genuinely decorative marks.
+    min_region_area_pt2: float = Field(default=1500.0, ge=0.0)
+    # Fewer comparable regions than this and there is no "surrounding
+    # content" to compare against, which is an Unable to Assess (AC7), not
+    # a clean result.
+    min_comparable_regions: int = Field(default=2, ge=2)
+    # An enlarged region holds almost no detail at its finest scale while
+    # still holding some at coarser ones, so the ratio between the two
+    # collapses (see _detail_ratio). Measured across every image asset this
+    # repo's generators embed, genuine artwork scores between 0.250
+    # (uob_stamp.jpg) and 0.496 (nric_crest.jpeg). The ACRA crest shrunk and
+    # blown back up to its original pixel dimensions scores 0.076 to 0.123
+    # across enlargement factors of 2x through 6x. 0.18 sits between the two
+    # populations, about 1.4x below the nearest genuine asset and 1.5x above
+    # the nearest forgery. Unlike the thresholds above this one is not a
+    # ratio between two regions, so it is the only absolute number here —
+    # but it is a ratio internal to one image, which is why it survives
+    # contrast and scale differences that defeat measuring detail directly.
+    min_detail_ratio: float = Field(default=0.18, gt=0.0, lt=1.0)
+    # --- standalone PNG/JPEG uploads (see _check_raster) ---
+    # A window of a flat image is flagged when at least this share of its
+    # hard pixel steps, on BOTH axes, stand alone with flat pixels either
+    # side (see _step_isolation). Measured over 64px windows of 81 clean
+    # rendered documents and 20 NRIC/passport uploads, genuine content —
+    # anti-aliased text, photos, crests — keeps at least one neighbour of a
+    # step moving; a region enlarged without smoothing does not. At 0.4 the
+    # NRIC/passport set shows no false alarms and 91% of injected
+    # resolution_mismatch patches are caught.
+    min_step_isolation: float = Field(default=0.4, gt=0.0, le=1.0)
+    # A finding needs this many adjacent flagged windows. One window on its
+    # own is most often a single pixel-sharp rule or border; requiring two
+    # halves false alarms on rendered documents for a 1-point cost in
+    # detection.
+    min_flagged_windows: int = Field(default=2, ge=1)
+
+
+class ImageRegion(BaseModel):
+    """AC1"""
+
+    xref: int
+    page: int
+    bbox: BBox
+    pixel_width: int
+    pixel_height: int
+    # Pixels per inch as RENDERED, not as stored: a 2000px image shrunk into
+    # a 100pt box is drawn at ~1440 DPI. This is the number that differs
+    # when a region comes from somewhere else.
+    effective_dpi: float
+    codec: str
+    stored_bytes: int
+    bytes_per_pixel: float
+    # None for anything that is not JPEG. Two JPEGs from the same encoder at
+    # the same quality share these tables exactly; different tables mean
+    # different compression provenance.
+    quantisation_signature: str | None
+    # How many pages this same embedded asset (xref) is drawn on. A logo or
+    # icon repeated on every page is template furniture placed by the
+    # issuer, not content anyone filled in.
+    pages_used_on: int
+    # Detail at the image's finest scale divided by detail three octaves
+    # coarser (see _detail_ratio). A low value means the region carries far
+    # less real detail than its stored pixel count claims — it was enlarged
+    # from something smaller. None when the image is too small to measure or
+    # could not be decoded.
+    detail_ratio: float | None = None
+    # Regions below the size floor, and template furniture, are kept (AC1
+    # asks for identification) but excluded from comparison (AC6).
+    comparable: bool
+    # Set when a later, opaque image is drawn over this one (see
+    # _hidden_placements). A hidden region is not part of what the reader
+    # sees, so it is excluded from comparison — but it is the original that
+    # the visible region replaced, which _check_covered_regions compares
+    # against directly.
+    covered_by_xref: int | None = None
+    covered_by_bbox: BBox | None = None
+
+
+class ImageManipulationIndicator(BaseModel):
+    indicator: IndicatorType  # AC5
+    page: int  # AC4
+    bbox: BBox  # AC4
+    detected: str
+    expected: str
+    deviation: str
+    severity: Severity
+    summary: str
+    evidence: dict
+
+
+class ImageManipulationResult(BaseModel):
+    document_id: str
+    regions: list[ImageRegion]  # AC1
+    indicators: list[ImageManipulationIndicator]
+    pages_checked: int
+    tolerances: Tolerances
+    unable_to_assess: bool  # AC7
+    unable_to_assess_reason: str | None = None
+    # What the bbox numbers mean: PDF points for a PDF, pixels for a PNG or
+    # JPEG upload, which has no page geometry of its own.
+    bbox_units: Literal["pt", "px"] = "pt"
+
+
+def _unable(
+    document_id: str, reason: str, tolerances: Tolerances,
+    regions: list[ImageRegion] | None = None, pages: int = 0,
+) -> ImageManipulationResult:
+    return ImageManipulationResult(
+        document_id=document_id,
+        regions=regions or [],
+        indicators=[],
+        pages_checked=pages,
+        tolerances=tolerances,
+        unable_to_assess=True,
+        unable_to_assess_reason=reason,
+    )
+
+
+# --- measurement -------------------------------------------------------------
+
+def _jpeg_quantisation_tables(data: bytes) -> tuple[bytes, ...] | None:
+    """
+    Pulls the DQT segments out of a JPEG.
+
+    The quantisation tables are the encoder's fingerprint: they are chosen
+    by the quality setting and the encoder implementation, so two images
+    compressed in the same pass carry identical tables and an image
+    compressed elsewhere almost never does. Comparing them is far more
+    reliable than comparing file sizes, which vary with content.
+
+    Returns None for anything that is not a parseable JPEG.
+    """
+    if len(data) < 4 or data[0] != 0xFF or data[1] != _JPEG_SOI:
+        return None
+
+    tables: list[bytes] = []
+    i = 2
+    while i < len(data) - 1:
+        if data[i] != 0xFF:
+            i += 1
+            continue
+        marker = data[i + 1]
+        if marker == 0xFF:  # fill byte
+            i += 1
+            continue
+        if marker in _JPEG_STANDALONE:
+            i += 2
+            continue
+        if marker == _JPEG_SOS:  # entropy-coded data follows; stop
+            break
+        if i + 4 > len(data):
+            break
+        segment_length = int.from_bytes(data[i + 2:i + 4], "big")
+        if segment_length < 2:
+            break
+        if marker == _JPEG_DQT:
+            tables.append(bytes(data[i + 4:i + 2 + segment_length]))
+        i += 2 + segment_length
+
+    return tuple(tables) or None
+
+
+def _quantisation_signature(data: bytes) -> str | None:
+    tables = _jpeg_quantisation_tables(data)
+    if tables is None:
+        return None
+    digest = hashlib.sha256(b"".join(tables)).hexdigest()[:12]
+    return digest
+
+
+def _resample_residual(image: Image.Image, factor: int) -> float | None:
+    """
+    How much of the image lives at scales finer than 1/factor: the RMS
+    difference between the image and itself after being shrunk by `factor`
+    and interpolated back up. A sharp image loses a lot in that round trip;
+    one that was already enlarged loses almost nothing, because there was
+    nothing at those scales to lose.
+    """
+    width, height = image.size
+    if width // factor < 4 or height // factor < 4:
+        return None
+    reduced = image.resize((width // factor, height // factor), Image.Resampling.LANCZOS)
+    restored = reduced.resize((width, height), Image.Resampling.LANCZOS)
+    # rms[0] is the single band's root-mean-square, 0-255. Normalised so the
+    # figure is comparable between images of different bit depths.
+    return ImageStat.Stat(ImageChops.difference(image, restored)).rms[0] / 255.0
+
+
+def _detail_ratio(data: bytes) -> float | None:
+    """
+    Whether a region holds as much real detail as its stored size claims.
+
+    Resolution everywhere else in this module is geometry: stored pixels
+    divided by printed inches. That number says nothing about whether the
+    pixels carry information. Enlarging a small image restores the pixel
+    count and leaves the detail behind, so a crest lifted off a website and
+    blown up to letterhead size reports a perfectly ordinary DPI while
+    looking soft to anyone who actually looks at it. This is the blind spot
+    of a DPI comparison, by construction rather than by loose tolerance.
+
+    What separates the two cases is where the detail sits. Measuring the
+    finest scale alone does not work: across this repo's own assets that
+    figure spans 7.8x with nothing wrong, because it tracks how contrasty
+    and textured the artwork is. Dividing it by the same measurement three
+    octaves coarser cancels that out — both figures scale together with
+    contrast — and leaves only the shape of the falloff, which is what
+    enlargement changes. The same assets then span 2x, and an enlarged
+    region sits well below all of them.
+
+    Returns None for an image too small to measure or impossible to decode.
+    """
+    try:
+        with Image.open(io.BytesIO(data)) as opened:
+            image = opened.convert("L")
+    except Exception:
+        # Anything pymupdf could extract but PIL cannot decode (CCITT fax,
+        # JBIG2, exotic JPEG2000 variants). Not measurable, not a finding.
+        return None
+
+    if min(image.size) < _MIN_DETAIL_PIXELS:
+        return None
+
+    fine = _resample_residual(image, _DETAIL_FINE_FACTOR)
+    coarse = _resample_residual(image, _DETAIL_COARSE_FACTOR)
+    logger.debug(
+        "detail: %sx%s px  residual@1/%s=%s  residual@1/%s=%s",
+        image.size[0], image.size[1],
+        _DETAIL_FINE_FACTOR, "n/a" if fine is None else f"{fine:.5f}",
+        _DETAIL_COARSE_FACTOR, "n/a" if coarse is None else f"{coarse:.5f}",
+    )
+    if fine is None or coarse is None or coarse <= 0.0:
+        # coarse == 0 means a completely flat image: no detail at any scale,
+        # so there is no falloff to describe and nothing to conclude.
+        return None
+    return round(fine / coarse, 4)
+
+
+def _hidden_placements(page: pymupdf.Page) -> list[tuple[int, BBox, int, BBox]]:
+    """
+    Image placements that a later image is drawn straight over, as
+    (hidden xref, hidden bbox, covering xref, covering bbox).
+
+    The commonest way to alter one image in an existing PDF is not to edit
+    it but to draw a new one on top: the original stays in the file,
+    painted out, and the reader only sees the replacement. That leaves the
+    original sitting directly underneath — the one thing the altered region
+    can be compared against with certainty, whatever its size and however
+    few other images the document holds.
+
+    get_image_info lists placements in drawing order, so "later" means
+    "drawn on top". A covering image with a transparency mask is skipped:
+    a signature laid over a stamp shows the stamp through it rather than
+    replacing it.
+    """
+    try:
+        infos = page.get_image_info(xrefs=True)
+    except Exception:
+        logger.debug("Page %s: image draw order unavailable", page.number, exc_info=True)
+        return []
+
+    hidden: list[tuple[int, BBox, int, BBox]] = []
+    for i, below in enumerate(infos):
+        below_rect = pymupdf.Rect(below["bbox"])
+        if below_rect.is_empty:
+            continue
+        for above in infos[i + 1:]:
+            above_rect = pymupdf.Rect(above["bbox"])
+            if above["xref"] == below["xref"] or above_rect.is_empty or above.get("has-mask"):
+                continue
+            covered = (below_rect & above_rect).get_area() / below_rect.get_area()
+            if (
+                covered >= _MIN_HIDDEN_FRACTION
+                and above_rect.get_area() <= _MAX_COVER_AREA_RATIO * below_rect.get_area()
+            ):
+                hidden.append((
+                    below["xref"], (below_rect.x0, below_rect.y0, below_rect.x1, below_rect.y1),
+                    above["xref"], (above_rect.x0, above_rect.y0, above_rect.x1, above_rect.y1),
+                ))
+                break
+    return hidden
+
+
+def _same_bbox(a: BBox, b: BBox) -> bool:
+    # get_image_rects and get_image_info compute the same box by different
+    # routes, so allow for float noise.
+    return all(abs(x - y) < 0.5 for x, y in zip(a, b))
+
+
+def _collect_regions(doc: pymupdf.Document, tolerances: Tolerances) -> list[ImageRegion]:
+    """AC1 — every embedded image, with where and how large it is drawn."""
+    regions: list[ImageRegion] = []
+    # Decoding and resampling an image is the expensive part of this module,
+    # and a template asset reappears on every page, so measure each distinct
+    # asset once.
+    detail_by_xref: dict[int, float | None] = {}
+    hidden: dict[int, list[tuple[int, BBox, int, BBox]]] = {}
+
+    for page in doc:
+        page_number = page.number
+        assert page_number is not None  # always set on a page iterated from its document
+        hidden[page_number] = _hidden_placements(page)
+        for image in page.get_images(full=True):
+            xref = image[0]
+            try:
+                extracted = doc.extract_image(xref)
+            except Exception:
+                logger.warning(
+                    "Page %s: image xref %s could not be extracted", page.number, xref,
+                    exc_info=True,
+                )
+                continue
+            if not extracted:
+                continue
+
+            pixel_width = int(extracted.get("width") or 0)
+            pixel_height = int(extracted.get("height") or 0)
+            data = extracted.get("image") or b""
+            if pixel_width <= 0 or pixel_height <= 0 or not data:
+                continue
+
+            if xref not in detail_by_xref:
+                detail_by_xref[xref] = _detail_ratio(data)
+
+            try:
+                rects = page.get_image_rects(xref)
+            except Exception:
+                rects = []
+
+            for rect in rects or ():
+                drawn_width_pt = float(rect.width)
+                drawn_height_pt = float(rect.height)
+                if drawn_width_pt <= 0 or drawn_height_pt <= 0:
+                    continue
+
+                # 72 points to the inch, so pixels / (points / 72) = DPI.
+                # Averaged over both axes: a region stretched on one axis
+                # only would otherwise read as a mismatch on its own.
+                dpi_x = pixel_width / (drawn_width_pt / 72.0)
+                dpi_y = pixel_height / (drawn_height_pt / 72.0)
+                effective_dpi = (dpi_x + dpi_y) / 2.0
+                area_pt2 = drawn_width_pt * drawn_height_pt
+
+                logger.debug(
+                    "region: page=%s xref=%s %sx%s px drawn %.0fx%.0fpt "
+                    "(%.0fpt2) dpi=%.1f codec=%s bpp=%.5f qsig=%s detail=%s "
+                    "comparable=%s (floor %.0fpt2)",
+                    page.number, xref, pixel_width, pixel_height,
+                    drawn_width_pt, drawn_height_pt, area_pt2, effective_dpi,
+                    extracted.get("ext"), len(data) / (pixel_width * pixel_height),
+                    _quantisation_signature(data), detail_by_xref[xref],
+                    area_pt2 >= tolerances.min_region_area_pt2,
+                    tolerances.min_region_area_pt2,
+                )
+                regions.append(
+                    ImageRegion(
+                        xref=xref,
+                        page=page_number,
+                        bbox=(rect.x0, rect.y0, rect.x1, rect.y1),
+                        pixel_width=pixel_width,
+                        pixel_height=pixel_height,
+                        effective_dpi=round(effective_dpi, 1),
+                        codec=str(extracted.get("ext") or "unknown"),
+                        stored_bytes=len(data),
+                        bytes_per_pixel=round(len(data) / (pixel_width * pixel_height), 5),
+                        quantisation_signature=_quantisation_signature(data),
+                        detail_ratio=detail_by_xref[xref],
+                        pages_used_on=1,  # corrected below, once all pages are seen
+                        comparable=area_pt2 >= tolerances.min_region_area_pt2,
+                    )
+                )
+
+    # Second pass: count how many pages each asset is drawn on. An asset on
+    # more than one page is the issuer's template furniture — a letterhead
+    # logo, a page-corner icon, a watermark. It still informs the baseline
+    # (see _baseline), but is never itself flagged (see _flaggable): such
+    # assets legitimately differ from each other in resolution, since a
+    # square icon and a wide banner are authored separately, and because
+    # they repeat they arrive in equal-sized clusters that drag a median
+    # between them and make each cluster look like the other's outlier.
+    # A pasted region, by contrast, appears once.
+    pages_by_xref: dict[int, set[int]] = {}
+    for region in regions:
+        pages_by_xref.setdefault(region.xref, set()).add(region.page)
+    for region in regions:
+        region.pages_used_on = len(pages_by_xref[region.xref])
+
+    # Third pass: mark placements painted over by a later image. They are
+    # not what the reader sees, so they leave the comparison pool.
+    for region in regions:
+        for xref, bbox, above_xref, above_bbox in hidden.get(region.page, ()):
+            if region.xref == xref and _same_bbox(region.bbox, bbox):
+                logger.debug(
+                    "region: page=%s xref=%s is hidden under xref=%s", region.page,
+                    region.xref, above_xref,
+                )
+                region.covered_by_xref = above_xref
+                region.covered_by_bbox = above_bbox
+                region.comparable = False
+                break
+
+    return regions
+
+
+def _baseline(regions: list[ImageRegion]) -> list[ImageRegion]:
+    """
+    One entry per distinct asset, so a logo repeated on twenty pages counts
+    once rather than twenty times and cannot dominate the median.
+    """
+    seen: set[int] = set()
+    unique: list[ImageRegion] = []
+    for region in regions:
+        if region.xref in seen:
+            continue
+        seen.add(region.xref)
+        unique.append(region)
+    return unique
+
+
+def _flaggable(regions: list[ImageRegion]) -> list[ImageRegion]:
+    """Regions eligible to be reported: sized, and not template furniture."""
+    return [region for region in regions if region.comparable and region.pages_used_on == 1]
+
+
+def _dedupe(
+    indicators: list[ImageManipulationIndicator],
+) -> list[ImageManipulationIndicator]:
+    """
+    One row per region per indicator type. An enlarged region is often also
+    a resolution outlier against its neighbours, and an officer should see
+    one finding about it, not two saying the same thing in different words.
+    Order is preserved, so the check that ran first wins.
+    """
+    seen: set[tuple[str, int, BBox]] = set()
+    unique: list[ImageManipulationIndicator] = []
+    for indicator in indicators:
+        key = (indicator.indicator, indicator.page, indicator.bbox)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(indicator)
+    return unique
+
+
+# --- checks ------------------------------------------------------------------
+
+def _ratio_against(value: float, baseline: float) -> float:
+    """How many times apart two positive values are, in either direction."""
+    if value <= 0 or baseline <= 0:
+        return 1.0
+    return max(value / baseline, baseline / value)
+
+
+def _check_intrinsic_resolution(
+    regions: list[ImageRegion], tolerances: Tolerances
+) -> list[ImageManipulationIndicator]:
+    """
+    AC2, measured without a comparison — regions enlarged from something
+    smaller than they claim to be.
+
+    Every other check in this module asks whether a region disagrees with
+    its neighbours. This one asks whether a region disagrees with ITSELF:
+    the resolution it is stored at against the resolution its detail shows
+    it was really produced at. Nothing else in the document is involved,
+    which makes it the only check here that works on a document holding a
+    single image — and on this pipeline's corpus most documents hold one or
+    none, so it is also where most of the reach comes from.
+
+    Recorded as a Resolution Mismatch (AC5): the mismatch is between stored
+    and actual resolution rather than between two regions.
+    """
+    indicators: list[ImageManipulationIndicator] = []
+
+    # One row per distinct asset, so a letterhead crest drawn on twenty
+    # pages is reported once rather than twenty times. Template furniture is
+    # deliberately NOT excluded here: the repetition exclusion elsewhere
+    # exists because repeated assets distort a median, and this check has no
+    # median to distort. A forged letterhead appears on every page, and
+    # excluding it would exempt exactly the case worth catching.
+    for region in _baseline([region for region in regions if region.comparable]):
+        ratio = region.detail_ratio
+        if ratio is None:
+            logger.debug(
+                "intrinsic: xref=%s not measurable (too small, or undecodable)", region.xref
+            )
+            continue
+        logger.debug(
+            "intrinsic: xref=%s detail=%.4f vs floor %.2f -> %s",
+            region.xref, ratio, tolerances.min_detail_ratio,
+            "ENLARGED" if ratio < tolerances.min_detail_ratio else "ok",
+        )
+        if ratio >= tolerances.min_detail_ratio:
+            continue
+
+        # Far below the threshold rather than just under it. A region with
+        # almost no fine detail at all was enlarged by a large factor, or
+        # from a thumbnail.
+        severity: Severity = (
+            "high" if ratio < tolerances.min_detail_ratio / 2 else "medium"
+        )
+        indicators.append(
+            ImageManipulationIndicator(
+                indicator="Resolution Mismatch",
+                page=region.page,
+                bbox=region.bbox,
+                detected=(
+                    f"stored at {region.pixel_width}x{region.pixel_height} px "
+                    f"({region.effective_dpi:.0f} DPI as drawn) but carrying a "
+                    f"detail ratio of only {ratio:.3f}"
+                ),
+                expected=(
+                    f"at least {tolerances.min_detail_ratio:.2f} for artwork "
+                    "genuinely produced at this pixel size"
+                ),
+                deviation="enlarged from a smaller original",
+                severity=severity,
+                summary=(
+                    f"Page {region.page + 1}: an image region stores "
+                    f"{region.pixel_width}x{region.pixel_height} pixels but holds "
+                    "almost none of the fine detail that size implies, meaning it "
+                    "was enlarged from a smaller image rather than produced at this "
+                    "resolution. On a letterhead mark this is the signature of a "
+                    "logo copied from elsewhere and scaled to fit."
+                ),
+                evidence={
+                    "xref": region.xref,
+                    "detail_ratio": ratio,
+                    "threshold": tolerances.min_detail_ratio,
+                    "pixel_dimensions": f"{region.pixel_width}x{region.pixel_height}",
+                    "effective_dpi": region.effective_dpi,
+                    "pages_used_on": region.pages_used_on,
+                },
+            )
+        )
+
+    return indicators
+
+
+def _check_covered_regions(
+    regions: list[ImageRegion], tolerances: Tolerances
+) -> list[ImageManipulationIndicator]:
+    """
+    AC2/AC3, measured against the original — a visible image compared with
+    the image it was drawn over (see _hidden_placements).
+
+    The comparative checks judge a region against its neighbours and have
+    to hedge when there are few of them. Here the comparison partner is the
+    region's own predecessor in the same slot, so there is no majority to
+    find and no ambiguity about which one changed: the visible one is the
+    replacement. That also makes it the one check that reaches small marks
+    — a crest or a seal below the size floor — which are exactly what gets
+    swapped on an official document.
+
+    Runs regardless of size and repetition, like the intrinsic check. A
+    replacement can differ from its original in resolution, compression or
+    both; each is reported as its own indicator (AC5), since they are
+    separate facts about how the replacement was made.
+    """
+    indicators: list[ImageManipulationIndicator] = []
+    for hidden in regions:
+        if hidden.covered_by_xref is None or hidden.covered_by_bbox is None:
+            continue
+        visible = next(
+            (
+                region for region in regions
+                if region.page == hidden.page
+                and region.xref == hidden.covered_by_xref
+                and _same_bbox(region.bbox, hidden.covered_by_bbox)
+            ),
+            None,
+        )
+        if visible is None:
+            continue
+
+        base_evidence = {
+            "xref": visible.xref,
+            "hidden_xref": hidden.xref,
+            "hidden_bbox": hidden.bbox,
+            "pixel_dimensions": f"{visible.pixel_width}x{visible.pixel_height}",
+            "hidden_pixel_dimensions": f"{hidden.pixel_width}x{hidden.pixel_height}",
+        }
+        ratio = _ratio_against(visible.effective_dpi, hidden.effective_dpi)
+        logger.debug(
+            "covered: page=%s xref=%s (%.1f DPI, %s) over hidden xref=%s (%.1f DPI, %s): "
+            "%.2fx apart vs tolerance %.2fx",
+            visible.page, visible.xref, visible.effective_dpi, visible.codec,
+            hidden.xref, hidden.effective_dpi, hidden.codec, ratio, tolerances.dpi_ratio,
+        )
+
+        if ratio >= tolerances.dpi_ratio:
+            direction = "higher" if visible.effective_dpi > hidden.effective_dpi else "lower"
+            indicators.append(
+                ImageManipulationIndicator(
+                    indicator="Resolution Mismatch",
+                    page=visible.page,
+                    bbox=visible.bbox,
+                    detected=f"{visible.effective_dpi:.0f} DPI",
+                    expected=(
+                        f"{hidden.effective_dpi:.0f} DPI (the original image hidden "
+                        "underneath it)"
+                    ),
+                    deviation=f"{ratio:.1f}x {direction}; drawn over the original",
+                    severity="high",
+                    summary=(
+                        f"Page {visible.page + 1}: an image is drawn directly over another "
+                        f"image in the same position, hiding it. The visible image is "
+                        f"{visible.effective_dpi:.0f} DPI; the hidden original underneath is "
+                        f"{hidden.effective_dpi:.0f} DPI, {ratio:.1f}x apart. The region has "
+                        "been replaced after the document was produced."
+                    ),
+                    evidence={
+                        **base_evidence,
+                        "effective_dpi": visible.effective_dpi,
+                        "hidden_effective_dpi": hidden.effective_dpi,
+                        "ratio": round(ratio, 2),
+                        "tolerance_ratio": tolerances.dpi_ratio,
+                    },
+                )
+            )
+
+        codec_differs = visible.codec != hidden.codec
+        tables_differ = (
+            visible.quantisation_signature is not None
+            and hidden.quantisation_signature is not None
+            and visible.quantisation_signature != hidden.quantisation_signature
+        )
+        if not (codec_differs or tables_differ):
+            # Same compression as the original. If the resolution matched
+            # too, the overlay itself is still unusual, but judging it is
+            # SCRUM-65's Image Overlay indicator, not a resolution or
+            # compression one.
+            continue
+        detected, expected = (
+            (f"{visible.codec} encoding", f"{hidden.codec} (the original hidden underneath it)")
+            if codec_differs else
+            (f"JPEG quantisation table {visible.quantisation_signature}",
+             f"{hidden.quantisation_signature} (the original hidden underneath it)")
+        )
+        indicators.append(
+            ImageManipulationIndicator(
+                indicator="Compression Mismatch",
+                page=visible.page,
+                bbox=visible.bbox,
+                detected=detected,
+                expected=expected,
+                deviation="compressed differently from the original it was drawn over",
+                severity="high",
+                summary=(
+                    f"Page {visible.page + 1}: an image is drawn directly over another image "
+                    "in the same position, hiding it, and was compressed differently from "
+                    "the original underneath. The region has been replaced after the "
+                    "document was produced."
+                ),
+                evidence={
+                    **base_evidence,
+                    "codec": visible.codec,
+                    "hidden_codec": hidden.codec,
+                    "quantisation_signature": visible.quantisation_signature,
+                    "hidden_quantisation_signature": hidden.quantisation_signature,
+                },
+            )
+        )
+    return indicators
+
+
+def _check_resolution(
+    regions: list[ImageRegion], tolerances: Tolerances
+) -> list[ImageManipulationIndicator]:
+    """AC2 — regions drawn at a resolution unlike the rest of the document."""
+    comparable = _baseline([region for region in regions if region.comparable])
+    if len(comparable) < tolerances.min_comparable_regions:
+        return []
+    candidates = _flaggable(comparable)
+    if not candidates:
+        return []
+
+    # With exactly two regions the median is their midpoint, so each sits
+    # the SAME distance from it and neither can ever read as an outlier —
+    # two regions 2x apart both score ~1.4x and nothing fires. Comparing
+    # them against each other instead is the only thing that means anything
+    # at that count. Which of the two is the altered one is genuinely
+    # unknowable from resolution alone, so both are reported.
+    if len(comparable) == 2:
+        first, second = comparable
+        ratio = _ratio_against(first.effective_dpi, second.effective_dpi)
+        logger.debug(
+            "resolution: only 2 assets, comparing pairwise: %.1f vs %.1f DPI = "
+            "%.2fx apart vs tolerance %.2fx -> %s",
+            first.effective_dpi, second.effective_dpi, ratio, tolerances.dpi_ratio,
+            "MISMATCH" if ratio >= tolerances.dpi_ratio else "within tolerance",
+        )
+        if ratio < tolerances.dpi_ratio:
+            return []
+        return [
+            ImageManipulationIndicator(
+                indicator="Resolution Mismatch",
+                page=region.page,
+                bbox=region.bbox,
+                detected=f"{region.effective_dpi:.0f} DPI",
+                expected=f"{other.effective_dpi:.0f} DPI (the only other image region)",
+                deviation=f"{ratio:.1f}x apart",
+                severity="medium",
+                summary=(
+                    f"Page {region.page + 1}: this document's two image regions are drawn "
+                    f"{ratio:.1f}x apart in resolution ({first.effective_dpi:.0f} vs "
+                    f"{second.effective_dpi:.0f} DPI). With only two regions there is no "
+                    "majority to say which one is out of place."
+                ),
+                evidence={
+                    "xref": region.xref,
+                    "effective_dpi": region.effective_dpi,
+                    "other_effective_dpi": other.effective_dpi,
+                    "ratio": round(ratio, 2),
+                    "comparable_regions": 2,
+                    "tolerance_ratio": tolerances.dpi_ratio,
+                },
+            )
+            for region, other in ((first, second), (second, first))
+            if region in candidates
+        ]
+
+    baseline = median(region.effective_dpi for region in comparable)
+    logger.debug(
+        "resolution: baseline median = %.1f DPI over %d assets %s",
+        baseline, len(comparable), [round(r.effective_dpi) for r in comparable],
+    )
+    if baseline <= 0:
+        return []
+
+    indicators: list[ImageManipulationIndicator] = []
+    for region in candidates:
+        ratio = _ratio_against(region.effective_dpi, baseline)
+        logger.debug(
+            "resolution: xref=%s %.1f DPI is %.2fx from baseline vs tolerance %.2fx -> %s",
+            region.xref, region.effective_dpi, ratio, tolerances.dpi_ratio,
+            "MISMATCH" if ratio >= tolerances.dpi_ratio else "ok",
+        )
+        if ratio < tolerances.dpi_ratio:
+            continue
+
+        direction = "higher" if region.effective_dpi > baseline else "lower"
+
+        # With too few regions to form a majority, say so rather than naming
+        # this one as the altered region. An officer who is sent to the wrong
+        # image and finds nothing wrong with it learns to distrust the check.
+        confident = len(comparable) >= _MIN_CONFIDENT_ATTRIBUTION
+        spread = ", ".join(
+            f"{other.effective_dpi:.0f} DPI (xref {other.xref}"
+            f"{', this one' if other.xref == region.xref else ''})"
+            for other in sorted(comparable, key=lambda r: -r.effective_dpi)
+        )
+        caveat = (
+            "" if confident else
+            f" With only {len(comparable)} comparable regions there is no majority to "
+            "establish which of them is out of place, so this reports an inconsistency "
+            f"across the set rather than a verdict on one region. The full spread is: "
+            f"{spread}. Each should be checked against the document it is supposed to "
+            "have come from."
+        )
+        indicators.append(
+            ImageManipulationIndicator(
+                indicator="Resolution Mismatch",
+                page=region.page,
+                bbox=region.bbox,
+                detected=f"{region.effective_dpi:.0f} DPI",
+                expected=f"~{baseline:.0f} DPI (median of {len(comparable)} regions)",
+                deviation=(
+                    f"{ratio:.1f}x {direction}" if confident
+                    else f"{ratio:.1f}x {direction}; which region is altered is ambiguous"
+                ),
+                # Less evidence, so a lower claim. A three-region spread is worth
+                # a look, not the confidence of a clear majority.
+                severity=(
+                    ("high" if ratio >= tolerances.dpi_ratio * 2 else "medium")
+                    if confident else "medium"
+                ),
+                summary=(
+                    f"Page {region.page + 1}: an image region is drawn at "
+                    f"{region.effective_dpi:.0f} DPI, {ratio:.1f}x {direction} than the "
+                    f"~{baseline:.0f} DPI of the other images in this document."
+                    + caveat
+                ),
+                evidence={
+                    "xref": region.xref,
+                    "pixel_dimensions": f"{region.pixel_width}x{region.pixel_height}",
+                    "baseline_dpi": round(baseline, 1),
+                    "ratio": round(ratio, 2),
+                    "comparable_regions": len(comparable),
+                    "tolerance_ratio": tolerances.dpi_ratio,
+                    "attribution_confident": confident,
+                    # Every candidate, so a reviewer can see the whole spread
+                    # instead of only the region this row happens to name.
+                    "all_region_dpi": {
+                        str(other.xref): other.effective_dpi for other in comparable
+                    },
+                },
+            )
+        )
+    return indicators
+
+
+def _check_compression(
+    regions: list[ImageRegion], tolerances: Tolerances
+) -> list[ImageManipulationIndicator]:
+    """
+    AC3 — regions whose compression does not match the rest.
+
+    Three signals, strongest first:
+      1. A JPEG whose quantisation tables differ from the other JPEGs. This
+         is the encoder's fingerprint, so a difference means the region was
+         compressed somewhere else.
+      2. A codec nobody else on the page uses (one JPEG photo dropped into
+         an otherwise PNG/Flate document, or the reverse).
+      3. Stored bytes per pixel far from the document's norm.
+
+    Only one indicator is raised per region — the strongest that applies —
+    so a pasted photo does not produce three rows describing one paste.
+    """
+    comparable = _baseline([region for region in regions if region.comparable])
+    if len(comparable) < tolerances.min_comparable_regions:
+        return []
+    candidates = _flaggable(comparable)
+    if not candidates:
+        return []
+
+    indicators: list[ImageManipulationIndicator] = []
+
+    # 1. Quantisation-table mismatch among JPEGs.
+    jpegs = [region for region in comparable if region.quantisation_signature]
+    logger.debug(
+        "compression: %d of %d assets are JPEG; quantisation comparison needs %d",
+        len(jpegs), len(comparable), tolerances.min_comparable_regions,
+    )
+    majority_signature: str | None = None
+    if len(jpegs) >= tolerances.min_comparable_regions:
+        counts: dict[str, int] = {}
+        for region in jpegs:
+            signature = region.quantisation_signature
+            if signature is not None:  # always true here; narrows the type
+                counts[signature] = counts.get(signature, 0) + 1
+        majority_signature, majority_count = max(counts.items(), key=lambda item: item[1])
+        # A clean split (two of each) is not a majority and not evidence.
+        if majority_count <= len(jpegs) / 2:
+            majority_signature = None
+
+    flagged: set[tuple[int, BBox]] = set()
+
+    # With exactly two JPEGs there is no majority to find — one of each is a
+    # 1-1 split, so the loop below never fires and a genuinely different
+    # encoder passes unnoticed. The tables either match or they do not, which
+    # is a fact about the pair rather than about either one, so both are
+    # reported and the attribution left open. Mirrors the two-region path in
+    # _check_resolution, for the same reason.
+    if (
+        majority_signature is None
+        and len(jpegs) == 2
+        and jpegs[0].quantisation_signature != jpegs[1].quantisation_signature
+    ):
+        logger.debug(
+            "compression: 2 JPEGs with differing tables (%s vs %s), comparing pairwise",
+            jpegs[0].quantisation_signature, jpegs[1].quantisation_signature,
+        )
+        for region, other in ((jpegs[0], jpegs[1]), (jpegs[1], jpegs[0])):
+            if region not in candidates:
+                continue
+            flagged.add((region.xref, region.bbox))
+            indicators.append(
+                ImageManipulationIndicator(
+                    indicator="Compression Mismatch",
+                    page=region.page,
+                    bbox=region.bbox,
+                    detected=f"JPEG quantisation table {region.quantisation_signature}",
+                    expected=(
+                        f"{other.quantisation_signature} (the only other JPEG region)"
+                    ),
+                    deviation="different encoder or quality setting; which region is "
+                              "altered is ambiguous",
+                    severity="medium",
+                    summary=(
+                        f"Page {region.page + 1}: this document's two JPEG regions were "
+                        "compressed with different quantisation tables, so they did not "
+                        "come out of the same pass. With only two there is no majority "
+                        "to say which one is out of place; both should be checked "
+                        "against the document they are supposed to have come from."
+                    ),
+                    evidence={
+                        "xref": region.xref,
+                        "quantisation_signature": region.quantisation_signature,
+                        "other_quantisation_signature": other.quantisation_signature,
+                        "jpeg_regions": 2,
+                        "attribution_confident": False,
+                    },
+                )
+            )
+
+    if majority_signature is not None:
+        for region in jpegs:
+            if region.quantisation_signature == majority_signature or region not in candidates:
+                continue
+            flagged.add((region.xref, region.bbox))
+            indicators.append(
+                ImageManipulationIndicator(
+                    indicator="Compression Mismatch",
+                    page=region.page,
+                    bbox=region.bbox,
+                    detected=f"JPEG quantisation table {region.quantisation_signature}",
+                    expected=f"{majority_signature} (used by the other JPEG regions)",
+                    deviation="different encoder or quality setting",
+                    severity="high",
+                    summary=(
+                        f"Page {region.page + 1}: an image region was JPEG-compressed with "
+                        "different quantisation tables from the rest of the document — it was "
+                        "not produced in the same pass as the surrounding content."
+                    ),
+                    evidence={
+                        "xref": region.xref,
+                        "quantisation_signature": region.quantisation_signature,
+                        "document_signature": majority_signature,
+                        "jpeg_regions": len(jpegs),
+                    },
+                )
+            )
+
+    # 2. Odd codec out.
+    codec_counts: dict[str, int] = {}
+    for region in comparable:
+        codec_counts[region.codec] = codec_counts.get(region.codec, 0) + 1
+    logger.debug(
+        "compression: codec spread %s -> %s", codec_counts,
+        "no majority, nothing to conclude" if len(codec_counts) > 1
+        and max(codec_counts.values()) <= len(comparable) / 2
+        else ("single codec, nothing to compare" if len(codec_counts) == 1 else "majority found"),
+    )
+    if len(codec_counts) > 1:
+        majority_codec, majority_count = max(codec_counts.items(), key=lambda item: item[1])
+        if majority_count > len(comparable) / 2:
+            for region in candidates:
+                if region.codec == majority_codec or (region.xref, region.bbox) in flagged:
+                    continue
+                flagged.add((region.xref, region.bbox))
+                indicators.append(
+                    ImageManipulationIndicator(
+                        indicator="Compression Mismatch",
+                        page=region.page,
+                        bbox=region.bbox,
+                        detected=f"{region.codec} encoding",
+                        expected=f"{majority_codec} ({majority_count} of {len(comparable)} regions)",
+                        deviation="different image format from the surrounding content",
+                        severity="medium",
+                        summary=(
+                            f"Page {region.page + 1}: an image region is stored as "
+                            f"{region.codec} while the rest of the document uses "
+                            f"{majority_codec} — consistent with a region inserted separately."
+                        ),
+                        evidence={
+                            "xref": region.xref,
+                            "codec": region.codec,
+                            "codec_counts": codec_counts,
+                        },
+                    )
+                )
+
+    # 3. Bytes-per-pixel outlier — LOSSY codecs only.
+    #
+    # For a lossy format, stored bytes per pixel tracks the quality setting,
+    # which is what this check is after. For a lossless one (PNG/Flate) it
+    # tracks image CONTENT instead: a flat logo compresses to almost
+    # nothing, a portrait photograph barely compresses at all. A clean NRIC
+    # card in this repo's own corpus spans 0.13 to 1.95 bytes/pixel across
+    # three legitimate PNGs — a 15x spread with nothing wrong with it — so
+    # applying this to lossless images produces false positives and no
+    # signal. The quantisation-table and codec checks above already cover
+    # what is knowable for those.
+    lossy = [region for region in comparable if region.codec in _LOSSY_CODECS]
+    baseline_bpp = median(region.bytes_per_pixel for region in lossy) if lossy else 0.0
+    logger.debug(
+        "compression: %d of %d assets use a lossy codec (bytes/pixel needs %d); "
+        "baseline %.5f bytes/pixel",
+        len(lossy), len(comparable), tolerances.min_comparable_regions, baseline_bpp,
+    )
+    # Same degeneracy as above: the median of two values is their midpoint, so
+    # each sits the same distance from it and neither can cross the tolerance.
+    # Two regions 3.3x apart each score only 1.8x against their own midpoint.
+    if len(lossy) == 2 and baseline_bpp > 0:
+        first, second = lossy
+        ratio = _ratio_against(first.bytes_per_pixel, second.bytes_per_pixel)
+        logger.debug(
+            "compression: only 2 lossy assets, comparing pairwise: %.5f vs %.5f "
+            "bytes/pixel = %.2fx apart vs tolerance %.2fx -> %s",
+            first.bytes_per_pixel, second.bytes_per_pixel, ratio,
+            tolerances.bytes_per_pixel_ratio,
+            "MISMATCH" if ratio >= tolerances.bytes_per_pixel_ratio else "within tolerance",
+        )
+        if ratio >= tolerances.bytes_per_pixel_ratio:
+            for region, other in ((first, second), (second, first)):
+                if region not in candidates or (region.xref, region.bbox) in flagged:
+                    continue
+                direction = (
+                    "more" if region.bytes_per_pixel > other.bytes_per_pixel else "less"
+                )
+                flagged.add((region.xref, region.bbox))
+                indicators.append(
+                    ImageManipulationIndicator(
+                        indicator="Compression Mismatch",
+                        page=region.page,
+                        bbox=region.bbox,
+                        detected=f"{region.bytes_per_pixel:.4f} bytes/pixel",
+                        expected=(
+                            f"{other.bytes_per_pixel:.4f} bytes/pixel "
+                            "(the only other lossy region)"
+                        ),
+                        deviation=f"{ratio:.1f}x {direction} data per pixel; which "
+                                  "region is altered is ambiguous",
+                        severity="medium",
+                        summary=(
+                            f"Page {region.page + 1}: this document's two lossy image "
+                            f"regions store {ratio:.1f}x different amounts of data per "
+                            "pixel, meaning they were compressed at different qualities. "
+                            "With only two there is no majority to say which one is out "
+                            "of place."
+                        ),
+                        evidence={
+                            "xref": region.xref,
+                            "bytes_per_pixel": region.bytes_per_pixel,
+                            "other_bytes_per_pixel": other.bytes_per_pixel,
+                            "ratio": round(ratio, 2),
+                            "tolerance_ratio": tolerances.bytes_per_pixel_ratio,
+                            "attribution_confident": False,
+                        },
+                    )
+                )
+
+    elif len(lossy) >= tolerances.min_comparable_regions and baseline_bpp > 0:
+        for region in lossy:
+            if region not in candidates:
+                continue
+            if (region.xref, region.bbox) in flagged:
+                continue
+            ratio = _ratio_against(region.bytes_per_pixel, baseline_bpp)
+            if ratio < tolerances.bytes_per_pixel_ratio:
+                continue
+            direction = "more" if region.bytes_per_pixel > baseline_bpp else "less"
+            flagged.add((region.xref, region.bbox))
+            indicators.append(
+                ImageManipulationIndicator(
+                    indicator="Compression Mismatch",
+                    page=region.page,
+                    bbox=region.bbox,
+                    detected=f"{region.bytes_per_pixel:.4f} bytes/pixel",
+                    expected=f"~{baseline_bpp:.4f} bytes/pixel",
+                    deviation=f"{ratio:.1f}x {direction} data per pixel",
+                    severity="medium",
+                    summary=(
+                        f"Page {region.page + 1}: an image region stores {ratio:.1f}x "
+                        f"{direction} data per pixel than the rest of the document, "
+                        "indicating it was compressed at a different quality."
+                    ),
+                    evidence={
+                        "xref": region.xref,
+                        "bytes_per_pixel": region.bytes_per_pixel,
+                        "baseline_bytes_per_pixel": round(baseline_bpp, 5),
+                        "ratio": round(ratio, 2),
+                        "tolerance_ratio": tolerances.bytes_per_pixel_ratio,
+                    },
+                )
+            )
+
+    return indicators
+
+
+# --- standalone PNG / JPEG uploads --------------------------------------------
+#
+# A photographed or scanned NRIC arrives as one flat image, with no embedded
+# objects to compare against each other. The comparison has to happen inside
+# the picture instead: split it into overlapping windows, measure each, and
+# report the windows that behave unlike genuine content.
+
+_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+_JPEG_MAGIC = b"\xff\xd8\xff"
+
+_RASTER_WINDOW = 64
+_RASTER_STRIDE = 32
+# Grey-level thresholds for _step_isolation: a "hard step" between two
+# neighbouring pixels, and a "flat" neighbour either side of it.
+_HARD_STEP = 24
+_FLAT_NEIGHBOUR = 3
+# A window needs this many hard steps on EACH axis before its isolation
+# share means anything; fewer and one stroke decides the answer.
+_MIN_STEPS_PER_AXIS = 12
+# ...and this many pixels with any visible change (over _EDGE grey levels)
+# at all. A window of plain card with one pixel-sharp border has enough
+# hard steps along the border to pass the count above and nothing else to
+# balance them.
+_EDGE = 8
+_MIN_EDGE_PIXELS = 60
+# Below this on either side, a window grid cannot be formed.
+_MIN_RASTER_SIDE = 2 * _RASTER_WINDOW
+
+
+def _is_raster(file_bytes: bytes) -> bool:
+    return file_bytes.startswith(_PNG_MAGIC) or file_bytes.startswith(_JPEG_MAGIC)
+
+
+def _window_sums(mask: np.ndarray, ys: list[int], xs: list[int]) -> np.ndarray:
+    """Count of True pixels in every WxW window at the given origins."""
+    integral = np.pad(mask.astype(np.int64), ((1, 0), (1, 0))).cumsum(0).cumsum(1)
+    top = np.array(ys)[:, None]
+    left = np.array(xs)[None, :]
+    w = _RASTER_WINDOW
+    return (
+        integral[top + w, left + w] - integral[top, left + w]
+        - integral[top + w, left] + integral[top, left]
+    )
+
+
+def _step_isolation(gray: np.ndarray) -> tuple[np.ndarray, list[int], list[int]]:
+    """
+    Per window, the share of hard pixel steps that stand alone — a jump
+    between two pixels with no movement on either side of it — taking the
+    lower of the horizontal and vertical shares. NaN where a window holds
+    too few steps to judge.
+
+    Genuine content moves gradually at its edges: anti-aliased text ramps
+    over two or three pixels, a photograph never sits perfectly still.
+    A region enlarged by repeating pixels (or shrunk and blown back up
+    without smoothing) is made of flat blocks, so every change happens in
+    one jump with nothing either side. Requiring this on BOTH axes is what
+    keeps a pixel-sharp ruled line or card border — isolated steps along
+    one axis only — from reading as an enlarged region.
+    """
+    height, width = gray.shape
+    ys = list(range(0, height - _RASTER_WINDOW + 1, _RASTER_STRIDE))
+    xs = list(range(0, width - _RASTER_WINDOW + 1, _RASTER_STRIDE))
+
+    dx = np.zeros_like(gray)
+    dx[:, :-1] = np.abs(np.diff(gray, axis=1))
+    dy = np.zeros_like(gray)
+    dy[:-1, :] = np.abs(np.diff(gray, axis=0))
+    busy = _window_sums((dx > _EDGE) | (dy > _EDGE), ys, xs) >= _MIN_EDGE_PIXELS
+
+    shares = []
+    for axis in (1, 0):
+        diff = np.abs(np.diff(gray, axis=axis))
+        pad = [(0, 0), (0, 0)]
+        pad[axis] = (1, 1)
+        padded = np.pad(diff, pad, constant_values=_HARD_STEP)  # edges never "flat"
+        if axis == 1:
+            before, step, after = padded[:, :-2], padded[:, 1:-1], padded[:, 2:]
+        else:
+            before, step, after = padded[:-2, :], padded[1:-1, :], padded[2:, :]
+        hard = step > _HARD_STEP
+        isolated = hard & (before <= _FLAT_NEIGHBOUR) & (after <= _FLAT_NEIGHBOUR)
+        # Back to image shape so windows line up between the two axes.
+        full = [(0, 0), (0, 0)]
+        full[axis] = (0, 1)
+        hard_count = _window_sums(np.pad(hard, full), ys, xs)
+        isolated_count = _window_sums(np.pad(isolated, full), ys, xs)
+        shares.append(np.where(
+            busy & (hard_count >= _MIN_STEPS_PER_AXIS),
+            isolated_count / np.maximum(hard_count, 1),
+            np.nan,
+        ))
+    # np.minimum, not np.fmin: a window too sparse on EITHER axis stays NaN
+    # rather than being judged on the other axis alone.
+    return np.minimum(shares[0], shares[1]), ys, xs
+
+
+def _connected(mask: np.ndarray) -> list[list[tuple[int, int]]]:
+    """8-connected groups of True cells in a window grid."""
+    seen = np.zeros_like(mask, dtype=bool)
+    groups: list[list[tuple[int, int]]] = []
+    rows, cols = mask.shape
+    for start in zip(*np.nonzero(mask)):
+        if seen[start]:
+            continue
+        seen[start] = True
+        stack, cells = [start], []
+        while stack:
+            r, c = stack.pop()
+            cells.append((int(r), int(c)))
+            for dr in (-1, 0, 1):
+                for dc in (-1, 0, 1):
+                    nr, nc = r + dr, c + dc
+                    if 0 <= nr < rows and 0 <= nc < cols and mask[nr, nc] and not seen[nr, nc]:
+                        seen[nr, nc] = True
+                        stack.append((nr, nc))
+        groups.append(cells)
+    return groups
+
+
+def _check_raster_resolution(
+    gray: np.ndarray, tolerances: Tolerances
+) -> tuple[list[ImageManipulationIndicator], int]:
+    """
+    AC2 for a flat image: regions enlarged from a lower resolution than the
+    rest of the picture. Returns the indicators and how many windows held
+    enough content to be judged at all.
+    """
+    scores, ys, xs = _step_isolation(gray)
+    assessed = int(np.isfinite(scores).sum())
+    flagged = np.isfinite(scores) & (scores >= tolerances.min_step_isolation)
+    logger.debug(
+        "raster resolution: %d window(s) assessable, %d over %.2f",
+        assessed, int(flagged.sum()), tolerances.min_step_isolation,
+    )
+
+    indicators: list[ImageManipulationIndicator] = []
+    for cells in _connected(flagged):
+        if len(cells) < tolerances.min_flagged_windows:
+            continue
+        bbox: BBox = (
+            float(min(xs[c] for _, c in cells)),
+            float(min(ys[r] for r, _ in cells)),
+            float(max(xs[c] for _, c in cells) + _RASTER_WINDOW),
+            float(max(ys[r] for r, _ in cells) + _RASTER_WINDOW),
+        )
+        score = float(np.mean([scores[r, c] for r, c in cells]))
+        baseline = float(np.nanmedian(scores)) if assessed else 0.0
+        indicators.append(
+            ImageManipulationIndicator(
+                indicator="Resolution Mismatch",
+                page=0,
+                bbox=bbox,
+                detected=f"{score:.0%} of edges are single-pixel jumps",
+                expected=(
+                    f"under {tolerances.min_step_isolation:.0%} for content produced at "
+                    f"this resolution (this image's median is {baseline:.0%})"
+                ),
+                deviation="enlarged from a lower resolution than its surroundings",
+                # Nearly every edge a bare jump is pixel repetition with no
+                # plausible innocent reading.
+                severity="high" if score >= 0.7 else "medium",
+                summary=(
+                    f"A {int(bbox[2] - bbox[0])}x{int(bbox[3] - bbox[1])} px region of "
+                    "this image is built from flat blocks of repeated pixels, while the "
+                    "rest of the image has the gradual edges of content produced at its "
+                    "full resolution. The region was enlarged from a smaller source and "
+                    "placed into the image."
+                ),
+                evidence={
+                    "step_isolation": round(score, 3),
+                    "image_median_step_isolation": round(baseline, 3),
+                    "threshold": tolerances.min_step_isolation,
+                    "windows": len(cells),
+                    "window_px": _RASTER_WINDOW,
+                },
+            )
+        )
+    return indicators, assessed
+
+
+def _check_raster(
+    document_id: str, file_bytes: bytes, tolerances: Tolerances
+) -> ImageManipulationResult:
+    """A standalone PNG or JPEG upload, compared against itself (AC1-AC7)."""
+    try:
+        with Image.open(io.BytesIO(file_bytes)) as opened:
+            codec = (opened.format or "unknown").lower()
+            dpi_info = opened.info.get("dpi")
+            gray = np.asarray(opened.convert("L"), dtype=np.float32)
+    except Exception as exc:
+        reason = f"Failed to decode the image: {type(exc).__name__}: {exc}"
+        logger.warning("Document %s: %s", document_id, reason, exc_info=True)
+        return _unable(document_id, reason, tolerances)
+
+    height, width = gray.shape
+    try:
+        effective_dpi = float(sum(dpi_info) / 2) if dpi_info else 0.0
+    except TypeError:
+        effective_dpi = 0.0
+    region = ImageRegion(
+        xref=0,
+        page=0,
+        bbox=(0.0, 0.0, float(width), float(height)),
+        pixel_width=width,
+        pixel_height=height,
+        # A flat image has no drawn size, only whatever DPI its file claims
+        # (0 when it claims none). Recorded for reference; nothing compares it.
+        effective_dpi=round(effective_dpi, 1),
+        codec="jpeg" if codec == "jpeg" else codec,
+        stored_bytes=len(file_bytes),
+        bytes_per_pixel=round(len(file_bytes) / (width * height), 5),
+        quantisation_signature=_quantisation_signature(file_bytes),
+        detail_ratio=_detail_ratio(file_bytes),
+        pages_used_on=1,
+        comparable=True,
+    )
+
+    def result(indicators, unable_reason: str | None = None) -> ImageManipulationResult:
+        return ImageManipulationResult(
+            document_id=document_id,
+            regions=[region],
+            indicators=indicators,
+            pages_checked=1,
+            tolerances=tolerances,
+            unable_to_assess=unable_reason is not None,
+            unable_to_assess_reason=unable_reason,
+            bbox_units="px",
+        )
+
+    if min(width, height) < _MIN_RASTER_SIDE:
+        return result([], (
+            f"Image is {width}x{height} px; at least {_MIN_RASTER_SIDE} px on each side "
+            "is needed to compare one part of it with another."
+        ))
+
+    indicators, assessed = _check_raster_resolution(gray, tolerances)
+    logger.debug(
+        "document %s: raster %sx%s %s, %d assessable window(s), %d indicator(s)",
+        document_id, width, height, codec, assessed, len(indicators),
+    )
+    # AC7 — a blank page, or one so smooth nothing in it has an edge.
+    if assessed < 2 and not indicators:
+        return result([], (
+            "The image holds too little edge detail (text, lines or artwork) to "
+            "compare one region against another."
+        ))
+    return result(_dedupe(indicators))
+
+
+# --- entry point -------------------------------------------------------------
+
+def check_image_manipulation(
+    document_id: str,
+    file_bytes: bytes,
+    tolerances: Tolerances | None = None,
+) -> ImageManipulationResult:
+    """
+    Inspects a PDF's embedded images, or a standalone PNG/JPEG upload, for
+    resolution and compression that disagree with the rest of the same
+    document. No LLM tokens.
+    Synchronous/CPU-bound — callers should run this via asyncio.to_thread.
+    """
+    tolerances = tolerances or Tolerances()
+
+    if _is_raster(file_bytes):
+        return _check_raster(document_id, file_bytes, tolerances)
+
+    try:
+        doc = pymupdf.open(stream=file_bytes, filetype="pdf")
+    except Exception as exc:
+        reason = f"Failed to open document as a PDF: {type(exc).__name__}: {exc}"
+        logger.warning("Document %s: %s", document_id, reason, exc_info=True)
+        return _unable(document_id, reason, tolerances)
+
+    try:
+        logger.debug(
+            "document %s: opened, %d page(s), tolerances %s",
+            document_id, doc.page_count, tolerances.model_dump(),
+        )
+        regions = _collect_regions(doc, tolerances)
+        pages = doc.page_count
+        logger.debug(
+            "document %s: %d placement(s) of %d distinct asset(s); %d placement(s) "
+            "clear the %.0fpt2 size floor",
+            document_id, len(regions), len({r.xref for r in regions}),
+            sum(1 for r in regions if r.comparable), tolerances.min_region_area_pt2,
+        )
+
+        # AC7 — nothing to measure.
+        if not regions:
+            return _unable(
+                document_id,
+                f"No embedded images found across {pages} page(s), so there are no "
+                "image regions to compare.",
+                tolerances, regions, pages,
+            )
+
+        # Counted as DISTINCT ASSETS, not placements. Every comparative check
+        # below dedupes by xref before comparing, so a single logo drawn on
+        # four pages gives them one value and nothing to compare it with.
+        # Counting placements here instead let such a document through the
+        # gate and out the other side as "clean", reporting a pass for a
+        # comparison that never happened.
+        comparable = _baseline([region for region in regions if region.comparable])
+
+        # These run first and unconditionally: neither needs the rest of the
+        # document to compare against, so they still work on a document the
+        # comparative checks cannot touch. Running them before those also
+        # means that where both would fire on one region, the self-contained
+        # explanation is the one kept (see _dedupe). A replacement measured
+        # against the original it hides is the strongest evidence here, so
+        # it goes first of all.
+        intrinsic = _check_covered_regions(regions, tolerances)
+        intrinsic += _check_intrinsic_resolution(regions, tolerances)
+        logger.debug(
+            "document %s: gate -> %d distinct comparable asset(s), %d needed for the "
+            "comparative checks; self-contained checks found %d",
+            document_id, len(comparable), tolerances.min_comparable_regions, len(intrinsic),
+        )
+
+        # AC7 — something to measure, but nothing to measure it against.
+        # A single full-page scan lands here: its resolution is whatever it
+        # is, with no surrounding content to disagree with.
+        if len(comparable) < tolerances.min_comparable_regions:
+            if not intrinsic:
+                return _unable(
+                    document_id,
+                    f"Only {len(comparable)} distinct image asset(s) large enough to "
+                    f"compare (of {len(regions)} placement(s) found); at least "
+                    f"{tolerances.min_comparable_regions} are needed to establish what "
+                    "the surrounding content looks like.",
+                    tolerances, regions, pages,
+                )
+            # The comparative checks could not run, but a self-contained one
+            # did and found something. The document was assessed, so reporting
+            # Unable to Assess next to a finding would tell an officer to
+            # disregard it.
+            return ImageManipulationResult(
+                document_id=document_id,
+                regions=regions,
+                indicators=_dedupe(intrinsic),
+                pages_checked=pages,
+                tolerances=tolerances,
+                unable_to_assess=False,
+            )
+
+        indicators = list(intrinsic)
+        indicators += _check_resolution(comparable, tolerances)
+        indicators += _check_compression(comparable, tolerances)
+        before_dedupe = len(indicators)
+        indicators = _dedupe(indicators)
+        logger.debug(
+            "document %s: %d raw indicator(s) -> %d after collapsing duplicates "
+            "describing the same region",
+            document_id, before_dedupe, len(indicators),
+        )
+
+        return ImageManipulationResult(
+            document_id=document_id,
+            regions=regions,
+            indicators=indicators,
+            pages_checked=pages,
+            tolerances=tolerances,
+            unable_to_assess=False,
+        )
+    finally:
+        doc.close()
+
+
+# =============================================================================
+# SCRUM-65 — image tampering
+# =============================================================================
+#
+# Visible boundaries, scaling distortions,
+# overlays and brightness/colour inconsistencies in the images of a document
+# (SCRUM-65).
+#
+# Its sibling, image_manipulation.py (SCRUM-64), asks whether an image was
+# produced at the same resolution and compression as the rest of the
+# document. This module asks whether an image was *edited into* the document
+# after the fact: painted over, stretched, rotated, or pasted with a seam or a
+# colour cast that the surrounding page does not share.
+#
+# The most useful fact about an edited PDF is that editing rarely removes
+# anything. To change a logo or a crest, the original is painted out and a new
+# image is drawn on top — and the original stays in the file, underneath. When
+# that happens the check compares the visible image against the very image it
+# replaced, which says not only THAT the region changed but HOW: its shape
+# (Scaling Anomaly), its edges (Visible Boundary), or its brightness, contrast,
+# colour, sharpness and noise (Quality Mismatch). None of the 205 clean
+# documents this repo generates contains a single hidden image, so the pairing
+# itself carries no false alarms on that corpus.
+#
+# Where there is no hidden original, the checks that need no comparison
+# partner still run: an image drawn stretched or rotated, and a halo or a
+# mismatched background patch around an image's edge as the page renders it.
+#
+# Image/geometry based, no LLM tokens. Synchronous and CPU-bound — callers
+# should run this via asyncio.to_thread, the same as the other checks here.
+
+# AC6: the indicator recorded against each finding.
+TamperingIndicatorType = Literal[
+    "Visible Boundary", "Scaling Anomaly", "Image Overlay", "Quality Mismatch",
+]
+
+# _MIN_HIDDEN_FRACTION / _MAX_COVER_AREA_RATIO (above, shared with
+# _hidden_placements) decide when an image counts as painted out.
+# A later image counts as the replacement when it overlaps this much of the
+# hidden original's slot. Low on purpose: a stretched replacement anchored
+# at the original's corner may only overlap half of it.
+_MIN_REPLACEMENT_OVERLAP = 0.25
+# A replacement this flat (grey-level standard deviation) is a patch of
+# paper used to paint the original out, not a replacement for it.
+_PAPER_PATCH_STD = 4.0
+# Both images are reduced to this size before comparing content, which
+# takes resolution out of the comparison: that is SCRUM-64's question.
+_COMPARE_PX = 64
+# Rendering resolution for the edge checks, and how far outside an image's
+# edge to look for the page it sits on.
+_EDGE_DPI = 150
+_EDGE_MARGIN_PT = 6.0
+# Below this many rendered pixels on a side, an edge band is too short to
+# average.
+_MIN_EDGE_PX = 16
+
+
+class TamperingTolerances(BaseModel):
+    """
+    AC7 — what counts as normal variation. Calibrated against the 205 clean
+    documents in documents_generated and 260 injections of each SCRUM-65
+    indicator by the repo's own injection tool.
+    """
+
+    # A replacement whose width-to-height ratio differs from the original's
+    # by this factor was stretched or squashed. Genuine replacements of a
+    # mark by a newer version keep its shape; the injection tool's stretch
+    # changes it 4.1x.
+    max_aspect_change: float = Field(default=1.2, gt=1.0)
+    # Any image drawn with this much more horizontal than vertical
+    # resolution (or the reverse) is being stretched by the page itself.
+    # Every one of the 550 image placements in the clean corpus is within
+    # 1.005.
+    max_draw_anisotropy: float = Field(default=1.2, gt=1.0)
+    # An image drawn at an angle further than this from upright. No image
+    # in the clean corpus is drawn at any angle at all.
+    max_rotation_deg: float = Field(default=2.0, ge=0.0)
+    # Grey levels by which a replacement's outer edge band darkens relative
+    # to the band just inside it, beyond what the original shows. Halo
+    # injections score a median of 5.5; plain overlays at most 2.2.
+    min_halo_vs_original: float = Field(default=3.0, gt=0.0)
+    # The same halo measured on the rendered page without an original: the
+    # image's edge band darker than both the page outside it and the image
+    # inside it. Clean placements never score above 0.
+    min_rendered_halo: float = Field(default=2.0, gt=0.0)
+    # A flat edge band inside the image that differs from the flat page
+    # just outside it by this many grey levels is a pasted patch whose
+    # background does not match the page. Clean placements top out at 0.19.
+    min_background_step: float = Field(default=3.0, gt=0.0)
+    # AC4 — a replacement compared with the original hidden under it. Re-
+    # rendering a region only ever softens it and never adds grain, so a
+    # replacement this much sharper, or with this much more fine-grain noise,
+    # was worked on. Measured over 81 documents with each of the injection
+    # tool's image_overlay, visible_boundary and quality_mismatch applied to
+    # their largest image: sharpness alone catches 69 of 81 quality
+    # injections, and 4-5 of 81 plain overlays also cross it.
+    min_sharpness_ratio: float = Field(default=1.02, gt=0.0)
+    # Noise needs a real margin rather than "any increase": an exact copy and
+    # a copy with only its brightness shifted both measure +0.0000 here, so
+    # the sign of a number that small says nothing. Plain overlays and halo
+    # injections never gain more than 0.0; quality injections gain 0.63 at
+    # the median.
+    min_noise_gain: float = Field(default=0.05, gt=0.0)
+    # Brightness and colour edits leave sharpness and noise untouched, so
+    # they need their own limits: grey levels of mean brightness, and points
+    # (0-255) of mean saturation. Adding them lifts quality injections caught
+    # from 69 to 78 of 81. It also labels 8-9 more of the 81 plain overlays
+    # as Quality Mismatch, always NRIC/passport photo slots where the
+    # injection tool's own re-render shifts brightness by 40+, and always
+    # alongside the Image Overlay finding on the same region. This check
+    # only runs on an image painted over an original, which none of the
+    # 205 clean generated documents has, so it cannot raise a false alarm
+    # on a clean document.
+    min_brightness_change: float = Field(default=25.0, gt=0.0)
+    min_saturation_change: float = Field(default=25.0, gt=0.0)
+    # PNG/JPEG uploads: how many faint straight seams, running both ways,
+    # must outline a region before it is reported (see _outlines). Two lets
+    # 1 in 20 clean NRIC/passport uploads through; three lets none.
+    min_outline_seams: int = Field(default=3, ge=2)
+
+
+class ImageTamperingIndicator(BaseModel):
+    indicator: TamperingIndicatorType  # AC6
+    page: int  # AC5
+    bbox: BBox  # AC5
+    detected: str
+    expected: str
+    deviation: str
+    severity: Severity
+    summary: str
+    evidence: dict
+
+
+class ImageTamperingResult(BaseModel):
+    document_id: str
+    regions: list[ImageRegion]  # AC1
+    indicators: list[ImageTamperingIndicator]
+    pages_checked: int
+    tolerances: TamperingTolerances
+    unable_to_assess: bool  # AC8
+    unable_to_assess_reason: str | None = None
+    # PDF points for a PDF, pixels for a PNG or JPEG upload.
+    bbox_units: Literal["pt", "px"] = "pt"
+
+
+def _tampering_unable(
+    document_id: str, reason: str, tolerances: TamperingTolerances,
+    regions: list[ImageRegion] | None = None, pages: int = 0,
+    bbox_units: Literal["pt", "px"] = "pt",
+) -> ImageTamperingResult:
+    return ImageTamperingResult(
+        document_id=document_id,
+        regions=regions or [],
+        indicators=[],
+        pages_checked=pages,
+        tolerances=tolerances,
+        unable_to_assess=True,
+        unable_to_assess_reason=reason,
+        bbox_units=bbox_units,
+    )
+
+
+def _tampering_dedupe(indicators: list[ImageTamperingIndicator]) -> list[ImageTamperingIndicator]:
+    """One row per region per indicator type; the check that ran first wins."""
+    seen: set[tuple[str, int, tuple[float, ...]]] = set()
+    unique: list[ImageTamperingIndicator] = []
+    for indicator in indicators:
+        key = (indicator.indicator, indicator.page, tuple(round(v, 1) for v in indicator.bbox))
+        if key not in seen:
+            seen.add(key)
+            unique.append(indicator)
+    return unique
+
+
+# --- tampering: PDF: finding what was painted over ---------------------------
+
+class _Placement(BaseModel):
+    """One image as drawn, with where it falls in the page's drawing order."""
+
+    order: int
+    xref: int
+    bbox: BBox
+    transform: tuple[float, float, float, float, float, float]
+    pixel_width: int
+    pixel_height: int
+
+
+class _Replacement(BaseModel):
+    """A hidden original and whatever was drawn over its slot."""
+
+    original: _Placement
+    covered_by: list[str]  # "image" / "shape", for the evidence
+    replacements: list[_Placement]
+
+
+def _coverage(inner: pymupdf.Rect, outer: pymupdf.Rect) -> float:
+    area = inner.get_area()
+    return (inner & outer).get_area() / area if area > 0 else 0.0
+
+
+def _placements(page: pymupdf.Page) -> tuple[list[_Placement], list[tuple[str, pymupdf.Rect]]]:
+    """
+    Every image placement on the page, tied to its position in the drawing
+    order, plus the drawing log itself. get_bboxlog lists every fill and
+    image in the order they are painted, which is the only way to tell
+    which of two overlapping things is on top.
+    """
+    log = [(kind, pymupdf.Rect(rect)) for kind, rect in page.get_bboxlog()]
+    placements: list[_Placement] = []
+    used: set[int] = set()
+    for info in page.get_image_info(xrefs=True):
+        if not info.get("xref"):
+            continue
+        box = pymupdf.Rect(info["bbox"])
+        for order, (kind, rect) in enumerate(log):
+            if (
+                kind == "fill-image" and order not in used
+                and all(abs(a - b) < 0.6 for a, b in zip(
+                    (rect.x0, rect.y0, rect.x1, rect.y1), (box.x0, box.y0, box.x1, box.y1)
+                ))
+            ):
+                used.add(order)
+                placements.append(_Placement(
+                    order=order,
+                    xref=info["xref"],
+                    bbox=(box.x0, box.y0, box.x1, box.y1),
+                    transform=tuple(info["transform"]),
+                    pixel_width=info["width"],
+                    pixel_height=info["height"],
+                ))
+                break
+    return placements, log
+
+
+def _decode(doc: pymupdf.Document, xref: int, paper: tuple[int, int, int]) -> Image.Image | None:
+    """
+    An image as the page shows it: its soft mask applied over the paper.
+    A transparent logo's raw pixels are often black where it is clear, so
+    comparing raw pixels against a rendered replacement would compare black
+    with paper.
+    """
+    try:
+        info = doc.extract_image(xref)
+        image = Image.open(io.BytesIO(info["image"]))
+        image = image.convert("RGBA") if image.mode in ("RGBA", "LA", "P") else image.convert("RGB")
+        smask = info.get("smask") or 0
+        if smask:
+            mask = Image.open(io.BytesIO(doc.extract_image(smask)["image"])).convert("L")
+            if mask.size != image.size:
+                mask = mask.resize(image.size, Image.Resampling.BILINEAR)
+            image = image.convert("RGBA")
+            image.putalpha(mask)
+    except Exception:
+        logger.debug("xref %s could not be decoded", xref, exc_info=True)
+        return None
+    if image.mode == "RGBA":
+        flat = Image.new("RGB", image.size, paper)
+        flat.paste(image, mask=image.split()[3])
+        image = flat
+    return image.convert("RGB")
+
+
+def _is_paper_patch(image: Image.Image) -> bool:
+    return float(np.asarray(image.convert("L"), dtype=np.float32).std()) < _PAPER_PATCH_STD
+
+
+def _find_replacements(page: pymupdf.Page) -> tuple[list[_Placement], list[_Replacement]]:
+    """
+    Images painted over by a later fill or image, each with the later
+    images drawn over its slot. The paper-coloured patch an editor uses to
+    blank the original is a cover, not a replacement.
+    """
+    placements, log = _placements(page)
+    found: list[_Replacement] = []
+    for original in placements:
+        slot = pymupdf.Rect(original.bbox)
+        if slot.is_empty:
+            continue
+        covered_by = [
+            "image" if kind == "fill-image" else "shape"
+            for order, (kind, rect) in enumerate(log)
+            if order > original.order
+            and kind in ("fill-image", "fill-path")
+            and _coverage(slot, rect) >= _MIN_HIDDEN_FRACTION
+            and rect.get_area() <= _MAX_COVER_AREA_RATIO * slot.get_area()
+        ]
+        if not covered_by:
+            continue
+        replacements = [
+            later for later in placements
+            if later.order > original.order
+            and later.xref != original.xref
+            and _coverage(slot, pymupdf.Rect(later.bbox)) >= _MIN_REPLACEMENT_OVERLAP
+        ]
+        found.append(_Replacement(original=original, covered_by=covered_by, replacements=replacements))
+    return placements, found
+
+
+# --- tampering: PDF: comparing a replacement with its original ---------------
+
+def _content_stats(image: Image.Image) -> dict[str, float]:
+    """
+    Brightness, contrast, colour, sharpness and noise of an image reduced
+    to _COMPARE_PX, plus how much its outer edge band darkens relative to
+    the band just inside it (a halo).
+    """
+    small = image.resize((_COMPARE_PX, _COMPARE_PX), Image.Resampling.LANCZOS)
+    rgb = np.asarray(small, dtype=np.float32)
+    grey = rgb.mean(-1)
+    saturation = np.asarray(small.convert("HSV"), dtype=np.float32)[..., 1]
+    blurred = np.asarray(small.convert("L").filter(ImageFilter.GaussianBlur(1.0)), dtype=np.float32)
+    band = max(2, int(_COMPARE_PX * 0.07))
+    edge = np.concatenate([
+        grey[:band].ravel(), grey[-band:].ravel(), grey[:, :band].ravel(), grey[:, -band:].ravel(),
+    ])
+    inside = np.concatenate([
+        grey[band:2 * band, band:-band].ravel(), grey[-2 * band:-band, band:-band].ravel(),
+        grey[band:-band, band:2 * band].ravel(), grey[band:-band, -2 * band:-band].ravel(),
+    ])
+    return {
+        "brightness": float(grey.mean()),
+        "contrast": float(grey.std()),
+        "saturation": float(saturation.mean()),
+        "noise": float(np.abs(grey - blurred).mean()),
+        "sharpness": float(
+            np.abs(np.diff(grey, axis=1)).mean() + np.abs(np.diff(grey, axis=0)).mean()
+        ),
+        "halo": float(inside.mean() - edge.mean()),
+    }
+
+
+def _check_replacement(
+    doc: pymupdf.Document, page_number: int, pair: _Replacement, tolerances: TamperingTolerances,
+) -> list[ImageTamperingIndicator]:
+    original = pair.original
+    slot = pymupdf.Rect(original.bbox)
+    indicators: list[ImageTamperingIndicator] = []
+
+    visible: list[tuple[_Placement, Image.Image]] = []
+    for candidate in pair.replacements:
+        image = _decode(doc, candidate.xref, (255, 255, 255))
+        if image is not None and not _is_paper_patch(image):
+            visible.append((candidate, image))
+
+    # AC6 — Image Overlay. Always reported: the original was painted out,
+    # which no document produced in one pass has any reason to do.
+    shown = visible[0][0] if visible else None
+    overlay_box = shown.bbox if shown else original.bbox
+    indicators.append(ImageTamperingIndicator(
+        indicator="Image Overlay",
+        page=page_number,
+        bbox=overlay_box,
+        detected=(
+            "an image drawn over another image in the same position" if shown
+            else "an image painted out by a later fill"
+        ),
+        expected="each image region drawn once",
+        deviation=f"original hidden under {', '.join(sorted(set(pair.covered_by)))}",
+        severity="high",
+        summary=(
+            f"Page {page_number + 1}: the image originally in this position is still in "
+            "the file but has been painted over"
+            + (" and a different image drawn on top of it." if shown else ".")
+            + " The region was edited after the document was produced."
+        ),
+        evidence={
+            "hidden_xref": original.xref,
+            "hidden_bbox": original.bbox,
+            "covering_xref": shown.xref if shown else None,
+            "covered_by": pair.covered_by,
+        },
+    ))
+    if not visible:
+        return indicators
+
+    # AC3 — Scaling Anomaly: the replacement's shape against the original's.
+    # Every image drawn over the slot is considered, and the most distorted
+    # one reported: the patch used to blank the original can carry some
+    # texture from the page beside it, and must not be mistaken for the
+    # replacement just because it was drawn first.
+    original_aspect = slot.width / slot.height
+
+    def aspect_change_of(placement: _Placement) -> float:
+        box = pymupdf.Rect(placement.bbox)
+        aspect = box.width / box.height
+        return max(aspect / original_aspect, original_aspect / aspect)
+
+    replacement, replacement_image = max(visible, key=lambda item: aspect_change_of(item[0]))
+    shown_box = pymupdf.Rect(replacement.bbox)
+    shown_aspect = shown_box.width / shown_box.height
+    aspect_change = aspect_change_of(replacement)
+    logger.debug(
+        "replacement: page=%s xref=%s over hidden xref=%s, aspect %.3f -> %.3f (%.2fx)",
+        page_number, replacement.xref, original.xref, original_aspect, shown_aspect,
+        aspect_change,
+    )
+    if aspect_change >= tolerances.max_aspect_change:
+        wider = shown_aspect > original_aspect
+        indicators.append(ImageTamperingIndicator(
+            indicator="Scaling Anomaly",
+            page=page_number,
+            bbox=replacement.bbox,
+            detected=f"width-to-height {shown_aspect:.2f}",
+            expected=f"{original_aspect:.2f} (the original hidden underneath it)",
+            deviation=f"{aspect_change:.1f}x {'wider' if wider else 'taller'} than the original",
+            severity="high",
+            summary=(
+                f"Page {page_number + 1}: an image was replaced by a copy stretched "
+                f"{aspect_change:.1f}x out of proportion — the original, still in the file "
+                f"underneath, is {original_aspect:.2f} wide for every unit of height; the "
+                f"visible image is {shown_aspect:.2f}."
+            ),
+            evidence={
+                "xref": replacement.xref,
+                "hidden_xref": original.xref,
+                "aspect_ratio": round(shown_aspect, 3),
+                "hidden_aspect_ratio": round(original_aspect, 3),
+                "change": round(aspect_change, 2),
+                "tolerance": tolerances.max_aspect_change,
+            },
+        ))
+        # A stretched copy no longer lines up with the original, so its
+        # content cannot be compared pixel for pixel.
+        return indicators
+
+    corner = replacement_image.getpixel((0, 0))
+    paper = (
+        (int(corner[0]), int(corner[1]), int(corner[2]))
+        if isinstance(corner, tuple) and len(corner) >= 3 else (255, 255, 255)
+    )
+    original_image = _decode(doc, original.xref, paper)
+    if original_image is None:
+        return indicators
+    now = _content_stats(replacement_image)
+    before = _content_stats(original_image)
+    halo_gain = now["halo"] - before["halo"]
+    sharpness_ratio = now["sharpness"] / max(before["sharpness"], 0.5)
+    noise_gain = now["noise"] - before["noise"]
+    logger.debug(
+        "replacement: xref=%s halo %+.2f, sharpness x%.2f, noise %+.2f, brightness %+.1f, "
+        "contrast x%.2f, saturation %+.1f",
+        replacement.xref, halo_gain, sharpness_ratio, noise_gain,
+        now["brightness"] - before["brightness"],
+        now["contrast"] / max(before["contrast"], 0.5), now["saturation"] - before["saturation"],
+    )
+    stats_evidence = {
+        "xref": replacement.xref,
+        "hidden_xref": original.xref,
+        "brightness_change": round(now["brightness"] - before["brightness"], 2),
+        "contrast_ratio": round(now["contrast"] / max(before["contrast"], 0.5), 3),
+        "saturation_change": round(now["saturation"] - before["saturation"], 2),
+        "sharpness_ratio": round(sharpness_ratio, 3),
+        "noise_change": round(noise_gain, 3),
+        "halo_change": round(halo_gain, 2),
+    }
+
+    # AC2 — Visible Boundary: a darkened rim the original did not have.
+    if halo_gain >= tolerances.min_halo_vs_original:
+        indicators.append(ImageTamperingIndicator(
+            indicator="Visible Boundary",
+            page=page_number,
+            bbox=replacement.bbox,
+            detected=f"edge band {halo_gain:.1f} grey levels darker than the original's",
+            expected=f"under {tolerances.min_halo_vs_original:.1f}",
+            deviation="a rectangular halo around the pasted region",
+            severity="high",
+            summary=(
+                f"Page {page_number + 1}: the image drawn over the original has a darkened "
+                "rim along its edges that the original does not — the halo left when a "
+                "region is cut out and pasted back in."
+            ),
+            evidence={**stats_evidence, "tolerance": tolerances.min_halo_vs_original},
+        ))
+
+    # AC4 — Quality Mismatch: sharper, noisier, brighter/darker or a
+    # different colour from what it replaced.
+    brightness_change = stats_evidence["brightness_change"]
+    saturation_change = stats_evidence["saturation_change"]
+    altered = {
+        "sharpness": sharpness_ratio >= tolerances.min_sharpness_ratio,
+        "noise": noise_gain >= tolerances.min_noise_gain,
+        "brightness": abs(brightness_change) >= tolerances.min_brightness_change,
+        "colour": abs(saturation_change) >= tolerances.min_saturation_change,
+    }
+    if any(altered.values()):
+        changes = []
+        if altered["sharpness"]:
+            changes.append(f"sharpness x{sharpness_ratio:.2f}")
+        if altered["noise"]:
+            changes.append(f"fine-grain noise {noise_gain:+.2f}")
+        changes.append(f"brightness {brightness_change:+.1f}")
+        changes.append(f"contrast x{stats_evidence['contrast_ratio']:.2f}")
+        changes.append(f"saturation {saturation_change:+.1f}")
+        indicators.append(ImageTamperingIndicator(
+            indicator="Quality Mismatch",
+            page=page_number,
+            bbox=replacement.bbox,
+            detected=", ".join(changes),
+            expected=(
+                f"sharpness under x{tolerances.min_sharpness_ratio:.2f}, noise gain under "
+                f"{tolerances.min_noise_gain:.2f}, brightness and saturation within "
+                f"{tolerances.min_brightness_change:.0f}/{tolerances.min_saturation_change:.0f} "
+                "of the original, as for a plain copy"
+            ),
+            deviation=f"{', '.join(k for k, v in altered.items() if v)} altered",
+            severity="medium",
+            summary=(
+                f"Page {page_number + 1}: the image drawn over the original differs from the "
+                f"original it hides in {' and '.join(k for k, v in altered.items() if v)}, "
+                "which a plain copy does not — the replacement was adjusted before it was "
+                "pasted in."
+            ),
+            evidence={
+                **stats_evidence,
+                "altered": [k for k, v in altered.items() if v],
+                "tolerances": {
+                    "sharpness_ratio": tolerances.min_sharpness_ratio,
+                    "noise_gain": tolerances.min_noise_gain,
+                    "brightness_change": tolerances.min_brightness_change,
+                    "saturation_change": tolerances.min_saturation_change,
+                },
+            },
+        ))
+    return indicators
+
+
+# --- tampering: PDF: checks that need no original ----------------------------
+
+def _check_geometry(page_number: int, placement: _Placement, tolerances: TamperingTolerances) -> list[ImageTamperingIndicator]:
+    """AC3 — an image the page itself draws stretched or rotated."""
+    a, b, c, d, _, _ = placement.transform
+    width_pt, height_pt = math.hypot(a, b), math.hypot(c, d)
+    if width_pt < 1 or height_pt < 1:
+        return []
+    indicators: list[ImageTamperingIndicator] = []
+
+    dpi_x = placement.pixel_width / (width_pt / 72.0)
+    dpi_y = placement.pixel_height / (height_pt / 72.0)
+    anisotropy = max(dpi_x, dpi_y) / min(dpi_x, dpi_y)
+    if anisotropy >= tolerances.max_draw_anisotropy:
+        wider = dpi_x < dpi_y  # fewer pixels per inch across = stretched across
+        indicators.append(ImageTamperingIndicator(
+            indicator="Scaling Anomaly",
+            page=page_number,
+            bbox=placement.bbox,
+            detected=f"{dpi_x:.0f} DPI across, {dpi_y:.0f} DPI down",
+            expected="the same resolution on both axes",
+            deviation=f"stretched {anisotropy:.1f}x {'wider' if wider else 'taller'} than its pixels",
+            severity="high",
+            summary=(
+                f"Page {page_number + 1}: an image is drawn {anisotropy:.1f}x out of its own "
+                "proportions — the page stretches it further in one direction than the "
+                "other, distorting what it shows."
+            ),
+            evidence={
+                "xref": placement.xref,
+                "dpi_x": round(dpi_x, 1),
+                "dpi_y": round(dpi_y, 1),
+                "anisotropy": round(anisotropy, 3),
+                "tolerance": tolerances.max_draw_anisotropy,
+            },
+        ))
+
+    angle = math.degrees(math.atan2(b, a)) % 90.0
+    off_axis = min(angle, 90.0 - angle)
+    if off_axis > tolerances.max_rotation_deg:
+        indicators.append(ImageTamperingIndicator(
+            indicator="Scaling Anomaly",
+            page=page_number,
+            bbox=placement.bbox,
+            detected=f"rotated {off_axis:.1f} degrees off the page axis",
+            expected=f"within {tolerances.max_rotation_deg:.0f} degrees of upright",
+            deviation="rotated",
+            severity="medium",
+            summary=(
+                f"Page {page_number + 1}: an image is drawn tilted {off_axis:.1f} degrees "
+                "against the page, which a generated document has no reason to do."
+            ),
+            evidence={
+                "xref": placement.xref,
+                "rotation_deg": round(off_axis, 2),
+                "tolerance": tolerances.max_rotation_deg,
+            },
+        ))
+    return indicators
+
+
+def _edge_bands(page: pymupdf.Page, bbox: BBox) -> list[tuple[np.ndarray, np.ndarray, np.ndarray]] | None:
+    """
+    For each side of an image as rendered: the page just outside it, the
+    image's own edge band, and the band just inside that. None when the
+    image is too small or too close to the page edge to have all three.
+    """
+    rect = pymupdf.Rect(bbox)
+    clip = pymupdf.Rect(
+        rect.x0 - _EDGE_MARGIN_PT, rect.y0 - _EDGE_MARGIN_PT,
+        rect.x1 + _EDGE_MARGIN_PT, rect.y1 + _EDGE_MARGIN_PT,
+    ) & page.rect
+    try:
+        pix = page.get_pixmap(dpi=_EDGE_DPI, clip=clip, alpha=False)
+    except Exception:
+        return None
+    grey = np.frombuffer(pix.samples, np.uint8).reshape(pix.height, pix.width, pix.n)[..., :3].mean(-1)
+    scale = _EDGE_DPI / 72.0
+    x0, y0 = int((rect.x0 - clip.x0) * scale), int((rect.y0 - clip.y0) * scale)
+    x1, y1 = int((rect.x1 - clip.x0) * scale), int((rect.y1 - clip.y0) * scale)
+    if (
+        x1 - x0 < _MIN_EDGE_PX or y1 - y0 < _MIN_EDGE_PX
+        or x0 < 4 or y0 < 4 or x1 > grey.shape[1] - 4 or y1 > grey.shape[0] - 4
+    ):
+        return None
+    # The pixel row straddling the edge itself is anti-aliased, a blend of
+    # image and page, so each band skips it: outside starts one pixel out,
+    # the image's own edge band one pixel in.
+    return [
+        (grey[y0 - 4:y0 - 1, x0:x1], grey[y0 + 1:y0 + 4, x0:x1], grey[y0 + 5:y0 + 9, x0:x1]),
+        (grey[y1 + 1:y1 + 4, x0:x1], grey[y1 - 4:y1 - 1, x0:x1], grey[y1 - 9:y1 - 5, x0:x1]),
+        (grey[y0:y1, x0 - 4:x0 - 1], grey[y0:y1, x0 + 1:x0 + 4], grey[y0:y1, x0 + 5:x0 + 9]),
+        (grey[y0:y1, x1 + 1:x1 + 4], grey[y0:y1, x1 - 4:x1 - 1], grey[y0:y1, x1 - 9:x1 - 5]),
+    ]
+
+
+def _check_rendered_edges(
+    page: pymupdf.Page, placement: _Placement, tolerances: TamperingTolerances,
+) -> list[ImageTamperingIndicator]:
+    """
+    AC2 — a seam around an image as the page renders it, with nothing to
+    compare it against. Two kinds, each judged on the median of the four
+    sides so that one busy edge cannot decide it:
+
+      halo:       the image's edge band darker than BOTH the page outside
+                  and the image inside — a rim, not an edge.
+      background: a flat edge band that differs from the flat page just
+                  outside it — a pasted rectangle whose background does not
+                  match the paper. A photo or a logo on a transparent
+                  background has no flat band that disagrees with the page.
+    """
+    page_number = page.number
+    assert page_number is not None  # always set on a page iterated from its document
+    bands = _edge_bands(page, placement.bbox)
+    if bands is None:
+        return []
+    halos, steps = [], []
+    for outside, rim, inside in bands:
+        halos.append(min(outside.mean() - rim.mean(), inside.mean() - rim.mean()))
+        flat = outside.std() < 3 and rim.std() < 3
+        steps.append(abs(outside.mean() - rim.mean()) if flat else 0.0)
+    halo, step = float(np.median(halos)), float(np.median(steps))
+    logger.debug(
+        "edges: page=%s xref=%s halo=%.2f background step=%.2f",
+        page.number, placement.xref, halo, step,
+    )
+    evidence = {
+        "xref": placement.xref,
+        "rendered_halo": round(halo, 2),
+        "background_step": round(step, 2),
+        "render_dpi": _EDGE_DPI,
+    }
+    if halo >= tolerances.min_rendered_halo:
+        return [ImageTamperingIndicator(
+            indicator="Visible Boundary",
+            page=page_number,
+            bbox=placement.bbox,
+            detected=f"edge band {halo:.1f} grey levels darker than both sides of it",
+            expected=f"under {tolerances.min_rendered_halo:.1f}",
+            deviation="a rectangular halo around the image",
+            severity="medium",
+            summary=(
+                f"Page {page_number + 1}: an image is framed by a darkened rim along its "
+                "edges, darker than both the page around it and its own content — the halo "
+                "left when a region is cut out and pasted in."
+            ),
+            evidence={**evidence, "tolerance": tolerances.min_rendered_halo},
+        )]
+    if step >= tolerances.min_background_step:
+        return [ImageTamperingIndicator(
+            indicator="Visible Boundary",
+            page=page_number,
+            bbox=placement.bbox,
+            detected=f"image background {step:.1f} grey levels off the page around it",
+            expected=f"under {tolerances.min_background_step:.1f}",
+            deviation="a pasted rectangle whose background does not match the page",
+            severity="medium",
+            summary=(
+                f"Page {page_number + 1}: an image sits in a flat rectangle of background that "
+                "does not match the paper around it, leaving a visible box around the region."
+            ),
+            evidence={**evidence, "tolerance": tolerances.min_background_step},
+        )]
+    return []
+
+
+def _check_pdf_tampering(
+    document_id: str, file_bytes: bytes, tolerances: TamperingTolerances,
+) -> ImageTamperingResult:
+    try:
+        doc = pymupdf.open(stream=file_bytes, filetype="pdf")
+    except Exception as exc:
+        reason = f"Failed to open document as a PDF: {type(exc).__name__}: {exc}"
+        logger.warning("Document %s: %s", document_id, reason, exc_info=True)
+        return _tampering_unable(document_id, reason, tolerances)
+
+    try:
+        regions = _collect_regions(doc, Tolerances())  # AC1
+        pages = doc.page_count
+        if not regions:
+            return _tampering_unable(
+                document_id,
+                f"No embedded images found across {pages} page(s), so there are no image "
+                "regions to examine.",
+                tolerances, regions, pages,
+            )
+
+        indicators: list[ImageTamperingIndicator] = []
+        for page in doc:
+            page_number = page.number
+            assert page_number is not None  # always set on a page iterated from its document
+            placements, pairs = _find_replacements(page)
+            hidden = {pair.original.order for pair in pairs}
+            # Replacements first: comparing against the original is the
+            # strongest evidence, so it is the explanation _tampering_dedupe keeps.
+            for pair in pairs:
+                indicators += _check_replacement(doc, page_number, pair, tolerances)
+            for placement in placements:
+                if placement.order in hidden:
+                    continue  # not visible, so it has no rendered edge
+                indicators += _check_geometry(page_number, placement, tolerances)
+                indicators += _check_rendered_edges(page, placement, tolerances)
+
+        return ImageTamperingResult(
+            document_id=document_id,
+            regions=regions,
+            indicators=_tampering_dedupe(indicators),
+            pages_checked=pages,
+            tolerances=tolerances,
+            unable_to_assess=False,
+        )
+    finally:
+        doc.close()
+
+
+# --- tampering: standalone PNG / JPEG uploads --------------------------------
+#
+# A flat image has no drawing order and no hidden originals, so the only
+# evidence is in the pixels. What pasting a patch into a picture leaves
+# behind, whatever was done to the patch, is its outline: a straight edge
+# where the patch's background meets the page's, one or two grey levels
+# apart, with flat colour on both sides. Genuine documents have straight
+# edges too — table rules, panels, the white band across an NRIC — but
+# those are either strong (a drawn border) or long (a band across the whole
+# card). A patch's outline is weak and short, and it turns corners.
+#
+# Measured on 20 NRIC/passport uploads and 183 images rendered from the
+# generated documents: no NRIC/passport false alarms and 2 of 183 rendered
+# (1%); 82% of injected halo patches and 64% of overlay patches found.
+# Stretching or re-grading a region INSIDE a flat image, with no seam to
+# show for it, is not detected: every noise and edge-sharpness measure
+# tried flagged clean card photos and watermarks more readily than
+# injected patches.
+
+# A seam is a step of this many grey levels between two pixels...
+_SEAM_MIN_STEP = 3.0
+_SEAM_MAX_STEP = 40.0
+# ...with the pixel either side moving by no more than this, so the step
+# separates two flat areas rather than sitting inside text or artwork.
+_SEAM_FLAT = 2.0
+# Steps continuing in a straight line for at least this many pixels, with
+# gaps of up to _SEAM_GAP, form one seam.
+_SEAM_MIN_LENGTH = 16
+_SEAM_GAP = 2
+# A seam longer than this share of the image side is a design line (a band
+# or a panel edge), not a patch outline.
+_SEAM_MAX_FRACTION = 0.45
+# Seams within this many pixels of each other belong to one outline.
+# How many an outline needs is TamperingTolerances.min_outline_seams.
+_SEAM_NEAR = 16
+# AC8 — below this share of pixels with any visible change (a step of over
+# _BLANK_EDGE grey levels to a neighbour), an upload has no content to judge.
+# The sparsest of 83 real uploads (pack images and rendered generated
+# documents, a text-only constitution at 150 DPI) sits at 2.0%; a blank page
+# is 0%.
+_BLANK_EDGE = 8.0
+_MIN_CONTENT_SHARE = 0.002
+
+
+def _seams(gray: np.ndarray) -> list[tuple[str, int, int, int, float]]:
+    """
+    Straight runs of weak steps between flat areas, as
+    (orientation, position, start, end, mean step). "v" seams run down the
+    image at a column; "h" seams run across it at a row.
+    """
+    height, width = gray.shape
+    found: list[tuple[str, int, int, int, float]] = []
+    for orientation, plane in (("v", gray), ("h", gray.T)):
+        diff = np.diff(plane, axis=1)
+        size = np.abs(diff)
+        flat_before = np.zeros_like(size, dtype=bool)
+        flat_after = np.zeros_like(size, dtype=bool)
+        flat_before[:, 1:] = size[:, :-1] <= _SEAM_FLAT
+        flat_after[:, :-1] = size[:, 1:] <= _SEAM_FLAT
+        step = (size >= _SEAM_MIN_STEP) & (size <= _SEAM_MAX_STEP) & flat_before & flat_after
+        limit = _SEAM_MAX_FRACTION * (height if orientation == "v" else width)
+        for column in np.nonzero(step.sum(axis=0) >= _SEAM_MIN_LENGTH)[0]:
+            rows = np.nonzero(step[:, column])[0]
+            breaks = np.nonzero(np.diff(rows) > _SEAM_GAP + 1)[0]
+            starts = np.r_[rows[0], rows[breaks + 1]]
+            ends = np.r_[rows[breaks], rows[-1]]
+            for start, end in zip(starts, ends):
+                length = end - start + 1
+                if length < _SEAM_MIN_LENGTH or length > limit:
+                    continue
+                values = diff[start:end + 1, column][step[start:end + 1, column]]
+                # One consistent direction: the same background on each side
+                # all the way along, not texture flickering both ways.
+                if abs(np.sign(values).mean()) > 0.8:
+                    found.append((
+                        orientation, int(column), int(start), int(end),
+                        float(np.abs(values).mean()),
+                    ))
+    return found
+
+
+def _outlines(
+    seams: list[tuple[str, int, int, int, float]], min_seams: int,
+) -> list[tuple[BBox, int, float]]:
+    """Nearby seams merged into outlines: (bbox, seam count, mean step)."""
+    groups: list[tuple[list[float], int, set[str], list[float]]] = []
+    for orientation, position, start, end, step in seams:
+        box = (
+            [position, start, position, end] if orientation == "v"
+            else [start, position, end, position]
+        )
+        groups.append((list(map(float, box)), 1, {orientation}, [step]))
+    merged = True
+    while merged:
+        merged = False
+        for i in range(len(groups)):
+            for j in range(i + 1, len(groups)):
+                a, b = groups[i][0], groups[j][0]
+                if (
+                    b[0] > a[2] + _SEAM_NEAR or a[0] > b[2] + _SEAM_NEAR
+                    or b[1] > a[3] + _SEAM_NEAR or a[1] > b[3] + _SEAM_NEAR
+                ):
+                    continue
+                groups[i] = (
+                    [min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3])],
+                    groups[i][1] + groups[j][1],
+                    groups[i][2] | groups[j][2],
+                    groups[i][3] + groups[j][3],
+                )
+                del groups[j]
+                merged = True
+                break
+            if merged:
+                break
+    return [
+        ((box[0], box[1], box[2], box[3]), count, float(np.mean(steps)))
+        for box, count, orientations, steps in groups
+        if count >= min_seams and len(orientations) == 2
+        and box[2] - box[0] >= 12 and box[3] - box[1] >= 12
+    ]
+
+
+def _check_raster_tampering(
+    document_id: str, file_bytes: bytes, tolerances: TamperingTolerances,
+) -> ImageTamperingResult:
+    try:
+        with Image.open(io.BytesIO(file_bytes)) as opened:
+            codec = (opened.format or "unknown").lower()
+            gray = np.asarray(opened.convert("L"), dtype=np.float32)
+    except Exception as exc:
+        reason = f"Failed to decode the image: {type(exc).__name__}: {exc}"
+        logger.warning("Document %s: %s", document_id, reason, exc_info=True)
+        return _tampering_unable(document_id, reason, tolerances, bbox_units="px")
+
+    height, width = gray.shape
+    region = ImageRegion(
+        xref=0, page=0, bbox=(0.0, 0.0, float(width), float(height)),
+        pixel_width=width, pixel_height=height, effective_dpi=0.0, codec=codec,
+        stored_bytes=len(file_bytes),
+        bytes_per_pixel=round(len(file_bytes) / (width * height), 5),
+        quantisation_signature=None, detail_ratio=None, pages_used_on=1, comparable=True,
+    )
+    if min(width, height) < 4 * _SEAM_MIN_LENGTH:
+        return _tampering_unable(
+            document_id,
+            f"Image is {width}x{height} px; too small to trace region outlines in.",
+            tolerances, [region], 1, bbox_units="px",
+        )
+
+    changes = (
+        int((np.abs(np.diff(gray, axis=1)) > _BLANK_EDGE).sum())
+        + int((np.abs(np.diff(gray, axis=0)) > _BLANK_EDGE).sum())
+    )
+    if changes / gray.size < _MIN_CONTENT_SHARE:
+        return _tampering_unable(
+            document_id,
+            "The image is essentially blank — too little text, lines or artwork to "
+            "judge whether anything was pasted into it.",
+            tolerances, [region], 1, bbox_units="px",
+        )
+
+    indicators: list[ImageTamperingIndicator] = []
+    for bbox, count, step in _outlines(_seams(gray), tolerances.min_outline_seams):
+        logger.debug("raster outline: %s from %d seams, step %.1f", bbox, count, step)
+        indicators.append(ImageTamperingIndicator(
+            indicator="Visible Boundary",
+            page=0,
+            bbox=bbox,
+            detected=f"{count} straight seams of {step:.1f} grey levels outlining a region",
+            expected="no outline between areas of the same background",
+            deviation="a pasted rectangle whose background does not match the page",
+            severity="medium",
+            summary=(
+                f"A {int(bbox[2] - bbox[0])}x{int(bbox[3] - bbox[1])} px region of this image "
+                "is outlined by faint straight edges where its background meets the "
+                "surrounding page — the seam left when a patch is pasted into a picture."
+            ),
+            evidence={
+                "seams": count, "mean_step": round(step, 2),
+                "min_seams": tolerances.min_outline_seams,
+            },
+        ))
+    return ImageTamperingResult(
+        document_id=document_id,
+        regions=[region],
+        indicators=_tampering_dedupe(indicators),
+        pages_checked=1,
+        tolerances=tolerances,
+        unable_to_assess=False,
+        bbox_units="px",
+    )
+
+
+# --- tampering: entry point --------------------------------------------------
+
+def check_image_tampering(
+    document_id: str,
+    file_bytes: bytes,
+    tolerances: TamperingTolerances | None = None,
+) -> ImageTamperingResult:
+    """
+    Inspects a PDF's images, or a standalone PNG/JPEG upload, for visible
+    boundaries, scaling distortions, overlays and quality inconsistencies.
+    No LLM tokens.
+    Synchronous/CPU-bound — callers should run this via asyncio.to_thread.
+    """
+    tolerances = tolerances or TamperingTolerances()
+    if _is_raster(file_bytes):
+        return _check_raster_tampering(document_id, file_bytes, tolerances)
+    return _check_pdf_tampering(document_id, file_bytes, tolerances)
