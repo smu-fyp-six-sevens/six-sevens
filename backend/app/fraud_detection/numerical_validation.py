@@ -232,6 +232,19 @@ def _rows(value: Any) -> list[dict]:
     return [row for row in value if isinstance(row, dict)]
 
 
+def _is_item(ctx: _Ctx, *labels: str) -> tuple[float | None, float | None]:
+    """Looks up a line item from income_statement_items by label (case-
+    insensitive, first match wins across the candidate labels given — e.g.
+    "profit before taxation" also matches a document that printed "profit
+    before tax"). Returns (amount, amount_prior_year), either side None if
+    that item/column wasn't extracted."""
+    wanted = {label.lower() for label in labels}
+    for row in _rows(ctx.fields.get("income_statement_items")):
+        if str(row.get("label", "")).strip().lower() in wanted:
+            return _as_number(row.get("amount")), _as_number(row.get("amount_prior_year"))
+    return None, None
+
+
 def _money(amount: float) -> str:
     return f"{amount:,.2f}"
 
@@ -1255,20 +1268,26 @@ def _check_nav(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck | None]:
 
 def _check_fs_is_cast(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck | None]:
     """FS.IS_CAST. Revenue -> gross profit -> operating expenses -> profit
-    before tax -> profit for the year, both years presented."""
+    before tax -> profit for the year, both years presented.
+
+    cost_of_sales/operating_expenses/tax_expense now live as rows inside
+    income_statement_items (amount + amount_prior_year per row) rather than
+    as their own flat *_prior_year fields — see _is_item."""
     findings = []
     ran_any = False
-    for suffix in ("", "_prior_year"):
-        values = _need(
-            ctx, "FS.IS_CAST",
-            f"revenue{suffix}", f"cost_of_sales{suffix}", f"operating_expenses{suffix}",
-            f"tax_expense{suffix}", f"profit_for_the_year{suffix}",
-        )
-        if values is None:
+    cost_of_sales_cur, cost_of_sales_prior = _is_item(ctx, "cost of sales")
+    opex_cur, opex_prior = _is_item(ctx, "total operating expenses")
+    tax_cur, tax_prior = _is_item(ctx, "tax expense")
+    for suffix, cost_of_sales, opex, tax in (
+        ("", cost_of_sales_cur, opex_cur, tax_cur),
+        ("_prior_year", cost_of_sales_prior, opex_prior, tax_prior),
+    ):
+        values = _need(ctx, "FS.IS_CAST", f"revenue{suffix}", f"profit_for_the_year{suffix}")
+        if values is None or cost_of_sales is None or opex is None or tax is None:
             continue
         ran_any = True
-        revenue, cost_of_sales, opex, tax, profit = (_as_number(v) for v in values)
-        if revenue is None or cost_of_sales is None or opex is None or tax is None or profit is None:
+        revenue, profit = (_as_number(v) for v in values)
+        if revenue is None or profit is None:
             continue
         gross_profit = revenue - cost_of_sales
         profit_before_tax = gross_profit - opex
@@ -1284,8 +1303,8 @@ def _check_fs_is_cast(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck |
                 severity_note=_materiality_note(expected - profit, expected),
             ))
     if not ran_any:
-        return [], _skip_missing("FS.IS_CAST", "revenue", "cost_of_sales", "operating_expenses",
-                                  "tax_expense", "profit_for_the_year")
+        return [], _skip_missing("FS.IS_CAST", "revenue", "income_statement_items",
+                                  "profit_for_the_year")
     return findings, None
 
 
@@ -1418,14 +1437,18 @@ def _check_fs_re_rollforward(ctx: _Ctx) -> tuple[list[NumericalFinding], Skipped
 
 def _check_fs_ppe_rollforward(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck | None]:
     """FS.PPE_ROLLFORWARD. Implied PPE additions (closing - opening +
-    depreciation) must not be negative."""
-    values = _need(
-        ctx, "FS.PPE_ROLLFORWARD", "ppe_opening", "ppe_closing", "depreciation_expense",
+    depreciation) must not be negative. depreciation_expense now lives as a
+    row inside income_statement_items — see _is_item."""
+    values = _need(ctx, "FS.PPE_ROLLFORWARD", "ppe_opening", "ppe_closing")
+    depreciation, _prior = _is_item(
+        ctx, "depreciation of property, plant and equipment", "depreciation", "depreciation expense",
     )
-    if values is None:
-        return [], _skip_missing("FS.PPE_ROLLFORWARD", "ppe_opening", "ppe_closing", "depreciation_expense")
-    opening, closing, depreciation = (_as_number(v) for v in values)
-    if opening is None or closing is None or depreciation is None:
+    if values is None or depreciation is None:
+        return [], _skip_missing(
+            "FS.PPE_ROLLFORWARD", "ppe_opening", "ppe_closing", "income_statement_items(depreciation)",
+        )
+    opening, closing = (_as_number(v) for v in values)
+    if opening is None or closing is None:
         return [], _skip_missing("FS.PPE_ROLLFORWARD", "ppe_* (unparseable)")
     implied_additions = closing - opening + depreciation
     if implied_additions < -_MONEY_TOLERANCE:
@@ -1441,12 +1464,13 @@ def _check_fs_ppe_rollforward(ctx: _Ctx) -> tuple[list[NumericalFinding], Skippe
 def _check_fs_tax_expense_rate(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck | None]:
     """FS.TAX_EXPENSE_RATE. Tax expense should be close to 17% of profit
     after the partial tax exemption, not a flat 17% of profit before
-    exemption."""
-    values = _need(ctx, "FS.TAX_EXPENSE_RATE", "profit_before_tax", "tax_expense")
-    if values is None:
-        return [], _skip_missing("FS.TAX_EXPENSE_RATE", "profit_before_tax", "tax_expense")
-    profit, tax = (_as_number(v) for v in values)
-    if profit is None or tax is None or profit <= 0:
+    exemption. Both values now live as rows inside income_statement_items —
+    see _is_item."""
+    profit, _p = _is_item(ctx, "profit before taxation", "profit before tax")
+    tax, _t = _is_item(ctx, "tax expense")
+    if profit is None or tax is None:
+        return [], _skip_missing("FS.TAX_EXPENSE_RATE", "income_statement_items(profit before tax, tax expense)")
+    if profit <= 0:
         return [], _skip_missing("FS.TAX_EXPENSE_RATE", "profit_before_tax/tax_expense (unparseable)")
     flat_rate_tax = profit * _CURRENT_NOA_SCHEME["tax_rate_pct"]
     if abs(tax - flat_rate_tax) < max(1.0, flat_rate_tax * 0.02):
@@ -1491,56 +1515,58 @@ _RATIO_BANDS = {
 
 def _check_fs_ratio_bands(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck | None]:
     """FS.RATIO_BANDS. finance costs / average borrowings, depreciation /
-    PPE, and gross margin must fall within configurable bands."""
+    PPE, and gross margin must fall within configurable bands.
+    finance_costs/depreciation_expense/cost_of_sales now live as rows
+    inside income_statement_items — see _is_item."""
     findings = []
     ran_any = False
 
-    finance = _need(ctx, "FS.RATIO_BANDS", "finance_costs", "borrowings_opening", "borrowings_closing")
-    if finance is not None:
+    costs, _c = _is_item(ctx, "finance costs")
+    opening = _as_number(ctx.fields.get("borrowings_opening"))
+    closing = _as_number(ctx.fields.get("borrowings_closing"))
+    if costs is not None and opening is not None and closing is not None and (opening + closing) > 0:
         ran_any = True
-        costs, opening, closing = (_as_number(v) for v in finance)
-        if costs is not None and opening is not None and closing is not None and (opening + closing) > 0:
-            ratio = costs / ((opening + closing) / 2)
-            lo, hi = _RATIO_BANDS["finance_cost_ratio"]
-            if not lo <= ratio <= hi:
-                findings.append(_finding(
-                    "FS.RATIO_BANDS", "implausible",
-                    f"Finance costs are {ratio:.1%} of average borrowings, outside the "
-                    f"{lo:.0%}-{hi:.0%} plausible band",
-                    field="finance_costs",
-                ))
+        ratio = costs / ((opening + closing) / 2)
+        lo, hi = _RATIO_BANDS["finance_cost_ratio"]
+        if not lo <= ratio <= hi:
+            findings.append(_finding(
+                "FS.RATIO_BANDS", "implausible",
+                f"Finance costs are {ratio:.1%} of average borrowings, outside the "
+                f"{lo:.0%}-{hi:.0%} plausible band",
+                field="finance_costs",
+            ))
 
-    dep = _need(ctx, "FS.RATIO_BANDS", "depreciation_expense", "ppe_closing")
-    if dep is not None:
+    depreciation, _d = _is_item(
+        ctx, "depreciation of property, plant and equipment", "depreciation", "depreciation expense",
+    )
+    ppe = _as_number(ctx.fields.get("ppe_closing"))
+    if depreciation is not None and ppe is not None and ppe > 0:
         ran_any = True
-        depreciation, ppe = (_as_number(v) for v in dep)
-        if depreciation is not None and ppe is not None and ppe > 0:
-            ratio = depreciation / ppe
-            lo, hi = _RATIO_BANDS["depreciation_ratio"]
-            if not lo <= ratio <= hi:
-                findings.append(_finding(
-                    "FS.RATIO_BANDS", "implausible",
-                    f"Depreciation is {ratio:.1%} of PPE, outside the {lo:.0%}-{hi:.0%} "
-                    "plausible band",
-                    field="depreciation_expense",
-                ))
+        ratio = depreciation / ppe
+        lo, hi = _RATIO_BANDS["depreciation_ratio"]
+        if not lo <= ratio <= hi:
+            findings.append(_finding(
+                "FS.RATIO_BANDS", "implausible",
+                f"Depreciation is {ratio:.1%} of PPE, outside the {lo:.0%}-{hi:.0%} "
+                "plausible band",
+                field="depreciation_expense",
+            ))
 
-    margin = _need(ctx, "FS.RATIO_BANDS", "revenue", "cost_of_sales")
-    if margin is not None:
+    cost, _cost_prior = _is_item(ctx, "cost of sales")
+    revenue = _as_number(ctx.fields.get("revenue"))
+    if revenue is not None and cost is not None and revenue > 0:
         ran_any = True
-        revenue, cost = (_as_number(v) for v in margin)
-        if revenue is not None and cost is not None and revenue > 0:
-            ratio = (revenue - cost) / revenue
-            lo, hi = _RATIO_BANDS["gross_margin"]
-            if not lo <= ratio <= hi:
-                findings.append(_finding(
-                    "FS.RATIO_BANDS", "implausible",
-                    f"Gross margin is {ratio:.1%}, outside the {lo:.0%}-{hi:.0%} plausible band",
-                    field="revenue",
-                ))
+        ratio = (revenue - cost) / revenue
+        lo, hi = _RATIO_BANDS["gross_margin"]
+        if not lo <= ratio <= hi:
+            findings.append(_finding(
+                "FS.RATIO_BANDS", "implausible",
+                f"Gross margin is {ratio:.1%}, outside the {lo:.0%}-{hi:.0%} plausible band",
+                field="revenue",
+            ))
 
     if not ran_any:
-        return [], _skip_missing("FS.RATIO_BANDS", "finance_costs/depreciation_expense/revenue (none present)")
+        return [], _skip_missing("FS.RATIO_BANDS", "income_statement_items/revenue/borrowings/ppe (none present)")
     return findings, None
 
 

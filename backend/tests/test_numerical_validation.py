@@ -423,8 +423,12 @@ def test_nav_flags_mismatch() -> None:
 
 def test_fs_is_cast_flags_income_statement_that_does_not_cast() -> None:
     result = _run(
-        [_field("revenue", "1000000"), _field("cost_of_sales", "600000"),
-         _field("operating_expenses", "200000"), _field("tax_expense", "17000"),
+        [_field("revenue", "1000000"),
+         _field("income_statement_items", [
+             {"label": "Cost of sales", "amount": 600000},
+             {"label": "Total operating expenses", "amount": 200000},
+             {"label": "Tax expense", "amount": 17000},
+         ]),
          _field("profit_for_the_year", "999999")],
         document_type="source_of_wealth",
     )
@@ -484,7 +488,10 @@ def test_fs_balances_skips_when_neither_year_extracted() -> None:
 
 def test_fs_tax_expense_rate_flags_flat_rate_ignoring_exemption() -> None:
     result = _run(
-        [_field("profit_before_tax", "1000000"), _field("tax_expense", "170000")],
+        [_field("income_statement_items", [
+            {"label": "Profit before taxation", "amount": 1000000},
+            {"label": "Tax expense", "amount": 170000},
+        ])],
         document_type="source_of_wealth",
     )
     assert len(_codes(result, "FS.TAX_EXPENSE_RATE")) == 1
@@ -502,7 +509,9 @@ def test_fs_re_rollforward_flags_broken_roll_forward() -> None:
 def test_fs_ppe_rollforward_flags_negative_implied_additions() -> None:
     result = _run(
         [_field("ppe_opening", "100000"), _field("ppe_closing", "10000"),
-         _field("depreciation_expense", "5000")],
+         _field("income_statement_items", [
+             {"label": "Depreciation of property, plant and equipment", "amount": 5000},
+         ])],
         document_type="source_of_wealth",
     )
     assert len(_codes(result, "FS.PPE_ROLLFORWARD")) == 1
@@ -518,7 +527,8 @@ def test_fs_debt_classification_flags_long_tenure_loan_with_no_non_current_porti
 
 def test_fs_ratio_bands_flags_finance_costs_outside_band() -> None:
     result = _run(
-        [_field("finance_costs", "100000"), _field("borrowings_opening", "100000"),
+        [_field("income_statement_items", [{"label": "Finance costs", "amount": 100000}]),
+         _field("borrowings_opening", "100000"),
          _field("borrowings_closing", "100000")],
         document_type="source_of_wealth",
     )
@@ -527,7 +537,8 @@ def test_fs_ratio_bands_flags_finance_costs_outside_band() -> None:
 
 def test_fs_ratio_bands_flags_gross_margin_outside_band() -> None:
     result = _run(
-        [_field("revenue", "100000"), _field("cost_of_sales", "200000")],
+        [_field("revenue", "100000"),
+         _field("income_statement_items", [{"label": "Cost of sales", "amount": 200000}])],
         document_type="source_of_wealth",
     )
     assert len(_codes(result, "FS.RATIO_BANDS")) == 1

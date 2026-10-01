@@ -252,22 +252,32 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # which tells the model not to escalate on that basis alone when
         # it's clearly this individual-account variant instead.
         "required": ["company_name", "uen"],
-        # cost_of_sales through equity_items/total_equity (not doc_gen-
-        # verified — added for fraud_detection.numerical_validation's FS.*
-        # checks): the full income-statement/balance-sheet line items behind
-        # the headline revenue/net_profit/total_assets figures above. Only
-        # extract where the statement actually itemises to this level.
+        # income_statement_items through equity_items/total_equity (not
+        # doc_gen-verified — added for fraud_detection.numerical_validation's
+        # FS.* checks): the full income-statement/balance-sheet line items
+        # behind the headline revenue/net_profit/total_assets figures above.
+        # Only extract where the statement actually itemises to this level.
+        #
+        # cost_of_sales/operating_expenses/tax_expense/profit_before_tax/
+        # finance_costs/depreciation_expense deliberately do NOT have their
+        # own flat fields here — every income-statement line other than
+        # revenue and profit_for_the_year (the two headline figures kept
+        # flat) belongs inside income_statement_items instead, so a
+        # two-column (current/prior year) statement doesn't explode into a
+        # dozen near-duplicate *_prior_year fields. See EXTRA_FIELD_GUIDANCE
+        # below for its row shape, and numerical_validation._is_item for how
+        # the FS.* checks look a specific line up by label.
         "additional": [
             "individual_address", "revenue", "net_profit",
             "total_assets", "total_liabilities", "share_capital", "notes",
             "broker_name", "account_number", "account_holder_name",
             "cash_balance", "portfolio_value", "net_asset_value", "holdings", "margin_loan",
-            "cost_of_sales", "operating_expenses", "tax_expense", "profit_before_tax",
+            "income_statement_items",
             "profit_for_the_year", "profit_for_the_year_prior_year",
             "retained_earnings_opening", "retained_earnings_closing",
             "retained_earnings_closing_prior_year", "ppe_opening", "ppe_closing",
-            "depreciation_expense", "borrowings_current", "borrowings_non_current",
-            "finance_costs", "loan_tenure", "financial_year_end", "signing_date", "note_references",
+            "borrowings_current", "borrowings_non_current",
+            "loan_tenure", "financial_year_end", "signing_date", "note_references",
             "current_assets_items", "total_current_assets",
             "non_current_assets_items", "total_non_current_assets",
             "current_liabilities_items", "total_current_liabilities",
@@ -517,6 +527,35 @@ EXTRA_FIELD_GUIDANCE: dict[str, str] = {
         "none, so that's the normal case, not a sign anything was missed."
     ),
     "source_of_wealth": (
+        'For "income_statement_items", its "value" should be an array of '
+        'objects — one per line of the income statement OTHER than Revenue '
+        'and Profit for the year (those two stay their own top-level '
+        'fields) — each with these keys: "label" (as printed, e.g. "Cost '
+        'of sales", "Staff costs", "Other operating expenses", "Total '
+        'operating expenses", "Finance costs", "Profit before taxation", '
+        '"Tax expense"), "amount" (numeric, this year\'s column; negative '
+        'for a figure shown in brackets, e.g. an expense), and '
+        '"amount_prior_year" (numeric, the comparative column if the '
+        'statement shows one, else null). Include every line between '
+        'Revenue and Profit for the year, in the order shown — this means '
+        'both subtotals (Gross profit, Total operating expenses, Profit '
+        'from operations, Profit before taxation) AND the individual '
+        'expense line items making up Operating expenses (e.g. Staff '
+        'costs, Rental expenses, Other operating expenses — the exact set '
+        'varies by company). Do not also create separate flat fields like '
+        '"operating_expenses" or "operating_expenses_prior_year" for '
+        'anything that belongs in this array.\n\n'
+        'For "current_assets_items", "non_current_assets_items", '
+        '"current_liabilities_items", "non_current_liabilities_items", and '
+        '"equity_items", each "value" should be an array of objects — one '
+        'per line item in that balance sheet section (e.g. '
+        'non_current_assets_items covers every row under "Non-current '
+        'assets" such as "Property, plant and equipment" and "Intangible '
+        'assets") — each with keys "label" (as printed) and "amount" '
+        '(numeric, this year\'s column only). Include every row actually '
+        'shown under that section heading, not just one summary row — a '
+        'section with three line items should produce three array entries, '
+        'not one.\n\n'
         'For "notes", its "value" should be an array of objects — one per '
         'numbered note in the financial statements — each with these keys: '
         '"note_number" (as shown, e.g. "3"), "heading" (e.g. "PROPERTY, PLANT '
