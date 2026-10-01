@@ -1,0 +1,265 @@
+import type { Page } from '@playwright/test';
+import { test, expect } from '../support/test';
+import { makeCase, type MockBackend } from '../support/mockBackend';
+import { browseFiles, dropFiles, jpg, oversizedPdf, pdf, png, text } from '../support/files';
+
+/**
+ * Upload Documents (SCRUM-6, Sprint 1) — test cases DI-001 to DI-016 from
+ * "Test Cases - Sprint 1.xlsx", plus the unsupported-format case from
+ * Generate Additional File Formats (SCRUM-115, Sprint 2), DT-031.
+ */
+
+async function openCase(page: Page, backend: MockBackend) {
+  const theCase = makeCase({ id: 'case-upload', greenlink_case_id: 'GLDB-1001' });
+  backend.cases.push(theCase);
+  await page.goto(`/cases/${theCase.greenlink_case_id}`);
+  await expect(page.getByRole('heading', { name: 'Upload supporting documents' })).toBeVisible();
+  return theCase;
+}
+
+const fileRow = (page: Page, filename: string) =>
+  page.locator('.file-row').filter({ has: page.locator('.f-name', { hasText: filename }) });
+
+const uploadButton = (page: Page) => page.locator('.upload-btn');
+
+test.describe('Upload documents @sprint1 @SCRUM-6', () => {
+  test('DI-001 upload page displays all required upload components @DI-001', async ({ page, backend }) => {
+    await openCase(page, backend);
+
+    const dropZone = page.getByRole('button', { name: 'Upload documents' });
+    await expect(dropZone).toBeVisible();
+    await expect(dropZone).toContainText('Drag files here or browse');
+    await expect(dropZone).toContainText('PDF · PNG · JPG — up to 25MB each');
+    await expect(page.getByText('No files selected yet')).toBeVisible();
+
+    await browseFiles(page, [pdf('payslip.pdf')]);
+    await expect(page.locator('.section-label', { hasText: 'Selected files' })).toBeVisible();
+    await expect(uploadButton(page)).toHaveText('Upload 1 file');
+  });
+
+  test('DI-002 a single valid file can be added using drag-and-drop @DI-002', async ({ page, backend }) => {
+    await openCase(page, backend);
+
+    await dropFiles(page, [pdf('payslip.pdf')]);
+
+    await expect(fileRow(page, 'payslip.pdf')).toBeVisible();
+    await expect(page.locator('.file-row')).toHaveCount(1);
+  });
+
+  test('DI-003 files added one at a time do not overwrite each other @DI-003', async ({ page, backend }) => {
+    await openCase(page, backend);
+
+    await dropFiles(page, [pdf('payslip.pdf')]);
+    await dropFiles(page, [pdf('passport.pdf')]);
+
+    await expect(fileRow(page, 'payslip.pdf')).toBeVisible();
+    await expect(fileRow(page, 'passport.pdf')).toBeVisible();
+    await expect(page.locator('.file-row')).toHaveCount(2);
+  });
+
+  test('DI-004 multiple files can be added simultaneously @DI-004', async ({ page, backend }) => {
+    await openCase(page, backend);
+
+    await dropFiles(page, [pdf('payslip.pdf'), pdf('passport.pdf')]);
+
+    await expect(page.locator('.file-row')).toHaveCount(2);
+    await expect(fileRow(page, 'payslip.pdf')).toBeVisible();
+    await expect(fileRow(page, 'passport.pdf')).toBeVisible();
+  });
+
+  test('DI-005 a file can be added using Browse @DI-005', async ({ page, backend }) => {
+    await openCase(page, backend);
+
+    await browseFiles(page, [pdf('payslip.pdf')]);
+
+    await expect(fileRow(page, 'payslip.pdf')).toBeVisible();
+  });
+
+  test('DI-006 Browse does not overwrite files added by drag-and-drop @DI-006', async ({ page, backend }) => {
+    await openCase(page, backend);
+
+    await dropFiles(page, [pdf('payslip.pdf')]);
+    await browseFiles(page, [pdf('passport.pdf')]);
+
+    await expect(page.locator('.file-row')).toHaveCount(2);
+    await expect(fileRow(page, 'payslip.pdf')).toBeVisible();
+    await expect(fileRow(page, 'passport.pdf')).toBeVisible();
+  });
+
+  test('DI-007 a PDF is accepted without a format validation error @DI-007', async ({ page, backend }) => {
+    await openCase(page, backend);
+
+    await browseFiles(page, [pdf('payslip.pdf')]);
+    await expect(fileRow(page, 'payslip.pdf').locator('.badge')).toHaveText('Ready');
+
+    await uploadButton(page).click();
+
+    const row = fileRow(page, 'payslip.pdf');
+    await expect(row.locator('.badge')).toHaveText('Uploaded');
+    await expect(row).not.toContainText('does not match a supported type');
+  });
+
+  test('DI-008 an unsupported file format is rejected with an error @DI-008', async ({ page, backend }) => {
+    await openCase(page, backend);
+
+    await browseFiles(page, [text('test.txt')]);
+    await uploadButton(page).click();
+
+    const row = fileRow(page, 'test.txt');
+    await expect(row.locator('.badge')).toHaveText('Rejected');
+    await expect(row).toContainText('File content does not match a supported type.');
+    expect(backend.requestsTo('POST', '/documents/upload-batch')).toHaveLength(0);
+  });
+
+  test('DI-009 a file over 25MB is rejected with a file-size error @DI-009', async ({ page, backend }) => {
+    await openCase(page, backend);
+
+    await browseFiles(page, [oversizedPdf('large-statement.pdf')]);
+    await uploadButton(page).click();
+
+    const row = fileRow(page, 'large-statement.pdf');
+    await expect(row.locator('.badge')).toHaveText('Rejected');
+    await expect(row).toContainText('File exceeds the 25 MB limit.');
+    expect(backend.requestsTo('POST', '/documents/upload-batch')).toHaveLength(0);
+  });
+
+  test('DI-010 a file shows an uploading state while the upload is in progress @DI-010', async ({ page, backend }) => {
+    await openCase(page, backend);
+    let release!: () => void;
+    backend.uploadGate = new Promise<void>((resolve) => (release = resolve));
+
+    await browseFiles(page, [pdf('payslip.pdf')]);
+    await uploadButton(page).click();
+
+    const row = fileRow(page, 'payslip.pdf');
+    await expect(row.locator('.badge')).toHaveText('Uploading');
+    await expect(row.getByLabel('Upload in progress')).toBeVisible();
+    await expect(uploadButton(page)).toHaveText('Uploading…');
+
+    release();
+    await expect(row.locator('.badge')).toHaveText('Uploaded');
+  });
+
+  test('DI-011 a successful upload shows a completed status @DI-011', async ({ page, backend }) => {
+    await openCase(page, backend);
+
+    await browseFiles(page, [pdf('payslip.pdf')]);
+    await uploadButton(page).click();
+
+    const row = fileRow(page, 'payslip.pdf');
+    await expect(row.locator('.badge')).toHaveText('Uploaded');
+    await expect(row).toContainText(/Document ID: doc-/);
+  });
+
+  test('DI-012 a failed upload shows a FAILED status and an error @DI-012', async ({ page, backend }) => {
+    await openCase(page, backend);
+    backend.uploadOutcomes['payslip.pdf'] = { success: false, error: 'Storage upload failed' };
+
+    await browseFiles(page, [pdf('payslip.pdf')]);
+    await uploadButton(page).click();
+
+    const row = fileRow(page, 'payslip.pdf');
+    await expect(row.locator('.badge')).toHaveText('Failed');
+    await expect(row).toContainText('Storage upload failed');
+  });
+
+  test('DI-013 each file keeps its own upload status @DI-013', async ({ page, backend }) => {
+    await openCase(page, backend);
+    backend.uploadOutcomes['passport.pdf'] = { success: false, error: 'Storage upload failed' };
+
+    await browseFiles(page, [pdf('payslip.pdf'), pdf('passport.pdf')]);
+    await uploadButton(page).click();
+
+    await expect(fileRow(page, 'payslip.pdf').locator('.badge')).toHaveText('Uploaded');
+    await expect(fileRow(page, 'passport.pdf').locator('.badge')).toHaveText('Failed');
+  });
+
+  test('DI-014 a failed file can be uploaded again @DI-014', async ({ page, backend }) => {
+    await openCase(page, backend);
+    backend.uploadOutcomes['payslip.pdf'] = { success: false, error: 'Storage upload failed' };
+
+    await browseFiles(page, [pdf('payslip.pdf')]);
+    await uploadButton(page).click();
+    await expect(fileRow(page, 'payslip.pdf').locator('.badge')).toHaveText('Failed');
+    await expect(uploadButton(page)).toHaveText('Upload again');
+
+    delete backend.uploadOutcomes['payslip.pdf'];
+    await uploadButton(page).click();
+
+    await expect(fileRow(page, 'payslip.pdf').locator('.badge')).toHaveText('Uploaded');
+    expect(backend.requestsTo('POST', '/documents/upload-batch')).toHaveLength(2);
+  });
+
+  test('DI-015 upload completion feedback is displayed @DI-015', async ({ page, backend }) => {
+    await openCase(page, backend);
+
+    await browseFiles(page, [pdf('payslip.pdf')]);
+    await uploadButton(page).click();
+
+    await expect(page.locator('.toast.all-ok')).toContainText(
+      '1 of 1 documents uploaded. All documents uploaded successfully.',
+    );
+  });
+
+  test('DI-016 complete document upload workflow @DI-016', async ({ page, backend }) => {
+    const theCase = await openCase(page, backend);
+
+    await dropFiles(page, [pdf('payslip.pdf')]);
+    await browseFiles(page, [pdf('passport.pdf')]);
+    await expect(page.locator('.file-row')).toHaveCount(2);
+
+    await uploadButton(page).click();
+
+    await expect(fileRow(page, 'payslip.pdf').locator('.badge')).toHaveText('Uploaded');
+    await expect(fileRow(page, 'passport.pdf').locator('.badge')).toHaveText('Uploaded');
+    await expect(page.locator('.toast.all-ok')).toContainText('2 of 2 documents uploaded.');
+
+    // The uploaded documents join the case's document list via the live
+    // case snapshot, and finish processing there.
+    for (const document of backend.documents) {
+      document.status = 'analyzed';
+      document.routing_status = 'accepted';
+      document.classification_confidence = 0.95;
+    }
+    backend.push(theCase.id);
+    const table = page.locator('.documents-table');
+    await expect(table.getByText('payslip.pdf')).toBeVisible();
+    await expect(table.getByText('passport.pdf')).toBeVisible();
+  });
+});
+
+test.describe('Generate additional file formats @sprint2 @SCRUM-115', () => {
+  test('DT-031 DOCX, XLSX and TXT files are rejected with a clear error @DT-031', async ({ page, backend }) => {
+    await openCase(page, backend);
+
+    await browseFiles(page, [
+      { name: 'report.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', buffer: Buffer.from('PK\u0003\u0004 docx') },
+      { name: 'figures.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from('PK\u0003\u0004 xlsx') },
+      text('notes.txt'),
+    ]);
+    await uploadButton(page).click();
+
+    for (const name of ['report.docx', 'figures.xlsx', 'notes.txt']) {
+      const row = fileRow(page, name);
+      await expect(row.locator('.badge')).toHaveText('Rejected');
+      await expect(row).toContainText('File content does not match a supported type.');
+    }
+    expect(backend.requestsTo('POST', '/documents/upload-batch')).toHaveLength(0);
+  });
+
+  test('DT-029 PDF, PNG, JPG and JPEG files are accepted for upload @DT-029', async ({ page, backend }) => {
+    await openCase(page, backend);
+
+    await browseFiles(page, [
+      pdf('C014_CertIncorp.pdf'),
+      png('NRIC_6554_back.png'),
+      jpg('clear_front.jpg'),
+      jpg('IMG_5099_front.jpeg'),
+    ]);
+    await uploadButton(page).click();
+
+    for (const name of ['C014_CertIncorp.pdf', 'NRIC_6554_back.png', 'clear_front.jpg', 'IMG_5099_front.jpeg']) {
+      await expect(fileRow(page, name).locator('.badge')).toHaveText('Uploaded');
+    }
+  });
+});

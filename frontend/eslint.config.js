@@ -43,4 +43,12 @@ export default [
       '@typescript-eslint/no-unused-vars': 'warn',
     },
   },
+  {
+    // Playwright tests aren't React: its fixtures receive a function named
+    // `use`, which the hooks rule would otherwise mistake for a React hook.
+    files: ['e2e/**/*.ts', 'playwright.config.ts'],
+    rules: {
+      'react-hooks/rules-of-hooks': 'off',
+    },
+  },
 ];

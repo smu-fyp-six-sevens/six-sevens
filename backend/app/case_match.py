@@ -67,6 +67,11 @@ _ROLE_ID_SUFFIXES: tuple[str, ...] = ("_id_number", "_id", "_nric_number")
 # Array fields listing several people, each an object with name/id keys —
 # in case extraction returns officers/shareholders that way instead.
 _PEOPLE_LIST_FIELDS: tuple[str, ...] = ("officers", "shareholders")
+# The key each list entry's ID number comes under. Extraction has used
+# several over time — the current incumbency schema returns
+# "identification_no" (the ACRA table's "Identification No." column) — so
+# accept any of them; missing it silently drops every officer's ID.
+_LIST_ENTRY_ID_KEYS: tuple[str, ...] = ("id_number", "identification_no", "nric_number", "id")
 
 # Individuals aren't checked on a constitution: its subscribers are the
 # people who formed the company, who may no longer be officers or
@@ -303,11 +308,11 @@ def _list_field_people(fields: dict) -> list[_Person]:
             if not isinstance(entry, dict):
                 continue
             name = entry.get("name") if isinstance(entry.get("name"), str) else None
-            raw_id = entry.get("id_number") or entry.get("id")
-            id_number = raw_id if isinstance(raw_id, str) else None
+            id_key = next((k for k in _LIST_ENTRY_ID_KEYS if isinstance(entry.get(k), str) and entry[k]), None)
+            id_number = entry[id_key] if id_key else None
             if name or id_number:
                 people.append(
-                    _Person(name, id_number, f"{list_field}.name", f"{list_field}.id_number")
+                    _Person(name, id_number, f"{list_field}.name", f"{list_field}.{id_key or 'id_number'}")
                 )
     return people
 
@@ -353,8 +358,10 @@ def _people(fields: dict) -> list[_Person]:
     seen_ids: set[str] = set()
     seen_names: set[tuple[str, ...]] = set()
     for person in (
-        *_role_prefixed_people(fields),
+        # Lists first: they're the complete set (every officer/shareholder,
+        # with IDs), so a flat duplicate without an ID is recognised and dropped.
         *_list_field_people(fields),
+        *_role_prefixed_people(fields),
         *_individual_field_people(fields),
     ):
         id_number = _normalize_id(person.id_number)

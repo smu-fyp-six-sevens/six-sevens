@@ -38,6 +38,10 @@ dependencies = [
   "opentelemetry-sdk>=1.27,<2.0",
   "opentelemetry-instrumentation-fastapi>=0.48b0",
   "opentelemetry-exporter-gcp-trace>=1.7,<2.0",
+  # Mock-document generators (doc_gen_scripts). Already in requirements.txt;
+  # CI installs from this file.
+  "openpyxl>=3.1",
+  "pandas>=2.1",
 ]
 
 [project.optional-dependencies]
@@ -52,6 +56,16 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# Puts backend/ on sys.path so tests can import `app` and `scripts` whichever
+# way pytest is launched (plain `pytest` in CI, `python -m pytest`, an IDE).
+pythonpath = ["."]
+# Regression suite tags (SCRUM-206): `pytest -m sprint1`, `pytest -m sprint2`.
+# story(...) records the Jira story and the sprint test sheet's test case ID.
+markers = [
+  "sprint1: regression test for a Sprint 1 test case",
+  "sprint2: regression test for a Sprint 2 test case",
+  "story(jira_id, test_case_id): the Jira story and manual test case ID this test covers",
+]
 filterwarnings = [
   # langgraph-checkpoint's own internal import (JsonPlusSerializer) trips a
   # pending-deprecation warning about an `allowed_objects` default we never

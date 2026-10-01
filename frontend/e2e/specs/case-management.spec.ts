@@ -1,0 +1,243 @@
+import type { Page } from '@playwright/test';
+import { test, expect } from '../support/test';
+import { makeCase, makeDocument, type MockBackend } from '../support/mockBackend';
+
+/**
+ * Case Management (Sprint 2) — "Test Cases - Sprint 2.xlsx", Case Management
+ * sheet: View Cases (SCRUM-78) CM-001–004, View Case Details (SCRUM-83)
+ * CM-005–009, Create Case (SCRUM-96) CM-010–013.
+ */
+
+function seedQueue(backend: MockBackend) {
+  const harbor = makeCase({
+    id: 'case-harbor',
+    greenlink_case_id: 'GLDB-1014',
+    company_name: 'Harbor Light Shipping Pte Ltd',
+    documents_status: 'analyzed',
+    created_at: '2026-09-01T00:00:00Z',
+  });
+  const meridian = makeCase({
+    id: 'case-meridian',
+    greenlink_case_id: 'GLDB-1067',
+    company_name: 'Meridian Warehousing Solutions Pte Ltd',
+    documents_status: 'in_progress',
+    created_at: '2026-09-02T00:00:00Z',
+  });
+  const platinum = makeCase({
+    id: 'case-platinum',
+    greenlink_case_id: 'GLDB-1032',
+    company_name: 'Platinum Fitness Group Pte Ltd',
+    documents_status: 'no_documents',
+    created_at: '2026-09-03T00:00:00Z',
+  });
+  backend.cases.push(harbor, meridian, platinum);
+  return { harbor, meridian, platinum };
+}
+
+const caseCards = (page: Page) => page.locator('.case-card');
+const searchBox = (page: Page) => page.getByRole('textbox', { name: 'Search case number or applicant' });
+
+test.describe('View cases @sprint2 @SCRUM-78', () => {
+  test('CM-001 cases can be searched by company name or case ID @CM-001', async ({ page, backend }) => {
+    const { harbor, meridian } = seedQueue(backend);
+    await page.goto('/cases');
+    await expect(caseCards(page)).toHaveCount(3);
+
+    await searchBox(page).fill('meridian');
+    await expect(caseCards(page)).toHaveCount(1);
+    await expect(caseCards(page)).toContainText(meridian.company_name!);
+
+    await searchBox(page).fill(harbor.greenlink_case_id);
+    await expect(caseCards(page)).toHaveCount(1);
+    await expect(caseCards(page)).toContainText(harbor.company_name!);
+  });
+
+  test('CM-002 only cases matching the search are displayed @CM-002', async ({ page, backend }) => {
+    seedQueue(backend);
+    await page.goto('/cases');
+
+    await searchBox(page).fill('pte ltd');
+    await expect(caseCards(page)).toHaveCount(3);
+
+    await searchBox(page).fill('fitness');
+    await expect(caseCards(page)).toHaveCount(1);
+    await expect(caseCards(page)).toContainText('Platinum Fitness Group Pte Ltd');
+    await expect(page.getByText('Assigned to you (1)')).toBeVisible();
+
+    await searchBox(page).fill('GLDB-0000');
+    await expect(caseCards(page)).toHaveCount(0);
+    await expect(page.getByText('No case matches "GLDB-0000"')).toBeVisible();
+  });
+
+  test('CM-003 a case can be selected from the case queue @CM-003', async ({ page, backend }) => {
+    const { meridian } = seedQueue(backend);
+    await page.goto('/cases');
+
+    await page.getByRole('button', { name: `Open case ${meridian.greenlink_case_id}, ${meridian.company_name}` }).click();
+
+    await expect(page).toHaveURL(`/cases/${meridian.greenlink_case_id}`);
+    await expect(page.getByRole('heading', { name: 'Upload supporting documents' })).toBeVisible();
+  });
+
+  test('CM-004 cases can be filtered by case status @CM-004', async ({ page, backend }) => {
+    seedQueue(backend);
+    await page.goto('/cases');
+
+    await page.locator('.status-chip', { hasText: 'Ready for review' }).click();
+    await expect(caseCards(page)).toHaveCount(1);
+    await expect(caseCards(page)).toContainText('Harbor Light Shipping Pte Ltd');
+
+    await page.locator('.status-chip', { hasText: 'In progress' }).click();
+    await expect(caseCards(page)).toHaveCount(2);
+
+    await page.locator('.status-chip', { hasText: 'Ready for review' }).click();
+    await page.locator('.status-chip', { hasText: 'In progress' }).click();
+    await expect(caseCards(page)).toHaveCount(3);
+  });
+});
+
+test.describe('View case details @sprint2 @SCRUM-83', () => {
+  test('CM-005 a selected case opens its details page @CM-005', async ({ page, backend }) => {
+    const { harbor } = seedQueue(backend);
+    await page.goto('/cases');
+
+    await page.getByRole('button', { name: `Open case ${harbor.greenlink_case_id}, ${harbor.company_name}` }).click();
+
+    await expect(page.locator('.eyebrow')).toContainText(`Case #${harbor.greenlink_case_id}`);
+    await expect(page.locator('.eyebrow')).toContainText(harbor.company_name!);
+    await expect(page.getByRole('button', { name: '← Back to case queue' })).toBeVisible();
+  });
+
+  test('CM-006 case details show only the selected case\'s information @CM-006', async ({ page, backend }) => {
+    const { harbor, meridian } = seedQueue(backend);
+    backend.documents.push(
+      makeDocument({ case_id: harbor.id, filename: 'C014_CertIncumbency.pdf', status: 'analyzed' }),
+      makeDocument({ case_id: meridian.id, filename: 'C067_NOA.pdf', status: 'analyzed' }),
+    );
+
+    await page.goto(`/cases/${harbor.greenlink_case_id}`);
+
+    await expect(page.locator('.eyebrow')).toContainText(harbor.company_name!);
+    await expect(page.locator('.eyebrow')).not.toContainText(meridian.company_name!);
+    const table = page.locator('.documents-table');
+    await expect(table.getByText('C014_CertIncumbency.pdf')).toBeVisible();
+    await expect(page.getByText('C067_NOA.pdf')).toHaveCount(0);
+  });
+
+  test('CM-007 the customer risk summary is accessible from case details @CM-007', async ({ page, backend }) => {
+    const { harbor } = seedQueue(backend);
+    await page.goto(`/cases/${harbor.greenlink_case_id}`);
+
+    const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
+    await expect(section).toBeVisible();
+    // Risk analysis isn't built yet — the section shows its placeholder.
+    await expect(section).toContainText('Risk summary not available yet.');
+  });
+
+  test('CM-008 flagged anomalies are accessible from case details @CM-008', async ({ page, backend }) => {
+    const { harbor } = seedQueue(backend);
+    backend.documents.push(
+      makeDocument({
+        case_id: harbor.id,
+        filename: 'Fashion-Purchase-Order.pdf',
+        status: 'analyzed',
+        document_type: 'unrecognised',
+        classification_confidence: 0.4,
+        routing_status: 'manual_review',
+      }),
+      makeDocument({
+        case_id: harbor.id,
+        filename: 'C014_CertIncorp.pdf',
+        status: 'analyzed',
+        document_type: 'certificate_of_incorporation',
+        classification_confidence: 0.97,
+        routing_status: 'accepted',
+      }),
+    );
+
+    await page.goto(`/cases/${harbor.greenlink_case_id}`);
+
+    const flagged = page.locator('.summary-card', {
+      has: page.getByRole('heading', { name: 'Flagged Items for Manual Review' }),
+    });
+    await expect(flagged.locator('.flagged-item')).toHaveCount(1);
+    await expect(flagged).toContainText('Fashion-Purchase-Order.pdf');
+    await expect(flagged).toContainText('Document type could not be confidently recognised.');
+    await expect(flagged).not.toContainText('C014_CertIncorp.pdf');
+  });
+
+  test('CM-009 the case audit trail is accessible from case details @CM-009', async ({ page, backend }) => {
+    const { harbor } = seedQueue(backend);
+    await page.goto(`/cases/${harbor.greenlink_case_id}`);
+
+    const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Case Audit Trail' }) });
+    await expect(section).toBeVisible();
+    // Audit events aren't recorded yet — the section shows its placeholder.
+    await expect(section).toContainText('No audit events available yet.');
+  });
+});
+
+test.describe('Create case @sprint2 @SCRUM-96', () => {
+  async function createCase(page: Page, companyName: string) {
+    await page.goto('/cases');
+    await page.getByRole('button', { name: '+ Create new case' }).click();
+    await expect(page.getByRole('heading', { name: 'Create Case' })).toBeVisible();
+    await page.getByLabel(/company name/i).fill(companyName);
+    await page.getByRole('button', { name: 'Create Case' }).click();
+    await expect(page).toHaveURL('/cases');
+  }
+
+  test('CM-010 a new case can be created with the required information @CM-010', async ({ page, backend }) => {
+    seedQueue(backend);
+
+    await createCase(page, 'Ironclad Security Services Pte Ltd');
+
+    const created = backend.requestsTo('POST', '/cases');
+    expect(created).toHaveLength(1);
+    expect(created[0].body).toEqual({ company_name: 'Ironclad Security Services Pte Ltd' });
+  });
+
+  test('CM-010 a case cannot be created without a company name @CM-010', async ({ page, backend }) => {
+    seedQueue(backend);
+    await page.goto('/create-case');
+
+    await page.getByRole('button', { name: 'Create Case' }).click();
+
+    await expect(page.getByText('Company name is required.')).toBeVisible();
+    expect(backend.requestsTo('POST', '/cases')).toHaveLength(0);
+  });
+
+  test('CM-011 a new case gets a case ID different from existing cases @CM-011', async ({ page, backend }) => {
+    const existing = Object.values(seedQueue(backend)).map((c) => c.greenlink_case_id);
+
+    await createCase(page, 'Ironclad Security Services Pte Ltd');
+
+    const newCard = caseCards(page).filter({ hasText: 'Ironclad Security Services Pte Ltd' });
+    await expect(newCard).toHaveCount(1);
+    const newId = (await newCard.locator('.case-id').innerText()).trim();
+    expect(newId).toMatch(/^GLDB-\d+$/);
+    expect(existing).not.toContain(newId);
+  });
+
+  test('CM-012 the created case\'s information is stored and can be reopened @CM-012', async ({ page, backend }) => {
+    seedQueue(backend);
+
+    await createCase(page, 'Ironclad Security Services Pte Ltd');
+    await caseCards(page).filter({ hasText: 'Ironclad Security Services Pte Ltd' }).locator('.case-card-open').click();
+
+    await expect(page.locator('.eyebrow')).toContainText('Ironclad Security Services Pte Ltd');
+    await page.reload();
+    await expect(page.locator('.eyebrow')).toContainText('Ironclad Security Services Pte Ltd');
+  });
+
+  test('CM-013 a newly created case appears in the queue and can be found by its case ID @CM-013', async ({ page, backend }) => {
+    seedQueue(backend);
+
+    await createCase(page, 'Ironclad Security Services Pte Ltd');
+
+    const created = backend.cases.find((c) => c.company_name === 'Ironclad Security Services Pte Ltd')!;
+    await searchBox(page).fill(created.greenlink_case_id);
+    await expect(caseCards(page)).toHaveCount(1);
+    await expect(caseCards(page)).toContainText('Ironclad Security Services Pte Ltd');
+  });
+});

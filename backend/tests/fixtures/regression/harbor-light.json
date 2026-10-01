@@ -1,0 +1,2100 @@
+{
+  "case": {
+    "company_name": "Harbor Light",
+    "created_at": "2026-09-25T06:53:29.169571Z",
+    "dev": true,
+    "documents_status": "analyzed",
+    "finalized_at": null,
+    "fulfilled_requirements": [
+      "certificate_of_incorporation",
+      "certificate_of_incumbency",
+      "source_of_wealth",
+      "id_document",
+      "list_of_loans"
+    ],
+    "greenlink_case_id": "GLDB-16",
+    "id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
+    "id_document_coverage": {
+      "covered": 1,
+      "missing_side": null,
+      "total": 1
+    },
+    "proof_of_address_coverage": {
+      "covered": 0,
+      "total": 1,
+      "unmatched_names": []
+    },
+    "recommended_additional_documents": [
+      "bank_statement",
+      "payslip",
+      "fatca_crs_declaration",
+      "company_constitution",
+      "proof_of_address",
+      "credit_report",
+      "notice_of_assessment"
+    ],
+    "status": "open",
+    "submission_finalized": false,
+    "updated_at": "2026-09-25T06:53:29.169571Z"
+  },
+  "documents": {
+    "5d2dee2e-b850-4c8b-913f-71e71e2e8d07": {
+      "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
+      "classification_confidence": 0.98,
+      "document_type": "source_of_wealth",
+      "escalation_reason": null,
+      "evidence": [
+        "Contains \"Statement of Comprehensive Income\" and \"Statement of Financial Position\" \u2014 hallmarks of a full corporate financial statement set",
+        "Contains \"Notes to the Financial Statements\" prepared in accordance with SFRS for Small Entities",
+        "Filename signals \"source wealth\" / \"wealth\"",
+        "Address check: not visible \u2014 corporate financial statements; source_of_wealth never satisfies proof of address"
+      ],
+      "extracted_fields": {
+        "accounting_standard": {
+          "confidence": 1.0,
+          "id": "196930be-2f05-4f96-8775-e33f0097e6aa",
+          "value": "Singapore Financial Reporting Standards for Small Entities (SFRS for Small Entities)"
+        },
+        "bank_borrowings_total": {
+          "confidence": 0.95,
+          "id": "6f3cd3e6-1c33-4564-9a14-30f2e1541eeb",
+          "value": 357270
+        },
+        "cash_and_bank_balances": {
+          "confidence": 1.0,
+          "id": "1ad7feb0-bd2c-441e-a7ac-dd867048506c",
+          "value": 828400
+        },
+        "company_name": {
+          "confidence": 1.0,
+          "id": "89c9ec4a-735f-45a3-830f-635393317f9d",
+          "value": "Harbor Light Shipping Pte Ltd"
+        },
+        "currency": {
+          "confidence": 1.0,
+          "id": "5b211d78-2db7-4d66-bd56-d3a8d9c859be",
+          "value": "Singapore Dollars (SGD)"
+        },
+        "director_name": {
+          "confidence": 1.0,
+          "id": "a535bef8-ddca-4cde-837c-668180d46d6c",
+          "value": "Priya d/o Manoharan"
+        },
+        "finance_lease_liabilities_total": {
+          "confidence": 0.95,
+          "id": "e2de5b8e-5635-4da1-893e-c197e65be02b",
+          "value": 406150
+        },
+        "financial_year_end": {
+          "confidence": 1.0,
+          "id": "80c71003-76f2-4a20-b84f-bba4584c0d56",
+          "value": "30 June 2026"
+        },
+        "gross_profit": {
+          "confidence": 1.0,
+          "id": "01c404a7-a6fb-4ee8-b929-24084be2150e",
+          "value": 485800
+        },
+        "net_profit": {
+          "confidence": 1.0,
+          "id": "951c94cf-c25a-4ea0-a2ef-369c5168bdf8",
+          "value": 143200
+        },
+        "notes": {
+          "confidence": 1.0,
+          "id": "c0517fe5-9173-4680-a9a0-0e099578510c",
+          "value": [
+            {
+              "heading": "GENERAL INFORMATION",
+              "note_number": "1",
+              "text": "The Company is incorporated in the Republic of Singapore. The principal activities of the Company are those of general trading."
+            },
+            {
+              "heading": "BASIS OF PREPARATION AND SIGNIFICANT ACCOUNTING POLICIES",
+              "note_number": "2",
+              "text": "The financial statements have been prepared in accordance with the historical cost convention, except as disclosed in the accounting policies below, and are drawn up in accordance with the provisions of the Singapore Financial Reporting Standards for Small Entities (SFRS for Small Entities)."
+            },
+            {
+              "heading": "REVENUE",
+              "note_number": "3",
+              "text": "Revenue represents the invoiced value of goods sold, net of goods and services tax and trade discounts."
+            },
+            {
+              "heading": "OTHER INCOME",
+              "note_number": "4",
+              "text": "Other income comprises interest income and sundry income."
+            },
+            {
+              "heading": "STAFF COSTS",
+              "note_number": "5",
+              "text": "Staff costs include salaries, bonuses, and the Company's contributions to the Central Provident Fund on behalf of employees."
+            },
+            {
+              "heading": "PROPERTY, PLANT AND EQUIPMENT",
+              "note_number": "6",
+              "text": "Property, plant and equipment comprise office equipment, furniture and fittings, renovation, and motor vehicles used in the Company's trading operations, stated at cost less accumulated depreciation and accumulated impairment losses. Depreciation is computed on a straight-line basis over the estimated useful lives of the assets."
+            },
+            {
+              "heading": "FINANCE COSTS",
+              "note_number": "7",
+              "text": "Finance costs comprise interest expense on bank borrowings and finance lease liabilities."
+            },
+            {
+              "heading": "TAX EXPENSE",
+              "note_number": "8",
+              "text": "Tax expense represents the estimated Singapore corporate income tax payable, computed at the prevailing statutory tax rate on the Company's chargeable income for the year."
+            },
+            {
+              "heading": "INVENTORIES",
+              "note_number": "9",
+              "text": "Inventories are stated at the lower of cost and net realisable value. Cost is determined on a first-in-first-out basis."
+            },
+            {
+              "heading": "TRADE RECEIVABLES",
+              "note_number": "10",
+              "text": "Trade receivables are amounts due from customers in the ordinary course of business, stated net of allowance for expected credit losses."
+            },
+            {
+              "heading": "CASH AND BANK BALANCES",
+              "note_number": "11",
+              "text": "Cash and bank balances comprise cash on hand and balances with banks, including the Company's operating accounts used for day-to-day transactions."
+            },
+            {
+              "heading": "BANK BORROWINGS",
+              "note_number": "12",
+              "text": "Bank borrowings comprise a term loan facility, secured against the Company's property, plant and equipment, repayable in monthly instalments over the facility tenure."
+            },
+            {
+              "heading": "SHARE CAPITAL",
+              "note_number": "13",
+              "text": "Share capital comprises fully paid ordinary shares, with no par value, issued by the Company."
+            }
+          ]
+        },
+        "principal_activities": {
+          "confidence": 1.0,
+          "id": "7228c316-9cb9-40fe-9769-841fe33793e5",
+          "value": "General trading"
+        },
+        "prior_year_net_profit": {
+          "confidence": 1.0,
+          "id": "b0a304a4-1259-4086-bbe4-21ef97263029",
+          "value": 172900
+        },
+        "prior_year_revenue": {
+          "confidence": 1.0,
+          "id": "cf5ccd6b-65ad-4a6c-ad77-8d5a12b6938f",
+          "value": 1538000
+        },
+        "prior_year_total_assets": {
+          "confidence": 1.0,
+          "id": "266e087a-5bb9-4f0b-84c3-609053b86c0c",
+          "value": 1403300
+        },
+        "prior_year_total_liabilities": {
+          "confidence": 1.0,
+          "id": "732ab360-91f1-4e97-87a3-eafc63be1a35",
+          "value": 895400
+        },
+        "profit_before_taxation": {
+          "confidence": 1.0,
+          "id": "66a22862-1d98-45a6-a87f-94e963d4cd27",
+          "value": 172500
+        },
+        "profit_from_operations": {
+          "confidence": 1.0,
+          "id": "9704972b-77f4-436a-8d7a-492cbf7777ff",
+          "value": 182500
+        },
+        "property_plant_and_equipment": {
+          "confidence": 1.0,
+          "id": "420c6c73-e059-4b04-9a03-e409d045a9f7",
+          "value": 556300
+        },
+        "retained_earnings_end_of_year": {
+          "confidence": 1.0,
+          "id": "2e947ee2-6f8b-42fa-9e4e-77dfaec0f576",
+          "value": 451100
+        },
+        "revenue": {
+          "confidence": 1.0,
+          "id": "bc521ab2-59f1-4c41-87ea-b539212043cf",
+          "value": 1578000
+        },
+        "share_capital": {
+          "confidence": 1.0,
+          "id": "078ac2ca-a6fe-45ad-a77d-4c8df71510df",
+          "value": 200000
+        },
+        "signing_date": {
+          "confidence": 1.0,
+          "id": "56c6ae85-aee3-4df8-ad51-7cab3c08ee1a",
+          "value": "23 Nov 2026"
+        },
+        "tax_expense": {
+          "confidence": 1.0,
+          "id": "8377462e-f1f2-4792-86bc-80b46690e68e",
+          "value": 29300
+        },
+        "total_assets": {
+          "confidence": 1.0,
+          "id": "c4c9ea0d-f6c2-4a12-a9cf-a978305506a0",
+          "value": 1769900
+        },
+        "total_equity": {
+          "confidence": 1.0,
+          "id": "2213f1af-8f14-4c8a-9c07-332470d617b0",
+          "value": 651100
+        },
+        "total_liabilities": {
+          "confidence": 1.0,
+          "id": "bd13ab48-f681-47ca-a15e-1f2eace43122",
+          "value": 1118800
+        },
+        "uen": {
+          "confidence": 1.0,
+          "id": "74c5e8d9-afa0-41ed-b5e6-e5b2fd8790c5",
+          "value": "201634564N"
+        }
+      },
+      "extraction_confidence": 0.996428571428571,
+      "failure_reason": null,
+      "filename": "C014_SourceWealth_BS.pdf",
+      "fulfilled_requirements": [
+        "source_of_wealth"
+      ],
+      "id": "5d2dee2e-b850-4c8b-913f-71e71e2e8d07",
+      "metadata": null,
+      "metadata_anomalies": null,
+      "processing_started_at": "2026-09-25T06:53:52.000944Z",
+      "queued_at": "2026-09-25T06:53:51.477986Z",
+      "retry_count": 0,
+      "routing_status": "accepted",
+      "status": "analyzed",
+      "storage_path": "regression-fixture/C014_SourceWealth_BS.pdf",
+      "uploaded_at": "2026-09-25T06:53:51.360867Z"
+    },
+    "71bc280f-36e1-4df0-bfa4-feed7fe1e481": {
+      "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
+      "classification_confidence": 0.95,
+      "document_type": "list_of_loans",
+      "escalation_reason": null,
+      "evidence": [
+        "Document headed as a loan facility offer letter (Enterprise Financing Scheme \u2013 SME Working Capital Loan)",
+        "Contains facility amount, tenure, and interest rate terms typical of a lending facility document",
+        "References a facility agreement, borrower acceptance terms, and security arrangement",
+        "Filename contains \"loans\" keyword, corroborating the text-based classification"
+      ],
+      "extracted_fields": {
+        "acceptance_date": {
+          "confidence": 0.99,
+          "id": "1e380e68-b0cc-4ed2-b638-cbd52afdcba9",
+          "value": "15 March 2026"
+        },
+        "bank_address": {
+          "confidence": 0.99,
+          "id": "63032e99-7a63-4ae1-acd6-0cf86afa1594",
+          "value": "65 Chulia Street, OCBC Centre, Singapore 049513"
+        },
+        "bank_name": {
+          "confidence": 0.99,
+          "id": "45429584-8c48-4e5e-b639-90b158130023",
+          "value": "OCBC Bank"
+        },
+        "bank_officer_name": {
+          "confidence": 0.99,
+          "id": "ae9b67d2-e1d8-4832-9c10-137a3a213e26",
+          "value": "Tan Mei Ling"
+        },
+        "bank_officer_title": {
+          "confidence": 0.99,
+          "id": "da40fd55-a1bb-48ad-a9de-7ada13a0203a",
+          "value": "Assistant Vice President, SME Banking"
+        },
+        "company_address": {
+          "confidence": 0.99,
+          "id": "f33cfe9f-a7cc-477b-bf68-1c59cab37710",
+          "value": "1 Fusionopolis Place, #14-05, Galaxis, Singapore 138522"
+        },
+        "company_name": {
+          "confidence": 0.99,
+          "id": "5d23300b-0a94-496a-88da-846a02a3712e",
+          "value": "Harbor Light Shipping Pte Ltd"
+        },
+        "document_date": {
+          "confidence": 0.99,
+          "id": "3905489d-95c9-441e-a834-f3ea63c6305e",
+          "value": "15 March 2026"
+        },
+        "document_type": {
+          "confidence": 0.99,
+          "id": "8daea3df-d23e-4a8a-be62-f292f87f43f7",
+          "value": "Letter of Offer \u2014 Enterprise Financing Scheme \u2013 SME Working Capital Loan"
+        },
+        "individual_name": {
+          "confidence": 0.99,
+          "id": "2cb0a402-9ffc-4732-8426-af36c2c0f200",
+          "value": "Priya d/o Manoharan"
+        },
+        "individual_title": {
+          "confidence": 0.99,
+          "id": "30fd9e92-ef5b-4f49-ab22-bf8d72eb2fbe",
+          "value": "Director"
+        },
+        "interest_rate": {
+          "confidence": 0.99,
+          "id": "ccfd2c84-9a1a-467d-8aad-a3432e80f9ad",
+          "value": "5.48% per annum"
+        },
+        "loan_amount": {
+          "confidence": 0.99,
+          "id": "c3da0817-302b-4711-b1ac-e10af7656427",
+          "value": "SGD 700,000.00"
+        },
+        "loan_tenure": {
+          "confidence": 0.99,
+          "id": "854f1a35-a580-4345-b040-5f31167abc84",
+          "value": "3 years"
+        },
+        "loan_terms": {
+          "confidence": 0.97,
+          "id": "f4ee5d40-aa88-45e8-a46e-05cec094b0af",
+          "value": [
+            {
+              "term_name": "Borrower",
+              "value": "Harbor Light Shipping Pte Ltd"
+            },
+            {
+              "term_name": "Scheme",
+              "value": "Enterprise Financing Scheme \u2013 SME Working Capital Loan"
+            },
+            {
+              "term_name": "Facility Type",
+              "value": "Term Loan under Enterprise Financing Scheme"
+            },
+            {
+              "term_name": "Purpose",
+              "value": "Working capital for business operations"
+            },
+            {
+              "term_name": "Government Risk Share",
+              "value": "70%"
+            },
+            {
+              "term_name": "Participating FI Risk Share",
+              "value": "30%"
+            },
+            {
+              "term_name": "Processing Fee",
+              "value": "1.00% of the facility amount, subject to minimum fee and eligibility checks"
+            },
+            {
+              "term_name": "Scheme Conditions",
+              "value": "Subject to prevailing Enterprise Singapore criteria and the Bank's internal credit approval"
+            },
+            {
+              "term_name": "Security",
+              "value": "Unsecured, backed by Enterprise Singapore risk-share"
+            },
+            {
+              "term_name": "Validity of Offer",
+              "value": "30 days from the date of this letter"
+            }
+          ]
+        },
+        "reference_number": {
+          "confidence": 0.99,
+          "id": "5da462b5-03fd-4c84-875b-2e2e0607c551",
+          "value": "EN/2026/C014"
+        },
+        "scheme_name": {
+          "confidence": 0.99,
+          "id": "cad2d94b-9d5a-4510-a5a3-65ef2292100e",
+          "value": "Enterprise Financing Scheme \u2013 SME Working Capital Loan"
+        },
+        "uen": {
+          "confidence": 0.99,
+          "id": "d4025176-bcf5-4595-85df-97f3a2a43d70",
+          "value": "201634564N"
+        }
+      },
+      "extraction_confidence": 0.988888888888889,
+      "failure_reason": null,
+      "filename": "C014_ListLoans_1 (1).pdf",
+      "fulfilled_requirements": [
+        "list_of_loans"
+      ],
+      "id": "71bc280f-36e1-4df0-bfa4-feed7fe1e481",
+      "metadata": null,
+      "metadata_anomalies": null,
+      "processing_started_at": "2026-09-25T06:53:52.071198Z",
+      "queued_at": "2026-09-25T06:53:51.507329Z",
+      "retry_count": 0,
+      "routing_status": "accepted",
+      "status": "analyzed",
+      "storage_path": "regression-fixture/C014_ListLoans_1 (1).pdf",
+      "uploaded_at": "2026-09-25T06:53:51.384482Z"
+    },
+    "d700d399-12b9-4eb8-b2b2-37e05f654d83": {
+      "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
+      "classification_confidence": 0.95,
+      "document_type": "certificate_of_incumbency",
+      "escalation_reason": null,
+      "evidence": [
+        "Filename contains \"incumbency\" \u2014 direct type signal",
+        "Text contains ACRA BizFile+ markers: \"accounting and corporate regulatory authority\", \"business profile\", \"bizfile\", \"uen\"",
+        "Document structure lists officers with positions and dates of appointment, and shareholders with share counts \u2014 hallmarks of an incumbency/BizProfile",
+        "Address check: not visible \u2014 address present but identified as a business/registered office address, not residential"
+      ],
+      "extracted_fields": {
+        "audit_firm_name": {
+          "confidence": 1.0,
+          "id": "60ab2b22-b018-4a99-af45-d5345dc56d88",
+          "value": "TAN & PARTNERS LLP"
+        },
+        "audit_firm_uen": {
+          "confidence": 1.0,
+          "id": "56d73eb8-e976-4563-86e3-76ff9cc8df18",
+          "value": "T09LL0512C"
+        },
+        "authentication_number": {
+          "confidence": 1.0,
+          "id": "fea9e2e7-a33d-4657-93be-82ac7097ec74",
+          "value": "A20375282Z"
+        },
+        "company_address": {
+          "confidence": 1.0,
+          "id": "43382441-b208-487c-8289-1265894d6f78",
+          "value": "1 FUSIONOPOLIS PLACE, #14-05, GALAXIS, SINGAPORE 138522"
+        },
+        "company_name": {
+          "confidence": 1.0,
+          "id": "19ee538a-6b0f-41f4-b6aa-03c352ad9e8e",
+          "value": "HARBOR LIGHT SHIPPING PTE LTD"
+        },
+        "company_status": {
+          "confidence": 1.0,
+          "id": "a70a9ff3-c338-4370-9ed6-6612ce843296",
+          "value": "LIVE COMPANY"
+        },
+        "company_type": {
+          "confidence": 1.0,
+          "id": "c766c408-b174-4d0a-8dce-982140683cd4",
+          "value": "PRIVATE COMPANY LIMITED BY SHARES"
+        },
+        "date_of_last_agm": {
+          "confidence": 1.0,
+          "id": "9086094c-aaf0-4ab2-9c25-dd5b5c7a81c9",
+          "value": "21/05/2026"
+        },
+        "date_of_last_ar": {
+          "confidence": 1.0,
+          "id": "58d221c3-6f47-405e-b587-5d501ac201da",
+          "value": "30/05/2026"
+        },
+        "director_address": {
+          "confidence": 0.9,
+          "id": "fd0915c7-0a72-4fec-86a4-828257cf2dc6",
+          "value": "4 KOVAN ROAD, #06-28, SINGAPORE 765942"
+        },
+        "director_appointment_date": {
+          "confidence": 1.0,
+          "id": "3d3be5a5-004b-453a-b45a-209d1295823b",
+          "value": "10/06/2016"
+        },
+        "director_id_number": {
+          "confidence": 1.0,
+          "id": "f6927e2f-9e7a-4989-b2a0-698a83abc924",
+          "value": "S7634564N"
+        },
+        "director_name": {
+          "confidence": 1.0,
+          "id": "4258da43-8cc5-492f-a4f3-f6a67e9f6125",
+          "value": "PRIYA D/O MANOHARAN"
+        },
+        "director_nationality": {
+          "confidence": 1.0,
+          "id": "2e3f2f1c-05a1-461c-b500-e9cf80877b70",
+          "value": "SINGAPORE CITIZEN"
+        },
+        "document_date": {
+          "confidence": 1.0,
+          "id": "5fd601e3-611e-4e07-8ec8-37edc9249081",
+          "value": "07/03/2026"
+        },
+        "financial_year_end": {
+          "confidence": 1.0,
+          "id": "d854cffe-e9e2-4159-81f3-f53e4316fbfc",
+          "value": "31/12"
+        },
+        "id_number": {
+          "confidence": 0.95,
+          "id": "bf9eedba-964a-450e-b28e-0bc97d8792f6",
+          "value": "S7634564N"
+        },
+        "incorporation_date": {
+          "confidence": 1.0,
+          "id": "bf7a7a5d-4000-41a2-b8f6-244059530481",
+          "value": "10/06/2016"
+        },
+        "individual_address": {
+          "confidence": 0.9,
+          "id": "b92fccca-71fc-47a4-9ddb-fe5442f075d5",
+          "value": "4 KOVAN ROAD, #06-28, SINGAPORE 765942"
+        },
+        "individual_name": {
+          "confidence": 0.85,
+          "id": "334fcce6-aa2a-4b28-a1e7-62e7a8a833ad",
+          "value": "PRIYA D/O MANOHARAN"
+        },
+        "issuing_authority": {
+          "confidence": 1.0,
+          "id": "770829d8-b8ef-4005-8e9a-917ecd55f924",
+          "value": "ACCOUNTING AND CORPORATE REGULATORY AUTHORITY (ACRA)"
+        },
+        "number_of_shares": {
+          "confidence": 1.0,
+          "id": "468467ba-2cad-4d4c-b245-7963265b38ba",
+          "value": 500000
+        },
+        "principal_activity": {
+          "confidence": 1.0,
+          "id": "274cf7e1-06f6-4d71-99aa-cb1db924a000",
+          "value": "RETAIL SALE IN NON-SPECIALISED STORES N.E.C. (47199)"
+        },
+        "receipt_number": {
+          "confidence": 1.0,
+          "id": "a8c7905f-fa17-4ca4-84a2-ae9fb4dd4c69",
+          "value": "ACRA807756387542"
+        },
+        "secretary_address": {
+          "confidence": 1.0,
+          "id": "3f3d7635-9c1a-47d3-809f-af95ddbb7728",
+          "value": "8 CROSS STREET, #24-03 MANULIFE TOWER, SINGAPORE 048424"
+        },
+        "secretary_appointment_date": {
+          "confidence": 1.0,
+          "id": "20899197-6e5b-433b-9174-6c2b32420c9e",
+          "value": "14/08/2016"
+        },
+        "secretary_id_number": {
+          "confidence": 1.0,
+          "id": "9f706bef-3bc5-43a4-9faa-5e832e8565fd",
+          "value": "S8081681J"
+        },
+        "secretary_name": {
+          "confidence": 1.0,
+          "id": "d59f24a3-9660-4ae7-ae76-28264409eab1",
+          "value": "GOH MEI LING"
+        },
+        "share_capital": {
+          "confidence": 1.0,
+          "id": "a502fb5f-1c05-4a68-87c1-b4f31aa71fe8",
+          "value": "500,000.00 SGD"
+        },
+        "share_class": {
+          "confidence": 1.0,
+          "id": "b82e27b9-3734-4bbd-ab6d-accb9adf28ed",
+          "value": "ORDINARY"
+        },
+        "share_currency": {
+          "confidence": 1.0,
+          "id": "1087ae39-1479-4f01-bdae-ac3d1e37f2dd",
+          "value": "SINGAPORE DOLLARS"
+        },
+        "shareholders": {
+          "confidence": 1.0,
+          "id": "0fe31095-8227-4598-b1aa-7e5b25f4eba7",
+          "value": [
+            {
+              "address": "4 KOVAN ROAD, #06-28, SINGAPORE 765942",
+              "id_number": "S7634564N",
+              "name": "PRIYA D/O MANOHARAN",
+              "nationality": "SINGAPORE CITIZEN",
+              "share_type": "ORDINARY",
+              "shares": 350000
+            },
+            {
+              "address": "14 WOODLANDS STREET 13, #02-02, SINGAPORE 103523",
+              "id_number": "S8001781P",
+              "name": "AINA BATRISYIA BINTE YUSOF",
+              "nationality": "SINGAPORE CITIZEN",
+              "share_type": "ORDINARY",
+              "shares": 150000
+            }
+          ]
+        },
+        "status_date": {
+          "confidence": 1.0,
+          "id": "c084e735-4565-4bc4-80b0-401441ec9f29",
+          "value": "10/06/2016"
+        },
+        "uen": {
+          "confidence": 1.0,
+          "id": "7236011e-35b5-496f-9815-39d4c21385bd",
+          "value": "201634564N"
+        }
+      },
+      "extraction_confidence": 0.988235294117647,
+      "failure_reason": null,
+      "filename": "C014_CertIncumbency.pdf",
+      "fulfilled_requirements": [
+        "certificate_of_incumbency"
+      ],
+      "id": "d700d399-12b9-4eb8-b2b2-37e05f654d83",
+      "metadata": null,
+      "metadata_anomalies": null,
+      "processing_started_at": "2026-09-25T06:53:51.807129Z",
+      "queued_at": "2026-09-25T06:53:51.517862Z",
+      "retry_count": 0,
+      "routing_status": "accepted",
+      "status": "analyzed",
+      "storage_path": "regression-fixture/C014_CertIncumbency.pdf",
+      "uploaded_at": "2026-09-25T06:53:51.359494Z"
+    },
+    "e6001e0b-3c13-4053-870a-4c3b1719714c": {
+      "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
+      "classification_confidence": 0.985,
+      "document_type": "certificate_of_incorporation",
+      "escalation_reason": null,
+      "evidence": [
+        "Title heading: 'Certificate Confirming Incorporation of Company'",
+        "Issued by ACRA, signed by Asst Registrar of Companies & Business Names",
+        "References 'incorporated under the Companies Act 1967'",
+        "Company type identified as Limited Exempt Private Company with UEN present"
+      ],
+      "extracted_fields": {
+        "certificate_date": {
+          "confidence": 0.97,
+          "id": "0402cebf-13ec-4fa0-aab6-429904cbb486",
+          "value": "10 Jun 2016"
+        },
+        "company_former_name": {
+          "confidence": 1.0,
+          "id": "5debfe79-3427-47a4-bc91-e12bc043fc56",
+          "value": null
+        },
+        "company_name": {
+          "confidence": 0.85,
+          "id": "875e001c-ada1-4400-966e-f0768826707d",
+          "value": "HARBOR LIGHT SHIPING PTE LTD"
+        },
+        "company_type": {
+          "confidence": 0.99,
+          "id": "f45e251b-8a26-4bde-b8b2-c3ed37744fd6",
+          "value": "Limited Exempt Private Company"
+        },
+        "incorporating_act": {
+          "confidence": 0.97,
+          "id": "fc3aee94-5c06-4a6b-881d-868944a50495",
+          "value": "Companies Act 1967"
+        },
+        "incorporation_date": {
+          "confidence": 0.99,
+          "id": "ed6c5ccf-c8cc-4956-ac07-00030d08891a",
+          "value": "10 Jun 2016"
+        },
+        "issuing_authority": {
+          "confidence": 0.99,
+          "id": "4b6e096b-8e0b-421c-9812-6257966f4d65",
+          "value": "Accounting and Corporate Regulatory Authority Singapore (ACRA)"
+        },
+        "receipt_number": {
+          "confidence": 0.99,
+          "id": "31e596ac-a660-4b61-b154-1183e1fbb5a9",
+          "value": "ACRA160610913961"
+        },
+        "registrar_name": {
+          "confidence": 0.99,
+          "id": "36ad41a4-97af-4402-b4ed-aa8e25b8bd27",
+          "value": "LIM BEE HOON"
+        },
+        "registrar_title": {
+          "confidence": 0.99,
+          "id": "4b0f3e03-69e0-4519-9977-b61dd7e6e131",
+          "value": "Asst Registrar of Companies & Business Names"
+        },
+        "uen": {
+          "confidence": 0.97,
+          "id": "dccb1b25-69a5-4753-8bd9-afb5d108b8e1",
+          "value": "201634564N"
+        },
+        "verification_url": {
+          "confidence": 0.95,
+          "id": "aaf57dd9-954e-41a2-abbd-e25d611ac5a7",
+          "value": "https://www.acratrustbar.gov.sg/verify/4n3NIEdM"
+        }
+      },
+      "extraction_confidence": 0.970833333333333,
+      "failure_reason": null,
+      "filename": "C014_CertIncorp.pdf",
+      "fulfilled_requirements": [
+        "certificate_of_incorporation"
+      ],
+      "id": "e6001e0b-3c13-4053-870a-4c3b1719714c",
+      "metadata": null,
+      "metadata_anomalies": null,
+      "processing_started_at": "2026-09-25T06:53:52.031538Z",
+      "queued_at": "2026-09-25T06:53:51.833474Z",
+      "retry_count": 0,
+      "routing_status": "accepted",
+      "status": "analyzed",
+      "storage_path": "regression-fixture/C014_CertIncorp.pdf",
+      "uploaded_at": "2026-09-25T06:53:51.735348Z"
+    },
+    "ead6c799-3b2f-40d9-bda1-b36435f08ec1": {
+      "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
+      "classification_confidence": 0.95,
+      "document_type": "passport",
+      "escalation_reason": null,
+      "evidence": [
+        "Heading reads \"PASSPORT\" with \"REPUBLIC OF SINGAPORE\" and national crest",
+        "Type / Country Code / Passport No row present",
+        "Two-line machine-readable zone with \"<\" filler characters present",
+        "Fields for Nationality, Date of expiry, Authority, and Place of birth present \u2014 no residential address block"
+      ],
+      "extracted_fields": {
+        "country_code": {
+          "confidence": 0.99,
+          "id": "80d6ec82-f132-4672-9639-760b29ab7ead",
+          "value": "SGP"
+        },
+        "date_of_birth": {
+          "confidence": 0.99,
+          "id": "08a262c4-68d6-42d3-a83d-4450a7b5160c",
+          "value": "04 APR 1972"
+        },
+        "date_of_expiry": {
+          "confidence": 0.99,
+          "id": "35745a96-486d-49ac-8acf-33ad30412843",
+          "value": "27 JUL 2033"
+        },
+        "date_of_issue": {
+          "confidence": 0.99,
+          "id": "784ee553-3310-43b4-bb66-8c0b9604362a",
+          "value": "27 JUL 2023"
+        },
+        "document_type": {
+          "confidence": 0.99,
+          "id": "64f7869b-7107-49e2-a861-905b9efdd4fa",
+          "value": "PA"
+        },
+        "individual_name": {
+          "confidence": 0.99,
+          "id": "cbf9b6cf-a139-485e-a50b-608bcf2cbf52",
+          "value": "TEO KAI MING"
+        },
+        "issuing_authority": {
+          "confidence": 0.99,
+          "id": "40d3a102-76ec-4f2b-9d67-87cdd67e70fb",
+          "value": "MINISTRY OF HOME AFFAIRS"
+        },
+        "mrz": {
+          "confidence": 0.95,
+          "id": "f9552648-1bb5-4e13-afed-0e0680763dd6",
+          "value": "PASGPEO<<KAI<MING<<<<<<<<<<<<<<<<<<<<<<<<<<<<\nK2180392J4SGP7204047M3307272S7273147P<<<<<28"
+        },
+        "nationality": {
+          "confidence": 0.99,
+          "id": "5fcc438e-3205-483e-9e3f-3bd40fee50eb",
+          "value": "SINGAPORE CITIZEN"
+        },
+        "nric_number": {
+          "confidence": 0.99,
+          "id": "35ece26a-bef6-4a83-b263-349b0c7a54dd",
+          "value": "S7273147P"
+        },
+        "passport_number": {
+          "confidence": 0.99,
+          "id": "5dd77b31-09f3-4a35-b699-e99f718b5a3e",
+          "value": "K2180392J"
+        },
+        "place_of_birth": {
+          "confidence": 0.99,
+          "id": "0c11a89e-0aac-4cec-9e7f-78fbec16f3de",
+          "value": "SINGAPORE"
+        },
+        "sex": {
+          "confidence": 0.99,
+          "id": "d4661190-f365-4b08-b352-07bb6dd7b6f2",
+          "value": "M"
+        }
+      },
+      "extraction_confidence": 0.986923076923077,
+      "failure_reason": null,
+      "filename": "Passport_5187.jpeg",
+      "fulfilled_requirements": [
+        "id_document"
+      ],
+      "id": "ead6c799-3b2f-40d9-bda1-b36435f08ec1",
+      "metadata": null,
+      "metadata_anomalies": null,
+      "processing_started_at": "2026-09-25T06:54:31.414055Z",
+      "queued_at": "2026-09-25T06:53:51.974164Z",
+      "retry_count": 0,
+      "routing_status": "accepted",
+      "status": "analyzed",
+      "storage_path": "regression-fixture/Passport_5187.jpeg",
+      "uploaded_at": "2026-09-25T06:53:51.596117Z"
+    }
+  },
+  "rows": [
+    {
+      "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
+      "classification_confidence": 0.95,
+      "document_type": "certificate_of_incumbency",
+      "escalation_reason": null,
+      "evidence": [
+        "Filename contains \"incumbency\" \u2014 direct type signal",
+        "Text contains ACRA BizFile+ markers: \"accounting and corporate regulatory authority\", \"business profile\", \"bizfile\", \"uen\"",
+        "Document structure lists officers with positions and dates of appointment, and shareholders with share counts \u2014 hallmarks of an incumbency/BizProfile",
+        "Address check: not visible \u2014 address present but identified as a business/registered office address, not residential"
+      ],
+      "extracted_fields": {
+        "audit_firm_name": "TAN & PARTNERS LLP",
+        "audit_firm_uen": "T09LL0512C",
+        "authentication_number": "A20375282Z",
+        "company_address": "1 FUSIONOPOLIS PLACE, #14-05, GALAXIS, SINGAPORE 138522",
+        "company_name": "HARBOR LIGHT SHIPPING PTE LTD",
+        "company_status": "LIVE COMPANY",
+        "company_type": "PRIVATE COMPANY LIMITED BY SHARES",
+        "date_of_last_agm": "21/05/2026",
+        "date_of_last_ar": "30/05/2026",
+        "director_address": "4 KOVAN ROAD, #06-28, SINGAPORE 765942",
+        "director_appointment_date": "10/06/2016",
+        "director_id_number": "S7634564N",
+        "director_name": "PRIYA D/O MANOHARAN",
+        "director_nationality": "SINGAPORE CITIZEN",
+        "document_date": "07/03/2026",
+        "financial_year_end": "31/12",
+        "id_number": "S7634564N",
+        "incorporation_date": "10/06/2016",
+        "individual_address": "4 KOVAN ROAD, #06-28, SINGAPORE 765942",
+        "individual_name": "PRIYA D/O MANOHARAN",
+        "issuing_authority": "ACCOUNTING AND CORPORATE REGULATORY AUTHORITY (ACRA)",
+        "number_of_shares": 500000,
+        "principal_activity": "RETAIL SALE IN NON-SPECIALISED STORES N.E.C. (47199)",
+        "receipt_number": "ACRA807756387542",
+        "secretary_address": "8 CROSS STREET, #24-03 MANULIFE TOWER, SINGAPORE 048424",
+        "secretary_appointment_date": "14/08/2016",
+        "secretary_id_number": "S8081681J",
+        "secretary_name": "GOH MEI LING",
+        "share_capital": "500,000.00 SGD",
+        "share_class": "ORDINARY",
+        "share_currency": "SINGAPORE DOLLARS",
+        "shareholders": [
+          {
+            "address": "4 KOVAN ROAD, #06-28, SINGAPORE 765942",
+            "id_number": "S7634564N",
+            "name": "PRIYA D/O MANOHARAN",
+            "nationality": "SINGAPORE CITIZEN",
+            "share_type": "ORDINARY",
+            "shares": 350000
+          },
+          {
+            "address": "14 WOODLANDS STREET 13, #02-02, SINGAPORE 103523",
+            "id_number": "S8001781P",
+            "name": "AINA BATRISYIA BINTE YUSOF",
+            "nationality": "SINGAPORE CITIZEN",
+            "share_type": "ORDINARY",
+            "shares": 150000
+          }
+        ],
+        "status_date": "10/06/2016",
+        "uen": "201634564N"
+      },
+      "extraction_confidence": 0.988235294117647,
+      "failure_reason": null,
+      "filename": "C014_CertIncumbency.pdf",
+      "fulfilled_requirements": [
+        "certificate_of_incumbency"
+      ],
+      "id": "d700d399-12b9-4eb8-b2b2-37e05f654d83",
+      "metadata": null,
+      "metadata_anomalies": null,
+      "processing_started_at": "2026-09-25T06:53:51.807129Z",
+      "queued_at": "2026-09-25T06:53:51.517862Z",
+      "retry_count": 0,
+      "routing_status": "accepted",
+      "status": "analyzed",
+      "storage_path": "regression-fixture/C014_CertIncumbency.pdf",
+      "uploaded_at": "2026-09-25T06:53:51.359494Z"
+    },
+    {
+      "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
+      "classification_confidence": 0.95,
+      "document_type": "passport",
+      "escalation_reason": null,
+      "evidence": [
+        "Heading reads \"PASSPORT\" with \"REPUBLIC OF SINGAPORE\" and national crest",
+        "Type / Country Code / Passport No row present",
+        "Two-line machine-readable zone with \"<\" filler characters present",
+        "Fields for Nationality, Date of expiry, Authority, and Place of birth present \u2014 no residential address block"
+      ],
+      "extracted_fields": {
+        "country_code": "SGP",
+        "date_of_birth": "04 APR 1972",
+        "date_of_expiry": "27 JUL 2033",
+        "date_of_issue": "27 JUL 2023",
+        "document_type": "PA",
+        "individual_name": "TEO KAI MING",
+        "issuing_authority": "MINISTRY OF HOME AFFAIRS",
+        "mrz": "PASGPEO<<KAI<MING<<<<<<<<<<<<<<<<<<<<<<<<<<<<\nK2180392J4SGP7204047M3307272S7273147P<<<<<28",
+        "nationality": "SINGAPORE CITIZEN",
+        "nric_number": "S7273147P",
+        "passport_number": "K2180392J",
+        "place_of_birth": "SINGAPORE",
+        "sex": "M"
+      },
+      "extraction_confidence": 0.986923076923077,
+      "failure_reason": null,
+      "filename": "Passport_5187.jpeg",
+      "fulfilled_requirements": [
+        "id_document"
+      ],
+      "id": "ead6c799-3b2f-40d9-bda1-b36435f08ec1",
+      "metadata": null,
+      "metadata_anomalies": null,
+      "processing_started_at": "2026-09-25T06:54:31.414055Z",
+      "queued_at": "2026-09-25T06:53:51.974164Z",
+      "retry_count": 0,
+      "routing_status": "accepted",
+      "status": "analyzed",
+      "storage_path": "regression-fixture/Passport_5187.jpeg",
+      "uploaded_at": "2026-09-25T06:53:51.596117Z"
+    },
+    {
+      "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
+      "classification_confidence": 0.98,
+      "document_type": "source_of_wealth",
+      "escalation_reason": null,
+      "evidence": [
+        "Contains \"Statement of Comprehensive Income\" and \"Statement of Financial Position\" \u2014 hallmarks of a full corporate financial statement set",
+        "Contains \"Notes to the Financial Statements\" prepared in accordance with SFRS for Small Entities",
+        "Filename signals \"source wealth\" / \"wealth\"",
+        "Address check: not visible \u2014 corporate financial statements; source_of_wealth never satisfies proof of address"
+      ],
+      "extracted_fields": {
+        "accounting_standard": "Singapore Financial Reporting Standards for Small Entities (SFRS for Small Entities)",
+        "bank_borrowings_total": 357270,
+        "cash_and_bank_balances": 828400,
+        "company_name": "Harbor Light Shipping Pte Ltd",
+        "currency": "Singapore Dollars (SGD)",
+        "director_name": "Priya d/o Manoharan",
+        "finance_lease_liabilities_total": 406150,
+        "financial_year_end": "30 June 2026",
+        "gross_profit": 485800,
+        "net_profit": 143200,
+        "notes": [
+          {
+            "heading": "GENERAL INFORMATION",
+            "note_number": "1",
+            "text": "The Company is incorporated in the Republic of Singapore. The principal activities of the Company are those of general trading."
+          },
+          {
+            "heading": "BASIS OF PREPARATION AND SIGNIFICANT ACCOUNTING POLICIES",
+            "note_number": "2",
+            "text": "The financial statements have been prepared in accordance with the historical cost convention, except as disclosed in the accounting policies below, and are drawn up in accordance with the provisions of the Singapore Financial Reporting Standards for Small Entities (SFRS for Small Entities)."
+          },
+          {
+            "heading": "REVENUE",
+            "note_number": "3",
+            "text": "Revenue represents the invoiced value of goods sold, net of goods and services tax and trade discounts."
+          },
+          {
+            "heading": "OTHER INCOME",
+            "note_number": "4",
+            "text": "Other income comprises interest income and sundry income."
+          },
+          {
+            "heading": "STAFF COSTS",
+            "note_number": "5",
+            "text": "Staff costs include salaries, bonuses, and the Company's contributions to the Central Provident Fund on behalf of employees."
+          },
+          {
+            "heading": "PROPERTY, PLANT AND EQUIPMENT",
+            "note_number": "6",
+            "text": "Property, plant and equipment comprise office equipment, furniture and fittings, renovation, and motor vehicles used in the Company's trading operations, stated at cost less accumulated depreciation and accumulated impairment losses. Depreciation is computed on a straight-line basis over the estimated useful lives of the assets."
+          },
+          {
+            "heading": "FINANCE COSTS",
+            "note_number": "7",
+            "text": "Finance costs comprise interest expense on bank borrowings and finance lease liabilities."
+          },
+          {
+            "heading": "TAX EXPENSE",
+            "note_number": "8",
+            "text": "Tax expense represents the estimated Singapore corporate income tax payable, computed at the prevailing statutory tax rate on the Company's chargeable income for the year."
+          },
+          {
+            "heading": "INVENTORIES",
+            "note_number": "9",
+            "text": "Inventories are stated at the lower of cost and net realisable value. Cost is determined on a first-in-first-out basis."
+          },
+          {
+            "heading": "TRADE RECEIVABLES",
+            "note_number": "10",
+            "text": "Trade receivables are amounts due from customers in the ordinary course of business, stated net of allowance for expected credit losses."
+          },
+          {
+            "heading": "CASH AND BANK BALANCES",
+            "note_number": "11",
+            "text": "Cash and bank balances comprise cash on hand and balances with banks, including the Company's operating accounts used for day-to-day transactions."
+          },
+          {
+            "heading": "BANK BORROWINGS",
+            "note_number": "12",
+            "text": "Bank borrowings comprise a term loan facility, secured against the Company's property, plant and equipment, repayable in monthly instalments over the facility tenure."
+          },
+          {
+            "heading": "SHARE CAPITAL",
+            "note_number": "13",
+            "text": "Share capital comprises fully paid ordinary shares, with no par value, issued by the Company."
+          }
+        ],
+        "principal_activities": "General trading",
+        "prior_year_net_profit": 172900,
+        "prior_year_revenue": 1538000,
+        "prior_year_total_assets": 1403300,
+        "prior_year_total_liabilities": 895400,
+        "profit_before_taxation": 172500,
+        "profit_from_operations": 182500,
+        "property_plant_and_equipment": 556300,
+        "retained_earnings_end_of_year": 451100,
+        "revenue": 1578000,
+        "share_capital": 200000,
+        "signing_date": "23 Nov 2026",
+        "tax_expense": 29300,
+        "total_assets": 1769900,
+        "total_equity": 651100,
+        "total_liabilities": 1118800,
+        "uen": "201634564N"
+      },
+      "extraction_confidence": 0.996428571428571,
+      "failure_reason": null,
+      "filename": "C014_SourceWealth_BS.pdf",
+      "fulfilled_requirements": [
+        "source_of_wealth"
+      ],
+      "id": "5d2dee2e-b850-4c8b-913f-71e71e2e8d07",
+      "metadata": null,
+      "metadata_anomalies": null,
+      "processing_started_at": "2026-09-25T06:53:52.000944Z",
+      "queued_at": "2026-09-25T06:53:51.477986Z",
+      "retry_count": 0,
+      "routing_status": "accepted",
+      "status": "analyzed",
+      "storage_path": "regression-fixture/C014_SourceWealth_BS.pdf",
+      "uploaded_at": "2026-09-25T06:53:51.360867Z"
+    },
+    {
+      "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
+      "classification_confidence": 0.95,
+      "document_type": "list_of_loans",
+      "escalation_reason": null,
+      "evidence": [
+        "Document headed as a loan facility offer letter (Enterprise Financing Scheme \u2013 SME Working Capital Loan)",
+        "Contains facility amount, tenure, and interest rate terms typical of a lending facility document",
+        "References a facility agreement, borrower acceptance terms, and security arrangement",
+        "Filename contains \"loans\" keyword, corroborating the text-based classification"
+      ],
+      "extracted_fields": {
+        "acceptance_date": "15 March 2026",
+        "bank_address": "65 Chulia Street, OCBC Centre, Singapore 049513",
+        "bank_name": "OCBC Bank",
+        "bank_officer_name": "Tan Mei Ling",
+        "bank_officer_title": "Assistant Vice President, SME Banking",
+        "company_address": "1 Fusionopolis Place, #14-05, Galaxis, Singapore 138522",
+        "company_name": "Harbor Light Shipping Pte Ltd",
+        "document_date": "15 March 2026",
+        "document_type": "Letter of Offer \u2014 Enterprise Financing Scheme \u2013 SME Working Capital Loan",
+        "individual_name": "Priya d/o Manoharan",
+        "individual_title": "Director",
+        "interest_rate": "5.48% per annum",
+        "loan_amount": "SGD 700,000.00",
+        "loan_tenure": "3 years",
+        "loan_terms": [
+          {
+            "term_name": "Borrower",
+            "value": "Harbor Light Shipping Pte Ltd"
+          },
+          {
+            "term_name": "Scheme",
+            "value": "Enterprise Financing Scheme \u2013 SME Working Capital Loan"
+          },
+          {
+            "term_name": "Facility Type",
+            "value": "Term Loan under Enterprise Financing Scheme"
+          },
+          {
+            "term_name": "Purpose",
+            "value": "Working capital for business operations"
+          },
+          {
+            "term_name": "Government Risk Share",
+            "value": "70%"
+          },
+          {
+            "term_name": "Participating FI Risk Share",
+            "value": "30%"
+          },
+          {
+            "term_name": "Processing Fee",
+            "value": "1.00% of the facility amount, subject to minimum fee and eligibility checks"
+          },
+          {
+            "term_name": "Scheme Conditions",
+            "value": "Subject to prevailing Enterprise Singapore criteria and the Bank's internal credit approval"
+          },
+          {
+            "term_name": "Security",
+            "value": "Unsecured, backed by Enterprise Singapore risk-share"
+          },
+          {
+            "term_name": "Validity of Offer",
+            "value": "30 days from the date of this letter"
+          }
+        ],
+        "reference_number": "EN/2026/C014",
+        "scheme_name": "Enterprise Financing Scheme \u2013 SME Working Capital Loan",
+        "uen": "201634564N"
+      },
+      "extraction_confidence": 0.988888888888889,
+      "failure_reason": null,
+      "filename": "C014_ListLoans_1 (1).pdf",
+      "fulfilled_requirements": [
+        "list_of_loans"
+      ],
+      "id": "71bc280f-36e1-4df0-bfa4-feed7fe1e481",
+      "metadata": null,
+      "metadata_anomalies": null,
+      "processing_started_at": "2026-09-25T06:53:52.071198Z",
+      "queued_at": "2026-09-25T06:53:51.507329Z",
+      "retry_count": 0,
+      "routing_status": "accepted",
+      "status": "analyzed",
+      "storage_path": "regression-fixture/C014_ListLoans_1 (1).pdf",
+      "uploaded_at": "2026-09-25T06:53:51.384482Z"
+    },
+    {
+      "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
+      "classification_confidence": 0.985,
+      "document_type": "certificate_of_incorporation",
+      "escalation_reason": null,
+      "evidence": [
+        "Title heading: 'Certificate Confirming Incorporation of Company'",
+        "Issued by ACRA, signed by Asst Registrar of Companies & Business Names",
+        "References 'incorporated under the Companies Act 1967'",
+        "Company type identified as Limited Exempt Private Company with UEN present"
+      ],
+      "extracted_fields": {
+        "certificate_date": "10 Jun 2016",
+        "company_former_name": null,
+        "company_name": "HARBOR LIGHT SHIPING PTE LTD",
+        "company_type": "Limited Exempt Private Company",
+        "incorporating_act": "Companies Act 1967",
+        "incorporation_date": "10 Jun 2016",
+        "issuing_authority": "Accounting and Corporate Regulatory Authority Singapore (ACRA)",
+        "receipt_number": "ACRA160610913961",
+        "registrar_name": "LIM BEE HOON",
+        "registrar_title": "Asst Registrar of Companies & Business Names",
+        "uen": "201634564N",
+        "verification_url": "https://www.acratrustbar.gov.sg/verify/4n3NIEdM"
+      },
+      "extraction_confidence": 0.970833333333333,
+      "failure_reason": null,
+      "filename": "C014_CertIncorp.pdf",
+      "fulfilled_requirements": [
+        "certificate_of_incorporation"
+      ],
+      "id": "e6001e0b-3c13-4053-870a-4c3b1719714c",
+      "metadata": null,
+      "metadata_anomalies": null,
+      "processing_started_at": "2026-09-25T06:53:52.031538Z",
+      "queued_at": "2026-09-25T06:53:51.833474Z",
+      "retry_count": 0,
+      "routing_status": "accepted",
+      "status": "analyzed",
+      "storage_path": "regression-fixture/C014_CertIncorp.pdf",
+      "uploaded_at": "2026-09-25T06:53:51.735348Z"
+    }
+  ],
+  "snapshot": {
+    "case": {
+      "company_name": "Harbor Light",
+      "created_at": "2026-09-25T06:53:29.169571Z",
+      "dev": true,
+      "documents_status": "analyzed",
+      "finalized_at": null,
+      "fulfilled_requirements": [
+        "certificate_of_incorporation",
+        "certificate_of_incumbency",
+        "source_of_wealth",
+        "id_document",
+        "list_of_loans"
+      ],
+      "greenlink_case_id": "GLDB-16",
+      "id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
+      "id_document_coverage": {
+        "covered": 1,
+        "missing_side": null,
+        "total": 1
+      },
+      "proof_of_address_coverage": {
+        "covered": 0,
+        "total": 1,
+        "unmatched_names": []
+      },
+      "recommended_additional_documents": [
+        "bank_statement",
+        "payslip",
+        "fatca_crs_declaration",
+        "company_constitution",
+        "proof_of_address",
+        "credit_report",
+        "notice_of_assessment"
+      ],
+      "status": "open",
+      "submission_finalized": false,
+      "updated_at": "2026-09-25T06:53:29.169571Z"
+    },
+    "case_match": {
+      "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
+      "documents": [
+        {
+          "can_proceed_to_fraud_detection": true,
+          "case_mismatch": false,
+          "comparisons": [],
+          "document_id": "d700d399-12b9-4eb8-b2b2-37e05f654d83",
+          "document_type": "certificate_of_incumbency",
+          "filename": "C014_CertIncumbency.pdf",
+          "reason": "Verified as the case's certificate of incumbency",
+          "status": "match"
+        },
+        {
+          "can_proceed_to_fraud_detection": false,
+          "case_mismatch": true,
+          "comparisons": [
+            {
+              "case_value": "S7634564N, S8081681J, S8001781P",
+              "check": "individual_id",
+              "document_field": "nric_number",
+              "document_value": "S7273147P",
+              "outcome": "mismatch",
+              "reason": "ID S7273147P (TEO KAI MING) is not any officer or shareholder on the certificate of incumbency"
+            }
+          ],
+          "document_id": "ead6c799-3b2f-40d9-bda1-b36435f08ec1",
+          "document_type": "passport",
+          "filename": "Passport_5187.jpeg",
+          "reason": "ID S7273147P (TEO KAI MING) is not any officer or shareholder on the certificate of incumbency",
+          "status": "manual_review"
+        },
+        {
+          "can_proceed_to_fraud_detection": true,
+          "case_mismatch": false,
+          "comparisons": [
+            {
+              "case_value": "201634564N",
+              "check": "company_uen",
+              "document_field": "uen",
+              "document_value": "201634564N",
+              "outcome": "match",
+              "reason": "UEN matches the certificate of incumbency"
+            },
+            {
+              "case_value": "PRIYA D/O MANOHARAN, GOH MEI LING, AINA BATRISYIA BINTE YUSOF",
+              "check": "individual_name",
+              "document_field": "director_name",
+              "document_value": "Priya d/o Manoharan",
+              "outcome": "match",
+              "reason": "Priya d/o Manoharan is listed on the certificate of incumbency"
+            }
+          ],
+          "document_id": "5d2dee2e-b850-4c8b-913f-71e71e2e8d07",
+          "document_type": "source_of_wealth",
+          "filename": "C014_SourceWealth_BS.pdf",
+          "reason": "Matches the case's company and individuals",
+          "status": "match"
+        },
+        {
+          "can_proceed_to_fraud_detection": true,
+          "case_mismatch": false,
+          "comparisons": [
+            {
+              "case_value": "201634564N",
+              "check": "company_uen",
+              "document_field": "uen",
+              "document_value": "201634564N",
+              "outcome": "match",
+              "reason": "UEN matches the certificate of incumbency"
+            },
+            {
+              "case_value": "PRIYA D/O MANOHARAN, GOH MEI LING, AINA BATRISYIA BINTE YUSOF",
+              "check": "individual_name",
+              "document_field": "individual_name",
+              "document_value": "Priya d/o Manoharan",
+              "outcome": "match",
+              "reason": "Priya d/o Manoharan is listed on the certificate of incumbency"
+            }
+          ],
+          "document_id": "71bc280f-36e1-4df0-bfa4-feed7fe1e481",
+          "document_type": "list_of_loans",
+          "filename": "C014_ListLoans_1 (1).pdf",
+          "reason": "Matches the case's company and individuals",
+          "status": "match"
+        },
+        {
+          "can_proceed_to_fraud_detection": true,
+          "case_mismatch": false,
+          "comparisons": [
+            {
+              "case_value": "201634564N",
+              "check": "company_uen",
+              "document_field": "uen",
+              "document_value": "201634564N",
+              "outcome": "match",
+              "reason": "UEN matches the certificate of incumbency"
+            }
+          ],
+          "document_id": "e6001e0b-3c13-4053-870a-4c3b1719714c",
+          "document_type": "certificate_of_incorporation",
+          "filename": "C014_CertIncorp.pdf",
+          "reason": "Matches the case's company and individuals",
+          "status": "match"
+        }
+      ],
+      "incumbency": {
+        "company_name": "HARBOR LIGHT SHIPPING PTE LTD",
+        "conflicting_document_ids": [],
+        "corroborating_document_ids": [
+          "5d2dee2e-b850-4c8b-913f-71e71e2e8d07",
+          "71bc280f-36e1-4df0-bfa4-feed7fe1e481",
+          "e6001e0b-3c13-4053-870a-4c3b1719714c"
+        ],
+        "document_id": "d700d399-12b9-4eb8-b2b2-37e05f654d83",
+        "individuals": [
+          {
+            "id_number": "S7634564N",
+            "name": "PRIYA D/O MANOHARAN"
+          },
+          {
+            "id_number": "S8081681J",
+            "name": "GOH MEI LING"
+          },
+          {
+            "id_number": "S8001781P",
+            "name": "AINA BATRISYIA BINTE YUSOF"
+          }
+        ],
+        "reasons": [
+          "3 other documents match the certificate of incumbency's company (201634564N)"
+        ],
+        "required_corroborations": 3,
+        "status": "verified",
+        "uen": "201634564N"
+      },
+      "mismatched_document_ids": [
+        "ead6c799-3b2f-40d9-bda1-b36435f08ec1"
+      ]
+    },
+    "documents": [
+      {
+        "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
+        "classification_confidence": 0.95,
+        "document_type": "certificate_of_incumbency",
+        "escalation_reason": null,
+        "evidence": [
+          "Filename contains \"incumbency\" \u2014 direct type signal",
+          "Text contains ACRA BizFile+ markers: \"accounting and corporate regulatory authority\", \"business profile\", \"bizfile\", \"uen\"",
+          "Document structure lists officers with positions and dates of appointment, and shareholders with share counts \u2014 hallmarks of an incumbency/BizProfile",
+          "Address check: not visible \u2014 address present but identified as a business/registered office address, not residential"
+        ],
+        "extracted_fields": {
+          "audit_firm_name": {
+            "confidence": 1.0,
+            "value": "TAN & PARTNERS LLP"
+          },
+          "audit_firm_uen": {
+            "confidence": 1.0,
+            "value": "T09LL0512C"
+          },
+          "authentication_number": {
+            "confidence": 1.0,
+            "value": "A20375282Z"
+          },
+          "company_address": {
+            "confidence": 1.0,
+            "value": "1 FUSIONOPOLIS PLACE, #14-05, GALAXIS, SINGAPORE 138522"
+          },
+          "company_name": {
+            "confidence": 1.0,
+            "value": "HARBOR LIGHT SHIPPING PTE LTD"
+          },
+          "company_status": {
+            "confidence": 1.0,
+            "value": "LIVE COMPANY"
+          },
+          "company_type": {
+            "confidence": 1.0,
+            "value": "PRIVATE COMPANY LIMITED BY SHARES"
+          },
+          "date_of_last_agm": {
+            "confidence": 1.0,
+            "value": "21/05/2026"
+          },
+          "date_of_last_ar": {
+            "confidence": 1.0,
+            "value": "30/05/2026"
+          },
+          "director_address": {
+            "confidence": 0.9,
+            "value": "4 KOVAN ROAD, #06-28, SINGAPORE 765942"
+          },
+          "director_appointment_date": {
+            "confidence": 1.0,
+            "value": "10/06/2016"
+          },
+          "director_id_number": {
+            "confidence": 1.0,
+            "value": "S7634564N"
+          },
+          "director_name": {
+            "confidence": 1.0,
+            "value": "PRIYA D/O MANOHARAN"
+          },
+          "director_nationality": {
+            "confidence": 1.0,
+            "value": "SINGAPORE CITIZEN"
+          },
+          "document_date": {
+            "confidence": 1.0,
+            "value": "07/03/2026"
+          },
+          "financial_year_end": {
+            "confidence": 1.0,
+            "value": "31/12"
+          },
+          "id_number": {
+            "confidence": 0.95,
+            "value": "S7634564N"
+          },
+          "incorporation_date": {
+            "confidence": 1.0,
+            "value": "10/06/2016"
+          },
+          "individual_address": {
+            "confidence": 0.9,
+            "value": "4 KOVAN ROAD, #06-28, SINGAPORE 765942"
+          },
+          "individual_name": {
+            "confidence": 0.85,
+            "value": "PRIYA D/O MANOHARAN"
+          },
+          "issuing_authority": {
+            "confidence": 1.0,
+            "value": "ACCOUNTING AND CORPORATE REGULATORY AUTHORITY (ACRA)"
+          },
+          "number_of_shares": {
+            "confidence": 1.0,
+            "value": 500000
+          },
+          "principal_activity": {
+            "confidence": 1.0,
+            "value": "RETAIL SALE IN NON-SPECIALISED STORES N.E.C. (47199)"
+          },
+          "receipt_number": {
+            "confidence": 1.0,
+            "value": "ACRA807756387542"
+          },
+          "secretary_address": {
+            "confidence": 1.0,
+            "value": "8 CROSS STREET, #24-03 MANULIFE TOWER, SINGAPORE 048424"
+          },
+          "secretary_appointment_date": {
+            "confidence": 1.0,
+            "value": "14/08/2016"
+          },
+          "secretary_id_number": {
+            "confidence": 1.0,
+            "value": "S8081681J"
+          },
+          "secretary_name": {
+            "confidence": 1.0,
+            "value": "GOH MEI LING"
+          },
+          "share_capital": {
+            "confidence": 1.0,
+            "value": "500,000.00 SGD"
+          },
+          "share_class": {
+            "confidence": 1.0,
+            "value": "ORDINARY"
+          },
+          "share_currency": {
+            "confidence": 1.0,
+            "value": "SINGAPORE DOLLARS"
+          },
+          "shareholders": {
+            "confidence": 1.0,
+            "value": [
+              {
+                "address": "4 KOVAN ROAD, #06-28, SINGAPORE 765942",
+                "id_number": "S7634564N",
+                "name": "PRIYA D/O MANOHARAN",
+                "nationality": "SINGAPORE CITIZEN",
+                "share_type": "ORDINARY",
+                "shares": 350000
+              },
+              {
+                "address": "14 WOODLANDS STREET 13, #02-02, SINGAPORE 103523",
+                "id_number": "S8001781P",
+                "name": "AINA BATRISYIA BINTE YUSOF",
+                "nationality": "SINGAPORE CITIZEN",
+                "share_type": "ORDINARY",
+                "shares": 150000
+              }
+            ]
+          },
+          "status_date": {
+            "confidence": 1.0,
+            "value": "10/06/2016"
+          },
+          "uen": {
+            "confidence": 1.0,
+            "value": "201634564N"
+          }
+        },
+        "extraction_confidence": 0.988235294117647,
+        "failure_reason": null,
+        "filename": "C014_CertIncumbency.pdf",
+        "fulfilled_requirements": [
+          "certificate_of_incumbency"
+        ],
+        "id": "d700d399-12b9-4eb8-b2b2-37e05f654d83",
+        "metadata": null,
+        "metadata_anomalies": null,
+        "processing_started_at": "2026-09-25T06:53:51.807129Z",
+        "queued_at": "2026-09-25T06:53:51.517862Z",
+        "retry_count": 0,
+        "routing_status": "accepted",
+        "status": "analyzed",
+        "storage_path": "regression-fixture/C014_CertIncumbency.pdf",
+        "uploaded_at": "2026-09-25T06:53:51.359494Z"
+      },
+      {
+        "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
+        "classification_confidence": 0.95,
+        "document_type": "passport",
+        "escalation_reason": null,
+        "evidence": [
+          "Heading reads \"PASSPORT\" with \"REPUBLIC OF SINGAPORE\" and national crest",
+          "Type / Country Code / Passport No row present",
+          "Two-line machine-readable zone with \"<\" filler characters present",
+          "Fields for Nationality, Date of expiry, Authority, and Place of birth present \u2014 no residential address block"
+        ],
+        "extracted_fields": {
+          "country_code": {
+            "confidence": 0.99,
+            "value": "SGP"
+          },
+          "date_of_birth": {
+            "confidence": 0.99,
+            "value": "04 APR 1972"
+          },
+          "date_of_expiry": {
+            "confidence": 0.99,
+            "value": "27 JUL 2033"
+          },
+          "date_of_issue": {
+            "confidence": 0.99,
+            "value": "27 JUL 2023"
+          },
+          "document_type": {
+            "confidence": 0.99,
+            "value": "PA"
+          },
+          "individual_name": {
+            "confidence": 0.99,
+            "value": "TEO KAI MING"
+          },
+          "issuing_authority": {
+            "confidence": 0.99,
+            "value": "MINISTRY OF HOME AFFAIRS"
+          },
+          "mrz": {
+            "confidence": 0.95,
+            "value": "PASGPEO<<KAI<MING<<<<<<<<<<<<<<<<<<<<<<<<<<<<\nK2180392J4SGP7204047M3307272S7273147P<<<<<28"
+          },
+          "nationality": {
+            "confidence": 0.99,
+            "value": "SINGAPORE CITIZEN"
+          },
+          "nric_number": {
+            "confidence": 0.99,
+            "value": "S7273147P"
+          },
+          "passport_number": {
+            "confidence": 0.99,
+            "value": "K2180392J"
+          },
+          "place_of_birth": {
+            "confidence": 0.99,
+            "value": "SINGAPORE"
+          },
+          "sex": {
+            "confidence": 0.99,
+            "value": "M"
+          }
+        },
+        "extraction_confidence": 0.986923076923077,
+        "failure_reason": null,
+        "filename": "Passport_5187.jpeg",
+        "fulfilled_requirements": [
+          "id_document"
+        ],
+        "id": "ead6c799-3b2f-40d9-bda1-b36435f08ec1",
+        "metadata": null,
+        "metadata_anomalies": null,
+        "processing_started_at": "2026-09-25T06:54:31.414055Z",
+        "queued_at": "2026-09-25T06:53:51.974164Z",
+        "retry_count": 0,
+        "routing_status": "accepted",
+        "status": "analyzed",
+        "storage_path": "regression-fixture/Passport_5187.jpeg",
+        "uploaded_at": "2026-09-25T06:53:51.596117Z"
+      },
+      {
+        "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
+        "classification_confidence": 0.98,
+        "document_type": "source_of_wealth",
+        "escalation_reason": null,
+        "evidence": [
+          "Contains \"Statement of Comprehensive Income\" and \"Statement of Financial Position\" \u2014 hallmarks of a full corporate financial statement set",
+          "Contains \"Notes to the Financial Statements\" prepared in accordance with SFRS for Small Entities",
+          "Filename signals \"source wealth\" / \"wealth\"",
+          "Address check: not visible \u2014 corporate financial statements; source_of_wealth never satisfies proof of address"
+        ],
+        "extracted_fields": {
+          "accounting_standard": {
+            "confidence": 1.0,
+            "value": "Singapore Financial Reporting Standards for Small Entities (SFRS for Small Entities)"
+          },
+          "bank_borrowings_total": {
+            "confidence": 0.95,
+            "value": 357270
+          },
+          "cash_and_bank_balances": {
+            "confidence": 1.0,
+            "value": 828400
+          },
+          "company_name": {
+            "confidence": 1.0,
+            "value": "Harbor Light Shipping Pte Ltd"
+          },
+          "currency": {
+            "confidence": 1.0,
+            "value": "Singapore Dollars (SGD)"
+          },
+          "director_name": {
+            "confidence": 1.0,
+            "value": "Priya d/o Manoharan"
+          },
+          "finance_lease_liabilities_total": {
+            "confidence": 0.95,
+            "value": 406150
+          },
+          "financial_year_end": {
+            "confidence": 1.0,
+            "value": "30 June 2026"
+          },
+          "gross_profit": {
+            "confidence": 1.0,
+            "value": 485800
+          },
+          "net_profit": {
+            "confidence": 1.0,
+            "value": 143200
+          },
+          "notes": {
+            "confidence": 1.0,
+            "value": [
+              {
+                "heading": "GENERAL INFORMATION",
+                "note_number": "1",
+                "text": "The Company is incorporated in the Republic of Singapore. The principal activities of the Company are those of general trading."
+              },
+              {
+                "heading": "BASIS OF PREPARATION AND SIGNIFICANT ACCOUNTING POLICIES",
+                "note_number": "2",
+                "text": "The financial statements have been prepared in accordance with the historical cost convention, except as disclosed in the accounting policies below, and are drawn up in accordance with the provisions of the Singapore Financial Reporting Standards for Small Entities (SFRS for Small Entities)."
+              },
+              {
+                "heading": "REVENUE",
+                "note_number": "3",
+                "text": "Revenue represents the invoiced value of goods sold, net of goods and services tax and trade discounts."
+              },
+              {
+                "heading": "OTHER INCOME",
+                "note_number": "4",
+                "text": "Other income comprises interest income and sundry income."
+              },
+              {
+                "heading": "STAFF COSTS",
+                "note_number": "5",
+                "text": "Staff costs include salaries, bonuses, and the Company's contributions to the Central Provident Fund on behalf of employees."
+              },
+              {
+                "heading": "PROPERTY, PLANT AND EQUIPMENT",
+                "note_number": "6",
+                "text": "Property, plant and equipment comprise office equipment, furniture and fittings, renovation, and motor vehicles used in the Company's trading operations, stated at cost less accumulated depreciation and accumulated impairment losses. Depreciation is computed on a straight-line basis over the estimated useful lives of the assets."
+              },
+              {
+                "heading": "FINANCE COSTS",
+                "note_number": "7",
+                "text": "Finance costs comprise interest expense on bank borrowings and finance lease liabilities."
+              },
+              {
+                "heading": "TAX EXPENSE",
+                "note_number": "8",
+                "text": "Tax expense represents the estimated Singapore corporate income tax payable, computed at the prevailing statutory tax rate on the Company's chargeable income for the year."
+              },
+              {
+                "heading": "INVENTORIES",
+                "note_number": "9",
+                "text": "Inventories are stated at the lower of cost and net realisable value. Cost is determined on a first-in-first-out basis."
+              },
+              {
+                "heading": "TRADE RECEIVABLES",
+                "note_number": "10",
+                "text": "Trade receivables are amounts due from customers in the ordinary course of business, stated net of allowance for expected credit losses."
+              },
+              {
+                "heading": "CASH AND BANK BALANCES",
+                "note_number": "11",
+                "text": "Cash and bank balances comprise cash on hand and balances with banks, including the Company's operating accounts used for day-to-day transactions."
+              },
+              {
+                "heading": "BANK BORROWINGS",
+                "note_number": "12",
+                "text": "Bank borrowings comprise a term loan facility, secured against the Company's property, plant and equipment, repayable in monthly instalments over the facility tenure."
+              },
+              {
+                "heading": "SHARE CAPITAL",
+                "note_number": "13",
+                "text": "Share capital comprises fully paid ordinary shares, with no par value, issued by the Company."
+              }
+            ]
+          },
+          "principal_activities": {
+            "confidence": 1.0,
+            "value": "General trading"
+          },
+          "prior_year_net_profit": {
+            "confidence": 1.0,
+            "value": 172900
+          },
+          "prior_year_revenue": {
+            "confidence": 1.0,
+            "value": 1538000
+          },
+          "prior_year_total_assets": {
+            "confidence": 1.0,
+            "value": 1403300
+          },
+          "prior_year_total_liabilities": {
+            "confidence": 1.0,
+            "value": 895400
+          },
+          "profit_before_taxation": {
+            "confidence": 1.0,
+            "value": 172500
+          },
+          "profit_from_operations": {
+            "confidence": 1.0,
+            "value": 182500
+          },
+          "property_plant_and_equipment": {
+            "confidence": 1.0,
+            "value": 556300
+          },
+          "retained_earnings_end_of_year": {
+            "confidence": 1.0,
+            "value": 451100
+          },
+          "revenue": {
+            "confidence": 1.0,
+            "value": 1578000
+          },
+          "share_capital": {
+            "confidence": 1.0,
+            "value": 200000
+          },
+          "signing_date": {
+            "confidence": 1.0,
+            "value": "23 Nov 2026"
+          },
+          "tax_expense": {
+            "confidence": 1.0,
+            "value": 29300
+          },
+          "total_assets": {
+            "confidence": 1.0,
+            "value": 1769900
+          },
+          "total_equity": {
+            "confidence": 1.0,
+            "value": 651100
+          },
+          "total_liabilities": {
+            "confidence": 1.0,
+            "value": 1118800
+          },
+          "uen": {
+            "confidence": 1.0,
+            "value": "201634564N"
+          }
+        },
+        "extraction_confidence": 0.996428571428571,
+        "failure_reason": null,
+        "filename": "C014_SourceWealth_BS.pdf",
+        "fulfilled_requirements": [
+          "source_of_wealth"
+        ],
+        "id": "5d2dee2e-b850-4c8b-913f-71e71e2e8d07",
+        "metadata": null,
+        "metadata_anomalies": null,
+        "processing_started_at": "2026-09-25T06:53:52.000944Z",
+        "queued_at": "2026-09-25T06:53:51.477986Z",
+        "retry_count": 0,
+        "routing_status": "accepted",
+        "status": "analyzed",
+        "storage_path": "regression-fixture/C014_SourceWealth_BS.pdf",
+        "uploaded_at": "2026-09-25T06:53:51.360867Z"
+      },
+      {
+        "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
+        "classification_confidence": 0.95,
+        "document_type": "list_of_loans",
+        "escalation_reason": null,
+        "evidence": [
+          "Document headed as a loan facility offer letter (Enterprise Financing Scheme \u2013 SME Working Capital Loan)",
+          "Contains facility amount, tenure, and interest rate terms typical of a lending facility document",
+          "References a facility agreement, borrower acceptance terms, and security arrangement",
+          "Filename contains \"loans\" keyword, corroborating the text-based classification"
+        ],
+        "extracted_fields": {
+          "acceptance_date": {
+            "confidence": 0.99,
+            "value": "15 March 2026"
+          },
+          "bank_address": {
+            "confidence": 0.99,
+            "value": "65 Chulia Street, OCBC Centre, Singapore 049513"
+          },
+          "bank_name": {
+            "confidence": 0.99,
+            "value": "OCBC Bank"
+          },
+          "bank_officer_name": {
+            "confidence": 0.99,
+            "value": "Tan Mei Ling"
+          },
+          "bank_officer_title": {
+            "confidence": 0.99,
+            "value": "Assistant Vice President, SME Banking"
+          },
+          "company_address": {
+            "confidence": 0.99,
+            "value": "1 Fusionopolis Place, #14-05, Galaxis, Singapore 138522"
+          },
+          "company_name": {
+            "confidence": 0.99,
+            "value": "Harbor Light Shipping Pte Ltd"
+          },
+          "document_date": {
+            "confidence": 0.99,
+            "value": "15 March 2026"
+          },
+          "document_type": {
+            "confidence": 0.99,
+            "value": "Letter of Offer \u2014 Enterprise Financing Scheme \u2013 SME Working Capital Loan"
+          },
+          "individual_name": {
+            "confidence": 0.99,
+            "value": "Priya d/o Manoharan"
+          },
+          "individual_title": {
+            "confidence": 0.99,
+            "value": "Director"
+          },
+          "interest_rate": {
+            "confidence": 0.99,
+            "value": "5.48% per annum"
+          },
+          "loan_amount": {
+            "confidence": 0.99,
+            "value": "SGD 700,000.00"
+          },
+          "loan_tenure": {
+            "confidence": 0.99,
+            "value": "3 years"
+          },
+          "loan_terms": {
+            "confidence": 0.97,
+            "value": [
+              {
+                "term_name": "Borrower",
+                "value": "Harbor Light Shipping Pte Ltd"
+              },
+              {
+                "term_name": "Scheme",
+                "value": "Enterprise Financing Scheme \u2013 SME Working Capital Loan"
+              },
+              {
+                "term_name": "Facility Type",
+                "value": "Term Loan under Enterprise Financing Scheme"
+              },
+              {
+                "term_name": "Purpose",
+                "value": "Working capital for business operations"
+              },
+              {
+                "term_name": "Government Risk Share",
+                "value": "70%"
+              },
+              {
+                "term_name": "Participating FI Risk Share",
+                "value": "30%"
+              },
+              {
+                "term_name": "Processing Fee",
+                "value": "1.00% of the facility amount, subject to minimum fee and eligibility checks"
+              },
+              {
+                "term_name": "Scheme Conditions",
+                "value": "Subject to prevailing Enterprise Singapore criteria and the Bank's internal credit approval"
+              },
+              {
+                "term_name": "Security",
+                "value": "Unsecured, backed by Enterprise Singapore risk-share"
+              },
+              {
+                "term_name": "Validity of Offer",
+                "value": "30 days from the date of this letter"
+              }
+            ]
+          },
+          "reference_number": {
+            "confidence": 0.99,
+            "value": "EN/2026/C014"
+          },
+          "scheme_name": {
+            "confidence": 0.99,
+            "value": "Enterprise Financing Scheme \u2013 SME Working Capital Loan"
+          },
+          "uen": {
+            "confidence": 0.99,
+            "value": "201634564N"
+          }
+        },
+        "extraction_confidence": 0.988888888888889,
+        "failure_reason": null,
+        "filename": "C014_ListLoans_1 (1).pdf",
+        "fulfilled_requirements": [
+          "list_of_loans"
+        ],
+        "id": "71bc280f-36e1-4df0-bfa4-feed7fe1e481",
+        "metadata": null,
+        "metadata_anomalies": null,
+        "processing_started_at": "2026-09-25T06:53:52.071198Z",
+        "queued_at": "2026-09-25T06:53:51.507329Z",
+        "retry_count": 0,
+        "routing_status": "accepted",
+        "status": "analyzed",
+        "storage_path": "regression-fixture/C014_ListLoans_1 (1).pdf",
+        "uploaded_at": "2026-09-25T06:53:51.384482Z"
+      },
+      {
+        "case_id": "81b0c15a-eacb-45e5-baa2-ed3650cf3970",
+        "classification_confidence": 0.985,
+        "document_type": "certificate_of_incorporation",
+        "escalation_reason": null,
+        "evidence": [
+          "Title heading: 'Certificate Confirming Incorporation of Company'",
+          "Issued by ACRA, signed by Asst Registrar of Companies & Business Names",
+          "References 'incorporated under the Companies Act 1967'",
+          "Company type identified as Limited Exempt Private Company with UEN present"
+        ],
+        "extracted_fields": {
+          "certificate_date": {
+            "confidence": 0.97,
+            "value": "10 Jun 2016"
+          },
+          "company_former_name": {
+            "confidence": 1.0,
+            "value": null
+          },
+          "company_name": {
+            "confidence": 0.85,
+            "value": "HARBOR LIGHT SHIPING PTE LTD"
+          },
+          "company_type": {
+            "confidence": 0.99,
+            "value": "Limited Exempt Private Company"
+          },
+          "incorporating_act": {
+            "confidence": 0.97,
+            "value": "Companies Act 1967"
+          },
+          "incorporation_date": {
+            "confidence": 0.99,
+            "value": "10 Jun 2016"
+          },
+          "issuing_authority": {
+            "confidence": 0.99,
+            "value": "Accounting and Corporate Regulatory Authority Singapore (ACRA)"
+          },
+          "receipt_number": {
+            "confidence": 0.99,
+            "value": "ACRA160610913961"
+          },
+          "registrar_name": {
+            "confidence": 0.99,
+            "value": "LIM BEE HOON"
+          },
+          "registrar_title": {
+            "confidence": 0.99,
+            "value": "Asst Registrar of Companies & Business Names"
+          },
+          "uen": {
+            "confidence": 0.97,
+            "value": "201634564N"
+          },
+          "verification_url": {
+            "confidence": 0.95,
+            "value": "https://www.acratrustbar.gov.sg/verify/4n3NIEdM"
+          }
+        },
+        "extraction_confidence": 0.970833333333333,
+        "failure_reason": null,
+        "filename": "C014_CertIncorp.pdf",
+        "fulfilled_requirements": [
+          "certificate_of_incorporation"
+        ],
+        "id": "e6001e0b-3c13-4053-870a-4c3b1719714c",
+        "metadata": null,
+        "metadata_anomalies": null,
+        "processing_started_at": "2026-09-25T06:53:52.031538Z",
+        "queued_at": "2026-09-25T06:53:51.833474Z",
+        "retry_count": 0,
+        "routing_status": "accepted",
+        "status": "analyzed",
+        "storage_path": "regression-fixture/C014_CertIncorp.pdf",
+        "uploaded_at": "2026-09-25T06:53:51.735348Z"
+      }
+    ],
+    "type": "snapshot"
+  },
+  "source": "Supabase case GLDB-16, captured by scripts/capture_regression_fixture.py"
+}
