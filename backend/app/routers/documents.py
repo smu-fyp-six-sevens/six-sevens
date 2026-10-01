@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from .. import document_repository, extracted_fields_repository, monitoring, storage_service
+from .. import case_service, document_repository, extracted_fields_repository, monitoring, storage_service
+from ..case_broadcaster import broadcaster
 
 from ._dependencies import get_document_or_404
 from ..config import settings
@@ -19,8 +20,14 @@ from ..langgraph.extraction_prompts import (
 from ..models import (
     IN_FLIGHT_STATUSES,
     AddExtractedFieldRequest,
+    BulkActionFailure,
+    BulkDeleteRequest,
+    BulkDeleteResponse,
+    BulkMoveRequest,
+    BulkMoveResponse,
     DocumentRecord,
     DocumentStatus,
+    MoveDocumentRequest,
     RoutingStatus,
     UpdateDocumentTypeRequest,
     UpdateExtractedFieldsRequest,
@@ -156,6 +163,213 @@ async def delete_document(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to delete the document. Check Supabase table access.",
         ) from exc
+
+
+async def _push_case_snapshot(case_id: str) -> None:
+    """Best-effort live refresh for a case's websocket subscribers (see
+    case_service.build_case_snapshot / routers/ws.py) — never raises, since
+    the write that triggered this already succeeded and is the source of
+    truth; a failed push just means that case's view goes stale until its
+    next real update instead."""
+    try:
+        snapshot = await asyncio.to_thread(case_service.build_case_snapshot, case_id)
+    except Exception:
+        logger.exception("Failed to build case snapshot for case %s", case_id)
+        return
+    if snapshot is not None:
+        broadcaster.publish(case_id, snapshot)
+
+
+async def _resync_case(case_id: str) -> None:
+    """Persists submission_finalized and pushes a fresh websocket snapshot —
+    the two things any mutation that can change a case's document set needs
+    to do. Best-effort/never raises, same reasoning as _push_case_snapshot."""
+    try:
+        await asyncio.to_thread(case_service.sync_submission_finalized, case_id)
+    except Exception:
+        logger.exception("Failed to resync submission_finalized for case %s", case_id)
+    await _push_case_snapshot(case_id)
+
+
+@router.post("/{document_id}/move", response_model=DocumentRecord)
+async def move_document(
+    document_id: str,
+    body: MoveDocumentRequest,
+    document: DocumentRecord = Depends(get_document_or_404),
+) -> DocumentRecord:
+    """
+    Reassigns a document to a different case — corrects a document uploaded
+    under the wrong case. Same eligibility as delete above: an approved
+    document is locked, and one still mid-pipeline would race it.
+    """
+    if document.status == DocumentStatus.APPROVED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An approved document cannot be moved.",
+        )
+    if document.status in IN_FLIGHT_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Document is still being processed; cancel it first, or wait "
+                "for it to finish, before moving it."
+            ),
+        )
+    if document.case_id == body.case_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Document is already in that case.",
+        )
+
+    target_case = await asyncio.to_thread(case_service.get_case, body.case_id)
+    if target_case is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target case not found")
+
+    old_case_id = document.case_id
+    try:
+        await asyncio.to_thread(document_repository.move_document, document_id, body.case_id)
+    except Exception as exc:
+        logger.exception("Failed to move document %s to case %s", document_id, body.case_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to move the document. Check Supabase table access.",
+        ) from exc
+
+    # document_repository.move_document already resynced the new case itself
+    # (see its own _sync_case call) — only the old case still needs it here.
+    # Its own Realtime row-change event (if any) only ever carries this
+    # document's NEW case_id, so it would never otherwise learn it lost one.
+    if old_case_id is not None:
+        await _resync_case(old_case_id)
+
+    return await get_document(document_id)
+
+
+@router.post("/bulk-move", response_model=BulkMoveResponse)
+async def bulk_move_documents(body: BulkMoveRequest) -> BulkMoveResponse:
+    """
+    Same eligibility as the single-document move above, applied to a batch
+    in one DB round trip — and each affected case is resynced exactly once
+    after the whole batch lands, not once per document (that's the one
+    thing a loop of N single-document moves can't do).
+    """
+    if not body.document_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No documents specified.")
+
+    target_case = await asyncio.to_thread(case_service.get_case, body.case_id)
+    if target_case is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target case not found")
+
+    try:
+        documents = await asyncio.to_thread(
+            document_repository.get_documents_by_ids, body.document_ids, include_fields=False
+        )
+    except Exception as exc:
+        logger.exception("Failed to fetch documents %s", body.document_ids)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch the documents. Check Supabase table access.",
+        ) from exc
+    documents_by_id = {document.id: document for document in documents}
+
+    eligible_ids: list[str] = []
+    failed: list[BulkActionFailure] = []
+    old_case_ids: set[str] = set()
+
+    for document_id in body.document_ids:
+        document = documents_by_id.get(document_id)
+        if document is None:
+            failed.append(BulkActionFailure(document_id=document_id, reason="Document not found"))
+        elif document.status == DocumentStatus.APPROVED:
+            failed.append(
+                BulkActionFailure(document_id=document_id, reason="An approved document cannot be moved.")
+            )
+        elif document.status in IN_FLIGHT_STATUSES:
+            failed.append(
+                BulkActionFailure(document_id=document_id, reason="Document is still being processed.")
+            )
+        elif document.case_id == body.case_id:
+            failed.append(
+                BulkActionFailure(document_id=document_id, reason="Document is already in that case.")
+            )
+        else:
+            eligible_ids.append(document_id)
+            if document.case_id is not None:
+                old_case_ids.add(document.case_id)
+
+    if eligible_ids:
+        try:
+            await asyncio.to_thread(document_repository.move_documents, eligible_ids, body.case_id)
+        except Exception as exc:
+            logger.exception("Bulk move failed for documents %s", eligible_ids)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Failed to move the documents. Check Supabase table access.",
+            ) from exc
+
+        for case_id in {*old_case_ids, body.case_id}:
+            await _resync_case(case_id)
+
+    return BulkMoveResponse(moved=eligible_ids, failed=failed)
+
+
+@router.post("/bulk-delete", response_model=BulkDeleteResponse)
+async def bulk_delete_documents(body: BulkDeleteRequest) -> BulkDeleteResponse:
+    """
+    Same eligibility as the single-document delete above, applied to a batch
+    — each affected case is resynced exactly once after the whole batch
+    lands, not once per document.
+    """
+    if not body.document_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No documents specified.")
+
+    try:
+        documents = await asyncio.to_thread(
+            document_repository.get_documents_by_ids, body.document_ids, include_fields=False
+        )
+    except Exception as exc:
+        logger.exception("Failed to fetch documents %s", body.document_ids)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch the documents. Check Supabase table access.",
+        ) from exc
+    documents_by_id = {document.id: document for document in documents}
+
+    eligible: list[DocumentRecord] = []
+    failed: list[BulkActionFailure] = []
+    case_ids: set[str] = set()
+
+    for document_id in body.document_ids:
+        document = documents_by_id.get(document_id)
+        if document is None:
+            failed.append(BulkActionFailure(document_id=document_id, reason="Document not found"))
+        elif document.status == DocumentStatus.APPROVED:
+            failed.append(
+                BulkActionFailure(document_id=document_id, reason="An approved document cannot be deleted.")
+            )
+        elif document.status in IN_FLIGHT_STATUSES:
+            failed.append(
+                BulkActionFailure(document_id=document_id, reason="Document is still being processed.")
+            )
+        else:
+            eligible.append(document)
+            if document.case_id is not None:
+                case_ids.add(document.case_id)
+
+    if eligible:
+        try:
+            await asyncio.to_thread(document_repository.remove_documents, eligible)
+        except Exception as exc:
+            logger.exception("Bulk delete failed for documents %s", [d.id for d in eligible])
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Failed to delete the documents. Check Supabase table access.",
+            ) from exc
+
+        for case_id in case_ids:
+            await _resync_case(case_id)
+
+    return BulkDeleteResponse(deleted=[d.id for d in eligible], failed=failed)
 
 
 @router.patch("/{document_id}/extracted-fields", response_model=DocumentRecord)

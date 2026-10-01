@@ -925,7 +925,12 @@ def _check_text_overlaps(blocks: list[_Block]) -> list[LayoutAnomaly]:
                         f"Text overlap near x={round(intersection_bbox[0])}, "
                         f"y={round(intersection_bbox[1])}"
                     ),
-                    bbox=tuple(round(v, 2) for v in intersection_bbox),
+                    bbox=(
+                        round(intersection_bbox[0], 2),
+                        round(intersection_bbox[1], 2),
+                        round(intersection_bbox[2], 2),
+                        round(intersection_bbox[3], 2),
+                    ),
                     text=(
                         f"{_snippet(left.text, 80)}"
                         f" ↔ "
