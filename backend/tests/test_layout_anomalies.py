@@ -380,6 +380,23 @@ def _single_line_pdf() -> bytes:
 
     return _pdf_bytes(build)
 
+def _text_overlap_pdf() -> bytes:
+    def build(doc):
+        page = doc.new_page(width=400, height=240)
+        page.insert_text(
+            (80, 100),
+            "Original text",
+            fontsize=12,
+            fontname="helv",
+        )
+        page.insert_text(
+            (80, 100),
+            "Overlaid text",
+            fontsize=12,
+            fontname="helv",
+        )
+
+    return _pdf_bytes(build)
 
 def _line(bbox, **kwargs) -> _Line:
     values = dict(
@@ -412,6 +429,70 @@ def _block(lines: list[_Line], **kwargs) -> _Block:
     values.update(kwargs)
     return _Block(**values)
 
+def test_text_overlap_detects_overlapping_text_boxes() -> None:
+    left = _line(
+        (100.0, 100.0, 220.0, 120.0),
+        text="Original text",
+    )
+    right = _line(
+        (170.0, 105.0, 280.0, 125.0),
+        text="Overlaid text",
+    )
+
+    findings = lr._check_text_overlaps(
+        [
+            _block([left]),
+            _block([right]),
+        ]
+    )
+
+    assert len(findings) == 1
+
+    finding = findings[0]
+
+    assert finding.anomaly_type == "Text Overlay"
+    assert finding.page == 1
+    assert finding.evidence["kind"] == "text-overlay"
+    assert finding.evidence["left_text"] == "Original text"
+    assert finding.evidence["right_text"] == "Overlaid text"
+    assert finding.evidence["overlap_ratio"] > 0.20
+    assert finding.bbox == (170.0, 105.0, 220.0, 120.0)
+
+def test_repeated_central_watermark_overlap_is_ignored() -> None:
+    blocks = [
+        _block([
+            _line(
+                (170.0, 360.0, 440.0, 410.0),
+                text="CONFIDENTIAL",
+                page=0,
+            ),
+        ]),
+        _block([
+            _line(
+                (170.0, 360.0, 440.0, 410.0),
+                text="CONFIDENTIAL",
+                page=1,
+            ),
+        ]),
+        _block([
+            _line(
+                (150.0, 380.0, 450.0, 400.0),
+                text="Document body text",
+                page=0,
+            ),
+        ]),
+        _block([
+            _line(
+                (150.0, 380.0, 450.0, 400.0),
+                text="Different body text",
+                page=1,
+            ),
+        ]),
+    ]
+
+    findings = lr._check_text_overlaps(blocks)
+
+    assert findings == []
 
 def _ml_block(y0: float, leadings: list[float], *, x0: float = 72.0, x1: float = 540.0) -> _Block:
     y = y0
@@ -528,6 +609,25 @@ def test_content_column_and_page_margins() -> None:
 # public API — Unable to Assess (AC5)
 # ---------------------------------------------------------------------------
 
+def test_public_api_detects_text_overlay() -> None:
+    result = check_layout_anomalies("doc-1", _text_overlap_pdf())
+
+    overlays = [
+        finding
+        for finding in result.anomalies
+        if finding.anomaly_type == "Text Overlay"
+    ]
+
+    assert overlays
+
+    finding = overlays[0]
+
+    assert finding.page == 1
+    assert finding.evidence["kind"] == "text-overlay"
+    assert "Original text" in finding.evidence["left_text"]
+    assert "Overlaid text" in finding.evidence["right_text"]
+    assert finding.bbox
+    assert finding.confidence > 0
 
 def test_check_invalid_empty_and_image_only() -> None:
     bad = check_layout_anomalies("doc-1", b"not-a-pdf")
@@ -547,6 +647,15 @@ def test_check_invalid_empty_and_image_only() -> None:
     assert image_only.unable_to_assess is True
     assert "embedded images" in (image_only.unable_to_assess_reason or "")
 
+def test_image_only_document_has_no_text_overlay_finding() -> None:
+    result = check_layout_anomalies("doc-1", _image_only_pdf())
+
+    assert result.unable_to_assess is True
+    assert result.anomalies == []
+    assert not any(
+        finding.anomaly_type == "Text Overlay"
+        for finding in result.anomalies
+    )
 
 def test_check_returns_empty_on_internal_error(monkeypatch) -> None:
     monkeypatch.setattr(

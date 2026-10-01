@@ -15,7 +15,13 @@ _T = TypeVar("_T")
 
 BBox = tuple[float, float, float, float]
 Alignment = Literal["left-aligned", "centred", "right-aligned", "justified"]
-AnomalyType = Literal["Indentation", "Alignment", "Margin", "Spacing"]
+AnomalyType = Literal[
+    "Indentation",
+    "Alignment",
+    "Margin",
+    "Spacing",
+    "Text Overlay",
+]
 ParagraphType = Literal["body", "header", "footer", "table", "signature", "heading", "cover"]
 
 # A left/right indent this far (or further) from comparable neighbours is a
@@ -313,6 +319,7 @@ def check_layout_anomalies(document_id: str, file_bytes: bytes) -> LayoutAnomaly
 
         page_margins = _page_margins(blocks)
         _assign_alignments(blocks)
+        text_overlay_anomalies = _check_text_overlaps(blocks)
         indent_anomalies, indent_check = _check_indentation(blocks)
         right_edge_anomalies, right_edge_check = _check_right_edge(blocks)
         align_anomalies, align_check = _check_alignment(blocks)
@@ -331,7 +338,8 @@ def check_layout_anomalies(document_id: str, file_bytes: bytes) -> LayoutAnomaly
             margin_check = _assessed()
 
         anomalies = (
-            indent_anomalies
+            text_overlay_anomalies
+            +indent_anomalies
             + right_edge_anomalies
             + align_anomalies
             + row_anomalies
@@ -814,6 +822,138 @@ def _union_bbox(bboxes) -> BBox:
     xs0, ys0, xs1, ys1 = zip(*bboxes)
     return (min(xs0), min(ys0), max(xs1), max(ys1))
 
+_TEXT_OVERLAP_MIN_RATIO = 0.20
+
+_EXPECTED_OVERLAY_MIN_PAGES = 2
+
+
+def _is_expected_overlay(
+    line: _Line,
+    lines: list[_Line],
+) -> bool:
+    """
+    Treat repeated, centrally placed text as an expected overlay
+    (for example, a watermark appearing on multiple pages).
+    """
+    normalized = " ".join(line.text.split()).lower()
+
+    if not normalized:
+        return False
+
+    matching_pages = {
+        other.page
+        for other in lines
+        if " ".join(other.text.split()).lower() == normalized
+    }
+
+    if len(matching_pages) < _EXPECTED_OVERLAY_MIN_PAGES:
+        return False
+
+    page_centre_x = line.page_width / 2
+    page_centre_y = line.page_height / 2
+    line_centre_x = (line.bbox[0] + line.bbox[2]) / 2
+    line_centre_y = (line.bbox[1] + line.bbox[3]) / 2
+
+    return (
+        abs(line_centre_x - page_centre_x) <= line.page_width * 0.25
+        and abs(line_centre_y - page_centre_y) <= line.page_height * 0.25
+    )
+
+
+def _check_text_overlaps(blocks: list[_Block]) -> list[LayoutAnomaly]:
+    """
+    Detect text elements whose bounding boxes physically overlap.
+
+    Uses the individual _Line bounding boxes already extracted from the
+    document's native text layer or OCR output.
+    """
+    lines = [
+        line
+        for block in blocks
+        for line in block.lines
+        if line.text.strip() and line.bbox[2] > line.bbox[0] and line.bbox[3] > line.bbox[1]
+    ]
+
+    anomalies: list[LayoutAnomaly] = []
+
+    for index, left in enumerate(lines):
+        for right in lines[index + 1:]:
+            if left.page != right.page:
+                continue
+            if _is_expected_overlay(left, lines) or _is_expected_overlay(right, lines):
+                continue
+
+            overlap_width = min(left.bbox[2], right.bbox[2]) - max(
+                left.bbox[0], right.bbox[0]
+            )
+            overlap_height = min(left.bbox[3], right.bbox[3]) - max(
+                left.bbox[1], right.bbox[1]
+            )
+
+            if overlap_width <= 0 or overlap_height <= 0:
+                continue
+
+            overlap_area = overlap_width * overlap_height
+            left_area = (left.bbox[2] - left.bbox[0]) * (
+                left.bbox[3] - left.bbox[1]
+            )
+            right_area = (right.bbox[2] - right.bbox[0]) * (
+                right.bbox[3] - right.bbox[1]
+            )
+            smaller_area = min(left_area, right_area)
+
+            if smaller_area <= 0:
+                continue
+
+            overlap_ratio = overlap_area / smaller_area
+
+            if overlap_ratio < _TEXT_OVERLAP_MIN_RATIO:
+                continue
+
+            intersection_bbox: BBox = (
+                max(left.bbox[0], right.bbox[0]),
+                max(left.bbox[1], right.bbox[1]),
+                min(left.bbox[2], right.bbox[2]),
+                min(left.bbox[3], right.bbox[3]),
+            )
+
+            anomalies.append(
+                LayoutAnomaly(
+                    anomaly_type="Text Overlay",
+                    page=left.page + 1,
+                    location=(
+                        f"Text overlap near x={round(intersection_bbox[0])}, "
+                        f"y={round(intersection_bbox[1])}"
+                    ),
+                    bbox=tuple(round(v, 2) for v in intersection_bbox),
+                    text=(
+                        f"{_snippet(left.text, 80)}"
+                        f" ↔ "
+                        f"{_snippet(right.text, 80)}"
+                    ),
+                    detected=f"{overlap_ratio:.0%} of the smaller text box overlaps",
+                    expected="Text boxes should not overlap",
+                    baseline=None,
+                    deviation=f"{overlap_ratio:.0%} overlap",
+                    confidence=1.0,
+                    evidence={
+                        "kind": "text-overlay",
+                        "left_text": _snippet(left.text, 200),
+                        "right_text": _snippet(right.text, 200),
+                        "left_bbox": [round(v, 2) for v in left.bbox],
+                        "right_bbox": [round(v, 2) for v in right.bbox],
+                        "overlap_bbox": [round(v, 2) for v in intersection_bbox],
+                        "overlap_ratio": round(overlap_ratio, 4),
+                    },
+                    summary=(
+                        f"Overlapping text detected on page {left.page + 1}: "
+                        f"{_snippet(left.text, 60)} overlaps "
+                        f"{_snippet(right.text, 60)}."
+                    ),
+                )
+            )
+
+    return anomalies
 
 def _mark_repeating_chrome(blocks: list[_Block]) -> None:
     """Text that repeats at the same height on several pages is running furniture.
