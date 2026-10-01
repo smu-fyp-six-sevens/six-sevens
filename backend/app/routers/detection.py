@@ -4,6 +4,7 @@ import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 
 
 from ..langgraph import trace as langgraph_trace
@@ -147,7 +148,7 @@ async def get_layout_anomalies(
     response_model=ImageManipulationResult,
 )
 async def get_image_manipulation(
-    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
 ) -> ImageManipulationResult:
     """
     On-demand, side-effect free: compares the resolution and compression of
@@ -165,7 +166,7 @@ async def get_image_manipulation(
     response_model=ImageTamperingResult,
 )
 async def get_image_tampering(
-    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
 ) -> ImageTamperingResult:
     """
     On-demand, side-effect free: looks for images edited into the document
@@ -177,6 +178,33 @@ async def get_image_tampering(
     """
     file_bytes = await _download_document_bytes(document)
     return await asyncio.to_thread(check_image_tampering, document_id, file_bytes)
+
+
+class ImageIntegrityResult(BaseModel):
+    """Both image checks on one document: SCRUM-64 and SCRUM-65."""
+
+    manipulation: ImageManipulationResult
+    tampering: ImageTamperingResult
+
+
+@router.get(
+    "/{document_id}/detection/image-integrity",
+    response_model=ImageIntegrityResult,
+)
+async def get_image_integrity(
+    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
+) -> ImageIntegrityResult:
+    """
+    On-demand, side-effect free: both image checks in one call, so the
+    individual-check panel offers a single "Image integrity" option. The file
+    is downloaded once and both checks run on it in parallel.
+    """
+    file_bytes = await _download_document_bytes(document)
+    manipulation, tampering = await asyncio.gather(
+        asyncio.to_thread(check_image_manipulation, document_id, file_bytes),
+        asyncio.to_thread(check_image_tampering, document_id, file_bytes),
+    )
+    return ImageIntegrityResult(manipulation=manipulation, tampering=tampering)
 
 
 @router.get(

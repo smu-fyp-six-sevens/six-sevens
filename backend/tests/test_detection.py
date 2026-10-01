@@ -467,7 +467,9 @@ def test_image_manipulation_happy_path() -> None:
         patch(
             "app.routers.detection.check_image_manipulation", return_value=result
         ) as mock_check,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
     ):
+        _mark_detection_already_ran(mock_trace)
         mock_repo.get_document.return_value = _document()
         mock_storage.download_file.return_value = b"%PDF-1.4"
 
@@ -478,6 +480,23 @@ def test_image_manipulation_happy_path() -> None:
     assert body["document_id"] == "doc-1"
     assert body["unable_to_assess"] is True
     mock_check.assert_called_once_with("doc-1", b"%PDF-1.4")
+
+
+def test_image_manipulation_requires_full_detection_first() -> None:
+    """Individual checks unlock only after a full detection pass, same as
+    the other on-demand checks."""
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
+        patch("app.routers.detection.check_image_manipulation") as mock_check,
+    ):
+        mock_repo.get_document.return_value = _document()
+        mock_trace.get_persisted.return_value = None
+        mock_trace.get.return_value = None
+        response = client.get("/documents/doc-1/detection/image-manipulation")
+
+    assert response.status_code == 409
+    mock_check.assert_not_called()
 
 
 def test_image_manipulation_document_missing() -> None:
@@ -582,7 +601,9 @@ def test_image_tampering_happy_path() -> None:
         patch(
             "app.routers.detection.check_image_tampering", return_value=result
         ) as mock_check,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
     ):
+        _mark_detection_already_ran(mock_trace)
         mock_repo.get_document.return_value = _document()
         mock_storage.download_file.return_value = b"%PDF-1.4"
 
@@ -591,6 +612,75 @@ def test_image_tampering_happy_path() -> None:
     assert response.status_code == 200
     assert response.json()["unable_to_assess"] is False
     mock_check.assert_called_once_with("doc-1", b"%PDF-1.4")
+
+
+def test_image_tampering_requires_full_detection_first() -> None:
+    """Individual checks unlock only after a full detection pass, same as
+    the other on-demand checks."""
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
+        patch("app.routers.detection.check_image_tampering") as mock_check,
+    ):
+        mock_repo.get_document.return_value = _document()
+        mock_trace.get_persisted.return_value = None
+        mock_trace.get.return_value = None
+        response = client.get("/documents/doc-1/detection/image-tampering")
+
+    assert response.status_code == 409
+    mock_check.assert_not_called()
+
+
+def _image_integrity_results():
+    manipulation = ImageManipulationResult(
+        document_id="doc-1", regions=[], indicators=[], pages_checked=1,
+        tolerances=Tolerances(), unable_to_assess=False,
+    )
+    tampering = ImageTamperingResult(
+        document_id="doc-1", regions=[], indicators=[], pages_checked=1,
+        tolerances=TamperingTolerances(), unable_to_assess=False,
+    )
+    return manipulation, tampering
+
+
+def test_image_integrity_runs_both_checks_on_one_download() -> None:
+    manipulation, tampering = _image_integrity_results()
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch("app.routers.detection.storage_service") as mock_storage,
+        patch("app.routers.detection.check_image_manipulation", return_value=manipulation) as mock_m,
+        patch("app.routers.detection.check_image_tampering", return_value=tampering) as mock_t,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
+    ):
+        _mark_detection_already_ran(mock_trace)
+        mock_repo.get_document.return_value = _document()
+        mock_storage.download_file.return_value = b"%PDF-1.4"
+
+        response = client.get("/documents/doc-1/detection/image-integrity")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body) == {"manipulation", "tampering"}
+    mock_storage.download_file.assert_called_once()
+    mock_m.assert_called_once_with("doc-1", b"%PDF-1.4")
+    mock_t.assert_called_once_with("doc-1", b"%PDF-1.4")
+
+
+def test_image_integrity_requires_full_detection_first() -> None:
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
+        patch("app.routers.detection.check_image_manipulation") as mock_m,
+        patch("app.routers.detection.check_image_tampering") as mock_t,
+    ):
+        mock_repo.get_document.return_value = _document()
+        mock_trace.get_persisted.return_value = None
+        mock_trace.get.return_value = None
+        response = client.get("/documents/doc-1/detection/image-integrity")
+
+    assert response.status_code == 409
+    mock_m.assert_not_called()
+    mock_t.assert_not_called()
 
 
 def test_image_tampering_document_missing() -> None:
