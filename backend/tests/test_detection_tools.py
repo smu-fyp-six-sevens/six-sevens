@@ -121,7 +121,7 @@ async def test_image_manipulation_tool_maps_indicators_to_findings() -> None:
 
     finding = output["findings"][0]
     assert finding["id"] == "image_manipulation_tool-1"
-    assert finding["summary"]
+    assert finding["summary"] == "[Resolution Mismatch] Region drawn at 72 DPI among 300 DPI images."
     assert finding["page"] == 1
     assert finding["severity_hint"] == "high"
     assert "evidence" not in finding
@@ -180,6 +180,7 @@ async def test_image_tampering_tool_maps_indicators_to_findings() -> None:
     finding = output["findings"][0]
     assert finding["id"] == "image_tampering_tool-1"
     assert finding["indicator"] == "Scaling Anomaly"
+    assert finding["summary"].startswith("[Scaling Anomaly] ")
     assert finding["page"] == 1
     assert finding["severity_hint"] == "high"
     assert "evidence" not in finding

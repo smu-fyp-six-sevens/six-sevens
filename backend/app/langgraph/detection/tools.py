@@ -315,6 +315,13 @@ async def metadata_tool(document_id: Annotated[str, InjectedState("document_id")
     return _result("metadata_tool", _with_ids("metadata_tool", findings))
 
 
+def _with_indicator(indicator: str, summary: str) -> str:
+    # The image checks' findings carry an AC-defined category (Visible
+    # Boundary, Resolution Mismatch, ...). The report only shows each
+    # finding's summary, so the category leads it.
+    return f"[{indicator}] {summary}"
+
+
 @tool
 async def image_manipulation_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
     """Compares the resolution and compression of the images in the file against each other — the images embedded in a PDF, or a standalone PNG/JPEG upload — and checks each for signs of having been enlarged. A region drawn at a very different DPI, compressed differently, or pasted over an original image is a classic sign of a spliced-in photo, signature or figure. Works on PDFs and image uploads."""
@@ -340,7 +347,7 @@ async def image_manipulation_tool(document_id: Annotated[str, InjectedState("doc
             "expected": indicator.expected,
             "deviation": indicator.deviation,
             "severity_hint": indicator.severity,
-            "summary": indicator.summary,
+            "summary": _with_indicator(indicator.indicator, indicator.summary),
         }
         for indicator in result.indicators
     ]
@@ -371,7 +378,7 @@ async def image_tampering_tool(document_id: Annotated[str, InjectedState("docume
             "expected": indicator.expected,
             "deviation": indicator.deviation,
             "severity_hint": indicator.severity,
-            "summary": indicator.summary,
+            "summary": _with_indicator(indicator.indicator, indicator.summary),
         }
         for indicator in result.indicators
     ]
