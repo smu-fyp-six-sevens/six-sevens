@@ -5,8 +5,12 @@ from unittest.mock import AsyncMock,patch
 from fastapi.testclient import TestClient
 
 from app.fraud_detection.font_consistency import ExtractedField, FontConsistencyResult
-from app.fraud_detection.image_manipulation import ImageManipulationResult, Tolerances
-from app.fraud_detection.image_tampering import ImageTamperingResult, Tolerances as TamperingTolerances
+from app.fraud_detection.image_manipulation import (
+    ImageManipulationResult,
+    ImageTamperingResult,
+    TamperingTolerances,
+    Tolerances,
+)
 from app.fraud_detection.metadata_analysis import MetadataAnalysisResult
 from app.fraud_detection.layout_anomalies import CheckAssessment, LayoutAnomalyResult
 from app.fraud_detection.numerical_validation import (

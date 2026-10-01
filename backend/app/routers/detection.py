@@ -19,9 +19,10 @@ from ..fraud_detection.font_consistency import (
 )
 from ..fraud_detection.image_manipulation import (
     ImageManipulationResult,
+    ImageTamperingResult,
     check_image_manipulation,
+    check_image_tampering,
 )
-from ..fraud_detection.image_tampering import ImageTamperingResult, check_image_tampering
 from ..fraud_detection.metadata_analysis import MetadataAnalysisResult, check_metadata_anomalies
 from ..fraud_detection.layout_anomalies import LayoutAnomalyResult, check_layout_anomalies
 from ..fraud_detection.numerical_validation import (

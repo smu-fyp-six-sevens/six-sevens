@@ -20,7 +20,7 @@ overlay-specific logic on top of that is only ~130 lines. Splitting it out would
 that extraction pipeline, not avoiding duplication.
 
 `image_manipulation.py` (SCRUM-64) covers resolution and compression mismatches between a file's
-images (embedded PDF images or a standalone PNG/JPEG). `image_tampering.py` (SCRUM-65) covers
+images (embedded PDF images or a standalone PNG/JPEG). The same module's `check_image_tampering` (SCRUM-65) covers
 images edited in after the fact: painted over and replaced (Image Overlay), stretched or rotated
 (Scaling Anomaly), pasted with a seam or halo (Visible Boundary), or with altered brightness,
 colour, sharpness or noise (Quality Mismatch). No AI-generated-content check exists yet.

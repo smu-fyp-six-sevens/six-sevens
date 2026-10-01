@@ -8,8 +8,8 @@ import pymupdf
 import pytest
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
 
-from app.fraud_detection.image_tampering import (
-    Tolerances,
+from app.fraud_detection.image_manipulation import (
+    TamperingTolerances as Tolerances,
     _Placement,
     _check_geometry,
     check_image_tampering,

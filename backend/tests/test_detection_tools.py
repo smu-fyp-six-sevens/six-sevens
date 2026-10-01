@@ -5,14 +5,12 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.fraud_detection.font_consistency import AnomalyLocation, FontAnomalyV2, FontConsistencyResult
-from app.fraud_detection.image_tampering import (
-    ImageTamperingIndicator,
-    ImageTamperingResult,
-    Tolerances as TamperingTolerances,
-)
 from app.fraud_detection.image_manipulation import (
     ImageManipulationIndicator,
     ImageManipulationResult,
+    ImageTamperingIndicator,
+    ImageTamperingResult,
+    TamperingTolerances,
     Tolerances,
 )
 from app.fraud_detection.metadata_analysis import MetadataAnalysisResult, MetadataAnomaly

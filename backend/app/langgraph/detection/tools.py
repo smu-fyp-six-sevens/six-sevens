@@ -34,8 +34,7 @@ from langgraph.prebuilt import InjectedState
 from ... import document_repository, extracted_fields_repository, storage_service
 from ...fraud_detection.date_anomalies import check_date_anomalies
 from ...fraud_detection.font_consistency import check_font_consistency
-from ...fraud_detection.image_manipulation import check_image_manipulation
-from ...fraud_detection.image_tampering import check_image_tampering
+from ...fraud_detection.image_manipulation import check_image_manipulation, check_image_tampering
 from ...fraud_detection.layout_anomalies import check_layout_anomalies
 from ...fraud_detection.metadata_analysis import check_metadata_anomalies
 from ...fraud_detection.numerical_validation import check_numerical_validation
