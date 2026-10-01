@@ -78,6 +78,9 @@ filterwarnings = [
 [tool.setuptools.packages.find]
 include = ["app*"]
 
+[tool.pyright]
+typeCheckingMode = "standard"
+
 [tool.coverage.run]
 omit = [
   # Dev-only synthetic fraud-injection tool, deliberately not unit-tested

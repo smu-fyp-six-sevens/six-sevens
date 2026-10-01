@@ -4,12 +4,30 @@ import json
 import logging
 import re
 from collections import Counter
-from typing import Any, Iterable, Literal, cast
+from typing import Any, Literal, cast
 
 import pymupdf
 from pydantic import BaseModel
 
 logger = logging.getLogger("fraud_detection.font_consistency")
+
+
+def _page(doc: pymupdf.Document, index: int) -> pymupdf.Page:
+    """
+    pymupdf.Document.__getitem__ is declared via inline @typing.overload in
+    its own source (no separate .pyi), with a default value on the int
+    overload and the slice/tuple overloads gated behind a sys.version_info
+    check — pyright can't cleanly resolve this for either direct indexing or
+    the old-style __getitem__-based iteration protocol (no __iter__ is
+    declared), and infers the element type as the whole overload-return
+    union instead of narrowing to Page. One cast, used everywhere a page is
+    pulled out of a Document, instead of re-deriving this at each call site.
+    """
+    return cast(pymupdf.Page, doc[index])
+
+
+def _pages(doc: pymupdf.Document) -> list[pymupdf.Page]:
+    return [_page(doc, i) for i in range(len(doc))]
 
 # --- span extraction & style-comparison building blocks ---------------------
 #
@@ -93,12 +111,12 @@ class _Span(BaseModel):
 
 def _extract_spans(doc: pymupdf.Document) -> list[_Span]:
     spans: list[_Span] = []
-    # pymupdf.Document is iterable at runtime (and duck-typed test doubles
-    # only implement __iter__) even though pyright's enumerate() overload
-    # resolution doesn't recognise it as Iterable — cast documents that.
-    for page_index, page in enumerate(cast(Iterable, doc)):
+    for page_index, page in enumerate(_pages(doc)):
         underline_rects = _underline_rects(page)
-        for block_index, block in enumerate(page.get_text("dict").get("blocks", [])):
+        # Same overload-ambiguity as get_text("text") elsewhere in this
+        # codebase — "dict" is always a dict at runtime for this mode.
+        page_dict = cast(dict, page.get_text("dict"))
+        for block_index, block in enumerate(page_dict.get("blocks", [])):
             if block.get("type") != 0:  # not a text block
                 continue
             for line_index, line in enumerate(block.get("lines", [])):
@@ -329,7 +347,7 @@ def check_font_consistency(
     try:
         spans = _extract_spans(doc)
         if not spans:
-            has_images = any(page.get_images() for page in doc)
+            has_images = any(page.get_images() for page in _pages(doc))
             reason = (
                 f"No extractable text spans found ({doc.page_count} page(s), "
                 f"has embedded images: {has_images}) -- likely a scanned/"
@@ -457,7 +475,7 @@ def _match_field_occurrences(
     wants to catch.
     """
     occurrences: list[list[_Span]] = []
-    for page_index, page in enumerate(cast(Iterable, doc)):
+    for page_index, page in enumerate(_pages(doc)):
         page_spans = spans_by_page.get(page_index)
         if not page_spans:
             continue

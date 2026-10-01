@@ -364,6 +364,7 @@ class DocumentRecord(BaseModel):
     # case-list enrichment separately rewrap it as {value, confidence} for
     # the API response.
     extracted_fields: Optional[dict] = None
+    missing_required_fields: list[str] = Field(default_factory=list)
     # Extraction's own confidence in the values it pulled into extracted_fields
     # — distinct from (and no longer overwrites) the classifier's
     # `classification_confidence` above. Set to 1.0 when a loan officer
@@ -394,6 +395,36 @@ class UpdateDocumentTypeRequest(BaseModel):
     """
 
     document_type: str
+
+
+class MoveDocumentRequest(BaseModel):
+    """Reassigns a document to a different case — see routers/documents.py's move_document."""
+
+    case_id: str
+
+
+class BulkActionFailure(BaseModel):
+    document_id: str
+    reason: str
+
+
+class BulkMoveRequest(BaseModel):
+    document_ids: list[str]
+    case_id: str
+
+
+class BulkMoveResponse(BaseModel):
+    moved: list[str]
+    failed: list[BulkActionFailure]
+
+
+class BulkDeleteRequest(BaseModel):
+    document_ids: list[str]
+
+
+class BulkDeleteResponse(BaseModel):
+    deleted: list[str]
+    failed: list[BulkActionFailure]
 
 
 class StuckDocument(BaseModel):
