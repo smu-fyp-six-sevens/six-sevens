@@ -458,6 +458,42 @@ def test_text_overlap_detects_overlapping_text_boxes() -> None:
     assert finding.evidence["overlap_ratio"] > 0.20
     assert finding.bbox == (170.0, 105.0, 220.0, 120.0)
 
+def test_repeated_central_watermark_overlap_is_ignored() -> None:
+    blocks = [
+        _block([
+            _line(
+                (170.0, 360.0, 440.0, 410.0),
+                text="CONFIDENTIAL",
+                page=0,
+            ),
+        ]),
+        _block([
+            _line(
+                (170.0, 360.0, 440.0, 410.0),
+                text="CONFIDENTIAL",
+                page=1,
+            ),
+        ]),
+        _block([
+            _line(
+                (150.0, 380.0, 450.0, 400.0),
+                text="Document body text",
+                page=0,
+            ),
+        ]),
+        _block([
+            _line(
+                (150.0, 380.0, 450.0, 400.0),
+                text="Different body text",
+                page=1,
+            ),
+        ]),
+    ]
+
+    findings = lr._check_text_overlaps(blocks)
+
+    assert findings == []
+
 def _ml_block(y0: float, leadings: list[float], *, x0: float = 72.0, x1: float = 540.0) -> _Block:
     y = y0
     lines = []
@@ -592,7 +628,7 @@ def test_public_api_detects_text_overlay() -> None:
     assert "Overlaid text" in finding.evidence["right_text"]
     assert finding.bbox
     assert finding.confidence > 0
-    
+
 def test_check_invalid_empty_and_image_only() -> None:
     bad = check_layout_anomalies("doc-1", b"not-a-pdf")
     assert bad.unable_to_assess is True
@@ -611,6 +647,15 @@ def test_check_invalid_empty_and_image_only() -> None:
     assert image_only.unable_to_assess is True
     assert "embedded images" in (image_only.unable_to_assess_reason or "")
 
+def test_image_only_document_has_no_text_overlay_finding() -> None:
+    result = check_layout_anomalies("doc-1", _image_only_pdf())
+
+    assert result.unable_to_assess is True
+    assert result.anomalies == []
+    assert not any(
+        finding.anomaly_type == "Text Overlay"
+        for finding in result.anomalies
+    )
 
 def test_check_returns_empty_on_internal_error(monkeypatch) -> None:
     monkeypatch.setattr(

@@ -810,6 +810,41 @@ def _union_bbox(bboxes) -> BBox:
 
 _TEXT_OVERLAP_MIN_RATIO = 0.20
 
+_EXPECTED_OVERLAY_MIN_PAGES = 2
+
+
+def _is_expected_overlay(
+    line: _Line,
+    lines: list[_Line],
+) -> bool:
+    """
+    Treat repeated, centrally placed text as an expected overlay
+    (for example, a watermark appearing on multiple pages).
+    """
+    normalized = " ".join(line.text.split()).lower()
+
+    if not normalized:
+        return False
+
+    matching_pages = {
+        other.page
+        for other in lines
+        if " ".join(other.text.split()).lower() == normalized
+    }
+
+    if len(matching_pages) < _EXPECTED_OVERLAY_MIN_PAGES:
+        return False
+
+    page_centre_x = line.page_width / 2
+    page_centre_y = line.page_height / 2
+    line_centre_x = (line.bbox[0] + line.bbox[2]) / 2
+    line_centre_y = (line.bbox[1] + line.bbox[3]) / 2
+
+    return (
+        abs(line_centre_x - page_centre_x) <= line.page_width * 0.25
+        and abs(line_centre_y - page_centre_y) <= line.page_height * 0.25
+    )
+
 
 def _check_text_overlaps(blocks: list[_Block]) -> list[LayoutAnomaly]:
     """
@@ -830,6 +865,8 @@ def _check_text_overlaps(blocks: list[_Block]) -> list[LayoutAnomaly]:
     for index, left in enumerate(lines):
         for right in lines[index + 1:]:
             if left.page != right.page:
+                continue
+            if _is_expected_overlay(left, lines) or _is_expected_overlay(right, lines):
                 continue
 
             overlap_width = min(left.bbox[2], right.bbox[2]) - max(
