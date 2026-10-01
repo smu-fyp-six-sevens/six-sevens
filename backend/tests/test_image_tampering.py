@@ -168,8 +168,7 @@ def test_replacement_with_adjusted_quality_is_a_quality_mismatch():
     result = check_image_tampering("doc", _pdf(place))
     quality = [i for i in result.indicators if i.indicator == "Quality Mismatch"]
     assert len(quality) == 1
-    assert quality[0].evidence["sharpness_ratio"] >= Tolerances().min_sharpness_ratio \
-        or quality[0].evidence["noise_change"] >= 0
+    assert {"sharpness", "noise"} & set(quality[0].evidence["altered"])
 
 
 def test_plain_copy_over_the_original_is_not_a_quality_mismatch():
@@ -179,6 +178,53 @@ def test_plain_copy_over_the_original_is_not_a_quality_mismatch():
         _replace(page, _SLOT, lambda im: im.filter(ImageFilter.GaussianBlur(0.6)))
 
     assert "Quality Mismatch" not in _names(check_image_tampering("doc", _pdf(place)))
+
+
+def test_exact_copy_over_the_original_is_not_a_quality_mismatch():
+    """Regression: an untouched copy measures a noise gain of exactly 0, which
+    the old "any noise increase" rule could count as altered."""
+    def place(page):
+        page.insert_image(_SLOT, stream=_png(_art()))
+        _replace(page, _SLOT, lambda im: im)
+
+    assert "Quality Mismatch" not in _names(check_image_tampering("doc", _pdf(place)))
+
+
+def test_darkened_replacement_is_a_quality_mismatch_on_brightness_alone():
+    """Darkening softens every edge and adds no grain, so only the brightness
+    tolerance can catch it."""
+    def place(page):
+        page.insert_image(_SLOT, stream=_png(_art()))
+        _replace(page, _SLOT, lambda im: ImageEnhance.Brightness(im).enhance(0.7))
+
+    quality = [
+        i for i in check_image_tampering("doc", _pdf(place)).indicators
+        if i.indicator == "Quality Mismatch"
+    ]
+    assert len(quality) == 1
+    assert quality[0].evidence["altered"] == ["brightness"]
+
+
+def test_desaturated_replacement_is_a_quality_mismatch_on_colour():
+    def place(page):
+        page.insert_image(_SLOT, stream=_png(_art()))
+        _replace(page, _SLOT, lambda im: ImageEnhance.Color(im).enhance(0.2))
+
+    quality = [
+        i for i in check_image_tampering("doc", _pdf(place)).indicators
+        if i.indicator == "Quality Mismatch"
+    ]
+    assert len(quality) == 1
+    assert "colour" in quality[0].evidence["altered"]
+
+
+def test_brightness_and_colour_tolerances_are_configurable():
+    def place(page):
+        page.insert_image(_SLOT, stream=_png(_art()))
+        _replace(page, _SLOT, lambda im: ImageEnhance.Brightness(im).enhance(0.7))
+
+    looser = Tolerances(min_brightness_change=200.0)
+    assert "Quality Mismatch" not in _names(check_image_tampering("doc", _pdf(place), looser))
 
 
 # --- no original to compare against ------------------------------------------
@@ -319,6 +365,14 @@ def test_outline_seam_count_is_configurable():
     found = check_image_tampering("doc", _card(patch=_brightened)).indicators[0]
     stricter = Tolerances(min_outline_seams=found.evidence["seams"] + 1)
     assert check_image_tampering("doc", _card(patch=_brightened), stricter).indicators == []
+
+
+def test_blank_image_upload_is_unable_to_assess():
+    buffer = io.BytesIO()
+    Image.new("RGB", (800, 600), (255, 255, 255)).save(buffer, "PNG")
+    result = check_image_tampering("doc", buffer.getvalue())
+    assert result.unable_to_assess is True
+    assert "blank" in result.unable_to_assess_reason
 
 
 def test_tiny_image_upload_is_unable_to_assess():

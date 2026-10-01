@@ -20,7 +20,10 @@ overlay-specific logic on top of that is only ~130 lines. Splitting it out would
 that extraction pipeline, not avoiding duplication.
 
 `image_manipulation.py` (SCRUM-64) covers resolution and compression mismatches between a file's
-images (embedded PDF images or a standalone PNG/JPEG). No AI-generated-content check exists yet.
+images (embedded PDF images or a standalone PNG/JPEG). `image_tampering.py` (SCRUM-65) covers
+images edited in after the fact: painted over and replaced (Image Overlay), stretched or rotated
+(Scaling Anomaly), pasted with a seam or halo (Visible Boundary), or with altered brightness,
+colour, sharpness or noise (Quality Mismatch). No AI-generated-content check exists yet.
 
 `case_match.py` (696 lines, 46 tests) — cross-document validation: verifies each case document's
 company/individuals against the certificate of incumbency (UEN/name/ID fuzzy matching). Gates
@@ -28,9 +31,9 @@ fraud detection per its own docstring.
 
 ## 2. LangGraph Detection Agent — `backend/app/langgraph/detection/`
 
-- **`tools.py`** — 7 `@tool` wrappers (`font_consistency_tool`, `layout_anomalies_tool`,
+- **`tools.py`** — 8 `@tool` wrappers (`font_consistency_tool`, `layout_anomalies_tool`,
   `spelling_tool`, `date_consistency_tool`, `transaction_balance_tool`, `metadata_tool`,
-  `image_manipulation_tool`), each
+  `image_manipulation_tool`, `image_tampering_tool`), each
   calling the matching `fraud_detection/*.py` function directly — same convention
   `routers/detection.py`'s own endpoints use. `transaction_balance_tool` filters
   `check_numerical_validation`'s findings down to `BS.RUNNING_BALANCE` only (the other numerical

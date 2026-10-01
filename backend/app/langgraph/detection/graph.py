@@ -97,10 +97,10 @@ DEFAULT_TEAMS: dict[str, dict[str, tuple[str, ...]]] = {
 
 
 def _default_team(document_type: str | None) -> dict:
-    # Same team for PDFs and image uploads: layout_rendering's
-    # image_manipulation_tool works on PNG/JPEG — only its font/layout tools
-    # need a native-text PDF, and the lead's brief (see _PLAN_PROMPT) narrows
-    # it to the image check for those.
+    # Same team for PDFs and image uploads: layout_rendering's image tools
+    # (image_manipulation_tool, image_tampering_tool) work on PNG/JPEG — only
+    # its font/layout tools need a native-text PDF, and the lead's brief (see
+    # _PLAN_PROMPT) narrows it to the image checks for those.
     team = DEFAULT_TEAMS.get(document_type or "", {"expected": (), "optional": ()})
     return {"expected": list(team["expected"]), "optional": list(team["optional"])}
 
@@ -129,7 +129,7 @@ Specialists:
 
 Rules:
 - The input includes "default_team" for this document type: "expected" specialists you should consult unless you can say why not, and "optional" ones that are your call. Start from it. Drop an expected specialist, or add one outside the default, only with a clear reason in that specialist's "reason". If default_team is empty, decide from scratch.
-- Layout & Rendering's font and layout checks need a native-text PDF, but its image-manipulation check also works on image files. If "file_extension" is an image type, brief it to run the image-manipulation check only.
+- Layout & Rendering's font and layout checks need a native-text PDF, but its two image checks (image manipulation and image tampering) also work on image files. If "file_extension" is an image type, brief it to run the image checks only.
 - Consult only specialists whose expertise genuinely applies to this document. Do not consult everyone by default — each consultation costs money and analyst attention.
 - For every specialist you do NOT consult, give a short reason (e.g. "no transaction figures, so a balance check has nothing to read").
 - For every specialist you DO consult, give a reason and a one-sentence brief on what to look at.

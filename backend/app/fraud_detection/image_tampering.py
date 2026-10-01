@@ -113,12 +113,32 @@ class Tolerances(BaseModel):
     # just outside it by this many grey levels is a pasted patch whose
     # background does not match the page. Clean placements top out at 0.19.
     min_background_step: float = Field(default=3.0, gt=0.0)
-    # A replacement at least this sharp relative to its original, or with
-    # more fine-grain noise than it, has had its quality altered. A plain
-    # re-render comes out no sharper than the original (1.00 at most across
-    # halo and overlay injections); quality injections come out at 1.03 and
-    # up.
+    # AC4 — a replacement compared with the original hidden under it. Re-
+    # rendering a region only ever softens it and never adds grain, so a
+    # replacement this much sharper, or with this much more fine-grain noise,
+    # was worked on. Measured over 81 documents with each of the injection
+    # tool's image_overlay, visible_boundary and quality_mismatch applied to
+    # their largest image: sharpness alone catches 69 of 81 quality
+    # injections, and 4-5 of 81 plain overlays also cross it.
     min_sharpness_ratio: float = Field(default=1.02, gt=0.0)
+    # Noise needs a real margin rather than "any increase": an exact copy and
+    # a copy with only its brightness shifted both measure +0.0000 here, so
+    # the sign of a number that small says nothing. Plain overlays and halo
+    # injections never gain more than 0.0; quality injections gain 0.63 at
+    # the median.
+    min_noise_gain: float = Field(default=0.05, gt=0.0)
+    # Brightness and colour edits leave sharpness and noise untouched, so
+    # they need their own limits: grey levels of mean brightness, and points
+    # (0-255) of mean saturation. Adding them lifts quality injections caught
+    # from 69 to 78 of 81. It also labels 8-9 more of the 81 plain overlays
+    # as Quality Mismatch, always NRIC/passport photo slots where the
+    # injection tool's own re-render shifts brightness by 40+, and always
+    # alongside the Image Overlay finding on the same region. This check
+    # only runs on an image painted over an original, which none of the
+    # 205 clean generated documents has, so it cannot raise a false alarm
+    # on a clean document.
+    min_brightness_change: float = Field(default=25.0, gt=0.0)
+    min_saturation_change: float = Field(default=25.0, gt=0.0)
     # PNG/JPEG uploads: how many faint straight seams, running both ways,
     # must outline a region before it is reported (see _outlines). Two lets
     # 1 in 20 clean NRIC/passport uploads through; three lets none.
@@ -221,13 +241,15 @@ def _placements(page: pymupdf.Page) -> tuple[list[_Placement], list[tuple[str, p
         for order, (kind, rect) in enumerate(log):
             if (
                 kind == "fill-image" and order not in used
-                and all(abs(a - b) < 0.6 for a, b in zip(rect, box))
+                and all(abs(a - b) < 0.6 for a, b in zip(
+                    (rect.x0, rect.y0, rect.x1, rect.y1), (box.x0, box.y0, box.x1, box.y1)
+                ))
             ):
                 used.add(order)
                 placements.append(_Placement(
                     order=order,
                     xref=info["xref"],
-                    bbox=tuple(box),
+                    bbox=(box.x0, box.y0, box.x1, box.y1),
                     transform=tuple(info["transform"]),
                     pixel_width=info["width"],
                     pixel_height=info["height"],
@@ -251,7 +273,7 @@ def _decode(doc: pymupdf.Document, xref: int, paper: tuple[int, int, int]) -> Im
         if smask:
             mask = Image.open(io.BytesIO(doc.extract_image(smask)["image"])).convert("L")
             if mask.size != image.size:
-                mask = mask.resize(image.size, Image.BILINEAR)
+                mask = mask.resize(image.size, Image.Resampling.BILINEAR)
             image = image.convert("RGBA")
             image.putalpha(mask)
     except Exception:
@@ -308,7 +330,7 @@ def _content_stats(image: Image.Image) -> dict[str, float]:
     to _COMPARE_PX, plus how much its outer edge band darkens relative to
     the band just inside it (a halo).
     """
-    small = image.resize((_COMPARE_PX, _COMPARE_PX), Image.LANCZOS)
+    small = image.resize((_COMPARE_PX, _COMPARE_PX), Image.Resampling.LANCZOS)
     rgb = np.asarray(small, dtype=np.float32)
     grey = rgb.mean(-1)
     saturation = np.asarray(small.convert("HSV"), dtype=np.float32)[..., 1]
@@ -427,8 +449,12 @@ def _check_replacement(
         # content cannot be compared pixel for pixel.
         return indicators
 
-    paper = replacement_image.getpixel((0, 0))
-    original_image = _decode(doc, original.xref, paper if isinstance(paper, tuple) else (255, 255, 255))
+    corner = replacement_image.getpixel((0, 0))
+    paper = (
+        (int(corner[0]), int(corner[1]), int(corner[2]))
+        if isinstance(corner, tuple) and len(corner) >= 3 else (255, 255, 255)
+    )
+    original_image = _decode(doc, original.xref, paper)
     if original_image is None:
         return indicators
     now = _content_stats(replacement_image)
@@ -472,35 +498,54 @@ def _check_replacement(
             evidence={**stats_evidence, "tolerance": tolerances.min_halo_vs_original},
         ))
 
-    # AC4 — Quality Mismatch: sharper or noisier than what it replaced.
-    # Re-rendering an image only ever softens it, so a replacement that
-    # comes out crisper or grainier was worked on.
-    if sharpness_ratio >= tolerances.min_sharpness_ratio or noise_gain >= 0:
+    # AC4 — Quality Mismatch: sharper, noisier, brighter/darker or a
+    # different colour from what it replaced.
+    brightness_change = stats_evidence["brightness_change"]
+    saturation_change = stats_evidence["saturation_change"]
+    altered = {
+        "sharpness": sharpness_ratio >= tolerances.min_sharpness_ratio,
+        "noise": noise_gain >= tolerances.min_noise_gain,
+        "brightness": abs(brightness_change) >= tolerances.min_brightness_change,
+        "colour": abs(saturation_change) >= tolerances.min_saturation_change,
+    }
+    if any(altered.values()):
         changes = []
-        if sharpness_ratio >= tolerances.min_sharpness_ratio:
+        if altered["sharpness"]:
             changes.append(f"sharpness x{sharpness_ratio:.2f}")
-        if noise_gain >= 0:
+        if altered["noise"]:
             changes.append(f"fine-grain noise {noise_gain:+.2f}")
-        changes.append(f"brightness {stats_evidence['brightness_change']:+.1f}")
+        changes.append(f"brightness {brightness_change:+.1f}")
         changes.append(f"contrast x{stats_evidence['contrast_ratio']:.2f}")
-        changes.append(f"saturation {stats_evidence['saturation_change']:+.1f}")
+        changes.append(f"saturation {saturation_change:+.1f}")
         indicators.append(ImageTamperingIndicator(
             indicator="Quality Mismatch",
             page=page_number,
             bbox=replacement.bbox,
             detected=", ".join(changes),
             expected=(
-                f"sharpness under x{tolerances.min_sharpness_ratio:.2f} and no added noise, "
-                "as for a plain copy of the original"
+                f"sharpness under x{tolerances.min_sharpness_ratio:.2f}, noise gain under "
+                f"{tolerances.min_noise_gain:.2f}, brightness and saturation within "
+                f"{tolerances.min_brightness_change:.0f}/{tolerances.min_saturation_change:.0f} "
+                "of the original, as for a plain copy"
             ),
-            deviation="brightness, contrast, colour, sharpness or noise altered",
+            deviation=f"{', '.join(k for k, v in altered.items() if v)} altered",
             severity="medium",
             summary=(
-                f"Page {page_number + 1}: the image drawn over the original is sharper or "
-                "grainier than the original it hides, which a plain copy never is — its "
-                "brightness, contrast, colour or noise has been adjusted."
+                f"Page {page_number + 1}: the image drawn over the original differs from the "
+                f"original it hides in {' and '.join(k for k, v in altered.items() if v)}, "
+                "which a plain copy does not — the replacement was adjusted before it was "
+                "pasted in."
             ),
-            evidence={**stats_evidence, "tolerance": tolerances.min_sharpness_ratio},
+            evidence={
+                **stats_evidence,
+                "altered": [k for k, v in altered.items() if v],
+                "tolerances": {
+                    "sharpness_ratio": tolerances.min_sharpness_ratio,
+                    "noise_gain": tolerances.min_noise_gain,
+                    "brightness_change": tolerances.min_brightness_change,
+                    "saturation_change": tolerances.min_saturation_change,
+                },
+            },
         ))
     return indicators
 
@@ -616,6 +661,8 @@ def _check_rendered_edges(
                   match the paper. A photo or a logo on a transparent
                   background has no flat band that disagrees with the page.
     """
+    page_number = page.number
+    assert page_number is not None  # always set on a page iterated from its document
     bands = _edge_bands(page, placement.bbox)
     if bands is None:
         return []
@@ -638,14 +685,14 @@ def _check_rendered_edges(
     if halo >= tolerances.min_rendered_halo:
         return [ImageTamperingIndicator(
             indicator="Visible Boundary",
-            page=page.number,
+            page=page_number,
             bbox=placement.bbox,
             detected=f"edge band {halo:.1f} grey levels darker than both sides of it",
             expected=f"under {tolerances.min_rendered_halo:.1f}",
             deviation="a rectangular halo around the image",
             severity="medium",
             summary=(
-                f"Page {page.number + 1}: an image is framed by a darkened rim along its "
+                f"Page {page_number + 1}: an image is framed by a darkened rim along its "
                 "edges, darker than both the page around it and its own content — the halo "
                 "left when a region is cut out and pasted in."
             ),
@@ -654,14 +701,14 @@ def _check_rendered_edges(
     if step >= tolerances.min_background_step:
         return [ImageTamperingIndicator(
             indicator="Visible Boundary",
-            page=page.number,
+            page=page_number,
             bbox=placement.bbox,
             detected=f"image background {step:.1f} grey levels off the page around it",
             expected=f"under {tolerances.min_background_step:.1f}",
             deviation="a pasted rectangle whose background does not match the page",
             severity="medium",
             summary=(
-                f"Page {page.number + 1}: an image sits in a flat rectangle of background that "
+                f"Page {page_number + 1}: an image sits in a flat rectangle of background that "
                 "does not match the paper around it, leaving a visible box around the region."
             ),
             evidence={**evidence, "tolerance": tolerances.min_background_step},
@@ -692,16 +739,18 @@ def _check_pdf(
 
         indicators: list[ImageTamperingIndicator] = []
         for page in doc:
+            page_number = page.number
+            assert page_number is not None  # always set on a page iterated from its document
             placements, pairs = _find_replacements(page)
             hidden = {pair.original.order for pair in pairs}
             # Replacements first: comparing against the original is the
             # strongest evidence, so it is the explanation _dedupe keeps.
             for pair in pairs:
-                indicators += _check_replacement(doc, page.number, pair, tolerances)
+                indicators += _check_replacement(doc, page_number, pair, tolerances)
             for placement in placements:
                 if placement.order in hidden:
                     continue  # not visible, so it has no rendered edge
-                indicators += _check_geometry(page.number, placement, tolerances)
+                indicators += _check_geometry(page_number, placement, tolerances)
                 indicators += _check_rendered_edges(page, placement, tolerances)
 
         return ImageTamperingResult(
@@ -751,6 +800,13 @@ _SEAM_MAX_FRACTION = 0.45
 # Seams within this many pixels of each other belong to one outline.
 # How many an outline needs is Tolerances.min_outline_seams.
 _SEAM_NEAR = 16
+# AC8 — below this share of pixels with any visible change (a step of over
+# _BLANK_EDGE grey levels to a neighbour), an upload has no content to judge.
+# The sparsest of 83 real uploads (pack images and rendered generated
+# documents, a text-only constitution at 150 DPI) sits at 2.0%; a blank page
+# is 0%.
+_BLANK_EDGE = 8.0
+_MIN_CONTENT_SHARE = 0.002
 
 
 def _seams(gray: np.ndarray) -> list[tuple[str, int, int, int, float]]:
@@ -855,6 +911,18 @@ def _check_raster(
         return _unable(
             document_id,
             f"Image is {width}x{height} px; too small to trace region outlines in.",
+            tolerances, [region], 1, bbox_units="px",
+        )
+
+    changes = (
+        int((np.abs(np.diff(gray, axis=1)) > _BLANK_EDGE).sum())
+        + int((np.abs(np.diff(gray, axis=0)) > _BLANK_EDGE).sum())
+    )
+    if changes / gray.size < _MIN_CONTENT_SHARE:
+        return _unable(
+            document_id,
+            "The image is essentially blank — too little text, lines or artwork to "
+            "judge whether anything was pasted into it.",
             tolerances, [region], 1, bbox_units="px",
         )
 

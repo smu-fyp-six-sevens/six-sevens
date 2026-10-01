@@ -49,8 +49,11 @@ SPECIALISTS: dict[str, Specialist] = {
             "with the rest of the document, overlapping/overlaid text blocks (a sign of "
             "pasting new content over an original figure or name), and images whose resolution "
             "or compression doesn't match the rest of the document (a spliced-in photo, signature "
-            "or figure, or one enlarged from a smaller source). The font and layout checks need a "
-            "PDF with native text; the image check also works on PNG/JPEG uploads. Most useful on "
+            "or figure, or one enlarged from a smaller source), or that were edited in after the "
+            "fact (painted over and replaced, stretched or rotated, pasted with a visible seam or "
+            "halo, or with altered brightness, colour, sharpness or noise). The font and layout "
+            "checks need a PDF with native text; the two image checks also work on PNG/JPEG "
+            "uploads. Most useful on "
             "documents with printed figures, names or photos that someone might have edited "
             "(statements, payslips, certificates, IDs)."
         ),
@@ -58,6 +61,7 @@ SPECIALISTS: dict[str, Specialist] = {
             detection_tools.font_consistency_tool,
             detection_tools.layout_anomalies_tool,
             detection_tools.image_manipulation_tool,
+            detection_tools.image_tampering_tool,
         ),
     ),
     "content_validation": Specialist(
