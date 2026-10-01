@@ -165,7 +165,8 @@ def dump_regions(pdf: Path, result: ImageManipulationResult, out_dir: Path) -> N
         with Image.open(pdf) as image:
             for n, indicator in enumerate(result.indicators):
                 crop = out_dir / f"{pdf.stem}_finding{n}.png"
-                image.crop(tuple(int(v) for v in indicator.bbox)).save(crop)
+                x0, y0, x1, y1 = (int(v) for v in indicator.bbox)
+                image.crop((x0, y0, x1, y1)).save(crop)
                 print(f"     wrote {crop.name}")
         return
     doc = pymupdf.open(pdf)

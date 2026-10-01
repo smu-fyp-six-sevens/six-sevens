@@ -298,8 +298,8 @@ def _resample_residual(image: Image.Image, factor: int) -> float | None:
     width, height = image.size
     if width // factor < 4 or height // factor < 4:
         return None
-    reduced = image.resize((width // factor, height // factor), Image.LANCZOS)
-    restored = reduced.resize((width, height), Image.LANCZOS)
+    reduced = image.resize((width // factor, height // factor), Image.Resampling.LANCZOS)
+    restored = reduced.resize((width, height), Image.Resampling.LANCZOS)
     # rms[0] is the single band's root-mean-square, 0-255. Normalised so the
     # figure is comparable between images of different bit depths.
     return ImageStat.Stat(ImageChops.difference(image, restored)).rms[0] / 255.0
@@ -392,7 +392,8 @@ def _hidden_placements(page: pymupdf.Page) -> list[tuple[int, BBox, int, BBox]]:
                 and above_rect.get_area() <= _MAX_COVER_AREA_RATIO * below_rect.get_area()
             ):
                 hidden.append((
-                    below["xref"], tuple(below_rect), above["xref"], tuple(above_rect),
+                    below["xref"], (below_rect.x0, below_rect.y0, below_rect.x1, below_rect.y1),
+                    above["xref"], (above_rect.x0, above_rect.y0, above_rect.x1, above_rect.y1),
                 ))
                 break
     return hidden
@@ -414,7 +415,9 @@ def _collect_regions(doc: pymupdf.Document, tolerances: Tolerances) -> list[Imag
     hidden: dict[int, list[tuple[int, BBox, int, BBox]]] = {}
 
     for page in doc:
-        hidden[page.number] = _hidden_placements(page)
+        page_number = page.number
+        assert page_number is not None  # always set on a page iterated from its document
+        hidden[page_number] = _hidden_placements(page)
         for image in page.get_images(full=True):
             xref = image[0]
             try:
@@ -470,7 +473,7 @@ def _collect_regions(doc: pymupdf.Document, tolerances: Tolerances) -> list[Imag
                 regions.append(
                     ImageRegion(
                         xref=xref,
-                        page=page.number,
+                        page=page_number,
                         bbox=(rect.x0, rect.y0, rect.x1, rect.y1),
                         pixel_width=pixel_width,
                         pixel_height=pixel_height,
