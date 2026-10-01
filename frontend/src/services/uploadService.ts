@@ -615,7 +615,8 @@ export type IndividualCheckId =
   | 'spelling-anomaly'
   | 'numerical-validation'
   | 'date-anomalies'
-  | 'metadata-anomaly';
+  | 'metadata-anomaly'
+  | 'image-integrity';
 
 export const INDIVIDUAL_DETECTION_CHECKS: { id: IndividualCheckId; label: string }[] = [
   { id: 'font-consistency', label: 'Font consistency' },
@@ -624,6 +625,9 @@ export const INDIVIDUAL_DETECTION_CHECKS: { id: IndividualCheckId; label: string
   { id: 'numerical-validation', label: 'Numerical validation' },
   { id: 'date-anomalies', label: 'Date anomalies' },
   { id: 'metadata-anomaly', label: 'Metadata anomaly' },
+  // Runs both image checks (SCRUM-64 resolution/compression, SCRUM-65
+  // tampering) and returns { manipulation, tampering }.
+  { id: 'image-integrity', label: 'Image integrity' },
 ];
 
 // Each check has its own result shape (FontConsistencyResult, LayoutAnomalyResult, ...) —
