@@ -201,6 +201,42 @@ def test_parse_extraction_output_malformed_json_escalates_with_model_text():
     assert "This is not a payslip at all." in result["escalation"]["reason"]
 
 
+def test_drop_unprinted_numbers_removes_a_figure_the_llm_calculated():
+    # Three per-month totals printed; the LLM summed them into total_credits.
+    text = "Total 36,182.85 70,506.33\nTotal 54,836.12 51,736.01\nTotal 42,639.19 47,306.64"
+    result = {
+        "extracted_fields": {"total_credits": 169548.98, "bank_name": "DBS"},
+        "field_confidences": {"total_credits": 0.85, "bank_name": 0.95},
+        "confidence": 0.9,
+    }
+    out = extract._drop_unprinted_numbers(result, text)
+    assert out["extracted_fields"] == {"bank_name": "DBS"}
+    assert out["field_confidences"] == {"bank_name": 0.95}
+    assert out["confidence"] == pytest.approx(0.95)
+    assert out["dropped_unprinted_fields"] == ["total_credits"]
+
+
+def test_drop_unprinted_numbers_keeps_printed_figures_in_any_format():
+    text = "Total Credits SGD 169,548.98\nWithdrawal 35.00\nProcessing Fee 1.00%"
+    fields = {
+        "total_credits": "SGD 169,548.98",
+        "total_debits": -35,
+        "fee_percentage": "1%",
+        "statement_period_end": "31-Aug-2026",
+        "transactions": [{"amount": 999.99}],
+    }
+    out = extract._drop_unprinted_numbers(
+        {"extracted_fields": dict(fields), "field_confidences": {}, "confidence": 0.0}, text
+    )
+    assert out["extracted_fields"] == fields
+    assert out["dropped_unprinted_fields"] == []
+
+
+def test_drop_unprinted_numbers_skips_when_text_has_no_figures():
+    result = {"extracted_fields": {"net_pay": 5000}, "field_confidences": {}, "confidence": 0.0}
+    assert extract._drop_unprinted_numbers(result, "")["extracted_fields"] == {"net_pay": 5000}
+
+
 def test_split_prompt_for_caching_keeps_raw_text_separate_from_the_schema_prefix():
     prefix, text = extract._split_prompt_for_caching("payslip", "Net pay: 5000")
     assert text == "Net pay: 5000"

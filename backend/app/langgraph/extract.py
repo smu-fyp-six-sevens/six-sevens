@@ -51,7 +51,9 @@ async def run_extraction(document_type: str, raw_text: str) -> dict:
         response = await cache_gate.run(f"extract:{document_type}", lambda: model.ainvoke([message]))
         telemetry.record_usage(span, response)
         llm_output = response.content if isinstance(response.content, str) else str(response.content)
-        return parse_extraction_output(llm_output)
+        result = _drop_unprinted_numbers(parse_extraction_output(llm_output), raw_text)
+        span.set_attribute("dropped_unprinted_fields", len(result.get("dropped_unprinted_fields", [])))
+        return result
 
 
 def parse_extraction_output(llm_output: str) -> dict:
@@ -100,6 +102,65 @@ def parse_extraction_output(llm_output: str) -> dict:
         "confidence": _average_field_confidence(field_confidences),
         "escalation": parsed.get("escalation"),
     }
+
+
+# A standalone figure in the document text: digits with optional thousands
+# separators and decimals ("12,688", "1.00", "109,129.65").
+_TEXT_NUMBER_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
+# A field value that is purely a figure, optionally with a currency prefix,
+# a percent sign, or accounting-style parentheses ("SGD 12,688", "(35.00)").
+_VALUE_NUMBER_RE = re.compile(
+    r"^\(?-?\s*(?:SGD|USD|S\$|US\$|\$)?\s*(-?[\d,]*\d(?:\.\d+)?)\s*%?\)?$", re.IGNORECASE
+)
+
+
+def _as_figure(value) -> float | None:
+    """The number a scalar field value represents, or None if it isn't a bare figure
+    (dates, names, text, arrays, booleans)."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return abs(float(value))
+    if isinstance(value, str):
+        match = _VALUE_NUMBER_RE.match(value.strip())
+        if match:
+            return abs(float(match.group(1).replace(",", "")))
+    return None
+
+
+def _drop_unprinted_numbers(result: dict, raw_text: str) -> dict:
+    """
+    Extraction is transcription only (see _FIELD_WRAPPER_INSTRUCTIONS), but the
+    LLM will still happily compute a figure the document never prints — e.g.
+    summing a three-month statement's per-month totals into total_credits.
+    Enforced here rather than trusted to the prompt: any top-level numeric
+    field whose figure doesn't appear anywhere in the document text is dropped.
+    Sign is ignored, since debits are legitimately extracted as negatives.
+
+    Arrays/objects (transactions, line items) are left alone — this only
+    checks scalar figures. Skipped entirely when the text has no figures at
+    all, so an empty/failed OCR doesn't wipe out every numeric field.
+    """
+    printed = {float(token.replace(",", "")) for token in _TEXT_NUMBER_RE.findall(raw_text or "")}
+    if not printed:
+        return result
+
+    fields = result.get("extracted_fields") or {}
+    dropped = []
+    for name, value in list(fields.items()):
+        figure = _as_figure(value)
+        if figure is None:
+            continue
+        if not any(abs(figure - p) < 0.005 for p in printed):
+            dropped.append(name)
+            del fields[name]
+            result.get("field_confidences", {}).pop(name, None)
+
+    if dropped:
+        logger.info("Dropped extracted fields not printed in the document: %s", dropped)
+        result["confidence"] = _average_field_confidence(result.get("field_confidences", {}))
+    result["dropped_unprinted_fields"] = dropped
+    return result
 
 
 def _average_field_confidence(field_confidences: dict) -> float:

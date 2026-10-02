@@ -257,6 +257,7 @@ async def extract_node(state: DocumentGraphState) -> dict:
     summary = {
         "confidence": extraction.get("confidence", 0.0),
         "field_count": len(extraction.get("extracted_fields") or {}),
+        "dropped_unprinted_fields": extraction.get("dropped_unprinted_fields", []),
         "escalation": extraction.get("escalation"),
     }
     trace.record(document_id, "extraction", document_type=document_type, **summary)

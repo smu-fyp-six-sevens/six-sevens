@@ -44,11 +44,13 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # fraud_detection.numerical_validation's BS.* checks, e.g.
         # BS.PERIOD_BOUNDS/BS.OVERDRAFT_LIMIT): only extract these where the
         # statement actually prints them; omit rather than guess.
-        # total_credits/total_debits/transaction_count deliberately aren't
-        # extracted: statements print per-period totals (if any) and no
-        # count, so the LLM ends up summing/counting them itself — a
-        # calculation, not a transcription. BS.TOTALS just skips them when
-        # absent.
+        # total_credits/total_debits only exist on templates that print a
+        # single whole-statement total — many print per-period totals only,
+        # and summing those is a calculation, not a transcription.
+        # extract._drop_unprinted_numbers enforces that in code. No
+        # transaction_count: statements don't print one, so it would only
+        # ever be a count the LLM made itself. BS.TOTALS skips whichever of
+        # these are absent.
         # opening_balance is doc_gen-verified only for the OCBC-style
         # statement (docgen_bankstatement_ocbc.py prints an explicit
         # "Opening Balance" header field, ctx['opening']) — the other
@@ -62,6 +64,7 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
             "company_name", "individual_name", "individual_address",
             "statement_period_start", "statement_period_end", "overdraft_limit",
             "opening_balance", "ledger_balance", "available_balance", "holds",
+            "total_credits", "total_debits",
         ],
     },
     "certificate_of_incorporation": {
@@ -666,7 +669,14 @@ _FIELD_WRAPPER_INSTRUCTIONS = (
     "but not because the value looks suspicious) — do not silently correct "
     "it to what you think was intended, and do not add a separate field "
     "describing the discrepancy. Spotting and explaining anomalies is a "
-    "separate, later, deterministic step; this step is transcription only."
+    "separate, later, deterministic step; this step is transcription only.\n\n"
+    "Never calculate a value. Do not add, subtract, multiply, count, average, "
+    "or convert figures to produce a field — every number you return must be "
+    "printed in the document exactly as a figure. If a field only exists as "
+    "something you would have to work out (e.g. a whole-statement total when "
+    "the statement only prints per-month totals, a fee amount when only a "
+    "percentage is printed), omit it. Any numeric value that does not appear "
+    "in the document text is discarded automatically."
 )
 
 
