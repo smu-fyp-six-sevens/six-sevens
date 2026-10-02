@@ -180,10 +180,10 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     const typeSelect = page.locator('.details-type-select');
     await expect(typeSelect).toHaveValue('');
     await expect(typeSelect.locator('option:checked')).toHaveText('Unrecognised — select a type…');
-    await expect(page.getByRole('button', { name: 'Confirm doc type' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Confirm document type' })).toBeDisabled();
 
     await typeSelect.selectOption({ label: 'Other' });
-    await page.getByRole('button', { name: 'Confirm doc type' }).click();
+    await page.getByRole('button', { name: 'Confirm document type' }).click();
 
     const saved = backend.requestsTo('PATCH', `/documents/${doc.id}/document-type`);
     expect(saved).toHaveLength(1);

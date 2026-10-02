@@ -37,7 +37,6 @@ export default defineConfig({
     env: {
       // An unroutable API host: every call must be answered by the mock.
       VITE_API_URL: 'http://api.test',
-      VITE_HIDE_DEV_FEATURES: 'false',
     },
   },
 });

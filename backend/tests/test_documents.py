@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import io
 from datetime import datetime
 from unittest.mock import AsyncMock, call, patch
@@ -1436,45 +1437,75 @@ def test_langgraph_trace_404_when_nothing_found_anywhere() -> None:
     assert response.status_code == 404
 
 
-# --- _start_detection_after_approval ---------------------------------------
+# --- _run_detection_task / _launch_detection --------------------------------
 
 
 @pytest.mark.asyncio
-async def test_start_detection_after_approval_pushes_case_snapshot_on_success() -> None:
-    from app.routers.documents import _start_detection_after_approval
+async def test_run_detection_task_pushes_case_snapshot_on_success() -> None:
+    from app.routers.documents import _run_detection_task
 
     with (
         patch("app.routers.documents.run_detection", AsyncMock(return_value={"verdict": "clean"})),
         patch("app.routers.documents._push_case_snapshot", AsyncMock()) as mock_push,
     ):
-        await _start_detection_after_approval("doc-1", "case-1")
+        await _run_detection_task("doc-1", "case-1")
 
     mock_push.assert_called_once_with("case-1")
 
 
 @pytest.mark.asyncio
-async def test_start_detection_after_approval_still_pushes_case_snapshot_on_failure() -> None:
+async def test_run_detection_task_still_pushes_case_snapshot_on_failure() -> None:
     # A crashed run must still surface live (status stays "scanning" forever
     # otherwise) — the push isn't conditional on run_detection succeeding.
-    from app.routers.documents import _start_detection_after_approval
+    from app.routers.documents import _run_detection_task
 
     with (
         patch("app.routers.documents.run_detection", AsyncMock(side_effect=RuntimeError("boom"))),
         patch("app.routers.documents._push_case_snapshot", AsyncMock()) as mock_push,
     ):
-        await _start_detection_after_approval("doc-1", "case-1")
+        await _run_detection_task("doc-1", "case-1")
 
     mock_push.assert_called_once_with("case-1")
 
 
 @pytest.mark.asyncio
-async def test_start_detection_after_approval_skips_push_when_no_case_id() -> None:
-    from app.routers.documents import _start_detection_after_approval
+async def test_run_detection_task_skips_push_when_no_case_id() -> None:
+    from app.routers.documents import _run_detection_task
 
     with (
         patch("app.routers.documents.run_detection", AsyncMock(return_value={"verdict": "clean"})),
         patch("app.routers.documents._push_case_snapshot", AsyncMock()) as mock_push,
     ):
-        await _start_detection_after_approval("doc-1", None)
+        await _run_detection_task("doc-1", None)
 
     mock_push.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_run_detection_task_records_cancellation_and_still_pushes_snapshot() -> None:
+    from app.routers.documents import _run_detection_task
+
+    with (
+        patch("app.routers.documents.run_detection", AsyncMock(side_effect=asyncio.CancelledError())),
+        patch("app.routers.documents.langgraph_trace") as mock_trace,
+        patch("app.routers.documents._push_case_snapshot", AsyncMock()) as mock_push,
+    ):
+        with pytest.raises(asyncio.CancelledError):
+            await _run_detection_task("doc-1", "case-1")
+
+    mock_trace.record.assert_called_once_with(
+        "doc-1", "detection_error", error="Cancelled by loan officer",
+    )
+    mock_push.assert_called_once_with("case-1")
+
+
+@pytest.mark.asyncio
+async def test_launch_detection_tracks_the_task() -> None:
+    from app.routers import documents as documents_router
+
+    with patch("app.routers.documents.run_detection", AsyncMock(return_value={"verdict": "clean"})):
+        documents_router._launch_detection("doc-1", None)
+        assert "doc-1" in documents_router._detection_tasks
+        await documents_router._detection_tasks["doc-1"]
+
+    assert "doc-1" not in documents_router._detection_tasks

@@ -55,7 +55,7 @@ def _approve(document: DocumentRecord, fields: list[ExtractedField]):
         patch("app.routers._dependencies.document_repository") as lookup,
         patch("app.routers.documents.document_repository") as documents,
         patch("app.routers.documents.extracted_fields_repository") as extracted,
-        patch("app.routers.documents._start_detection_after_approval"),
+        patch("app.routers.documents._launch_detection"),
     ):
         lookup.get_document.return_value = document
         documents.get_document.return_value = document

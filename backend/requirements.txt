@@ -1,12 +1,11 @@
-sqlalchemy
-asyncpg
-psycopg2-binary
-python-dotenv
-fastapi>=0.110
-uvicorn[standard]>=0.29
+fastapi[standard]
+sqlalchemy>=2.0,<3.0
+asyncpg>=0.29,<1.0
+psycopg2-binary>=2.9,<3.0
+python-dotenv>=1.0,<2.0
+uvicorn[standard]>=0.27,<1.0
 supabase>=2.4
-httpx>=0.27
-httpx2>=2.0,<3.0
+httpx>=0.27,<1.0
 python-multipart>=0.0.9
 pymupdf>=1.24,<2.0
 rapidocr>=3.0,<4.0
@@ -14,21 +13,22 @@ onnxruntime>=1.20,<2.0
 pillow>=10.0,<12.0
 reportlab>=4.2,<5.0
 pypdf>=4.2,<5.0
+symspellpy>=6.7,<7.0
+numpy
 openpyxl>=3.1
 pandas>=2.1
-numpy
-symspellpy>=6.7,<7.0
 
-# LangGraph experiment (langgraph-test branch, backend/app/langgraph) — see
-# LANGGRAPH_MIGRATION_PLAN.md.
+# LangGraph pipeline (backend/app/langgraph) — imported unconditionally by
+# main.py (via queue_service -> langgraph.pipeline -> langgraph.graph), so
+# these are hard runtime dependencies, not optional.
 langgraph>=0.2,<0.3
 langchain-anthropic>=0.3,<0.4
 langgraph-checkpoint-postgres>=2.0,<3.0
 psycopg[binary,pool]>=3.1,<4.0
 
-# Observability (langgraph-test branch) — see LANGGRAPH_MIGRATION_PLAN.md
-# section 6. Off by default (settings.OTEL_ENABLED); exports to Google Cloud
-# Trace when a project is configured, else the console.
+# Observability (see app/telemetry.py) — also imported unconditionally by
+# main.py; off at runtime by default (OTEL_ENABLED), but still has to be
+# importable.
 opentelemetry-api>=1.27,<2.0
 opentelemetry-sdk>=1.27,<2.0
 opentelemetry-instrumentation-fastapi>=0.48b0

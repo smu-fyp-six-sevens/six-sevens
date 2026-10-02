@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock,patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -688,4 +688,104 @@ def test_image_tampering_document_missing() -> None:
         mock_repo.get_document.return_value = None
         response = client.get("/documents/doc-1/detection/image-tampering")
     assert response.status_code == 404
+
+
+# --- detection/cancel, detection/retry --------------------------------------
+
+
+def test_cancel_detection_cancels_the_tracked_task() -> None:
+    from app.routers import documents as documents_router
+
+    task = MagicMock()
+    task.done.return_value = False
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch.dict(documents_router._detection_tasks, {"doc-1": task}, clear=True),
+    ):
+        mock_repo.get_document.return_value = _document(status=DocumentStatus.APPROVED)
+        response = client.post("/documents/doc-1/detection/cancel")
+
+    assert response.status_code == 200
+    task.cancel.assert_called_once()
+
+
+def test_cancel_detection_404_when_nothing_running() -> None:
+    from app.routers import documents as documents_router
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch.dict(documents_router._detection_tasks, {}, clear=True),
+    ):
+        mock_repo.get_document.return_value = _document(status=DocumentStatus.APPROVED)
+        response = client.post("/documents/doc-1/detection/cancel")
+
+    assert response.status_code == 409
+
+
+def test_retry_detection_relaunches_after_a_cancelled_run() -> None:
+    from app.routers import documents as documents_router
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
+        patch.object(documents_router, "_launch_detection") as mock_launch,
+        patch.dict(documents_router._detection_tasks, {}, clear=True),
+    ):
+        mock_repo.get_document.return_value = _document(status=DocumentStatus.APPROVED)
+        mock_trace.get_persisted.return_value = {"detection_error": "Cancelled by loan officer"}
+        response = client.post("/documents/doc-1/detection/retry")
+
+    assert response.status_code == 200
+    mock_launch.assert_called_once_with("doc-1", "case-1")
+
+
+def test_retry_detection_rejected_when_already_running() -> None:
+    from app.routers import documents as documents_router
+
+    task = MagicMock()
+    task.done.return_value = False
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch.object(documents_router, "_launch_detection") as mock_launch,
+        patch.dict(documents_router._detection_tasks, {"doc-1": task}, clear=True),
+    ):
+        mock_repo.get_document.return_value = _document(status=DocumentStatus.APPROVED)
+        response = client.post("/documents/doc-1/detection/retry")
+
+    assert response.status_code == 409
+    mock_launch.assert_not_called()
+
+
+def test_retry_detection_rejected_when_a_report_already_exists() -> None:
+    from app.routers import documents as documents_router
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
+        patch.object(documents_router, "_launch_detection") as mock_launch,
+        patch.dict(documents_router._detection_tasks, {}, clear=True),
+    ):
+        mock_repo.get_document.return_value = _document(status=DocumentStatus.APPROVED)
+        mock_trace.get_persisted.return_value = {"detection_report": {"verdict": "clean"}}
+        response = client.post("/documents/doc-1/detection/retry")
+
+    assert response.status_code == 409
+    mock_launch.assert_not_called()
+
+
+def test_retry_detection_rejected_when_nothing_ran_yet() -> None:
+    from app.routers import documents as documents_router
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
+        patch.object(documents_router, "_launch_detection") as mock_launch,
+        patch.dict(documents_router._detection_tasks, {}, clear=True),
+    ):
+        mock_repo.get_document.return_value = _document(status=DocumentStatus.APPROVED)
+        mock_trace.get_persisted.return_value = None
+        response = client.post("/documents/doc-1/detection/retry")
+
+    assert response.status_code == 409
+    mock_launch.assert_not_called()
 

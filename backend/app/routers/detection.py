@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from ..langgraph import trace as langgraph_trace
 from ..models import DocumentRecord
 from .. import case_service, extracted_fields_repository, storage_service
+from . import documents as documents_router
 from ._dependencies import get_document_or_404
 from ..case_match import DocumentCaseMatch
 from ..fraud_detection.font_consistency import (
@@ -81,10 +82,10 @@ async def _require_detection_has_run(
     Gate for the individual on-demand checks below: a loan officer can run
     one specific check manually, but only after the full Lead Investigator
     pass (triggered automatically on approval — see
-    routers/documents.py's _start_detection_after_approval) has completed
-    at least once for this document — never the other way round. Checked
-    by looking for a stored detection_report on the document's langgraph
-    trace (same signal GET .../detection/report uses).
+    routers/documents.py's _launch_detection) has completed at least once
+    for this document — never the other way round. Checked by looking for
+    a stored detection_report on the document's langgraph trace (same
+    signal GET .../detection/report uses).
     """
     try:
         persisted = await asyncio.to_thread(langgraph_trace.get_persisted, document_id)
@@ -254,6 +255,63 @@ async def get_document_detection_report(document_id: str) -> dict:
             detail=f"Detection failed: {error}. Run detection again.",
         )
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No detection report for this document yet.")
+
+
+@router.post("/{document_id}/detection/cancel")
+async def cancel_document_detection(
+    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+) -> dict:
+    """
+    Interrupts an in-flight detection run — the Detection panel's Cancel
+    action while a document reads "Scanning"/"Detecting". Only takes effect
+    at the graph's next await point (an Anthropic call already in flight
+    still completes) — see routers/documents.py's _run_detection_task.
+    The cancellation is then recorded the same way a crash is, so
+    GET .../detection/report and retry_document_detection below both
+    already know how to handle it.
+    """
+    task = documents_router._detection_tasks.get(document_id)
+    if task is None or task.done():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No detection run is currently in progress for this document.",
+        )
+    task.cancel()
+    return {"status": "cancelling"}
+
+
+@router.post("/{document_id}/detection/retry")
+async def retry_document_detection(
+    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+) -> dict:
+    """
+    Re-launches detection after a previous attempt was cancelled or
+    crashed. NOT a general "run detection" trigger — that only ever
+    happens automatically on approval (routers/documents.py's
+    approve_document) — so this is only allowed when the last attempt left
+    an error/cancellation behind and produced no report, and only when
+    nothing is already running for this document.
+    """
+    existing = documents_router._detection_tasks.get(document_id)
+    if existing is not None and not existing.done():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Detection is already running for this document.",
+        )
+    try:
+        persisted = await asyncio.to_thread(langgraph_trace.get_persisted, document_id)
+    except Exception:  # noqa: BLE001 — table unreachable: fall back to in-memory
+        persisted = None
+    trace_data = persisted or langgraph_trace.get(document_id)
+    has_report = bool((trace_data or {}).get("detection_report"))
+    has_error = bool((trace_data or {}).get("detection_error"))
+    if has_report or not has_error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Detection can only be retried after a cancelled or failed run.",
+        )
+    documents_router._launch_detection(document_id, document.case_id)
+    return {"status": "retrying"}
 
 
 @cases_router.get("/{case_id}/detection/reports")

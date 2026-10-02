@@ -29,6 +29,8 @@ import {
   isConfirmedOther,
   getDocumentCaseMatch,
   getDetectionReport,
+  cancelDetection,
+  retryDetection,
   getLangGraphTrace,
   updateDocumentType,
   updateExtractedFields,
@@ -702,10 +704,11 @@ export default function DocumentDetailsPage({
   };
 
   // Detection Agent: the stored report for this document. Only ever
-  // triggered by approval (routers/documents.py's _start_detection_after_approval) —
-  // no manual "run" trigger here.
+  // triggered by approval (routers/documents.py's _launch_detection) — no
+  // general-purpose "run" trigger here, just cancel/retry below.
   const [detectionReport, setDetectionReport] = useState<DetectionReport | null>(null);
-  // Set when a run crashed — see GET .../detection/report's 502-vs-404 split.
+  // Set when a run crashed or was cancelled — see GET .../detection/report's
+  // 502-vs-404 split.
   const [detectionError, setDetectionError] = useState<string | null>(null);
 
   const [isRefreshingDetection, setIsRefreshingDetection] = useState(false);
@@ -720,6 +723,34 @@ export default function DocumentDetailsPage({
       setDetectionError(err instanceof Error ? err.message : 'Detection failed.');
     } finally {
       setIsRefreshingDetection(false);
+    }
+  };
+
+  const [isCancellingDetection, setIsCancellingDetection] = useState(false);
+
+  const handleCancelDetection = async () => {
+    setIsCancellingDetection(true);
+    try {
+      await cancelDetection(documentId);
+      await refreshDetectionReport();
+    } catch (err) {
+      setDetectionError(err instanceof Error ? err.message : 'Failed to cancel detection.');
+    } finally {
+      setIsCancellingDetection(false);
+    }
+  };
+
+  const [isRetryingDetection, setIsRetryingDetection] = useState(false);
+
+  const handleRetryDetection = async () => {
+    setIsRetryingDetection(true);
+    try {
+      await retryDetection(documentId);
+      await refreshDetectionReport();
+    } catch (err) {
+      setDetectionError(err instanceof Error ? err.message : 'Failed to retry detection.');
+    } finally {
+      setIsRetryingDetection(false);
     }
   };
 
@@ -887,8 +918,12 @@ export default function DocumentDetailsPage({
   const lowestConfidence =
     fieldConfidenceValues.length > 0 ? Math.min(...fieldConfidenceValues) : null;
 
+  // A required field reading as blank doesn't lower lowestConfidence — the
+  // model can report a blank value with high confidence — so it needs its
+  // own check, not just the confidence one above.
   const needsManualReview =
-    lowestConfidence != null && lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD;
+    (lowestConfidence != null && lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD) ||
+    missingRequiredFields.length > 0;
 
   // Set once a loan officer has clicked "Save fields": the PATCH endpoint
   // writes extraction_confidence=1.0 and routing_status=accepted together.
@@ -1404,8 +1439,8 @@ export default function DocumentDetailsPage({
                   {isSavingType
                     ? 'Saving…'
                     : chosenType === document.document_type
-                      ? 'Confirm doc type'
-                      : 'Confirm doc type and rerun'}
+                      ? 'Confirm document type'
+                      : 'Confirm document type and rerun'}
                 </button>
 
                 {typeError && (
@@ -1950,11 +1985,24 @@ export default function DocumentDetailsPage({
           <p style={{ color: 'crimson' }}>{detectionError}</p>
         )}
         {!detectionReport ? (
-          <p>
-            {detectionError
-              ? 'The last detection run did not finish.'
-              : 'No detection report yet — detection starts automatically once the document is approved.'}
-          </p>
+          <>
+            <p>
+              {detectionError
+                ? 'The last detection run did not finish.'
+                : 'Scanning… detection starts automatically once the document is approved.'}
+            </p>
+            {detectionError ? (
+              <button type="button" disabled={isRetryingDetection} onClick={() => void handleRetryDetection()}>
+                {isRetryingDetection ? 'Retrying…' : 'Retry detection'}
+              </button>
+            ) : (
+              isApproved && (
+                <button type="button" disabled={isCancellingDetection} onClick={() => void handleCancelDetection()}>
+                  {isCancellingDetection ? 'Cancelling…' : 'Cancel detection'}
+                </button>
+              )
+            )}
+          </>
         ) : (
           <>
             <p>

@@ -45,19 +45,43 @@ _TYPE_OVERRIDE_BLOCKED_STATUSES = IN_FLIGHT_STATUSES
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 logger = logging.getLogger(__name__)
-async def _start_detection_after_approval(document_id: str, case_id: str | None) -> None:
+
+# document_id -> the task currently running detection for it, so
+# cancel/retry can find and interrupt it — same pattern as
+# queue_service.DocumentQueue._active_tasks.
+_detection_tasks: dict[str, asyncio.Task] = {}
+
+
+async def _run_detection_task(document_id: str, case_id: str | None) -> None:
     # Detection writes to langgraph_trace, a table the realtime listener
-    # doesn't watch, so completion needs its own explicit push for the
-    # case view's live scanning -> detected transition.
+    # doesn't watch, so completion (or cancellation) needs its own explicit
+    # push for the case view's live scanning -> detected transition.
     try:
         await run_detection(document_id)
+    except asyncio.CancelledError:
+        # Only takes effect at the graph's next await point — an Anthropic
+        # call already in flight still completes, it's just not waited on.
+        logger.info("Detection cancelled for document %s", document_id)
+        langgraph_trace.record(document_id, "detection_error", error="Cancelled by loan officer")
+        raise
     except Exception:
         logger.exception(
             "Fraud detection failed for approved document %s",
             document_id,
         )
-    if case_id:
-        await _push_case_snapshot(case_id)
+    finally:
+        _detection_tasks.pop(document_id, None)
+        if case_id:
+            await _push_case_snapshot(case_id)
+
+
+def _launch_detection(document_id: str, case_id: str | None) -> None:
+    """Only entry point that starts a detection run — called on approval,
+    and on a narrow retry after a cancelled/crashed attempt (see
+    routers/detection.py's retry_document_detection). Never a general
+    "run detection" trigger."""
+    task = asyncio.create_task(_run_detection_task(document_id, case_id))
+    _detection_tasks[document_id] = task
 
 class DocumentDownloadResponse(BaseModel):
     document_id: str
@@ -701,7 +725,6 @@ def _missing_required_fields(
 @router.post("/{document_id}/approve", response_model=DocumentRecord)
 async def approve_document(
     document_id: str,
-    background_tasks: BackgroundTasks,
     document: DocumentRecord = Depends(get_document_or_404),
 ) -> DocumentRecord:
     """
@@ -741,11 +764,7 @@ async def approve_document(
             document_id,
         )
 
-        background_tasks.add_task(
-            _start_detection_after_approval,
-            document_id,
-            document.case_id,
-        )
+        _launch_detection(document_id, document.case_id)
 
         return await get_document(document_id)
 

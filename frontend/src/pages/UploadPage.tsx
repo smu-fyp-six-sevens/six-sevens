@@ -314,7 +314,8 @@ export default function UploadPage({
     return (
       document.routing_status === 'manual_review' ||
       caseMatchNeedsReview(document) ||
-      (lowestConfidence != null && lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD)
+      (lowestConfidence != null && lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD) ||
+      (document.missing_required_fields?.length ?? 0) > 0
     );
   });
 
@@ -1474,6 +1475,7 @@ function isEligibleForApproval(
                   const lowestConfidence = lowestFieldConfidence(document.extracted_fields);
                   const lowExtractionConfidence =
                     lowestConfidence != null && lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD;
+                  const missingRequiredFields = document.missing_required_fields ?? [];
                   const caseMatch = caseMatches.get(document.id);
 
                   // Classification problems first — a case-match reason is
@@ -1497,7 +1499,11 @@ function isEligibleForApproval(
                             'This document was routed to manual review during classification. Please verify the document before approving.'
                       : lowExtractionConfidence
                         ? 'One or more extracted fields have low confidence and require review.'
-                        : 'This document requires manual review.';
+                        : missingRequiredFields.length > 0
+                          ? `Missing required field${missingRequiredFields.length > 1 ? 's' : ''}: ${missingRequiredFields
+                              .map((fieldName) => humanizeFieldKey(fieldName))
+                              .join(', ')}.`
+                          : 'This document requires manual review.';
                   return (
                     <div
                       key={document.id}

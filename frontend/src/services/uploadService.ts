@@ -163,18 +163,18 @@ export async function getDocumentCaseMatch(documentId: string): Promise<Document
 // Overall routing outcome shown in the UI (view only). routing_status
 // alone only records the classifier's decision — documents are always sent on
 // to extraction, so an 'accepted' classification can still end up needing
-// manual review. This folds in the later stages: a failed document or one
-// with a low-confidence field reads as Manual Review (same rule as the
-// flagged-documents list), and an accepted one reads as Pending until
-// extraction has finished. caseMatch folds in the case-match check the same
-// way: a document it sends to manual review (it belongs to another
-// company/individual, or the certificate of incumbency itself is in doubt)
-// reads as Manual Review — without touching the stored
-// routing_status, which the checklist still relies on.
+// manual review. This folds in the later stages: a failed document, one
+// with a low-confidence field, or one missing a required field reads as
+// Manual Review (same rule as the flagged-documents list), and an accepted
+// one reads as Pending until extraction has finished. caseMatch folds in
+// the case-match check the same way: a document it sends to manual review
+// (it belongs to another company/individual, or the certificate of
+// incumbency itself is in doubt) reads as Manual Review — without touching
+// the stored routing_status, which the checklist still relies on.
 export function formatRoutingOutcome(
   document: Pick<
     DocumentRecord,
-    'status' | 'routing_status' | 'extracted_fields'
+    'status' | 'routing_status' | 'extracted_fields' | 'missing_required_fields'
   >,
   caseMatch?: Pick<DocumentCaseMatch, 'status'> | null,
 ): string {
@@ -196,7 +196,8 @@ export function formatRoutingOutcome(
     document.routing_status === 'manual_review' ||
     caseMatch?.status === 'manual_review' ||
     (lowestConfidence != null &&
-      lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD)
+      lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD) ||
+    (document.missing_required_fields?.length ?? 0) > 0
   ) {
     return 'Manual Review';
   }
@@ -624,6 +625,28 @@ export async function getDetectionReport(documentId: string): Promise<DetectionR
   }
 
   return (await response.json()) as DetectionReport;
+}
+
+// Interrupts an in-flight run (the "Scanning"/"Detecting" stage) — not a
+// general "run detection" trigger, which only ever happens on approval.
+export async function cancelDetection(documentId: string): Promise<void> {
+  const response = await authFetch(`/documents/${documentId}/detection/cancel`, { method: 'POST' });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to cancel detection (${response.status}): ${detail}`);
+  }
+}
+
+// Re-launches detection after a cancelled or crashed run — only valid in
+// that state; the backend rejects it otherwise.
+export async function retryDetection(documentId: string): Promise<void> {
+  const response = await authFetch(`/documents/${documentId}/detection/retry`, { method: 'POST' });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Failed to retry detection (${response.status}): ${detail}`);
+  }
 }
 
 export type IndividualCheckId =

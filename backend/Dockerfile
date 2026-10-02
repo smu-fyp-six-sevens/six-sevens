@@ -21,6 +21,7 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/pyproject.toml ./pyproject.toml
+COPY backend/requirements.txt ./requirements.txt
 COPY backend/app ./app
 RUN mkdir -p ./document_templates ./documents_generated
 RUN pip install --no-cache-dir --retries 10 --timeout 120 -e .
