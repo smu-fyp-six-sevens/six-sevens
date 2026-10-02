@@ -626,17 +626,6 @@ export async function getDetectionReport(documentId: string): Promise<DetectionR
   return (await response.json()) as DetectionReport;
 }
 
-export async function runDetection(documentId: string): Promise<DetectionReport> {
-  const response = await authFetch(`/documents/${documentId}/detection/run`, { method: 'POST' });
-
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`Detection failed (${response.status}): ${detail}`);
-  }
-
-  return (await response.json()) as DetectionReport;
-}
-
 export type IndividualCheckId =
   | 'font-consistency'
   | 'layout-anomalies'

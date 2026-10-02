@@ -343,10 +343,6 @@ export class MockBackend {
         const report = this.detectionReports[documentId];
         return report ? json(report) : json({ detail: 'No detection report' }, 404);
       }
-      if (method === 'POST' && rest === '/detection/run') {
-        const report = this.detectionReports[documentId];
-        return report ? json(report) : json({ detail: 'Detection not mocked for this test' }, 500);
-      }
       if (method === 'GET' && rest === '/langgraph-trace') {
         const trace = this.traces[documentId];
         return trace ? json(trace) : json({ detail: 'No trace' }, 404);

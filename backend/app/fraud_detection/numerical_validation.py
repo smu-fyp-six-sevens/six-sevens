@@ -2574,13 +2574,6 @@ def _check_mrz_vs_viz(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck |
     return findings, None
 
 
-def _check_passport_id_number(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck | None]:
-    """The printed national ID number on a passport also goes through the
-    NRIC checksum and birth-year checks — reuses ID.NRIC_CHECKSUM /
-    ID.NRIC_BIRTHYEAR, already run universally, so nothing extra here."""
-    return [], None
-
-
 PASSPORT_CHECKS: list[CheckFn] = [
     _check_mrz_format, _check_mrz_checkdigits, _check_mrz_vs_viz,
 ]

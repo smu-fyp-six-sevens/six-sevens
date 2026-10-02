@@ -14,6 +14,11 @@ from app.fraud_detection.image_manipulation import (
     Tolerances,
 )
 from app.fraud_detection.metadata_analysis import MetadataAnalysisResult, MetadataAnomaly
+from app.fraud_detection.numerical_validation import (
+    BenfordAnalysis,
+    NumericalFinding,
+    NumericalValidationResult,
+)
 from app.fraud_detection.spelling_anomaly import SpellingAnomaly, SpellingAnomalyResult
 from app.langgraph.detection import tools
 
@@ -215,3 +220,30 @@ def test_layout_rendering_owns_both_image_tools() -> None:
 def test_with_ids_rejects_finding_missing_summary() -> None:
     with pytest.raises(AssertionError):
         tools._with_ids("fake_tool", [{"id": "x"}])
+
+
+@pytest.mark.asyncio
+async def test_numerical_validation_tool_surfaces_non_bank_statement_findings() -> None:
+    # Regression: the tool used to filter for check_code == "BS.RUNNING_BALANCE"
+    # only, silently dropping every other document type's findings (FS.*, CR.*, etc).
+    result = NumericalValidationResult(
+        document_id="doc-1",
+        document_type="source_of_wealth",
+        values_analysed=4,
+        findings=[
+            NumericalFinding(
+                check_code="FS.IS_CAST", severity="impossible", summary="Income statement doesn't cast.",
+            )
+        ],
+        skipped_checks=[],
+        benford=BenfordAnalysis(sample_size=0, digits=[], unable_to_assess=True),
+        unable_to_assess=False,
+    )
+    with (
+        patch.object(tools, "_document", AsyncMock(return_value=_document(document_type="source_of_wealth"))),
+        patch.object(tools, "_extracted_fields", AsyncMock(return_value=[])),
+        patch.object(tools, "check_numerical_validation", return_value=result),
+    ):
+        output = await tools.numerical_validation_tool.ainvoke({"document_id": "doc-1"})
+
+    assert output["findings"][0]["check_code"] == "FS.IS_CAST"

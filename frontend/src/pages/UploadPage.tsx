@@ -1360,6 +1360,16 @@ function isEligibleForApproval(
                         <span className="documents-card-icon">✓</span>
                         <span>Approved Documents</span>
                       </div>
+                      <span
+                        className={`mock-badge${wsConnected ? ' live' : ''}`}
+                        title={
+                          wsConnected
+                            ? 'Connected — updates push in real time'
+                            : 'Disconnected — reconnecting…'
+                        }
+                      >
+                        {wsConnected ? 'LIVE' : 'OFFLINE'}
+                      </span>
                     </div>
 
                     <div className="documents-table documents-table--selectable">

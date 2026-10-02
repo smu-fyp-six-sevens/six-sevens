@@ -32,7 +32,6 @@ import {
   getLangGraphTrace,
   updateDocumentType,
   updateExtractedFields,
-  runDetection,
   runIndividualDetectionCheck,
   INDIVIDUAL_DETECTION_CHECKS,
 } from '../services/uploadService';
@@ -702,25 +701,12 @@ export default function DocumentDetailsPage({
     }
   };
 
-  // Detection Agent: the stored report for this document.
+  // Detection Agent: the stored report for this document. Only ever
+  // triggered by approval (routers/documents.py's _start_detection_after_approval) —
+  // no manual "run" trigger here.
   const [detectionReport, setDetectionReport] = useState<DetectionReport | null>(null);
-  // Set when a run crashed (distinct from simply not having run yet) — see
-  // GET .../detection/report's 502-vs-404 split in routers/detection.py.
+  // Set when a run crashed — see GET .../detection/report's 502-vs-404 split.
   const [detectionError, setDetectionError] = useState<string | null>(null);
-  const [isRunningDetection, setIsRunningDetection] = useState(false);
-
-  const handleRunDetection = async () => {
-    setIsRunningDetection(true);
-    setDetectionError(null);
-    try {
-      const report = await runDetection(documentId);
-      setDetectionReport(report);
-    } catch (err) {
-      setDetectionError(err instanceof Error ? err.message : 'Detection failed.');
-    } finally {
-      setIsRunningDetection(false);
-    }
-  };
 
   const [isRefreshingDetection, setIsRefreshingDetection] = useState(false);
 
@@ -1964,16 +1950,11 @@ export default function DocumentDetailsPage({
           <p style={{ color: 'crimson' }}>{detectionError}</p>
         )}
         {!detectionReport ? (
-          <>
-            <p>
-              {detectionError
-                ? 'The last detection run did not finish.'
-                : 'No detection report yet for this document.'}
-            </p>
-            <button type="button" disabled={isRunningDetection} onClick={() => void handleRunDetection()}>
-              {isRunningDetection ? 'Running…' : detectionError ? 'Retry detection' : 'Run detection'}
-            </button>
-          </>
+          <p>
+            {detectionError
+              ? 'The last detection run did not finish.'
+              : 'No detection report yet — detection starts automatically once the document is approved.'}
+          </p>
         ) : (
           <>
             <p>

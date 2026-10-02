@@ -251,11 +251,11 @@ async def date_consistency_tool(document_id: Annotated[str, InjectedState("docum
 
 
 @tool
-async def transaction_balance_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
-    """Recomputes a bank statement's running balance from its extracted transactions (previous balance + amount should equal the next balance) and reports rows where the arithmetic doesn't hold — a strong sign a figure was altered."""
+async def numerical_validation_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
+    """Runs every numerical/format/reconciliation check that applies to this document's type and reports every discrepancy found — e.g. a bank statement's running balance and Benford's Law distribution, a Source of Wealth financial statement's income-statement/balance-sheet casting and rollforwards, a payslip's CPF arithmetic, a credit report's internal consistency, an NRIC checksum or UEN format, a passport's MRZ checkdigits, a FATCA TIN format. Which checks actually run is decided inside this tool from the document's own type — you don't need to know which ones apply."""
     document = await _document(document_id)
     if document is None:
-        return _result("transaction_balance_tool", [], unable="Document not found")
+        return _result("numerical_validation_tool", [], unable="Document not found")
 
     fields = await _extracted_fields(document_id)
     result = await asyncio.to_thread(
@@ -263,18 +263,12 @@ async def transaction_balance_tool(document_id: Annotated[str, InjectedState("do
     )
     if result.unable_to_assess:
         return _result(
-            "transaction_balance_tool", [], unable=result.unable_to_assess_reason or "Unable to assess"
+            "numerical_validation_tool", [], unable=result.unable_to_assess_reason or "Unable to assess"
         )
-
-    balance_findings = [f for f in result.findings if f.check_code == "BS.RUNNING_BALANCE"]
-    if not balance_findings:
-        skipped = next((s for s in result.skipped_checks if s.check_code == "BS.RUNNING_BALANCE"), None)
-        if skipped is not None:
-            return _result("transaction_balance_tool", [], unable=skipped.reason)
-        return _result("transaction_balance_tool", [])
 
     findings = [
         {
+            "check_code": finding.check_code,
             "severity_hint": finding.severity,
             "field": finding.field,
             "stated": finding.stated,
@@ -282,9 +276,9 @@ async def transaction_balance_tool(document_id: Annotated[str, InjectedState("do
             "needs_review": finding.needs_review,
             "summary": finding.summary,
         }
-        for finding in balance_findings
+        for finding in result.findings
     ]
-    return _result("transaction_balance_tool", _with_ids("transaction_balance_tool", findings))
+    return _result("numerical_validation_tool", _with_ids("numerical_validation_tool", findings))
 
 
 # --- Digital Authenticity ---------------------------------------------------

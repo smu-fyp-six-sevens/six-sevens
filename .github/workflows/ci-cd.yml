@@ -47,6 +47,9 @@ jobs:
         run: npx --yes pyright --pythonpath "$(python -c 'import sys; print(sys.executable)')" app
 
   frontend-ci:
+    # Includes the SCRUM-206 Playwright regression suite (Sprint 1 & 2 test
+    # cases against a mocked backend, frontend/e2e) — one job, one install,
+    # instead of a second job repeating checkout/setup-node/npm ci.
     name: Frontend CI
     runs-on: ubuntu-latest
     defaults:
@@ -72,29 +75,6 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-  frontend-regression:
-    # SCRUM-206 regression suite: Sprint 1 & 2 test cases against a mocked
-    # backend (frontend/e2e). No Supabase or AI calls. A failure here fails
-    # the PR check, and GitHub emails whoever pushed it.
-    name: Frontend regression (Playwright)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install frontend dependencies
-        run: npm ci
-
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
@@ -116,7 +96,6 @@ jobs:
     needs:
       - backend-ci
       - frontend-ci
-      - frontend-regression
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     strategy:

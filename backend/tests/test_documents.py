@@ -1434,3 +1434,47 @@ def test_langgraph_trace_404_when_nothing_found_anywhere() -> None:
         response = client.get("/documents/doc-1/langgraph-trace")
 
     assert response.status_code == 404
+
+
+# --- _start_detection_after_approval ---------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_start_detection_after_approval_pushes_case_snapshot_on_success() -> None:
+    from app.routers.documents import _start_detection_after_approval
+
+    with (
+        patch("app.routers.documents.run_detection", AsyncMock(return_value={"verdict": "clean"})),
+        patch("app.routers.documents._push_case_snapshot", AsyncMock()) as mock_push,
+    ):
+        await _start_detection_after_approval("doc-1", "case-1")
+
+    mock_push.assert_called_once_with("case-1")
+
+
+@pytest.mark.asyncio
+async def test_start_detection_after_approval_still_pushes_case_snapshot_on_failure() -> None:
+    # A crashed run must still surface live (status stays "scanning" forever
+    # otherwise) — the push isn't conditional on run_detection succeeding.
+    from app.routers.documents import _start_detection_after_approval
+
+    with (
+        patch("app.routers.documents.run_detection", AsyncMock(side_effect=RuntimeError("boom"))),
+        patch("app.routers.documents._push_case_snapshot", AsyncMock()) as mock_push,
+    ):
+        await _start_detection_after_approval("doc-1", "case-1")
+
+    mock_push.assert_called_once_with("case-1")
+
+
+@pytest.mark.asyncio
+async def test_start_detection_after_approval_skips_push_when_no_case_id() -> None:
+    from app.routers.documents import _start_detection_after_approval
+
+    with (
+        patch("app.routers.documents.run_detection", AsyncMock(return_value={"verdict": "clean"})),
+        patch("app.routers.documents._push_case_snapshot", AsyncMock()) as mock_push,
+    ):
+        await _start_detection_after_approval("doc-1", None)
+
+    mock_push.assert_not_called()

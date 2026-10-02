@@ -6,10 +6,8 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-
 from ..langgraph import trace as langgraph_trace
-from ..langgraph.detection.graph import DetectionError, run_detection
-from ..models import IN_FLIGHT_STATUSES, DocumentRecord
+from ..models import DocumentRecord
 from .. import case_service, extracted_fields_repository, storage_service
 from ._dependencies import get_document_or_404
 from ..case_match import DocumentCaseMatch
@@ -82,10 +80,11 @@ async def _require_detection_has_run(
     """
     Gate for the individual on-demand checks below: a loan officer can run
     one specific check manually, but only after the full Lead Investigator
-    pass (POST /detection/run) has completed at least once for this
-    document — never the other way round. Checked by looking for a stored
-    detection_report on the document's langgraph trace (same signal
-    GET .../detection/report uses).
+    pass (triggered automatically on approval — see
+    routers/documents.py's _start_detection_after_approval) has completed
+    at least once for this document — never the other way round. Checked
+    by looking for a stored detection_report on the document's langgraph
+    trace (same signal GET .../detection/report uses).
     """
     try:
         persisted = await asyncio.to_thread(langgraph_trace.get_persisted, document_id)
@@ -232,36 +231,6 @@ async def get_spelling_anomaly(
         unable_to_assess=result.unable_to_assess, finding_count=len(result.anomalies),
     )
     return result
-
-
-# A pipeline run is still in flight for these — detection needs finished extraction.
-_DETECTION_BLOCKED_STATUSES = IN_FLIGHT_STATUSES
-
-
-@router.post("/{document_id}/detection/run")
-async def run_document_detection(
-    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
-) -> dict:
-    """
-    Runs the Lead Investigator + specialists over one document and returns the
-    combined report (also stored on the document's langgraph trace, so it
-    survives restarts — see langgraph/detection/graph.py). Nothing is written
-    to the documents table.
-    """
-    if document.status in _DETECTION_BLOCKED_STATUSES:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Document is still being processed; run detection once extraction has finished.",
-        )
-    try:
-        return await run_detection(document_id)
-    except DetectionError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except Exception as exc:
-        logger.exception("Detection failed for document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Detection failed: {exc}"
-        ) from exc
 
 
 @router.get("/{document_id}/detection/report")

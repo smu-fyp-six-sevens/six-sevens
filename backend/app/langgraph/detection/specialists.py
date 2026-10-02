@@ -69,14 +69,18 @@ SPECIALISTS: dict[str, Specialist] = {
         title="Content Validation Analyst",
         expertise=(
             "Whether the document's content is internally sensible: misspellings in a formal issued "
-            "document, impossible or contradictory dates, and (for bank statements) running balances "
-            "that don't add up. Applies to nearly any text document; the numerical check only "
-            "applies to documents that carry transaction figures."
+            "document, impossible or contradictory dates, and whatever numerical/format/reconciliation "
+            "checks apply to this document's type — a bank statement's running balance and Benford's "
+            "Law distribution, a Source of Wealth financial statement's income-statement/balance-sheet "
+            "casting and rollforwards, a payslip's CPF arithmetic, a credit report's internal "
+            "consistency, an NRIC checksum or UEN format, a passport's MRZ checkdigits, a FATCA TIN "
+            "format, and more. Applies to nearly any document — the numerical tool decides internally "
+            "which of its checks actually apply to this document's type."
         ),
         tools=(
             detection_tools.spelling_tool,
             detection_tools.date_consistency_tool,
-            detection_tools.transaction_balance_tool,
+            detection_tools.numerical_validation_tool,
         ),
     ),
     "digital_authenticity": Specialist(

@@ -45,7 +45,10 @@ _TYPE_OVERRIDE_BLOCKED_STATUSES = IN_FLIGHT_STATUSES
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 logger = logging.getLogger(__name__)
-async def _start_detection_after_approval(document_id: str) -> None:
+async def _start_detection_after_approval(document_id: str, case_id: str | None) -> None:
+    # Detection writes to langgraph_trace, a table the realtime listener
+    # doesn't watch, so completion needs its own explicit push for the
+    # case view's live scanning -> detected transition.
     try:
         await run_detection(document_id)
     except Exception:
@@ -53,6 +56,8 @@ async def _start_detection_after_approval(document_id: str) -> None:
             "Fraud detection failed for approved document %s",
             document_id,
         )
+    if case_id:
+        await _push_case_snapshot(case_id)
 
 class DocumentDownloadResponse(BaseModel):
     document_id: str
@@ -739,6 +744,7 @@ async def approve_document(
         background_tasks.add_task(
             _start_detection_after_approval,
             document_id,
+            document.case_id,
         )
 
         return await get_document(document_id)
