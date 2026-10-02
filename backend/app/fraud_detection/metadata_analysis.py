@@ -601,6 +601,29 @@ def _check_edit_history(
     ]
 
 
+# exiftool's FileType values for raster images. These rarely carry authorship
+# or editing metadata at all: screenshots, phone exports and images passed
+# through messaging apps or web tools are routinely written without it.
+_IMAGE_FILE_TYPES = frozenset({"PNG", "JPEG", "GIF", "WEBP", "TIFF", "BMP", "HEIC"})
+
+
+def _unable_to_assess_reason(raw_metadata: dict | None) -> str:
+    if not raw_metadata:
+        return "No metadata was captured for this document"
+    file_type = str(raw_metadata.get("FileType") or "").upper()
+    if file_type in _IMAGE_FILE_TYPES:
+        return (
+            f"This {file_type} image carries no authorship or editing metadata (no author, "
+            "software, or creation/modification dates). That's normal for screenshots, scans, "
+            "and images saved by phones, messaging apps or web tools, so there is nothing for "
+            "this check to assess. Missing metadata is not a sign of tampering on its own."
+        )
+    return (
+        "None of the supported metadata fields (author, creator, producer, creation date, "
+        "modification date, software) were present"
+    )
+
+
 def check_metadata_anomalies(
     document_id: str,
     raw_metadata: dict | None,
@@ -637,19 +660,13 @@ def check_metadata_anomalies(
     # "Unable to Assess" on a document we know was altered would be worse
     # than reporting nothing.
     if not any(extracted[field] for field in SUPPORTED_METADATA_FIELDS) and not parse_warning_anomalies:
-        reason = (
-            "No metadata was captured for this document"
-            if not raw_metadata
-            else "None of the supported metadata fields (author, creator, producer, "
-            "creation date, modification date, software) were present"
-        )
         return MetadataAnalysisResult(
             document_id=document_id,
             extracted_metadata=extracted,
             anomalies=[],
             ai_generation_indicators=[],
             unable_to_assess=True,
-            unable_to_assess_reason=reason,
+            unable_to_assess_reason=_unable_to_assess_reason(raw_metadata),
         )
 
     anomalies = _check_suspicious_values(extracted)

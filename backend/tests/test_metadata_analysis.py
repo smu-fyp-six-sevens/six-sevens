@@ -70,6 +70,15 @@ def test_unable_to_assess_when_only_unsupported_fields_present() -> None:
     assert "None of the supported metadata fields" in result.unable_to_assess_reason
 
 
+def test_unable_to_assess_reason_explains_bare_image_metadata() -> None:
+    result = check_metadata_anomalies(
+        "doc-1", {"FileType": "PNG", "ImageWidth": 1412, "FileModifyDate": "2026:10:02 04:59:12+00:00"}
+    )
+    assert result.unable_to_assess is True
+    assert "This PNG image carries no authorship or editing metadata" in result.unable_to_assess_reason
+    assert "not a sign of tampering" in result.unable_to_assess_reason
+
+
 def test_assessed_when_at_least_one_supported_field_present() -> None:
     result = check_metadata_anomalies("doc-1", {"Author": "Jane Tan"})
     assert result.unable_to_assess is False
