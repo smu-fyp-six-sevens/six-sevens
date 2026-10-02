@@ -40,11 +40,15 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # models.compute_fulfilled_requirements uses exactly this
         # company-vs-individual split to tell the two apart.
         "required": ["bank_name", "account_number", "transactions"],
-        # statement_period_* through transaction_count (not doc_gen-verified
-        # — added for fraud_detection.numerical_validation's BS.* checks,
-        # e.g. BS.PERIOD_BOUNDS/BS.OVERDRAFT_LIMIT/BS.TOTALS): only extract
-        # these where the statement actually prints them; omit rather than
-        # guess.
+        # statement_period_* through holds (not doc_gen-verified — added for
+        # fraud_detection.numerical_validation's BS.* checks, e.g.
+        # BS.PERIOD_BOUNDS/BS.OVERDRAFT_LIMIT): only extract these where the
+        # statement actually prints them; omit rather than guess.
+        # total_credits/total_debits/transaction_count deliberately aren't
+        # extracted: statements print per-period totals (if any) and no
+        # count, so the LLM ends up summing/counting them itself — a
+        # calculation, not a transcription. BS.TOTALS just skips them when
+        # absent.
         # opening_balance is doc_gen-verified only for the OCBC-style
         # statement (docgen_bankstatement_ocbc.py prints an explicit
         # "Opening Balance" header field, ctx['opening']) — the other
@@ -58,7 +62,6 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
             "company_name", "individual_name", "individual_address",
             "statement_period_start", "statement_period_end", "overdraft_limit",
             "opening_balance", "ledger_balance", "available_balance", "holds",
-            "total_credits", "total_debits", "transaction_count",
         ],
     },
     "certificate_of_incorporation": {
