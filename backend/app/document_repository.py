@@ -204,6 +204,8 @@ def update_extracted_fields(
     document_id: str,
     extraction_confidence: Optional[float],
     fulfilled_requirements: Optional[list[str]] = None,
+    *,
+    routing_status: Optional[str] = None,
 ) -> None:
     """
     Persists the Extraction-stage confidence into its own extraction_confidence
@@ -233,6 +235,10 @@ def update_extracted_fields(
     }
     if fulfilled_requirements is not None:
         update["fulfilled_requirements"] = fulfilled_requirements
+    # Only a loan officer's "Save fields" passes this — their review
+    # resolves the document's manual review, so it's now ACCEPTED.
+    if routing_status is not None:
+        update["routing_status"] = routing_status
     result = supabase_client.table("documents").update(update).eq("id", document_id).execute()
     if result.data:
         _sync_case(_row(result.data[0]).get("case_id"))

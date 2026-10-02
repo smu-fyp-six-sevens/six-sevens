@@ -145,6 +145,30 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     await expect(page.locator('.approved-documents-card')).toContainText(cert.filename);
   });
 
+  test('DI-025 saving fields locks them and moves Manual Review -> Accepted -> Approved @DI-025', async ({ page, backend }) => {
+    // Routed to manual review by the classifier as well — saving the
+    // fields must clear that too, not only the low field confidence.
+    const { fixture, cert } = certWithMissingUen(backend);
+    cert.routing_status = 'manual_review';
+    await page.goto(fixture.documentUrl(cert));
+    await expect(routingOutcome(page)).toHaveText('Manual Review');
+
+    await reviewRow(page, 'UEN').locator('input').fill('201634564N');
+    await page.getByRole('button', { name: 'Save fields' }).click();
+
+    await expect(routingOutcome(page)).toHaveText('Accepted');
+    await expect(reviewSection(page)).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '+ Add field' })).toHaveCount(0);
+    await expect(page.locator('.delete-field-button')).toHaveCount(0);
+
+    await page.reload();
+    await expect(routingOutcome(page)).toHaveText('Accepted');
+    await expect(reviewSection(page)).toHaveCount(0);
+
+    await page.getByRole('button', { name: '✓ Approve Document' }).click();
+    await expect(routingOutcome(page)).toHaveText('Approved');
+  });
+
   test('DI-026 fields cannot be saved while a required field is still empty @DI-026', async ({ page, backend }) => {
     const { fixture, cert } = certWithMissingUen(backend);
     await page.goto(fixture.documentUrl(cert));

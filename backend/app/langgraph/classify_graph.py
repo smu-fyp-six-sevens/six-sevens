@@ -36,6 +36,7 @@ from langgraph.prebuilt import ToolNode
 
 from . import text_cache, trace
 from .cache_gate import cache_gate
+from .classification_confidence import compute_classification_confidence, tool_results
 from .. import telemetry
 from .classify_support import agent_prompt_parts, validate_agent_output
 from .llm_classify import llm_classify_tool
@@ -195,11 +196,39 @@ def prepare_reclassify_node(state: DocumentGraphState) -> dict:
     return {"agent_messages": new_messages, "classification": None}
 
 
+def _apply_computed_confidence(state: DocumentGraphState, classification: dict) -> dict:
+    """
+    Replaces the agent's self-reported confidence with one computed from the
+    sources it actually consulted (see classification_confidence.py). The
+    agent's own needs_manual_review stays OR'd in as an extra signal; it can
+    only make routing stricter, never looser.
+    """
+    computed = compute_classification_confidence(
+        classification.get("document_type"),
+        state.get("rule_result"),
+        tool_results(state.get("agent_messages") or []),
+    )
+    trace.record(
+        state["document_id"], "confidence",
+        agent_confidence=classification.get("confidence"),
+        computed_confidence=computed["confidence"],
+        basis=computed["basis"],
+        sources=computed["sources"],
+    )
+    return {
+        **classification,
+        "confidence": computed["confidence"],
+        "needs_manual_review": bool(classification.get("needs_manual_review")) or computed["needs_manual_review"],
+    }
+
+
 def validate_node(state: DocumentGraphState) -> dict:
     last = (state.get("agent_messages") or [])[-1]
     content = last.content if isinstance(last.content, str) else str(last.content)
     classification = validate_agent_output(content)
     trace.record(state["document_id"], "validate", document_type=classification.get("document_type"))
+    if classification.get("document_type"):
+        classification = _apply_computed_confidence(state, classification)
     return {"classification": classification}
 
 
@@ -236,7 +265,7 @@ async def repair_node(state: DocumentGraphState) -> dict:
         repaired = {}
 
     if repaired.get("document_type"):
-        return {"classification": repaired}
+        return {"classification": _apply_computed_confidence(state, repaired)}
 
     return {
         "classification": {

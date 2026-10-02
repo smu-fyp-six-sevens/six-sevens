@@ -454,11 +454,15 @@ async def update_extracted_fields(
                 # Preserve the original extraction confidence.
                 field_confidences[name] = existing_field.confidence
 
+        # The officer has now reviewed every flagged field, which resolves
+        # the manual review: routing moves Manual Review -> Accepted here,
+        # and only approve_document later moves it on to Approved.
         await asyncio.to_thread(
             document_repository.update_extracted_fields,
             document_id,
             1.0,
             fulfilled_requirements,
+            routing_status=RoutingStatus.ACCEPTED.value,
         )
 
         await asyncio.to_thread(
@@ -548,7 +552,11 @@ async def add_extracted_field(
         await asyncio.to_thread(
             document_repository.update_extracted_fields,
             document_id,
-            1.0,
+            # The new field itself is stored at 1.0, but adding one isn't
+            # the officer's "Save fields" review — extraction_confidence=1.0
+            # (with routing_status=accepted) is what the frontend reads as
+            # "fields verified and locked", so it's carried through unchanged.
+            document.extraction_confidence,
             fulfilled_requirements,
         )
 

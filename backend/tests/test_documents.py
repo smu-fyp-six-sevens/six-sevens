@@ -319,8 +319,9 @@ def test_update_extracted_fields_success() -> None:
     # fulfilled_requirements recomputed from the corrected fields (see
     # models.compute_fulfilled_requirements) rather than left untouched —
     # here just self-fulfilment since no individual_address was corrected in.
+    # routing_status=accepted: the officer's save resolves manual review.
     mock_repo.update_extracted_fields.assert_called_once_with(
-        "doc-1", 1.0, ["payslip"]
+        "doc-1", 1.0, ["payslip"], routing_status="accepted"
     )
     # required_field_names drawn from the document's own document_type
     # ("payslip") so field_category reflects the same required/additional
@@ -847,9 +848,12 @@ def test_add_extracted_field_inserts_and_returns_refetched_document() -> None:
         5000,
         required_field_names=set(schema_field_names("payslip")),
     )
-    # Manually entered fields are human-verified, hence confidence 1.0.
+    # The new field itself is stored at 1.0 (see add_extracted_field above),
+    # but adding one isn't a "Save fields" review, so the document-level
+    # extraction_confidence is carried through unchanged — 1.0 there is what
+    # the frontend reads as "fields verified and locked".
     mock_repo.update_extracted_fields.assert_called_once_with(
-        "doc-1", 1.0, ["payslip"]
+        "doc-1", None, ["payslip"]
     )
     # document_repository.update_extracted_fields resyncs the case itself
     # now — not observable from here since that call is mocked.

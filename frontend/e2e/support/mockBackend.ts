@@ -306,7 +306,7 @@ export class MockBackend {
       }
       if (method === 'PATCH' && rest === '/extracted-fields') {
         // Same rule as routers/documents.py's update_extracted_fields: a
-        // field the officer could edit (empty, below the 0.95 threshold, or
+        // field the officer could edit (empty, below the 0.9 threshold, or
         // any field on an unrecognised document) becomes human-verified
         // (1.0); every other field keeps its original confidence.
         const submitted = (body as { extracted_fields: Record<string, unknown> }).extracted_fields;
@@ -322,11 +322,12 @@ export class MockBackend {
             !old ||
             document.document_type === 'unrecognised' ||
             oldValue === '' ||
-            (old.confidence != null && old.confidence < 0.95);
+            (old.confidence != null && old.confidence < 0.9);
           merged[name] = { id: old?.id, value, confidence: wasEditable ? 1.0 : old.confidence ?? null };
         }
         document.extracted_fields = merged;
         document.extraction_confidence = 1.0;
+        document.routing_status = 'accepted';
         return json(document);
       }
       if (method === 'PATCH' && rest === '/document-type') {

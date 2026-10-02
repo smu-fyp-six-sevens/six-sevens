@@ -903,6 +903,16 @@ export default function DocumentDetailsPage({
   const needsManualReview =
     lowestConfidence != null && lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD;
 
+  // Set once a loan officer has clicked "Save fields": the PATCH endpoint
+  // writes extraction_confidence=1.0 and routing_status=accepted together.
+  // From then on the fields are locked — no further edits, adds or deletes —
+  // and the only remaining step is Approve Document.
+  const areFieldsVerified =
+    document?.routing_status === 'accepted' &&
+    document.extraction_confidence === 1 &&
+    !needsManualReview;
+  const canEditFields = !isApproved && !areFieldsVerified;
+
   // The type can only be corrected once the pipeline has finished with the
   // document, and only while classification confidence is still below the
   // threshold — the backend enforces both. Saving sets confidence to 1.0, so
@@ -1130,7 +1140,7 @@ export default function DocumentDetailsPage({
   }
 
   async function handleSaveFields() {
-    if (!document || isApproved) {
+    if (!document || !canEditFields) {
       return;
     }
 
@@ -1512,7 +1522,7 @@ export default function DocumentDetailsPage({
             </span>
           )}
 
-          {!isApproved && (
+          {canEditFields && (
             <button
               type="button"
               className="add-field-button"
@@ -1534,7 +1544,7 @@ export default function DocumentDetailsPage({
           )}
         </div>
 
-        {isAddFieldOpen && (
+        {canEditFields && isAddFieldOpen && (
           <div className="add-field-form">
             <div className="add-field-form-row">
               <label htmlFor="new-field-name">Field name</label>
@@ -1689,7 +1699,7 @@ export default function DocumentDetailsPage({
                     '—'
                   )}
 
-                  {!isApproved && field.id && (
+                  {canEditFields && field.id && (
                     <button
                       type="button"
                       className="delete-field-button"
@@ -1751,7 +1761,7 @@ export default function DocumentDetailsPage({
           Manual review
           ===================================================== */}
 
-      {!isApproved && (needsManualReview || isUnrecognisedDocument) && (
+      {canEditFields && (needsManualReview || isUnrecognisedDocument) && (
         <section className="details-card details-card--review">
           <div className="details-section-heading details-section-heading--warning">
             <span className="details-section-icon">⚠</span>
@@ -1819,7 +1829,7 @@ export default function DocumentDetailsPage({
                     <ArrayFieldEditButton
                       label={humanizeFieldKey(key)}
                       draftJson={fieldDraft[key] ?? '[]'}
-                      disabled={isSaving || isApproved || !canEditField}
+                      disabled={isSaving || !canEditField}
                       onChange={(json) => handleFieldChange(key, json)}
                     />
                   ) : isArrayOfLabelValueStrings(field.value) ? (
@@ -1891,7 +1901,7 @@ export default function DocumentDetailsPage({
               )}
             </div>
 
-          {!isApproved && (
+          {canEditFields && (
             <button
               type="button"
               className="details-save-button"

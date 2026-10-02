@@ -76,12 +76,12 @@ class Settings:
 
     # Below this, classification is routed to manual review regardless of
     # the guessed document_type (see langgraph/nodes._is_below_threshold).
-    CLASSIFICATION_CONFIDENCE_THRESHOLD: float = 0.8
+    CLASSIFICATION_CONFIDENCE_THRESHOLD: float = 0.85
 
     # Below this, extracted fields render as editable so a loan officer can
     # correct them. Set above CLASSIFICATION_CONFIDENCE_THRESHOLD since a
     # wrong-looking field is costlier than a wrongly-routed document.
-    EXTRACTION_CONFIDENCE_THRESHOLD: float = 0.95
+    EXTRACTION_CONFIDENCE_THRESHOLD: float = 0.9
 
     ALLOWED_CONTENT_TYPES: set[str] = {
         "application/pdf",

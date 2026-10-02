@@ -272,6 +272,25 @@ C001_SET = [
 ]
 
 
+# Confidence is computed from the rule classifier alone here (the agent
+# calls no tools), not the 0.96 the agent reports — see
+# classification_confidence.py. A "certain" text pattern scores 0.97; a
+# strong rule match with nothing to corroborate it is capped at 0.85. The
+# NRIC's stand-in text carries no NRIC wording, leaving only a weak
+# filename hit, so it goes to manual review.
+C001_EXPECTED_CONFIDENCE = {
+    "certificate_of_incorporation": (0.97, "accepted"),
+    "certificate_of_incumbency": (0.85, "accepted"),
+    "company_constitution": (0.97, "accepted"),
+    "credit_report": (0.85, "accepted"),
+    "list_of_loans": (0.85, "accepted"),
+    "fatca_crs_declaration": (0.97, "accepted"),
+    "bank_statement": (0.85, "accepted"),
+    "nric": (0.4, "manual_review"),
+    "payslip": (0.85, "accepted"),
+}
+
+
 @pytest.mark.sprint1
 @pytest.mark.story("SCRUM-8", "DI-017")
 @pytest.mark.parametrize("filename, document_type", C001_SET)
@@ -282,10 +301,11 @@ async def test_each_clean_file_is_recorded_with_its_type_confidence_and_routing(
 
     await run(document_id)
 
+    expected_confidence, expected_routing = C001_EXPECTED_CONFIDENCE[document_type]
     recorded = store.classifications[document_id]
     assert recorded["document_type"] == document_type
-    assert recorded["classification_confidence"] == 0.96
-    assert recorded["routing_status"] == "accepted"
+    assert recorded["classification_confidence"] == expected_confidence
+    assert recorded["routing_status"] == expected_routing
     assert store.documents[document_id].status == DocumentStatus.ANALYZED
 
 

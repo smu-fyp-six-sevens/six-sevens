@@ -80,7 +80,7 @@ export const ADDITIONAL_DOCUMENT_TYPES: { value: string; label: string }[] = [
 // Mirrors settings.EXTRACTION_CONFIDENCE_THRESHOLD in backend/app/config.py —
 // below this, the UI renders extracted fields as editable so a loan officer
 // can correct values the LLM wasn't confident about.
-export const EXTRACTION_CONFIDENCE_THRESHOLD = 0.95;
+export const EXTRACTION_CONFIDENCE_THRESHOLD = 0.9;
 
 // The single source of truth for "does this document's extraction quality
 // need a human to look at it" — the lowest confidence across its own
@@ -180,6 +180,13 @@ export function formatRoutingOutcome(
 ): string {
   if (document.status === 'rejected') {
     return 'Rejected';
+  }
+
+  // Manual Review -> Accepted (officer saved the fields) -> Approved: only
+  // the Approve Document action gets a document here, and it's what kicks
+  // off detection scanning.
+  if (document.status === 'approved') {
+    return 'Approved';
   }
 
   const lowestConfidence = lowestFieldConfidence(document.extracted_fields);
@@ -324,7 +331,7 @@ export function isDocumentStatusInProgress(status: string, hasDetectionReport: b
 // Mirrors settings.CLASSIFICATION_CONFIDENCE_THRESHOLD in backend/app/config.py —
 // below this, the officer can correct the document type (the backend enforces
 // the same gate).
-export const CLASSIFICATION_CONFIDENCE_THRESHOLD = 0.8;
+export const CLASSIFICATION_CONFIDENCE_THRESHOLD = 0.85;
 
 // Mirrors KNOWN_DOCUMENT_TYPES in backend/app/extraction_prompts.py — the real
 // document_type values, so passport/nric stay separate (unlike
