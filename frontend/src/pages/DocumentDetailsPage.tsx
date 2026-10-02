@@ -26,6 +26,7 @@ import {
   formatDocumentType,
   formatRoutingOutcome,
   getDocument,
+  isConfirmedOther,
   getDocumentCaseMatch,
   getDetectionReport,
   getLangGraphTrace,
@@ -927,8 +928,13 @@ export default function DocumentDetailsPage({
 
   // What the dropdown currently shows: the officer's pick, else the existing
   // type. Saving is allowed even when it's unchanged — that's how an officer
-  // confirms a low-confidence classification was actually right.
-  const chosenType = selectedType || document?.document_type || '';
+  // confirms a low-confidence classification was actually right. An
+  // unconfirmed 'unrecognised' starts blank rather than pre-selecting "Other",
+  // so choosing Other is an explicit decision.
+  const isUnconfirmedUnrecognised =
+    document?.document_type === 'unrecognised' && !isConfirmedOther(document);
+  const chosenType =
+    selectedType || (isUnconfirmedUnrecognised ? '' : document?.document_type) || '';
 
   // Saving a corrected type re-runs extraction in the background; this page
   // only fetched once on load, so listen for the result while it's in flight.
@@ -1391,9 +1397,9 @@ export default function DocumentDetailsPage({
                     setTypeError(null);
                   }}
                 >
-                  {!document.document_type && (
+                  {(!document.document_type || isUnconfirmedUnrecognised) && (
                     <option value="" disabled>
-                      Select a type…
+                      {isUnconfirmedUnrecognised ? 'Unrecognised — select a type…' : 'Select a type…'}
                     </option>
                   )}
                   {DOCUMENT_TYPE_OPTIONS.map((option) => (
@@ -1422,7 +1428,7 @@ export default function DocumentDetailsPage({
               </div>
             ) : (
               <strong>
-                {formatDocumentType(document.document_type)}
+                {formatDocumentType(document.document_type, document.classification_confidence)}
               </strong>
             )}
           </div>
@@ -1490,7 +1496,7 @@ export default function DocumentDetailsPage({
               <strong>Classification confidence below threshold</strong>
               <div>
                 This document was classified as{' '}
-                {formatDocumentType(document.document_type)} with{' '}
+                {formatDocumentType(document.document_type, document.classification_confidence)} with{' '}
                 {document.classification_confidence!.toFixed(2)} confidence, below the
                 required {CLASSIFICATION_CONFIDENCE_THRESHOLD.toFixed(2)}.
               </div>

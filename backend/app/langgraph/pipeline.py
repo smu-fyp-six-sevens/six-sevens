@@ -99,7 +99,19 @@ async def _rerun_extraction(document_id: str) -> None:
     # node — whatever fields Extraction found are real data worth keeping.
     await nodes.persist_extracted_fields(document_id, document_type, extraction)
 
-    if extraction.get("escalation"):
+    # Only an officer's type change reaches this rerun, so "unrecognised"
+    # here means they explicitly picked "Other". The general prompt can still
+    # suggest a known type (e.g. a budget proposal that mentions a term loan
+    # reading as list_of_loans) — that's advisory, not grounds to FAIL a
+    # document the officer has already decided on. Any other officer-chosen
+    # type still fails on escalation: there it means the fields genuinely
+    # don't fit the type picked.
+    if extraction.get("escalation") and document_type == "unrecognised":
+        logger.info(
+            "Document %s: ignoring extraction escalation on officer-confirmed Other: %s",
+            document_id, extraction["escalation"].get("reason"),
+        )
+    elif extraction.get("escalation"):
         await nodes.fail_document(
             document_id,
             f"Extraction could not process this as {document_type}: "

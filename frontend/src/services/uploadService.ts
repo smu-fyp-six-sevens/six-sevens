@@ -336,7 +336,9 @@ export const CLASSIFICATION_CONFIDENCE_THRESHOLD = 0.85;
 // Mirrors KNOWN_DOCUMENT_TYPES in backend/app/extraction_prompts.py — the real
 // document_type values, so passport/nric stay separate (unlike
 // REQUIRED_DOCUMENT_TYPES above, whose 'id_document' is only a checklist
-// slot). 'unrecognised' is the backend's "Other" catch-all.
+// slot). 'unrecognised' is the backend's catch-all: the classifier stores it
+// when nothing fits, and an officer picking "Other" confirms it (see
+// isConfirmedOther).
 export const DOCUMENT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'bank_statement', label: 'Bank statement' },
   { value: 'certificate_of_incorporation', label: 'Certificate of incorporation' },
@@ -368,14 +370,33 @@ export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   credit_report: 'Credit report',
   list_of_loans: 'List of loans',
   notice_of_assessment: 'Notice of assessment',
-  unrecognised: 'Other',
+  unrecognised: 'Unrecognised',
 };
+
+// 'unrecognised' starts out as the classifier's "couldn't tell" result and
+// only becomes "Other" once an officer confirms it from the type dropdown.
+// That confirmation (PATCH .../document-type) sets classification_confidence
+// to exactly 1.0, which the pipeline never does — computed classification
+// confidence is capped at 0.97 (see classification_confidence.py).
+export function isConfirmedOther(
+  document: Pick<DocumentRecord, 'document_type' | 'classification_confidence'>,
+): boolean {
+  return (
+    document.document_type === 'unrecognised' &&
+    document.classification_confidence === 1
+  );
+}
 
 export function formatDocumentType(
   documentType: string | null | undefined,
+  classificationConfidence?: number | null,
 ): string {
   if (!documentType) {
     return '—';
+  }
+
+  if (documentType === 'unrecognised') {
+    return classificationConfidence === 1 ? 'Other' : 'Unrecognised';
   }
 
   return (

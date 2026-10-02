@@ -162,6 +162,8 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     });
     await expect(flagged.locator('.flagged-item')).toHaveCount(1);
     await expect(flagged).toContainText('Fashion-Purchase-Order.pdf');
+    // Not confirmed by an officer yet, so it reads Unrecognised, not Other.
+    await expect(flagged.locator('.flagged-item-meta')).toContainText('Unrecognised');
     await expect(flagged).toContainText('Document type could not be confidently recognised.');
     await expect(flagged).not.toContainText('C014_CertIncorp.pdf');
   });

@@ -229,7 +229,12 @@ _TEXT_RULES = {
         (r"facility\s*(offer|letter|agreement)", 0.6),
         (r"overdraft\s*facility", 0.6),
         (r"credit\s*facility", 0.5),
-        (r"\b(loan|overdraft)s?\b", 0.4),
+        # Not a bare "loan"/"overdraft": those words turn up in bank
+        # statements, credit reports, financial statements and budget
+        # proposals ("Term loan - DBS Bank") alike, and alone made
+        # list_of_loans a weak candidate for all of them. Real loan
+        # letters name the facility itself (see doc_gen_scripts/list_of_loans).
+        (r"\bloan\s*facilit(?:y|ies)\b", 0.6),
     ],
 }
 

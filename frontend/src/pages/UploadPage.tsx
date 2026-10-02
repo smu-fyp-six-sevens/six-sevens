@@ -1251,7 +1251,7 @@ function isEligibleForApproval(
                             </span>
 
                             <span className="document-type-cell">
-                              {formatDocumentType(document.document_type)}
+                              {formatDocumentType(document.document_type, document.classification_confidence)}
                             </span>
 
                             <span className="document-status-cell">
@@ -1399,7 +1399,7 @@ function isEligibleForApproval(
                             </span>
 
                             <span className="document-type-cell">
-                              {formatDocumentType(document.document_type)}
+                              {formatDocumentType(document.document_type, document.classification_confidence)}
                             </span>
 
                             <span className="document-status-cell">
@@ -1498,7 +1498,7 @@ function isEligibleForApproval(
 
                         <div className="flagged-item-meta">
                           <span>
-                            {formatDocumentType(document.document_type)}
+                            {formatDocumentType(document.document_type, document.classification_confidence)}
                           </span>
 
                           {lowestConfidence != null && (

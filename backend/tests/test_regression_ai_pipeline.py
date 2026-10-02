@@ -554,3 +554,62 @@ def _clear_pipeline_memory():
     for document_id in [f"doc-{n}" for n in range(1, 10)]:
         text_cache.discard(document_id)
         trace._traces.pop(document_id, None)
+
+
+# --- Officer type correction: extraction rerun ---------------------------------
+
+
+BUDGET_PROPOSAL_TEXT = (
+    "Proposal Budget - Combined funding sources\n"
+    "Meridian Warehousing Solutions Pte Ltd\n"
+    "Term loan - DBS Bank $680,000\nShareholder loan $70,000\n"
+    "PLEASE NOTE: If during the facility period, any actual expense differs from the budgeted expense"
+)
+
+
+def _officer_set_type(store: FakeStore, monkeypatch, filename: str, text: str, document_type: str) -> str:
+    """A document the officer has just re-typed via PATCH .../document-type."""
+    monkeypatch.setattr("app.langgraph.pipeline.document_repository", store)
+    document_id = store.add(filename, text)
+    document = store.documents[document_id]
+    document.document_type = document_type
+    document.classification_confidence = 1.0
+    document.routing_status = "accepted"
+    document.status = DocumentStatus.EXTRACTING
+    return document_id
+
+
+async def test_extraction_cannot_overrule_an_officer_confirmed_other(ai, store, monkeypatch):
+    document_id = _officer_set_type(store, monkeypatch, "C067_BudgetProposal.pdf", BUDGET_PROPOSAL_TEXT, "unrecognised")
+    ai.reply("extract", extraction(
+        {"document_title": ("Proposal Budget", 0.95), "company_name": ("Meridian Warehousing Solutions Pte Ltd", 0.97)},
+        escalation={"suggested_document_type": "list_of_loans", "reason": "Mentions a DBS term loan facility"},
+    ))
+
+    await pipeline.rerun_extraction(document_id)
+
+    document = store.documents[document_id]
+    assert document.status == DocumentStatus.ANALYZED
+    assert document.document_type == "unrecognised"
+    assert store.fields[document_id]["company_name"] == "Meridian Warehousing Solutions Pte Ltd"
+
+
+async def test_extraction_rejecting_an_officer_chosen_type_still_fails_it(ai, store, monkeypatch):
+    document_id = _officer_set_type(store, monkeypatch, "C067_BudgetProposal.pdf", BUDGET_PROPOSAL_TEXT, "payslip")
+    ai.reply("extract", extraction({}, escalation={"reason": "This is a budget proposal, not a payslip"}))
+
+    await pipeline.rerun_extraction(document_id)
+
+    document = store.documents[document_id]
+    assert document.status == DocumentStatus.FAILED
+    assert "not a payslip" in document.failure_reason
+
+
+def test_a_passing_mention_of_a_loan_is_not_a_loan_document():
+    from app.langgraph.rule_classify import classify_by_rules
+
+    budget = classify_by_rules("C067_BudgetProposal.pdf", BUDGET_PROPOSAL_TEXT)
+    assert budget["top_candidates"] == []
+
+    offer = classify_by_rules("scan.pdf", "We are pleased to offer you the following Term Loan Facility")
+    assert offer["top_candidates"][0]["document_type"] == "list_of_loans"

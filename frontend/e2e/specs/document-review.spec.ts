@@ -169,6 +169,28 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     await expect(routingOutcome(page)).toHaveText('Approved');
   });
 
+  test('an unrecognised document starts as Unrecognised and only becomes Other once the officer picks it', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const doc = fixture.document('Payslip');
+    doc.document_type = 'unrecognised';
+    doc.classification_confidence = 0;
+    doc.routing_status = 'manual_review';
+    await page.goto(fixture.documentUrl(doc));
+
+    const typeSelect = page.locator('.details-type-select');
+    await expect(typeSelect).toHaveValue('');
+    await expect(typeSelect.locator('option:checked')).toHaveText('Unrecognised — select a type…');
+    await expect(page.getByRole('button', { name: 'Confirm doc type' })).toBeDisabled();
+
+    await typeSelect.selectOption({ label: 'Other' });
+    await page.getByRole('button', { name: 'Confirm doc type' }).click();
+
+    const saved = backend.requestsTo('PATCH', `/documents/${doc.id}/document-type`);
+    expect(saved).toHaveLength(1);
+    expect((saved[0].body as { document_type: string }).document_type).toBe('unrecognised');
+    await expect(page.locator('.details-label', { hasText: 'Document Type' }).locator('xpath=following-sibling::strong')).toHaveText('Other');
+  });
+
   test('DI-026 fields cannot be saved while a required field is still empty @DI-026', async ({ page, backend }) => {
     const { fixture, cert } = certWithMissingUen(backend);
     await page.goto(fixture.documentUrl(cert));
