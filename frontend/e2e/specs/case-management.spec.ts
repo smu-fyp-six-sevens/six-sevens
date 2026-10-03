@@ -94,6 +94,38 @@ test.describe('View cases @sprint2 @SCRUM-78', () => {
     await page.locator('.status-chip', { hasText: 'In progress' }).click();
     await expect(caseCards(page)).toHaveCount(3);
   });
+
+  test('CM-004 the Documents failed chip shows only cases with a failed document @CM-004', async ({ page, backend }) => {
+    seedQueue(backend);
+    backend.cases.push(makeCase({ id: 'case-failed', greenlink_case_id: 'GLDB-1099', company_name: 'Failing Co Pte Ltd', documents_status: 'failed' }));
+    await page.goto('/cases');
+
+    await page.locator('.status-chip', { hasText: 'Documents failed' }).click();
+
+    await expect(caseCards(page)).toHaveCount(1);
+    await expect(caseCards(page)).toContainText('Failing Co Pte Ltd');
+  });
+
+  test('CM-004 the Processing stuck chip shows only cases with a stuck document @CM-004', async ({ page, backend }) => {
+    seedQueue(backend);
+    backend.cases.push(makeCase({ id: 'case-stuck', greenlink_case_id: 'GLDB-1100', company_name: 'Stuck Co Pte Ltd', documents_status: 'stuck' }));
+    await page.goto('/cases');
+
+    await page.locator('.status-chip', { hasText: 'Processing stuck' }).click();
+
+    await expect(caseCards(page)).toHaveCount(1);
+    await expect(caseCards(page)).toContainText('Stuck Co Pte Ltd');
+  });
+
+  test('CM-004 the Documents pending chip shows only cases with no documents yet @CM-004', async ({ page, backend }) => {
+    const { platinum } = seedQueue(backend);
+    await page.goto('/cases');
+
+    await page.locator('.status-chip', { hasText: 'Documents pending' }).click();
+
+    await expect(caseCards(page)).toHaveCount(1);
+    await expect(caseCards(page)).toContainText(platinum.company_name!);
+  });
 });
 
 test.describe('View case details @sprint2 @SCRUM-83', () => {
@@ -152,6 +184,7 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
         document_type: 'certificate_of_incorporation',
         classification_confidence: 0.97,
         routing_status: 'accepted',
+        extracted_fields: { company_name: { id: 'field-1', value: 'Harbor Light Shipping Pte Ltd', confidence: 0.98 } },
       }),
     );
 
@@ -197,6 +230,29 @@ test.describe('Create case @sprint2 @SCRUM-96', () => {
     const created = backend.requestsTo('POST', '/cases');
     expect(created).toHaveLength(1);
     expect(created[0].body).toEqual({ company_name: 'Ironclad Security Services Pte Ltd' });
+  });
+
+  test('CM-010 a company name of exactly 100 characters is accepted @CM-010', async ({ page, backend }) => {
+    seedQueue(backend);
+    const hundred = 'A'.repeat(100);
+
+    await createCase(page, hundred);
+
+    const created = backend.requestsTo('POST', '/cases');
+    expect(created).toHaveLength(1);
+    expect(created[0].body).toEqual({ company_name: hundred });
+  });
+
+  test('CM-010 typing past 100 characters stops the company name at 100 @CM-010', async ({ page, backend }) => {
+    seedQueue(backend);
+    await page.goto('/create-case');
+
+    const input = page.getByLabel(/company name/i);
+    await input.pressSequentially('A'.repeat(101));
+
+    await expect(input).toHaveValue('A'.repeat(100));
+    await page.getByRole('button', { name: 'Create Case' }).click();
+    expect(backend.requestsTo('POST', '/cases')).toHaveLength(1);
   });
 
   test('CM-010 a case cannot be created without a company name @CM-010', async ({ page, backend }) => {

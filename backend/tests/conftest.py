@@ -117,6 +117,7 @@ def _block_real_supabase_network(monkeypatch: pytest.MonkeyPatch) -> None:
     only broke in CI. Failing loudly here makes that reproducible locally
     the moment it happens, instead of only in CI.
     """
+    from app import supabase_client as supabase_module
     from app.supabase_client import supabase_client
 
     monkeypatch.setattr(supabase_client, "table", _BlockedSupabaseAccess("table"))
@@ -124,6 +125,16 @@ def _block_real_supabase_network(monkeypatch: pytest.MonkeyPatch) -> None:
     # self._storage once set — patch that plain backing attribute instead
     # of the property itself, which monkeypatch can't assign to.
     monkeypatch.setattr(supabase_client, "_storage", _BlockedSupabaseAccess("storage"))
+    # Secret-key client: every DELETE goes through it, and it bypasses RLS.
+    monkeypatch.setattr(supabase_module, "_service_client", _BlockedSupabaseAccess("service_supabase_client"))
+    monkeypatch.setattr(supabase_module, "acreate_client", _refuse_real_realtime)
+
+
+async def _refuse_real_realtime(*args, **kwargs):
+    raise RuntimeError(
+        "Test attempted a real Supabase Realtime connection via acreate_client(...). "
+        "Patch realtime_listener.start / build_async_supabase_client instead."
+    )
 
 
 def _write_sample_pdf(path: Path) -> None:

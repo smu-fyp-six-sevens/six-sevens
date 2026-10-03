@@ -181,4 +181,26 @@ test.describe('Map documents @sprint2 @SCRUM-118', () => {
     }
     await expect(sidebar(page).locator('.section-label').first()).toContainText(`4 / ${REQUIRED.length}`);
   });
+
+  test('DI-others-05 an NRIC with only one side uploaded says which side is missing @DI-others', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const identity = () => requiredList(page).locator('li', { hasText: 'Identity document (NRIC/Passport)' }).locator('.requirement-unmatched');
+
+    fixture.case.id_document_coverage = { covered: 1, total: 2, missing_side: 'back' };
+    await page.goto(fixture.caseUrl);
+    await expect(identity()).toHaveText('Front photo present, back missing.');
+
+    fixture.case.id_document_coverage = { covered: 1, total: 2, missing_side: 'front' };
+    await page.goto(fixture.caseUrl);
+    await expect(identity()).toHaveText('Back photo present, front missing.');
+  });
+
+  test('DI-others-06 an address on file with no matching ID is named in the proof of address requirement @DI-others', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    fixture.case.proof_of_address_coverage = { covered: 1, total: 2, unmatched_names: ['Jane Tan'] };
+    await page.goto(fixture.caseUrl);
+
+    const address = requiredList(page).locator('li', { hasText: 'Personal proof of address' }).locator('.requirement-unmatched');
+    await expect(address).toHaveText('Address on file but no matching ID uploaded: Jane Tan');
+  });
 });

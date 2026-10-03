@@ -60,6 +60,11 @@ Not started, no urgency until the Cloud Native award work picks up:
   `detection/specialists.py`, `classify_graph.py`, `detection/tools.py`, `trace.py`,
   `detection/graph.py`, `nodes.py`, `pipeline.py` — 21-74% coverage each, needs real
   LangGraph-state/async fixtures. Explicitly deferred; pick up only when asked.
+- **REG-004 / REG-005 known-defect tests (backend, `test.fail`)** — not yet written. Desired
+  behaviour, code not changed: REG-004, a low-confidence named type on first extraction should use
+  the generic prompt (currently uses the named type's schema, `nodes.py:142-146`). REG-005,
+  confirming a type must re-run extraction against that type's schema (currently skipped when the
+  type is unchanged, `routers/documents.py:843-848`). Full detail in `TEST_PLAN.md` Part 8.
 
 ## Small known gaps
 

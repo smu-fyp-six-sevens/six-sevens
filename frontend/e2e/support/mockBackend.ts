@@ -330,6 +330,23 @@ export class MockBackend {
         document.routing_status = 'accepted';
         return json(document);
       }
+      if (method === 'POST' && rest === '/extracted-fields') {
+        const { field_name, field_value } = body as { field_name: string; field_value: unknown };
+        document.extracted_fields = {
+          ...(document.extracted_fields ?? {}),
+          [field_name]: { id: `field-${field_name}`, value: field_value, confidence: 1.0 },
+        };
+        return json(document);
+      }
+      if (method === 'DELETE' && rest.startsWith('/extracted-fields/')) {
+        const fieldId = rest.slice('/extracted-fields/'.length);
+        const remaining: Record<string, unknown> = {};
+        for (const [name, field] of Object.entries(document.extracted_fields ?? {})) {
+          if ((field as { id?: string }).id !== fieldId) remaining[name] = field;
+        }
+        document.extracted_fields = remaining;
+        return json(document);
+      }
       if (method === 'PATCH' && rest === '/document-type') {
         document.document_type = (body as { document_type: string }).document_type;
         document.routing_status = 'accepted';

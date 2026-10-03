@@ -226,6 +226,54 @@ test.describe('Upload documents @sprint1 @SCRUM-6', () => {
     await expect(table.getByText('payslip.pdf')).toBeVisible();
     await expect(table.getByText('passport.pdf')).toBeVisible();
   });
+
+  test('DI-others-01 an empty (0 byte) file is rejected @DI-others', async ({ page, backend }) => {
+    await openCase(page, backend);
+
+    await browseFiles(page, [{ name: 'empty.pdf', mimeType: 'application/pdf', buffer: Buffer.alloc(0) }]);
+    await uploadButton(page).click();
+
+    const row = fileRow(page, 'empty.pdf');
+    await expect(row.locator('.badge')).toHaveText('Rejected');
+    await expect(row).toContainText('File is empty (0 bytes).');
+    expect(backend.requestsTo('POST', '/documents/upload-batch')).toHaveLength(0);
+  });
+
+  test('DI-others-02 a filename that cleans up to nothing is rejected @DI-others', async ({ page, backend }) => {
+    await openCase(page, backend);
+
+    await browseFiles(page, [pdf('...')]);
+    await uploadButton(page).click();
+
+    const row = fileRow(page, '...');
+    await expect(row.locator('.badge')).toHaveText('Rejected');
+    await expect(row).toContainText('Filename is invalid or unsafe.');
+    expect(backend.requestsTo('POST', '/documents/upload-batch')).toHaveLength(0);
+  });
+
+  test('DI-others-03 a file already uploaded to this case is rejected as a duplicate @DI-others', async ({ page, backend }) => {
+    await openCase(page, backend);
+
+    await browseFiles(page, [pdf('payslip.pdf')]);
+    await uploadButton(page).click();
+    await expect(fileRow(page, 'payslip.pdf').locator('.badge')).toHaveText('Uploaded');
+
+    await browseFiles(page, [pdf('payslip.pdf')]);
+    await uploadButton(page).click();
+
+    await expect(page.getByText('This exact file has already been uploaded for this case.').first()).toBeVisible();
+    expect(backend.requestsTo('POST', '/documents/upload-batch')).toHaveLength(1);
+  });
+
+  test('DI-others-04 more than 20 files at once is refused and only the first 20 are kept @DI-others', async ({ page, backend }) => {
+    await openCase(page, backend);
+
+    const twentyOne = Array.from({ length: 21 }, (_, index) => pdf(`statement-${index + 1}.pdf`));
+    await browseFiles(page, twentyOne);
+
+    await expect(page.locator('.toast.mixed')).toContainText('Too many files selected (21). Maximum is 20 per upload.');
+    await expect(page.locator('.file-row')).toHaveCount(20);
+  });
 });
 
 test.describe('Generate additional file formats @sprint2 @SCRUM-115', () => {

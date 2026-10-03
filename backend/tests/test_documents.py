@@ -1188,6 +1188,7 @@ def test_move_document_success_pushes_both_case_snapshots() -> None:
         mock_repo.get_document.return_value = moved
         mock_fields_repo.get_extracted_fields.return_value = []
         mock_case_service.get_case.return_value = _make_case(case_id="case-2")
+        mock_case_service.missing_required_fields.return_value = []
         mock_case_service.build_case_snapshot.side_effect = lambda case_id: {"case": {"id": case_id}}
 
         response = client.post("/documents/doc-1/move", json={"case_id": "case-2"})

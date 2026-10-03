@@ -37,7 +37,7 @@ import pytest
 from langchain_core.messages import AIMessage
 
 from app.config import settings
-from app.langgraph import pipeline, text_cache, trace
+from app.langgraph import nodes, pipeline, text_cache, trace
 from app.langgraph.extraction_prompts import EXTRACTION_SCHEMAS
 from app.models import DocumentRecord, DocumentStatus
 from app.queue_service import DocumentQueue
@@ -613,3 +613,151 @@ def test_a_passing_mention_of_a_loan_is_not_a_loan_document():
 
     offer = classify_by_rules("scan.pdf", "We are pleased to offer you the following Term Loan Facility")
     assert offer["top_candidates"][0]["document_type"] == "list_of_loans"
+
+
+# --- SCRUM-8 / SCRUM-9 additions -------------------------------------------------
+
+
+@pytest.mark.sprint1
+@pytest.mark.story("SCRUM-8", "DI-017")
+@pytest.mark.parametrize("confidence, expected_routing", [
+    (settings.CLASSIFICATION_CONFIDENCE_THRESHOLD, "accepted"),
+    (settings.CLASSIFICATION_CONFIDENCE_THRESHOLD - 0.0001, "manual_review"),
+])
+async def test_the_classification_threshold_is_inclusive(store, confidence, expected_routing):
+    document_id = store.add("C001_Constitution.pdf", "Constitution text")
+    await nodes.record_classification_result(
+        document_id, {"document_type": "company_constitution", "confidence": confidence, "evidence": []}
+    )
+
+    assert store.classifications[document_id]["routing_status"] == expected_routing
+
+
+@pytest.mark.sprint1
+@pytest.mark.story("SCRUM-9", "DI-018")
+async def test_each_extracted_fields_own_confidence_is_saved(ai, store):
+    fields, document_type = real_extraction("FATCA_Form")
+    document_id = store.add("FATCA_Form_20250522.pdf", "FATCA / CRS Self-Certification")
+    ai.reply("classify_agent", classification(document_type))
+    ai.reply("extract", extraction(fields))
+
+    await run(document_id)
+
+    assert store.field_confidences[document_id] == {name: confidence for name, (_, confidence) in fields.items()}
+
+
+@pytest.mark.sprint1
+@pytest.mark.story("SCRUM-9", "DI-018")
+async def test_a_required_field_the_document_does_not_contain_is_saved_as_null(ai, store):
+    document_id = store.add("C001_Constitution.pdf", "Constitution text with no company name")
+    ai.reply("classify_agent", classification("company_constitution"))
+    ai.reply("extract", extraction({"company_name": (None, 0.0)}))
+
+    await run(document_id)
+
+    assert "company_name" in store.fields[document_id]
+    assert store.fields[document_id]["company_name"] is None
+
+
+# --- SCRUM-19 Auto-trigger extraction and reclassification ----------------------
+
+
+@pytest.mark.sprint2
+@pytest.mark.story("SCRUM-19", "MA-003")
+async def test_a_generic_extraction_that_suggests_a_type_triggers_one_reclassification(ai, store):
+    document_id = store.add("statement_scan.pdf", "OCBC Statement of Account Opening Balance")
+    ai.reply("classify_agent", classification("unrecognised", 0.2, manual_review=True))
+    ai.reply("extract", extraction({"document_title": ("Statement of Account", 0.9)}, escalation={
+        "suggested_document_type": "bank_statement",
+        "reason": "Heading and bank name read as a bank statement",
+        "evidence": ["Statement of Account"],
+    }))
+    ai.reply("classify_agent", classification("bank_statement", 0.95))
+    ai.reply("extract", extraction({"bank_name": ("OCBC", 0.97)}))
+
+    await run(document_id)
+
+    assert store.escalations[document_id] == ["Heading and bank name read as a bank statement"]
+    assert store.classifications[document_id]["document_type"] == "bank_statement"
+    assert store.documents[document_id].status == DocumentStatus.ANALYZED
+    assert ai.steps() == ["classify_agent", "extract", "classify_agent", "extract"]
+
+
+@pytest.mark.sprint2
+@pytest.mark.story("SCRUM-19", "MA-003")
+async def test_a_second_disagreement_is_not_re_checked_again(ai, store):
+    document_id = store.add("C001-P2_Payslip.pdf", "BANK STATEMENT Opening balance")
+    ai.reply("classify_agent", classification("payslip", 0.96))
+    ai.reply("extract", extraction({}, escalation={"reason": "A bank statement, not a payslip",
+                                                   "suggested_document_type": "bank_statement"}))
+    ai.reply("classify_agent", classification("payslip", 0.96))
+    ai.reply("extract", extraction({}, escalation={"reason": "Still a bank statement",
+                                                   "suggested_document_type": "bank_statement"}))
+
+    await run(document_id)
+
+    assert ai.steps() == ["classify_agent", "extract", "classify_agent", "extract"]
+    assert store.documents[document_id].status == DocumentStatus.FAILED
+    assert "Unresolved after 1 reclassification" in store.documents[document_id].failure_reason
+
+
+@pytest.mark.sprint2
+@pytest.mark.story("SCRUM-19", "MA-003")
+async def test_an_unrecognised_document_that_stays_unrecognised_after_a_recheck_goes_to_manual_review(ai, store):
+    # Mirrors what the officer sees: the recheck runs, the document is not
+    # failed, it stays Unrecognised and waits for the officer to pick a type.
+    document_id = store.add("Fashion-Purchase-Order-Template-TemplateLab.com_.pdf", "PURCHASE ORDER Item Qty")
+    ai.reply("classify_agent", classification("unrecognised", 0.2, manual_review=True))
+    ai.reply("extract", extraction({"document_title": ("Purchase Order", 0.9)}, escalation={
+        "suggested_document_type": "bank_statement", "reason": "Looked like a statement",
+    }))
+    ai.reply("classify_agent", classification("unrecognised", 0.2, manual_review=True))
+    ai.reply("extract", extraction({"document_title": ("Purchase Order", 0.9)}))
+
+    await run(document_id)
+
+    document = store.documents[document_id]
+    assert document.status == DocumentStatus.ANALYZED
+    assert document.document_type == "unrecognised"
+    assert store.classifications[document_id]["routing_status"] == "manual_review"
+
+
+@pytest.mark.sprint2
+@pytest.mark.story("SCRUM-19", "MA-003")
+async def test_the_reclassification_reason_and_both_attempts_are_recorded_in_the_trace(ai, store):
+    document_id = store.add("statement_scan.pdf", "OCBC Statement of Account Opening Balance")
+    ai.reply("classify_agent", classification("payslip", 0.96))
+    ai.reply("extract", extraction({}, escalation={"reason": "Bank statement wording",
+                                                   "suggested_document_type": "bank_statement"}))
+    ai.reply("classify_agent", classification("bank_statement", 0.95))
+    ai.reply("extract", extraction({"bank_name": ("OCBC", 0.97)}))
+
+    await run(document_id)
+
+    records = (trace.get(document_id) or {}).get("steps", [])
+    escalation = next(r for r in records if r["step"] == "record_escalation")
+    assert escalation["reason"] == "Bank statement wording"
+    assert escalation["attempts"] == 1
+    assert any(r["step"] == "reclassify" and r["reason"] == "Bank statement wording" for r in records)
+    assert sum(1 for r in records if r["step"] == "extraction") == 2
+
+
+@pytest.mark.sprint2
+@pytest.mark.story("SCRUM-19", "MA-004")
+@pytest.mark.xfail(
+    strict=True,
+    reason="REG-004 (known defect): a low-confidence named type on first extraction uses the type's own schema, not the generic one.",
+)
+async def test_a_low_confidence_named_type_is_extracted_with_the_generic_schema(ai, store):
+    # Known defect (REG-004), see TEST_PLAN.md Part 8: the code uses the named
+    # type's schema here; the desired behaviour is the generic prompt.
+    document_id = store.add("scan_0042.pdf", "Net Pay ... Employer")
+    ai.reply("classify_agent", classification("payslip", 0.8))
+    ai.reply("extract", extraction({"net_pay": (5200, 0.9)}))
+
+    await run(document_id)
+
+    assert store.classifications[document_id]["routing_status"] == "manual_review"
+    extract_prompt = str(ai.calls[-1][1])
+    assert "net_pay" not in extract_prompt
+

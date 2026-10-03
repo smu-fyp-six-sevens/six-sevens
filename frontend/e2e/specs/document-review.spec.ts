@@ -169,7 +169,7 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     await expect(routingOutcome(page)).toHaveText('Approved');
   });
 
-  test('an unrecognised document starts as Unrecognised and only becomes Other once the officer picks it', async ({ page, backend }) => {
+  test('an unrecognised document starts as Unrecognised and only becomes Other once the officer picks it @DI-others', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
     const doc = fixture.document('Payslip');
     doc.document_type = 'unrecognised';
@@ -209,8 +209,9 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     await page.goto(fixture.documentUrl(cert));
 
     await expect(page.getByRole('button', { name: '✓ Approve Document' })).toBeDisabled();
-    await expect(page.locator('.approval-warning')).toContainText('Cannot approve yet');
-    await expect(page.locator('.approval-warning strong')).toHaveText('UEN');
+    const requiredWarning = page.locator('.approval-warning', { hasText: 'Please complete the following required field' });
+    await expect(requiredWarning).toContainText('Cannot approve yet');
+    await expect(requiredWarning.locator('strong')).toHaveText('UEN');
     expect(backend.requestsTo('POST', `/documents/${cert.id}/approve`)).toHaveLength(0);
   });
 
@@ -244,6 +245,69 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
 
     await expect(page.locator('.save-error')).toHaveCount(0);
     expect(backend.requestsTo('PATCH', `/documents/${cert.id}/extracted-fields`)).toHaveLength(1);
+  });
+
+  test('DI-others-07 an officer can add a custom field to a document @DI-others', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const payslip = fixture.document('Payslip');
+    await page.goto(fixture.documentUrl(payslip));
+
+    await page.getByRole('button', { name: '+ Add field' }).click();
+    await page.locator('#new-field-name').fill('employer_address');
+    await page.locator('#new-field-value').fill('1 Raffles Place');
+    await page.getByRole('button', { name: 'Add field', exact: true }).click();
+
+    await expect(fieldRow(page, 'Employer Address').locator('.field-value')).toHaveText('1 Raffles Place');
+    expect(backend.requestsTo('POST', `/documents/${payslip.id}/extracted-fields`)).toHaveLength(1);
+  });
+
+  test('DI-others-08 an officer can delete a custom field from a document @DI-others', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const payslip = fixture.document('Payslip');
+    await page.goto(fixture.documentUrl(payslip));
+    await page.getByRole('button', { name: '+ Add field' }).click();
+    await page.locator('#new-field-name').fill('employer_address');
+    await page.locator('#new-field-value').fill('1 Raffles Place');
+    await page.getByRole('button', { name: 'Add field', exact: true }).click();
+    await expect(fieldRow(page, 'Employer Address')).toBeVisible();
+
+    page.once('dialog', (dialog) => dialog.accept());
+    await fieldRow(page, 'Employer Address').locator('.delete-field-button').click();
+
+    await expect(fieldRow(page, 'Employer Address')).toHaveCount(0);
+    expect(backend.requestsTo('DELETE', `/documents/${payslip.id}/extracted-fields/field-employer_address`)).toHaveLength(1);
+  });
+
+  test('DI-others-09 an array field flagged for review can be edited in the review table @DI-others', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'harbor-light');
+    const loans = fixture.document('ListLoans');
+    (loans.extracted_fields as Record<string, { confidence: number }>).loan_terms.confidence = 0.5;
+    await page.goto(fixture.documentUrl(loans));
+
+    const editButton = reviewRow(page, 'Loan Terms').getByRole('button', { name: /^Edit \d+ items?$/ });
+    await editButton.click();
+    await page.locator('.array-modal-input').first().fill('Edited term');
+    await page.locator('.array-modal-save').click();
+
+    await reviewRow(page, 'Loan Terms').getByRole('button', { name: /^Edit \d+ items?$/ }).click();
+    await expect(page.locator('.array-modal-input').first()).toHaveValue('Edited term');
+  });
+
+  test('DI-others-10 an officer can confirm a low-confidence type as a different type @DI-others', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const payslip = fixture.document('Payslip');
+    payslip.document_type = 'payslip';
+    payslip.classification_confidence = 0.5;
+    payslip.routing_status = 'manual_review';
+    payslip.status = 'analyzed';
+    await page.goto(fixture.documentUrl(payslip));
+
+    await page.locator('.details-type-select').selectOption('bank_statement');
+    await page.getByRole('button', { name: 'Confirm document type' }).click();
+
+    const saved = backend.requestsTo('PATCH', `/documents/${payslip.id}/document-type`);
+    expect(saved).toHaveLength(1);
+    expect((saved[0].body as { document_type: string }).document_type).toBe('bank_statement');
   });
 });
 
