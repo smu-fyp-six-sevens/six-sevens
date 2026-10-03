@@ -95,11 +95,10 @@ SPECIALISTS: dict[str, Specialist] = {
 }
 
 
-_SPECIALIST_PROMPT = """You are the {title} on a forgery-check team reviewing ONE loan-application document.
+# Split static/dynamic so cache_control only covers the byte-stable half
+# (per specialist, not per document) — see cache_gate.py.
+_SPECIALIST_STATIC_PROMPT = """You are the {title} on a forgery-check team reviewing ONE loan-application document.
 Your expertise: {expertise}
-
-Document type: {document_type}
-Lead investigator's brief for you: {brief}
 
 Rules:
 - Call the tool(s) relevant to the brief and to this document type (e.g. skip a bank-statement balance check on a document with no transactions). Call each tool at most once. If none is relevant, say so.
@@ -113,6 +112,9 @@ Severity scale: high = strong sign of tampering; medium = suspicious, needs a hu
 When finished, reply with ONLY this JSON (no prose):
 {{"summary": "<2-3 sentences>", "assessments": [{{"finding_id": "<id from a tool result>", "severity": "info|low|medium|high", "rationale": "<why>"}}], "uncertain": false, "uncertainty_reason": null}}
 Set "uncertain" to true when a finding is ambiguous, or a second opinion from a different specialist would help, and say why in "uncertainty_reason"."""
+
+_SPECIALIST_DYNAMIC_PROMPT = """Document type: {document_type}
+Lead investigator's brief for you: {brief}"""
 
 
 class SpecialistState(TypedDict, total=False):
@@ -147,6 +149,7 @@ def _parse_json_object(text: str) -> dict | None:
 def _make_agent_node(spec: Specialist):
     async def agent_node(state: SpecialistState) -> dict:
         from .._anthropic import build_chat_anthropic
+        from ..cache_gate import cache_gate
 
         model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 1024).bind_tools(list(spec.tools))
 
@@ -156,20 +159,26 @@ def _make_agent_node(spec: Specialist):
             span.set_attribute("turn", "continuation" if existing else "first")
 
             if existing:
+                # cache_control breakpoint is already in `existing`'s system
+                # message — this call naturally lands after whichever call
+                # first warmed the cache for this specialist.
                 response = await model.ainvoke(existing)
                 telemetry.record_usage(span, response)
                 return {"messages": [response]}
 
+            static_text = _SPECIALIST_STATIC_PROMPT.format(title=spec.title, expertise=spec.expertise)
+            dynamic_text = _SPECIALIST_DYNAMIC_PROMPT.format(
+                document_type=state.get("document_type") or "unknown",
+                brief=state.get("brief") or "Review this document within your expertise.",
+            )
             seed = [
-                SystemMessage(content=_SPECIALIST_PROMPT.format(
-                    title=spec.title,
-                    expertise=spec.expertise,
-                    document_type=state.get("document_type") or "unknown",
-                    brief=state.get("brief") or "Review this document within your expertise.",
-                )),
+                SystemMessage(content=[
+                    {"type": "text", "text": static_text, "cache_control": {"type": "ephemeral"}},
+                    {"type": "text", "text": dynamic_text},
+                ]),
                 HumanMessage(content="Begin your review."),
             ]
-            response = await model.ainvoke(seed)
+            response = await cache_gate.run(f"detection_specialist:{spec.name}", lambda: model.ainvoke(seed))
             telemetry.record_usage(span, response)
             return {"messages": [*seed, response]}
 
