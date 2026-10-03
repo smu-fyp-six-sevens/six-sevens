@@ -93,6 +93,23 @@ export const EXTRACTION_CONFIDENCE_THRESHOLD = 0.9;
 // per-field minimum is the more honest signal for a loan officer deciding
 // whether to trust what's on screen. Returns null when there are no fields
 // with a numeric confidence to compare at all.
+// Mirrors case_service.has_extracted_information in the backend, which the
+// approve endpoint enforces: at least one field holds a real value (not
+// null, a blank string, or an empty list/object).
+export function hasExtractedInformation(fields: Record<string, unknown> | null): boolean {
+  if (!fields) {
+    return false;
+  }
+  return Object.values(fields).some((raw) => {
+    const value = raw && typeof raw === 'object' && 'value' in raw ? (raw as { value?: unknown }).value : raw;
+    if (value == null) return false;
+    if (typeof value === 'string') return value.trim() !== '';
+    if (Array.isArray(value)) return value.length > 0;
+    if (typeof value === 'object') return Object.keys(value).length > 0;
+    return true;
+  });
+}
+
 export function lowestFieldConfidence(fields: Record<string, unknown> | null): number | null {
   if (!fields) {
     return null;
@@ -174,7 +191,12 @@ export async function getDocumentCaseMatch(documentId: string): Promise<Document
 export function formatRoutingOutcome(
   document: Pick<
     DocumentRecord,
-    'status' | 'routing_status' | 'extracted_fields' | 'missing_required_fields'
+    | 'status'
+    | 'routing_status'
+    | 'extracted_fields'
+    | 'missing_required_fields'
+    | 'document_type'
+    | 'classification_confidence'
   >,
   caseMatch?: Pick<DocumentCaseMatch, 'status'> | null,
 ): string {
@@ -194,6 +216,10 @@ export function formatRoutingOutcome(
   if (
     document.status === 'failed' ||
     document.routing_status === 'manual_review' ||
+    // Saving fields flips routing_status to accepted without confirming the
+    // type, so an unconfirmed classification is checked on its own.
+    (document.status === 'analyzed' && !isClassificationConfirmed(document)) ||
+    (document.status === 'analyzed' && !hasExtractedInformation(document.extracted_fields)) ||
     caseMatch?.status === 'manual_review' ||
     (lowestConfidence != null &&
       lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD) ||
@@ -300,20 +326,35 @@ export function formatDocumentStatus(status: string): string {
 // tell a just-approved document apart from one whose detection already
 // finished. "scanning"/"detected" are frontend-only display stages derived
 // from whether a detection report exists yet, not real DocumentStatus values.
-export type DocumentDetectionStage = 'scanning' | 'detected' | null;
+// "skipped" is an approved unrecognised (Other) document: the backend never
+// runs detection on those (routers/documents.skips_detection), so it would
+// otherwise read as scanning forever.
+export type DocumentDetectionStage = 'scanning' | 'detected' | 'skipped' | null;
+
+export function skipsDetection(documentType: string | null | undefined): boolean {
+  return !documentType || documentType === 'unrecognised';
+}
 
 export function documentDetectionStage(
   status: string,
   hasDetectionReport: boolean,
+  documentType?: string | null,
 ): DocumentDetectionStage {
   if (status !== 'approved') {
     return null;
   }
-  return hasDetectionReport ? 'detected' : 'scanning';
+  if (hasDetectionReport) {
+    return 'detected';
+  }
+  return skipsDetection(documentType) ? 'skipped' : 'scanning';
 }
 
-export function formatDocumentStatusLabel(status: string, hasDetectionReport: boolean): string {
-  const stage = documentDetectionStage(status, hasDetectionReport);
+export function formatDocumentStatusLabel(
+  status: string,
+  hasDetectionReport: boolean,
+  documentType?: string | null,
+): string {
+  const stage = documentDetectionStage(status, hasDetectionReport, documentType);
   if (stage === 'scanning') return 'Scanning';
   if (stage === 'detected') return 'Detected';
   return formatDocumentStatus(status);
@@ -322,8 +363,12 @@ export function formatDocumentStatusLabel(status: string, hasDetectionReport: bo
 // Same "…" suffix / non-terminal treatment formatDocumentStatus's other
 // callers already use, extended so "approved but still scanning" reads as
 // in-progress too instead of looking done.
-export function isDocumentStatusInProgress(status: string, hasDetectionReport: boolean): boolean {
-  if (documentDetectionStage(status, hasDetectionReport) === 'scanning') {
+export function isDocumentStatusInProgress(
+  status: string,
+  hasDetectionReport: boolean,
+  documentType?: string | null,
+): boolean {
+  if (documentDetectionStage(status, hasDetectionReport, documentType) === 'scanning') {
     return true;
   }
   return !TERMINAL_DOCUMENT_STATUSES.has(status);
@@ -333,6 +378,24 @@ export function isDocumentStatusInProgress(status: string, hasDetectionReport: b
 // below this, the officer can correct the document type (the backend enforces
 // the same gate).
 export const CLASSIFICATION_CONFIDENCE_THRESHOLD = 0.85;
+
+// Mirrors case_service.is_classification_confirmed in the backend, which the
+// approve endpoint enforces. A real type needs the classifier at or above the
+// threshold, or an officer's confirmation. 'unrecognised' (Other) always needs
+// the officer: picking a type in the dropdown writes exactly 1.0, which the
+// classifier itself never reaches (it caps at 0.97).
+export function isClassificationConfirmed(
+  document: Pick<DocumentRecord, 'document_type' | 'classification_confidence'>,
+): boolean {
+  const confidence = document.classification_confidence;
+  if (confidence == null) {
+    return false;
+  }
+  if (!document.document_type || document.document_type === 'unrecognised') {
+    return confidence >= 1;
+  }
+  return confidence >= CLASSIFICATION_CONFIDENCE_THRESHOLD;
+}
 
 // Mirrors KNOWN_DOCUMENT_TYPES in backend/app/extraction_prompts.py — the real
 // document_type values, so passport/nric stay separate (unlike

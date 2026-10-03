@@ -13,7 +13,6 @@ from ..case_broadcaster import broadcaster
 from ._dependencies import get_document_or_404
 from ..config import settings
 from ..langgraph.extraction_prompts import (
-    EXTRACTION_SCHEMAS,
     KNOWN_DOCUMENT_TYPES,
     schema_field_names,
 )
@@ -32,6 +31,7 @@ from ..models import (
     UpdateDocumentTypeRequest,
     UpdateExtractedFieldsRequest,
     compute_fulfilled_requirements,
+    is_classification_confirmed,
 )
 from ..langgraph import pipeline as langgraph_pipeline
 from ..langgraph import trace as langgraph_trace
@@ -42,9 +42,20 @@ from ..queue_service import document_queue
 _SETTABLE_DOCUMENT_TYPES = {*KNOWN_DOCUMENT_TYPES, "unrecognised"}
 # A pipeline run is already in flight for these — correcting the type now would race it.
 _TYPE_OVERRIDE_BLOCKED_STATUSES = IN_FLIGHT_STATUSES
+# A loan officer's decision is final: approved and rejected documents are
+# locked against field edits, type corrections and moves.
+_LOCKED_STATUSES = frozenset({DocumentStatus.APPROVED, DocumentStatus.REJECTED})
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 logger = logging.getLogger(__name__)
+
+
+def _ensure_unlocked(document: DocumentRecord, action: str) -> None:
+    if document.status in _LOCKED_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"An {document.status.value} document is locked and cannot be {action}.",
+        )
 
 # document_id -> the task currently running detection for it, so
 # cancel/retry can find and interrupt it — same pattern as
@@ -73,6 +84,13 @@ async def _run_detection_task(document_id: str, case_id: str | None) -> None:
         _detection_tasks.pop(document_id, None)
         if case_id:
             await _push_case_snapshot(case_id)
+
+
+def skips_detection(document: DocumentRecord) -> bool:
+    """Fraud detection never runs on an unrecognised (Other) document: with
+    no known type there's no schema or document-specific check to run it
+    against. Approving one as Other is allowed, it just isn't scanned."""
+    return document.document_type in (None, "", "unrecognised")
 
 
 def _launch_detection(document_id: str, case_id: str | None) -> None:
@@ -148,7 +166,7 @@ async def get_document(document_id: str) -> DocumentRecord:
             for field in extracted_fields
         }
 
-    document.missing_required_fields = _missing_required_fields(
+    document.missing_required_fields = case_service.missing_required_fields(
         document.document_type,
         extracted_fields,
     )
@@ -231,10 +249,10 @@ async def move_document(
     under the wrong case. Same eligibility as delete above: an approved
     document is locked, and one still mid-pipeline would race it.
     """
-    if document.status == DocumentStatus.APPROVED:
+    if document.status in _LOCKED_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="An approved document cannot be moved.",
+            detail=f"An {document.status.value} document cannot be moved.",
         )
     if document.status in IN_FLIGHT_STATUSES:
         raise HTTPException(
@@ -309,9 +327,12 @@ async def bulk_move_documents(body: BulkMoveRequest) -> BulkMoveResponse:
         document = documents_by_id.get(document_id)
         if document is None:
             failed.append(BulkActionFailure(document_id=document_id, reason="Document not found"))
-        elif document.status == DocumentStatus.APPROVED:
+        elif document.status in _LOCKED_STATUSES:
             failed.append(
-                BulkActionFailure(document_id=document_id, reason="An approved document cannot be moved.")
+                BulkActionFailure(
+                    document_id=document_id,
+                    reason=f"An {document.status.value} document cannot be moved.",
+                )
             )
         elif document.status in IN_FLIGHT_STATUSES:
             failed.append(
@@ -414,6 +435,7 @@ async def update_extracted_fields(
     since a human has now verified the values, which also takes the document
     back above the threshold so the frontend stops showing it as editable.
     """
+    _ensure_unlocked(document, "edited")
     try:
         # Recomputed rather than left as whatever the automated pipeline last
         # wrote — a loan officer correcting individual_address (e.g. filling
@@ -529,6 +551,7 @@ async def add_extracted_field(
     Manually added fields are considered human-verified,
     so their confidence is automatically set to 1.0.
     """
+    _ensure_unlocked(document, "edited")
     field_name = request.field_name.strip()
 
     if not field_name:
@@ -618,6 +641,7 @@ async def delete_extracted_field(
     The field must belong to the specified document.
     Fulfilled requirements are recalculated after deletion.
     """
+    _ensure_unlocked(document, "edited")
     try:
         existing_fields = await asyncio.to_thread(
             extracted_fields_repository.get_extracted_fields,
@@ -682,46 +706,6 @@ async def delete_extracted_field(
             detail="Failed to delete extracted field. Check Supabase table access.",
         ) from exc
 
-def _missing_required_fields(
-    document_type: str | None,
-    extracted_fields,
-) -> list[str]:
-    required_field_names = set(
-        EXTRACTION_SCHEMAS.get(document_type or "", {}).get("required", [])
-    )
-
-    if not required_field_names:
-        return []
-
-    fields_by_name = {
-        field.field_name: field
-        for field in extracted_fields
-    }
-
-    missing: list[str] = []
-
-    for field_name in sorted(required_field_names):
-        field = fields_by_name.get(field_name)
-
-        if field is None:
-            missing.append(field_name)
-            continue
-
-        value = field.field_value
-
-        if value is None:
-            missing.append(field_name)
-            continue
-
-        if isinstance(value, str) and not value.strip():
-            missing.append(field_name)
-            continue
-
-        if isinstance(value, (list, dict)) and not value:
-            missing.append(field_name)
-
-    return missing
-
 @router.post("/{document_id}/approve", response_model=DocumentRecord)
 async def approve_document(
     document_id: str,
@@ -738,13 +722,29 @@ async def approve_document(
             detail="Only completed documents can be approved.",
         )
 
+    if not is_classification_confirmed(document):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Cannot approve document. Confirm the document type first."
+            ),
+        )
+
     try:
         extracted_fields = await asyncio.to_thread(
             extracted_fields_repository.get_extracted_fields,
             document_id,
         )
 
-        missing_required_fields = _missing_required_fields(
+        if not case_service.has_extracted_information(extracted_fields):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Cannot approve document. No information was extracted from it."
+                ),
+            )
+
+        missing_required_fields = case_service.missing_required_fields(
             document.document_type,
             extracted_fields,
         )
@@ -759,12 +759,35 @@ async def approve_document(
                 ),
             )
 
+        # Saving the fields marks every reviewed field 1.0 (see
+        # update_extracted_fields), so anything still under the threshold
+        # hasn't been looked at by an officer yet.
+        low_confidence_fields = sorted(
+            field.field_name
+            for field in extracted_fields
+            if field.confidence is not None
+            and field.confidence < settings.EXTRACTION_CONFIDENCE_THRESHOLD
+        )
+
+        if low_confidence_fields:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Cannot approve document. Low-confidence fields must be "
+                    "reviewed and saved first: "
+                    + ", ".join(low_confidence_fields)
+                ),
+            )
+
         await asyncio.to_thread(
             document_repository.approve_document,
             document_id,
         )
 
-        _launch_detection(document_id, document.case_id)
+        if skips_detection(document):
+            logger.info("Document %s approved as unrecognised; detection skipped", document_id)
+        else:
+            _launch_detection(document_id, document.case_id)
 
         return await get_document(document_id)
 
@@ -824,6 +847,7 @@ async def update_document_type(
     columns and leaves status/extracted_fields untouched — the response
     reads EXTRACTING only when a re-run was actually kicked off.
     """
+    _ensure_unlocked(document, "re-typed")
     document_type = request.document_type.strip().lower()
     if document_type not in _SETTABLE_DOCUMENT_TYPES:
         raise HTTPException(
@@ -837,10 +861,10 @@ async def update_document_type(
             detail="Document is still being processed; try again once it finishes.",
         )
 
-    if (
-        document.classification_confidence is not None
-        and document.classification_confidence >= settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
-    ):
+    # Same rule approval uses, so a document that can't be approved yet can
+    # always be re-typed — including an "unrecognised" one the classifier
+    # was confident about, which still needs an officer's pick.
+    if is_classification_confirmed(document):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Classification confidence is above the threshold; the type can't be overridden.",

@@ -87,6 +87,11 @@ async def _require_detection_has_run(
     a stored detection_report on the document's langgraph trace (same
     signal GET .../detection/report uses).
     """
+    if documents_router.skips_detection(document):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Detection doesn't run on unrecognised documents.",
+        )
     try:
         persisted = await asyncio.to_thread(langgraph_trace.get_persisted, document_id)
     except Exception:  # noqa: BLE001 — table unreachable: fall back to in-memory
@@ -292,6 +297,11 @@ async def retry_document_detection(
     an error/cancellation behind and produced no report, and only when
     nothing is already running for this document.
     """
+    if documents_router.skips_detection(document):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Detection doesn't run on unrecognised documents.",
+        )
     existing = documents_router._detection_tasks.get(document_id)
     if existing is not None and not existing.done():
         raise HTTPException(

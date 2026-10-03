@@ -8,6 +8,7 @@ from . import case_repository, document_repository, extracted_fields_repository
 from .case_match import CaseMatchResult, DocumentCaseMatch, check_case_match
 from .config import settings
 from .langgraph import trace as langgraph_trace
+from .langgraph.extraction_prompts import EXTRACTION_SCHEMAS
 
 logger = logging.getLogger("classifier_pipeline.case_service")
 from .mapper import (
@@ -27,10 +28,13 @@ from .models import (
     DocumentRecord,
     DocumentStatus,
     DocumentType,
+    IN_FLIGHT_STATUSES,
     IdDocumentCoverage,
     IDENTITY_DOCUMENT_REQUIREMENT,
     ProofOfAddressCoverage,
     RoutingStatus,
+    counts_towards_checklist,
+    is_classification_confirmed,
 )
 from .monitoring import is_stuck
 
@@ -57,7 +61,8 @@ def compute_requirement_coverage(documents: list[DocumentRecord]) -> tuple[list[
     A requirement counts as fulfilled only by a document whose
     classification was actually ACCEPTED — one sitting in manual review
     hasn't been confirmed to be what it claims, so it shouldn't retire a
-    checklist item yet. A single document can fulfil more than one
+    checklist item yet — and that a loan officer hasn't rejected (see
+    models.counts_towards_checklist). A single document can fulfil more than one
     requirement (see DocumentRecord.fulfilled_requirements), so most
     requirements are a union across all of a case's accepted documents, not
     a 1:1 count — proof_of_address is the one exception, requiring coverage
@@ -69,7 +74,7 @@ def compute_requirement_coverage(documents: list[DocumentRecord]) -> tuple[list[
     """
     fulfilled: set[str] = set()
     for doc in documents:
-        if doc.routing_status == RoutingStatus.ACCEPTED:
+        if counts_towards_checklist(doc):
             fulfilled.update(doc.fulfilled_requirements)
 
     # Overrides whatever individual documents self-reported for this one
@@ -173,6 +178,51 @@ def build_summary(case, documents: list[DocumentRecord]) -> CaseSummary:
     )
 
 
+def is_empty_field_value(value) -> bool:
+    """None, a blank string, or an empty list/dict: nothing was extracted."""
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return not value.strip()
+    if isinstance(value, (list, dict)):
+        return not value
+    return False
+
+
+def has_extracted_information(extracted_fields) -> bool:
+    """Whether Extraction (or the officer) produced at least one real value.
+    A document with nothing extracted has nothing to verify, so it can't be
+    approved."""
+    return any(not is_empty_field_value(field.field_value) for field in extracted_fields)
+
+
+def missing_required_fields(document_type: str | None, extracted_fields) -> list[str]:
+    """
+    The document type's required schema fields that Extraction left absent
+    or empty (see is_empty_field_value). Shared by GET /documents/{id}, the
+    approve gate and the case snapshot, so the document page, the case
+    overview and approval all agree on which documents need manual review.
+    """
+    required_field_names = set(
+        EXTRACTION_SCHEMAS.get(document_type or "", {}).get("required", [])
+    )
+
+    if not required_field_names:
+        return []
+
+    fields_by_name = {
+        field.field_name: field
+        for field in extracted_fields
+    }
+
+    return [
+        field_name
+        for field_name in sorted(required_field_names)
+        if field_name not in fields_by_name
+        or is_empty_field_value(fields_by_name[field_name].field_value)
+    ]
+
+
 def _enrich_with_extracted_fields(documents: list[DocumentRecord]) -> list[DocumentRecord]:
     fields_by_document = extracted_fields_repository.get_extracted_fields_for_documents(
         [document.id for document in documents]
@@ -184,6 +234,14 @@ def _enrich_with_extracted_fields(documents: list[DocumentRecord]) -> list[Docum
                 field.field_name: {"value": field.field_value, "confidence": field.confidence}
                 for field in fields
             }
+        # Skipped while the pipeline is still running: Extraction hasn't
+        # written anything yet, so every required field would read as
+        # missing and the case overview would show Manual Review instead
+        # of Pending.
+        if document.status not in IN_FLIGHT_STATUSES:
+            document.missing_required_fields = missing_required_fields(
+                document.document_type, fields or []
+            )
     return documents
 
 

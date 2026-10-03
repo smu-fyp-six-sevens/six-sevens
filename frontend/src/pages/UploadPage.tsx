@@ -25,6 +25,8 @@ import {
   isDocumentStatusInProgress,
   formatDocumentType,
   formatRoutingOutcome,
+  isClassificationConfirmed,
+  hasExtractedInformation,
   lowestFieldConfidence,
   bulkDeleteDocuments,
   bulkMoveDocuments,
@@ -310,9 +312,14 @@ export default function UploadPage({
     caseMatches.get(document.id)?.status === 'manual_review';
 
   const flaggedDocuments = Array.from(documentDetails.values()).filter((document) => {
+    // Rejecting a document is the officer's final decision, so it's no
+    // longer waiting on review.
+    if (document.status === 'rejected') return false;
     const lowestConfidence = lowestFieldConfidence(document.extracted_fields);
     return (
       document.routing_status === 'manual_review' ||
+      (document.status === 'analyzed' && !isClassificationConfirmed(document)) ||
+      (document.status === 'analyzed' && !hasExtractedInformation(document.extracted_fields)) ||
       caseMatchNeedsReview(document) ||
       (lowestConfidence != null && lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD) ||
       (document.missing_required_fields?.length ?? 0) > 0
@@ -780,7 +787,11 @@ function isEligibleForApproval(
     if (!moveTargetCaseId) return;
 
     const eligible = extractedDocuments.filter(
-      (document) => selectedDocumentIds.has(document.id) && TERMINAL_DOCUMENT_STATUSES.has(document.status),
+      (document) =>
+        selectedDocumentIds.has(document.id) &&
+        TERMINAL_DOCUMENT_STATUSES.has(document.status) &&
+        // Locked once rejected — the backend refuses the move too.
+        document.status !== 'rejected',
     );
     if (eligible.length === 0) {
       setIsMoveDialogOpen(false);
@@ -1262,7 +1273,9 @@ function isEligibleForApproval(
                                     ? 'status-dot--success'
                                     : status === 'failed'
                                       ? 'status-dot--failed'
-                                      : status === 'cancelled'
+                                      : status === 'rejected'
+                                        ? 'status-dot--rejected'
+                                        : status === 'cancelled'
                                         ? 'status-dot--cancelled'
                                         : isStuck
                                           ? 'status-dot--stuck'
@@ -1386,7 +1399,11 @@ function isEligibleForApproval(
 
                       {approvedDocuments.map((document) => {
                         const hasDetectionReport = document.has_detection_report ?? false;
-                        const detectionStage = documentDetectionStage(document.status, hasDetectionReport);
+                        const detectionStage = documentDetectionStage(
+                          document.status,
+                          hasDetectionReport,
+                          document.document_type,
+                        );
 
                         return (
                           <div
@@ -1416,12 +1433,18 @@ function isEligibleForApproval(
                             <span className="document-status-cell">
                               <span
                                 className={`status-dot ${
-                                  detectionStage === 'detected' ? 'status-dot--success' : ''
+                                  detectionStage === 'detected' || detectionStage === 'skipped'
+                                    ? 'status-dot--success'
+                                    : ''
                                 }`}
                               />
                               <span>
-                                {formatDocumentStatusLabel(document.status, hasDetectionReport)}
-                                {isDocumentStatusInProgress(document.status, hasDetectionReport) && '…'}
+                                {formatDocumentStatusLabel(document.status, hasDetectionReport, document.document_type)}
+                                {isDocumentStatusInProgress(
+                                  document.status,
+                                  hasDetectionReport,
+                                  document.document_type,
+                                ) && '…'}
                               </span>
                             </span>
 
@@ -1480,12 +1503,15 @@ function isEligibleForApproval(
 
                   // Classification problems first — a case-match reason is
                   // only meaningful once the document type is right.
+                  const classificationNeedsReview =
+                    document.routing_status === 'manual_review' ||
+                    !isClassificationConfirmed(document);
                   const reason =
-                    document.routing_status !== 'manual_review' &&
+                    !classificationNeedsReview &&
                     caseMatch &&
                     caseMatchNeedsReview(document)
                       ? `${caseMatch.reason}. Please verify the document belongs to this case before approving.`
-                      : document.routing_status === 'manual_review'
+                      : classificationNeedsReview
                       ? document.document_type === 'unrecognised'
                         ? 'Document type could not be confidently recognised. Please verify the document type before approving.'
                         : document.classification_confidence != null &&
@@ -1497,6 +1523,8 @@ function isEligibleForApproval(
                             )}. Please verify the document type before approving.`
                           : document.escalation_reason ??
                             'This document was routed to manual review during classification. Please verify the document before approving.'
+                      : !hasExtractedInformation(document.extracted_fields)
+                        ? 'No information was extracted from this document. Add the fields manually or reject it.'
                       : lowExtractionConfidence
                         ? 'One or more extracted fields have low confidence and require review.'
                         : missingRequiredFields.length > 0

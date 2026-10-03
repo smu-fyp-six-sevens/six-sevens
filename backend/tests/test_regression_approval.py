@@ -27,7 +27,7 @@ from fastapi.testclient import TestClient
 from app.fraud_detection.font_consistency import ExtractedField
 from app.main import app
 from app.models import DocumentRecord, DocumentStatus
-from app.routers.documents import _missing_required_fields
+from app.case_service import missing_required_fields
 
 client = TestClient(app)
 ANCHORPOINT = json.loads((Path(__file__).parent / "fixtures" / "regression" / "anchorpoint.json").read_text())
@@ -40,6 +40,7 @@ def _real(filename_part: str) -> tuple[DocumentRecord, list[ExtractedField]]:
         case_id=captured["case_id"],
         filename=captured["filename"],
         document_type=captured["document_type"],
+        classification_confidence=captured["classification_confidence"],
         status=DocumentStatus.ANALYZED,
         uploaded_at=datetime.now(timezone.utc),
     )
@@ -100,7 +101,7 @@ def test_a_clean_credit_report_can_be_approved():
     document, fields = _real("Credit_Bureau_Report_8027")
     assert any(f.field_name == "defaults" and f.field_value == [] for f in fields)
 
-    assert _missing_required_fields(document.document_type, fields) == []
+    assert missing_required_fields(document.document_type, fields) == []
 
 
 @pytest.mark.sprint2
@@ -116,4 +117,4 @@ def test_a_personal_source_of_wealth_statement_can_be_approved(filename):
     document, fields = _real(filename)
     assert any(f.field_name == "account_holder_name" and f.field_value for f in fields)
 
-    assert _missing_required_fields(document.document_type, fields) == []
+    assert missing_required_fields(document.document_type, fields) == []

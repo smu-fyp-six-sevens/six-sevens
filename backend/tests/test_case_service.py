@@ -37,6 +37,9 @@ def _make_document(
     document_type: str | None = None,
     fulfilled_requirements: list[str] | None = None,
     extracted_fields: dict | None = None,
+    # Confident by default: below the threshold an accepted document doesn't
+    # count until an officer confirms its type (models.counts_towards_checklist).
+    classification_confidence: float | None = 0.97,
 ) -> DocumentRecord:
     now = _now()
     return DocumentRecord(
@@ -52,6 +55,7 @@ def _make_document(
         ),
         routing_status=routing_status,
         document_type=document_type,
+        classification_confidence=classification_confidence,
         fulfilled_requirements=fulfilled_requirements or [],
         extracted_fields=extracted_fields,
     )
@@ -81,6 +85,48 @@ def test_enrich_with_extracted_fields_fills_in_fields_for_matching_documents() -
     }
     # No matching row for doc-2 — left as whatever it already had (None here).
     assert enriched[1].extracted_fields is None
+
+
+def test_enrich_with_extracted_fields_reports_empty_required_fields() -> None:
+    # The case overview's Manual Review status reads missing_required_fields
+    # off the snapshot, so a blank or absent required field has to show up here.
+    payslip = _make_document("doc-1", DocumentStatus.ANALYZED, document_type="payslip")
+
+    with patch("app.case_service.extracted_fields_repository") as mock_repo:
+        mock_repo.get_extracted_fields_for_documents.return_value = {
+            "doc-1": [
+                ExtractedField(field_name="individual_name", field_type="string", field_value="Jane Tan", confidence=0.95),
+                ExtractedField(field_name="company_name", field_type="string", field_value="  ", confidence=0.95),
+            ],
+        }
+
+        enriched = _enrich_with_extracted_fields([payslip])
+
+    assert enriched[0].missing_required_fields == ["company_name", "net_pay"]
+
+
+def test_enrich_with_extracted_fields_reports_all_required_fields_when_none_extracted() -> None:
+    payslip = _make_document("doc-1", DocumentStatus.ANALYZED, document_type="payslip")
+
+    with patch("app.case_service.extracted_fields_repository") as mock_repo:
+        mock_repo.get_extracted_fields_for_documents.return_value = {}
+
+        enriched = _enrich_with_extracted_fields([payslip])
+
+    assert enriched[0].missing_required_fields == ["company_name", "individual_name", "net_pay"]
+
+
+def test_enrich_with_extracted_fields_skips_missing_fields_while_in_flight() -> None:
+    # Extraction hasn't run yet — reporting every field as missing would flip
+    # the overview to Manual Review instead of Pending.
+    payslip = _make_document("doc-1", DocumentStatus.EXTRACTING, document_type="payslip")
+
+    with patch("app.case_service.extracted_fields_repository") as mock_repo:
+        mock_repo.get_extracted_fields_for_documents.return_value = {}
+
+        enriched = _enrich_with_extracted_fields([payslip])
+
+    assert enriched[0].missing_required_fields == []
 
 
 def test_enrich_with_extracted_fields_handles_empty_document_list() -> None:
@@ -183,6 +229,44 @@ def test_manual_review_document_does_not_count_as_fulfilled() -> None:
             "doc-1",
             DocumentStatus.ANALYZED,
             routing_status=RoutingStatus.MANUAL_REVIEW,
+            fulfilled_requirements=["bank_statement"],
+        )
+    ]
+    fulfilled, missing = compute_requirement_coverage(documents)
+    assert "bank_statement" not in fulfilled
+    assert "bank_statement" in missing
+
+
+def test_unconfirmed_low_confidence_type_does_not_count_until_officer_confirms() -> None:
+    """
+    Save fields flips routing to ACCEPTED without confirming the type, so a
+    payslip guessed at 0.6 must not tick the checklist until the officer
+    confirms it in the type dropdown (which writes 1.0) — the same bar
+    approval uses.
+    """
+    saved_but_unconfirmed = _make_document(
+        "doc-1",
+        DocumentStatus.ANALYZED,
+        routing_status=RoutingStatus.ACCEPTED,
+        document_type="payslip",
+        classification_confidence=0.6,
+        fulfilled_requirements=["payslip"],
+    )
+    fulfilled, missing = compute_requirement_coverage([saved_but_unconfirmed])
+    assert "payslip" not in fulfilled
+
+    confirmed = saved_but_unconfirmed.model_copy(update={"classification_confidence": 1.0})
+    fulfilled, missing = compute_requirement_coverage([confirmed])
+    assert "payslip" in fulfilled
+
+
+def test_rejected_document_does_not_count_as_fulfilled() -> None:
+    """A loan officer rejecting a document un-ticks its checklist item."""
+    documents = [
+        _make_document(
+            "doc-1",
+            DocumentStatus.REJECTED,
+            routing_status=RoutingStatus.ACCEPTED,
             fulfilled_requirements=["bank_statement"],
         )
     ]
