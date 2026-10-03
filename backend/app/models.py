@@ -6,6 +6,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from .config import settings
+
 
 class DocumentStatus(str, Enum):
     UPLOADED = "uploaded"       # stored, not yet queued
@@ -440,3 +442,36 @@ class ProcessingErrorEntry(BaseModel):
     document_id: str
     error: str
     occurred_at: datetime
+
+
+def is_classification_confirmed(document: DocumentRecord) -> bool:
+    """
+    Whether the document's type can be trusted enough to approve it. A real
+    type needs the classifier at or above the threshold, or an officer's
+    confirmation. "unrecognised" (Other) always needs the officer: the
+    classifier's confidence there only says it couldn't find a match. An
+    officer's pick in the type dropdown writes exactly 1.0 (see
+    routers/documents.update_document_type), which the classifier never
+    reaches (CERTAIN_CAP is 0.97), so 1.0 marks an officer-confirmed type.
+    """
+    confidence = document.classification_confidence
+    if confidence is None:
+        return False
+    if document.document_type in (None, "", "unrecognised"):
+        return confidence >= 1.0
+    return confidence >= settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
+
+
+def counts_towards_checklist(document: DocumentRecord) -> bool:
+    """
+    Whether a document can tick checklist items and establish identities or
+    addresses (case_service.compute_requirement_coverage, mapper.py). Same
+    bar as approval for the type: routing_status alone isn't enough, since
+    an officer's "Save fields" flips it to ACCEPTED without confirming the
+    type. A rejected document never counts.
+    """
+    return (
+        document.routing_status == RoutingStatus.ACCEPTED
+        and document.status != DocumentStatus.REJECTED
+        and is_classification_confirmed(document)
+    )

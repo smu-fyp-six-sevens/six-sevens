@@ -18,6 +18,9 @@ def _make_document(
     document_type: str | None = None,
     routing_status: RoutingStatus | None = None,
     extracted_fields: dict | None = None,
+    # Confident by default: below the threshold an accepted document doesn't
+    # count until an officer confirms its type (models.counts_towards_checklist).
+    classification_confidence: float | None = 0.97,
 ) -> DocumentRecord:
     now = datetime.now(timezone.utc)
     return DocumentRecord(
@@ -29,6 +32,7 @@ def _make_document(
         uploaded_at=now,
         routing_status=routing_status,
         document_type=document_type,
+        classification_confidence=classification_confidence,
         extracted_fields=extracted_fields,
     )
 

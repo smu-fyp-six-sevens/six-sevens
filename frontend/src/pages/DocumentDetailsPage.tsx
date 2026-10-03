@@ -25,6 +25,9 @@ import {
   isDocumentStatusInProgress,
   formatDocumentType,
   formatRoutingOutcome,
+  isClassificationConfirmed,
+  hasExtractedInformation,
+  skipsDetection,
   getDocument,
   isConfirmedOther,
   getDocumentCaseMatch,
@@ -852,9 +855,31 @@ export default function DocumentDetailsPage({
   const hasCase = Boolean(document?.case_id);
   const documentStatus = document?.status;
   const isApproved = document?.status === 'approved';
+  // Approve and Reject are both final: the document is locked against field
+  // edits and type corrections either way (the backend enforces this too).
+  const isLocked = isApproved || document?.status === 'rejected';
+  // Fields still under the threshold haven't been reviewed: "Save fields"
+  // marks every reviewed field 1.0, so these block approval until then (the
+  // backend's approve endpoint refuses them too).
+  const lowConfidenceFields = Object.entries(document?.extracted_fields ?? {})
+    .filter(([, raw]) => {
+      const confidence =
+        raw && typeof raw === 'object' ? (raw as { confidence?: unknown }).confidence : null;
+      return typeof confidence === 'number' && confidence < EXTRACTION_CONFIDENCE_THRESHOLD;
+    })
+    .map(([fieldName]) => fieldName)
+    .sort();
+
+  const isTypeConfirmed = document ? isClassificationConfirmed(document) : false;
+
+  const hasExtractedInfo = hasExtractedInformation(document?.extracted_fields ?? null);
+
   const canApprove =
     document?.status === 'analyzed' &&
-    (document.missing_required_fields?.length ?? 0) === 0;
+    isTypeConfirmed &&
+    hasExtractedInfo &&
+    (document.missing_required_fields?.length ?? 0) === 0 &&
+    lowConfidenceFields.length === 0;
 
   const missingRequiredFields = document?.missing_required_fields ?? [];
   const extractedFieldsJson = JSON.stringify(document?.extracted_fields ?? null);
@@ -933,19 +958,18 @@ export default function DocumentDetailsPage({
     document?.routing_status === 'accepted' &&
     document.extraction_confidence === 1 &&
     !needsManualReview;
-  const canEditFields = !isApproved && !areFieldsVerified;
+  const canEditFields = !isLocked && !areFieldsVerified;
 
   // The type can only be corrected once the pipeline has finished with the
   // document, and only while classification confidence is still below the
   // threshold — the backend enforces both. Saving sets confidence to 1.0, so
   // the dropdown goes away afterwards.
   const canCorrectType =
-    !isApproved &&
+    !isLocked &&
     (document?.status === 'analyzed' || document?.status === 'failed') &&
-    !(
-      document.classification_confidence != null &&
-      document.classification_confidence >= CLASSIFICATION_CONFIDENCE_THRESHOLD
-    );
+    // Same rule as approval, so a document that can't be approved yet can
+    // always be confirmed — including a confidently 'unrecognised' one.
+    !isTypeConfirmed;
 
   // What the dropdown currently shows: the officer's pick, else the existing
   // type. Saving is allowed even when it's unchanged — that's how an officer
@@ -967,7 +991,10 @@ export default function DocumentDetailsPage({
     document?.status === 'extracting';
 
   const hasDetectionReport = detectionReport !== null;
-  const detectionStage = document ? documentDetectionStage(document.status, hasDetectionReport) : null;
+  const detectionStage = document
+    ? documentDetectionStage(document.status, hasDetectionReport, document.document_type)
+    : null;
+  const detectionSkipped = skipsDetection(document?.document_type);
 
   useEffect(() => {
     if (document?.status !== 'processing') {
@@ -1369,7 +1396,7 @@ export default function DocumentDetailsPage({
 
           <div
             className={`document-status ${
-              document.status === 'analyzed' || detectionStage === 'detected'
+              document.status === 'analyzed' || detectionStage === 'detected' || detectionStage === 'skipped'
                 ? 'document-status--success'
                 : document.status === 'failed'
                   ? 'document-status--failed'
@@ -1384,7 +1411,7 @@ export default function DocumentDetailsPage({
           >
             <span
               className={`status-dot ${
-                document.status === 'analyzed' || detectionStage === 'detected'
+                document.status === 'analyzed' || detectionStage === 'detected' || detectionStage === 'skipped'
                   ? 'status-dot--success'
                   : document.status === 'failed'
                     ? 'status-dot--failed'
@@ -1398,9 +1425,9 @@ export default function DocumentDetailsPage({
               }`}
             />
             {isDocumentStuckProcessing(document)
-              ? `${formatDocumentStatusLabel(document.status, hasDetectionReport)} (Stuck)`
-              : formatDocumentStatusLabel(document.status, hasDetectionReport)}
-            {isDocumentStatusInProgress(document.status, hasDetectionReport) && '…'}
+              ? `${formatDocumentStatusLabel(document.status, hasDetectionReport, document.document_type)} (Stuck)`
+              : formatDocumentStatusLabel(document.status, hasDetectionReport, document.document_type)}
+            {isDocumentStatusInProgress(document.status, hasDetectionReport, document.document_type) && '…'}
           </div>
         </div>
 
@@ -1984,7 +2011,17 @@ export default function DocumentDetailsPage({
         {detectionError && (
           <p style={{ color: 'crimson' }}>{detectionError}</p>
         )}
-        {!detectionReport ? (
+        {document.status === 'rejected' ? (
+          // Reject only works on an extracted, unapproved document, so a
+          // rejected one has never been scanned and never will be.
+          <p>Detection doesn't run on rejected documents.</p>
+        ) : detectionSkipped && !detectionReport ? (
+          <p>
+            Detection doesn't run on unrecognised documents.
+            {document.status !== 'approved' &&
+              ' Choose a document type above to have it scanned after approval.'}
+          </p>
+        ) : !detectionReport ? (
           <>
             <p>
               {detectionError
@@ -2060,7 +2097,11 @@ export default function DocumentDetailsPage({
         )}
 
         <h3 style={{ marginBottom: '0.25em' }}>Run an individual check</h3>
-        {!detectionReport ? (
+        {document.status === 'rejected' ? (
+          <p>Not available for rejected documents.</p>
+        ) : detectionSkipped && !detectionReport ? (
+          <p>Not available for unrecognised documents.</p>
+        ) : !detectionReport ? (
           <p>Run full detection above first — individual checks unlock once a report exists.</p>
         ) : (
           <>
@@ -2132,6 +2173,26 @@ export default function DocumentDetailsPage({
               </button>
             )}
 
+            {document.status === 'analyzed' && !isTypeConfirmed && (
+              <div className="approval-warning">
+                Cannot approve yet.{' '}
+                {!document.document_type || document.document_type === 'unrecognised'
+                  ? 'The document type could not be identified.'
+                  : `The classifier is only ${Math.round(
+                      (document.classification_confidence ?? 0) * 100,
+                    )}% sure this is a ${formatDocumentType(document.document_type, null)}.`}{' '}
+                Choose the correct type in <strong>Document Type</strong> above and save it before
+                approving, or reject the document if it doesn't belong in this case.
+              </div>
+            )}
+
+            {document.status === 'analyzed' && !hasExtractedInfo && (
+              <div className="approval-warning">
+                Cannot approve yet. No information was extracted from this document. Add the
+                fields manually, or reject it if it doesn't belong in this case.
+              </div>
+            )}
+
             {document.status === 'analyzed' && missingRequiredFields.length > 0 && (
               <div className="approval-warning">
                 Cannot approve yet. Please complete the following required field
@@ -2141,6 +2202,20 @@ export default function DocumentDetailsPage({
                     .map((fieldName) => humanizeFieldKey(fieldName))
                     .join(', ')}
                 </strong>
+              </div>
+            )}
+
+            {document.status === 'analyzed' && lowConfidenceFields.length > 0 && (
+              <div className="approval-warning">
+                Cannot approve yet. {lowConfidenceFields.length > 1 ? 'These fields have' : 'This field has'}{' '}
+                low confidence:{' '}
+                <strong>
+                  {lowConfidenceFields
+                    .map((fieldName) => humanizeFieldKey(fieldName))
+                    .join(', ')}
+                </strong>
+                . Check {lowConfidenceFields.length > 1 ? 'them' : 'it'} in Manual Review and press{' '}
+                <strong>Save fields</strong> before approving.
               </div>
             )}
 

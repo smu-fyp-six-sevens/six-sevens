@@ -31,6 +31,7 @@ def _document(**kwargs) -> DocumentRecord:
         case_id="case-1",
         filename="statement.pdf",
         storage_path="case-1/doc-1_statement.pdf",
+        document_type="bank_statement",
         status=DocumentStatus.ANALYZED,
         uploaded_at="2026-08-26T00:00:00Z",
     )
@@ -166,6 +167,7 @@ def _make_document(document_id: str = "doc-1") -> DocumentRecord:
         case_id="case-1",
         filename="statement.pdf",
         storage_path=f"case-1/{document_id}_statement.pdf",
+        document_type="bank_statement",
         status=DocumentStatus.ANALYZED,
         uploaded_at="2026-08-26T00:00:00Z",
     )
@@ -283,7 +285,7 @@ def test_get_metadata_anomaly_success_persists_result() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["anomalies"][0]["field"] == "author"
-    mock_check.assert_called_once_with("doc-1", None, None)
+    mock_check.assert_called_once_with("doc-1", None, "bank_statement")
 
 
 def test_get_metadata_anomaly_passes_stored_metadata_and_document_type_through() -> None:
@@ -385,7 +387,7 @@ def test_get_numerical_validation_passes_extracted_fields_and_document_type() ->
     # No file download — works from extracted_fields and document_type alone.
     args = mock_check.call_args[0]
     assert args[1] == fields
-    assert args[2] is None
+    assert args[2] == "bank_statement"
 
 
 def test_get_numerical_validation_degrades_when_fields_fetch_fails() -> None:
@@ -541,7 +543,7 @@ def test_get_date_anomalies_passes_extracted_fields_and_document_type() -> None:
     # No file download — works from extracted_fields and document_type alone.
     args = mock_check.call_args[0]
     assert args[1] == fields
-    assert args[2] is None
+    assert args[2] == "bank_statement"
 
 
 def test_get_date_anomalies_writes_nothing() -> None:
@@ -789,3 +791,42 @@ def test_retry_detection_rejected_when_nothing_ran_yet() -> None:
     assert response.status_code == 409
     mock_launch.assert_not_called()
 
+
+
+def test_retry_detection_refused_for_unrecognised_document() -> None:
+    from app.routers import documents as documents_router
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
+        patch.object(documents_router, "_launch_detection") as mock_launch,
+        patch.dict(documents_router._detection_tasks, {}, clear=True),
+    ):
+        mock_repo.get_document.return_value = _document(
+            status=DocumentStatus.APPROVED, document_type="unrecognised"
+        )
+        mock_trace.get_persisted.return_value = {"detection_error": "crashed"}
+        response = client.post("/documents/doc-1/detection/retry")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Detection doesn't run on unrecognised documents."
+    mock_launch.assert_not_called()
+
+
+def test_individual_checks_refused_for_unrecognised_document() -> None:
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
+        patch("app.routers.detection.check_image_manipulation") as mock_m,
+        patch("app.routers.detection.check_image_tampering") as mock_t,
+    ):
+        mock_repo.get_document.return_value = _document(
+            status=DocumentStatus.APPROVED, document_type="unrecognised"
+        )
+        _mark_detection_already_ran(mock_trace)
+        response = client.get("/documents/doc-1/detection/image-integrity")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Detection doesn't run on unrecognised documents."
+    mock_m.assert_not_called()
+    mock_t.assert_not_called()

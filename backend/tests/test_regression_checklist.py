@@ -22,6 +22,7 @@ from pathlib import Path
 import pytest
 
 from app.case_service import build_summary
+from app.config import settings
 from app.models import (
     ADDITIONAL_DOCUMENT_TYPES,
     REQUIRED_DOCUMENT_TYPES,
@@ -52,6 +53,23 @@ def _without(documents: list[DocumentRecord], *parts: str) -> list[DocumentRecor
     return [d for d in documents if not any(part in d.filename for part in parts)]
 
 
+def _officer_confirmed(documents: list[DocumentRecord]) -> list[DocumentRecord]:
+    """
+    The fixtures predate the rule that an accepted document below the
+    classification threshold only counts once an officer confirms its type
+    (models.counts_towards_checklist). anchorpoint's two utility bills were
+    accepted at 0.83; confirming them — which writes 1.0, as the type
+    dropdown does — reproduces what production computed at capture time.
+    """
+    return [
+        d.model_copy(update={"classification_confidence": 1.0})
+        if d.routing_status == RoutingStatus.ACCEPTED
+        and (d.classification_confidence or 0) < settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
+        else d
+        for d in documents
+    ]
+
+
 # --- Classify Optional Documents (SCRUM-114) -----------------------------------
 
 
@@ -61,12 +79,23 @@ def _without(documents: list[DocumentRecord], *parts: str) -> list[DocumentRecor
 def test_checklist_recomputed_from_real_documents_matches_production(name):
     case, documents, captured = _load(name)
 
-    summary = build_summary(case, documents)
+    summary = build_summary(case, _officer_confirmed(documents))
 
     assert set(summary.fulfilled_requirements) == set(captured["fulfilled_requirements"])
     assert summary.recommended_additional_documents == captured["recommended_additional_documents"]
     assert summary.proof_of_address_coverage.model_dump() == captured["proof_of_address_coverage"]
     assert summary.id_document_coverage.model_dump() == captured["id_document_coverage"]
+
+
+def test_unconfirmed_low_confidence_documents_do_not_tick_the_checklist():
+    # The same case as captured, before an officer confirms the two utility
+    # bills accepted at 0.83: neither can tick a checklist item yet.
+    case, documents, captured = _load("anchorpoint")
+    assert "company_proof_of_address" in captured["fulfilled_requirements"]
+
+    summary = build_summary(case, documents)
+
+    assert "company_proof_of_address" not in summary.fulfilled_requirements
 
 
 @pytest.mark.sprint2
@@ -86,7 +115,7 @@ def test_required_and_optional_requirements_are_separate_lists():
 def test_missing_optional_documents_do_not_make_the_case_incomplete():
     case, documents, _ = _load("anchorpoint")
     no_optional = _without(
-        documents,
+        _officer_confirmed(documents),
         "LoanFacility", "LoanOffer", "FacilityLetter",   # list of loans
         "Company_UtilityBill",                          # company proof of address
         "SimS_SourceOfWealth", "Wealth_Statement_scan",  # personal source of wealth

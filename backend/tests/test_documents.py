@@ -1294,7 +1294,7 @@ def test_move_document_db_failure_returns_502() -> None:
 
 
 def test_approve_document_success() -> None:
-    document = _typed_document()
+    document = _typed_document(classification_confidence=0.97)
 
     with (
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
@@ -1318,6 +1318,30 @@ def test_approve_document_success() -> None:
     mock_repo.approve_document.assert_called_once_with("doc-1")
 
 
+def test_approve_document_rejects_unreviewed_low_confidence_field() -> None:
+    # A field under the threshold hasn't been through Save fields yet (which
+    # would have marked it 1.0), so the document can't be approved.
+    document = _typed_document(classification_confidence=0.97)
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
+        mock_fields_repo.get_extracted_fields.return_value = [
+            ExtractedField(field_name="individual_name", field_type="string", field_value="Jane", confidence=0.9),
+            ExtractedField(field_name="company_name", field_type="string", field_value="Acme", confidence=0.55),
+            ExtractedField(field_name="net_pay", field_type="string", field_value="1000", confidence=0.9),
+        ]
+
+        response = client.post("/documents/doc-1/approve")
+
+    assert response.status_code == 400
+    assert response.json()["detail"].endswith("saved first: company_name")
+    mock_repo.approve_document.assert_not_called()
+
+
 def test_approve_document_rejects_a_document_not_yet_analyzed() -> None:
     document = _typed_document(status=DocumentStatus.EXTRACTING)
 
@@ -1334,7 +1358,7 @@ def test_approve_document_rejects_a_document_not_yet_analyzed() -> None:
 
 
 def test_approve_document_write_failure_returns_502() -> None:
-    document = _typed_document()
+    document = _typed_document(classification_confidence=0.97)
 
     with (
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
@@ -1509,3 +1533,167 @@ async def test_launch_detection_tracks_the_task() -> None:
         await documents_router._detection_tasks["doc-1"]
 
     assert "doc-1" not in documents_router._detection_tasks
+
+
+@pytest.mark.parametrize("locked_status", [DocumentStatus.APPROVED, DocumentStatus.REJECTED])
+@pytest.mark.parametrize(
+    ("method", "url", "body"),
+    [
+        ("patch", "/documents/doc-1/extracted-fields", {"extracted_fields": {"net_pay": 5000}}),
+        ("post", "/documents/doc-1/extracted-fields", {"field_name": "net_pay", "field_value": 5000}),
+        ("delete", "/documents/doc-1/extracted-fields/field-1", None),
+        ("patch", "/documents/doc-1/document-type", {"document_type": "payslip"}),
+        ("post", "/documents/doc-1/move", {"case_id": "case-2"}),
+    ],
+)
+def test_locked_document_cannot_be_changed(locked_status, method, url, body) -> None:
+    # An officer's approve/reject decision is final: no field edits, type
+    # corrections or moves afterwards, whatever the frontend shows.
+    document = _make_document()
+    document.status = locked_status
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
+
+        kwargs = {"json": body} if body is not None else {}
+        response = getattr(client, method)(url, **kwargs)
+
+    assert response.status_code == 409
+    assert "cannot be" in response.json()["detail"]
+    mock_fields_repo.replace_extracted_fields.assert_not_called()
+    mock_fields_repo.add_extracted_field.assert_not_called()
+    mock_fields_repo.delete_extracted_field.assert_not_called()
+    mock_repo.move_document.assert_not_called()
+    mock_repo.update_extracted_fields.assert_not_called()
+
+
+def test_rejected_document_can_still_be_deleted() -> None:
+    # Locked against edits, but not against removal — a rejected file is
+    # usually cleared out so a corrected one can replace it.
+    document = _make_document()
+    document.status = DocumentStatus.REJECTED
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.case_service"),
+        patch("app.routers.documents.broadcaster"),
+    ):
+        mock_dep_repo.get_document.return_value = document
+
+        response = client.delete("/documents/doc-1")
+
+    assert response.status_code == 204
+    mock_repo.remove_document.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ("document_type", "classification_confidence"),
+    [
+        ("payslip", 0.6),  # real type, classifier unsure
+        ("payslip", None),
+        ("unrecognised", 0.0),  # e.g. a homework PDF
+        ("unrecognised", 0.97),  # classifier sure it matches nothing
+    ],
+)
+def test_approve_document_requires_a_confirmed_type(document_type, classification_confidence) -> None:
+    document = _typed_document(
+        document_type=document_type, classification_confidence=classification_confidence
+    )
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
+        mock_fields_repo.get_extracted_fields.return_value = []
+
+        response = client.post("/documents/doc-1/approve")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Cannot approve document. Confirm the document type first."
+    mock_repo.approve_document.assert_not_called()
+
+
+def test_approve_document_allows_officer_confirmed_unrecognised() -> None:
+    # Picking "Other" in the type dropdown writes 1.0 — an explicit decision.
+    document = _typed_document(document_type="unrecognised", classification_confidence=1.0)
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+        patch("app.routers.documents._launch_detection") as mock_launch,
+    ):
+        mock_dep_repo.get_document.return_value = document
+        mock_repo.get_document.return_value = document
+        mock_fields_repo.get_extracted_fields.return_value = [
+            ExtractedField(field_name="summary", field_type="string", field_value="x", confidence=0.99),
+        ]
+
+        response = client.post("/documents/doc-1/approve")
+
+    assert response.status_code == 200
+    mock_repo.approve_document.assert_called_once_with("doc-1")
+    # Approved as Other, but never scanned.
+    mock_launch.assert_not_called()
+
+
+def test_confident_unrecognised_document_can_still_be_retyped() -> None:
+    # Otherwise it could never be approved: the type override is the only way
+    # to confirm it.
+    document = _typed_document(document_type="unrecognised", classification_confidence=0.97)
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+        patch("app.routers.documents.langgraph_pipeline"),
+    ):
+        mock_dep_repo.get_document.return_value = document
+        mock_repo.get_document.return_value = document
+        mock_fields_repo.get_extracted_fields.return_value = []
+
+        response = client.patch(
+            "/documents/doc-1/document-type", json={"document_type": "unrecognised"}
+        )
+
+    assert response.status_code == 200
+    assert mock_repo.record_classification.call_args.kwargs["classification_confidence"] == 1.0
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        [],
+        [
+            ExtractedField(field_name="summary", field_type="string", field_value="  ", confidence=0.99),
+            ExtractedField(field_name="items", field_type="array", field_value=[], confidence=0.99),
+            ExtractedField(field_name="notes", field_type="string", field_value=None, confidence=0.99),
+        ],
+    ],
+    ids=["no-fields", "only-blank-fields"],
+)
+def test_approve_document_requires_some_extracted_information(fields) -> None:
+    # An officer-confirmed Other has no required fields, so without this a
+    # document with nothing extracted would sail through.
+    document = _typed_document(document_type="unrecognised", classification_confidence=1.0)
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
+        mock_fields_repo.get_extracted_fields.return_value = fields
+
+        response = client.post("/documents/doc-1/approve")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Cannot approve document. No information was extracted from it."
+    mock_repo.approve_document.assert_not_called()

@@ -124,9 +124,17 @@ def approve_document(document_id: str) -> None:
         _sync_case(_row(result.data[0]).get("case_id"))
 
 def reject_document(document_id: str) -> None:
-    supabase_client.table("documents").update(
-        {"status": DocumentStatus.REJECTED.value}
-    ).eq("id", document_id).execute()
+    result = (
+        supabase_client.table("documents")
+        .update({"status": DocumentStatus.REJECTED.value})
+        .eq("id", document_id)
+        .execute()
+    )
+    # A rejected document no longer fulfils the checklist (see
+    # case_service.compute_requirement_coverage), so the case's
+    # submission_finalized flag can change here too.
+    if result.data:
+        _sync_case(_row(result.data[0]).get("case_id"))
 
 
 def get_documents_by_ids(

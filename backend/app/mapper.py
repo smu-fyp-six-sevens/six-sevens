@@ -11,8 +11,8 @@ from typing import NamedTuple, Optional
 from .models import (
     DocumentRecord,
     IDENTITY_DOCUMENT_TYPES,
-    RoutingStatus,
     counts_as_address_proof,
+    counts_towards_checklist,
 )
 
 
@@ -86,9 +86,7 @@ def _named_addresses_from_document(doc: DocumentRecord) -> list[_NamedAddress]:
 
 
 def _collect_identity_state(documents: list[DocumentRecord]) -> _IdentityState:
-    accepted = [
-        doc for doc in documents if doc.routing_status == RoutingStatus.ACCEPTED
-    ]
+    accepted = [doc for doc in documents if counts_towards_checklist(doc)]
 
     # Identities come ONLY from id_document uploads — an address document
     # can match an identity an id_document already established, but never
