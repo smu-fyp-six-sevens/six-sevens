@@ -143,12 +143,6 @@ def test_picking_a_different_type_reruns_extraction_once() -> None:
 
 @pytest.mark.sprint2
 @pytest.mark.story("SCRUM-19", "MA-003")
-@pytest.mark.xfail(
-    strict=True,
-    reason="REG-005 (known defect): confirming the classifier's type after a generic first extraction "
-    "does not re-run extraction, because the code assumes the first pass already used that type's schema. "
-    "Becomes correct once REG-004 is fixed.",
-)
 def test_confirming_the_same_type_after_a_generic_first_pass_reruns_extraction() -> None:
     response, pipeline = _confirm_type(_document(), "payslip")
 

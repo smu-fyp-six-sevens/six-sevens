@@ -417,14 +417,15 @@ async def test_extraction_disagreeing_with_the_type_sends_it_back_for_reclassifi
 
 @pytest.mark.sprint2
 @pytest.mark.story("SCRUM-9", "DI-018")
-@pytest.mark.parametrize("filename, real_document", [
-    ("C007-P2_Payslip.pdf", "Payslip"),
-    ("C007_selfcert.pdf", "FATCA_Form"),
-    ("C007_CreditReport.pdf", "Credit_Bureau_Report"),
+@pytest.mark.parametrize("filename, real_document, text", [
+    ("C007-P2_Payslip.pdf", "Payslip", "payslip text"),
+    ("C007_selfcert.pdf", "FATCA_Form", "FATCA / CRS Self-Certification"),
+    ("C007_CreditReport.pdf", "Credit_Bureau_Report", "credit report text"),
 ])
-async def test_each_document_type_is_extracted_against_its_own_fields(ai, store, filename, real_document):
+async def test_each_document_type_is_extracted_against_its_own_fields(ai, store, filename, real_document, text):
+    # Confident classifications only: a low-confidence type is extracted generically.
     fields, document_type = real_extraction(real_document)
-    document_id = store.add(filename, f"{document_type} text")
+    document_id = store.add(filename, text)
     ai.reply("classify_agent", classification(document_type))
     ai.reply("extract", extraction(fields))
 
@@ -744,10 +745,6 @@ async def test_the_reclassification_reason_and_both_attempts_are_recorded_in_the
 
 @pytest.mark.sprint2
 @pytest.mark.story("SCRUM-19", "MA-004")
-@pytest.mark.xfail(
-    strict=True,
-    reason="REG-004 (known defect): a low-confidence named type on first extraction uses the type's own schema, not the generic one.",
-)
 async def test_a_low_confidence_named_type_is_extracted_with_the_generic_schema(ai, store):
     # Known defect (REG-004), see TEST_PLAN.md Part 8: the code uses the named
     # type's schema here; the desired behaviour is the generic prompt.

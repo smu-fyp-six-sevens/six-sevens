@@ -918,6 +918,27 @@ export default function DocumentDetailsPage({
     !document?.document_type ||
     document.document_type.toLowerCase() === 'unrecognised';
 
+  // A field needs the officer's attention when the backend says it's a
+  // required field that's missing, its confidence is low, or the document is
+  // unrecognised. A correctly blank, high-confidence, non-required field doesn't.
+  const needsAttention = (key: string, field: ExtractedField) =>
+    isUnrecognisedDocument ||
+    missingRequiredFields.includes(key) ||
+    (field.confidence != null && field.confidence < EXTRACTION_CONFIDENCE_THRESHOLD);
+
+  // Required fields Extraction didn't return at all, shown as empty rows so
+  // the officer can fill them in.
+  const absentRequiredFields = missingRequiredFields.filter(
+    (name) => !extractedFields.some(([key]) => key === name),
+  );
+  const reviewFields: [string, ExtractedField][] = [
+    ...extractedFields,
+    ...absentRequiredFields.map((name): [string, ExtractedField] => [
+      name,
+      { value: null, confidence: null },
+    ]),
+  ];
+
   const failureReason =
     document?.status === 'failed' && document.failure_reason
       ? describeFailureReason(document.failure_reason)
@@ -1198,12 +1219,11 @@ export default function DocumentDetailsPage({
       return;
     }
 
-    // Make sure every extracted field has a value before saving.
-    const hasEmptyField = extractedFields.some(([key]) => {
-      const value = fieldDraft[key]?.trim();
-
-      return !value;
-    });
+    // Only fields that need attention must have a value. A correctly blank
+    // field can stay blank.
+    const hasEmptyField = reviewFields.some(
+      ([key, field]) => needsAttention(key, field) && !fieldDraft[key]?.trim(),
+    );
 
     if (hasEmptyField) {
       setSaveMessage(null);
@@ -1228,7 +1248,15 @@ export default function DocumentDetailsPage({
         extractedFields.map(([key, field]) => [key, field.value]),
       );
       const payload: Record<string, unknown> = {};
-      for (const [key, draftValue] of Object.entries(fieldDraft)) {
+      const draftWithAbsent: Record<string, string> = {
+        ...Object.fromEntries(absentRequiredFields.map((name) => [name, ''])),
+        ...fieldDraft,
+      };
+      for (const [key, draftValue] of Object.entries(draftWithAbsent)) {
+        if (draftValue.trim() === '') {
+          payload[key] = null;
+          continue;
+        }
         const original = originalValueByKey.get(key);
         if (Array.isArray(original) || isPlainObject(original)) {
           try {
@@ -1855,18 +1883,8 @@ export default function DocumentDetailsPage({
               <span>Confidence</span>
             </div>
 
-            {extractedFields.map(([key, field]) => {
-              const isEmptyField =
-                field.value == null ||
-                String(field.value).trim() === '' ||
-                String(field.value).trim() === '-';
-
-              const canEditField =
-                !isInFlight &&
-                (isUnrecognisedDocument ||
-                  isEmptyField ||
-                  (field.confidence != null &&
-                    field.confidence < EXTRACTION_CONFIDENCE_THRESHOLD));
+            {reviewFields.map(([key, field]) => {
+              const canEditField = !isInFlight && needsAttention(key, field);
 
               return (
                 <div

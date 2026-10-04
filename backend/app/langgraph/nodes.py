@@ -247,7 +247,15 @@ async def extract_node(state: DocumentGraphState) -> dict:
     raw_text = text_cache.get(document_id) or ""
 
     await set_status(document_id, DocumentStatus.EXTRACTING)
-    extraction = await extract.run_extraction(document_type, raw_text)
+    # A low-confidence or review-flagged classification is extracted with the
+    # generic schema, so the document's fields aren't tied to a guess. The
+    # named type is still recorded for the officer to confirm.
+    schema_type = (
+        "unrecognised"
+        if _is_below_threshold(classification.get("confidence")) or classification.get("needs_manual_review")
+        else document_type
+    )
+    extraction = await extract.run_extraction(schema_type, raw_text)
 
     # Persisted regardless of escalation — whatever fields Extraction
     # actually found are real data, worth keeping even if the document ends
@@ -260,7 +268,7 @@ async def extract_node(state: DocumentGraphState) -> dict:
         "dropped_unprinted_fields": extraction.get("dropped_unprinted_fields", []),
         "escalation": extraction.get("escalation"),
     }
-    trace.record(document_id, "extraction", document_type=document_type, **summary)
+    trace.record(document_id, "extraction", document_type=document_type, schema=schema_type, **summary)
     # Whether an escalation here triggers a reclassify or a final FAILED is
     # graph.py's call (it also knows `attempts` vs MAX_RECLASSIFICATION_ATTEMPTS) —
     # this node only ever reports what Extraction found.

@@ -48,7 +48,7 @@
         "Utility bill heading from electricity retailer with \"Residential\" account type label",
         "Residential address block with unit number format (e.g. #10-40) and Singapore postal code present",
         "Billing period, total amount payable, and payment due date fields consistent with a utility bill",
-        "Address check: visible \u2014 residential Singapore address with unit number and postal code"
+        "Address check: visible — residential Singapore address with unit number and postal code"
       ],
       "extracted_fields": {
         "account_number": {
@@ -69,7 +69,7 @@
         "billing_period": {
           "confidence": 0.97,
           "id": "d05b874d-444f-4941-9182-84149f5fe525",
-          "value": "03 Jun 2026 \u2013 30 Jun 2026"
+          "value": "03 Jun 2026 – 30 Jun 2026"
         },
         "contract_end_date": {
           "confidence": 0.99,
@@ -162,8 +162,8 @@
       "evidence": [
         "Document heading reads 'PASSPORT REPUBLIC OF SINGAPORE' with Type / Country Code / Passport No row present",
         "Two-line machine-readable zone present at foot of document",
-        "Fields include Nationality, Date of expiry, and Authority \u2014 standard passport biodata layout",
-        "National ID No printed does not make this an NRIC \u2014 no card layout, no address block, no fingerprint area"
+        "Fields include Nationality, Date of expiry, and Authority — standard passport biodata layout",
+        "National ID No printed does not make this an NRIC — no card layout, no address block, no fingerprint area"
       ],
       "extracted_fields": {
         "country_code": {
@@ -258,7 +258,7 @@
         "Document heading identifies it as a 'Monthly Statement of Margin Account - Securities'",
         "Contains net asset value, portfolio value, and ending position market valuations",
         "Issued by a licensed broker-dealer and custodian, not a deposit-taking institution",
-        "Address check: visible \u2014 residential address present, but source_of_wealth never satisfies proof_of_address"
+        "Address check: visible — residential address present, but source_of_wealth never satisfies proof_of_address"
       ],
       "extracted_fields": {
         "account_holder_name": {
@@ -463,7 +463,7 @@
       "document_type": "certificate_of_incumbency",
       "escalation_reason": null,
       "evidence": [
-        "Contains ACRA BizFile+ header and \"Business Profile\" designation \u2014 ACRA BizProfile explicitly covers certificate_of_incumbency for Singapore companies",
+        "Contains ACRA BizFile+ header and \"Business Profile\" designation — ACRA BizProfile explicitly covers certificate_of_incumbency for Singapore companies",
         "UEN field present, consistent with Singapore company registry extract",
         "Officers section with position held and date of appointment fields present",
         "Shareholders section with share type and number of shares fields present"
@@ -653,9 +653,9 @@
       "escalation_reason": null,
       "evidence": [
         "Heading \"REPUBLIC OF SINGAPORE\" and \"IDENTITY CARD NO.\" confirm Singapore NRIC front",
-        "Fields present: Name, Race, Date of birth, Sex, Country/Place of birth \u2014 standard NRIC front layout",
+        "Fields present: Name, Race, Date of birth, Sex, Country/Place of birth — standard NRIC front layout",
         "Portrait photo area and Merlion/coat-of-arms watermarks consistent with NRIC front",
-        "Address check: not visible \u2014 this is the front face of the NRIC; residential address appears only on the reverse"
+        "Address check: not visible — this is the front face of the NRIC; residential address appears only on the reverse"
       ],
       "extracted_fields": {
         "country": {
@@ -807,10 +807,10 @@
       "document_type": "source_of_wealth",
       "escalation_reason": null,
       "evidence": [
-        "Filename contains 'source of wealth' and 'wealth' \u2014 direct type signal",
-        "Document is a 'Monthly Statement of Margin Account \u2013 Securities' showing portfolio holdings and net asset value",
+        "Filename contains 'source of wealth' and 'wealth' — direct type signal",
+        "Document is a 'Monthly Statement of Margin Account – Securities' showing portfolio holdings and net asset value",
         "Contains margin account indicators: net asset value, portfolio value, ending positions with equity holdings",
-        "Address check: visible \u2014 residential Singapore address present, but source_of_wealth never satisfies proof_of_address"
+        "Address check: visible — residential Singapore address present, but source_of_wealth never satisfies proof_of_address"
       ],
       "extracted_fields": {
         "account_holder_name": {
@@ -994,7 +994,7 @@
       "document_type": "list_of_loans",
       "escalation_reason": null,
       "evidence": [
-        "Document headed \"Letter of Offer \u2014 Overdraft Facility\"",
+        "Document headed \"Letter of Offer — Overdraft Facility\"",
         "Contains facility type, facility limit, and interest rate fields describing a credit facility",
         "References repayment-on-demand terms and security/charge over borrower's assets",
         "Filename contains keyword \"loan\""
@@ -1140,7 +1140,7 @@
         "Document heading and layout consistent with a current-account bank statement",
         "Transaction table with deposit, withdrawal, and running ledger balance columns",
         "Summary totals for total deposits and total withdrawals present",
-        "Address check: not visible \u2014 only a branch name and company name shown, no residential address"
+        "Address check: not visible — only a branch name and company name shown, no residential address"
       ],
       "extracted_fields": {
         "account_branch": {
@@ -1431,7 +1431,7 @@
       "evidence": [
         "Document title: 'Certificate Confirming Incorporation of Company'",
         "Issued by ACRA with registrar signature (ASST REGISTRAR OF COMPANIES & BUSINESS NAMES)",
-        "Incorporated under the Companies Act 1967 \u2014 standard incorporation certificate language",
+        "Incorporated under the Companies Act 1967 — standard incorporation certificate language",
         "Company type identified as private company limited by shares"
       ],
       "extracted_fields": {
@@ -1512,7 +1512,7 @@
         "Document heading: \"Income Tax - Notice of Assessment (Amended)\"",
         "Contains \"Year of Assessment\", \"Estimated Chargeable Income\", \"Tax Assessed\", \"Tax Rebate\" fields",
         "Issued by \"COMPTROLLER OF INCOME TAX\" via iras.gov.sg",
-        "Filename contains \"noa\" and \"iras\" \u2014 strong keyword signals"
+        "Filename contains \"noa\" and \"iras\" — strong keyword signals"
       ],
       "extracted_fields": {
         "company_address": {
@@ -1743,25 +1743,10 @@
           "id": "852817c5-93e4-4dab-a53d-33b161b39ea6",
           "value": 5
         },
-        "bankruptcy_number": {
-          "confidence": 0.8,
-          "id": "2e1b1c0a-4202-44ec-a746-2bd21ea94d44",
-          "value": "11111"
-        },
-        "bankruptcy_order_date": {
-          "confidence": 0.8,
-          "id": "7736e0ab-9779-4ea8-8d3f-4b2f7c634f4b",
-          "value": "12/03/2022"
-        },
-        "bankruptcy_petition_date": {
-          "confidence": 0.8,
-          "id": "c02c4d87-28d2-4c0a-b487-97eb86337767",
-          "value": "10/11/2023"
-        },
         "bankruptcy_proceedings_count": {
           "confidence": 0.99,
           "id": "b62ec535-f2cb-49bd-8d97-d035b1cb9bc0",
-          "value": 2
+          "value": 0
         },
         "bureau_score": {
           "confidence": 0.95,
@@ -1912,6 +1897,11 @@
           "confidence": 0.99,
           "id": "26945863-2101-497d-9dcd-5e9e13f02f8b",
           "value": 10000
+        },
+        "bankruptcy_proceedings": {
+          "id": null,
+          "value": [],
+          "confidence": 0.99
         }
       },
       "extraction_confidence": 0.965833333333333,
@@ -1937,7 +1927,7 @@
       "document_type": "list_of_loans",
       "escalation_reason": null,
       "evidence": [
-        "Document heading identifies it as a Letter of Offer for an Enterprise Financing Scheme \u2013 SME Working Capital Loan",
+        "Document heading identifies it as a Letter of Offer for an Enterprise Financing Scheme – SME Working Capital Loan",
         "Contains facility type, facility amount, tenure and interest rate fields characteristic of a lending facility document",
         "Includes acceptance clause and security terms consistent with a loan offer letter",
         "Filename contains 'facility letter' and text contains 'facility agreement' and 'loan'"
@@ -1966,7 +1956,7 @@
         "document_title": {
           "confidence": 0.99,
           "id": "e9662039-41f7-4b6a-9c43-2dfe7b53fa5e",
-          "value": "Letter of Offer \u2014 Enterprise Financing Scheme \u2013 SME Working Capital Loan"
+          "value": "Letter of Offer — Enterprise Financing Scheme – SME Working Capital Loan"
         },
         "facility_type": {
           "confidence": 0.99,
@@ -2050,7 +2040,7 @@
         "scheme": {
           "confidence": 0.99,
           "id": "0385fac2-8716-4d56-9795-7afa87f90fff",
-          "value": "Enterprise Financing Scheme \u2013 SME Working Capital Loan"
+          "value": "Enterprise Financing Scheme – SME Working Capital Loan"
         },
         "signatory_bank": {
           "confidence": 0.98,
@@ -2086,10 +2076,10 @@
       "document_type": "nric",
       "escalation_reason": null,
       "evidence": [
-        "\"NRIC No.\" field present \u2014 canonical Singapore Identity Card label",
-        "\"Date of issue\" field present \u2014 standard NRIC back-side field",
+        "\"NRIC No.\" field present — canonical Singapore Identity Card label",
+        "\"Date of issue\" field present — standard NRIC back-side field",
         "Residential address block with unit number format (#05-59) and Singapore postal code",
-        "Address check: visible \u2014 residential street address with unit number and Singapore postal code"
+        "Address check: visible — residential street address with unit number and Singapore postal code"
       ],
       "extracted_fields": {
         "date_of_issue": {
@@ -2137,7 +2127,7 @@
       "document_type": "list_of_loans",
       "escalation_reason": null,
       "evidence": [
-        "Document heading: \"Letter of Offer \u2014 Term Loan Facility\"",
+        "Document heading: \"Letter of Offer — Term Loan Facility\"",
         "Contains principal amount, interest rate, and fixed monthly instalment schedule",
         "Specifies tenure in equal monthly instalments with security/charge terms",
         "Filename and text both contain loan-related keywords"
@@ -2278,7 +2268,7 @@
       "evidence": [
         "Filename contains \"constitution\", a strong direct signal for this document type",
         "Document heading references \"CONSTITUTION OF\" a named Singapore private company",
-        "Structured clauses governing SHARE CAPITAL, TRANSFER OF SHARES, GENERAL MEETINGS, and DIRECTORS \u2014 characteristic of a company constitution",
+        "Structured clauses governing SHARE CAPITAL, TRANSFER OF SHARES, GENERAL MEETINGS, and DIRECTORS — characteristic of a company constitution",
         "References THE COMPANIES ACT and adoption by subscribers, consistent with articles of association"
       ],
       "extracted_fields": {
@@ -2391,7 +2381,7 @@
       "evidence": [
         "Document contains a \"STATEMENT OF COMPREHENSIVE INCOME\" heading",
         "Document contains a \"STATEMENT OF FINANCIAL POSITION\" heading (balance sheet)",
-        "Document contains \"NOTES TO THE FINANCIAL STATEMENTS\" \u2014 full financial statements structure",
+        "Document contains \"NOTES TO THE FINANCIAL STATEMENTS\" — full financial statements structure",
         "Filename signals 'balance sheet'; primary content is holdings/net-worth valuation, not deposit-account transactions"
       ],
       "extracted_fields": {
@@ -2657,8 +2647,8 @@
       "evidence": [
         "Heading \"STATEMENT OF ACCOUNT\" for a \"MONTHLY SAVINGS ACCOUNT\" with deposit/withdrawal/balance transaction columns",
         "Periodic account statement from OCBC covering a defined date range with running balances",
-        "Transaction entries including credits, debits and a balance brought forward \u2014 consistent with a deposit-account statement",
-        "Address check: visible \u2014 residential Singapore address with unit number and postal code printed on statement"
+        "Transaction entries including credits, debits and a balance brought forward — consistent with a deposit-account statement",
+        "Address check: visible — residential Singapore address with unit number and postal code printed on statement"
       ],
       "extracted_fields": {
         "account_number": {
@@ -2920,7 +2910,7 @@
         "Document identified as a utility bill (Sembcorp Power Bill)",
         "Contains a residential address with Singapore postal code and unit number format",
         "Includes billing period, bill date, and total amount payable fields",
-        "Address check: visible \u2014 Singapore residential address with unit number format and postal code"
+        "Address check: visible — Singapore residential address with unit number format and postal code"
       ],
       "extracted_fields": {
         "account_type": {
@@ -2941,7 +2931,7 @@
         "billing_period": {
           "confidence": 0.99,
           "id": "f9a972f4-1e3d-4477-8ef0-6f7db03afe49",
-          "value": "04 Aug 2026 \u2013 31 Aug 2026"
+          "value": "04 Aug 2026 – 31 Aug 2026"
         },
         "company_address": {
           "confidence": 0.99,
@@ -3048,7 +3038,7 @@
       "escalation_reason": null,
       "evidence": [
         "Filename and text layer both contain the keyword \"payslip\"",
-        "Document contains \"NET PAY\" and \"Basic Salary\" headings \u2014 characteristic payslip structure",
+        "Document contains \"NET PAY\" and \"Basic Salary\" headings — characteristic payslip structure",
         "Earnings and deductions breakdown present, including CPF and tax deduction lines",
         "Per-period wage statement with explicit PAY PERIOD and PAYMENT DATE fields"
       ],
@@ -3166,8 +3156,8 @@
       "evidence": [
         "Document heading reads 'PASSPORT REPUBLIC OF SINGAPORE' with Type / Country Code / Passport No row present",
         "Two-line machine-readable zone present at foot of document",
-        "Fields include Nationality, Date of expiry, and Authority \u2014 standard passport biodata layout",
-        "National ID No printed does not make this an NRIC \u2014 no card layout, no address block, no fingerprint area"
+        "Fields include Nationality, Date of expiry, and Authority — standard passport biodata layout",
+        "National ID No printed does not make this an NRIC — no card layout, no address block, no fingerprint area"
       ],
       "extracted_fields": {
         "country_code": "SGP",
@@ -3207,7 +3197,7 @@
       "document_type": "certificate_of_incumbency",
       "escalation_reason": null,
       "evidence": [
-        "Contains ACRA BizFile+ header and \"Business Profile\" designation \u2014 ACRA BizProfile explicitly covers certificate_of_incumbency for Singapore companies",
+        "Contains ACRA BizFile+ header and \"Business Profile\" designation — ACRA BizProfile explicitly covers certificate_of_incumbency for Singapore companies",
         "UEN field present, consistent with Singapore company registry extract",
         "Officers section with position held and date of appointment fields present",
         "Shareholders section with share type and number of shares fields present"
@@ -3297,9 +3287,9 @@
       "escalation_reason": null,
       "evidence": [
         "Heading \"REPUBLIC OF SINGAPORE\" and \"IDENTITY CARD NO.\" confirm Singapore NRIC front",
-        "Fields present: Name, Race, Date of birth, Sex, Country/Place of birth \u2014 standard NRIC front layout",
+        "Fields present: Name, Race, Date of birth, Sex, Country/Place of birth — standard NRIC front layout",
         "Portrait photo area and Merlion/coat-of-arms watermarks consistent with NRIC front",
-        "Address check: not visible \u2014 this is the front face of the NRIC; residential address appears only on the reverse"
+        "Address check: not visible — this is the front face of the NRIC; residential address appears only on the reverse"
       ],
       "extracted_fields": {
         "country": "SINGAPORE",
@@ -3336,7 +3326,7 @@
         "Document heading and layout consistent with a current-account bank statement",
         "Transaction table with deposit, withdrawal, and running ledger balance columns",
         "Summary totals for total deposits and total withdrawals present",
-        "Address check: not visible \u2014 only a branch name and company name shown, no residential address"
+        "Address check: not visible — only a branch name and company name shown, no residential address"
       ],
       "extracted_fields": {
         "account_branch": "UOB Orchard",
@@ -3565,10 +3555,10 @@
       "document_type": "nric",
       "escalation_reason": null,
       "evidence": [
-        "\"NRIC No.\" field present \u2014 canonical Singapore Identity Card label",
-        "\"Date of issue\" field present \u2014 standard NRIC back-side field",
+        "\"NRIC No.\" field present — canonical Singapore Identity Card label",
+        "\"Date of issue\" field present — standard NRIC back-side field",
         "Residential address block with unit number format (#05-59) and Singapore postal code",
-        "Address check: visible \u2014 residential street address with unit number and Singapore postal code"
+        "Address check: visible — residential street address with unit number and Singapore postal code"
       ],
       "extracted_fields": {
         "date_of_issue": "12-05-2020",
@@ -3600,7 +3590,7 @@
       "document_type": "list_of_loans",
       "escalation_reason": null,
       "evidence": [
-        "Document heading: \"Letter of Offer \u2014 Term Loan Facility\"",
+        "Document heading: \"Letter of Offer — Term Loan Facility\"",
         "Contains principal amount, interest rate, and fixed monthly instalment schedule",
         "Specifies tenure in equal monthly instalments with security/charge terms",
         "Filename and text both contain loan-related keywords"
@@ -3675,7 +3665,7 @@
       "document_type": "list_of_loans",
       "escalation_reason": null,
       "evidence": [
-        "Document headed \"Letter of Offer \u2014 Overdraft Facility\"",
+        "Document headed \"Letter of Offer — Overdraft Facility\"",
         "Contains facility type, facility limit, and interest rate fields describing a credit facility",
         "References repayment-on-demand terms and security/charge over borrower's assets",
         "Filename contains keyword \"loan\""
@@ -3757,13 +3747,13 @@
         "Document identified as a utility bill (Sembcorp Power Bill)",
         "Contains a residential address with Singapore postal code and unit number format",
         "Includes billing period, bill date, and total amount payable fields",
-        "Address check: visible \u2014 Singapore residential address with unit number format and postal code"
+        "Address check: visible — Singapore residential address with unit number format and postal code"
       ],
       "extracted_fields": {
         "account_type": "Commercial",
         "bank_account_for_deduction": "OCBC bank account ending with 4078",
         "bill_date": "10 Sep 2026",
-        "billing_period": "04 Aug 2026 \u2013 31 Aug 2026",
+        "billing_period": "04 Aug 2026 – 31 Aug 2026",
         "company_address": "6 Serangoon North Avenue 5 #02-11, Singapore 554910",
         "company_name": "Anchorpoint Insurance Brokers Pte Ltd",
         "contract_end_date": "01 Feb 2031",
@@ -3806,8 +3796,8 @@
       "evidence": [
         "Heading \"STATEMENT OF ACCOUNT\" for a \"MONTHLY SAVINGS ACCOUNT\" with deposit/withdrawal/balance transaction columns",
         "Periodic account statement from OCBC covering a defined date range with running balances",
-        "Transaction entries including credits, debits and a balance brought forward \u2014 consistent with a deposit-account statement",
-        "Address check: visible \u2014 residential Singapore address with unit number and postal code printed on statement"
+        "Transaction entries including credits, debits and a balance brought forward — consistent with a deposit-account statement",
+        "Address check: visible — residential Singapore address with unit number and postal code printed on statement"
       ],
       "extracted_fields": {
         "account_number": "163-084397-993",
@@ -4008,7 +3998,7 @@
       "evidence": [
         "Filename contains \"constitution\", a strong direct signal for this document type",
         "Document heading references \"CONSTITUTION OF\" a named Singapore private company",
-        "Structured clauses governing SHARE CAPITAL, TRANSFER OF SHARES, GENERAL MEETINGS, and DIRECTORS \u2014 characteristic of a company constitution",
+        "Structured clauses governing SHARE CAPITAL, TRANSFER OF SHARES, GENERAL MEETINGS, and DIRECTORS — characteristic of a company constitution",
         "References THE COMPANIES ACT and adoption by subscribers, consistent with articles of association"
       ],
       "extracted_fields": {
@@ -4065,7 +4055,7 @@
       "evidence": [
         "Document title: 'Certificate Confirming Incorporation of Company'",
         "Issued by ACRA with registrar signature (ASST REGISTRAR OF COMPANIES & BUSINESS NAMES)",
-        "Incorporated under the Companies Act 1967 \u2014 standard incorporation certificate language",
+        "Incorporated under the Companies Act 1967 — standard incorporation certificate language",
         "Company type identified as private company limited by shares"
       ],
       "extracted_fields": {
@@ -4106,7 +4096,7 @@
         "Document heading: \"Income Tax - Notice of Assessment (Amended)\"",
         "Contains \"Year of Assessment\", \"Estimated Chargeable Income\", \"Tax Assessed\", \"Tax Rebate\" fields",
         "Issued by \"COMPTROLLER OF INCOME TAX\" via iras.gov.sg",
-        "Filename contains \"noa\" and \"iras\" \u2014 strong keyword signals"
+        "Filename contains \"noa\" and \"iras\" — strong keyword signals"
       ],
       "extracted_fields": {
         "company_address": "6 SERANGOON NORTH AVENUE 5, #02-11, SINGAPORE 554910",
@@ -4192,7 +4182,7 @@
       "escalation_reason": null,
       "evidence": [
         "Filename and text layer both contain the keyword \"payslip\"",
-        "Document contains \"NET PAY\" and \"Basic Salary\" headings \u2014 characteristic payslip structure",
+        "Document contains \"NET PAY\" and \"Basic Salary\" headings — characteristic payslip structure",
         "Earnings and deductions breakdown present, including CPF and tax deduction lines",
         "Per-period wage statement with explicit PAY PERIOD and PAYMENT DATE fields"
       ],
@@ -4238,7 +4228,7 @@
       "document_type": "list_of_loans",
       "escalation_reason": null,
       "evidence": [
-        "Document heading identifies it as a Letter of Offer for an Enterprise Financing Scheme \u2013 SME Working Capital Loan",
+        "Document heading identifies it as a Letter of Offer for an Enterprise Financing Scheme – SME Working Capital Loan",
         "Contains facility type, facility amount, tenure and interest rate fields characteristic of a lending facility document",
         "Includes acceptance clause and security terms consistent with a loan offer letter",
         "Filename contains 'facility letter' and text contains 'facility agreement' and 'loan'"
@@ -4248,7 +4238,7 @@
         "borrower_signatory": "Sim Shu Ting, Director",
         "company_address": "6 Serangoon North Avenue 5, #02-11, Singapore 554910",
         "company_name": "Anchorpoint Insurance Brokers Pte Ltd",
-        "document_title": "Letter of Offer \u2014 Enterprise Financing Scheme \u2013 SME Working Capital Loan",
+        "document_title": "Letter of Offer — Enterprise Financing Scheme – SME Working Capital Loan",
         "facility_type": "Term Loan under Enterprise Financing Scheme",
         "individual_name": "Sim Shu Ting",
         "interest_rate": "4.10% per annum",
@@ -4288,7 +4278,7 @@
           }
         ],
         "reference_number": "EN/2026/C063",
-        "scheme": "Enterprise Financing Scheme \u2013 SME Working Capital Loan",
+        "scheme": "Enterprise Financing Scheme – SME Working Capital Loan",
         "signatory_bank": "Tan Mei Ling, Assistant Vice President, SME Banking",
         "uen": "201630968D"
       },
@@ -4427,10 +4417,10 @@
       "document_type": "source_of_wealth",
       "escalation_reason": null,
       "evidence": [
-        "Filename contains 'source of wealth' and 'wealth' \u2014 direct type signal",
-        "Document is a 'Monthly Statement of Margin Account \u2013 Securities' showing portfolio holdings and net asset value",
+        "Filename contains 'source of wealth' and 'wealth' — direct type signal",
+        "Document is a 'Monthly Statement of Margin Account – Securities' showing portfolio holdings and net asset value",
         "Contains margin account indicators: net asset value, portfolio value, ending positions with equity holdings",
-        "Address check: visible \u2014 residential Singapore address present, but source_of_wealth never satisfies proof_of_address"
+        "Address check: visible — residential Singapore address present, but source_of_wealth never satisfies proof_of_address"
       ],
       "extracted_fields": {
         "account_holder_name": "SIM SHU TING",
@@ -4579,7 +4569,7 @@
         "Document heading identifies it as a 'Monthly Statement of Margin Account - Securities'",
         "Contains net asset value, portfolio value, and ending position market valuations",
         "Issued by a licensed broker-dealer and custodian, not a deposit-taking institution",
-        "Address check: visible \u2014 residential address present, but source_of_wealth never satisfies proof_of_address"
+        "Address check: visible — residential address present, but source_of_wealth never satisfies proof_of_address"
       ],
       "extracted_fields": {
         "account_holder_name": "MUHAMMAD DANISH BIN ISMAIL",
@@ -4702,7 +4692,7 @@
       "evidence": [
         "Document contains a \"STATEMENT OF COMPREHENSIVE INCOME\" heading",
         "Document contains a \"STATEMENT OF FINANCIAL POSITION\" heading (balance sheet)",
-        "Document contains \"NOTES TO THE FINANCIAL STATEMENTS\" \u2014 full financial statements structure",
+        "Document contains \"NOTES TO THE FINANCIAL STATEMENTS\" — full financial statements structure",
         "Filename signals 'balance sheet'; primary content is holdings/net-worth valuation, not deposit-account transactions"
       ],
       "extracted_fields": {
@@ -4837,13 +4827,13 @@
         "Utility bill heading from electricity retailer with \"Residential\" account type label",
         "Residential address block with unit number format (e.g. #10-40) and Singapore postal code present",
         "Billing period, total amount payable, and payment due date fields consistent with a utility bill",
-        "Address check: visible \u2014 residential Singapore address with unit number and postal code"
+        "Address check: visible — residential Singapore address with unit number and postal code"
       ],
       "extracted_fields": {
         "account_number": "91671418",
         "account_type": "Residential",
         "bill_date": "30 Jul 2026",
-        "billing_period": "03 Jun 2026 \u2013 30 Jun 2026",
+        "billing_period": "03 Jun 2026 – 30 Jun 2026",
         "contract_end_date": "10 Mar 2032",
         "deposit": "$400.00",
         "electricity_usage_kwh": "689 kWh",
@@ -5371,8 +5361,8 @@
         "evidence": [
           "Document heading reads 'PASSPORT REPUBLIC OF SINGAPORE' with Type / Country Code / Passport No row present",
           "Two-line machine-readable zone present at foot of document",
-          "Fields include Nationality, Date of expiry, and Authority \u2014 standard passport biodata layout",
-          "National ID No printed does not make this an NRIC \u2014 no card layout, no address block, no fingerprint area"
+          "Fields include Nationality, Date of expiry, and Authority — standard passport biodata layout",
+          "National ID No printed does not make this an NRIC — no card layout, no address block, no fingerprint area"
         ],
         "extracted_fields": {
           "country_code": {
@@ -5451,7 +5441,7 @@
         "document_type": "certificate_of_incumbency",
         "escalation_reason": null,
         "evidence": [
-          "Contains ACRA BizFile+ header and \"Business Profile\" designation \u2014 ACRA BizProfile explicitly covers certificate_of_incumbency for Singapore companies",
+          "Contains ACRA BizFile+ header and \"Business Profile\" designation — ACRA BizProfile explicitly covers certificate_of_incumbency for Singapore companies",
           "UEN field present, consistent with Singapore company registry extract",
           "Officers section with position held and date of appointment fields present",
           "Shareholders section with share type and number of shares fields present"
@@ -5616,9 +5606,9 @@
         "escalation_reason": null,
         "evidence": [
           "Heading \"REPUBLIC OF SINGAPORE\" and \"IDENTITY CARD NO.\" confirm Singapore NRIC front",
-          "Fields present: Name, Race, Date of birth, Sex, Country/Place of birth \u2014 standard NRIC front layout",
+          "Fields present: Name, Race, Date of birth, Sex, Country/Place of birth — standard NRIC front layout",
           "Portrait photo area and Merlion/coat-of-arms watermarks consistent with NRIC front",
-          "Address check: not visible \u2014 this is the front face of the NRIC; residential address appears only on the reverse"
+          "Address check: not visible — this is the front face of the NRIC; residential address appears only on the reverse"
         ],
         "extracted_fields": {
           "country": {
@@ -5676,7 +5666,7 @@
           "Document heading and layout consistent with a current-account bank statement",
           "Transaction table with deposit, withdrawal, and running ledger balance columns",
           "Summary totals for total deposits and total withdrawals present",
-          "Address check: not visible \u2014 only a branch name and company name shown, no residential address"
+          "Address check: not visible — only a branch name and company name shown, no residential address"
         ],
         "extracted_fields": {
           "account_branch": {
@@ -5950,10 +5940,10 @@
         "document_type": "nric",
         "escalation_reason": null,
         "evidence": [
-          "\"NRIC No.\" field present \u2014 canonical Singapore Identity Card label",
-          "\"Date of issue\" field present \u2014 standard NRIC back-side field",
+          "\"NRIC No.\" field present — canonical Singapore Identity Card label",
+          "\"Date of issue\" field present — standard NRIC back-side field",
           "Residential address block with unit number format (#05-59) and Singapore postal code",
-          "Address check: visible \u2014 residential street address with unit number and Singapore postal code"
+          "Address check: visible — residential street address with unit number and Singapore postal code"
         ],
         "extracted_fields": {
           "date_of_issue": {
@@ -5997,7 +5987,7 @@
         "document_type": "list_of_loans",
         "escalation_reason": null,
         "evidence": [
-          "Document heading: \"Letter of Offer \u2014 Term Loan Facility\"",
+          "Document heading: \"Letter of Offer — Term Loan Facility\"",
           "Contains principal amount, interest rate, and fixed monthly instalment schedule",
           "Specifies tenure in equal monthly instalments with security/charge terms",
           "Filename and text both contain loan-related keywords"
@@ -6120,7 +6110,7 @@
         "document_type": "list_of_loans",
         "escalation_reason": null,
         "evidence": [
-          "Document headed \"Letter of Offer \u2014 Overdraft Facility\"",
+          "Document headed \"Letter of Offer — Overdraft Facility\"",
           "Contains facility type, facility limit, and interest rate fields describing a credit facility",
           "References repayment-on-demand terms and security/charge over borrower's assets",
           "Filename contains keyword \"loan\""
@@ -6250,7 +6240,7 @@
           "Document identified as a utility bill (Sembcorp Power Bill)",
           "Contains a residential address with Singapore postal code and unit number format",
           "Includes billing period, bill date, and total amount payable fields",
-          "Address check: visible \u2014 Singapore residential address with unit number format and postal code"
+          "Address check: visible — Singapore residential address with unit number format and postal code"
         ],
         "extracted_fields": {
           "account_type": {
@@ -6267,7 +6257,7 @@
           },
           "billing_period": {
             "confidence": 0.99,
-            "value": "04 Aug 2026 \u2013 31 Aug 2026"
+            "value": "04 Aug 2026 – 31 Aug 2026"
           },
           "company_address": {
             "confidence": 0.99,
@@ -6359,8 +6349,8 @@
         "evidence": [
           "Heading \"STATEMENT OF ACCOUNT\" for a \"MONTHLY SAVINGS ACCOUNT\" with deposit/withdrawal/balance transaction columns",
           "Periodic account statement from OCBC covering a defined date range with running balances",
-          "Transaction entries including credits, debits and a balance brought forward \u2014 consistent with a deposit-account statement",
-          "Address check: visible \u2014 residential Singapore address with unit number and postal code printed on statement"
+          "Transaction entries including credits, debits and a balance brought forward — consistent with a deposit-account statement",
+          "Address check: visible — residential Singapore address with unit number and postal code printed on statement"
         ],
         "extracted_fields": {
           "account_number": {
@@ -6606,7 +6596,7 @@
         "evidence": [
           "Filename contains \"constitution\", a strong direct signal for this document type",
           "Document heading references \"CONSTITUTION OF\" a named Singapore private company",
-          "Structured clauses governing SHARE CAPITAL, TRANSFER OF SHARES, GENERAL MEETINGS, and DIRECTORS \u2014 characteristic of a company constitution",
+          "Structured clauses governing SHARE CAPITAL, TRANSFER OF SHARES, GENERAL MEETINGS, and DIRECTORS — characteristic of a company constitution",
           "References THE COMPANIES ACT and adoption by subscribers, consistent with articles of association"
         ],
         "extracted_fields": {
@@ -6705,7 +6695,7 @@
         "evidence": [
           "Document title: 'Certificate Confirming Incorporation of Company'",
           "Issued by ACRA with registrar signature (ASST REGISTRAR OF COMPANIES & BUSINESS NAMES)",
-          "Incorporated under the Companies Act 1967 \u2014 standard incorporation certificate language",
+          "Incorporated under the Companies Act 1967 — standard incorporation certificate language",
           "Company type identified as private company limited by shares"
         ],
         "extracted_fields": {
@@ -6776,7 +6766,7 @@
           "Document heading: \"Income Tax - Notice of Assessment (Amended)\"",
           "Contains \"Year of Assessment\", \"Estimated Chargeable Income\", \"Tax Assessed\", \"Tax Rebate\" fields",
           "Issued by \"COMPTROLLER OF INCOME TAX\" via iras.gov.sg",
-          "Filename contains \"noa\" and \"iras\" \u2014 strong keyword signals"
+          "Filename contains \"noa\" and \"iras\" — strong keyword signals"
         ],
         "extracted_fields": {
           "company_address": {
@@ -6925,7 +6915,7 @@
         "escalation_reason": null,
         "evidence": [
           "Filename and text layer both contain the keyword \"payslip\"",
-          "Document contains \"NET PAY\" and \"Basic Salary\" headings \u2014 characteristic payslip structure",
+          "Document contains \"NET PAY\" and \"Basic Salary\" headings — characteristic payslip structure",
           "Earnings and deductions breakdown present, including CPF and tax deduction lines",
           "Per-period wage statement with explicit PAY PERIOD and PAYMENT DATE fields"
         ],
@@ -7022,7 +7012,7 @@
         "document_type": "list_of_loans",
         "escalation_reason": null,
         "evidence": [
-          "Document heading identifies it as a Letter of Offer for an Enterprise Financing Scheme \u2013 SME Working Capital Loan",
+          "Document heading identifies it as a Letter of Offer for an Enterprise Financing Scheme – SME Working Capital Loan",
           "Contains facility type, facility amount, tenure and interest rate fields characteristic of a lending facility document",
           "Includes acceptance clause and security terms consistent with a loan offer letter",
           "Filename contains 'facility letter' and text contains 'facility agreement' and 'loan'"
@@ -7046,7 +7036,7 @@
           },
           "document_title": {
             "confidence": 0.99,
-            "value": "Letter of Offer \u2014 Enterprise Financing Scheme \u2013 SME Working Capital Loan"
+            "value": "Letter of Offer — Enterprise Financing Scheme – SME Working Capital Loan"
           },
           "facility_type": {
             "confidence": 0.99,
@@ -7119,7 +7109,7 @@
           },
           "scheme": {
             "confidence": 0.99,
-            "value": "Enterprise Financing Scheme \u2013 SME Working Capital Loan"
+            "value": "Enterprise Financing Scheme – SME Working Capital Loan"
           },
           "signatory_bank": {
             "confidence": 0.98,
@@ -7373,10 +7363,10 @@
         "document_type": "source_of_wealth",
         "escalation_reason": null,
         "evidence": [
-          "Filename contains 'source of wealth' and 'wealth' \u2014 direct type signal",
-          "Document is a 'Monthly Statement of Margin Account \u2013 Securities' showing portfolio holdings and net asset value",
+          "Filename contains 'source of wealth' and 'wealth' — direct type signal",
+          "Document is a 'Monthly Statement of Margin Account – Securities' showing portfolio holdings and net asset value",
           "Contains margin account indicators: net asset value, portfolio value, ending positions with equity holdings",
-          "Address check: visible \u2014 residential Singapore address present, but source_of_wealth never satisfies proof_of_address"
+          "Address check: visible — residential Singapore address present, but source_of_wealth never satisfies proof_of_address"
         ],
         "extracted_fields": {
           "account_holder_name": {
@@ -7621,7 +7611,7 @@
           "Document heading identifies it as a 'Monthly Statement of Margin Account - Securities'",
           "Contains net asset value, portfolio value, and ending position market valuations",
           "Issued by a licensed broker-dealer and custodian, not a deposit-taking institution",
-          "Address check: visible \u2014 residential address present, but source_of_wealth never satisfies proof_of_address"
+          "Address check: visible — residential address present, but source_of_wealth never satisfies proof_of_address"
         ],
         "extracted_fields": {
           "account_holder_name": {
@@ -7807,7 +7797,7 @@
         "evidence": [
           "Document contains a \"STATEMENT OF COMPREHENSIVE INCOME\" heading",
           "Document contains a \"STATEMENT OF FINANCIAL POSITION\" heading (balance sheet)",
-          "Document contains \"NOTES TO THE FINANCIAL STATEMENTS\" \u2014 full financial statements structure",
+          "Document contains \"NOTES TO THE FINANCIAL STATEMENTS\" — full financial statements structure",
           "Filename signals 'balance sheet'; primary content is holdings/net-worth valuation, not deposit-account transactions"
         ],
         "extracted_fields": {
@@ -8041,7 +8031,7 @@
           "Utility bill heading from electricity retailer with \"Residential\" account type label",
           "Residential address block with unit number format (e.g. #10-40) and Singapore postal code present",
           "Billing period, total amount payable, and payment due date fields consistent with a utility bill",
-          "Address check: visible \u2014 residential Singapore address with unit number and postal code"
+          "Address check: visible — residential Singapore address with unit number and postal code"
         ],
         "extracted_fields": {
           "account_number": {
@@ -8058,7 +8048,7 @@
           },
           "billing_period": {
             "confidence": 0.97,
-            "value": "03 Jun 2026 \u2013 30 Jun 2026"
+            "value": "03 Jun 2026 – 30 Jun 2026"
           },
           "contract_end_date": {
             "confidence": 0.99,

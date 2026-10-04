@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.main import app
 from app.models import DocumentRecord, DocumentStatus
 from app.queue_service import document_queue
@@ -23,7 +24,7 @@ def test_stuck_documents_includes_uploaded_status() -> None:
         filename="statement.pdf",
         storage_path="case-1/doc-stuck-upload_statement.pdf",
         status=DocumentStatus.UPLOADED,
-        uploaded_at=_old_timestamp(60),
+        uploaded_at=_old_timestamp(settings.STUCK_THRESHOLD_SECONDS + 60),
     )
 
     with patch("app.monitoring.document_repository") as mock_repo:
@@ -48,7 +49,7 @@ def test_stuck_documents_includes_extracting_status() -> None:
         filename="statement.pdf",
         storage_path="case-1/doc-stuck-extraction_statement.pdf",
         status=DocumentStatus.EXTRACTING,
-        uploaded_at=_old_timestamp(60),
+        uploaded_at=_old_timestamp(settings.STUCK_THRESHOLD_SECONDS + 60),
     )
 
     with patch("app.monitoring.document_repository") as mock_repo:

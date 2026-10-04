@@ -196,6 +196,16 @@ def has_extracted_information(extracted_fields) -> bool:
     return any(not is_empty_field_value(field.field_value) for field in extracted_fields)
 
 
+def _is_individual_account(fields_by_name) -> bool:
+    """A statement naming a person and no UEN is a personal account, the same
+    rule compute_fulfilled_requirements uses for personal source of wealth."""
+    def has_value(name: str) -> bool:
+        field = fields_by_name.get(name)
+        return field is not None and not is_empty_field_value(field.field_value)
+
+    return has_value("account_holder_name") and not has_value("uen")
+
+
 def missing_required_fields(document_type: str | None, extracted_fields) -> list[str]:
     """
     The document type's required schema fields that Extraction left absent
@@ -203,23 +213,29 @@ def missing_required_fields(document_type: str | None, extracted_fields) -> list
     approve gate and the case snapshot, so the document page, the case
     overview and approval all agree on which documents need manual review.
     """
-    required_field_names = set(
-        EXTRACTION_SCHEMAS.get(document_type or "", {}).get("required", [])
-    )
-
-    if not required_field_names:
-        return []
+    schema = EXTRACTION_SCHEMAS.get(document_type or "", {})
+    required_field_names = set(schema.get("required", []))
+    empty_list_ok = set(schema.get("allow_empty", []))
 
     fields_by_name = {
         field.field_name: field
         for field in extracted_fields
     }
 
+    if schema.get("required_when_individual") and _is_individual_account(fields_by_name):
+        required_field_names = set(schema["required_when_individual"])
+
+    if not required_field_names:
+        return []
+
     return [
         field_name
         for field_name in sorted(required_field_names)
         if field_name not in fields_by_name
-        or is_empty_field_value(fields_by_name[field_name].field_value)
+        or (
+            is_empty_field_value(fields_by_name[field_name].field_value)
+            and not (field_name in empty_list_ok and fields_by_name[field_name].field_value == [])
+        )
     ]
 
 

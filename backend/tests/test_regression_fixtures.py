@@ -11,7 +11,7 @@ the JSON is regenerated:
 
     cd backend
     python -c "import json; from app.langgraph.extraction_prompts import EXTRACTION_SCHEMAS as S; \\
-      print(json.dumps({t: s.get('required', []) for t, s in sorted(S.items())}, indent=2))" \\
+      print(json.dumps({t: {'required': s.get('required', []), 'allow_empty': s.get('allow_empty', []), 'required_when_individual': s.get('required_when_individual', [])} for t, s in sorted(S.items())}, indent=2))" \\
       > tests/fixtures/regression/required_fields.json
 """
 from __future__ import annotations
@@ -25,7 +25,14 @@ REQUIRED_FIELDS = Path(__file__).parent / "fixtures" / "regression" / "required_
 
 
 def test_mocked_backend_required_fields_match_extraction_schemas():
-    expected = {t: s.get("required", []) for t, s in sorted(EXTRACTION_SCHEMAS.items())}
+    expected = {
+        t: {
+            "required": s.get("required", []),
+            "allow_empty": s.get("allow_empty", []),
+            "required_when_individual": s.get("required_when_individual", []),
+        }
+        for t, s in sorted(EXTRACTION_SCHEMAS.items())
+    }
     assert json.loads(REQUIRED_FIELDS.read_text()) == expected, (
         "required_fields.json is out of date with EXTRACTION_SCHEMAS — regenerate it (see this file's docstring)"
     )

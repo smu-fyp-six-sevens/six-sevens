@@ -9,25 +9,42 @@ import type { Page, Route, WebSocketRoute } from '@playwright/test';
  * backend/tests/test_regression_fixtures.py), so approval is blocked by
  * exactly the same rule as routers/documents.py.
  */
-const REQUIRED_FIELDS: Record<string, string[]> = JSON.parse(
+const REQUIRED_FIELDS: Record<
+  string,
+  { required: string[]; allow_empty: string[]; required_when_individual: string[] }
+> = JSON.parse(
   readFileSync(
     path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../backend/tests/fixtures/regression/required_fields.json'),
     'utf8',
   ),
 );
 
-/** Same rule as routers/documents.py _missing_required_fields. */
+/** Same rule as backend case_service.missing_required_fields. */
 export function missingRequiredFields(document: { document_type: string | null; extracted_fields: Record<string, unknown> | null }): string[] {
   const fields = document.extracted_fields ?? {};
-  return [...(REQUIRED_FIELDS[document.document_type ?? ''] ?? [])].sort().filter((name) => {
-    if (!(name in fields)) return true;
-    const raw = fields[name];
-    const value = raw && typeof raw === 'object' && 'value' in (raw as object) ? (raw as { value: unknown }).value : raw;
+  const schema = REQUIRED_FIELDS[document.document_type ?? ''] ?? {
+    required: [],
+    allow_empty: [],
+    required_when_individual: [],
+  };
+  const unwrap = (raw: unknown): unknown =>
+    raw && typeof raw === 'object' && 'value' in (raw as object) ? (raw as { value: unknown }).value : raw;
+  const isEmpty = (value: unknown): boolean => {
     if (value === null || value === undefined) return true;
-    if (typeof value === 'string' && !value.trim()) return true;
-    if (Array.isArray(value) && value.length === 0) return true;
-    if (typeof value === 'object' && !Array.isArray(value) && Object.keys(value as object).length === 0) return true;
+    if (typeof value === 'string') return !value.trim();
+    if (Array.isArray(value)) return value.length === 0;
+    if (typeof value === 'object') return Object.keys(value as object).length === 0;
     return false;
+  };
+  const hasValue = (name: string) => !isEmpty(unwrap(fields[name]));
+  const individualAccount =
+    schema.required_when_individual.length > 0 && hasValue('account_holder_name') && !hasValue('uen');
+  const required = individualAccount ? schema.required_when_individual : schema.required;
+  return [...required].sort().filter((name) => {
+    if (!(name in fields)) return true;
+    const value = unwrap(fields[name]);
+    if (Array.isArray(value) && value.length === 0) return !schema.allow_empty.includes(name);
+    return isEmpty(value);
   });
 }
 

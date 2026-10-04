@@ -66,6 +66,16 @@ Not started, no urgency until the Cloud Native award work picks up:
   confirming a type must re-run extraction against that type's schema (currently skipped when the
   type is unchanged, `routers/documents.py:843-848`). Full detail in `TEST_PLAN.md` Part 8.
 
+## Frontend structure
+
+- **Split the large frontend files into modules** — `DocumentDetailsPage.tsx` (~2,280 lines) and
+  `UploadPage.tsx` (~1,850 lines) are the biggest; `uploadService.ts` (~1,020 lines) is imported by six
+  source files. Plan: move leaf components first, one piece at a time, keeping markup and class names
+  unchanged. For services, split by domain behind an `index.ts` re-export so import paths don't change.
+  Verify after each move with `npm run build` and the specs that cover that area (`document-review`,
+  `upload`, `checklist`). Regression suite is not affected by file layout; it can break only if markup
+  or behaviour changes.
+
 ## Small known gaps
 
 - `case_service.delete_case`'s "remove every document, then the case row" cascade has no direct

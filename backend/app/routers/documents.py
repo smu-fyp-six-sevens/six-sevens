@@ -870,10 +870,19 @@ async def update_document_type(
             detail="Classification confidence is above the threshold; the type can't be overridden.",
         )
 
-    type_changed = document_type != document.document_type
+    # A first pass with a low-confidence or review-flagged classification was
+    # extracted generically (see nodes.extract_node), so its fields aren't from
+    # this type's schema: re-run even when the officer keeps the same type.
+    first_pass_generic = (
+        document.routing_status == RoutingStatus.MANUAL_REVIEW
+        and document.document_type not in (None, "", "unrecognised")
+    )
+    needs_extraction = document_type != document.document_type or (
+        first_pass_generic and document_type != "unrecognised"
+    )
 
     try:
-        if type_changed:
+        if needs_extraction:
             # Self-fulfilment only, like nodes.record_classification_result's first
             # write: the existing extracted_fields came from the wrong
             # schema, so they shouldn't be used to claim e.g.
@@ -918,7 +927,7 @@ async def update_document_type(
             detail="Failed to save the document type. Check Supabase table access.",
         ) from exc
 
-    if type_changed:
+    if needs_extraction:
         background_tasks.add_task(langgraph_pipeline.rerun_extraction, document_id)
 
     return await get_document(document_id)

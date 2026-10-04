@@ -56,10 +56,9 @@ class Settings:
 
     # AC2: invocation should be attempted within this window of being dequeued
     DEQUEUE_TO_INVOKE_TARGET_SECONDS: float = 1.0
-    # AC4: a document idle in queued/processing longer than this is "stuck"
-    # (drives the monitoring dashboard's stuck-document listing — every
-    # in-flight status, this short threshold).
-    STUCK_THRESHOLD_SECONDS: int = 10
+    # A document idle in queued/processing longer than this is "stuck"
+    # (drives the monitoring dashboard's stuck-document listing).
+    STUCK_THRESHOLD_SECONDS: int = 600
     # Separate, longer threshold specifically for retry eligibility: a
     # document sitting in PROCESSING (not any other in-flight status) past
     # this long is considered stuck and can be retried without waiting for

@@ -1,93 +1,154 @@
 {
-  "bank_statement": [
-    "bank_name",
-    "account_number",
-    "transactions"
-  ],
-  "certificate_of_incorporation": [
-    "company_name",
-    "uen",
-    "incorporation_date",
-    "company_type",
-    "incorporating_act",
-    "certificate_date"
-  ],
-  "certificate_of_incumbency": [
-    "company_name",
-    "uen",
-    "incorporation_date",
-    "company_type",
-    "company_address",
-    "shareholder_name",
-    "shareholder_address",
-    "nric_number",
-    "share_capital",
-    "share_class"
-  ],
-  "company_constitution": [
-    "company_name",
-    "uen",
-    "incorporation_date",
-    "company_address",
-    "share_capital",
-    "issued_shares",
-    "subscribers"
-  ],
-  "credit_report": [
-    "individual_name",
-    "id_number",
-    "date_of_birth",
-    "nationality",
-    "individual_address",
-    "defaults",
-    "bankruptcy_proceedings"
-  ],
-  "fatca_crs_declaration": [
-    "company_name",
-    "company_address",
-    "tin",
-    "declaration_date",
-    "country_of_incorporation"
-  ],
-  "list_of_loans": [
-    "company_name",
-    "company_address",
-    "individual_name",
-    "loan_amount",
-    "uen"
-  ],
-  "notice_of_assessment": [
-    "company_name",
-    "tax_reference_number",
-    "company_address",
-    "year_of_assessment",
-    "noa_date",
-    "eci",
-    "tax_payable"
-  ],
-  "nric": [
-    "nric_number"
-  ],
-  "passport": [
-    "individual_name",
-    "passport_number",
-    "date_of_birth",
-    "nationality",
-    "mrz",
-    "date_of_expiry",
-    "date_of_issue",
-    "place_of_birth",
-    "sex"
-  ],
-  "payslip": [
-    "individual_name",
-    "company_name",
-    "net_pay"
-  ],
-  "proof_of_address": [],
-  "source_of_wealth": [
-    "company_name",
-    "uen"
-  ],
-  "unrecognised": []
+  "bank_statement": {
+    "required": [
+      "bank_name",
+      "account_number",
+      "transactions"
+    ],
+    "allow_empty": [],
+    "required_when_individual": []
+  },
+  "certificate_of_incorporation": {
+    "required": [
+      "company_name",
+      "uen",
+      "incorporation_date",
+      "company_type",
+      "incorporating_act",
+      "certificate_date"
+    ],
+    "allow_empty": [],
+    "required_when_individual": []
+  },
+  "certificate_of_incumbency": {
+    "required": [
+      "company_name",
+      "uen",
+      "incorporation_date",
+      "company_type",
+      "company_address",
+      "shareholder_name",
+      "shareholder_address",
+      "nric_number",
+      "share_capital",
+      "share_class"
+    ],
+    "allow_empty": [],
+    "required_when_individual": []
+  },
+  "company_constitution": {
+    "required": [
+      "company_name",
+      "uen",
+      "incorporation_date",
+      "company_address",
+      "share_capital",
+      "issued_shares",
+      "subscribers"
+    ],
+    "allow_empty": [],
+    "required_when_individual": []
+  },
+  "credit_report": {
+    "required": [
+      "individual_name",
+      "id_number",
+      "date_of_birth",
+      "nationality",
+      "individual_address",
+      "defaults",
+      "bankruptcy_proceedings"
+    ],
+    "allow_empty": [
+      "defaults",
+      "bankruptcy_proceedings"
+    ],
+    "required_when_individual": []
+  },
+  "fatca_crs_declaration": {
+    "required": [
+      "company_name",
+      "company_address",
+      "tin",
+      "declaration_date",
+      "country_of_incorporation"
+    ],
+    "allow_empty": [],
+    "required_when_individual": []
+  },
+  "list_of_loans": {
+    "required": [
+      "company_name",
+      "company_address",
+      "individual_name",
+      "loan_amount",
+      "uen"
+    ],
+    "allow_empty": [],
+    "required_when_individual": []
+  },
+  "notice_of_assessment": {
+    "required": [
+      "company_name",
+      "tax_reference_number",
+      "company_address",
+      "year_of_assessment",
+      "noa_date",
+      "eci",
+      "tax_payable"
+    ],
+    "allow_empty": [],
+    "required_when_individual": []
+  },
+  "nric": {
+    "required": [
+      "nric_number"
+    ],
+    "allow_empty": [],
+    "required_when_individual": []
+  },
+  "passport": {
+    "required": [
+      "individual_name",
+      "passport_number",
+      "date_of_birth",
+      "nationality",
+      "mrz",
+      "date_of_expiry",
+      "date_of_issue",
+      "place_of_birth",
+      "sex"
+    ],
+    "allow_empty": [],
+    "required_when_individual": []
+  },
+  "payslip": {
+    "required": [
+      "individual_name",
+      "company_name",
+      "net_pay"
+    ],
+    "allow_empty": [],
+    "required_when_individual": []
+  },
+  "proof_of_address": {
+    "required": [],
+    "allow_empty": [],
+    "required_when_individual": []
+  },
+  "source_of_wealth": {
+    "required": [
+      "company_name",
+      "uen"
+    ],
+    "allow_empty": [],
+    "required_when_individual": [
+      "account_holder_name"
+    ]
+  },
+  "unrecognised": {
+    "required": [],
+    "allow_empty": [],
+    "required_when_individual": []
+  }
 }

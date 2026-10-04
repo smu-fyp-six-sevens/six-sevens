@@ -91,12 +91,6 @@ def test_a_document_with_every_required_field_can_be_approved():
 
 @pytest.mark.sprint2
 @pytest.mark.story("SCRUM-20", "DI-025")
-@pytest.mark.xfail(
-    strict=True,
-    reason="REG-003 (known defect, reported to SCRUM-26 owner): a credit report with no defaults "
-    "has defaults = [] (the schema's own 'normal, expected value'), but the approval check treats "
-    "an empty list as missing, so a clean credit report can never be approved.",
-)
 def test_a_clean_credit_report_can_be_approved():
     document, fields = _real("Credit_Bureau_Report_8027")
     assert any(f.field_name == "defaults" and f.field_value == [] for f in fields)
@@ -106,12 +100,6 @@ def test_a_clean_credit_report_can_be_approved():
 
 @pytest.mark.sprint2
 @pytest.mark.story("SCRUM-20", "DI-025")
-@pytest.mark.xfail(
-    strict=True,
-    reason="REG-003 (known defect, reported to SCRUM-26 owner): a personal source-of-wealth statement "
-    "(brokerage account in a person's name) correctly has no company_name or UEN, but those are the "
-    "schema's required fields, so it can never be approved.",
-)
 @pytest.mark.parametrize("filename", ["SimS_SourceOfWealth", "MuhammadD_Wealth_Statement_scan"])
 def test_a_personal_source_of_wealth_statement_can_be_approved(filename):
     document, fields = _real(filename)

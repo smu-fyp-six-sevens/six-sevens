@@ -258,6 +258,9 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # which tells the model not to escalate on that basis alone when
         # it's clearly this individual-account variant instead.
         "required": ["company_name", "uen"],
+        # A personal account statement (no UEN, a person's name) is
+        # required to name its account holder instead of a company.
+        "required_when_individual": ["account_holder_name"],
         # income_statement_items through equity_items/total_equity (not
         # doc_gen-verified — added for fraud_detection.numerical_validation's
         # FS.* checks): the full income-statement/balance-sheet line items
@@ -286,7 +289,7 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # each row's own "note" column in income_statement_items/
         # balance_sheet_items instead (see FS.NOTE_REFS).
         "additional": [
-            "individual_address", "revenue", "net_profit",
+            "individual_address", "account_holder_name", "revenue", "net_profit",
             "total_assets", "total_liabilities", "share_capital", "notes",
             "broker_name", "account_number", "account_holder_name",
             "cash_balance", "portfolio_value", "net_asset_value", "holdings", "margin_loan",
@@ -332,6 +335,8 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
             "individual_name", "id_number", "date_of_birth", "nationality",
             "individual_address", "defaults", "bankruptcy_proceedings",
         ],
+        # An empty list is a valid answer for these (no defaults/bankruptcies on record).
+        "allow_empty": ["defaults", "bankruptcy_proceedings"],
         # account_count through bureau_score (not doc_gen-verified — added
         # for fraud_detection.numerical_validation's CR.* checks): the
         # report's own summary counters and score block.

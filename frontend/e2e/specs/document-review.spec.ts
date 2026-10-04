@@ -216,11 +216,6 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
   });
 
   test('DI-025 a clean credit report (no defaults on record) can be approved @DI-025', async ({ page, backend }) => {
-    test.fail(
-      true,
-      'REG-003 (known defect, reported to SCRUM-26 owner): the approval check treats defaults = [] ' +
-        '(no defaults, the normal case) as a missing required field, so a clean credit report can never be approved.',
-    );
     const fixture = loadFixture(backend, 'anchorpoint');
     const report = fixture.document('Credit_Bureau_Report');
     await page.goto(fixture.documentUrl(report));
@@ -229,11 +224,6 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
   });
 
   test('DI-025 a field that is legitimately empty does not block saving a correction @DI-025', async ({ page, backend }) => {
-    test.fail(
-      true,
-      'REG-002 (known defect, reported to SCRUM-20 owner): Save fields requires every field to be non-empty, ' +
-        'including ones extraction was confident are absent (e.g. no former name).',
-    );
     // Harbor Light's real certificate has no former name, so extraction
     // correctly left Company Former Name empty (confidence 1.0). Fixing the
     // flagged UEN should be enough to save.
