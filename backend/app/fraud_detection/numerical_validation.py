@@ -651,6 +651,20 @@ def _running_balance_breaks(rows: list[dict]) -> list[_BalanceBreak]:
     return breaks
 
 
+def _is_newest_first(rows: list[dict]) -> bool:
+    """
+    Whether a transaction list runs newest-first (e.g. OCBC's Daily
+    Statement of Account) rather than oldest-first. Banks differ, so it's
+    worked out per statement: from the transaction dates when the first and
+    last differ, otherwise from which direction the running balance
+    reconciles in with fewer breaks.
+    """
+    dates = [d for d in (_parse_field_date(r.get("date")) for r in rows) if d is not None]
+    if len(dates) >= 2 and dates[0] != dates[-1]:
+        return dates[0] > dates[-1]
+    return len(_running_balance_breaks(list(reversed(rows)))) < len(_running_balance_breaks(rows))
+
+
 def _balance_finding(b: _BalanceBreak) -> NumericalFinding:
     where = f"transaction {b.index + 1}" + (f" ({b.description})" if b.description else "")
     if b.sign_inverted:
@@ -675,10 +689,9 @@ def _check_running_balance(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCh
     """
     BS.RUNNING_BALANCE. Each balance must equal the previous one plus that
     row's amount. Direction (oldest-first vs newest-first) is worked out
-    from the figures rather than assumed — verified against this
-    pipeline's own real extracted statements, most list oldest-first but a
-    real minority list newest-first, and assuming one direction produced
-    dozens of false findings on entirely genuine statements.
+    per statement (see _is_newest_first) rather than assumed — most banks
+    list oldest-first but some (e.g. OCBC) list newest-first, and assuming
+    one direction produced dozens of false findings on genuine statements.
     """
     values = _need(ctx, "BS.RUNNING_BALANCE", "transactions")
     if values is None:
@@ -687,13 +700,14 @@ def _check_running_balance(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCh
     if len(rows) < 2:
         return [], _skip_missing("BS.RUNNING_BALANCE", "transactions (fewer than 2 rows)")
 
-    oldest_first = _running_balance_breaks(rows)
-    newest_first = _running_balance_breaks(list(reversed(rows)))
-    if len(newest_first) < len(oldest_first):
+    if _is_newest_first(rows):
         last = len(rows) - 1
-        breaks = [b.model_copy(update={"index": last - b.index}) for b in newest_first]
+        breaks = [
+            b.model_copy(update={"index": last - b.index})
+            for b in _running_balance_breaks(list(reversed(rows)))
+        ]
     else:
-        breaks = oldest_first
+        breaks = _running_balance_breaks(rows)
 
     if not breaks:
         return [], None
@@ -729,11 +743,17 @@ def _check_open_close(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck |
     checked against each other directly — a mismatch here means the
     printed header and the transaction list disagree, independent of
     whether the credit/debit arithmetic itself reconciles.
+
+    The derived opening/closing come from the chronologically first/last
+    rows, so a newest-first statement is reversed first (see
+    _is_newest_first).
     """
     values = _need(ctx, "BS.OPEN_CLOSE", "transactions")
     if values is None:
         return [], _skip_missing("BS.OPEN_CLOSE", "transactions")
     rows = _rows(values[0])
+    if len(rows) >= 2 and _is_newest_first(rows):
+        rows = list(reversed(rows))
     amounts = [_as_number(r.get("amount")) for r in rows]
     balances = [_as_number(r.get("balance")) for r in rows]
     first_balance = balances[0] if balances else None
@@ -1951,6 +1971,12 @@ def _check_cr_amortisation(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCh
         instalment = _as_number(row.get("monthly_instalment"))
         if len(history) < 2 or instalment is None:
             continue
+        # An amortising balance falls over time, so a history whose first
+        # balance is below its last is listed newest-first (as the credit
+        # report's "Preceding 5 Months" tables are).
+        first, last = _as_number(history[0].get("balance")), _as_number(history[-1].get("balance"))
+        if first is not None and last is not None and first < last:
+            history = list(reversed(history))
         for j in range(1, len(history)):
             prev, curr = _as_number(history[j - 1].get("balance")), _as_number(history[j].get("balance"))
             if prev is None or curr is None:
@@ -2190,13 +2216,17 @@ def _check_poa_usage_match(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCh
     trend_rows = _rows(trend)
     if stated is None or not trend_rows:
         return [], _skip_missing("POA.USAGE_MATCH", "usage_this_period/consumption_trend (unparseable)")
-    latest = trend_rows[-1]
-    trend_value = _as_number(latest.get("usage"))
-    if trend_value is not None and abs(stated - trend_value) > max(0.5, stated * 0.02):
+    # The billing month is the latest trend point, which sits at either end
+    # depending on whether the chart runs oldest- or newest-first.
+    ends = [trend_rows[-1]] if len(trend_rows) == 1 else [trend_rows[-1], trend_rows[0]]
+    end_values = [v for v in (_as_number(r.get("usage")) for r in ends) if v is not None]
+    tolerance = max(0.5, stated * 0.02)
+    if end_values and all(abs(stated - v) > tolerance for v in end_values):
+        trend_value = end_values[0]
         return [_finding(
             "POA.USAGE_MATCH", "inconsistent",
             f"Stated usage ({stated:g}) does not match the latest consumption trend point "
-            f"({trend_value:g})",
+            f"({' or '.join(f'{v:g}' for v in end_values)}, depending on the chart's order)",
             field="usage_this_period", stated=f"{stated:g}", expected=f"{trend_value:g}",
         )], None
     return [], None
@@ -2442,6 +2472,19 @@ def _mrz_check_digit(s: str) -> int:
     return sum(_mrz_char_value(c) * weights[i % 3] for i, c in enumerate(s)) % 10
 
 
+def _mrz_lines(raw: Any) -> list[str]:
+    """
+    The two TD3 lines, however extraction separated them. A real MRZ never
+    contains whitespace, so any space or newline is a line break — the
+    extracted value often joins the lines with a space instead of a newline.
+    88 characters once whitespace is removed means a valid two-line MRZ.
+    """
+    compact = "".join(str(raw).split())
+    if len(compact) == 88:
+        return [compact[:44], compact[44:]]
+    return [ln.strip() for ln in str(raw).strip().splitlines() if ln.strip()]
+
+
 def _check_mrz_format(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck | None]:
     """ID.MRZ_FORMAT. TD3 machine-readable zone is two lines of 44
     characters each."""
@@ -2449,7 +2492,7 @@ def _check_mrz_format(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck |
     if values is None:
         return [], _skip_missing("ID.MRZ_FORMAT", "mrz")
     raw = values[0]
-    lines = [ln for ln in str(raw).strip().splitlines() if ln.strip()]
+    lines = _mrz_lines(raw)
     if len(lines) != 2 or any(len(ln) != 44 for ln in lines):
         shapes = ", ".join(f"{len(ln)} chars" for ln in lines) or "no lines"
         return [_finding(
@@ -2465,7 +2508,7 @@ def _check_mrz_checkdigits(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCh
     values = _need(ctx, "ID.MRZ_CHECKDIGITS", "mrz")
     if values is None:
         return [], _skip_missing("ID.MRZ_CHECKDIGITS", "mrz")
-    lines = [ln for ln in str(values[0]).strip().splitlines() if ln.strip()]
+    lines = _mrz_lines(values[0])
     if len(lines) != 2 or any(len(ln) != 44 for ln in lines):
         return [], _skip_missing("ID.MRZ_CHECKDIGITS", "mrz (wrong format, see ID.MRZ_FORMAT)")
     line2 = lines[1]
@@ -2526,7 +2569,7 @@ def _check_mrz_vs_viz(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck |
     values = _need(ctx, "ID.MRZ_VS_VIZ", "mrz")
     if values is None:
         return [], _skip_missing("ID.MRZ_VS_VIZ", "mrz")
-    lines = [ln for ln in str(values[0]).strip().splitlines() if ln.strip()]
+    lines = _mrz_lines(values[0])
     if len(lines) != 2 or any(len(ln) != 44 for ln in lines):
         return [], _skip_missing("ID.MRZ_VS_VIZ", "mrz (wrong format, see ID.MRZ_FORMAT)")
     line2 = lines[1]

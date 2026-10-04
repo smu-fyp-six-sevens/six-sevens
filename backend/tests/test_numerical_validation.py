@@ -172,6 +172,51 @@ def test_running_balance_reconciles_a_newest_first_statement() -> None:
     assert _codes(result, "BS.RUNNING_BALANCE") == []
 
 
+def test_running_balance_uses_dates_to_tell_a_newest_first_statement() -> None:
+    # Newest-first (OCBC-style): the dates decide the direction, so a break
+    # is reported against the right row rather than the whole list failing.
+    newest_first = [
+        {"date": "31 Aug 2026", "amount": -35.00, "balance": 110251.40},
+        {"date": "29 Aug 2026", "amount": 18141.88, "balance": 110286.40},
+        {"date": "25 Aug 2026", "amount": -0.50, "balance": 92144.52},
+        {"date": "25 Aug 2026", "amount": -5709.40, "balance": 92145.02},
+    ]
+    result = _run([_field("transactions", newest_first)], document_type="bank_statement")
+    assert _codes(result, "BS.RUNNING_BALANCE") == []
+
+
+def test_open_close_handles_a_newest_first_statement() -> None:
+    # Rows from a real OCBC statement, listed newest-first. The derived
+    # opening/closing must come from the chronologically first/last rows,
+    # not list positions — otherwise the stated header balances are
+    # falsely reported as mismatching.
+    newest_first = [
+        {"date": "05 Jun 2026", "amount": 44573.19, "balance": 86709.09},
+        {"date": "01 Jun 2026", "amount": -4737.73, "balance": 42135.90},
+    ]
+    result = _run(
+        [_field("transactions", newest_first), _field("opening_balance", "46,873.63"),
+         _field("ledger_balance", "86,709.09")],
+        document_type="bank_statement",
+    )
+    assert _codes(result, "BS.STATED_OPENING") == []
+    assert _codes(result, "BS.STATED_CLOSING") == []
+    assert _codes(result, "BS.OPEN_CLOSE") == []
+
+
+def test_open_close_still_flags_a_wrong_stated_opening_on_a_newest_first_statement() -> None:
+    newest_first = [
+        {"date": "05 Jun 2026", "amount": 44573.19, "balance": 86709.09},
+        {"date": "01 Jun 2026", "amount": -4737.73, "balance": 42135.90},
+    ]
+    result = _run(
+        [_field("transactions", newest_first), _field("opening_balance", "50,000.00"),
+         _field("ledger_balance", "86,709.09")],
+        document_type="bank_statement",
+    )
+    assert len(_codes(result, "BS.STATED_OPENING")) == 1
+
+
 def test_running_balance_reports_sign_inversion_as_direction() -> None:
     transactions = [
         {"amount": 0, "balance": 15153.28},
@@ -711,6 +756,19 @@ def test_cr_amortisation_flags_a_balance_fall_bigger_than_the_instalment() -> No
     assert len(_codes(result, "CR.AMORTISATION")) == 1
 
 
+def test_cr_amortisation_reads_a_newest_first_history_in_date_order() -> None:
+    # Newest-first like the report's "Preceding 5 Months" table: read in
+    # list order the balance only rises, so a too-large fall went unseen.
+    result = _run(
+        [_field("accounts", [{
+            "monthly_instalment": 100,
+            "balance_history": [{"balance": 200}, {"balance": 1000}],
+        }])],
+        document_type="credit_report",
+    )
+    assert len(_codes(result, "CR.AMORTISATION")) == 1
+
+
 def test_cr_linear_series_flags_a_mechanically_constant_balance_fall() -> None:
     result = _run(
         [_field("accounts", [{
@@ -810,6 +868,28 @@ def test_poa_usage_match_flags_stated_usage_not_matching_the_trend() -> None:
     assert len(_codes(result, "POA.USAGE_MATCH")) == 1
 
 
+def test_poa_usage_match_accepts_a_newest_first_trend() -> None:
+    result = _run(
+        [_field("usage_this_period", "500"),
+         _field("consumption_trend", [
+             {"month": "Mar", "usage": 500}, {"month": "Feb", "usage": 420}, {"month": "Jan", "usage": 380},
+         ])],
+        document_type="proof_of_address",
+    )
+    assert _codes(result, "POA.USAGE_MATCH") == []
+
+
+def test_poa_usage_match_accepts_an_oldest_first_trend() -> None:
+    result = _run(
+        [_field("usage_this_period", "500"),
+         _field("consumption_trend", [
+             {"month": "Jan", "usage": 380}, {"month": "Feb", "usage": 420}, {"month": "Mar", "usage": 500},
+         ])],
+        document_type="proof_of_address",
+    )
+    assert _codes(result, "POA.USAGE_MATCH") == []
+
+
 def test_poa_unit_rate_flags_an_implausible_tariff() -> None:
     result = _run(
         [_field("current_charges", "1000"), _field("usage_this_period", "1")],
@@ -902,6 +982,32 @@ def test_mrz_checkdigits_valid_mrz_passes_clean() -> None:
     assert _codes(result, "ID.MRZ_FORMAT") == []
     assert _codes(result, "ID.MRZ_CHECKDIGITS") == []
     assert _codes(result, "ID.MRZ_VS_VIZ") == []
+
+
+def test_mrz_lines_joined_by_a_space_are_parsed_as_two_lines() -> None:
+    # Real extracted value: the two TD3 lines joined with a space, 89 chars.
+    mrz = (
+        "PASGPLIM<<CHOON<GUAN<<<<<<<<<<<<<<<<<<<<<<<< "
+        "K1791518E6SGP7512032F3001075S7534567X<<<<<66"
+    )
+    result = _run([_field("mrz", mrz)], document_type="passport")
+    assert _codes(result, "ID.MRZ_FORMAT") == []
+    assert _codes(result, "ID.MRZ_CHECKDIGITS") == []
+
+
+def test_mrz_lines_with_no_separator_are_split_at_44() -> None:
+    mrz = _build_mrz("E1234567A", "900101", "300101").replace("\n", "")
+    result = _run([_field("mrz", mrz)], document_type="passport")
+    assert _codes(result, "ID.MRZ_FORMAT") == []
+    assert _codes(result, "ID.MRZ_CHECKDIGITS") == []
+
+
+def test_mrz_checkdigits_still_run_and_flag_when_lines_are_space_joined() -> None:
+    lines = _build_mrz("E1234567A", "900101", "300101").split("\n")
+    corrupted_char = "1" if lines[1][9] != "1" else "2"
+    lines[1] = lines[1][:9] + corrupted_char + lines[1][10:]
+    result = _run([_field("mrz", " ".join(lines))], document_type="passport")
+    assert len(_codes(result, "ID.MRZ_CHECKDIGITS")) >= 1
 
 
 def test_mrz_checkdigits_flags_corrupted_check_digit() -> None:
