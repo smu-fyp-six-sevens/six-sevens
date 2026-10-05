@@ -60,11 +60,16 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # no separate "closing balance" field: both templates print that
         # same figure under the "Ledger Balance"/"Available Balance"
         # labels already captured below.
+        # bank_registration_no / bank_gst_no / bic_code: the issuing BANK's
+        # own Co. Reg. No., GST Reg. No. and SWIFT BIC as printed on the
+        # statement (header or footer) — not the account holder's. Read by
+        # BS.BANK_IDENTIFIERS.
         "additional": [
             "company_name", "individual_name", "individual_address",
             "statement_period_start", "statement_period_end", "overdraft_limit",
             "opening_balance", "ledger_balance", "available_balance", "holds",
-            "total_credits", "total_debits",
+            "total_credits", "total_debits", "bank_registration_no", "bank_gst_no",
+            "bic_code",
         ],
     },
     "certificate_of_incorporation": {
