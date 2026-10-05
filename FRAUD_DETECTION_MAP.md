@@ -86,7 +86,7 @@ No dev/QA duplicate of any of this remains — the old `/extraction/test-*` endp
 `/extraction/test` router itself (plus their only frontend callers, `TestAnomalyPage.tsx` and
 `ExtractionTestPage.tsx`, and all their dedicated service files) have been deleted outright.
 
-## 4. Frontend — `DocumentDetailsPage.tsx`'s Detection section
+## 4. Frontend — Detection panel (`pages/document-details/DetectionPanel.tsx`)
 
 Unstyled/debug-styled, covers the full workflow:
 - Renders `detectionReport` (`getDetectionReport`), auto-fetched on load; shows the failure reason

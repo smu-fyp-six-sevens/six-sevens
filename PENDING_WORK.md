@@ -68,13 +68,29 @@ Not started, no urgency until the Cloud Native award work picks up:
 
 ## Frontend structure
 
-- **Split the large frontend files into modules** — `DocumentDetailsPage.tsx` (~2,280 lines) and
-  `UploadPage.tsx` (~1,850 lines) are the biggest; `uploadService.ts` (~1,020 lines) is imported by six
-  source files. Plan: move leaf components first, one piece at a time, keeping markup and class names
-  unchanged. For services, split by domain behind an `index.ts` re-export so import paths don't change.
-  Verify after each move with `npm run build` and the specs that cover that area (`document-review`,
-  `upload`, `checklist`). Regression suite is not affected by file layout; it can break only if markup
-  or behaviour changes.
+- **Move page state and handlers into custom hooks** — the main open item. `DocumentDetailsPage.tsx` and
+  `UploadPage.tsx` are still ~970 lines each, mostly `useState` and handler functions. Planned split:
+  - Details page: `useDocumentLoader` (load, WebSocket, stuck recheck), `useFieldEditing` (draft, save, add and
+    delete field), `useDetection` (report, trace, cancel, retry, individual checks), `useDocumentActions` (approve,
+    reject, cancel, retry, delete, type save).
+  - Upload page: `useUploadSelection` (files, submit), `useCaseDocuments` (documents, WebSocket, case matches,
+    coverage), `useBulkActions` (selection, approve, delete, move), `useCaseEditing`.
+  - Payoff: cards currently take 20+ props each (`ExtractedInformationCard`, `DocumentListPanel`). Hooks would let
+    them read state directly. Verify with `tsc`, `npm run build`, and the `document-review`, `upload`,
+    `case-management` and `checklist` specs.
+- **Dead code in `UploadPage.tsx`** (deferred): `isExtractionNotConfiguredFailure`, `structuredFieldEntries`,
+  `REQUIREMENT_LABELS`, `formatFieldValue`, plus `savingFields`, `saveFieldErrors`, `setFieldDraftValue`,
+  `saveFieldDraft`, `handleApproveDocument`, `isApproving`. Remove when the hooks move.
+- **Frontend mirrors backend thresholds** — `CLASSIFICATION_CONFIDENCE_THRESHOLD`, `EXTRACTION_CONFIDENCE_THRESHOLD`
+  and the stuck timeouts are hardcoded in `services/uploadService/documentStatus.ts`. A backend change silently
+  disagrees with the UI. Serve them from the backend with the case or config payload.
+- **Reject wording** — `documents.ts` uses "Reject failed" while the other service messages say "Failed to …".
+  Align if wanted.
+- **Auto-shortened comments** — comments in the moved files were shortened mechanically. Worth a read-through.
+
+Done recently: lazy-loaded pages and debug panels (main chunk 281 kB → 203 kB), shared `assertOk` helper in the
+upload service, reject error shown on the details page, `humanizeFieldKey` moved to `utils/fieldLabels.ts`, shared
+edit trigger for array fields, status tone table in `DocumentSummaryCard`, memoised derived lists in both pages.
 
 ## Small known gaps
 
