@@ -1,48 +1,34 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DocumentPreviewModal from '../components/DocumentPreviewModal';
 import KebabMenu from '../components/KebabMenu';
-import { subscribeToCaseStatus } from '../services/caseSocket';
 import {
-  deleteDocument,
-  approveDocument,
-  cancelDocument,
   canCancelDocument,
   canRetryDocument,
-  rejectDocument,
-  retryDocument,
   CLASSIFICATION_CONFIDENCE_THRESHOLD,
   EXTRACTION_CONFIDENCE_THRESHOLD,
   documentDetectionStage,
   formatDocumentType,
-  isClassificationConfirmed,
   hasExtractedInformation,
+  isClassificationConfirmed,
   skipsDetection,
-  getDocument,
-  isConfirmedOther,
-  getDocumentCaseMatch,
-  getDetectionReport,
-  cancelDetection,
-  retryDetection,
-  getLangGraphTrace,
-  updateDocumentType,
-  updateExtractedFields,
-  runIndividualDetectionCheck,
 } from '../services/uploadService';
-import type {
-  DetectionReport,
-  DocumentCaseMatch,
-  DocumentRecord,
-  IndividualCheckId,
-  LangGraphTrace,
-} from '../services/uploadService';
-import { ExtractedField, buildFieldDraft, displayableFieldEntries, isPlainObject, valueToString } from './document-details/fieldDisplay';
+import { displayableFieldEntries } from './document-details/fieldDisplay';
+import type { ExtractedField } from './document-details/fieldDisplay';
 import { describeFailureReason } from './document-details/formatters';
 import { DocumentSummaryCard } from './document-details/DocumentSummaryCard';
 import { ExtractedInformationCard } from './document-details/ExtractedInformationCard';
 import { ManualReviewCard } from './document-details/ManualReviewCard';
+import { useDetection } from './document-details/useDetection';
+import { useDocumentActions } from './document-details/useDocumentActions';
+import { useDocumentCaseMatch } from './document-details/useDocumentCaseMatch';
+import { useDocumentRecord } from './document-details/useDocumentRecord';
+import { useDocumentTypeEditing } from './document-details/useDocumentTypeEditing';
+import { useFieldEditing } from './document-details/useFieldEditing';
+import { useLangGraphTrace } from './document-details/useLangGraphTrace';
+import { humanizeFieldKey } from '../utils/fieldLabels';
 
 // Developer-only panels, so they load on demand.
 const DetectionPanel = lazy(() =>
@@ -51,7 +37,6 @@ const DetectionPanel = lazy(() =>
 const LangGraphTracePanel = lazy(() =>
   import('./document-details/LangGraphTracePanel').then((m) => ({ default: m.LangGraphTracePanel })),
 );
-import { humanizeFieldKey } from '../utils/fieldLabels';
 
 interface DocumentDetailsPageProps {
   selectedCase: CaseRecord;
@@ -66,180 +51,19 @@ export default function DocumentDetailsPage({
   onBack,
   onDocumentDeleted,
 }: DocumentDetailsPageProps) {
-  const [document, setDocument] = useState<DocumentRecord | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  const [isAddFieldOpen, setIsAddFieldOpen] = useState(false);
-  const [newFieldName, setNewFieldName] = useState('');
-  const [newFieldValue, setNewFieldValue] = useState('');
-  const [isAddingField, setIsAddingField] = useState(false);
-  const [addFieldError, setAddFieldError] = useState<string | null>(null);
-
-  const [deletingFieldId, setDeletingFieldId] = useState<string | null>(null);
-  const [deleteFieldError, setDeleteFieldError] = useState<string | null>(null);
-  
-  const [fieldDraft, setFieldDraft] = useState<Record<string, string>>({});
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
-
-  const [selectedType, setSelectedType] = useState('');
-  const [isSavingType, setIsSavingType] = useState(false);
-  const [typeError, setTypeError] = useState<string | null>(null);
-
-  // Debug aid, see backend/app/langgraph/trace.py.
-  const [langGraphTrace, setLangGraphTrace] = useState<LangGraphTrace | null>(null);
-  const [isRefreshingTrace, setIsRefreshingTrace] = useState(false);
-
-  const refreshLangGraphTrace = async () => {
-    setIsRefreshingTrace(true);
-    try {
-      const result = await getLangGraphTrace(documentId);
-      setLangGraphTrace(result);
-    } catch {
-      // Dev-only aid — a fetch failure here shouldn't disturb the page.
-    } finally {
-      setIsRefreshingTrace(false);
-    }
-  };
-
-  // Detection Agent: the stored report for this document.
-  const [detectionReport, setDetectionReport] = useState<DetectionReport | null>(null);
-  // Set when a run crashed or was cancelled.
-  const [detectionError, setDetectionError] = useState<string | null>(null);
-
-  const [isRefreshingDetection, setIsRefreshingDetection] = useState(false);
-
-  const refreshDetectionReport = async () => {
-    setIsRefreshingDetection(true);
-    try {
-      const report = await getDetectionReport(documentId);
-      setDetectionReport(report);
-      setDetectionError(null);
-    } catch (err) {
-      setDetectionError(err instanceof Error ? err.message : 'Detection failed.');
-    } finally {
-      setIsRefreshingDetection(false);
-    }
-  };
-
-  const [isCancellingDetection, setIsCancellingDetection] = useState(false);
-
-  const handleCancelDetection = async () => {
-    setIsCancellingDetection(true);
-    try {
-      await cancelDetection(documentId);
-      await refreshDetectionReport();
-    } catch (err) {
-      setDetectionError(err instanceof Error ? err.message : 'Failed to cancel detection.');
-    } finally {
-      setIsCancellingDetection(false);
-    }
-  };
-
-  const [isRetryingDetection, setIsRetryingDetection] = useState(false);
-
-  const handleRetryDetection = async () => {
-    setIsRetryingDetection(true);
-    try {
-      await retryDetection(documentId);
-      await refreshDetectionReport();
-    } catch (err) {
-      setDetectionError(err instanceof Error ? err.message : 'Failed to retry detection.');
-    } finally {
-      setIsRetryingDetection(false);
-    }
-  };
-
-  // Individual checks: re-run one check, only once a full detection report exists.
-  const [runningCheckId, setRunningCheckId] = useState<IndividualCheckId | null>(null);
-  const [individualCheckError, setIndividualCheckError] = useState<string | null>(null);
-  const [individualCheckResults, setIndividualCheckResults] = useState<
-    Partial<Record<IndividualCheckId, unknown>>
-  >({});
-
-  const handleRunIndividualCheck = async (checkId: IndividualCheckId) => {
-    setRunningCheckId(checkId);
-    setIndividualCheckError(null);
-    try {
-      const result = await runIndividualDetectionCheck(documentId, checkId);
-      setIndividualCheckResults((prev) => ({ ...prev, [checkId]: result }));
-    } catch (err) {
-      setIndividualCheckError(err instanceof Error ? err.message : 'Check failed.');
-    } finally {
-      setRunningCheckId(null);
-    }
-  };
-
-  const [isApproving, setIsApproving] = useState(false);
-  const [approveError, setApproveError] = useState<string | null>(null);
-
-  const [isRejecting, setIsRejecting] = useState(false);
-  const [rejectError, setRejectError] = useState<string | null>(null);
-
-  const [isCancelling, setIsCancelling] = useState(false);
-  const [cancelError, setCancelError] = useState<string | null>(null);
-
-  const [isRetrying, setIsRetrying] = useState(false);
-  const [retryError, setRetryError] = useState<string | null>(null);
-
-  // Forces a re-render every so often while PROCESSING so the "Stuck" badge/Retry button can appear.
-  const [, forceStuckRecheck] = useState(0);
-  const [isDeletingDocument, setIsDeletingDocument] = useState(false);
-  const [deleteDocumentError, setDeleteDocumentError] = useState<string | null>(null);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const {
+    document,
+    setDocument,
+    isLoading,
+    loadError,
+    fieldDraft,
+    setFieldDraft,
+    extractedFieldsJsonRef,
+    isInFlight,
+  } = useDocumentRecord(documentId);
+  const caseMatch = useDocumentCaseMatch(documentId, document);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  // Last extracted_fields the draft was built from.
-  const extractedFieldsJsonRef = useRef('');
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadDocument() {
-      setIsLoading(true);
-      setLoadError(null);
-
-      try {
-        const result = await getDocument(documentId);
-
-        if (cancelled) {
-          return;
-        }
-
-        setDocument(result);
-        extractedFieldsJsonRef.current = JSON.stringify(
-          result.extracted_fields ?? null,
-        );
-        setFieldDraft(buildFieldDraft(result.extracted_fields));
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-
-        setLoadError(
-          error instanceof Error
-            ? error.message
-            : 'Failed to load document.',
-        );
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    void loadDocument();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [documentId]);
-
-  // Whether this document belongs to the case's company and individuals (see backend/app/case_match.py).
-  const [caseMatch, setCaseMatch] = useState<DocumentCaseMatch | null>(null);
-  const hasCase = Boolean(document?.case_id);
-  const documentStatus = document?.status;
   const isApproved = document?.status === 'approved';
   // Approve and Reject are both final: the document is locked against field edits and type corrections.
   const isLocked = isApproved || document?.status === 'rejected';
@@ -272,29 +96,6 @@ export default function DocumentDetailsPage({
     () => document?.missing_required_fields ?? [],
     [document?.missing_required_fields],
   );
-  const extractedFieldsJson = JSON.stringify(document?.extracted_fields ?? null);
-
-  useEffect(() => {
-    if (!hasCase || documentStatus !== 'analyzed') {
-      setCaseMatch(null);
-      return;
-    }
-
-    let cancelled = false;
-
-    getDocumentCaseMatch(documentId)
-      .then((result) => {
-        if (!cancelled) setCaseMatch(result);
-      })
-      .catch(() => {
-        // Informational only — the rest of the page works without it.
-        if (!cancelled) setCaseMatch(null);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [documentId, hasCase, documentStatus, extractedFieldsJson]);
 
   const caseMatchMismatches = useMemo(
     () => caseMatch?.comparisons.filter((comparison) => comparison.outcome === 'mismatch') ?? [],
@@ -362,322 +163,104 @@ export default function DocumentDetailsPage({
     !needsManualReview;
   const canEditFields = !isLocked && !areFieldsVerified;
 
-  // The type can only be corrected once the pipeline has finished with the document, and only while.
+  // The type can only be corrected once the pipeline has finished with the document. Same rule as
+  // approval, so a document that can't be approved yet can always be confirmed.
   const canCorrectType =
     !isLocked &&
     (document?.status === 'analyzed' || document?.status === 'failed') &&
-    // Same rule as approval, so a document that can't be approved yet can always be confirmed.
     !isTypeConfirmed;
 
-  // What the dropdown currently shows: the officer's pick, else the existing type.
-  const isUnconfirmedUnrecognised =
-    document?.document_type === 'unrecognised' && !isConfirmedOther(document);
-  const chosenType =
-    selectedType || (isUnconfirmedUnrecognised ? '' : document?.document_type) || '';
+  const {
+    isAddFieldOpen,
+    setIsAddFieldOpen,
+    newFieldName,
+    setNewFieldName,
+    newFieldValue,
+    setNewFieldValue,
+    isAddingField,
+    setIsAddingField,
+    addFieldError,
+    setAddFieldError,
+    deletingFieldId,
+    setDeletingFieldId,
+    deleteFieldError,
+    setDeleteFieldError,
+    isSaving,
+    saveMessage,
+    saveError,
+    handleFieldChange,
+    handleSaveFields,
+    clearSaveMessages,
+  } = useFieldEditing({
+    document,
+    setDocument,
+    fieldDraft,
+    setFieldDraft,
+    canEditFields,
+    extractedFields,
+    reviewFields,
+    absentRequiredFields,
+    needsAttention,
+  });
 
-  // Saving a corrected type re-runs extraction in the background.
-  const caseId = document?.case_id ?? null;
-  const isInFlight =
-    document?.status === 'uploaded' ||
-    document?.status === 'queued' ||
-    document?.status === 'processing' ||
-    document?.status === 'extracting';
+  const {
+    setSelectedType,
+    isSavingType,
+    typeError,
+    setTypeError,
+    chosenType,
+    isUnconfirmedUnrecognised,
+    handleSaveType,
+  } = useDocumentTypeEditing({
+    document,
+    setDocument,
+    setFieldDraft,
+    extractedFieldsJsonRef,
+    clearSaveMessages,
+  });
+
+  const {
+    detectionReport,
+    detectionError,
+    isRefreshingDetection,
+    refreshDetectionReport,
+    isCancellingDetection,
+    handleCancelDetection,
+    isRetryingDetection,
+    handleRetryDetection,
+    runningCheckId,
+    individualCheckError,
+    individualCheckResults,
+    handleRunIndividualCheck,
+  } = useDetection(documentId);
+
+  const { langGraphTrace, isRefreshingTrace, refreshLangGraphTrace } = useLangGraphTrace(documentId);
+
+  const {
+    isApproving,
+    approveError,
+    handleApproveDocument,
+    isRejecting,
+    rejectError,
+    handleRejectDocument,
+    isCancelling,
+    cancelError,
+    handleCancelDocument,
+    isRetrying,
+    retryError,
+    handleRetryDocument,
+    isDeletingDocument,
+    deleteDocumentError,
+    deleteConfirmOpen,
+    setDeleteConfirmOpen,
+    confirmDeleteDocument,
+  } = useDocumentActions({ document, setDocument, onDocumentDeleted });
 
   const hasDetectionReport = detectionReport !== null;
   const detectionStage = document
     ? documentDetectionStage(document.status, hasDetectionReport, document.document_type)
     : null;
   const detectionSkipped = skipsDetection(document?.document_type);
-
-  useEffect(() => {
-    if (document?.status !== 'processing') {
-      return;
-    }
-    const interval = window.setInterval(() => forceStuckRecheck((n) => n + 1), 15000);
-    return () => window.clearInterval(interval);
-  }, [document?.status]);
-
-  useEffect(() => {
-    if (!caseId || !isInFlight) {
-      return;
-    }
-
-    const subscription = subscribeToCaseStatus(caseId, (snapshot) => {
-      const updated = snapshot.documents.find(
-        (candidate) => candidate.id === documentId,
-      );
-
-      if (!updated) {
-        return;
-      }
-
-      const nextJson = JSON.stringify(updated.extracted_fields ?? null);
-
-      if (nextJson !== extractedFieldsJsonRef.current) {
-        extractedFieldsJsonRef.current = nextJson;
-        setFieldDraft(buildFieldDraft(updated.extracted_fields));
-      }
-
-      setDocument(updated);
-    });
-
-    return () => subscription.unsubscribe();
-  }, [caseId, isInFlight, documentId]);
-
-  useEffect(() => {
-    let cancelled = false;
-    getDetectionReport(documentId)
-      .then((report) => {
-        if (!cancelled) setDetectionReport(report);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setDetectionError(err instanceof Error ? err.message : 'Detection failed.');
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [documentId]);
-
-  // Fetched once on load.
-  useEffect(() => {
-    let cancelled = false;
-    getLangGraphTrace(documentId)
-      .then((result) => {
-        if (!cancelled) setLangGraphTrace(result);
-      })
-      .catch(() => {
-        // Dev-only aid — a fetch failure here shouldn't disturb the page.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [documentId]);
-
-  async function handleApproveDocument() {
-    if (!document) {
-      return;
-    }
-
-    setIsApproving(true);
-    setApproveError(null);
-
-    try {
-      const updated = await approveDocument(document.id);
-      setDocument(updated);
-    } catch (error) {
-      setApproveError(
-        error instanceof Error
-          ? error.message
-          : 'Failed to approve document.',
-      );
-    } finally {
-      setIsApproving(false);
-    }
-  }
-
-  async function handleRejectDocument() {
-  if (!document) {
-    return;
-  }
-
-  setIsRejecting(true);
-  setRejectError(null);
-
-  try {
-    const updated = await rejectDocument(document.id);
-    setDocument(updated);
-  } catch (error) {
-    setRejectError(
-      error instanceof Error
-        ? error.message
-        : 'Failed to reject document.',
-    );
-  } finally {
-    setIsRejecting(false);
-  }
-}
-
-  async function handleCancelDocument() {
-    if (!document) {
-      return;
-    }
-
-    setIsCancelling(true);
-    setCancelError(null);
-
-    try {
-      const updated = await cancelDocument(document.id);
-      setDocument(updated);
-    } catch (error) {
-      setCancelError(
-        error instanceof Error
-          ? error.message
-          : 'Failed to cancel document.',
-      );
-    } finally {
-      setIsCancelling(false);
-    }
-  }
-
-  async function handleRetryDocument() {
-    if (!document) {
-      return;
-    }
-
-    setIsRetrying(true);
-    setRetryError(null);
-
-    try {
-      const updated = await retryDocument(document.id);
-      setDocument(updated);
-    } catch (error) {
-      setRetryError(
-        error instanceof Error
-          ? error.message
-          : 'Failed to retry document.',
-      );
-    } finally {
-      setIsRetrying(false);
-    }
-  }
-
-  async function handleSaveType() {
-    if (!document || !chosenType) {
-      return;
-    }
-
-    setIsSavingType(true);
-    setTypeError(null);
-
-    try {
-      const updated = await updateDocumentType(document.id, chosenType);
-
-      extractedFieldsJsonRef.current = JSON.stringify(
-        updated.extracted_fields ?? null,
-      );
-      setDocument(updated);
-      setFieldDraft(buildFieldDraft(updated.extracted_fields));
-      setSelectedType('');
-      setSaveMessage(null);
-      setSaveError(null);
-    } catch (error) {
-      setTypeError(
-        error instanceof Error
-          ? error.message
-          : 'Failed to update the document type.',
-      );
-    } finally {
-      setIsSavingType(false);
-    }
-  }
-
-  function handleFieldChange(key: string, value: string) {
-    setFieldDraft((current) => ({
-      ...current,
-      [key]: value,
-    }));
-
-    setSaveMessage(null);
-    setSaveError(null);
-  }
-
-  async function handleSaveFields() {
-    if (!document || !canEditFields) {
-      return;
-    }
-
-    // Only fields that need attention must have a value.
-    const hasEmptyField = reviewFields.some(
-      ([key, field]) => needsAttention(key, field) && !fieldDraft[key]?.trim(),
-    );
-
-    if (hasEmptyField) {
-      setSaveMessage(null);
-      setSaveError('Please complete all fields before saving.');
-      return;
-    }
-
-    setIsSaving(true);
-    setSaveMessage(null);
-    setSaveError(null);
-
-    try {
-      // fieldDraft is Record<string, string>.
-      const originalValueByKey = new Map(
-        extractedFields.map(([key, field]) => [key, field.value]),
-      );
-      const payload: Record<string, unknown> = {};
-      const draftWithAbsent: Record<string, string> = {
-        ...Object.fromEntries(absentRequiredFields.map((name) => [name, ''])),
-        ...fieldDraft,
-      };
-      for (const [key, draftValue] of Object.entries(draftWithAbsent)) {
-        if (draftValue.trim() === '') {
-          payload[key] = null;
-          continue;
-        }
-        const original = originalValueByKey.get(key);
-        if (Array.isArray(original) || isPlainObject(original)) {
-          try {
-            payload[key] = JSON.parse(draftValue);
-            continue;
-          } catch {
-            // Malformed edit.
-          }
-        }
-        payload[key] = draftValue;
-      }
-
-      const updated = await updateExtractedFields(
-        document.id,
-        payload,
-      );
-
-      setDocument(updated);
-
-      const nextDraft: Record<string, string> = {};
-
-      for (const [key, field] of displayableFieldEntries(
-        updated.extracted_fields,
-      )) {
-        nextDraft[key] = valueToString(field.value);
-      }
-
-      setFieldDraft(nextDraft);
-
-      setSaveMessage(
-        'Changes saved. The extracted fields are now verified and can no longer be edited.',
-      );
-    } catch (error) {
-      setSaveError(
-        error instanceof Error
-          ? error.message
-          : 'Failed to save extracted fields.',
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  async function confirmDeleteDocument() {
-    if (!document) return;
-
-    setIsDeletingDocument(true);
-    setDeleteDocumentError(null);
-
-    try {
-      await deleteDocument(document.id);
-      onDocumentDeleted();
-    } catch (error) {
-      setDeleteConfirmOpen(false);
-      setDeleteDocumentError(
-        error instanceof Error ? error.message : 'Failed to delete document.',
-      );
-      setIsDeletingDocument(false);
-    }
-  }
 
   if (isLoading) {
     return (

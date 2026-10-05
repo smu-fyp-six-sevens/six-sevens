@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useState } from 'react';
 import type { CaseRecord } from '../App';
 import {
-  acceptedIdentityNames,
   describeIssue,
   fieldsToDraft,
-  isEligibleForApproval,
 } from './upload/uploadHelpers';
+import { useCaseSettings } from './upload/useCaseSettings';
+import { useCaseSnapshot } from './upload/useCaseSnapshot';
+import { useDocumentActions } from './upload/useDocumentActions';
+import { useDocumentSelection } from './upload/useDocumentSelection';
+import { useUploadSelection } from './upload/useUploadSelection';
 import { DocumentListPanel } from './upload/DocumentListPanel';
 import { MoveDocumentsDialog } from './upload/MoveDocumentsDialog';
 import { RequirementsSidebar } from './upload/RequirementsSidebar';
@@ -15,41 +18,15 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import DropZone from '../components/DropZone';
 import FileRow from '../components/FileRow';
 import KebabMenu from '../components/KebabMenu';
-import { subscribeToCaseStatus } from '../services/caseSocket';
-import type { CaseStatusSubscription } from '../services/caseSocket';
 import {
-  approveDocument,
-  cancelDocument,
-  deleteCase,
-  retryDocument,
-  EXTRACTION_CONFIDENCE_THRESHOLD,
-  TERMINAL_DOCUMENT_STATUSES,
-  isClassificationConfirmed,
-  hasExtractedInformation,
-  lowestFieldConfidence,
-  bulkDeleteDocuments,
-  bulkMoveDocuments,
-  listCaseOptions,
-  updateCase,
   updateExtractedFields,
-  uploadDocuments,
 } from '../services/uploadService';
 import type {
-  BulkUploadItemResult,
-  CaseOption,
-  DocumentCaseMatch,
-  DocumentRecord,
 } from '../services/uploadService';
 import {
-  MAX_BULK_FILES,
-  checkFileCount,
-  recordUploadedHash,
-  validateFiles,
 } from '../utils/fileValidation';
-import type { FileIssue } from '../utils/fileValidation';
 import {
   MAX_COMPANY_NAME_LENGTH,
-  validateCompanyName,
 } from '../utils/caseValidation';
 
 
@@ -68,314 +45,119 @@ export default function UploadPage({
   onCaseUpdated,
   onCaseDeleted,
 }: UploadPageProps) {
-  const [isEditingCase, setIsEditingCase] = useState(false);
-  const [companyNameDraft, setCompanyNameDraft] = useState(selectedCase.applicant);
-  const [isSavingCase, setIsSavingCase] = useState(false);
-  const [saveCaseError, setSaveCaseError] = useState<string | null>(null);
+  const {
+    setDocumentDetails,
+    fulfilledRequirements,
+    proofOfAddressCoverage,
+    idDocumentCoverage,
+    wsConnected,
+    caseMatches,
+    setCaseMatches,
+    isMountedRef,
+    caseSocketRef,
+    documents,
+    caseHasInFlightDocument,
+    extractedDocuments,
+    approvedDocuments,
+    flaggedDocuments,
+    identityNames,
+    caseMatchNeedsReview,
+  } = useCaseSnapshot(selectedCase.id);
 
-  useEffect(() => {
-    setCompanyNameDraft(selectedCase.applicant);
-  }, [selectedCase.applicant]);
+  const {
+    isEditingCase,
+    setIsEditingCase,
+    companyNameDraft,
+    setCompanyNameDraft,
+    isSavingCase,
+    saveCaseError,
+    handleSaveCase,
+    handleCancelEditCase,
+    deleteError,
+    setDeleteError,
+    isDeletingCase,
+    caseDeleteOpen,
+    setCaseDeleteOpen,
+    confirmDeleteCase,
+  } = useCaseSettings({ selectedCase, onCaseUpdated, onCaseDeleted });
 
-  async function handleSaveCase() {
-    const trimmed = companyNameDraft.trim();
-    const validationError = validateCompanyName(companyNameDraft);
-    if (validationError) {
-      setSaveCaseError(validationError);
-      return;
-    }
+  const {
+    selectedFiles,
+    countError,
+    rejections,
+    justSubmitted,
+    isSubmitting,
+    error,
+    hasOutcome,
+    resultByFilename,
+    completedCount,
+    successfulCount,
+    failedCount,
+    handleFiles,
+    handleSubmit,
+    removeFile,
+  } = useUploadSelection({ caseId: selectedCase.id, caseSocketRef });
 
-    setIsSavingCase(true);
-    setSaveCaseError(null);
+  const {
+    selectedDocumentIds,
+    setSelectedDocumentIds,
+    documentsToDelete,
+    setDocumentsToDelete,
+    isBulkDeleting,
+    isMoveDialogOpen,
+    setIsMoveDialogOpen,
+    caseOptions,
+    isLoadingCaseOptions,
+    moveTargetCaseId,
+    setMoveTargetCaseId,
+    isMovingDocuments,
+    moveError,
+    selectedExtractedDocuments,
+    allExtractedSelected,
+    eligibleForApprovalCount,
+    selectedApprovableCount,
+    selectedMovableOrDeletableCount,
+    clearDocumentSelection,
+    toggleDocumentSelected,
+    confirmDeleteDocuments,
+    handleSelectAllEligible,
+    openMoveDialog,
+    confirmMoveSelected,
+  } = useDocumentSelection({
+    caseId: selectedCase.id,
+    extractedDocuments,
+    caseMatches,
+    setDocumentDetails,
+    setCaseMatches,
+    setDeleteError,
+    isMountedRef,
+    caseSocketRef,
+  });
 
-    try {
-      const updated = await updateCase(selectedCase.id, trimmed);
-      onCaseUpdated(updated.company_name ?? trimmed);
-      setIsEditingCase(false);
-    } catch (err) {
-      setSaveCaseError(err instanceof Error ? err.message : 'Failed to save case.');
-    } finally {
-      setIsSavingCase(false);
-    }
-  }
+  const {
+    approvingDocumentId,
+    approveError,
+    cancellingDocumentId,
+    cancelActionError,
+    retryingDocumentId,
+    retryActionError,
+    isApprovingSelected,
+    handleCancelDocument,
+    handleRetryDocument,
+    handleApproveSelected,
+  } = useDocumentActions({
+    setDocumentDetails,
+    isMountedRef,
+    selectedDocumentIds,
+    setSelectedDocumentIds,
+    extractedDocuments,
+    caseMatches,
+  });
 
-  function handleCancelEditCase() {
-    setCompanyNameDraft(selectedCase.applicant);
-    setSaveCaseError(null);
-    setIsEditingCase(false);
-  }
-
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [countError, setCountError] = useState<string | null>(null);
-  const [rejections, setRejections] = useState<{ file: File; issue: FileIssue }[]>([]);
-  const [results, setResults] = useState<BulkUploadItemResult[]>([]);
-  const [justSubmitted, setJustSubmitted] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [documentDetails, setDocumentDetails] = useState<Map<string, DocumentRecord>>(new Map());
-  const [fulfilledRequirements, setFulfilledRequirements] = useState<Set<string>>(new Set());
-  const [proofOfAddressCoverage, setProofOfAddressCoverage] = useState<{
-    covered: number;
-    total: number;
-    unmatched_names: string[];
-  }>({ covered: 0, total: 0, unmatched_names: [] });
-  const [idDocumentCoverage, setIdDocumentCoverage] = useState<{
-    covered: number;
-    total: number;
-    missing_side: string | null;
-  }>({ covered: 0, total: 0, missing_side: null });
+  // Unused field-draft state, kept until the dead code is removed (see PENDING_WORK.md).
   const [fieldDrafts, setFieldDrafts] = useState<Map<string, Record<string, string>>>(new Map());
   const [savingFields, setSavingFields] = useState<Set<string>>(new Set());
   const [saveFieldErrors, setSaveFieldErrors] = useState<Map<string, string>>(new Map());
-  const [wsConnected, setWsConnected] = useState(false);
-  const [approvingDocumentId, setApprovingDocumentId] = useState<string | null>(null);
-  const [approveError, setApproveError] = useState<string | null>(null);
-  const [cancellingDocumentId, setCancellingDocumentId] = useState<string | null>(null);
-  const [cancelActionError, setCancelActionError] = useState<string | null>(null);
-  const [retryingDocumentId, setRetryingDocumentId] = useState<string | null>(null);
-  const [retryActionError, setRetryActionError] = useState<string | null>(null);
-  // Forces a re-render every so often while any document is PROCESSING, so a "Stuck"/Retry-eligible.
-  const [, setStuckTick] = useState(0);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [isDeletingCase, setIsDeletingCase] = useState(false);
-  const [caseDeleteOpen, setCaseDeleteOpen] = useState(false);
-  // Bulk selection.
-  const [selectedDocumentIds, setSelectedDocumentIds] = useState<Set<string>>(new Set());
-  const [documentsToDelete, setDocumentsToDelete] = useState<DocumentRecord[]>([]);
-  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
-  const [isApprovingSelected, setIsApprovingSelected] = useState(false);
-  const [isMoveDialogOpen, setIsMoveDialogOpen] = useState(false);
-  const [caseOptions, setCaseOptions] = useState<CaseOption[] | null>(null);
-  const [isLoadingCaseOptions, setIsLoadingCaseOptions] = useState(false);
-  const [moveTargetCaseId, setMoveTargetCaseId] = useState('');
-  const [isMovingDocuments, setIsMovingDocuments] = useState(false);
-  const [moveError, setMoveError] = useState<string | null>(null);
-  // Case-match result per document (see backend/app/case_match.py), pushed with every case snapshot.
-  const [caseMatches, setCaseMatches] = useState<Map<string, DocumentCaseMatch>>(new Map());
-
-  // A case-match flag needs manual review until an officer approves the document.
-  const caseMatchNeedsReview = useCallback(
-    (document: DocumentRecord) =>
-      document.status !== 'approved' &&
-      caseMatches.get(document.id)?.status === 'manual_review',
-    [caseMatches],
-  );
-
-  const flaggedDocuments = useMemo(() => Array.from(documentDetails.values()).filter((document) => {
-    // Rejecting a document is the officer's final decision, so it's no longer waiting on review.
-    if (document.status === 'rejected') return false;
-    const lowestConfidence = lowestFieldConfidence(document.extracted_fields);
-    return (
-      document.routing_status === 'manual_review' ||
-      (document.status === 'analyzed' && !isClassificationConfirmed(document)) ||
-      (document.status === 'analyzed' && !hasExtractedInformation(document.extracted_fields)) ||
-      caseMatchNeedsReview(document) ||
-      (lowestConfidence != null && lowestConfidence < EXTRACTION_CONFIDENCE_THRESHOLD) ||
-      (document.missing_required_fields?.length ?? 0) > 0
-    );
-  }), [documentDetails, caseMatchNeedsReview]);
-
-  const identityNames = useMemo(
-    () => acceptedIdentityNames(Array.from(documentDetails.values())),
-    [documentDetails],
-  );
-
-  const isMountedRef = useRef(true);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
-  const hasOutcome = results.length > 0 || rejections.length > 0;
-
-  // One WebSocket per case (see caseSocket.ts / backend routers/ws.py) replaces the old per-document.
-  const caseSocketRef = useRef<CaseStatusSubscription | null>(null);
-  useEffect(() => {
-    setWsConnected(false);
-
-    const subscription = subscribeToCaseStatus(
-      selectedCase.id,
-      ({ documents, caseSummary, caseMatch }) => {
-        if (!isMountedRef.current) return;
-
-        setDocumentDetails(new Map(documents.map((document) => [document.id, document])));
-        setCaseMatches(
-          new Map((caseMatch?.documents ?? []).map((match) => [match.document_id, match])),
-        );
-        setFulfilledRequirements(new Set(caseSummary.fulfilled_requirements));
-        setProofOfAddressCoverage(caseSummary.proof_of_address_coverage);
-        setIdDocumentCoverage(caseSummary.id_document_coverage);
-      },
-      (connected) => {
-        if (isMountedRef.current) setWsConnected(connected);
-      },
-    );
-    caseSocketRef.current = subscription;
-
-    return () => {
-      caseSocketRef.current = null;
-      subscription.unsubscribe();
-    };
-  }, [selectedCase.id]);
-
-  const resultByFilename = useMemo(
-    () => new Map(results.map((result) => [result.filename, result])),
-    [results],
-  );
-
-  function handleFiles(files: File[]) {
-    setSelectedFiles((current) => {
-      const combined = [...current, ...files];
-      setCountError(checkFileCount(combined));
-      return combined.slice(0, MAX_BULK_FILES);
-    });
-
-    setResults([]);
-    setRejections([]);
-    setError(null);
-    setJustSubmitted(false);
-  }
-
-  async function handleSubmit() {
-    if (!selectedFiles.length || countError) return;
-
-    setIsSubmitting(true);
-    setError(null);
-    setResults([]);
-    setRejections([]);
-    setJustSubmitted(true);
-
-    try {
-      const { ok, rejected } = await validateFiles(
-        selectedFiles,
-        selectedCase.id,
-      );
-
-      setRejections(rejected);
-
-      if (ok.length === 0) return;
-
-      const response = await uploadDocuments(
-        selectedCase.id,
-        ok.map((validated) => validated.uploadFile),
-      );
-
-      setResults(response.results);
-
-      response.results.forEach((result, index) => {
-        if (result.success) {
-          recordUploadedHash(selectedCase.id, ok[index].hash);
-        }
-      });
-
-      // Wakes the backend's poll loop immediately instead of waiting out its idle interval (up to 30s once.
-      if (response.results.some((result) => result.success)) {
-        caseSocketRef.current?.refresh();
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  async function handleApproveDocument(documentId: string) {
-  setApprovingDocumentId(documentId);
-  setApproveError(null);
-
-  try {
-    const updated = await approveDocument(documentId);
-
-    if (!isMountedRef.current) {
-      return;
-    }
-
-    setDocumentDetails((current) => {
-      const next = new Map(current);
-      next.set(documentId, updated);
-      return next;
-    });
-  } catch (err) {
-    if (!isMountedRef.current) {
-      return;
-    }
-
-    setApproveError(
-      err instanceof Error
-        ? err.message
-        : 'Failed to approve document.',
-    );
-  } finally {
-    if (isMountedRef.current) {
-      setApprovingDocumentId(null);
-    }
-  }
-}
-
-async function handleCancelDocument(documentId: string) {
-  setCancellingDocumentId(documentId);
-  setCancelActionError(null);
-
-  try {
-    const updated = await cancelDocument(documentId);
-
-    if (!isMountedRef.current) {
-      return;
-    }
-
-    setDocumentDetails((current) => {
-      const next = new Map(current);
-      next.set(documentId, updated);
-      return next;
-    });
-  } catch (err) {
-    if (!isMountedRef.current) {
-      return;
-    }
-
-    setCancelActionError(
-      err instanceof Error ? err.message : 'Failed to cancel document.',
-    );
-  } finally {
-    if (isMountedRef.current) {
-      setCancellingDocumentId(null);
-    }
-  }
-}
-
-async function handleRetryDocument(documentId: string) {
-  setRetryingDocumentId(documentId);
-  setRetryActionError(null);
-
-  try {
-    const updated = await retryDocument(documentId);
-
-    if (!isMountedRef.current) {
-      return;
-    }
-
-    setDocumentDetails((current) => {
-      const next = new Map(current);
-      next.set(documentId, updated);
-      return next;
-    });
-  } catch (err) {
-    if (!isMountedRef.current) {
-      return;
-    }
-
-    setRetryActionError(
-      err instanceof Error ? err.message : 'Failed to retry document.',
-    );
-  } finally {
-    if (isMountedRef.current) {
-      setRetryingDocumentId(null);
-    }
-  }
-}
 
   function getFieldDraft(
     documentId: string,
@@ -456,270 +238,6 @@ async function handleRetryDocument(documentId: string) {
       }
     }
   }
-
-  function removeFile(index: number) {
-    setSelectedFiles((files) => files.filter((_, i) => i !== index));
-    setCountError(null);
-    setResults([]);
-    setRejections([]);
-    setError(null);
-    setJustSubmitted(false);
-  }
-
-  async function confirmDeleteCase() {
-    setIsDeletingCase(true);
-    setDeleteError(null);
-
-    try {
-      await deleteCase(selectedCase.id);
-      onCaseDeleted();
-    } catch (err) {
-      setCaseDeleteOpen(false);
-      setDeleteError(err instanceof Error ? err.message : 'Failed to delete case.');
-      setIsDeletingCase(false);
-    }
-  }
-
-  function clearDocumentSelection() {
-    setSelectedDocumentIds(new Set());
-  }
-
-  function toggleDocumentSelected(documentId: string) {
-    setSelectedDocumentIds((current) => {
-      const next = new Set(current);
-      if (next.has(documentId)) {
-        next.delete(documentId);
-      } else {
-        next.add(documentId);
-      }
-      return next;
-    });
-  }
-
-  async function confirmDeleteDocuments() {
-    if (documentsToDelete.length === 0) return;
-
-    const targets = documentsToDelete;
-    setIsBulkDeleting(true);
-    setDeleteError(null);
-
-    try {
-      const result = await bulkDeleteDocuments(targets.map((document) => document.id));
-      const deletedIds = new Set(result.deleted);
-
-      if (deletedIds.size > 0) {
-        setDocumentDetails((current) => {
-          const next = new Map(current);
-          for (const id of deletedIds) next.delete(id);
-          return next;
-        });
-        setCaseMatches((current) => {
-          const next = new Map(current);
-          for (const id of deletedIds) next.delete(id);
-          return next;
-        });
-        setSelectedDocumentIds((current) => {
-          const next = new Set(current);
-          for (const id of deletedIds) next.delete(id);
-          return next;
-        });
-        caseSocketRef.current?.refresh();
-      }
-
-      if (result.failed.length > 0) {
-        setDeleteError(
-          result.failed.length === targets.length
-            ? 'Failed to delete the selected document(s).'
-            : `${result.failed.length} of ${targets.length} documents could not be deleted.`,
-        );
-      }
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : 'Failed to delete the selected document(s).');
-    }
-
-    setDocumentsToDelete([]);
-    setIsBulkDeleting(false);
-  }
-
-  function handleSelectAllEligible() {
-    setSelectedDocumentIds(
-      new Set(
-        extractedDocuments
-          .filter((document) => isEligibleForApproval(document, caseMatches))
-          .map((document) => document.id),
-      ),
-    );
-  }
-
-  async function handleApproveSelected() {
-    const eligible = extractedDocuments.filter(
-      (document) => selectedDocumentIds.has(document.id) && isEligibleForApproval(document, caseMatches),
-    );
-    if (eligible.length === 0) return;
-
-    setIsApprovingSelected(true);
-    setApproveError(null);
-
-    try {
-      const updatedDocuments = await Promise.all(
-        eligible.map((document) => approveDocument(document.id)),
-      );
-      if (!isMountedRef.current) return;
-
-      setDocumentDetails((current) => {
-        const next = new Map(current);
-        for (const updated of updatedDocuments) next.set(updated.id, updated);
-        return next;
-      });
-      setSelectedDocumentIds((current) => {
-        const next = new Set(current);
-        for (const updated of updatedDocuments) next.delete(updated.id);
-        return next;
-      });
-    } catch (err) {
-      if (!isMountedRef.current) return;
-      setApproveError(err instanceof Error ? err.message : 'Failed to approve selected documents.');
-    } finally {
-      if (isMountedRef.current) setIsApprovingSelected(false);
-    }
-  }
-
-  async function openMoveDialog() {
-    setMoveError(null);
-    setMoveTargetCaseId('');
-    setIsMoveDialogOpen(true);
-    if (caseOptions !== null) return;
-
-    setIsLoadingCaseOptions(true);
-    try {
-      const options = await listCaseOptions();
-      if (isMountedRef.current) {
-        setCaseOptions(options.filter((option) => option.id !== selectedCase.id));
-      }
-    } catch (err) {
-      if (isMountedRef.current) {
-        setMoveError(err instanceof Error ? err.message : 'Failed to load cases.');
-      }
-    } finally {
-      if (isMountedRef.current) setIsLoadingCaseOptions(false);
-    }
-  }
-
-  async function confirmMoveSelected() {
-    if (!moveTargetCaseId) return;
-
-    const eligible = extractedDocuments.filter(
-      (document) =>
-        selectedDocumentIds.has(document.id) &&
-        TERMINAL_DOCUMENT_STATUSES.has(document.status) &&
-        // Locked once rejected — the backend refuses the move too.
-        document.status !== 'rejected',
-    );
-    if (eligible.length === 0) {
-      setIsMoveDialogOpen(false);
-      return;
-    }
-
-    setIsMovingDocuments(true);
-    setMoveError(null);
-
-    try {
-      const result = await bulkMoveDocuments(eligible.map((document) => document.id), moveTargetCaseId);
-      const movedIds = new Set(result.moved);
-
-      if (movedIds.size > 0) {
-        setDocumentDetails((current) => {
-          const next = new Map(current);
-          for (const id of movedIds) next.delete(id);
-          return next;
-        });
-        setCaseMatches((current) => {
-          const next = new Map(current);
-          for (const id of movedIds) next.delete(id);
-          return next;
-        });
-        setSelectedDocumentIds((current) => {
-          const next = new Set(current);
-          for (const id of movedIds) next.delete(id);
-          return next;
-        });
-        caseSocketRef.current?.refresh();
-      }
-
-      if (result.failed.length > 0) {
-        setMoveError(
-          result.failed.length === eligible.length
-            ? 'Failed to move the selected document(s).'
-            : `${result.failed.length} of ${eligible.length} documents could not be moved.`,
-        );
-      } else {
-        setIsMoveDialogOpen(false);
-      }
-    } catch (err) {
-      setMoveError(err instanceof Error ? err.message : 'Failed to move the selected document(s).');
-    }
-
-    setIsMovingDocuments(false);
-  }
-
-  const documents = useMemo(
-    () =>
-      Array.from(documentDetails.values()).sort((a, b) =>
-        a.uploaded_at.localeCompare(b.uploaded_at),
-      ),
-    [documentDetails],
-  );
-
-  const anyDocumentProcessing = useMemo(
-    () => documents.some((document) => document.status === 'processing'),
-    [documents],
-  );
-  // Mirrors routers/cases.py's delete_case guard: blocked while any document is still in flight.
-  const caseHasInFlightDocument = useMemo(
-    () => documents.some((document) => !TERMINAL_DOCUMENT_STATUSES.has(document.status)),
-    [documents],
-  );
-  useEffect(() => {
-    if (!anyDocumentProcessing) {
-      return;
-    }
-    const interval = window.setInterval(() => setStuckTick((n) => n + 1), 15000);
-    return () => window.clearInterval(interval);
-  }, [anyDocumentProcessing]);
-
-  const extractedDocuments = useMemo(
-    () => documents.filter((document) => document.status !== 'approved'),
-    [documents],
-  );
-
-  const approvedDocuments = useMemo(
-    () => documents.filter((document) => document.status === 'approved'),
-    [documents],
-  );
-
-  const selectedExtractedDocuments = useMemo(
-    () => extractedDocuments.filter((document) => selectedDocumentIds.has(document.id)),
-    [extractedDocuments, selectedDocumentIds],
-  );
-  const allExtractedSelected =
-    extractedDocuments.length > 0 && selectedExtractedDocuments.length === extractedDocuments.length;
-  const eligibleForApprovalCount = useMemo(
-    () => extractedDocuments.filter((document) => isEligibleForApproval(document, caseMatches)).length,
-    [extractedDocuments, caseMatches],
-  );
-  const selectedApprovableCount = useMemo(
-    () => selectedExtractedDocuments.filter((document) => isEligibleForApproval(document, caseMatches)).length,
-    [selectedExtractedDocuments, caseMatches],
-  );
-  const selectedMovableOrDeletableCount = useMemo(
-    () => selectedExtractedDocuments.filter((document) => TERMINAL_DOCUMENT_STATUSES.has(document.status)).length,
-    [selectedExtractedDocuments],
-  );
-
-  const completedCount = results.length + rejections.length;
-  const successfulCount = results.filter((result) => result.success).length;
-  const failedCount =
-    results.filter((result) => !result.success).length + rejections.length;
 
   return (
     <main className="shell shell--upload">

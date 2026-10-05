@@ -68,19 +68,16 @@ Not started, no urgency until the Cloud Native award work picks up:
 
 ## Frontend structure
 
-- **Move page state and handlers into custom hooks** — the main open item. `DocumentDetailsPage.tsx` and
-  `UploadPage.tsx` are still ~970 lines each, mostly `useState` and handler functions. Planned split:
-  - Details page: `useDocumentLoader` (load, WebSocket, stuck recheck), `useFieldEditing` (draft, save, add and
-    delete field), `useDetection` (report, trace, cancel, retry, individual checks), `useDocumentActions` (approve,
-    reject, cancel, retry, delete, type save).
-  - Upload page: `useUploadSelection` (files, submit), `useCaseDocuments` (documents, WebSocket, case matches,
-    coverage), `useBulkActions` (selection, approve, delete, move), `useCaseEditing`.
-  - Payoff: cards currently take 20+ props each (`ExtractedInformationCard`, `DocumentListPanel`). Hooks would let
-    them read state directly. Verify with `tsc`, `npm run build`, and the `document-review`, `upload`,
-    `case-management` and `checklist` specs.
+- **Page state moved into hooks (done)** — `DocumentDetailsPage.tsx` (~570 lines) uses `useDocumentRecord`,
+  `useDocumentCaseMatch`, `useFieldEditing`, `useDocumentTypeEditing`, `useDetection`, `useLangGraphTrace` and
+  `useDocumentActions` in `pages/document-details/`. `UploadPage.tsx` (~510 lines) uses `useCaseSnapshot`,
+  `useCaseSettings`, `useUploadSelection`, `useDocumentSelection` and `useDocumentActions` in `pages/upload/`.
+  Still open: the cards take many props (`ExtractedInformationCard`, `DocumentListPanel`), which could now be
+  grouped or read from hooks. Verify with `tsc`, `npm run build`, and the `document-review`, `upload`,
+  `case-management` and `checklist` specs.
 - **Dead code in `UploadPage.tsx`** (deferred): `isExtractionNotConfiguredFailure`, `structuredFieldEntries`,
   `REQUIREMENT_LABELS`, `formatFieldValue`, plus `savingFields`, `saveFieldErrors`, `setFieldDraftValue`,
-  `saveFieldDraft`, `handleApproveDocument`, `isApproving`. Remove when the hooks move.
+  `saveFieldDraft`, `isApproving`. The hooks have moved, so these can be removed next.
 - **Frontend mirrors backend thresholds** — `CLASSIFICATION_CONFIDENCE_THRESHOLD`, `EXTRACTION_CONFIDENCE_THRESHOLD`
   and the stuck timeouts are hardcoded in `services/uploadService/documentStatus.ts`. A backend change silently
   disagrees with the UI. Serve them from the backend with the case or config payload.
