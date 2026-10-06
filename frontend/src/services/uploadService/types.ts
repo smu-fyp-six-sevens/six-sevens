@@ -36,6 +36,7 @@ export interface DocumentRecord {
   metadata: Record<string, unknown> | null;
   // Only present on documents pushed via the case-status websocket.
   has_detection_report?: boolean;
+  has_detection_error?: boolean;
 }
 
 // Mirrors DocumentCaseMatch / CaseMatchResult in backend/app/case_match.py.
@@ -74,7 +75,7 @@ export interface CaseMatchResult {
 }
 
 // A document sitting in APPROVED status is, from an officer's point of view, still doing something.
-export type DocumentDetectionStage = 'scanning' | 'detected' | 'skipped' | null;
+export type DocumentDetectionStage = 'scanning' | 'detected' | 'skipped' | 'failed' | null;
 
 // Mirrors the subset of CaseSummary in backend/app/models.py this page needs.
 export interface CaseRequirementCoverage {

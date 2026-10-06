@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
+from app.langgraph.detection.binder import BindingResult
 from app.fraud_detection.font_consistency import ExtractedField, FontConsistencyResult
 from app.fraud_detection.image_manipulation import (
     ImageManipulationResult,
@@ -13,10 +14,6 @@ from app.fraud_detection.image_manipulation import (
 )
 from app.fraud_detection.metadata_analysis import MetadataAnalysisResult
 from app.fraud_detection.layout_anomalies import CheckAssessment, LayoutAnomalyResult
-from app.fraud_detection.numerical_validation import (
-    BenfordAnalysis,
-    NumericalValidationResult,
-)
 from app.fraud_detection.date_anomalies import DateAnomalyResult
 from app.fraud_detection.spelling_anomaly import SpellingAnomaly, SpellingAnomalyResult
 from app.main import app
@@ -345,22 +342,6 @@ def test_get_metadata_anomaly_document_not_found() -> None:
     mock_check.assert_not_called()
 
 
-def _numerical_result() -> NumericalValidationResult:
-    return NumericalValidationResult(
-        document_id="doc-1",
-        values_analysed=12,
-        skipped_checks=[],
-        findings=[],
-        benford=BenfordAnalysis(
-            sample_size=0,
-            digits=[],
-            unable_to_assess=True,
-            unable_to_assess_reason="Too few values",
-        ),
-        unable_to_assess=False,
-    )
-
-
 def test_get_numerical_validation_passes_extracted_fields_and_document_type() -> None:
     fields = [
         ExtractedField(
@@ -371,8 +352,8 @@ def test_get_numerical_validation_passes_extracted_fields_and_document_type() ->
         patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.extracted_fields_repository") as mock_fields,
         patch(
-            "app.routers.detection.check_numerical_validation",
-            return_value=_numerical_result(),
+            "app.routers.detection.bind_numerical_checks",
+            new=AsyncMock(return_value=BindingResult()),
         ) as mock_check,
         patch("app.routers.detection.langgraph_trace") as mock_trace,
     ):
@@ -383,11 +364,11 @@ def test_get_numerical_validation_passes_extracted_fields_and_document_type() ->
         response = client.get("/documents/doc-1/detection/numerical-validation")
 
     assert response.status_code == 200
-    assert response.json()["values_analysed"] == 12
+    assert response.json()["values_analysed"] == 0
     # No file download — works from extracted_fields and document_type alone.
     args = mock_check.call_args[0]
+    assert args[0] == "bank_statement"
     assert args[1] == fields
-    assert args[2] == "bank_statement"
 
 
 def test_get_numerical_validation_degrades_when_fields_fetch_fails() -> None:
@@ -395,8 +376,8 @@ def test_get_numerical_validation_degrades_when_fields_fetch_fails() -> None:
         patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.extracted_fields_repository") as mock_fields,
         patch(
-            "app.routers.detection.check_numerical_validation",
-            return_value=_numerical_result(),
+            "app.routers.detection.bind_numerical_checks",
+            new=AsyncMock(return_value=BindingResult()),
         ) as mock_check,
         patch("app.routers.detection.langgraph_trace") as mock_trace,
     ):
@@ -408,6 +389,7 @@ def test_get_numerical_validation_degrades_when_fields_fetch_fails() -> None:
 
     assert response.status_code == 200
     assert mock_check.call_args[0][1] == []
+    assert response.json()["values_analysed"] == 0
 
 
 def test_get_numerical_validation_writes_nothing() -> None:
@@ -415,8 +397,8 @@ def test_get_numerical_validation_writes_nothing() -> None:
         patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.extracted_fields_repository") as mock_fields,
         patch(
-            "app.routers.detection.check_numerical_validation",
-            return_value=_numerical_result(),
+            "app.routers.detection.bind_numerical_checks",
+            new=AsyncMock(return_value=BindingResult()),
         ),
         patch("app.routers.detection.langgraph_trace") as mock_trace,
     ):
@@ -434,7 +416,7 @@ def test_get_numerical_validation_writes_nothing() -> None:
 def test_get_numerical_validation_fetch_and_not_found_errors() -> None:
     with (
         patch("app.routers._dependencies.document_repository") as mock_repo,
-        patch("app.routers.detection.check_numerical_validation") as mock_check,
+        patch("app.routers.detection.bind_numerical_checks", new=AsyncMock(return_value=BindingResult())) as mock_check,
     ):
         mock_repo.get_document.side_effect = RuntimeError("db down")
         assert (
@@ -444,7 +426,7 @@ def test_get_numerical_validation_fetch_and_not_found_errors() -> None:
 
     with (
         patch("app.routers._dependencies.document_repository") as mock_repo,
-        patch("app.routers.detection.check_numerical_validation") as mock_check,
+        patch("app.routers.detection.bind_numerical_checks", new=AsyncMock(return_value=BindingResult())) as mock_check,
     ):
         mock_repo.get_document.return_value = None
         assert (
@@ -830,3 +812,31 @@ def test_individual_checks_refused_for_unrecognised_document() -> None:
     assert response.json()["detail"] == "Detection doesn't run on unrecognised documents."
     mock_m.assert_not_called()
     mock_t.assert_not_called()
+
+
+def test_get_numerical_validation_reports_a_binder_failure_and_still_runs() -> None:
+    fields = [
+        ExtractedField(field_name="total_assets", field_type="number", field_value="1000", confidence=0.95),
+        ExtractedField(field_name="total_liabilities", field_type="number", field_value="400", confidence=0.95),
+        ExtractedField(field_name="total_equity", field_type="number", field_value="500", confidence=0.95),
+    ]
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch("app.routers.detection.extracted_fields_repository") as mock_fields,
+        patch(
+            "app.routers.detection.bind_numerical_checks",
+            new=AsyncMock(return_value=BindingResult(error="api down")),
+        ),
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
+    ):
+        mock_repo.get_document.return_value = _document(document_type="source_of_wealth")
+        mock_fields.get_extracted_fields.return_value = fields
+        _mark_detection_already_ran(mock_trace)
+
+        response = client.get("/documents/doc-1/detection/numerical-validation")
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["binding_error"] == "api down"
+    # Exact-name matches still run: the balance identity is off by 100.
+    assert [f["check_code"] for f in body["findings"]] == ["FS.BALANCES"]

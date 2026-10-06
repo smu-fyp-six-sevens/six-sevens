@@ -8,6 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from .. import case_service, document_repository, extracted_fields_repository, monitoring, storage_service
+from ..extracted_fields_repository import normalise_field_name
 from ..case_broadcaster import broadcaster
 
 from ._dependencies import get_document_or_404
@@ -552,7 +553,7 @@ async def add_extracted_field(
     so their confidence is automatically set to 1.0.
     """
     _ensure_unlocked(document, "edited")
-    field_name = request.field_name.strip()
+    field_name = normalise_field_name(request.field_name)
 
     if not field_name:
         raise HTTPException(

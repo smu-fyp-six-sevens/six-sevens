@@ -251,3 +251,24 @@ def test_delete_fields_for_documents_is_a_noop_for_an_empty_list() -> None:
         extracted_fields_repository.delete_fields_for_documents([])
 
     mock_service.assert_not_called()
+
+
+def test_normalise_field_name_lowercases_and_joins_with_underscores() -> None:
+    normalise = extracted_fields_repository.normalise_field_name
+    assert normalise("Total Equity (SGD)") == "total_equity_sgd"
+    assert normalise("  Share   Capital ") == "share_capital"
+    assert normalise("Revenue - 2026") == "revenue_2026"
+    assert normalise("!!!") == ""
+
+
+def test_infer_field_type_guesses_from_text_values() -> None:
+    infer = extracted_fields_repository._infer_field_type
+    assert infer("2,729,000") == "number"
+    assert infer("(1,000.00)") == "number"
+    assert infer("-5") == "number"
+    assert infer("true") == "boolean"
+    assert infer("2026-10-06") == "date"
+    assert infer("06/10/2026") == "date"
+    assert infer("Acme Pte Ltd") == "string"
+    assert infer("NaN") == "string"
+    assert infer(42) == "number"

@@ -258,7 +258,7 @@ export default function DocumentDetailsPage({
 
   const hasDetectionReport = detectionReport !== null;
   const detectionStage = document
-    ? documentDetectionStage(document.status, hasDetectionReport, document.document_type)
+    ? documentDetectionStage(document.status, hasDetectionReport, document.document_type, document.has_detection_error ?? false)
     : null;
   const detectionSkipped = skipsDetection(document?.document_type);
 

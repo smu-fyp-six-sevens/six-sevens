@@ -25,10 +25,9 @@ from ..fraud_detection.image_manipulation import (
 )
 from ..fraud_detection.metadata_analysis import MetadataAnalysisResult, check_metadata_anomalies
 from ..fraud_detection.layout_anomalies import LayoutAnomalyResult, check_layout_anomalies
-from ..fraud_detection.numerical_validation import (
-    NumericalValidationResult,
-    check_numerical_validation,
-)
+from ..fraud_detection.numerical_validation.models import NumericalValidationResult
+from ..fraud_detection.numerical_validation.runner import build_result, run_numerical_checks
+from ..langgraph.detection.binder import bind_numerical_checks
 from ..fraud_detection.date_anomalies import (
     DateAnomalyResult,
     check_date_anomalies,
@@ -353,12 +352,11 @@ async def get_numerical_validation(
     confirmed value metadata_analysis uses for its own type-scoped rules.
     """
     extracted_fields = await _fetch_extracted_fields(document_id)
-    result = await asyncio.to_thread(
-        check_numerical_validation,
-        document_id,
-        extracted_fields,
-        document.document_type,
+    bound = await bind_numerical_checks(document.document_type, extracted_fields)
+    outcome = await asyncio.to_thread(
+        run_numerical_checks, document.document_type, extracted_fields, bound.bindings,
     )
+    result = build_result(document_id, document.document_type, extracted_fields, outcome, bound.error)
     await _trace_check(
         document_id, "check_numerical_validation",
         unable_to_assess=result.unable_to_assess, finding_count=len(result.findings),

@@ -405,10 +405,12 @@ export function DocumentListPanel({
 
                         {approvedDocuments.map((document) => {
                           const hasDetectionReport = document.has_detection_report ?? false;
+                          const hasDetectionError = document.has_detection_error ?? false;
                           const detectionStage = documentDetectionStage(
                             document.status,
                             hasDetectionReport,
                             document.document_type,
+                            hasDetectionError,
                           );
 
                           return (
@@ -445,11 +447,12 @@ export function DocumentListPanel({
                                   }`}
                                 />
                                 <span>
-                                  {formatDocumentStatusLabel(document.status, hasDetectionReport, document.document_type)}
+                                  {formatDocumentStatusLabel(document.status, hasDetectionReport, document.document_type, hasDetectionError)}
                                   {isDocumentStatusInProgress(
                                     document.status,
                                     hasDetectionReport,
                                     document.document_type,
+                                    hasDetectionError,
                                   ) && '…'}
                                 </span>
                               </span>

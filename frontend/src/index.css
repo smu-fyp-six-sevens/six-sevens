@@ -3061,6 +3061,20 @@ h1 {
   color: #d33b3b;
 }
 
+.collapse-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #17294d;
+  font-size: 14px;
+  cursor: pointer;
+}
+
 .review-description {
   margin: -4px 0 18px;
   color: #63708a;

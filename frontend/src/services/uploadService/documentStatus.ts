@@ -158,6 +158,7 @@ export function documentDetectionStage(
   status: string,
   hasDetectionReport: boolean,
   documentType?: string | null,
+  hasDetectionError = false,
 ): DocumentDetectionStage {
   if (status !== 'approved') {
     return null;
@@ -165,17 +166,22 @@ export function documentDetectionStage(
   if (hasDetectionReport) {
     return 'detected';
   }
-  return skipsDetection(documentType) ? 'skipped' : 'scanning';
+  if (skipsDetection(documentType)) {
+    return 'skipped';
+  }
+  return hasDetectionError ? 'failed' : 'scanning';
 }
 
 export function formatDocumentStatusLabel(
   status: string,
   hasDetectionReport: boolean,
   documentType?: string | null,
+  hasDetectionError = false,
 ): string {
-  const stage = documentDetectionStage(status, hasDetectionReport, documentType);
+  const stage = documentDetectionStage(status, hasDetectionReport, documentType, hasDetectionError);
   if (stage === 'scanning') return 'Scanning';
   if (stage === 'detected') return 'Detected';
+  if (stage === 'failed') return 'Detection failed';
   return formatDocumentStatus(status);
 }
 
@@ -184,9 +190,14 @@ export function isDocumentStatusInProgress(
   status: string,
   hasDetectionReport: boolean,
   documentType?: string | null,
+  hasDetectionError = false,
 ): boolean {
-  if (documentDetectionStage(status, hasDetectionReport, documentType) === 'scanning') {
+  const stage = documentDetectionStage(status, hasDetectionReport, documentType, hasDetectionError);
+  if (stage === 'scanning') {
     return true;
+  }
+  if (stage === 'failed') {
+    return false;
   }
   return !TERMINAL_DOCUMENT_STATUSES.has(status);
 }

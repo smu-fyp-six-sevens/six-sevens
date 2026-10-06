@@ -173,8 +173,6 @@ async def load_context_node(state: DetectionState) -> dict:
         "document_type": document.document_type or "unknown",
         "filename": document.filename,
         "has_extracted_fields": bool(fields),
-        "extracted_field_names": [f.field_name for f in fields][:30],
-        "has_embedded_metadata": bool(document.metadata),
         "file_extension": os.path.splitext(document.filename or "")[1].lower(),
     }
     return {"context": context}
@@ -230,6 +228,7 @@ async def specialist_node(payload: dict) -> dict:
         payload["document_id"], "detection_specialist",
         specialist=payload["name"], tools_called=report["tools_called"],
         finding_count=len(report["findings"]), dismissed=report["dismissed"], uncertain=report["uncertain"],
+        tool_calls=report["tool_calls"],
     )
     return {"reports": [report]}
 
@@ -460,7 +459,8 @@ async def run_detection(document_id: str) -> dict:
     """Investigates one document and returns the combined report. Raises DetectionError if it can't be investigated."""
     logger.info("Document %s: detection run starting", document_id)
     await asyncio.to_thread(trace.resume, document_id)
-    trace.record(document_id, "detection_start")
+    # Clears an error left by an earlier failed attempt, so a retry doesn't read as failed while running.
+    trace.record(document_id, "detection_start", detection_error=None)
     with telemetry.get_tracer().start_as_current_span("detection.run") as span:
         span.set_attribute("document_id", document_id)
         try:

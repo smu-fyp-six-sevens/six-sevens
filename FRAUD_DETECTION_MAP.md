@@ -31,7 +31,7 @@ findings it dismisses.
 | File | Dimension | Tests |
 |---|---|---|
 | `layout_anomalies.py` | Indentation/alignment/margin/spacing deviations + text overlay | 112 |
-| `numerical_validation.py` | Deterministic arithmetic/identity checks over extracted fields (balances, totals) | 88 |
+| `numerical_validation/` | Deterministic arithmetic/identity checks over extracted fields. Package: `registry.py` (the `@check` decorator; each check's inputs come from its signature), `identity_company.py`, `statements.py`, `records.py`, `casts.py` (statement arithmetic), `common.py`, `models.py`, `runner.py` (applies bindings and builds the result) | — |
 | `metadata_analysis.py` | File-embedded metadata (author/producer/create-modify dates) tamper signals | 54 |
 | `date_anomalies.py` | Date extraction/labeling and logical date consistency (future dates, end-before-start) | 38 |
 | `spelling_anomaly.py` | Misspellings via SymSpell, filtered against `domain_terms.py` allow-list | 24 |
@@ -55,15 +55,17 @@ fraud detection per its own docstring.
 
 ## 2. Detection Agent — files
 
-- **`tools.py`** — 8 tools, each a thin adapter onto a deterministic check in `fraud_detection/*.py`.
+- **`tools.py`** — 7 tools, each a thin adapter onto a deterministic check in `fraud_detection/*.py`.
   Every tool returns the same shape (`tool`, `unable_to_assess`, `reason`, `findings`, `truncated`).
   Findings are capped at 15 per tool. A check's own severity is passed through as `severity_hint`,
   kept separate from the specialist's own `info/low/medium/high` scale.
-  `numerical_validation_tool` runs every numerical check that applies to the document's type. It
-  replaced the older `transaction_balance_tool`, which no longer exists.
+  The numerical checks run through `numerical_checks_tool` (`langgraph/detection/field_tools.py`, which calls `fraud_detection/numerical_validation/runner.py`).
+  The model binds each check's roles to document fields and, for row roles, row indices. Document
+  type comes from the run state. A check with unbound roles is skipped with the reason.
 - **`specialists.py`** — the three specialists and their tool sets:
   - Layout & Rendering: font consistency, layout anomalies, image manipulation, image tampering.
-  - Content Validation: spelling, date consistency, numerical validation.
+  - Content Validation: spelling, date consistency, and `numerical_checks_tool`. It also gets the document's
+    field list and the checks that apply, with the roles each one reads, in its prompt.
   - Digital Authenticity: metadata.
   Each specialist is a tool-calling loop (agent, tools, collect). "Collect" merges tool results with
   the LLM's assessments. A finding the LLM doesn't assess is still kept, marked `medium`.
@@ -128,7 +130,7 @@ Node details:
 - **`load_context_node`**: loads the document with `include_fields=False`. Raises `DetectionError` if the
   row or `storage_path` is missing. Loads extracted field names (first 30); a failure here is logged and
   tolerated. Builds `context` with `document_type`, `filename`, `has_extracted_fields`,
-  `extracted_field_names`, `has_embedded_metadata` and `file_extension`.
+  and `file_extension`. The lead gets no field names.
 - **`lead_plan_node`**: calls `_ask_lead(_PLAN_SYSTEM_PROMPT, {"document": context})`. The result goes
   through `_normalise_plan`, which keeps the brief for each specialist. A missing or blank brief becomes
   "Review this document within your expertise." The trace event `detection_plan` records the briefs.
@@ -279,7 +281,7 @@ Specialist to tool map (`specialists.py:42`):
 | Specialist | Tools |
 |---|---|
 | `layout_rendering` | `font_consistency_tool`, `layout_anomalies_tool`, `image_manipulation_tool`, `image_tampering_tool` |
-| `content_validation` | `spelling_tool`, `date_consistency_tool`, `numerical_validation_tool` |
+| `content_validation` | `spelling_tool`, `date_consistency_tool`, `numerical_checks_tool` |
 | `digital_authenticity` | `metadata_tool` |
 
 ### 2A.8 Trace events and telemetry
@@ -332,7 +334,7 @@ them.
 ## 3. API surface — `backend/app/routers/detection.py`
 
 - `GET /documents/{id}/detection/{font-consistency, layout-anomalies, image-manipulation,
-  image-tampering, image-integrity, spelling-anomaly, numerical-validation, date-anomalies,
+  image-tampering, image-integrity, spelling-anomaly, numerical-validation (one Haiku call binds the check inputs, `langgraph/detection/binder.py`), date-anomalies,
   metadata-anomaly}` — individual checks, gated by `_require_detection_has_run`: 409 until a
   `detection_report` exists for the document.
 - `GET /documents/{id}/detection/report` — 200 with the report; 502 if the last run recorded an
@@ -357,11 +359,11 @@ There is **no** `POST /detection/run`. The first run only starts automatically o
 
 ## 5. Test coverage — `backend/tests/`
 
-- `test_detection.py` (35) — the `routers/detection.py` endpoints.
-- `test_detection_tools.py` (10) — the tool result contract.
-- `test_langgraph.py` (40) — the whole pipeline. Only one test touches detection, and it only checks
-  that the graph compiles.
-- The check modules in §1 have their own tests (counts there, as recorded on 2026-10-01).
+- `test_detection.py` — the `routers/detection.py` endpoints.
+- `test_detection_tools.py` — the tool result contract.
+- `test_langgraph.py` — the whole pipeline. Only one test touches detection, and it only checks that the graph compiles.
+- `test_numerical_validation.py`, `test_statement_casts.py`, `test_numerical_binder.py` — the numerical checks, statement casts and the binder.
+- The other check modules in §1 have their own test files.
 
 Not tested: the lead plan, the merge into a verdict, the second-look rules, specialist report
 collection, and the new bugs in §6. Those are the main gap in this area.

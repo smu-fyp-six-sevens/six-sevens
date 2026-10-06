@@ -12,3 +12,8 @@ export function humanizeFieldKey(key: string): string {
     )
     .join(' ');
 }
+
+// Mirrors backend normalise_field_name: 'Total Equity (SGD)' -> 'total_equity_sgd'.
+export function normaliseFieldName(name: string): string {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}

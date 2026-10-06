@@ -37,7 +37,6 @@ from ...fraud_detection.font_consistency import check_font_consistency
 from ...fraud_detection.image_manipulation import check_image_manipulation, check_image_tampering
 from ...fraud_detection.layout_anomalies import check_layout_anomalies
 from ...fraud_detection.metadata_analysis import check_metadata_anomalies
-from ...fraud_detection.numerical_validation import check_numerical_validation
 from ...fraud_detection.spelling_anomaly import check_spelling_anomalies
 
 logger = logging.getLogger("classifier_pipeline.langgraph.detection.tools")
@@ -75,6 +74,11 @@ async def _extracted_fields(document_id: str) -> list:
             logger.exception("Failed to fetch extracted fields for document %s", document_id)
             entry["fields"] = []
     return entry["fields"]
+
+
+async def document_fields(document_id: str) -> list:
+    """The document's extracted fields, fetched once per run."""
+    return await _extracted_fields(document_id)
 
 
 async def _file_bytes(document_id: str) -> bytes | None:
@@ -248,37 +252,6 @@ async def date_consistency_tool(document_id: Annotated[str, InjectedState("docum
         for finding in result.findings
     ]
     return _result("date_consistency_tool", _with_ids("date_consistency_tool", findings))
-
-
-@tool
-async def numerical_validation_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
-    """Runs every numerical/format/reconciliation check that applies to this document's type and reports every discrepancy found — e.g. a bank statement's running balance and Benford's Law distribution, a Source of Wealth financial statement's income-statement/balance-sheet casting and rollforwards, a payslip's CPF arithmetic, a credit report's internal consistency, an NRIC checksum or UEN format, a passport's MRZ checkdigits, a FATCA TIN format. Which checks actually run is decided inside this tool from the document's own type — you don't need to know which ones apply."""
-    document = await _document(document_id)
-    if document is None:
-        return _result("numerical_validation_tool", [], unable="Document not found")
-
-    fields = await _extracted_fields(document_id)
-    result = await asyncio.to_thread(
-        check_numerical_validation, document_id, fields, document.document_type
-    )
-    if result.unable_to_assess:
-        return _result(
-            "numerical_validation_tool", [], unable=result.unable_to_assess_reason or "Unable to assess"
-        )
-
-    findings = [
-        {
-            "check_code": finding.check_code,
-            "severity_hint": finding.severity,
-            "field": finding.field,
-            "stated": finding.stated,
-            "expected": finding.expected,
-            "needs_review": finding.needs_review,
-            "summary": finding.summary,
-        }
-        for finding in result.findings
-    ]
-    return _result("numerical_validation_tool", _with_ids("numerical_validation_tool", findings))
 
 
 # --- Digital Authenticity ---------------------------------------------------
