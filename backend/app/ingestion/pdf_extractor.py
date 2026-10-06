@@ -1,6 +1,22 @@
+import re
 from typing import Iterable, cast
 
 import pymupdf
+
+# sort=True pads the gap between columns with spaces; a long run carries no
+# meaning beyond "next column", and would otherwise inflate every LLM prompt.
+_COLUMN_GAP_RE = re.compile(r"[ \t]{3,}")
+
+
+def _page_text(page: pymupdf.Page) -> str:
+    """
+    Text in on-page reading order (top to bottom, left to right), not the
+    order it's stored in the file. An edited PDF stores the new text at the
+    end of the page, so file order strands a value away from its label and
+    the text-only extraction step can't pair them.
+    """
+    text = cast(str, page.get_text("text", sort=True))
+    return "\n".join(_COLUMN_GAP_RE.sub("   ", line).rstrip() for line in text.splitlines())
 
 
 def extract_pdf(file_bytes: bytes):
@@ -20,7 +36,7 @@ def extract_pdf(file_bytes: bytes):
 
         page_number = page_index + 1
 
-        page_text = page.get_text("text")
+        page_text = _page_text(page)
 
         page_dict = page.get_text("dict")
 

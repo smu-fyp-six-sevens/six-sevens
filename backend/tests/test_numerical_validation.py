@@ -115,11 +115,67 @@ def test_unable_to_assess_when_nothing_at_all_extracted() -> None:
     assert result.unable_to_assess is True
 
 
-def test_reference_data_checks_skip_when_no_table_configured() -> None:
-    assert REFERENCE_DATA["bank_identifiers"] == {}
-    result = _run([_field("bank_name", "OCBC")], document_type="bank_statement")
+def test_bank_identifiers_skip_a_bank_not_in_the_reference_table() -> None:
+    result = _run(
+        [_field("bank_name", "Bank of Atlantis"), _field("bank_registration_no", "199900001A")],
+        document_type="bank_statement",
+    )
     skip = next(s for s in result.skipped_checks if s.check_code == "BS.BANK_IDENTIFIERS")
     assert "not configured" in skip.reason
+
+
+def test_bank_identifiers_accept_the_real_registration_number_under_any_name_form() -> None:
+    for name in ("OCBC Bank", "OVERSEA-CHINESE BANKING CORPORATION LIMITED", "Oversea-Chinese Banking Corporation Limited"):
+        result = _run(
+            [_field("bank_name", name), _field("bank_registration_no", "193200032W")],
+            document_type="bank_statement",
+        )
+        assert _codes(result, "BS.BANK_IDENTIFIERS") == [], name
+
+
+def test_bank_identifiers_flag_a_wrong_registration_number() -> None:
+    result = _run(
+        [_field("bank_name", "OCBC Bank"), _field("bank_registration_no", "Co.Reg.no.:196800000R")],
+        document_type="bank_statement",
+    )
+    findings = _codes(result, "BS.BANK_IDENTIFIERS")
+    assert len(findings) == 1
+    assert findings[0].expected == "193200032W"
+
+
+def test_bank_identifiers_treat_posb_as_dbs() -> None:
+    ok = _run(
+        [_field("bank_name", "POSB"), _field("bank_registration_no", "196800306E"),
+         _field("bic_code", "DBSSSGSGXXX")],
+        document_type="bank_statement",
+    )
+    wrong = _run(
+        [_field("bank_name", "POSB"), _field("bank_registration_no", "199900001A")],
+        document_type="bank_statement",
+    )
+    assert _codes(ok, "BS.BANK_IDENTIFIERS") == []
+    assert len(_codes(wrong, "BS.BANK_IDENTIFIERS")) == 1
+
+
+def test_bank_identifiers_accept_an_11_character_bic_with_the_head_office_suffix() -> None:
+    result = _run(
+        [_field("bank_name", "OCBC Bank"), _field("bic_code", "OCBCSGSGXXX")],
+        document_type="bank_statement",
+    )
+    assert _codes(result, "BS.BANK_IDENTIFIERS") == []
+
+
+def test_bank_identifiers_flag_another_banks_bic() -> None:
+    result = _run(
+        [_field("bank_name", "OCBC Bank"), _field("bic_code", "DBSSSGSGXXX")],
+        document_type="bank_statement",
+    )
+    assert len(_codes(result, "BS.BANK_IDENTIFIERS")) == 1
+
+
+def test_bank_identifiers_skip_when_the_statement_prints_no_registration_number() -> None:
+    result = _run([_field("bank_name", "DBS Bank Ltd")], document_type="bank_statement")
+    assert any(s.check_code == "BS.BANK_IDENTIFIERS" for s in result.skipped_checks)
 
 
 # ---------------------------------------------------------------------------
@@ -645,6 +701,64 @@ def test_noa_chain_flags_wrong_payable() -> None:
     assert len(_codes(result, "NOA.PAYABLE")) == 1
 
 
+# The tax computation of a real amended NOA (C030, YA2025, ECI 321,800).
+_C030_COMPUTATION = [
+    {"line": "First 10,000 @ 75.00%", "amount": 7500},
+    {"line": "Next 190,000 @ 50.00%", "amount": 95000},
+    {"line": "Estimated Chargeable Income after deducting Exempt Amount", "amount": 219300},
+    {"line": "Tax on 219,300 @ 17.00%", "amount": 37281.0},
+    {"line": "Tax Assessed", "amount": 37281.0},
+    {"line": "Less: Tax Rebate (net of CIT Rebate Cash Grant, if any)", "amount": 18640.5},
+    {"line": "Estimated Tax Payable", "amount": 18640.5},
+    {"line": "Less: Previous Assessment dated 12 May 2025", "amount": 37281.0},
+    {"line": "Estimated Tax Discharged per this Assessment", "amount": 18640.5},
+]
+
+
+def _noa(computation: list[dict], payable: str = "18,640.50"):
+    return _run(
+        [_field("eci", "321,800"), _field("tax_payable", payable),
+         _field("year_of_assessment", "2025"), _field("tax_computation", computation)],
+        document_type="notice_of_assessment",
+    )
+
+
+def test_noa_chain_passes_a_genuine_amended_assessment() -> None:
+    # Regression: "Tax on 219,300 @ 17.00%" used to be read as the
+    # chargeable-income-after-exemption line because its label contains "17".
+    result = _noa(_C030_COMPUTATION)
+    assert [f for f in result.findings if f.check_code.startswith("NOA")] == []
+
+
+def test_noa_chain_accepts_a_rebate_printed_net_of_the_cash_grant() -> None:
+    # A company that got the $2,000 CIT Rebate Cash Grant: rebate printed as
+    # 18,640.50 - 2,000 = 16,640.50, so payable is 37,281 - 16,640.50.
+    computation = [dict(r) for r in _C030_COMPUTATION[:5]] + [
+        {"line": "Less: Tax Rebate (net of CIT Rebate Cash Grant, if any)", "amount": 16640.5},
+        {"line": "Estimated Tax Payable", "amount": 20640.5},
+    ]
+    result = _noa(computation, payable="20,640.50")
+    assert [f for f in result.findings if f.check_code.startswith("NOA")] == []
+
+
+def test_noa_chain_flags_a_wrong_exemption_tier() -> None:
+    computation = [dict(r) for r in _C030_COMPUTATION]
+    computation[1]["amount"] = 85000
+    assert len(_codes(_noa(computation), "NOA.EXEMPTION_TIERS")) == 1
+
+
+def test_noa_chain_flags_a_wrong_chargeable_income_after_exemption() -> None:
+    computation = [dict(r) for r in _C030_COMPUTATION]
+    computation[2]["amount"] = 229300
+    assert len(_codes(_noa(computation), "NOA.CHARGEABLE_AFTER_EXEMPTION")) == 1
+
+
+def test_noa_chain_flags_a_discharge_that_does_not_net_off_the_previous_assessment() -> None:
+    computation = [dict(r) for r in _C030_COMPUTATION]
+    computation[8]["amount"] = 8640.5
+    assert len(_codes(_noa(computation), "NOA.AMENDMENT")) == 1
+
+
 # ---------------------------------------------------------------------------
 # Payslip
 # ---------------------------------------------------------------------------
@@ -670,10 +784,10 @@ def test_payslip_earnings_sum_flags_mismatch() -> None:
     assert len(_codes(result, "PAY.EARNINGS_SUM")) == 1
 
 
-def test_cpf_ceiling_skips_without_reference_year_configured() -> None:
+def test_cpf_ceiling_skips_a_pay_date_before_the_reference_table() -> None:
     result = _run(
         [_field("employee_cpf", "5000"), _field("ordinary_wages", "10000"),
-         _field("pay_date", "2026-01-15")],
+         _field("pay_date", "2015-06-30")],
         document_type="payslip",
     )
     skip = next((s for s in result.skipped_checks if s.check_code == "PAY.CPF_CEILING"), None)
@@ -681,17 +795,24 @@ def test_cpf_ceiling_skips_without_reference_year_configured() -> None:
     assert "not configured" in skip.reason
 
 
-def test_cpf_ceiling_flags_excess_once_configured() -> None:
-    REFERENCE_DATA["cpf_ordinary_wage_ceiling"][2026] = 7400
-    try:
-        result = _run(
-            [_field("employee_cpf", "5000"), _field("ordinary_wages", "10000"),
-             _field("pay_date", "2026-01-15")],
-            document_type="payslip",
-        )
-        assert len(_codes(result, "PAY.CPF_CEILING")) == 1
-    finally:
-        REFERENCE_DATA["cpf_ordinary_wage_ceiling"].clear()
+def test_cpf_ceiling_flags_a_contribution_above_20_percent_of_the_2026_ceiling() -> None:
+    # 2026 ceiling is $8,000, so the most an employee contributes is $1,600.
+    result = _run(
+        [_field("employee_cpf", "1700"), _field("ordinary_wages", "10000"),
+         _field("pay_date", "2026-01-15")],
+        document_type="payslip",
+    )
+    assert len(_codes(result, "PAY.CPF_CEILING")) == 1
+
+
+def test_cpf_ceiling_uses_the_ceiling_in_force_on_the_pay_date_within_2023() -> None:
+    # $6,000 until 31 Aug 2023, $6,300 from 1 Sep 2023: a $1,260 contribution
+    # is only possible on the later ceiling.
+    fields = [_field("employee_cpf", "1260"), _field("ordinary_wages", "10000")]
+    august = _run(fields + [_field("pay_date", "2023-08-31")], document_type="payslip")
+    october = _run(fields + [_field("pay_date", "2023-10-31")], document_type="payslip")
+    assert len(_codes(august, "PAY.CPF_CEILING")) == 1
+    assert _codes(october, "PAY.CPF_CEILING") == []
 
 
 def test_cpf_base_flags_contribution_calculated_on_basic_pay_alone() -> None:
@@ -866,6 +987,30 @@ def test_poa_usage_match_flags_stated_usage_not_matching_the_trend() -> None:
         document_type="proof_of_address",
     )
     assert len(_codes(result, "POA.USAGE_MATCH")) == 1
+
+
+def test_amount_parse_ignores_identifier_fields_that_mention_tax() -> None:
+    result = _run([_field("tax_reference_number", "202034564S")], document_type="notice_of_assessment")
+    assert _codes(result, "GEN.AMOUNT_PARSE") == []
+
+
+def test_fee_schedule_ignores_supplier_payments_and_two_fixed_charge_tiers() -> None:
+    # From a real OCBC statement: $35.00 monthly and $0.50 per-transaction
+    # charges share a description, and GIRO/FAST supplier payments vary.
+    transactions = (
+        [{"description": "Txn Charges Billing / CHARGES / Billing Statement", "amount": a}
+         for a in (-35.00, -0.50, -35.00, -0.50, -35.00, -0.50)]
+        + [{"description": "Outward Remittance / GIRO / TAN HENG PACKAGING PTE LTD", "amount": a}
+           for a in (-26758.55, -22342.15, -16801.43, -5145.57)]
+    )
+    result = _run([_field("transactions", transactions)], document_type="bank_statement")
+    assert _codes(result, "BS.FEE_SCHEDULE") == []
+
+
+def test_fee_schedule_flags_a_charge_with_free_form_amounts() -> None:
+    transactions = [{"description": "Service Charge", "amount": a} for a in (-35.00, -37.20, -41.15, -29.80)]
+    result = _run([_field("transactions", transactions)], document_type="bank_statement")
+    assert len(_codes(result, "BS.FEE_SCHEDULE")) == 1
 
 
 def test_poa_usage_match_accepts_a_newest_first_trend() -> None:

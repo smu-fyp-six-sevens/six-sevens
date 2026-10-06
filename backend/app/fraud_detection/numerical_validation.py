@@ -44,6 +44,7 @@ check needs were not extracted."
 from __future__ import annotations
 
 import calendar
+import collections
 import math
 import re
 from datetime import date
@@ -126,24 +127,92 @@ class NumericalValidationResult(BaseModel):
 # supplied; every check below degrades to SKIPPED, never a guess.
 # ---------------------------------------------------------------------------
 
+_YA2024_2026_SCHEME = {
+    "exempt_first_pct": 0.75, "exempt_first_cap": 10_000,
+    "exempt_next_pct": 0.50, "exempt_next_cap": 190_000,
+    "tax_rate_pct": 0.17,
+    # Total of rebate + cash grant is capped at rebate_cap; the NOA prints the
+    # rebate net of the grant for companies that received one.
+    "rebate_pct": 0.50, "rebate_cap": 40_000, "cash_grant": 2_000,
+}
+
 REFERENCE_DATA: dict[str, dict] = {
-    # bank_name -> {"registration_no": ..., "gst_no": ...}
-    "bank_identifiers": {},
-    # ISO date string (from which this limit took effect) -> SGD limit
-    "deposit_insurance_limits": {},
+    # Canonical bank name -> how it's named on statements, and its ACRA
+    # registration number (UEN), each from the bank's own published
+    # documents (checked Oct 2026):
+    #   DBS        dbs.com.sg account application forms ("DBS Bank Ltd Co. Reg. No: 196800306E")
+    #   OCBC       OCBC's SGX announcements ("Co. Reg. no.: 193200032W")
+    #   UOB        uob.com.sg terms & conditions ("Co. Reg. No. 193500026Z")
+    #   Green Link glbank.com MAS Notice 637 disclosures ("UEN: 202115950G")
+    # SWIFT BIC (first 8 characters; an 11-character form only adds a branch,
+    # "XXX" = head office): DBS from dbs.com.sg's SWIFT code page, OCBC from
+    # its Telegraphic Transfer Guide, UOB from its International Network
+    # listing; Green Link's isn't on its own site, so it's taken from the
+    # SWIFT directory as republished by Wise and XE.
+    # GST registration numbers are deliberately absent: none could be
+    # confirmed from an official source, and a guessed one would flag
+    # genuine statements. BS.BANK_IDENTIFIERS only compares fields present here.
+    "bank_identifiers": {
+        # POSB is a DBS brand: same legal entity, UEN and BIC (DBS's SWIFT page
+        # gives "DBS & POSB" one code).
+        "DBS Bank Ltd": {
+            "aliases": ("dbs", "posb", "development bank of singapore"),
+            "registration_no": "196800306E", "bic": "DBSSSGSG",
+        },
+        "Oversea-Chinese Banking Corporation Limited": {
+            "aliases": ("ocbc", "oversea-chinese banking", "oversea chinese banking"),
+            "registration_no": "193200032W", "bic": "OCBCSGSG",
+        },
+        "United Overseas Bank Limited": {
+            "aliases": ("uob", "united overseas bank"), "registration_no": "193500026Z",
+            "bic": "UOVBSGSG",
+        },
+        "Green Link Digital Bank Pte. Ltd.": {
+            "aliases": ("green link digital bank", "gldb"), "registration_no": "202115950G",
+            "bic": "GLDTSGSG",
+        },
+    },
+    # Effective date -> SDIC deposit insurance limit per depositor (SGD).
+    # SDIC media releases of 28 Mar 2019 ($75,000 from 1 Apr 2019) and
+    # 1 Apr 2024 ($100,000 from that day).
+    "deposit_insurance_limits": {"2019-04-01": 75_000, "2024-04-01": 100_000},
+    # Deliberately empty: government loan schemes (e.g. Enterprise Financing
+    # Scheme) have per-sub-scheme caps and risk shares that changed several
+    # times, including temporary COVID-era terms — too many conditions to
+    # encode reliably. LOAN.SCHEME_PARAMS stays SKIPPED.
     # scheme_name -> {"amount_cap": ..., "risk_share_pct": ..., "effective_from": ...}
     "loan_scheme_params": {},
-    # year_of_assessment (int) -> {"exempt_first_pct", "exempt_first_cap",
-    # "exempt_next_pct", "exempt_next_cap", "tax_rate_pct", "rebate_pct",
-    # "rebate_cap"} — the compute_noa_tax formula this pipeline's own
-    # generator uses (75%/$10k, 50%/$190k, 17%, 50% capped $40k) is a real,
-    # current Singapore scheme, not a placeholder, but it is a SINGLE
-    # year's parameters hardcoded, not a year-keyed table — so NOA checks
-    # below use it only when this dict has no year-specific override.
-    "noa_tax_parameters": {},
-    # calendar year (int) -> CPF ordinary wage ceiling in SGD/month
-    "cpf_ordinary_wage_ceiling": {},
+    # Year of assessment -> corporate tax parameters. IRAS Budget 2024
+    # overview (YA 2024) and the Form C-S explanatory notes (YA 2025, YA
+    # 2026): partial exemption 75% of first $10k + 50% of next $190k (since
+    # YA 2020), 17%, CIT Rebate 50% with a $2,000 cash grant, total capped at
+    # $40,000. Other years fall back to _CURRENT_NOA_SCHEME.
+    "noa_tax_parameters": {2024: _YA2024_2026_SCHEME, 2025: _YA2024_2026_SCHEME, 2026: _YA2024_2026_SCHEME},
+    # Effective date -> CPF ordinary wage ceiling (SGD/month), per CPF Board's
+    # "What is the Ordinary Wage (OW) ceiling?" page. Keyed by date, not
+    # year: the ceiling changed mid-2023.
+    "cpf_ordinary_wage_ceiling": {
+        "2016-01-01": 6_000, "2023-09-01": 6_300, "2024-01-01": 6_800,
+        "2025-01-01": 7_400, "2026-01-01": 8_000,
+    },
 }
+
+
+def _in_force_on(table: dict[str, float], on: date) -> float | None:
+    """The value of a date-keyed reference table in force on a given day."""
+    applicable = [(date.fromisoformat(k), v) for k, v in table.items() if date.fromisoformat(k) <= on]
+    return max(applicable)[1] if applicable else None
+
+
+def _bank_reference(bank_name: Any) -> dict | None:
+    name = re.sub(r"[^a-z ]", " ", str(bank_name or "").lower())
+    name = " ".join(name.split())
+    for reference in REFERENCE_DATA["bank_identifiers"].values():
+        for alias in reference["aliases"]:
+            alias_norm = " ".join(re.sub(r"[^a-z ]", " ", alias).split())
+            if re.search(rf"\b{re.escape(alias_norm)}\b", name):
+                return reference
+    return None
 
 # The current scheme this pipeline's own NOA generator uses (see
 # doc_gen_scripts/optional_documents/company_noa/generate_noa.py's
@@ -596,6 +665,10 @@ def _check_amount_parse(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck
 
 
 def _looks_like_amount_field(name: str) -> bool:
+    # Identifiers and labels that merely mention an amount word
+    # (tax_reference_number, payment_date, tax_type) aren't amounts.
+    if re.search(r"number|_no$|reference|_ref|_id$|code|date|_type$|name|period", name, re.IGNORECASE):
+        return False
     return bool(re.search(
         r"amount|balance|pay$|_pay|capital|value|tax|eci|income|price|rate$",
         name, re.IGNORECASE,
@@ -869,7 +942,8 @@ def _check_available_vs_ledger(ctx: _Ctx) -> tuple[list[NumericalFinding], Skipp
     if values is None:
         return [], _skip_missing("BS.AVAILABLE_VS_LEDGER", "ledger_balance", "available_balance")
     ledger, available = (_as_number(v) for v in values)
-    holds = _as_number(ctx.fields.get("holds")) or 0.0
+    # Extraction sometimes names this after the printed label ("Total Hold Amount").
+    holds = _as_number(ctx.fields.get("holds", ctx.fields.get("total_hold_amount"))) or 0.0
     if ledger is None or available is None:
         return [], _skip_missing("BS.AVAILABLE_VS_LEDGER", "ledger_balance", "available_balance")
     expected = ledger - holds
@@ -919,6 +993,9 @@ def _check_narrative_amount(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedC
 
 
 _FEE_KEYWORDS = re.compile(r"fee|charge|fast\b|giro|interbank", re.IGNORECASE)
+# The bank's own charges only — FAST/GIRO name a payment channel, so a
+# supplier payment sent by GIRO isn't a fee.
+_BANK_CHARGE_KEYWORDS = re.compile(r"\bfees?\b|\bcharges?\b|commission", re.IGNORECASE)
 _FEE_BEARING_KEYWORDS = re.compile(r"fast\b|giro|interbank|salary|payroll", re.IGNORECASE)
 
 
@@ -937,7 +1014,7 @@ def _check_fee_schedule(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck
     for row in rows:
         description = str(row.get("description") or "")
         amount = _as_number(row.get("amount"))
-        if amount is not None and _FEE_KEYWORDS.search(description):
+        if amount is not None and _BANK_CHARGE_KEYWORDS.search(description):
             key = re.sub(r"\d+", "#", description.strip().lower())
             fee_amounts_by_desc.setdefault(key, []).append(abs(amount))
 
@@ -945,38 +1022,71 @@ def _check_fee_schedule(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck
     for desc, amounts in fee_amounts_by_desc.items():
         if len(amounts) < 3:
             continue
-        mean = sum(amounts) / len(amounts)
-        if mean == 0:
+        # A bank's charges come from a fixed tariff, so one description can
+        # legitimately take a couple of set amounts (e.g. a $35.00 monthly
+        # fee and a $0.50 per-transaction fee both printed as "CHARGES").
+        # Only flag when the amounts look free-form rather than tariffed.
+        counts = collections.Counter(round(a, 2) for a in amounts)
+        recurring = [a for a, n in counts.items() if n >= 2]
+        one_offs = [
+            a for a, n in counts.items()
+            if n == 1 and recurring and all(abs(a - r) / r > 0.5 for r in recurring if r)
+        ]
+        if len(counts) > max(2, len(amounts) // 2):
+            reason = (
+                f"takes {len(counts)} different amounts across {len(amounts)} occurrences — "
+                "bank charges normally come from a fixed tariff"
+            )
+        elif one_offs:
+            reason = (
+                f"is normally {', '.join(_money(r) for r in sorted(recurring))} but appears once as "
+                f"{', '.join(_money(a) for a in sorted(one_offs))}"
+            )
+        else:
             continue
-        if any(abs(a - mean) / mean > 0.5 for a in amounts):
-            findings.append(_finding(
-                "BS.FEE_SCHEDULE", "implausible",
-                f"Recurring charge \"{desc}\" varies widely across the statement "
-                f"({', '.join(_money(a) for a in amounts)})",
-                field="transactions",
-            ))
+        findings.append(_finding(
+            "BS.FEE_SCHEDULE", "implausible",
+            f"Recurring charge \"{desc}\" {reason} ({', '.join(_money(a) for a in amounts)})",
+            field="transactions",
+        ))
     return findings, None
 
 
 def _check_bank_identifiers(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck | None]:
-    """BS.BANK_IDENTIFIERS. Registration/GST numbers must match the
-    reference table for the named bank."""
-    if not REFERENCE_DATA["bank_identifiers"]:
-        return [], _skip_reference("BS.BANK_IDENTIFIERS", "bank_identifiers")
+    """BS.BANK_IDENTIFIERS. The bank's own registration number, GST number
+    and SWIFT BIC printed on the statement must match the reference table
+    for the named bank. All three are public, so a match proves little; a
+    mismatch is a fabricated or mistyped identifier."""
     values = _need(ctx, "BS.BANK_IDENTIFIERS", "bank_name")
     if values is None:
         return [], _skip_missing("BS.BANK_IDENTIFIERS", "bank_name")
-    reference = REFERENCE_DATA["bank_identifiers"].get(str(values[0]))
+    reference = _bank_reference(values[0])
     if reference is None:
         return [], _skip_reference("BS.BANK_IDENTIFIERS", f"bank_identifiers[{values[0]!r}]")
     findings = []
-    for key in ("registration_no", "gst_no"):
-        stated, expected = ctx.fields.get(key), reference.get(key)
-        if stated and expected and str(stated).strip() != str(expected).strip():
+    ran_any = False
+    for field_name, key, label, length in (
+        ("bank_registration_no", "registration_no", "registration number", None),
+        ("bank_gst_no", "gst_no", "GST registration number", None),
+        # BIC: compare bank + country + location only; the optional 3-letter
+        # branch suffix ("XXX" = head office) doesn't change the institution.
+        ("bic_code", "bic", "SWIFT BIC", 8),
+    ):
+        stated, expected = ctx.fields.get(field_name), reference.get(key)
+        if not stated or not expected:
+            continue
+        ran_any = True
+        stated_norm = re.sub(r"[^A-Z0-9]", "", str(stated).upper())[:length]
+        expected_norm = re.sub(r"[^A-Z0-9]", "", str(expected).upper())[:length]
+        if stated_norm != expected_norm:
             findings.append(_finding(
-                "BS.BANK_IDENTIFIERS", "impossible", f"{key} {stated!r} does not match {expected!r}",
-                field=key, stated=str(stated), expected=str(expected),
+                "BS.BANK_IDENTIFIERS", "impossible",
+                f"The statement prints {values[0]}'s {label} as {stated}, but the bank's "
+                f"actual {label} is {expected}",
+                field=field_name, stated=str(stated), expected=str(expected),
             ))
+    if not ran_any:
+        return [], _skip_missing("BS.BANK_IDENTIFIERS", "bank_registration_no/bic_code")
     return findings, None
 
 
@@ -1657,8 +1767,13 @@ def _compute_noa(eci: float, scheme: dict) -> dict[str, float]:
     tax = round(after * scheme["tax_rate_pct"], 2)
     rebate = round(min(tax * scheme["rebate_pct"], scheme["rebate_cap"]), 2)
     payable = round(tax - rebate, 2)
+    # A company that received the CIT Rebate Cash Grant has the rebate printed
+    # "net of CIT Rebate Cash Grant", so both readings are genuine.
+    rebate_net = round(max(rebate - scheme.get("cash_grant", 0), 0), 2)
+    payable_net = round(tax - rebate_net, 2)
     return {"exempt_first": exempt_first, "exempt_next": exempt_next, "after": after,
-            "tax": tax, "rebate": rebate, "payable": payable}
+            "tax": tax, "rebate": rebate, "payable": payable,
+            "rebate_net": rebate_net, "payable_net": payable_net}
 
 
 def _noa_year(ctx: _Ctx) -> int | None:
@@ -1691,16 +1806,29 @@ def _check_noa_chain(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck | 
     computed = _compute_noa(eci, scheme)
 
     findings = []
-    lines = _rows(ctx.fields.get("tax_computation"))
-    line_by_label = {str(r.get("line", "")).lower(): _as_number(r.get("amount")) for r in lines}
+    lines = [
+        (str(r.get("line", "")).strip().lower(), _as_number(r.get("amount")))
+        for r in _rows(ctx.fields.get("tax_computation"))
+    ]
 
-    def _find_line(*keywords: str) -> float | None:
-        for label, amount in line_by_label.items():
-            if all(k in label for k in keywords):
-                return amount
-        return None
+    def _find_line(pattern: str) -> float | None:
+        regex = re.compile(pattern)
+        return next((amount for label, amount in lines if regex.search(label)), None)
 
-    stated_after = _find_line("17") or _find_line("chargeable", "after")
+    for code_label, pattern, expected in (
+        ("first", r"^first\b", computed["exempt_first"]),
+        ("next", r"^next\b", computed["exempt_next"]),
+    ):
+        stated_tier = _find_line(pattern)
+        if stated_tier is not None and abs(stated_tier - expected) > _MONEY_TOLERANCE:
+            findings.append(_finding(
+                "NOA.EXEMPTION_TIERS", "impossible",
+                f"The \"{code_label}\" exemption tier should be {_money(expected)} for ECI "
+                f"{_money(eci)}, but the computation shows {_money(stated_tier)}",
+                field="tax_computation", stated=_money(stated_tier), expected=_money(expected),
+            ))
+
+    stated_after = _find_line(r"chargeable income after")
     if stated_after is not None and abs(stated_after - computed["after"]) > _MONEY_TOLERANCE:
         findings.append(_finding(
             "NOA.CHARGEABLE_AFTER_EXEMPTION", "impossible",
@@ -1709,7 +1837,7 @@ def _check_noa_chain(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck | 
             field="tax_computation", stated=_money(stated_after), expected=_money(computed["after"]),
         ))
 
-    stated_tax = _find_line("tax") or _find_line("17.00%") or _find_line("17%")
+    stated_tax = _find_line(r"^tax on\b") or _find_line(r"^tax assessed\b")
     if stated_tax is not None and abs(stated_tax - computed["tax"]) > _MONEY_TOLERANCE:
         findings.append(_finding(
             "NOA.TAX_AT_RATE", "impossible",
@@ -1718,16 +1846,25 @@ def _check_noa_chain(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck | 
             field="tax_computation", stated=_money(stated_tax), expected=_money(computed["tax"]),
         ))
 
-    stated_rebate = _find_line("rebate")
-    if stated_rebate is not None and abs(abs(stated_rebate) - computed["rebate"]) > _MONEY_TOLERANCE:
+    def _matches_either(stated: float, *expected: float) -> bool:
+        return any(abs(stated - e) <= _MONEY_TOLERANCE for e in expected)
+
+    stated_rebate = _find_line(r"\brebate\b")
+    if stated_rebate is not None and not _matches_either(
+        abs(stated_rebate), computed["rebate"], computed["rebate_net"]
+    ):
+        net_note = (
+            f" or {_money(computed['rebate_net'])} net of the "
+            f"{_money(scheme['cash_grant'])} cash grant" if scheme.get("cash_grant") else ""
+        )
         findings.append(_finding(
             "NOA.REBATE", "impossible",
-            f"Tax rebate should be {_money(computed['rebate'])} (capped at "
+            f"Tax rebate should be {_money(computed['rebate'])}{net_note} (capped at "
             f"{_money(scheme['rebate_cap'])}), but the computation shows {_money(stated_rebate)}",
             field="tax_computation", stated=_money(stated_rebate), expected=_money(computed["rebate"]),
         ))
 
-    if abs(stated_payable - computed["payable"]) > _MONEY_TOLERANCE:
+    if not _matches_either(stated_payable, computed["payable"], computed["payable_net"]):
         findings.append(_finding(
             "NOA.PAYABLE", "impossible",
             f"Tax payable should be {_money(computed['payable'])} for ECI {_money(eci)} under "
@@ -1735,6 +1872,23 @@ def _check_noa_chain(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck | 
             f"{_money(stated_payable)}",
             field="tax_payable", stated=_money(stated_payable), expected=_money(computed["payable"]),
         ))
+
+    # An amended assessment nets the new figure against the previous one:
+    # payable - previous = additional tax due (positive) or discharged (negative).
+    previous = _find_line(r"previous assessment")
+    settled = _find_line(r"discharged")
+    additional = _find_line(r"additional tax|balance payable")
+    if previous is not None and (settled is not None or additional is not None):
+        difference = stated_payable - abs(previous)
+        stated_diff = -abs(settled) if settled is not None else abs(additional or 0.0)
+        if abs(difference - stated_diff) > _MONEY_TOLERANCE:
+            findings.append(_finding(
+                "NOA.AMENDMENT", "impossible",
+                f"Tax payable {_money(stated_payable)} less the previous assessment "
+                f"{_money(abs(previous))} is {_money(difference)}, but the notice states "
+                f"{'a discharge of ' + _money(abs(stated_diff)) if settled is not None else 'additional tax of ' + _money(stated_diff)}",
+                field="tax_computation", stated=_money(abs(stated_diff)), expected=_money(abs(difference)),
+            ))
     return findings, None
 
 
@@ -1811,10 +1965,11 @@ def _check_cpf_ceiling(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck 
         return [], _skip_missing("PAY.CPF_CEILING", "employee_cpf", "ordinary_wages", "pay_date")
     cpf_raw, wages_raw, pay_date_raw = values
     pay_date_val = _parse_field_date(pay_date_raw)
-    year = pay_date_val.year if pay_date_val else None
-    ceiling = REFERENCE_DATA["cpf_ordinary_wage_ceiling"].get(year) if year else None
+    if pay_date_val is None:
+        return [], _skip_missing("PAY.CPF_CEILING", "pay_date (unparseable)")
+    ceiling = _in_force_on(REFERENCE_DATA["cpf_ordinary_wage_ceiling"], pay_date_val)
     if ceiling is None:
-        return [], _skip_reference("PAY.CPF_CEILING", f"cpf_ordinary_wage_ceiling[{year!r}]")
+        return [], _skip_reference("PAY.CPF_CEILING", f"cpf_ordinary_wage_ceiling[{pay_date_val.isoformat()}]")
     cpf, wages = _as_number(cpf_raw), _as_number(wages_raw)
     if cpf is None or wages is None:
         return [], _skip_missing("PAY.CPF_CEILING", "employee_cpf/ordinary_wages (unparseable)")
