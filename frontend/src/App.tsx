@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import {
   BrowserRouter,
   Navigate,
@@ -9,10 +9,12 @@ import {
 } from 'react-router-dom';
 
 import CaseQueuePage from './pages/CaseQueuePage';
-import UploadPage from './pages/UploadPage';
 import CreateCasePage from './pages/CreateCasePage';
-import DocumentDetailsPage from './pages/DocumentDetailsPage';
 import LoginPage from './pages/LoginPage';
+
+// Loaded on first visit to keep the initial bundle small.
+const UploadPage = lazy(() => import('./pages/UploadPage'));
+const DocumentDetailsPage = lazy(() => import('./pages/DocumentDetailsPage'));
 import { authFetch, getToken } from './lib/api';
 
 export interface CaseRecord {
@@ -281,6 +283,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <Suspense fallback={<p className="loading">Loading…</p>}>
       <Routes>
         <Route
           path="/"
@@ -375,6 +378,7 @@ export default function App() {
           element={<Navigate to="/cases" replace />}
         />
       </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }
