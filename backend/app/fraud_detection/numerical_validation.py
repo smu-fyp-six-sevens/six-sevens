@@ -314,6 +314,62 @@ def _is_item(ctx: _Ctx, *labels: str) -> tuple[float | None, float | None]:
     return None, None
 
 
+def _magnitude_item(ctx: _Ctx, *labels: str) -> tuple[float | None, float | None]:
+    """_is_item for an expense line, as a positive amount. Statements show
+    expenses as negatives (brackets) or as positives under a "less" heading,
+    so the sign can't be trusted."""
+    current, prior = _is_item(ctx, *labels)
+    return (
+        abs(current) if current is not None else None,
+        abs(prior) if prior is not None else None,
+    )
+
+
+# Subtotal rows (Gross profit, Total operating expenses, Total equity...) repeat the
+# lines above them, so they must be left out of any sum.
+_SUBTOTAL_PREFIXES = (
+    "total", "gross ", "net ", "operating profit", "operating loss",
+    "profit from", "profit before", "profit after", "loss before", "loss from",
+)
+# Lines that add to profit. Anything else between revenue and profit is an expense.
+_CREDIT_WORDS = ("income", "gain", "credit", "benefit", "write back", "reversal", "share of", "dividend received")
+
+
+def _is_subtotal(label: str) -> bool:
+    return label.strip().lower().startswith(_SUBTOTAL_PREFIXES)
+
+
+def _cast_lines(rows: list[dict]) -> list[dict]:
+    """The rows that add up to profit. A "Total ..." row replaces the detail
+    lines above it (so a statement showing both isn't double counted, and one
+    showing only the total still works). Other subtotals (gross profit, profit
+    before tax...) just close the block, keeping the lines above them."""
+    kept: list[dict] = []
+    pending: list[dict] = []
+    for row in rows:
+        label = str(row.get("label", ""))
+        if label.strip().lower().startswith("total"):
+            pending = []
+            kept.append(row)
+        elif _is_subtotal(label):
+            kept.extend(pending)
+            pending = []
+        else:
+            pending.append(row)
+    return kept + pending
+
+
+def _profit_effect(label: str, amount: float) -> float:
+    """A line's effect on profit: income adds, expenses subtract. "Tax" is
+    checked first so "Income tax expense" is still an expense."""
+    text = label.lower()
+    if "tax" in text:
+        credit = any(word in text for word in ("credit", "benefit", "refund"))
+    else:
+        credit = any(word in text for word in _CREDIT_WORDS)
+    return abs(amount) if credit else -abs(amount)
+
+
 def _money(amount: float) -> str:
     return f"{amount:,.2f}"
 
@@ -1397,37 +1453,31 @@ def _check_nav(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck | None]:
 
 
 def _check_fs_is_cast(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedCheck | None]:
-    """FS.IS_CAST. Revenue -> gross profit -> operating expenses -> profit
-    before tax -> profit for the year, both years presented.
-
-    cost_of_sales/operating_expenses/tax_expense now live as rows inside
-    income_statement_items (amount + amount_prior_year per row) rather than
-    as their own flat *_prior_year fields — see _is_item."""
+    """FS.IS_CAST. Revenue plus every non-subtotal line in income_statement_items
+    must equal profit for the year, both years presented. See _profit_effect for signs."""
     findings = []
     ran_any = False
-    cost_of_sales_cur, cost_of_sales_prior = _is_item(ctx, "cost of sales")
-    opex_cur, opex_prior = _is_item(ctx, "total operating expenses")
-    tax_cur, tax_prior = _is_item(ctx, "tax expense")
-    for suffix, cost_of_sales, opex, tax in (
-        ("", cost_of_sales_cur, opex_cur, tax_cur),
-        ("_prior_year", cost_of_sales_prior, opex_prior, tax_prior),
-    ):
+    lines = _cast_lines(_rows(ctx.fields.get("income_statement_items")))
+    for suffix, column in (("", "amount"), ("_prior_year", "amount_prior_year")):
         values = _need(ctx, "FS.IS_CAST", f"revenue{suffix}", f"profit_for_the_year{suffix}")
-        if values is None or cost_of_sales is None or opex is None or tax is None:
+        if values is None or not lines:
+            continue
+        revenue, profit = (_as_number(v) for v in values)
+        amounts = [_as_number(row.get(column)) for row in lines]
+        if revenue is None or profit is None or any(a is None for a in amounts):
             continue
         ran_any = True
-        revenue, profit = (_as_number(v) for v in values)
-        if revenue is None or profit is None:
-            continue
-        gross_profit = revenue - cost_of_sales
-        profit_before_tax = gross_profit - opex
-        expected = profit_before_tax - tax
+        effects = [(str(row.get("label", "")).strip(), _profit_effect(str(row.get("label", "")), a))
+                   for row, a in zip(lines, amounts)]
+        expected = revenue + sum(effect for _label, effect in effects)
         if abs(expected - profit) > _MONEY_TOLERANCE:
             label = "prior year" if suffix else "current year"
+            breakdown = " ".join(
+                f"{'+' if effect > 0 else '-'} {name} {_money(abs(effect))}" for name, effect in effects
+            )
             findings.append(_finding(
                 "FS.IS_CAST", "impossible",
-                f"Income statement ({label}) does not cast: revenue {_money(revenue)} - COGS "
-                f"{_money(cost_of_sales)} - opex {_money(opex)} - tax {_money(tax)} = "
+                f"Income statement ({label}) does not cast: revenue {_money(revenue)} {breakdown} = "
                 f"{_money(expected)}, but profit for the year shows {_money(profit)}",
                 field=f"profit_for_the_year{suffix}", stated=_money(profit), expected=_money(expected),
                 severity_note=_materiality_note(expected - profit, expected),
@@ -1453,6 +1503,7 @@ def _bs_section_rows(ctx: _Ctx, section: str) -> list[dict]:
     return [
         row for row in _rows(ctx.fields.get("balance_sheet_items"))
         if str(row.get("section", "")).strip().lower().replace(" ", "_") == section
+        and not _is_subtotal(str(row.get("label", "")))
     ]
 
 
@@ -1583,7 +1634,7 @@ def _check_fs_ppe_rollforward(ctx: _Ctx) -> tuple[list[NumericalFinding], Skippe
     depreciation) must not be negative. depreciation_expense now lives as a
     row inside income_statement_items — see _is_item."""
     values = _need(ctx, "FS.PPE_ROLLFORWARD", "ppe_opening", "ppe_closing")
-    depreciation, _prior = _is_item(
+    depreciation, _prior = _magnitude_item(
         ctx, "depreciation of property, plant and equipment", "depreciation", "depreciation expense",
     )
     if values is None or depreciation is None:
@@ -1610,7 +1661,7 @@ def _check_fs_tax_expense_rate(ctx: _Ctx) -> tuple[list[NumericalFinding], Skipp
     exemption. Both values now live as rows inside income_statement_items —
     see _is_item."""
     profit, _p = _is_item(ctx, "profit before taxation", "profit before tax")
-    tax, _t = _is_item(ctx, "tax expense")
+    tax, _t = _magnitude_item(ctx, "tax expense")
     if profit is None or tax is None:
         return [], _skip_missing("FS.TAX_EXPENSE_RATE", "income_statement_items(profit before tax, tax expense)")
     if profit <= 0:
@@ -1664,7 +1715,7 @@ def _check_fs_ratio_bands(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedChe
     findings = []
     ran_any = False
 
-    costs, _c = _is_item(ctx, "finance costs")
+    costs, _c = _magnitude_item(ctx, "finance costs")
     opening = _as_number(ctx.fields.get("borrowings_opening"))
     closing = _as_number(ctx.fields.get("borrowings_closing"))
     if costs is not None and opening is not None and closing is not None and (opening + closing) > 0:
@@ -1679,7 +1730,7 @@ def _check_fs_ratio_bands(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedChe
                 field="finance_costs",
             ))
 
-    depreciation, _d = _is_item(
+    depreciation, _d = _magnitude_item(
         ctx, "depreciation of property, plant and equipment", "depreciation", "depreciation expense",
     )
     ppe = _as_number(ctx.fields.get("ppe_closing"))
@@ -1695,7 +1746,7 @@ def _check_fs_ratio_bands(ctx: _Ctx) -> tuple[list[NumericalFinding], SkippedChe
                 field="depreciation_expense",
             ))
 
-    cost, _cost_prior = _is_item(ctx, "cost of sales")
+    cost, _cost_prior = _magnitude_item(ctx, "cost of sales")
     revenue = _as_number(ctx.fields.get("revenue"))
     if revenue is not None and cost is not None and revenue > 0:
         ran_any = True

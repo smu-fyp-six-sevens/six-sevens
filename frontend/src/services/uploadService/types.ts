@@ -138,14 +138,14 @@ export interface DetectionReport {
   consulted: {
     specialist: string;
     title: string;
-    reason: string;
+    brief: string;
     tools_called: string[];
     summary: string;
     uncertain: boolean;
+    // Absent on reports stored before dismissals existed.
+    dismissed?: { id: string; tool: string | null; summary: string; reason: string }[];
     second_look: boolean;
   }[];
-  skipped: { specialist: string; title: string; reason: string }[];
-  plan_deviation: { default_expected: string[]; added: string[]; dropped: string[] } | null;
   second_look: { from: string; to: string; question: string; reason: string } | null;
   unable_to_assess: { specialist: string; tool: string | null; reason: string | null }[];
   generated_at: string;

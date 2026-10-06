@@ -671,6 +671,48 @@ def test_fs_bs_cast_flags_a_section_that_does_not_sum_to_its_total() -> None:
     assert len(_codes(result, "FS.BS_CAST")) == 1
 
 
+def test_fs_is_cast_reads_bracketed_expenses_as_deductions() -> None:
+    # Expenses shown in brackets are extracted as negatives; they must still subtract.
+    result = _run(
+        [_field("revenue", "2000000"), _field("profit_for_the_year", "440000"),
+         _field("income_statement_items", [
+             {"label": "Cost of revenue", "amount": -1000000},
+             {"label": "Administrative expenses", "amount": -500000},
+             {"label": "Finance costs", "amount": -50000},
+             {"label": "Other income", "amount": 20000},
+             {"label": "Income tax expense", "amount": -30000},
+         ])],
+        document_type="source_of_wealth",
+    )
+    assert _codes(result, "FS.IS_CAST") == []
+
+
+def test_fs_is_cast_ignores_subtotal_rows() -> None:
+    result = _run(
+        [_field("revenue", "1000000"), _field("profit_for_the_year", "300000"),
+         _field("income_statement_items", [
+             {"label": "Cost of sales", "amount": -600000},
+             {"label": "Gross profit", "amount": 400000},
+             {"label": "Total operating expenses", "amount": -100000},
+         ])],
+        document_type="source_of_wealth",
+    )
+    assert _codes(result, "FS.IS_CAST") == []
+
+
+def test_fs_bs_cast_does_not_count_the_total_row() -> None:
+    result = _run(
+        [_field("balance_sheet_items", [
+            {"section": "equity", "label": "Share capital", "amount": 1000000},
+            {"section": "equity", "label": "Retained earnings", "amount": 695700},
+            {"section": "equity", "label": "Total equity", "amount": 1695700},
+        ]),
+         _field("total_equity", "1695700")],
+        document_type="source_of_wealth",
+    )
+    assert _codes(result, "FS.BS_CAST") == []
+
+
 def test_fs_bs_cast_skips_when_nothing_extracted() -> None:
     result = _run([_field("company_name", "Acme")], document_type="source_of_wealth")
     codes = {s.check_code for s in result.skipped_checks}
