@@ -12,6 +12,7 @@ from .. import case_service, extracted_fields_repository, storage_service
 from . import documents as documents_router
 from ._dependencies import get_document_or_404
 from ..case_match import DocumentCaseMatch
+from ..fraud_detection.ai_generation import AIGenerationResult, check_ai_generation
 from ..fraud_detection.font_consistency import (
     ExtractedField,
     FontConsistencyResult,
@@ -183,6 +184,23 @@ async def get_image_tampering(
     """
     file_bytes = await _download_document_bytes(document)
     return await asyncio.to_thread(check_image_tampering, document_id, file_bytes)
+
+
+@router.get(
+    "/{document_id}/detection/ai-generation",
+    response_model=AIGenerationResult,
+)
+async def get_ai_generation(
+    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
+) -> AIGenerationResult:
+    """
+    On-demand, side-effect free: scores the document's photographs, scans or
+    image upload for traces of AI generation, with every indicator's
+    measured value and contribution to the score. A low score means no
+    indicator crossed its threshold — not that the image is proven genuine.
+    """
+    file_bytes = await _download_document_bytes(document)
+    return await asyncio.to_thread(check_ai_generation, document_id, file_bytes)
 
 
 class ImageIntegrityResult(BaseModel):
