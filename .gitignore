@@ -22,6 +22,9 @@ documents_generated/
 fyp_backend.egg-info
 backend/test_files
 
+# LangGraph Studio (`langgraph dev`) local in-memory runtime state
+backend/.langgraph_api/
+
 # Playwright regression suite output
 frontend/playwright-report/
 frontend/test-results/
