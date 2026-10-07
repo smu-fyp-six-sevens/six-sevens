@@ -40,8 +40,8 @@ export function UploadSummaryCards({
               </div>
 
               {flaggedDocuments.length === 0 ? (
-                <div className="summary-message summary-message--warning">
-                  <span className="summary-message-icon">ⓘ</span>
+                <div className="summary-message summary-message--success">
+                  <span className="summary-message-icon">✓</span>
 
                   <div>
                     <strong>No flagged items at the moment.</strong>

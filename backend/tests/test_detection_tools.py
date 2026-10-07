@@ -4,7 +4,12 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.fraud_detection.font_consistency import AnomalyLocation, FontAnomalyV2, FontConsistencyResult
+from app.fraud_detection.font_consistency import (
+    AnomalyLocation,
+    ExtractedField,
+    FontAnomalyV2,
+    FontConsistencyResult,
+)
 from app.fraud_detection.image_manipulation import (
     ImageManipulationIndicator,
     ImageManipulationResult,
@@ -14,13 +19,9 @@ from app.fraud_detection.image_manipulation import (
     Tolerances,
 )
 from app.fraud_detection.metadata_analysis import MetadataAnalysisResult, MetadataAnomaly
-from app.fraud_detection.numerical_validation import (
-    BenfordAnalysis,
-    NumericalFinding,
-    NumericalValidationResult,
-)
 from app.fraud_detection.spelling_anomaly import SpellingAnomaly, SpellingAnomalyResult
-from app.langgraph.detection import tools
+from app.langgraph.detection import field_tools, tools
+from app.langgraph.detection.binder import BindingResult
 
 
 def _document(**attrs):
@@ -223,30 +224,22 @@ def test_with_ids_rejects_finding_missing_summary() -> None:
 
 
 @pytest.mark.asyncio
-async def test_numerical_validation_tool_surfaces_non_bank_statement_findings() -> None:
+async def test_numerical_checks_tool_surfaces_non_bank_statement_findings() -> None:
     # Regression: the tool used to filter for check_code == "BS.RUNNING_BALANCE"
     # only, silently dropping every other document type's findings (FS.*, CR.*, etc).
-    result = NumericalValidationResult(
-        document_id="doc-1",
-        document_type="source_of_wealth",
-        values_analysed=4,
-        findings=[
-            NumericalFinding(
-                check_code="FS.IS_CAST", severity="impossible", summary="Income statement doesn't cast.",
-            )
-        ],
-        skipped_checks=[],
-        benford=BenfordAnalysis(sample_size=0, digits=[], unable_to_assess=True),
-        unable_to_assess=False,
-    )
-    with (
-        patch.object(tools, "_document", AsyncMock(return_value=_document(document_type="source_of_wealth"))),
-        patch.object(tools, "_extracted_fields", AsyncMock(return_value=[])),
-        patch.object(tools, "check_numerical_validation", return_value=result),
-    ):
-        output = await tools.numerical_validation_tool.ainvoke({"document_id": "doc-1"})
+    fields = [
+        ExtractedField(field_name="total_assets", field_type="number", field_value="1000", confidence=0.95),
+        ExtractedField(field_name="total_liabilities", field_type="number", field_value="400", confidence=0.95),
+        ExtractedField(field_name="total_equity", field_type="number", field_value="500", confidence=0.95),
+    ]
+    no_bindings = BindingResult()  # the binder is patched out so no model is called
+    with patch.object(field_tools, "document_fields", AsyncMock(return_value=fields)), \
+            patch("app.langgraph.detection.binder.bind_numerical_checks", AsyncMock(return_value=no_bindings)):
+        output = await field_tools.numerical_checks_tool.coroutine(
+            document_id="doc-1", document_type="source_of_wealth",
+        )
 
-    assert output["findings"][0]["check_code"] == "FS.IS_CAST"
+    assert output["findings"][0]["check_code"] == "FS.BALANCES"
 
 
 # --- ai_generation_tool -------------------------------------------------------

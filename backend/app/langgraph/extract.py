@@ -79,6 +79,7 @@ def parse_extraction_output(llm_output: str) -> dict:
         return {
             "extracted_fields": {},
             "field_confidences": {},
+            "field_reasons": {},
             "confidence": 0.0,
             "escalation": {
                 "reason": f"Extraction did not return valid JSON. Its response was: {excerpt}"
@@ -86,13 +87,16 @@ def parse_extraction_output(llm_output: str) -> dict:
         }
 
     raw_fields = parsed.get("extracted_fields", {})
-    extracted_fields, field_confidences = _split_field_confidences(
+    extracted_fields, field_confidences, field_reasons = _split_field_confidences(
         raw_fields if isinstance(raw_fields, dict) else {}
     )
 
     return {
         "extracted_fields": extracted_fields,
         "field_confidences": field_confidences,
+        # Only for fields the agent itself scored low — see _FIELD_WRAPPER_INSTRUCTIONS.
+        # Not persisted anywhere; surfaced only in this run's langgraph trace (nodes.py's extract_node).
+        "field_reasons": field_reasons,
         # The document-level confidence is derived from the individual
         # fields' own confidences (averaged), not the LLM's separate
         # top-level self-report — a single overall number is easy for the
@@ -155,6 +159,7 @@ def _drop_unprinted_numbers(result: dict, raw_text: str) -> dict:
             dropped.append(name)
             del fields[name]
             result.get("field_confidences", {}).pop(name, None)
+            result.get("field_reasons", {}).pop(name, None)
 
     if dropped:
         logger.info("Dropped extracted fields not printed in the document: %s", dropped)
@@ -170,13 +175,14 @@ def _average_field_confidence(field_confidences: dict) -> float:
     return sum(values) / len(values)
 
 
-def _split_field_confidences(raw_fields: dict) -> tuple[dict, dict]:
+def _split_field_confidences(raw_fields: dict) -> tuple[dict, dict, dict]:
     """
     The extraction prompt asks the LLM to wrap each field as
-    {"value": ..., "confidence": <float>} rather than a bare value (see
-    build_extraction_prompt). Splits that into a flat name->value dict —
-    what documents.extracted_fields and the frontend expect — and a
-    parallel name->confidence dict for extracted_fields_repository.
+    {"value": ..., "confidence": <float>, "low_confidence_reason": <str, only when
+    confidence is low>} rather than a bare value (see build_extraction_prompt). Splits
+    that into a flat name->value dict — what documents.extracted_fields and the
+    frontend expect — a parallel name->confidence dict for extracted_fields_repository,
+    and a name->reason dict (only entries where the model actually gave one).
 
     Falls back to treating the whole entry as a bare value with an unknown
     (None) confidence if the LLM didn't wrap a particular field, since real
@@ -184,12 +190,16 @@ def _split_field_confidences(raw_fields: dict) -> tuple[dict, dict]:
     """
     values: dict = {}
     confidences: dict = {}
+    reasons: dict = {}
     for name, entry in raw_fields.items():
         if isinstance(entry, dict) and "value" in entry:
             values[name] = entry["value"]
             confidence = entry.get("confidence")
             confidences[name] = float(confidence) if isinstance(confidence, (int, float)) else None
+            reason = entry.get("low_confidence_reason")
+            if isinstance(reason, str) and reason.strip():
+                reasons[name] = reason.strip()
         else:
             values[name] = entry
             confidences[name] = None
-    return values, confidences
+    return values, confidences, reasons

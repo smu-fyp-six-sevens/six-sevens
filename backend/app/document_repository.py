@@ -123,6 +123,27 @@ def approve_document(document_id: str) -> None:
     if result.data:
         _sync_case(_row(result.data[0]).get("case_id"))
 
+def mark_detecting(document_id: str) -> None:
+    """The Detection Agent has started — shown live as "Scanning" (see langgraph/detection/graph.py)."""
+    supabase_client.table("documents").update(
+        {"status": DocumentStatus.DETECTING.value}
+    ).eq("id", document_id).execute()
+
+
+def mark_detected(document_id: str) -> None:
+    """The Detection Agent finished and produced a report — terminal."""
+    supabase_client.table("documents").update(
+        {"status": DocumentStatus.DETECTED.value}
+    ).eq("id", document_id).execute()
+
+
+def revert_to_approved(document_id: str) -> None:
+    """A detection run crashed or was cancelled: back to APPROVED — still locked, eligible for Retry."""
+    supabase_client.table("documents").update(
+        {"status": DocumentStatus.APPROVED.value}
+    ).eq("id", document_id).execute()
+
+
 def reject_document(document_id: str) -> None:
     result = (
         supabase_client.table("documents")

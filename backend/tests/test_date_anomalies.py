@@ -17,7 +17,7 @@ def _codes(result, code: str) -> list:
 
 
 def _valid_nric(prefix: str, digits: str) -> str:
-    from app.fraud_detection.numerical_validation import _nric_expected_letter
+    from app.fraud_detection.numerical_validation.identity_company import _nric_expected_letter
     return f"{prefix}{digits}{_nric_expected_letter(prefix, digits)}"
 
 

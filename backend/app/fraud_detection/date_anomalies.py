@@ -46,28 +46,35 @@ from __future__ import annotations
 
 import re
 from datetime import date, timedelta
-from typing import Callable
+from typing import Any, Callable
 
 from pydantic import BaseModel
 
 from .font_consistency import ExtractedField
-from .numerical_validation import (
-    Severity,
-    SkippedCheck,
-    _Ctx,
-    _apply_needs_review,
-    _as_number,
-    _confidence_by_name,
-    _fields_by_name,
-    _is_forward_looking_date_field,
-    _looks_like_date_field,
-    _need,
-    _noa_year,
-    _parse_field_date,
-    _rows,
-    _skip_missing,
-    _UEN_RE,
-)
+from .numerical_validation.common import _apply_needs_review, _as_number, _confidence_by_name, _fields_by_name, _parse_field_date, _rows, _skip_missing
+from .numerical_validation.identity_company import _UEN_RE, _is_forward_looking_date_field, _looks_like_date_field
+from .numerical_validation.models import Severity, SkippedCheck
+from .numerical_validation.statements import _noa_year
+
+
+class _Ctx(BaseModel):
+    """The fields of one document, as the date checks read them."""
+
+    model_config = {"arbitrary_types_allowed": True}
+    fields: dict[str, Any]
+    document_type: str | None
+    today: date
+
+
+def _need(ctx: _Ctx, code: str, *names: str) -> list[Any] | None:
+    """The values for `names` if every one is present and non-empty, else None."""
+    values = []
+    for name in names:
+        value = ctx.fields.get(name)
+        if value is None or value == "" or value == []:
+            return None
+        values.append(value)
+    return values
 
 # ---------------------------------------------------------------------------
 # Models
@@ -437,7 +444,7 @@ def _check_noa_date_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck | 
         return [], _skip_missing("NOA.DATE_LOGIC", "noa_date", "year_of_assessment")
     noa_date_raw, ya_raw = values
     noa_date_val = _parse_field_date(noa_date_raw)
-    year = _noa_year(ctx)
+    year = _noa_year(ctx.fields.get("year_of_assessment"))
     if noa_date_val is None or year is None:
         return [], _skip_missing("NOA.DATE_LOGIC", "noa_date/year_of_assessment (unparseable)")
 

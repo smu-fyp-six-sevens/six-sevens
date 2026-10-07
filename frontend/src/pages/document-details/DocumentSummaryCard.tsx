@@ -25,7 +25,7 @@ const STATUS_CLASSES: Record<StatusTone, { wrapper: string; dot: string }> = {
 
 function statusTone(document: DocumentRecord, detectionStage: DocumentDetectionStage): StatusTone | null {
   if (document.status === 'analyzed' || detectionStage === 'detected' || detectionStage === 'skipped') return 'success';
-  if (document.status === 'failed') return 'failed';
+  if (document.status === 'failed' || detectionStage === 'failed') return 'failed';
   if (document.status === 'rejected') return 'rejected';
   if (document.status === 'cancelled') return 'cancelled';
   if (isDocumentStuckProcessing(document)) return 'stuck';
@@ -66,6 +66,7 @@ export function DocumentSummaryCard({
   typeError: string | null;
 }) {
   const tone = statusTone(document, detectionStage);
+  const hasDetectionError = document.has_detection_error ?? false;
 
   return (
         <section className="details-card">
@@ -91,9 +92,9 @@ export function DocumentSummaryCard({
                 className={`status-dot ${tone ? STATUS_CLASSES[tone].dot : ''}`}
               />
               {isDocumentStuckProcessing(document)
-                ? `${formatDocumentStatusLabel(document.status, hasDetectionReport, document.document_type)} (Stuck)`
-                : formatDocumentStatusLabel(document.status, hasDetectionReport, document.document_type)}
-              {isDocumentStatusInProgress(document.status, hasDetectionReport, document.document_type) && '…'}
+                ? `${formatDocumentStatusLabel(document.status, hasDetectionReport, document.document_type, hasDetectionError)} (Stuck)`
+                : formatDocumentStatusLabel(document.status, hasDetectionReport, document.document_type, hasDetectionError)}
+              {isDocumentStatusInProgress(document.status, hasDetectionReport, document.document_type, hasDetectionError) && '…'}
             </div>
           </div>
 

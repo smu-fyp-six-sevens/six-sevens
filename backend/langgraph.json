@@ -1,0 +1,9 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "document_pipeline": "./app/langgraph/graph.py:build_document_graph",
+    "classify": "./app/langgraph/classify_graph.py:build_classify_graph",
+    "detection": "./app/langgraph/detection/graph.py:build_detection_graph"
+  },
+  "env": ".env"
+}

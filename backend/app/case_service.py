@@ -326,13 +326,16 @@ def build_case_snapshot(case_id: str) -> Optional[dict]:
         detected_ids = {
             report["document_id"] for report in langgraph_trace.get_case_detection_reports(case_id)
         }
+        failed_ids = langgraph_trace.get_case_failed_detection_ids(case_id)
     except Exception:
         logger.exception("Failed to load detection reports for case %s", case_id)
         detected_ids = set()
+        failed_ids = set()
     document_dumps = []
     for document in enriched:
         dump = document.model_dump(mode="json")
         dump["has_detection_report"] = document.id in detected_ids
+        dump["has_detection_error"] = document.id in failed_ids
         document_dumps.append(dump)
     return {
         "type": "snapshot",

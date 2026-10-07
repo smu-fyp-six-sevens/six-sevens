@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from 'react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
 import type { DocumentRecord } from '../../services/uploadService';
 import type { ExtractedField } from './fieldDisplay';
 import {
@@ -10,7 +10,7 @@ import {
   deleteExtractedField,
 } from '../../services/uploadService';
 import { buildFieldDraft, formatFieldDisplayValue, formatNumberWithCommas, isArrayOfLabelValueStrings, isArrayOfObjects, isArrayOfPrimitives, isPlainKeyValueObject, keyValueObjectRows, labelValueStringRows } from './fieldDisplay';
-import { humanizeFieldKey } from '../../utils/fieldLabels';
+import { humanizeFieldKey, normaliseFieldName } from '../../utils/fieldLabels';
 
 export function ExtractedInformationCard({
   addFieldError,
@@ -57,6 +57,8 @@ export function ExtractedInformationCard({
   setNewFieldName: Dispatch<SetStateAction<string>>;
   setNewFieldValue: Dispatch<SetStateAction<string>>;
 }) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
   return (
         <section className="details-card">
           <div className="details-section-heading">
@@ -72,29 +74,39 @@ export function ExtractedInformationCard({
               </span>
             )}
 
-            {canEditFields && (
+            <div className="details-section-actions">
+              {canEditFields && !isInFlight && (
+                <button
+                  type="button"
+                  className="add-field-button"
+                  onClick={() => {
+                    setIsCollapsed(false);
+                    setIsAddFieldOpen(true);
+                    setAddFieldError(null);
+                    setNewFieldName('');
+                    setNewFieldValue('');
+                  }}
+                >
+                  + Add field
+                </button>
+              )}
+
               <button
                 type="button"
-                className="add-field-button"
-                disabled={isInFlight}
-                title={
-                  isInFlight
-                    ? 'Fields can\'t be edited while the document is being processed.'
-                    : undefined
-                }
-                onClick={() => {
-                  setIsAddFieldOpen(true);
-                  setAddFieldError(null);
-                  setNewFieldName('');
-                  setNewFieldValue('');
-                }}
+                className={`document-row-action-icon collapse-toggle${isCollapsed ? ' is-collapsed' : ''}`}
+                aria-expanded={!isCollapsed}
+                aria-label={isCollapsed ? 'Expand extracted information' : 'Collapse extracted information'}
+                title={isCollapsed ? 'Expand' : 'Collapse'}
+                onClick={() => setIsCollapsed((collapsed) => !collapsed)}
               >
-                + Add field
+                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
               </button>
-            )}
+            </div>
           </div>
 
-          {canEditFields && isAddFieldOpen && (
+          {!isCollapsed && canEditFields && isAddFieldOpen && (
             <div className="add-field-form">
               <div className="add-field-form-row">
                 <label htmlFor="new-field-name">Field name</label>
@@ -106,6 +118,9 @@ export function ExtractedInformationCard({
                   placeholder="e.g. Company Address"
                   disabled={isAddingField}
                 />
+                {normaliseFieldName(newFieldName) && normaliseFieldName(newFieldName) !== newFieldName.trim() && (
+                  <small>Saved as {normaliseFieldName(newFieldName)}</small>
+                )}
               </div>
 
               <div className="add-field-form-row">
@@ -138,10 +153,15 @@ export function ExtractedInformationCard({
                 <button
                   type="button"
                   onClick={async () => {
-                    const fieldName = newFieldName.trim();
+                    const fieldName = normaliseFieldName(newFieldName);
 
                     if (!fieldName) {
                       setAddFieldError('Field name cannot be empty.');
+                      return;
+                    }
+
+                    if (document?.extracted_fields && fieldName in document.extracted_fields) {
+                      setAddFieldError('A field with this name already exists.');
                       return;
                     }
 
@@ -183,13 +203,13 @@ export function ExtractedInformationCard({
             </div>
           )}
 
-          {deleteFieldError && (
+          {!isCollapsed && deleteFieldError && (
             <div className="add-field-error">
               {deleteFieldError}
             </div>
           )}
 
-          {extractedFields.length === 0 ? (
+          {isCollapsed ? null : extractedFields.length === 0 ? (
             <div className="review-message review-message--error">
               <div>
                 <strong>No extracted fields available.</strong>

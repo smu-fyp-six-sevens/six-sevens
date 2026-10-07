@@ -4,6 +4,7 @@ import type { CaseStatusSubscription } from '../../services/caseSocket';
 import {
   EXTRACTION_CONFIDENCE_THRESHOLD,
   TERMINAL_DOCUMENT_STATUSES,
+  hasBeenApproved,
   hasExtractedInformation,
   isClassificationConfirmed,
   lowestFieldConfidence,
@@ -38,7 +39,7 @@ export function useCaseSnapshot(caseId: string) {
   // A case-match flag needs manual review until an officer approves the document.
   const caseMatchNeedsReview = useCallback(
     (document: DocumentRecord) =>
-      document.status !== 'approved' &&
+      !hasBeenApproved(document.status) &&
       caseMatches.get(document.id)?.status === 'manual_review',
     [caseMatches],
   );
@@ -123,13 +124,15 @@ export function useCaseSnapshot(caseId: string) {
     return () => window.clearInterval(interval);
   }, [anyDocumentProcessing]);
 
+  // "Approved" here means the whole post-approval family (approved/detecting/detected) — a
+  // document doesn't move back to the pre-approval table once the Detection Agent picks it up.
   const extractedDocuments = useMemo(
-    () => documents.filter((document) => document.status !== 'approved'),
+    () => documents.filter((document) => !hasBeenApproved(document.status)),
     [documents],
   );
 
   const approvedDocuments = useMemo(
-    () => documents.filter((document) => document.status === 'approved'),
+    () => documents.filter((document) => hasBeenApproved(document.status)),
     [documents],
   );
 

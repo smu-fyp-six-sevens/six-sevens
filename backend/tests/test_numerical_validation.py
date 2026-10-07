@@ -1,25 +1,42 @@
 from __future__ import annotations
 
 import random
-from datetime import date
+from types import SimpleNamespace
 
+from app.fraud_detection.field_catalogue import array_rows
 from app.fraud_detection.font_consistency import ExtractedField
-from app.fraud_detection.numerical_validation import (
-    BENFORD_MIN_SAMPLE,
-    REFERENCE_DATA,
-    _benford,
-    _mrz_check_digit,
-    _nric_expected_letter,
-    check_numerical_validation,
-)
+from app.fraud_detection.numerical_validation.runner import Binding, ROW_ROLES, benford_summary, run_numerical_checks
+from app.fraud_detection.numerical_validation.common import REFERENCE_DATA
+from app.fraud_detection.numerical_validation.identity_company import _mrz_check_digit, _nric_expected_letter
+from app.fraud_detection.numerical_validation.statements import BENFORD_MIN_SAMPLE, _benford
 
 
 def _field(name: str, value, confidence: float = 0.95) -> ExtractedField:
     return ExtractedField(field_name=name, field_type="string", field_value=value, confidence=confidence)
 
 
+def _auto_bindings(fields: list[ExtractedField]) -> list[Binding]:
+    """What a correct binder would produce: each row role points at the first row carrying one of its labels."""
+    rows = array_rows(next((f.field_value for f in fields if f.field_name == "income_statement_items"), None)) or []
+    bindings = []
+    for role, aliases in ROW_ROLES.items():
+        wanted = {alias.lower() for alias in aliases}
+        for index, row in enumerate(rows):
+            if str(row.get("label", "")).strip().lower() in wanted:
+                bindings.append(Binding(role=role, field="income_statement_items", row=index))
+                break
+    return bindings
+
+
 def _run(fields: list[ExtractedField], document_type: str | None = None):
-    return check_numerical_validation("doc-1", fields, document_type)
+    outcome = run_numerical_checks(document_type, fields, _auto_bindings(fields))
+    return SimpleNamespace(
+        findings=outcome.findings,
+        skipped_checks=outcome.skipped,
+        benford=benford_summary(document_type, outcome),
+        benford_excluding_fees=outcome.benford_excluding_fees,
+        unable_to_assess=not fields,
+    )
 
 
 def _codes(result, code: str) -> list:
@@ -522,71 +539,6 @@ def test_nav_flags_mismatch() -> None:
     assert len(_codes(result, "SOW.NAV")) == 1
 
 
-def test_fs_is_cast_flags_income_statement_that_does_not_cast() -> None:
-    result = _run(
-        [_field("revenue", "1000000"),
-         _field("income_statement_items", [
-             {"label": "Cost of sales", "amount": 600000},
-             {"label": "Total operating expenses", "amount": 200000},
-             {"label": "Tax expense", "amount": 17000},
-         ]),
-         _field("profit_for_the_year", "999999")],
-        document_type="source_of_wealth",
-    )
-    assert len(_codes(result, "FS.IS_CAST")) == 1
-
-
-def test_fs_balances_flags_broken_identity() -> None:
-    result = _run(
-        [_field("total_assets", "1000"), _field("total_liabilities", "400"),
-         _field("total_equity", "500")],
-        document_type="source_of_wealth",
-    )
-    findings = _codes(result, "FS.BALANCES")
-    assert len(findings) == 1
-    # 10% of total assets — clearly material, no "this might just be
-    # rounding" qualifier.
-    assert findings[0].severity_note is None
-
-
-def test_fs_balances_prior_year_flags_broken_identity_independently() -> None:
-    # Current year reconciles; only the prior-year column is broken.
-    result = _run(
-        [_field("total_assets", "1000"), _field("total_liabilities", "400"), _field("total_equity", "600"),
-         _field("total_assets_prior_year", "2000"),
-         _field("total_liabilities_prior_year", "400"),
-         _field("total_equity_prior_year", "600")],
-        document_type="source_of_wealth",
-    )
-    assert _codes(result, "FS.BALANCES") == []
-    findings = _codes(result, "FS.BALANCES_PRIOR_YEAR")
-    assert len(findings) == 1
-    assert findings[0].expected == "1,000.00"
-
-
-def test_fs_balances_still_flags_a_small_discrepancy_with_a_materiality_note() -> None:
-    # A $200 gap on ~$2.4M total assets (~0.008%) used to fall entirely
-    # within the old 0.1%-of-assets tolerance and was silently dropped.
-    # It must now still be flagged, just annotated as small — the lead
-    # agent decides whether that's worth escalating, not this check.
-    result = _run(
-        [_field("total_assets", "2392800"), _field("total_liabilities", "1385300"),
-         _field("total_equity", "1007300")],
-        document_type="source_of_wealth",
-    )
-    findings = _codes(result, "FS.BALANCES")
-    assert len(findings) == 1
-    assert findings[0].severity_note is not None
-    assert "%" in findings[0].severity_note
-
-
-def test_fs_balances_skips_when_neither_year_extracted() -> None:
-    result = _run([_field("company_name", "Acme")], document_type="source_of_wealth")
-    codes = {s.check_code for s in result.skipped_checks}
-    assert "FS.BALANCES" in codes
-    assert "FS.BALANCES_PRIOR_YEAR" not in codes
-
-
 def test_fs_tax_expense_rate_flags_flat_rate_ignoring_exemption() -> None:
     result = _run(
         [_field("income_statement_items", [
@@ -658,23 +610,6 @@ def test_fs_note_refs_flags_a_reference_with_no_matching_note() -> None:
     assert len(findings) == 1
     assert "7" in findings[0].summary
 
-
-def test_fs_bs_cast_flags_a_section_that_does_not_sum_to_its_total() -> None:
-    result = _run(
-        [_field("balance_sheet_items", [
-            {"section": "current_assets", "label": "Cash", "amount": 1000},
-            {"section": "current_assets", "label": "Trade receivables", "amount": 500},
-        ]),
-         _field("total_current_assets", "999999")],
-        document_type="source_of_wealth",
-    )
-    assert len(_codes(result, "FS.BS_CAST")) == 1
-
-
-def test_fs_bs_cast_skips_when_nothing_extracted() -> None:
-    result = _run([_field("company_name", "Acme")], document_type="source_of_wealth")
-    codes = {s.check_code for s in result.skipped_checks}
-    assert "FS.BS_CAST" in codes
 
 
 # ---------------------------------------------------------------------------

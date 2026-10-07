@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import re
 from collections import defaultdict
+from datetime import datetime
 from typing import Any, Optional, cast
 
 from .supabase_client import service_supabase_client, supabase_client
@@ -14,6 +16,15 @@ def _row(mapping: Any) -> dict:
     return cast(dict, mapping)
 
 
+_NUMBER_TEXT_RE = re.compile(r"^-?\(?\d[\d,]*(\.\d+)?\)?$")
+_DATE_FORMATS = ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d %b %Y", "%d %B %Y")
+
+
+def normalise_field_name(name: str) -> str:
+    """'Total Equity (SGD)' -> 'total_equity_sgd'. Non-alphanumerics become single underscores."""
+    return re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_")
+
+
 def _infer_field_type(value: object) -> str:
     if value is None:
         return "null"
@@ -25,6 +36,23 @@ def _infer_field_type(value: object) -> str:
         return "array"
     if isinstance(value, dict):
         return "object"
+    if isinstance(value, str):
+        return _infer_text_type(value.strip())
+    return "string"
+
+
+def _infer_text_type(text: str) -> str:
+    """Values typed in the UI arrive as strings, so guess from their text."""
+    if text.lower() in ("true", "false"):
+        return "boolean"
+    if _NUMBER_TEXT_RE.match(text):
+        return "number"
+    for fmt in _DATE_FORMATS:
+        try:
+            datetime.strptime(text, fmt)
+            return "date"
+        except ValueError:
+            continue
     return "string"
 
 

@@ -75,28 +75,21 @@ export function DetectionPanel({
             <p>
               <strong>Verdict: {detectionReport.verdict.toUpperCase()}</strong> — {detectionReport.summary}
             </p>
-            <div>Specialists consulted:</div>
+            <div>Specialists:</div>
             <ul>
               {detectionReport.consulted.map((c) => (
                 <li key={c.specialist}>
-                  {c.title}{c.second_look ? ' (second look)' : ''} — {c.reason} [tools: {c.tools_called.join(', ') || 'none'}]
+                  {c.title}{c.second_look ? ' (second look)' : ''} — {c.brief} [tools: {c.tools_called.join(', ') || 'none'}]
+                  {(c.dismissed ?? []).length > 0 && (
+                    <ul>
+                      {(c.dismissed ?? []).map((d) => (
+                        <li key={`${d.tool}-${d.id}`}>dismissed: {d.summary} — {d.reason}</li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               ))}
               {detectionReport.consulted.length === 0 && <li>none</li>}
-            </ul>
-            {detectionReport.plan_deviation &&
-              (detectionReport.plan_deviation.added.length > 0 || detectionReport.plan_deviation.dropped.length > 0) && (
-                <p>
-                  Deviated from the default team — added: {detectionReport.plan_deviation.added.join(', ') || 'none'};
-                  dropped: {detectionReport.plan_deviation.dropped.join(', ') || 'none'}
-                </p>
-              )}
-            <div>Specialists not consulted:</div>
-            <ul>
-              {detectionReport.skipped.map((s) => (
-                <li key={s.specialist}>{s.title} — {s.reason}</li>
-              ))}
-              {detectionReport.skipped.length === 0 && <li>none</li>}
             </ul>
             {detectionReport.second_look && (
               <p>

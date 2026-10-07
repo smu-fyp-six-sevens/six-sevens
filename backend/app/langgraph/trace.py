@@ -71,8 +71,7 @@ def get(document_id: str) -> dict[str, Any] | None:
     return _traces.get(document_id)
 
 
-def get_case_detection_reports(case_id: str) -> list[dict[str, Any]]:
-    """Detection reports stored on the traces of every document in a case."""
+def _case_trace_rows(case_id: str) -> list[dict[str, Any]]:
     rows = (
         supabase_client.table("langgraph_trace")
         .select("document_id, trace")
@@ -80,12 +79,16 @@ def get_case_detection_reports(case_id: str) -> list[dict[str, Any]]:
         .execute()
         .data
     )
+    # Every row here is a JSON object (the query selects document_id,
+    # trace from a real table) — cast() just tells the type checker
+    # what's already true, since postgrest types .data loosely.
+    return [cast(dict, raw_row) for raw_row in rows]
+
+
+def get_case_detection_reports(case_id: str) -> list[dict[str, Any]]:
+    """Detection reports stored on the traces of every document in a case."""
     reports = []
-    for raw_row in rows:
-        # Every row here is a JSON object (the query selects document_id,
-        # trace from a real table) — cast() just tells the type checker
-        # what's already true, since postgrest types .data loosely.
-        row = cast(dict, raw_row)
+    for row in _case_trace_rows(case_id):
         row_trace = cast(dict, row.get("trace")) or {}
         if not row_trace.get("detection_report"):
             continue
@@ -95,6 +98,16 @@ def get_case_detection_reports(case_id: str) -> list[dict[str, Any]]:
             "report": row_trace["detection_report"],
         })
     return reports
+
+
+def get_case_failed_detection_ids(case_id: str) -> set[str]:
+    """Documents in a case whose last detection run errored and left no report."""
+    failed = set()
+    for row in _case_trace_rows(case_id):
+        row_trace = cast(dict, row.get("trace")) or {}
+        if row_trace.get("detection_error") and not row_trace.get("detection_report"):
+            failed.add(row["document_id"])
+    return failed
 
 
 def get_persisted(document_id: str) -> dict[str, Any] | None:
