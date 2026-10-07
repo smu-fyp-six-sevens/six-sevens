@@ -17,10 +17,12 @@ check isn't called. An argument with a default of None is optional.
 from __future__ import annotations
 
 import inspect
+import re
 from dataclasses import dataclass
 from typing import Any, Callable
 
-# Marks an argument that the runner converts to a number before the check sees it.
+# Marks an argument that the runner converts to a number before the check sees it. An optional one
+# is written `Num | None = None` (never bare `Num = None` — Num is float, not float | None).
 Num = float
 
 ROW_ROLE_NAMES = frozenset({
@@ -69,6 +71,12 @@ def _param_kind(name: str) -> str:
     return "field"
 
 
+def _is_num_annotation(annotation: str) -> bool:
+    """True for "Num" itself and for "Num | None"/"Optional[Num]" — an optional numeric
+    argument's annotation text, not just its runtime value (Num is just `float`)."""
+    return "Num" in re.split(r"[\[\]|, ]+", annotation)
+
+
 def check(*, code: str, applies: tuple[str, ...] | None = None) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     def register(fn: Callable[..., Any]) -> Callable[..., Any]:
         params = []
@@ -76,7 +84,7 @@ def check(*, code: str, applies: tuple[str, ...] | None = None) -> Callable[[Cal
             annotation = param.annotation if isinstance(param.annotation, str) else getattr(param.annotation, "__name__", "")
             params.append(Param(
                 name=param.name,
-                numeric=annotation == "Num",
+                numeric=_is_num_annotation(annotation),
                 required=param.default is inspect.Parameter.empty,
                 kind=_param_kind(param.name),
             ))

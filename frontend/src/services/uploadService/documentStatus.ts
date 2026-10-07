@@ -7,6 +7,14 @@ import type {
 // Mirrors settings.EXTRACTION_CONFIDENCE_THRESHOLD in backend/app/config.py.
 export const EXTRACTION_CONFIDENCE_THRESHOLD = 0.9;
 
+// True from the moment a loan officer approves a document onward: 'approved' itself (briefly, or
+// resting there after a failed/cancelled detection run), 'detecting' (Detection Agent running,
+// shown as "Scanning"), and 'detected' (it finished). All three are locked the same way approved
+// always was — see routers/documents.py's _LOCKED_STATUSES, which this mirrors.
+export function hasBeenApproved(status: string | null | undefined): boolean {
+  return status === 'approved' || status === 'detecting' || status === 'detected';
+}
+
 // The single source of truth for "does this document's extraction quality need a human to look at it".
 export function hasExtractedInformation(fields: Record<string, unknown> | null): boolean {
   if (!fields) {
@@ -58,7 +66,7 @@ export function formatRoutingOutcome(
   }
 
   // Manual Review -> Accepted (officer saved the fields) -> Approved: only the Approve Document action.
-  if (document.status === 'approved') {
+  if (hasBeenApproved(document.status)) {
     return 'Approved';
   }
 
@@ -85,10 +93,12 @@ export function formatRoutingOutcome(
   return '—';
 }
 
-// Statuses that no longer change on their own.
+// Statuses that no longer change on their own. 'detecting' is deliberately not here — it's the
+// one status that's still actively in progress, so it keeps the "…" / isDocumentStatusInProgress treatment.
 export const TERMINAL_DOCUMENT_STATUSES = new Set([
   'analyzed',
   'approved',
+  'detected',
   'rejected',
   'failed',
   'cancelled',
@@ -139,6 +149,10 @@ export function formatDocumentStatus(status: string): string {
       return 'Extracted';
     case 'approved':
       return 'Approved';
+    case 'detecting':
+      return 'Scanning';
+    case 'detected':
+      return 'Detected';
     case 'rejected':
       return 'Rejected';
     case 'failed':
@@ -160,12 +174,18 @@ export function documentDetectionStage(
   documentType?: string | null,
   hasDetectionError = false,
 ): DocumentDetectionStage {
-  if (status !== 'approved') {
+  if (!hasBeenApproved(status)) {
     return null;
   }
-  if (hasDetectionReport) {
+  // The live status is authoritative once a run has actually set it.
+  if (status === 'detecting') {
+    return 'scanning';
+  }
+  if (status === 'detected' || hasDetectionReport) {
     return 'detected';
   }
+  // status === 'approved': either about to start, or resting after a failed/cancelled run — fall
+  // back to the old inference (still needed for documents detected before this status existed).
   if (skipsDetection(documentType)) {
     return 'skipped';
   }

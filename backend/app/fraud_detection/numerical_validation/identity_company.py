@@ -319,9 +319,10 @@ def _check_mrz_vs_viz(
 def _check_acra_share_sum(*, shareholders: Any, issued_shares: Num) -> CheckResult:
     """Shareholders' shares must add up to issued shares."""
     shares = [_field_number(r, "shares") for r in _rows(shareholders)]
-    if not shares or any(s is None for s in shares):
+    numeric_shares = [s for s in shares if s is not None]
+    if not shares or len(numeric_shares) != len(shares):
         return [], skipped(reason="shareholder share counts not all readable")
-    total = sum(shares)
+    total = sum(numeric_shares)
     if abs(total - issued_shares) > _MONEY_TOLERANCE:
         return [_finding(
             "ACRA.SHARE_SUM", "impossible",
@@ -378,9 +379,10 @@ def _check_const_subscriber_sum(*, subscribers: Any, issued_shares: Num) -> Chec
     partial list would always fail for an innocent reason."""
     subscriber_rows = _rows(subscribers)
     shares = [_field_number(r, "shares") for r in subscriber_rows]
-    if not subscriber_rows or any(s is None for s in shares):
+    numeric_shares = [s for s in shares if s is not None]
+    if not subscriber_rows or len(numeric_shares) != len(shares):
         return [], skipped(reason="subscriber share counts incomplete")
-    total = sum(shares)
+    total = sum(numeric_shares)
     if abs(total - issued_shares) > _MONEY_TOLERANCE:
         return [_finding(
             "CONST.SUBSCRIBER_SUM", "impossible",

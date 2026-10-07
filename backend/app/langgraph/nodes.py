@@ -267,6 +267,9 @@ async def extract_node(state: DocumentGraphState) -> dict:
         "field_count": len(extraction.get("extracted_fields") or {}),
         "dropped_unprinted_fields": extraction.get("dropped_unprinted_fields", []),
         "escalation": extraction.get("escalation"),
+        # The agent's own reasoning for each field it wasn't confident in — not persisted to the
+        # extracted_fields table, visible here in the trace only (see extract.py's field_reasons).
+        "low_confidence_reasons": extraction.get("field_reasons") or {},
     }
     trace.record(document_id, "extraction", document_type=document_type, schema=schema_type, **summary)
     # Whether an escalation here triggers a reclassify or a final FAILED is

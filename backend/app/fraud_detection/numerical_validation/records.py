@@ -31,7 +31,7 @@ from .registry import Num, check
 @check(code="PAY.NET", applies=("payslip",))
 def _check_payslip_sums(
     *, net_pay: Num, earnings_items: Any = None, deductions_items: Any = None,
-    total_earnings: Num = None, total_deductions: Num = None,
+    total_earnings: Num | None = None, total_deductions: Num | None = None,
 ) -> CheckResult:
     """Earnings lines sum to total earnings, deductions to total deductions, and earnings minus deductions to net pay."""
     if earnings_items is None and deductions_items is None:
@@ -39,8 +39,9 @@ def _check_payslip_sums(
     findings = []
     if earnings_items is not None and total_earnings is not None:
         amounts = [_as_amount(r) for r in _rows(earnings_items)]
-        if amounts and all(a is not None for a in amounts):
-            total = sum(amounts)
+        numeric_amounts = [a for a in amounts if a is not None]
+        if amounts and len(numeric_amounts) == len(amounts):
+            total = sum(numeric_amounts)
             if abs(total - total_earnings) > _MONEY_TOLERANCE:
                 findings.append(_finding(
                     "PAY.EARNINGS_SUM", "impossible",
@@ -49,8 +50,9 @@ def _check_payslip_sums(
                 ))
     if deductions_items is not None and total_deductions is not None:
         amounts = [_as_amount(r) for r in _rows(deductions_items)]
-        if amounts and all(a is not None for a in amounts):
-            total = sum(amounts)
+        numeric_amounts = [a for a in amounts if a is not None]
+        if amounts and len(numeric_amounts) == len(amounts):
+            total = sum(numeric_amounts)
             if abs(total - total_deductions) > _MONEY_TOLERANCE:
                 findings.append(_finding(
                     "PAY.DEDUCTIONS_SUM", "impossible",
@@ -119,8 +121,8 @@ def _as_amount(row: Any) -> float | None:
 
 @check(code="CR.SUMMARY_COUNTS", applies=("credit_report",))
 def _check_cr_summary_counts(
-    *, accounts: Any = None, account_count: Num = None, previous_enquiries: Any = None,
-    enquiry_count: Num = None, defaults: Any = None, default_count: Num = None,
+    *, accounts: Any = None, account_count: Num | None = None, previous_enquiries: Any = None,
+    enquiry_count: Num | None = None, defaults: Any = None, default_count: Num | None = None,
 ) -> CheckResult:
     """Summary counts of accounts, enquiries and defaults must match the rows listed."""
     findings = []
@@ -149,7 +151,7 @@ _DEFAULT_STATUS_RE = re.compile(r"overdue|write.?off|restructur", re.IGNORECASE)
 
 
 @check(code="CR.DEFAULT_CONSISTENCY", applies=("credit_report",))
-def _check_cr_default_consistency(*, accounts: Any, default_count: Num = None, defaults: Any = None) -> CheckResult:
+def _check_cr_default_consistency(*, accounts: Any, default_count: Num | None = None, defaults: Any = None) -> CheckResult:
     """A default count of zero is inconsistent with an account showing an overdue, write-off or restructure status."""
     defaults_rows = _rows(defaults)
     if default_count is None and not defaults_rows:
@@ -183,14 +185,15 @@ def _check_cr_limit_vs_balance(*, accounts: Any) -> CheckResult:
 
 
 @check(code="CR.AGGREGATE_SUM", applies=("credit_report",))
-def _check_cr_aggregate_sum(*, accounts: Any, total_outstanding_balance: Num = None) -> CheckResult:
+def _check_cr_aggregate_sum(*, accounts: Any, total_outstanding_balance: Num | None = None) -> CheckResult:
     """Account balances must add up to the stated total outstanding balance."""
     if total_outstanding_balance is None:
         return [], skipped(reason="Required field(s) not extracted: total_outstanding_balance")
     balances = [_field_number(r, "current_balance") for r in _rows(accounts)]
-    if not balances or any(b is None for b in balances):
+    numeric_balances = [b for b in balances if b is not None]
+    if not balances or len(numeric_balances) != len(balances):
         return [], skipped(reason="account balances not all readable")
-    total = sum(balances)
+    total = sum(numeric_balances)
     if abs(total - total_outstanding_balance) > max(_MONEY_TOLERANCE, abs(total) * 0.01):
         return [_finding(
             "CR.AGGREGATE_SUM", "impossible",
@@ -370,7 +373,7 @@ def _check_loan_rate_band(*, interest_rate: Num, facility_type: Any) -> CheckRes
 
 
 @check(code="LOAN.SCHEME_PARAMS", applies=("list_of_loans",))
-def _check_loan_scheme_params(*, scheme_name: Any, loan_amount: Num = None) -> CheckResult:
+def _check_loan_scheme_params(*, scheme_name: Any, loan_amount: Num | None = None) -> CheckResult:
     """A government loan scheme's amount cap."""
     if not REFERENCE_DATA["loan_scheme_params"]:
         return [], _skip_reference("LOAN.SCHEME_PARAMS", "loan_scheme_params")
@@ -414,8 +417,8 @@ def _check_poa_usage_match(*, usage_this_period: Num, consumption_trend: Any) ->
 
 @check(code="POA.BALANCE_ARITHMETIC", applies=("proof_of_address",))
 def _check_poa_balance_arithmetic(
-    *, previous_balance: Num = None, payment_received: Num = None, outstanding_balance: Num = None,
-    current_charges: Num = None, total_payable: Num = None,
+    *, previous_balance: Num | None = None, payment_received: Num | None = None, outstanding_balance: Num | None = None,
+    current_charges: Num | None = None, total_payable: Num | None = None,
 ) -> CheckResult:
     """Previous balance minus payment equals outstanding; outstanding plus current charges equals total payable."""
     findings = []

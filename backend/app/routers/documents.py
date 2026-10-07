@@ -43,9 +43,15 @@ from ..queue_service import document_queue
 _SETTABLE_DOCUMENT_TYPES = {*KNOWN_DOCUMENT_TYPES, "unrecognised"}
 # A pipeline run is already in flight for these — correcting the type now would race it.
 _TYPE_OVERRIDE_BLOCKED_STATUSES = IN_FLIGHT_STATUSES
-# A loan officer's decision is final: approved and rejected documents are
-# locked against field edits, type corrections and moves.
-_LOCKED_STATUSES = frozenset({DocumentStatus.APPROVED, DocumentStatus.REJECTED})
+# A loan officer's decision is final: approved (and everything detection does
+# afterwards) and rejected documents are locked against field edits, type
+# corrections and moves.
+_LOCKED_STATUSES = frozenset({
+    DocumentStatus.APPROVED, DocumentStatus.DETECTING, DocumentStatus.DETECTED, DocumentStatus.REJECTED,
+})
+# Same "approved or further along" set, for the two places below that check
+# specifically for APPROVED alone rather than going through _ensure_unlocked.
+_UNDELETABLE_STATUSES = frozenset({DocumentStatus.APPROVED, DocumentStatus.DETECTING, DocumentStatus.DETECTED})
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 logger = logging.getLogger(__name__)
@@ -73,8 +79,12 @@ async def _run_detection_task(document_id: str, case_id: str | None) -> None:
     except asyncio.CancelledError:
         # Only takes effect at the graph's next await point — an Anthropic
         # call already in flight still completes, it's just not waited on.
+        # Not an Exception subclass, so run_detection's own except block
+        # never runs for this path — the DETECTING -> APPROVED revert has
+        # to happen here instead.
         logger.info("Detection cancelled for document %s", document_id)
         langgraph_trace.record(document_id, "detection_error", error="Cancelled by loan officer")
+        await asyncio.to_thread(document_repository.revert_to_approved, document_id)
         raise
     except Exception:
         logger.exception(
@@ -189,10 +199,10 @@ async def delete_document(
     updates, extracted fields) and orphan a document row mid-flight. Cancel
     it first if you want to stop and then delete an in-flight document.
     """
-    if document.status == DocumentStatus.APPROVED:
+    if document.status in _UNDELETABLE_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="An approved document cannot be deleted.",
+            detail=f"An {document.status.value} document cannot be deleted.",
         )
     if document.status in IN_FLIGHT_STATUSES:
         raise HTTPException(
@@ -394,9 +404,11 @@ async def bulk_delete_documents(body: BulkDeleteRequest) -> BulkDeleteResponse:
         document = documents_by_id.get(document_id)
         if document is None:
             failed.append(BulkActionFailure(document_id=document_id, reason="Document not found"))
-        elif document.status == DocumentStatus.APPROVED:
+        elif document.status in _UNDELETABLE_STATUSES:
             failed.append(
-                BulkActionFailure(document_id=document_id, reason="An approved document cannot be deleted.")
+                BulkActionFailure(
+                    document_id=document_id, reason=f"An {document.status.value} document cannot be deleted.",
+                )
             )
         elif document.status in IN_FLIGHT_STATUSES:
             failed.append(

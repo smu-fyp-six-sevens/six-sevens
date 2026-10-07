@@ -62,15 +62,6 @@ export function ExtractedInformationCard({
   return (
         <section className="details-card">
           <div className="details-section-heading">
-            <button
-              type="button"
-              className="collapse-toggle"
-              aria-expanded={!isCollapsed}
-              aria-label={isCollapsed ? 'Expand extracted information' : 'Collapse extracted information'}
-              onClick={() => setIsCollapsed((collapsed) => !collapsed)}
-            >
-              {isCollapsed ? '▸' : '▾'}
-            </button>
             <span className="details-section-icon">▣</span>
             <span>Extracted Information</span>
 
@@ -83,27 +74,36 @@ export function ExtractedInformationCard({
               </span>
             )}
 
-            {canEditFields && (
+            <div className="details-section-actions">
+              {canEditFields && !isInFlight && (
+                <button
+                  type="button"
+                  className="add-field-button"
+                  onClick={() => {
+                    setIsCollapsed(false);
+                    setIsAddFieldOpen(true);
+                    setAddFieldError(null);
+                    setNewFieldName('');
+                    setNewFieldValue('');
+                  }}
+                >
+                  + Add field
+                </button>
+              )}
+
               <button
                 type="button"
-                className="add-field-button"
-                disabled={isInFlight}
-                title={
-                  isInFlight
-                    ? 'Fields can\'t be edited while the document is being processed.'
-                    : undefined
-                }
-                onClick={() => {
-                  setIsCollapsed(false);
-                  setIsAddFieldOpen(true);
-                  setAddFieldError(null);
-                  setNewFieldName('');
-                  setNewFieldValue('');
-                }}
+                className={`document-row-action-icon collapse-toggle${isCollapsed ? ' is-collapsed' : ''}`}
+                aria-expanded={!isCollapsed}
+                aria-label={isCollapsed ? 'Expand extracted information' : 'Collapse extracted information'}
+                title={isCollapsed ? 'Expand' : 'Collapse'}
+                onClick={() => setIsCollapsed((collapsed) => !collapsed)}
               >
-                + Add field
+                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
               </button>
-            )}
+            </div>
           </div>
 
           {!isCollapsed && canEditFields && isAddFieldOpen && (

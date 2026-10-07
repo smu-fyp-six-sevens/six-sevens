@@ -103,8 +103,8 @@ def compute_classification_confidence(
         runner_up = _strength(rule_candidates[1]) if len(rule_candidates) > 1 else None
         picks["rule"] = (rule_candidates[0]["document_type"], _strength(rule_candidates[0]), False, runner_up)
 
-    for source, result in tools.items():
-        candidates = _candidates(result)
+    for source, tool_result in tools.items():
+        candidates = _candidates(tool_result)
         if candidates:
             runner_up = _strength(candidates[1]) if len(candidates) > 1 else None
             picks[source] = (candidates[0]["document_type"], _strength(candidates[0]), False, runner_up)

@@ -15,8 +15,10 @@ into one combined report; the LLM only contributes the briefs, the
 severity/rationale on each finding, and the summary. A document that raises
 nothing comes back clean — nothing here forces a finding.
 
-Nothing is written to the documents table: the report is returned to the
-caller and stored in the langgraph trace (key `detection_report`).
+The report itself is returned to the caller and stored in the langgraph trace
+(key `detection_report`), not written to the documents table — only the
+document's status is (DETECTING while this runs, DETECTED on success, back to
+APPROVED on failure/cancellation — see run_detection below).
 """
 
 from __future__ import annotations
@@ -461,6 +463,9 @@ async def run_detection(document_id: str) -> dict:
     await asyncio.to_thread(trace.resume, document_id)
     # Clears an error left by an earlier failed attempt, so a retry doesn't read as failed while running.
     trace.record(document_id, "detection_start", detection_error=None)
+    # Live in the documents table too, not just the trace, so "Scanning" is a real DB-backed status
+    # rather than inferred from the absence of a report (which looked identical to a lost/crashed run).
+    await asyncio.to_thread(document_repository.mark_detecting, document_id)
     with telemetry.get_tracer().start_as_current_span("detection.run") as span:
         span.set_attribute("document_id", document_id)
         try:
@@ -477,8 +482,10 @@ async def run_detection(document_id: str) -> dict:
             # silent 404 forever — see routers/detection.py.
             logger.exception("Detection graph run failed for document %s", document_id)
             trace.record(document_id, "detection_error", error=f"{type(exc).__name__}: {exc}")
+            await asyncio.to_thread(document_repository.revert_to_approved, document_id)
             raise
         result = final["result"]
         span.set_attribute("verdict", result["verdict"])
         span.set_attribute("finding_count", len(result["findings"]))
+        await asyncio.to_thread(document_repository.mark_detected, document_id)
         return result

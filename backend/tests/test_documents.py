@@ -1514,6 +1514,7 @@ async def test_run_detection_task_records_cancellation_and_still_pushes_snapshot
         patch("app.routers.documents.run_detection", AsyncMock(side_effect=asyncio.CancelledError())),
         patch("app.routers.documents.langgraph_trace") as mock_trace,
         patch("app.routers.documents._push_case_snapshot", AsyncMock()) as mock_push,
+        patch("app.routers.documents.document_repository") as mock_repo,
     ):
         with pytest.raises(asyncio.CancelledError):
             await _run_detection_task("doc-1", "case-1")
@@ -1521,6 +1522,8 @@ async def test_run_detection_task_records_cancellation_and_still_pushes_snapshot
     mock_trace.record.assert_called_once_with(
         "doc-1", "detection_error", error="Cancelled by loan officer",
     )
+    # DETECTING -> back to APPROVED: a cancelled run must not leave the document stuck as "Scanning".
+    mock_repo.revert_to_approved.assert_called_once_with("doc-1")
     mock_push.assert_called_once_with("case-1")
 
 

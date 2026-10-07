@@ -134,7 +134,7 @@ def _check_running_balance(*, transactions: Any) -> CheckResult:
 
 @check(code="BS.OPEN_CLOSE", applies=("bank_statement",))
 def _check_open_close(
-    *, transactions: Any, ledger_balance: Num = None, opening_balance: Num = None,
+    *, transactions: Any, ledger_balance: Num | None = None, opening_balance: Num | None = None,
 ) -> CheckResult:
     """Opening balance plus credits minus debits must equal the closing balance. The stated header balances
     are used as the anchors when present, and also cross-checked against the transaction-derived values."""
@@ -183,7 +183,7 @@ def _check_open_close(
 
 @check(code="BS.TOTALS", applies=("bank_statement",))
 def _check_totals(
-    *, transactions: Any, total_credits: Num = None, total_debits: Num = None, transaction_count: Num = None,
+    *, transactions: Any, total_credits: Num | None = None, total_debits: Num | None = None, transaction_count: Num | None = None,
 ) -> CheckResult:
     """Any stated total credits, total debits or transaction count must match the transaction lines."""
     rows = _rows(transactions)
@@ -231,7 +231,7 @@ def _check_overdraft_limit(*, transactions: Any, overdraft_limit: Num) -> CheckR
 
 @check(code="BS.AVAILABLE_VS_LEDGER", applies=("bank_statement",))
 def _check_available_vs_ledger(
-    *, ledger_balance: Num, available_balance: Num, holds: Num = None, total_hold_amount: Num = None,
+    *, ledger_balance: Num, available_balance: Num, holds: Num | None = None, total_hold_amount: Num | None = None,
 ) -> CheckResult:
     """Available balance equals ledger balance minus holds."""
     # Extraction sometimes names this after the printed label ("Total Hold Amount").
@@ -538,7 +538,7 @@ def _run_benford_pair(transactions: Any) -> tuple[BenfordAnalysis | None, Benfor
         return None, None, []
     all_amounts = [a for a in (_field_number(r, "amount") for r in rows) if a]
     non_fee_amounts = [
-        _field_number(r, "amount") for r in rows if not _FEE_KEYWORDS.search(str(r.get("description") or ""))
+        _field_number(r, "amount") for r in rows if not _BANK_CHARGE_KEYWORDS.search(str(r.get("description") or ""))
     ]
     non_fee_amounts = [a for a in non_fee_amounts if a]
 
@@ -577,9 +577,10 @@ def _check_holding_value(*, holdings: Any) -> CheckResult:
 def _check_portfolio_sum(*, holdings: Any, portfolio_value: Num) -> CheckResult:
     """Holdings must add up to the stated portfolio value."""
     market_values = [_field_number(r, "market_value") for r in _rows(holdings)]
-    if not market_values or any(v is None for v in market_values):
+    numeric_values = [v for v in market_values if v is not None]
+    if not market_values or len(numeric_values) != len(market_values):
         return [], skipped(reason="holding market values not all readable")
-    total = sum(market_values)
+    total = sum(numeric_values)
     if abs(total - portfolio_value) > _MONEY_TOLERANCE:
         return [_finding(
             "SOW.PORTFOLIO_SUM", "impossible",
@@ -592,7 +593,7 @@ def _check_portfolio_sum(*, holdings: Any, portfolio_value: Num) -> CheckResult:
 
 @check(code="SOW.NAV", applies=("source_of_wealth",))
 def _check_nav(
-    *, cash_balance: Num, portfolio_value: Num, net_asset_value: Num, margin_loan: Num = None,
+    *, cash_balance: Num, portfolio_value: Num, net_asset_value: Num, margin_loan: Num | None = None,
 ) -> CheckResult:
     """Cash plus portfolio value minus margin loan must equal net asset value."""
     margin = margin_loan or 0.0
@@ -611,7 +612,7 @@ def _check_nav(
 @check(code="FS.RE_ROLLFORWARD", applies=("source_of_wealth",))
 def _check_fs_re_rollforward(
     *, retained_earnings_opening: Num, profit_for_the_year: Num, dividends_paid: Num,
-    retained_earnings_closing: Num, retained_earnings_closing_prior_year: Num = None,
+    retained_earnings_closing: Num, retained_earnings_closing_prior_year: Num | None = None,
 ) -> CheckResult:
     """Retained earnings roll forward (opening plus profit minus dividends is closing), and last year's closing
     equals this year's opening."""
@@ -682,7 +683,7 @@ def _check_fs_tax_expense_rate(*, profit_before_tax_line: Any, tax_expense_line:
 
 @check(code="FS.DEBT_CLASSIFICATION", applies=("source_of_wealth",))
 def _check_fs_debt_classification(
-    *, borrowings_current: Num, loan_tenure: Num, borrowings_non_current: Num = None,
+    *, borrowings_current: Num, loan_tenure: Num, borrowings_non_current: Num | None = None,
 ) -> CheckResult:
     """A term loan repaid in instalments should have a non-current portion."""
     if loan_tenure <= 12:
@@ -706,7 +707,7 @@ _RATIO_BANDS = {
 
 @check(code="FS.RATIO_BANDS", applies=("source_of_wealth",))
 def _check_fs_ratio_bands(
-    *, borrowings_opening: Num = None, borrowings_closing: Num = None, ppe_closing: Num = None, revenue: Num = None,
+    *, borrowings_opening: Num | None = None, borrowings_closing: Num | None = None, ppe_closing: Num | None = None, revenue: Num | None = None,
     finance_costs_line: Any = None, depreciation_line: Any = None, cost_of_sales_line: Any = None,
 ) -> CheckResult:
     """Finance costs over average borrowings, depreciation over PPE, and gross margin must each fall within a

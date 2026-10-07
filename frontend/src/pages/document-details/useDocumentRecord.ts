@@ -21,6 +21,12 @@ export function useDocumentRecord(documentId: string) {
     document?.status === 'queued' ||
     document?.status === 'processing' ||
     document?.status === 'extracting';
+  // Needs to stay subscribed from 'approved' onward, not just once 'detecting' starts: detection
+  // launches asynchronously right after approval, so a window that only opened once status was
+  // already 'detecting' would never learn that transition happened in the first place — the
+  // socket has to already be open when the server makes it. Stops once 'detected' (terminal).
+  const isAwaitingOrRunningDetection =
+    document?.status === 'approved' || document?.status === 'detecting';
 
   useEffect(() => {
     let cancelled = false;
@@ -74,7 +80,7 @@ export function useDocumentRecord(documentId: string) {
   }, [document?.status]);
 
   useEffect(() => {
-    if (!caseId || !isInFlight) {
+    if (!caseId || (!isInFlight && !isAwaitingOrRunningDetection)) {
       return;
     }
 
@@ -98,7 +104,7 @@ export function useDocumentRecord(documentId: string) {
     });
 
     return () => subscription.unsubscribe();
-  }, [caseId, isInFlight, documentId]);
+  }, [caseId, isInFlight, isAwaitingOrRunningDetection, documentId]);
 
   return {
     document,

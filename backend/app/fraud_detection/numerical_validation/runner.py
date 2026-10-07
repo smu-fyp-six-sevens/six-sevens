@@ -288,16 +288,17 @@ def _balance_sheet(values: dict[str, Any], plain: dict[str, str], sections: dict
         ("current year", ("total_assets", "total_liabilities", "total_equity")),
         ("prior year", ("total_assets_prior_year", "total_liabilities_prior_year", "total_equity_prior_year")),
     ):
-        resolved = [_resolve_plain(name, plain, values) for name in names]
-        if not all(resolved):
+        resolved_names = [name for name in (_resolve_plain(name, plain, values) for name in names) if name is not None]
+        if len(resolved_names) != len(names):
             continue
-        numbers = [_as_number(values[name]) for name in resolved]
-        if any(n is None for n in numbers):
+        numbers = [_as_number(values[name]) for name in resolved_names]
+        numeric_values = [n for n in numbers if n is not None]
+        if len(numeric_values) != len(numbers):
             continue
-        assets, liabilities, equity = numbers
+        assets, liabilities, equity = numeric_values
         finding = identity_finding(
-            year, resolved[0], assets, liabilities, equity,
-            needs_review=_low_confidence(confidences, resolved),
+            year, resolved_names[0], assets, liabilities, equity,
+            needs_review=_low_confidence(confidences, resolved_names),
         )
         if finding:
             outcome.findings.append(finding)
@@ -438,7 +439,9 @@ def build_result(document_id: str, document_type: str | None, fields: list[Any],
         unable_to_assess_reason="No numerical values could be extracted from this document" if unable else None,
         breakdown=outcome.breakdown,
         unassigned=outcome.unassigned,
-        bindings_applied=outcome.applied,
+        # The same role (e.g. "transactions") is read by many checks, so outcome.applied has one
+        # entry per check that used it — de-duplicated here, once per distinct role/field/row.
+        bindings_applied=list({tuple(sorted(b.items())): b for b in outcome.applied}.values()),
         binding_issues=outcome.issues,
         binding_error=binding_error,
     )

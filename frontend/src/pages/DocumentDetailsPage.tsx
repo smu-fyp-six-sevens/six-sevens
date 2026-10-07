@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -11,6 +11,7 @@ import {
   EXTRACTION_CONFIDENCE_THRESHOLD,
   documentDetectionStage,
   formatDocumentType,
+  hasBeenApproved,
   hasExtractedInformation,
   isClassificationConfirmed,
   skipsDetection,
@@ -64,7 +65,7 @@ export default function DocumentDetailsPage({
   const caseMatch = useDocumentCaseMatch(documentId, document);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
-  const isApproved = document?.status === 'approved';
+  const isApproved = hasBeenApproved(document?.status);
   // Approve and Reject are both final: the document is locked against field edits and type corrections.
   const isLocked = isApproved || document?.status === 'rejected';
   // Fields still under the threshold haven't been reviewed: "Save fields" marks every reviewed field.
@@ -236,6 +237,19 @@ export default function DocumentDetailsPage({
 
   const { langGraphTrace, isRefreshingTrace, refreshLangGraphTrace } = useLangGraphTrace(documentId);
 
+  // The case-status websocket (useDocumentRecord) stays subscribed while status is 'detecting', so this
+  // fires live the moment the server moves it to 'detected' (or back to 'approved' on a failed run) —
+  // no manual refresh needed to see the finished report and trace.
+  const previousDetectionStatusRef = useRef<string | null>(null);
+  useEffect(() => {
+    const previousStatus = previousDetectionStatusRef.current;
+    previousDetectionStatusRef.current = document?.status ?? null;
+    if (previousStatus === 'detecting' && document?.status !== 'detecting') {
+      void refreshDetectionReport();
+      void refreshLangGraphTrace();
+    }
+  }, [document?.status, refreshDetectionReport, refreshLangGraphTrace]);
+
   const {
     isApproving,
     approveError,
@@ -319,7 +333,7 @@ export default function DocumentDetailsPage({
                   label: 'Preview document',
                   onSelect: () => setIsPreviewOpen(true),
                 },
-                ...(document.status !== 'approved' && !isInFlight
+                ...(!hasBeenApproved(document.status) && !isInFlight
                   ? [
                       {
                         id: 'delete',
@@ -455,7 +469,7 @@ export default function DocumentDetailsPage({
           <div className="save-error">{retryError}</div>
         )}
 
-        {document.status !== 'approved' &&
+        {!hasBeenApproved(document.status) &&
         document.status !== 'rejected' && (
           <div className="document-actions">
             {canCancelDocument(document.status) && (

@@ -665,11 +665,21 @@ def schema_field_names(document_type: str) -> list[str]:
     return [*schema.get("required", []), *schema.get("additional", [])]
 
 
+# The "0.9" below mirrors settings.EXTRACTION_CONFIDENCE_THRESHOLD (the point past which a field
+# needs no manual review) — kept as a literal since this is prompt text, not code.
 _FIELD_WRAPPER_INSTRUCTIONS = (
-    'Each field in extracted_fields must be an object of the form '
-    '{"value": <the extracted value, or null if not present>, "confidence": <float '
+    "A field that is one of this document type's required fields (listed above) but genuinely "
+    "isn't present should still be returned, wrapped with \"value\": null — that gap is real and "
+    "needs a human to see it. An ADDITIONAL field (also listed above) that doesn't apply to this "
+    "document, or isn't printed on it, should be left out of extracted_fields entirely — do not "
+    'include it with a null value just to show you considered it.\n\n'
+    'Each field you do include in extracted_fields must be an object of the form '
+    '{"value": <the extracted value>, "confidence": <float '
     "0.0-1.0, your confidence that this specific value is correct and clearly "
-    "supported by the text>} — do not return a bare value, always wrap it like "
+    'supported by the text>, "low_confidence_reason": <a short phrase for why, e.g. '
+    '"handwriting is hard to read", "figure is partially cut off", "value is implied '
+    'rather than printed directly" — required whenever confidence is below 0.9, omit '
+    "or use null otherwise> — do not return a bare value, always wrap it like "
     "this, for every field regardless of which tier it came from.\n\n"
     "Every value must be a literal transcription of what the document itself "
     "states — never your own commentary, correction, or judgement about "

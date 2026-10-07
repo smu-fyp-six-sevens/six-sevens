@@ -16,6 +16,8 @@ class DocumentStatus(str, Enum):
     EXTRACTING = "extracting"   # classification recorded; Extraction workflow invoked
     ANALYZED = "analyzed"       # Classifier (and downstream agents) finished
     APPROVED = "approved"       # When loan officer manually approves a document
+    DETECTING = "detecting"     # Detection Agent running (shown as "Scanning")
+    DETECTED = "detected"       # Detection Agent finished with a report — terminal
     REJECTED = "rejected"       # When loan officer manually rejects a document
     FAILED = "failed"           # AC3: retries exhausted, needs manual review
     CANCELLED = "cancelled"     # Manually stopped by a loan officer while queued/processing
