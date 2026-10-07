@@ -13,6 +13,7 @@ from app.fraud_detection import ai_generation
 from app.fraud_detection.ai_generation import (
     AIGenerationConfig,
     _estimate_quality,
+    _ijg_table,
     _provenance,
     check_ai_generation,
 )
@@ -93,6 +94,17 @@ def test_spectral_peaks_flag_a_generator_checkerboard() -> None:
     assert "2px period" in peaks.detail
 
 
+def test_spectral_peaks_ignore_a_bayer_sensor_trace() -> None:
+    """
+    A camera's Bayer sensor leaves a diagonal 2px checkerboard in genuine
+    photos; it must not read as a generator's upsampling pattern.
+    """
+    yy, xx = np.mgrid[0:768, 0:768]
+    bayer = np.where((yy + xx) % 2 == 0, 1.0, -1.0)[..., None]
+    result = check_ai_generation("doc-1", _png(np.clip(_scene() + bayer, 0, 255)))
+    assert _indicator(result, "Spectral Peaks").strength == 0.0
+
+
 def test_spectral_peaks_ignore_jpeg_block_grid() -> None:
     """JPEG's 8x8 blocks are periodic too; a plain JPEG must not read as upsampled."""
     result = check_ai_generation("doc-1", _jpeg(_scene(), 75))
@@ -120,11 +132,9 @@ def test_double_compression_finds_the_earlier_quality() -> None:
 
 
 def test_compression_indicators_skip_formats_without_jpeg_history() -> None:
-    result = check_ai_generation("doc-1", _png(_scene()))
-    for name in ("Double Compression", "Quantisation Table"):
-        indicator = _indicator(result, name)
-        assert not indicator.assessed
-        assert "PNG" in (indicator.reason or "")
+    indicator = _indicator(check_ai_generation("doc-1", _png(_scene())), "Double Compression")
+    assert not indicator.assessed
+    assert "PNG" in (indicator.reason or "")
 
 
 def test_estimate_quality_recognises_standard_libjpeg_tables() -> None:
@@ -136,28 +146,25 @@ def test_provenance_reads_iptc_digital_source_type() -> None:
     tags = {
         "XMP-iptcExt:DigitalSourceType": "http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia",
     }
-    indicator, camera = _provenance(tags, AIGenerationConfig())
+    indicator = _provenance(tags, AIGenerationConfig())
     assert indicator.strength == 0.95
     assert "trainedalgorithmicmedia" in indicator.detail
-    assert camera is False
 
 
 def test_provenance_reads_c2pa_claim_generator() -> None:
     tags = {"JUMBF:JUMDLabel": "c2pa", "JUMBF:ClaimGenerator": "Adobe_Firefly/1.0"}
-    indicator, _ = _provenance(tags, AIGenerationConfig())
+    indicator = _provenance(tags, AIGenerationConfig())
     assert indicator.strength == 0.9
     assert "C2PA manifest present" in indicator.detail
 
 
 def test_provenance_absence_is_not_evidence() -> None:
-    indicator, camera = _provenance({"IFD0:Make": "Apple", "IFD0:Model": "iPhone 15"}, AIGenerationConfig())
+    indicator = _provenance({"IFD0:Make": "Apple", "IFD0:Model": "iPhone 15"}, AIGenerationConfig())
     assert indicator.strength == 0.0
-    assert camera is True
 
 
 def test_provenance_unassessed_without_exiftool() -> None:
-    indicator, _ = _provenance(None, AIGenerationConfig())
-    assert not indicator.assessed
+    assert not _provenance(None, AIGenerationConfig()).assessed
 
 
 @requires_exiftool
@@ -197,7 +204,7 @@ def test_every_indicator_is_recorded_with_value_and_weight() -> None:
     names = {i.indicator for i in image.indicators}
     assert names == {
         "Spectral Peaks", "Noise Level", "Noise Signal Dependence", "Error Level Analysis",
-        "Double Compression", "Quantisation Table", "Camera Metadata", "Provenance",
+        "Double Compression", "Capture Signature", "Provenance",
     }
     for indicator in image.indicators:
         if indicator.assessed:
@@ -244,7 +251,7 @@ def test_pdf_embedded_photo_is_scored_with_its_page() -> None:
     assert image.source == "embedded"
     assert image.page == 0
     assert image.bbox is not None
-    assert _indicator(result, "Camera Metadata").assessed is False
+    assert _indicator(result, "Capture Signature").assessed is False
 
 
 def test_pdf_without_images_is_unable_to_assess() -> None:
@@ -271,4 +278,65 @@ def test_exiftool_missing_degrades_to_pixel_only(monkeypatch) -> None:
 
     assert not result.unable_to_assess
     assert _indicator(result, "Provenance").assessed is False
-    assert _indicator(result, "Camera Metadata").assessed is False
+    assert _indicator(result, "Capture Signature").assessed is False
+
+
+# --- Capture Signature -------------------------------------------------------------
+
+_IPHONE_TAGS = {"ICC_Profile:ProfileDescription": "Display P3", "ICC-header:ProfileCMMType": "Apple Computer Inc."}
+
+
+def _camera_jpeg(rgb: np.ndarray) -> bytes:
+    """A JPEG with custom (non-libjpeg) tables at ~q96, like an iPhone's encoder."""
+    table = [int(v) + (1 if i % 7 == 0 else 0) for i, v in enumerate(_ijg_table(96))]
+    buffer = io.BytesIO()
+    Image.fromarray(rgb.astype(np.uint8)).save(buffer, "JPEG", qtables=[table, table])
+    return buffer.getvalue()
+
+
+def _with_tags(monkeypatch, tags: dict) -> None:
+    monkeypatch.setattr(ai_generation, "_run_exiftool", lambda blobs, config: [tags for _ in blobs])
+
+
+def test_capture_signature_recognises_a_phone_photo(monkeypatch) -> None:
+    _with_tags(monkeypatch, _IPHONE_TAGS)
+    capture = _indicator(check_ai_generation("doc-1", _camera_jpeg(_scene())), "Capture Signature")
+
+    assert capture.value == "camera"
+    assert capture.contribution == 0.0
+    assert "custom JPEG tables" in capture.detail and "Display P3" in capture.detail
+
+
+def test_camera_capture_halves_noise_level(monkeypatch) -> None:
+    """A clean low-light phone photo is phone noise reduction, not generation."""
+    clean = _scene(noise=0.0, falloff=2.0)
+    _with_tags(monkeypatch, {})
+    stripped = _indicator(check_ai_generation("doc-1", _camera_jpeg(clean)), "Noise Level")
+    _with_tags(monkeypatch, _IPHONE_TAGS)
+    captured = _indicator(check_ai_generation("doc-1", _camera_jpeg(clean)), "Noise Level")
+
+    assert captured.contribution == pytest.approx(stripped.contribution / 2, abs=1e-3)
+    assert "camera capture" in captured.detail
+
+
+def test_capture_signature_is_unknown_for_a_forwarded_photo(monkeypatch) -> None:
+    """WhatsApp-style: standard tables at q80, everything stripped."""
+    _with_tags(monkeypatch, {})
+    # 768x700: not a generator size (768x768 is one).
+    capture = _indicator(check_ai_generation("doc-1", _jpeg(_scene()[:, :700], 80)), "Capture Signature")
+    assert capture.value == "unknown"
+    assert capture.strength == 0.5
+
+
+def test_capture_signature_flags_a_generator_output_size(monkeypatch) -> None:
+    _with_tags(monkeypatch, {})
+    capture = _indicator(check_ai_generation("doc-1", _png(_scene(1024))), "Capture Signature")
+    assert capture.value == "generator-shaped"
+    assert "1024x1024" in capture.detail
+
+
+def test_capture_signature_treats_a_p3_png_as_a_screenshot(monkeypatch) -> None:
+    _with_tags(monkeypatch, _IPHONE_TAGS)
+    capture = _indicator(check_ai_generation("doc-1", _png(_scene()[:, :700])), "Capture Signature")
+    assert capture.value == "unknown"
+    assert "screenshot" in capture.detail

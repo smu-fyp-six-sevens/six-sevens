@@ -19,16 +19,20 @@ Indicators (AC1):
   Noise Level             Camera sensors add noise everywhere; generated
                           images are usually far cleaner in smooth areas.
   Noise Signal Dependence Sensor noise grows with brightness; noise a model
-                          synthesises has no reason to.
+                          synthesises has no reason to. Recorded only (weight
+                          0): phone processing breaks this on real photos.
   Error Level Analysis    Re-saving at a fixed JPEG quality and comparing:
                           regions with a different compression history stand
                           out against the rest.
   Double Compression      "JPEG ghosts": recompressing at a range of qualities
                           dips at any quality the image was saved at before.
-  Quantisation Table      Standard libjpeg tables mean a software encoder
-                          (the usual last step of a generation pipeline);
-                          cameras mostly ship their own.
-  Camera Metadata         A photographic upload with no camera make/model.
+  Capture Signature       Uploads only: does the file carry a phone/camera's
+                          fingerprint (custom JPEG tables, a device colour
+                          profile, camera EXIF), a generator's (preset output
+                          sizes), or neither (re-encoded by a messaging app or
+                          stripped)? A camera capture also halves Noise
+                          Level's weight, since phone noise reduction makes
+                          real low-light photos look "too clean".
   Provenance              Read via ExifTool: a C2PA manifest, an IPTC
                           DigitalSourceType, or a generator's own tags (e.g.
                           Stable Diffusion's "parameters" chunk). A declared
@@ -82,8 +86,7 @@ IndicatorName = Literal[
     "Noise Signal Dependence",
     "Error Level Analysis",
     "Double Compression",
-    "Quantisation Table",
-    "Camera Metadata",
+    "Capture Signature",
     "Provenance",
 ]
 Likelihood = Literal["low", "medium", "high"]
@@ -96,23 +99,24 @@ _SCORED: tuple[IndicatorName, ...] = (
     "Noise Signal Dependence",
     "Error Level Analysis",
     "Double Compression",
-    "Quantisation Table",
-    "Camera Metadata",
+    "Capture Signature",
 )
 
 
 def _default_weights() -> dict[str, float]:
-    # Strongest, most AI-specific cue first. Noise Signal Dependence and the
-    # quantisation table are kept small: both have common innocent causes
-    # (gamma encoding flattens noise; many phones use standard tables).
+    # Strongest, most AI-specific cue first. Noise Signal Dependence is
+    # measured and recorded but not scored: on two real iPhone photos it
+    # read -0.44 and -0.60 (full strength), because phone noise reduction and
+    # tone mapping break the "noise grows with brightness" premise. Capture
+    # Signature stays modest: a missing signature mostly means a messaging
+    # app re-encoded the file, not that a model made it.
     return {
         "Spectral Peaks": 0.35,
-        "Noise Level": 0.25,
-        "Noise Signal Dependence": 0.05,
+        "Noise Level": 0.30,
+        "Noise Signal Dependence": 0.0,
         "Error Level Analysis": 0.10,
         "Double Compression": 0.10,
-        "Quantisation Table": 0.05,
-        "Camera Metadata": 0.10,
+        "Capture Signature": 0.15,
     }
 
 
@@ -177,6 +181,18 @@ class AIGenerationConfig(BaseModel):
     # double-compressed 0.74-0.81.
     ghost_depth_floor: float = Field(default=0.05, ge=0.0)
     ghost_depth_ceiling: float = Field(default=0.3, gt=0.0)
+
+    # --- Capture Signature ---
+    # Camera encoders save high: both real iPhone uploads used custom tables
+    # at quality 96, while web/messaging exports sit around 70-85.
+    capture_min_camera_quality: int = Field(default=90, ge=1, le=100)
+    # Signals needed to call a file a camera capture. One alone is too easy
+    # to have by accident (any editor can embed a P3 profile).
+    capture_min_camera_signals: int = Field(default=2, ge=1)
+    # Noise Level's weight is multiplied by this for a camera capture: phone
+    # noise reduction made a real low-light iPhone photo read as clean (0.83
+    # grey levels) as a rendered fake card (0.82).
+    noise_weight_when_captured: float = Field(default=0.5, ge=0.0, le=1.0)
 
     # --- bands ---
     medium_threshold: float = Field(default=0.35, gt=0.0, lt=1.0)
@@ -333,10 +349,17 @@ def _averaged_spectrum(residual: np.ndarray, config: AIGenerationConfig) -> np.n
 
 def _peak_ratio(power: np.ndarray, period: int) -> float:
     """
-    Power at the period's frequency against the median of its surroundings.
-    A real fixed pattern lights up both axes (or the diagonal); a lone axis
-    is more often text lines or a scanner's banding, so the axes count only
-    as their weaker one.
+    Power at the period's frequency against the median of its surroundings,
+    on the horizontal and vertical axes only, counted as the weaker of the two:
+    a lone axis is more often text lines or a scanner's banding.
+
+    The diagonal is deliberately not measured. A camera's Bayer sensor samples
+    green on a diagonal checkerboard (quad-Bayer phone sensors repeat it at
+    4px), and demosaicing leaves exactly that diagonal peak in genuine photos
+    — two real iPhone NRIC photos measured 73-79 there, against 6-9 on the
+    axes. Generator upsampling works along rows and columns, so it shows on
+    the axes: the AI-generated passport in GLDB-55 measured 18 and 122 there,
+    and 1.3 on the diagonal.
     """
     t = power.shape[0]
     c = t // 2
@@ -352,8 +375,7 @@ def _peak_ratio(power: np.ndarray, period: int) -> float:
         background = float(np.median(patch[ring]))
         return peak / background if background > 0 else 0.0
 
-    axes = min(ratio_at(0, f), ratio_at(f, 0))
-    return max(axes, ratio_at(f, f))
+    return min(ratio_at(0, f), ratio_at(f, 0))
 
 
 def _measure_spectral(gray: np.ndarray, is_jpeg: bool, config: AIGenerationConfig) -> AIIndicator:
@@ -485,20 +507,6 @@ def _estimate_quality(image: Image.Image) -> tuple[int, bool] | None:
     errors = [(float(np.abs(_ijg_table(q) - luma).sum()), q) for q in range(1, 101)]
     error, quality = min(errors)
     return quality, error == 0
-
-
-def _measure_quant_table(image: Image.Image, config: AIGenerationConfig) -> AIIndicator:
-    name: IndicatorName = "Quantisation Table"
-    estimate = _estimate_quality(image)
-    if estimate is None:
-        return _not_assessed(name, "No readable JPEG quantisation table.", config)
-    quality, standard = estimate
-    detail = (
-        f"Standard libjpeg tables at quality {quality} — a software encoder."
-        if standard
-        else f"Custom tables (closest standard quality {quality}) — typical of a camera or vendor encoder."
-    )
-    return _measured(name, quality, detail, 1.0 if standard else 0.0, config)
 
 
 def _recompress(image: Image.Image, quality: int) -> np.ndarray:
@@ -643,11 +651,10 @@ def _source_types(tags: dict) -> list[str]:
     return found
 
 
-def _provenance(tags: dict | None, config: AIGenerationConfig) -> tuple[AIIndicator, bool]:
-    """(Provenance indicator, whether camera capture is declared/evidenced)."""
+def _provenance(tags: dict | None, config: AIGenerationConfig) -> AIIndicator:
     name: IndicatorName = "Provenance"
     if tags is None:
-        return _not_assessed(name, "ExifTool is not available to read provenance.", config), False
+        return _not_assessed(name, "ExifTool is not available to read provenance.", config)
 
     evidence: list[str] = []
     floor = 0.0
@@ -683,30 +690,93 @@ def _provenance(tags: dict | None, config: AIGenerationConfig) -> tuple[AIIndica
             floor = max(floor, marker_floor)
             evidence.append(f"{key.split(':')[-1]} names '{marker}'")
 
-    make_model = [
-        str(v) for k, v in tags.items()
-        if lowered_keys[k].split(":")[-1] in ("make", "model") and str(v).strip()
-    ]
-    camera = bool(make_model) or any(t in _CAMERA_SOURCE_TYPES for t in source_types)
-
     detail = "; ".join(evidence) if evidence else (
         "No AI provenance declared (absence is not evidence — metadata is easily stripped)."
     )
     return AIIndicator(
         indicator=name, assessed=True, value=round(floor, 3), detail=detail,
         strength=round(floor, 3), weight=0.0,
-    ), camera
-
-
-def _camera_metadata(camera: bool, provenance_assessed: bool, config: AIGenerationConfig) -> AIIndicator:
-    name: IndicatorName = "Camera Metadata"
-    if not provenance_assessed:
-        return _not_assessed(name, "ExifTool is not available to read camera metadata.", config)
-    if camera:
-        return _measured(name, "present", "Camera make/model or a camera capture source type is recorded.", 0.0, config)
-    return _measured(
-        name, "absent", "A photographic image with no camera make, model or capture source type.", 1.0, config
     )
+
+
+# --- Capture Signature -------------------------------------------------------------
+
+# Profiles every editor and exporter embeds; they say nothing about a device.
+_GENERIC_PROFILES = ("srgb", "adobe rgb", "generic rgb", "gray gamma", "dot gain", "generic gray")
+# Output sizes of common generators (either orientation).
+_GENERATOR_SIZES = {
+    frozenset(size)
+    for size in (
+        (512, 512), (768, 768), (1024, 1024), (1536, 1536), (2048, 2048),
+        (1024, 1536), (1024, 1792), (832, 1216), (896, 1152), (768, 1344), (640, 1536),
+    )
+}
+
+
+def _tag(tags: dict, *names: str) -> str | None:
+    """First non-empty value whose tag name (ignoring the -G1 group) matches."""
+    wanted = {n.lower() for n in names}
+    for key, value in tags.items():
+        if key.split(":")[-1].lower() in wanted and str(value).strip():
+            return str(value).strip()
+    return None
+
+
+def _capture_signature(image: Image.Image, fmt: str, tags: dict | None, config: AIGenerationConfig) -> AIIndicator:
+    """
+    Camera (strength 0), generator-shaped (1) or unknown (0.5). Unknown is
+    the honest middle: WhatsApp/Telegram strip and re-encode real photos into
+    exactly what a stripped AI image looks like, so a missing signature is
+    weak evidence. Never strong evidence either way — EXIF and profiles can
+    be copied onto a fake, which is why provenance and the pixel indicators
+    are scored separately.
+    """
+    name: IndicatorName = "Capture Signature"
+    if tags is None:
+        return _not_assessed(name, "ExifTool is not available to read the colour profile and EXIF.", config)
+
+    camera: list[str] = []
+    quality = _estimate_quality(image) if fmt in ("jpeg", "jpg", "mpo") else None
+    if quality is not None:
+        q, standard = quality
+        if not standard and q >= config.capture_min_camera_quality:
+            camera.append(f"custom JPEG tables at quality {q}")
+
+    notes: list[str] = []
+    profile = _tag(tags, "ProfileDescription")
+    device_profile = profile is not None and not any(g in profile.lower() for g in _GENERIC_PROFILES)
+    if device_profile and fmt == "png":
+        # iPhone screenshots are P3-tagged PNGs: a device made the file, but
+        # it captured a screen, not a scene — possibly an AI image on screen.
+        notes.append(f"PNG with a device colour profile ({profile}) — a screenshot, not a capture")
+    elif device_profile:
+        camera.append(f"device colour profile ({profile})")
+
+    make, model = _tag(tags, "Make"), _tag(tags, "Model", "LensModel")
+    if make or model:
+        camera.append(f"camera EXIF ({' '.join(v for v in (make, model) if v)})")
+    elif _tag(tags, "ExposureTime") and _tag(tags, "ISO"):
+        camera.append("camera exposure EXIF")
+    if any(t in _CAMERA_SOURCE_TYPES for t in _source_types(tags)):
+        camera.append("declares a camera capture source type")
+
+    width, height = image.size
+    generator = (
+        f"{width}x{height} is a common AI generator output size"
+        if frozenset({width, height}) in _GENERATOR_SIZES
+        else None
+    )
+
+    if len(camera) >= config.capture_min_camera_signals:
+        return _measured(name, "camera", "Camera capture: " + "; ".join(camera) + ".", 0.0, config)
+    if generator:
+        return _measured(name, "generator-shaped", generator + ".", 1.0, config)
+    found = camera + notes
+    detail = (
+        "No camera signature" + (f" beyond {'; '.join(found)}" if found else "")
+        + " — re-encoded (e.g. by a messaging app), stripped, or not a camera capture."
+    )
+    return _measured(name, "unknown", detail, 0.5, config)
 
 
 # --- scoring ---------------------------------------------------------------------
@@ -764,32 +834,38 @@ def _assess_image(
 
     rgb = _centre_crop(np.asarray(image.convert("RGB")), config.max_analysis_side)
     photographic, character = _is_photographic(rgb, config)
-    provenance, camera = _provenance(tags, config)
-
     indicators: list[AIIndicator] = []
     if not photographic:
         reason = f"Graphic rather than a photograph or scan ({character}); pixel statistics don't apply."
         indicators += [_not_assessed(name, reason, config) for name in _SCORED]
     else:
+        if source == "upload":
+            capture = _capture_signature(image, fmt, tags, config)
+        else:
+            capture = _not_assessed(
+                "Capture Signature", "PDF creation normally strips a camera's signature from embedded images.", config
+            )
         gray = rgb.astype(float) @ np.array([0.299, 0.587, 0.114])
         indicators.append(_measure_spectral(gray, is_jpeg, config))
-        indicators.extend(_measure_noise(gray, config))
-        crop = Image.fromarray(rgb)
-        indicators.append(_measure_ela(crop, config))
+        level, dependence = _measure_noise(gray, config)
+        if capture.value == "camera" and level.assessed:
+            # Phone noise reduction, not generation, explains a clean camera photo.
+            factor = config.noise_weight_when_captured
+            level = level.model_copy(update={
+                "weight": level.weight * factor,
+                "contribution": round(level.contribution * factor, 4),
+                "detail": f"{level.detail} Weighted x{factor:g}: a camera capture, where phone "
+                          "noise reduction explains a clean image.",
+            })
+        indicators += [level, dependence, _measure_ela(Image.fromarray(rgb), config)]
         if is_jpeg:
             indicators.append(_measure_double_compression(image, config))
-            indicators.append(_measure_quant_table(image, config))
-        else:
-            reason = f"{fmt.upper()} carries no JPEG compression history."
-            indicators.append(_not_assessed("Double Compression", reason, config))
-            indicators.append(_not_assessed("Quantisation Table", reason, config))
-        if source == "upload":
-            indicators.append(_camera_metadata(camera, provenance.assessed, config))
         else:
             indicators.append(_not_assessed(
-                "Camera Metadata", "PDF creation normally strips camera metadata from embedded images.", config
+                "Double Compression", f"{fmt.upper()} carries no JPEG compression history.", config
             ))
-    indicators.append(provenance)
+        indicators.append(capture)
+    indicators.append(_provenance(tags, config))
 
     score, coverage = _score(indicators)
     _log_indicators(document_id, label, indicators)
@@ -883,7 +959,7 @@ def check_ai_generation(
         doc.close()
 
     tags = _run_exiftool([("pdf", file_bytes)] + [(e["ext"], e["data"]) for e in embedded], config)
-    file_provenance, _ = _provenance(tags[0] if tags else None, config)
+    file_provenance = _provenance(tags[0] if tags else None, config)
     _log_indicators(document_id, "file", [file_provenance])
 
     assessments = []

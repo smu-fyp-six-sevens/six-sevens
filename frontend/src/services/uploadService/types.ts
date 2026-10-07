@@ -159,7 +159,8 @@ export type IndividualCheckId =
   | 'numerical-validation'
   | 'date-anomalies'
   | 'metadata-anomaly'
-  | 'image-integrity';
+  | 'image-integrity'
+  | 'ai-generation';
 
 export interface BulkActionFailure {
   document_id: string;
