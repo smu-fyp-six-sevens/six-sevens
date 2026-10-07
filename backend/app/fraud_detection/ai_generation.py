@@ -268,6 +268,22 @@ def _not_assessed(name: IndicatorName, reason: str, config: AIGenerationConfig) 
     )
 
 
+def _measured(
+    name: IndicatorName, value: float | str, detail: str, strength: float, config: AIGenerationConfig
+) -> AIIndicator:
+    weight = config.weights.get(name, 0.0)
+    return AIIndicator(
+        indicator=name, assessed=True, value=value, detail=detail,
+        strength=round(strength, 3), weight=weight, contribution=round(weight * strength, 4),
+    )
+
+
+def _blocks(array: np.ndarray, size: int) -> np.ndarray:
+    """size x size tiles as rows, dropping any partial tiles at the edges."""
+    h, w = (array.shape[0] // size) * size, (array.shape[1] // size) * size
+    return array[:h, :w].reshape(h // size, size, w // size, size).swapaxes(1, 2).reshape(-1, size * size)
+
+
 def _centre_crop(array: np.ndarray, side: int) -> np.ndarray:
     """Centre crop to at most side x side, with offsets on the 8px JPEG grid."""
     h, w = array.shape[:2]
@@ -368,19 +384,11 @@ def _measure_spectral(gray: np.ndarray, is_jpeg: bool, config: AIGenerationConfi
         math.log(config.spectral_ratio_floor),
         math.log(config.spectral_ratio_ceiling),
     )
-    weight = config.weights.get(name, 0.0)
-    return AIIndicator(
-        indicator=name,
-        assessed=True,
-        value=round(best_ratio, 2),
-        detail=(
-            f"Strongest periodic peak: {best_ratio:.1f}x the surrounding spectrum at a "
-            f"{best_period}px period ({best_map})."
-        ),
-        strength=round(strength, 3),
-        weight=weight,
-        contribution=round(weight * strength, 4),
+    detail = (
+        f"Strongest periodic peak: {best_ratio:.1f}x the surrounding spectrum at a "
+        f"{best_period}px period ({best_map})."
     )
+    return _measured(name, round(best_ratio, 2), detail, strength, config)
 
 
 # --- Noise -------------------------------------------------------------------------
@@ -397,29 +405,24 @@ def _measure_noise(gray: np.ndarray, config: AIGenerationConfig) -> tuple[AIIndi
     level_name: IndicatorName = "Noise Level"
     dep_name: IndicatorName = "Noise Signal Dependence"
     b = config.noise_block
-    h, w = (gray.shape[0] // b) * b, (gray.shape[1] // b) * b
-    if h < b * 2 or w < b * 2:
+    if gray.shape[0] < b * 2 or gray.shape[1] < b * 2:
         reason = "Image too small to split into noise blocks."
         return _not_assessed(level_name, reason, config), _not_assessed(dep_name, reason, config)
 
-    gray = gray[:h, :w]
     smooth = np.asarray(
         Image.fromarray(np.clip(gray, 0, 255).astype(np.uint8)).filter(ImageFilter.MedianFilter(3)),
         dtype=float,
     )
     residual = gray - smooth
 
-    def blocks(a: np.ndarray) -> np.ndarray:
-        return a.reshape(h // b, b, w // b, b).swapaxes(1, 2).reshape(-1, b * b)
-
-    means = blocks(gray).mean(axis=1)
+    means = _blocks(gray, b).mean(axis=1)
     # Texture as the second difference of the denoised image: zero on a flat
     # area AND on a smooth gradient (sky, shading, paper curl), large only at
     # edges and detail — which is what would leak into the noise residual.
     curvature = np.zeros_like(smooth)
     curvature[1:-1, 1:-1] = np.abs(_laplacian(smooth)) / 4
-    texture = blocks(curvature).mean(axis=1)
-    sigmas = blocks(residual).std(axis=1)
+    texture = _blocks(curvature, b).mean(axis=1)
+    sigmas = _blocks(residual, b).std(axis=1)
     # Clipped blocks have had their noise flattened by the sensor or encoder.
     usable = (texture <= config.noise_smooth_max_curvature) & (means > 16) & (means < 239)
     if int(usable.sum()) < config.min_noise_blocks:
@@ -430,16 +433,10 @@ def _measure_noise(gray: np.ndarray, config: AIGenerationConfig) -> tuple[AIIndi
         return _not_assessed(level_name, reason, config), _not_assessed(dep_name, reason, config)
 
     sigma = float(np.median(sigmas[usable]))
-    level_strength = _ramp(sigma, config.noise_sigma_high, config.noise_sigma_low)
-    level_weight = config.weights.get(level_name, 0.0)
-    level = AIIndicator(
-        indicator=level_name,
-        assessed=True,
-        value=round(sigma, 3),
-        detail=f"Median noise in {int(usable.sum())} smooth block(s): {sigma:.2f} grey levels.",
-        strength=round(level_strength, 3),
-        weight=level_weight,
-        contribution=round(level_weight * level_strength, 4),
+    level = _measured(
+        level_name, round(sigma, 3),
+        f"Median noise in {int(usable.sum())} smooth block(s): {sigma:.2f} grey levels.",
+        _ramp(sigma, config.noise_sigma_high, config.noise_sigma_low), config,
     )
 
     spread = float(np.ptp(means[usable]))
@@ -452,16 +449,10 @@ def _measure_noise(gray: np.ndarray, config: AIGenerationConfig) -> tuple[AIIndi
         )
     else:
         rho = _spearman(means[usable], sigmas[usable])
-        dep_strength = _ramp(rho, config.noise_rho_high, config.noise_rho_low)
-        dep_weight = config.weights.get(dep_name, 0.0)
-        dependence = AIIndicator(
-            indicator=dep_name,
-            assessed=True,
-            value=round(rho, 3),
-            detail=f"Noise vs brightness rank correlation across smooth blocks: {rho:+.2f}.",
-            strength=round(dep_strength, 3),
-            weight=dep_weight,
-            contribution=round(dep_weight * dep_strength, 4),
+        dependence = _measured(
+            dep_name, round(rho, 3),
+            f"Noise vs brightness rank correlation across smooth blocks: {rho:+.2f}.",
+            _ramp(rho, config.noise_rho_high, config.noise_rho_low), config,
         )
     return level, dependence
 
@@ -502,17 +493,12 @@ def _measure_quant_table(image: Image.Image, config: AIGenerationConfig) -> AIIn
     if estimate is None:
         return _not_assessed(name, "No readable JPEG quantisation table.", config)
     quality, standard = estimate
-    strength = 1.0 if standard else 0.0
-    weight = config.weights.get(name, 0.0)
     detail = (
         f"Standard libjpeg tables at quality {quality} — a software encoder."
         if standard
         else f"Custom tables (closest standard quality {quality}) — typical of a camera or vendor encoder."
     )
-    return AIIndicator(
-        indicator=name, assessed=True, value=quality, detail=detail,
-        strength=strength, weight=weight, contribution=round(weight * strength, 4),
-    )
+    return _measured(name, quality, detail, 1.0 if standard else 0.0, config)
 
 
 def _recompress(image: Image.Image, quality: int) -> np.ndarray:
@@ -554,17 +540,13 @@ def _measure_double_compression(image: Image.Image, config: AIGenerationConfig) 
             depth, dip_quality = (later - curve[i]) / later, qualities[i]
 
     strength = _ramp(depth, config.ghost_depth_floor, config.ghost_depth_ceiling)
-    weight = config.weights.get(name, 0.0)
     detail = (
         f"Recompression error dips {depth:.0%} at quality {dip_quality}, below the final quality "
         f"{final_quality} — the image was saved before at about quality {dip_quality}."
         if strength > 0
         else f"No dip below the final quality {final_quality}; consistent with a single save."
     )
-    return AIIndicator(
-        indicator=name, assessed=True, value=round(depth, 3), detail=detail,
-        strength=round(strength, 3), weight=weight, contribution=round(weight * strength, 4),
-    )
+    return _measured(name, round(depth, 3), detail, strength, config)
 
 
 def _measure_ela(image: Image.Image, config: AIGenerationConfig) -> AIIndicator:
@@ -575,15 +557,10 @@ def _measure_ela(image: Image.Image, config: AIGenerationConfig) -> AIIndicator:
     gray = original.mean(axis=2)
 
     b = config.ela_block
-    h, w = (error.shape[0] // b) * b, (error.shape[1] // b) * b
-
-    def blocks(a: np.ndarray) -> np.ndarray:
-        return a[:h, :w].reshape(h // b, b, w // b, b).swapaxes(1, 2).reshape(-1, b * b)
-
     # Flat blocks recompress perfectly whatever their history, so only
     # textured ones say anything.
-    textured = blocks(gray).std(axis=1) >= 4
-    block_error = blocks(error).mean(axis=1)[textured]
+    textured = _blocks(gray, b).std(axis=1) >= 4
+    block_error = _blocks(error, b).mean(axis=1)[textured]
     if block_error.size < config.ela_min_blocks:
         return _not_assessed(
             name, f"Only {block_error.size} textured {b}px block(s); {config.ela_min_blocks} are needed.", config
@@ -594,19 +571,12 @@ def _measure_ela(image: Image.Image, config: AIGenerationConfig) -> AIIndicator:
     median = float(np.median(block_error))
     floor = config.ela_error_floor
     ratio = (float(np.percentile(block_error, 95)) + floor) / (median + floor)
-    strength = _ramp(ratio, config.ela_ratio_floor, config.ela_ratio_ceiling)
-    weight = config.weights.get(name, 0.0)
-    return AIIndicator(
-        indicator=name,
-        assessed=True,
-        value=round(ratio, 2),
-        detail=(
-            f"At quality {config.ela_quality}, the brightest 5% of textured blocks show "
-            f"{ratio:.1f}x the median error level."
-        ),
-        strength=round(strength, 3),
-        weight=weight,
-        contribution=round(weight * strength, 4),
+    detail = (
+        f"At quality {config.ela_quality}, the brightest 5% of textured blocks show "
+        f"{ratio:.1f}x the median error level."
+    )
+    return _measured(
+        name, round(ratio, 2), detail, _ramp(ratio, config.ela_ratio_floor, config.ela_ratio_ceiling), config
     )
 
 
@@ -732,15 +702,10 @@ def _camera_metadata(camera: bool, provenance_assessed: bool, config: AIGenerati
     name: IndicatorName = "Camera Metadata"
     if not provenance_assessed:
         return _not_assessed(name, "ExifTool is not available to read camera metadata.", config)
-    strength = 0.0 if camera else 1.0
-    weight = config.weights.get(name, 0.0)
-    return AIIndicator(
-        indicator=name, assessed=True, value="present" if camera else "absent",
-        detail=(
-            "Camera make/model or a camera capture source type is recorded."
-            if camera else "A photographic image with no camera make, model or capture source type."
-        ),
-        strength=strength, weight=weight, contribution=round(weight * strength, 4),
+    if camera:
+        return _measured(name, "present", "Camera make/model or a camera capture source type is recorded.", 0.0, config)
+    return _measured(
+        name, "absent", "A photographic image with no camera make, model or capture source type.", 1.0, config
     )
 
 
