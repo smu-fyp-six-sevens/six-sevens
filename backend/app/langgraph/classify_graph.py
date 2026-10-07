@@ -250,13 +250,17 @@ async def repair_node(state: DocumentGraphState) -> dict:
     repair_model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 512)
     try:
         response = await repair_model.ainvoke([
-            SystemMessage(
-                content="Extract ONLY a valid JSON object of the shape "
-                '{"document_type": "...", "confidence": 0.0, "evidence": [...], '
-                '"reasoning": "...", "needs_manual_review": true, "fulfilled_requirements": [...]} '
-                "from the text below. If no such object can be recovered, respond with "
-                '{"document_type": null}.'
-            ),
+            SystemMessage(content=[
+                {
+                    "type": "text",
+                    "text": "Extract ONLY a valid JSON object of the shape "
+                    '{"document_type": "...", "confidence": 0.0, "evidence": [...], '
+                    '"reasoning": "...", "needs_manual_review": true, "fulfilled_requirements": [...]} '
+                    "from the text below. If no such object can be recovered, respond with "
+                    '{"document_type": null}.',
+                    "cache_control": {"type": "ephemeral"},
+                },
+            ]),
             HumanMessage(content=bad_output),
         ])
         repaired = validate_agent_output(response.content if isinstance(response.content, str) else str(response.content))
