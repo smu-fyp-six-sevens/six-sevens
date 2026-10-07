@@ -51,6 +51,7 @@ from typing import Any, Callable
 from pydantic import BaseModel
 
 from .font_consistency import ExtractedField
+from .giro_dates import giro_on_closed_days
 from .numerical_validation.common import _apply_needs_review, _as_number, _confidence_by_name, _fields_by_name, _parse_field_date, _rows, _skip_missing
 from .numerical_validation.identity_company import _UEN_RE, _is_forward_looking_date_field, _looks_like_date_field
 from .numerical_validation.models import Severity, SkippedCheck
@@ -394,7 +395,23 @@ def _check_period_bounds(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck | N
     return findings, None
 
 
-BANK_STATEMENT_DATE_CHECKS: list[CheckFn] = [_check_period_bounds]
+def _check_giro_business_day(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck | None]:
+    """BS.GIRO_BUSINESS_DAY. A GIRO transaction can't be dated on a Sunday or public holiday (see giro_dates.py)."""
+    values = _need(ctx, "BS.GIRO_BUSINESS_DAY", "transactions")
+    if values is None:
+        return [], _skip_missing("BS.GIRO_BUSINESS_DAY", "transactions")
+    return [
+        _finding(
+            "BS.GIRO_BUSINESS_DAY", "inconsistent",
+            f"Transaction {hit.index + 1} ({hit.description[:60]}) is a GIRO payment dated "
+            f"{hit.day.isoformat()}, {hit.reason}. No Singapore bank processes GIRO on Sundays or public holidays.",
+            field=f"transactions[{hit.index}].date", stated=hit.day.isoformat(), expected="a bank business day",
+        )
+        for hit in giro_on_closed_days(values[0])
+    ], None
+
+
+BANK_STATEMENT_DATE_CHECKS: list[CheckFn] = [_check_period_bounds, _check_giro_business_day]
 
 
 # ---------------------------------------------------------------------------

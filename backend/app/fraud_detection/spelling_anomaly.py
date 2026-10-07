@@ -145,7 +145,24 @@ def _dehyphenate_spans(texts: list[str], known_terms: set[str] | None = None) ->
     return texts
 
 
+_TLDS = (
+    "com|net|org|gov|edu|mil|int|sg|my|id|th|ph|vn|hk|cn|tw|jp|kr|in|au|nz|uk|us|ca|eu|de|fr|"
+    "io|co|ai|app|biz|info|asia|xyz|online|site|tech"
+)
+# Removed before tokenizing, by shape rather than spelling: a misspelled word never looks
+# like one of these, so this can't hide a real typo. Whitespace-free runs only.
+_WEB_ADDRESS_RE = re.compile(
+    r"\S*://\S*"  # a scheme: https://..., mailto: is caught by the email arm
+    r"|\bwww\.\S+"
+    r"|\S+@\S+\.\S+"  # email
+    rf"|\b[\w-]+(?:\.[\w-]+)*\.(?:{_TLDS})\b(?:/\S*)?"  # bare domain, with any path
+    r"|\S*[\w-]+/[\w-]+[/.-]\S*",  # a wrapped URL's path continuing on its own: "taxes/corporate-income-tax"
+    re.IGNORECASE,
+)
+
+
 def _tokenize(text: str) -> list[str]:
+    text = _WEB_ADDRESS_RE.sub(" ", text)
     return [word for word in _WORD_RE.findall(text) if len(word) >= MIN_WORD_LENGTH]
 
 

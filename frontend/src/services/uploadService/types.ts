@@ -158,6 +158,7 @@ export type IndividualCheckId =
   | 'spelling-anomaly'
   | 'numerical-validation'
   | 'date-anomalies'
+  | 'registry-verification'
   | 'metadata-anomaly'
   | 'image-integrity';
 

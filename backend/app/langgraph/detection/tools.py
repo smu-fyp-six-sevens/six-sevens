@@ -33,6 +33,7 @@ from langgraph.prebuilt import InjectedState
 
 from ... import document_repository, extracted_fields_repository, storage_service
 from ...fraud_detection.date_anomalies import check_date_anomalies
+from ...fraud_detection.registry_lookups import verify_against_registries
 from ...fraud_detection.font_consistency import check_font_consistency
 from ...fraud_detection.image_manipulation import check_image_manipulation, check_image_tampering
 from ...fraud_detection.layout_anomalies import check_layout_anomalies
@@ -252,6 +253,34 @@ async def date_consistency_tool(document_id: Annotated[str, InjectedState("docum
         for finding in result.findings
     ]
     return _result("date_consistency_tool", _with_ids("date_consistency_tool", findings))
+
+
+@tool
+async def registry_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
+    """Checks the document's facts against Singapore's public registries, live: ACRA (the UEN exists, the company name matches, the company is live, the incorporation date and registered address match), OneMap and HDB (an address's postal code exists and matches its street; a home address is a residential block) and MAS (a bank statement's bank is licensed). Use it on any document with a UEN, a company, an address or a bank."""
+    document = await _document(document_id)
+    if document is None:
+        return _result("registry_tool", [], unable="Document not found")
+
+    fields = await _extracted_fields(document_id)
+    result = await verify_against_registries(document_id, fields, document.document_type)
+    if result.unable_to_assess:
+        return _result("registry_tool", [], unable=result.unable_to_assess_reason or "Unable to assess")
+
+    findings = [
+        {
+            "check_code": finding.check_code,
+            "severity_hint": finding.severity,
+            "source": finding.source,
+            "field": finding.field,
+            "stated": finding.stated,
+            "expected": finding.expected,
+            "needs_review": finding.needs_review,
+            "summary": finding.summary,
+        }
+        for finding in result.findings
+    ]
+    return _result("registry_tool", _with_ids("registry_tool", findings))
 
 
 # --- Digital Authenticity ---------------------------------------------------

@@ -41,20 +41,25 @@ REFERENCE_DATA: dict[str, dict] = {
     # GST registration numbers are deliberately absent: none could be
     # confirmed from an official source, and a guessed one would flag
     # genuine statements. BS.BANK_IDENTIFIERS only compares fields present here.
+    # account_digits (BS.ACCOUNT_NUMBER_FORMAT): DBS 10 and POSB 9 from DBS's
+    # "Bank & Branch Codes" page; OCBC "10 or 12 digits" from OCBC's help page;
+    # UOB 10 from OCBC's funds-transfer tips PDF. Green Link publishes none.
+    # All four registration numbers also match ACRA's own register
+    # (data.gov.sg "Entities Registered with ACRA").
     "bank_identifiers": {
         # POSB is a DBS brand: same legal entity, UEN and BIC (DBS's SWIFT page
         # gives "DBS & POSB" one code).
         "DBS Bank Ltd": {
             "aliases": ("dbs", "posb", "development bank of singapore"),
-            "registration_no": "196800306E", "bic": "DBSSSGSG",
+            "registration_no": "196800306E", "bic": "DBSSSGSG", "account_digits": (9, 10),
         },
         "Oversea-Chinese Banking Corporation Limited": {
             "aliases": ("ocbc", "oversea-chinese banking", "oversea chinese banking"),
-            "registration_no": "193200032W", "bic": "OCBCSGSG",
+            "registration_no": "193200032W", "bic": "OCBCSGSG", "account_digits": (10, 12),
         },
         "United Overseas Bank Limited": {
             "aliases": ("uob", "united overseas bank"), "registration_no": "193500026Z",
-            "bic": "UOVBSGSG",
+            "bic": "UOVBSGSG", "account_digits": (10,),
         },
         "Green Link Digital Bank Pte. Ltd.": {
             "aliases": ("green link digital bank", "gldb"), "registration_no": "202115950G",

@@ -34,6 +34,7 @@ from ..fraud_detection.date_anomalies import (
     check_date_anomalies,
 )
 from ..fraud_detection.spelling_anomaly import SpellingAnomalyResult, check_spelling_anomalies
+from ..fraud_detection.registry_lookups import RegistryResult, verify_against_registries
 
 router = APIRouter(prefix="/documents", tags=["detection"])
 cases_router = APIRouter(prefix="/cases", tags=["detection"])
@@ -403,6 +404,26 @@ async def get_date_anomalies(
     )
     await _trace_check(
         document_id, "check_date_anomalies",
+        unable_to_assess=result.unable_to_assess, finding_count=len(result.findings),
+    )
+    return result
+
+
+@router.get("/{document_id}/detection/registry-verification", response_model=RegistryResult)
+async def get_registry_verification(
+    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
+) -> RegistryResult:
+    """
+    The document's extracted facts against Singapore's public registries, live: ACRA
+    (the company exists, under this name, is live, with this incorporation date and
+    registered address), OneMap and HDB (the address exists and, for a home address,
+    is a residential block), and MAS (a bank statement's bank is licensed). Read-only.
+    A registry that can't be reached is reported as a skipped check, never a finding.
+    """
+    extracted_fields = await _fetch_extracted_fields(document_id)
+    result = await verify_against_registries(document_id, extracted_fields, document.document_type)
+    await _trace_check(
+        document_id, "check_registry_verification",
         unable_to_assess=result.unable_to_assess, finding_count=len(result.findings),
     )
     return result
