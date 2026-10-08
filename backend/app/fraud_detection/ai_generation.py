@@ -943,13 +943,18 @@ def check_ai_generation(
             document_id, file_bytes, tags[0] if tags else None, config, source="upload",
         )
         if assessment is None:
-            return _unable(document_id, "The file could not be decoded as an image.", config, bbox_units="px")
+            return _unable(
+                document_id,
+                "Could not run: the file could not be opened as an image. It may be corrupted, or in a "
+                "format this check can't read (for example HEIC, an iPhone's default photo format).",
+                config, bbox_units="px",
+            )
         return _finish(document_id, [assessment], None, config, bbox_units="px")
 
     try:
         doc = pymupdf.open(stream=file_bytes, filetype="pdf")
     except Exception as exc:  # noqa: BLE001
-        reason = f"Failed to open document as a PDF: {type(exc).__name__}: {exc}"
+        reason = f"Could not run: the file could not be opened as a PDF ({type(exc).__name__}: {exc})."
         logger.warning("Document %s: %s", document_id, reason)
         return _unable(document_id, reason, config)
 
@@ -987,15 +992,31 @@ def _finish(
     # Unable to Assess is never reported as a clean result: with no image
     # measured and nothing declared, there is no basis for a score at all.
     if not measured and file_floor == 0:
+        # Two very different meanings of "unable", spelled out so an officer
+        # can tell them apart: "Nothing to check" (no photo or scan to
+        # examine — normal for a text-only PDF, not a warning sign) versus
+        # "Could not run" (a real failure, raised earlier).
         if not images:
             reason = (
-                f"No raster images of at least {config.min_image_side}px to analyse; pixel-level "
-                "AI-generation analysis needs a photo, scan or image upload."
+                "Nothing to check: this document contains no photographs, scans or other images "
+                f"of at least {config.min_image_side} px, only text and vector graphics. "
+                "AI-generation analysis examines pixels, so there was nothing for it to look at. "
+                "This is normal for a digitally issued document and is not a sign of fraud."
             )
         else:
+            sizes = ", ".join(f"{i.pixel_width} × {i.pixel_height} px {i.format.upper()}" for i in images[:3])
+            if bbox_units == "px":
+                what = "This image is a flat graphic"
+            elif len(images) == 1:
+                what = f"This document's only image ({sizes}) is a flat graphic"
+            else:
+                more = ", ..." if len(images) > 3 else ""
+                what = f"This document's {len(images)} images ({sizes}{more}) are all flat graphics"
             reason = (
-                f"{len(images)} image(s) found, but all are graphics (logos, flat fills, rendered "
-                "pages) rather than photographs or scans, and none declares an AI source."
+                f"Nothing to check: {what} (logos, stamps, designs or rendered pages) rather than "
+                "photographs or scans, and nothing in the file declares an AI source. Pixel "
+                "statistics only mean something on photographs and scans, so there was nothing for "
+                "this check to examine. This is not a sign of fraud on its own."
             )
         return _unable(
             document_id, reason, config, images=images, file_provenance=file_provenance, bbox_units=bbox_units,

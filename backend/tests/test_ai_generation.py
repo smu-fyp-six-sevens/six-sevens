@@ -237,7 +237,7 @@ def test_graphics_are_listed_but_not_scored() -> None:
     result = check_ai_generation("doc-1", _png(_logo()))
 
     assert result.unable_to_assess
-    assert "graphics" in (result.unable_to_assess_reason or "")
+    assert (result.unable_to_assess_reason or "").startswith("Nothing to check: This image is a flat graphic")
     assert result.images[0].photographic is False
 
 
@@ -259,7 +259,8 @@ def test_pdf_without_images_is_unable_to_assess() -> None:
 
     assert result.unable_to_assess
     assert result.score == 0.0
-    assert "No raster images" in (result.unable_to_assess_reason or "")
+    assert (result.unable_to_assess_reason or "").startswith("Nothing to check: this document contains no")
+    assert "not a sign of fraud" in (result.unable_to_assess_reason or "")
 
 
 def test_small_embedded_images_are_skipped() -> None:
@@ -270,6 +271,16 @@ def test_small_embedded_images_are_skipped() -> None:
 def test_undecodable_upload_is_unable_to_assess() -> None:
     result = check_ai_generation("doc-1", b"not an image")
     assert result.unable_to_assess
+    assert (result.unable_to_assess_reason or "").startswith("Could not run:")
+
+
+def test_pdf_with_only_graphics_names_them() -> None:
+    logo = io.BytesIO()
+    Image.fromarray(_logo().astype(np.uint8)).save(logo, "PNG")
+    result = check_ai_generation("doc-1", _pdf_with_image(logo.getvalue()))
+
+    assert result.unable_to_assess
+    assert "only image (300 × 300 px PNG) is a flat graphic" in (result.unable_to_assess_reason or "")
 
 
 def test_exiftool_missing_degrades_to_pixel_only(monkeypatch) -> None:
