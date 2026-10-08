@@ -140,7 +140,13 @@ async def get_layout_anomalies(
     and nothing crossed a threshold — not that the document is clean.
     """
     file_bytes = await _download_document_bytes(document)
-    result = await asyncio.to_thread(check_layout_anomalies, document_id, file_bytes)
+    result = await asyncio.to_thread(
+        check_layout_anomalies,
+        document_id,
+        file_bytes,
+        document.document_type,
+        document.classification_confidence,
+    )
     await _trace_check(
         document_id, "check_layout_anomalies",
         unable_to_assess=result.unable_to_assess, finding_count=len(result.anomalies),

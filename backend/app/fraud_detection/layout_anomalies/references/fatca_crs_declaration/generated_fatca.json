@@ -1,0 +1,3128 @@
+{
+ "name": "generated_fatca",
+ "document_type": "fatca_crs_declaration",
+ "labels": [
+  {
+   "page": 0,
+   "x0": 72.02400207519531,
+   "x1": 334.1860046386719,
+   "baseline": 100.0999755859375,
+   "bottom": 103.48397827148438,
+   "text": "fatca & crs self-certification form (for entity)"
+  },
+  {
+   "page": 0,
+   "x0": 72.02400207519531,
+   "x1": 173.32699584960938,
+   "baseline": 121.0999755859375,
+   "bottom": 123.63797760009766,
+   "text": "what is this form about?"
+  },
+  {
+   "page": 0,
+   "x0": 72.02400207519531,
+   "x1": 507.0120544433594,
+   "baseline": 141.01995849609375,
+   "bottom": 143.55795288085938,
+   "text": "the foreign account tax compliance act (\"fatca\") and common reporting standard (“crs”) regulations require"
+  },
+  {
+   "page": 0,
+   "x0": 72.02400207519531,
+   "x1": 524.1171264648438,
+   "baseline": 152.89996337890625,
+   "bottom": 155.43795776367188,
+   "text": "green link digital bank pte. ltd. (\"gldb\" or \"the bank\") to collect and report certain information about our customers"
+  },
+  {
+   "page": 0,
+   "x0": 72.02400207519531,
+   "x1": 523.6351318359375,
+   "baseline": 164.77996826171875,
+   "bottom": 167.31796264648438,
+   "text": "tax residency. if you are a u.s. person or tax resident outside the country where your account is held, the bank may be"
+  },
+  {
+   "page": 0,
+   "x0": 72.02400207519531,
+   "x1": 511.7990417480469,
+   "baseline": 176.65997314453125,
+   "bottom": 179.19796752929688,
+   "text": "legally obliged to pass on the information in this form and other financial information with respect to your financial"
+  },
+  {
+   "page": 0,
+   "x0": 72.02400207519531,
+   "x1": 496.9501037597656,
+   "baseline": 188.41998291015625,
+   "bottom": 190.95797729492188,
+   "text": "accounts to the relevant tax authorities and they may exchange this information with tax authorities of another"
+  },
+  {
+   "page": 0,
+   "x0": 72.02400207519531,
+   "x1": 511.2070007324219,
+   "baseline": 200.17999267578125,
+   "bottom": 202.71798706054688,
+   "text": "jurisdiction or jurisdictions pursuant to intergovernmental agreements to exchange financial account information."
+  },
+  {
+   "page": 0,
+   "x0": 72.02400207519531,
+   "x1": 495.01513671875,
+   "baseline": 220.219970703125,
+   "bottom": 222.75796508789062,
+   "text": "this form is intended to request information for the purpose of complying with relevant tax regulations. please"
+  },
+  {
+   "page": 0,
+   "x0": 72.02400207519531,
+   "x1": 514.9672241210938,
+   "baseline": 231.97998046875,
+   "bottom": 234.51797485351562,
+   "text": "complete this self-certification form so that we hold accurate and up to date information about your tax residence"
+  },
+  {
+   "page": 0,
+   "x0": 72.02400207519531,
+   "x1": 502.4800109863281,
+   "baseline": 243.8599853515625,
+   "bottom": 246.39797973632812,
+   "text": "status. if there are subsequent changes to your circumstances, please let us know by providing an updated self-"
+  },
+  {
+   "page": 0,
+   "x0": 72.02400207519531,
+   "x1": 146.80699157714844,
+   "baseline": 255.6199951171875,
+   "bottom": 258.1579895019531,
+   "text": "certification form."
+  },
+  {
+   "page": 0,
+   "x0": 72.02400207519531,
+   "x1": 495.62701416015625,
+   "baseline": 275.53997802734375,
+   "bottom": 278.0779724121094,
+   "text": "if you have any questions on how to determine your tax residence status and/or fatca and crs status, please"
+  },
+  {
+   "page": 0,
+   "x0": 72.02400207519531,
+   "x1": 344.3769836425781,
+   "baseline": 287.3299560546875,
+   "bottom": 289.8679504394531,
+   "text": "consult a professional adviser as we are not allowed to give tax advice."
+  },
+  {
+   "page": 0,
+   "x0": 72.02400207519531,
+   "x1": 499.02801513671875,
+   "baseline": 307.3699951171875,
+   "bottom": 309.9079895019531,
+   "text": "please complete this self-certification if you are an entity account holder (including a partnership). for joint or"
+  },
+  {
+   "page": 0,
+   "x0": 72.02400207519531,
+   "x1": 448.2969970703125,
+   "baseline": 319.1300048828125,
+   "bottom": 321.6679992675781,
+   "text": "multiple account holders, complete a separate self-certification for each entity account holder."
+  },
+  {
+   "page": 0,
+   "x0": 72.02400207519531,
+   "x1": 508.2070007324219,
+   "baseline": 339.04998779296875,
+   "bottom": 341.5879821777344,
+   "text": "if you are an individual (including a sole proprietor) account holder, please only complete the ‘self-certification –"
+  },
+  {
+   "page": 0,
+   "x0": 72.02400207519531,
+   "x1": 115.60700225830078,
+   "baseline": 350.80999755859375,
+   "bottom": 353.3479919433594,
+   "text": "individual’."
+  },
+  {
+   "page": 0,
+   "x0": 113.66000366210938,
+   "x1": 195.3021240234375,
+   "baseline": 372.16998291015625,
+   "bottom": 374.97869873046875,
+   "text": "entity information"
+  },
+  {
+   "page": 0,
+   "x0": 445.6300048828125,
+   "x1": 518.4219970703125,
+   "baseline": 372.16998291015625,
+   "bottom": 374.7079772949219,
+   "text": "*mandatory fields"
+  },
+  {
+   "page": 0,
+   "x0": 77.66400146484375,
+   "x1": 211.63699340820312,
+   "baseline": 384.8899841308594,
+   "bottom": 387.427978515625,
+   "text": "full legal name of entity/ branch*"
+  },
+  {
+   "page": 0,
+   "x0": 77.66400146484375,
+   "x1": 178.60699462890625,
+   "baseline": 398.4499816894531,
+   "bottom": 400.98797607421875,
+   "text": "country of incorporation*"
+  },
+  {
+   "page": 0,
+   "x0": 77.66400146484375,
+   "x1": 191.80699157714844,
+   "baseline": 473.5899963378906,
+   "bottom": 476.12799072265625,
+   "text": "registered address of entity*"
+  },
+  {
+   "page": 0,
+   "x0": 99.4800033569336,
+   "x1": 324.1969909667969,
+   "baseline": 547.510009765625,
+   "bottom": 550.0480346679688,
+   "text": "if mailing address is different from the registered address"
+  },
+  {
+   "page": 0,
+   "x0": 77.66400146484375,
+   "x1": 174.0469970703125,
+   "baseline": 561.0699462890625,
+   "bottom": 563.6079711914062,
+   "text": "mailing address of entity"
+  },
+  {
+   "page": 0,
+   "x0": 77.66400146484375,
+   "x1": 486.0069885253906,
+   "baseline": 696.5799560546875,
+   "bottom": 699.1179809570312,
+   "text": "if the country of the mailing address does not match the country of the registered address, please explain:"
+  },
+  {
+   "page": 0,
+   "x0": 13.4399995803833,
+   "x1": 159.33212280273438,
+   "baseline": 827.4959716796875,
+   "bottom": 829.7632446289062,
+   "text": "fatca & crs – for entity (november 2025)"
+  },
+  {
+   "page": 1,
+   "x0": 77.66400146484375,
+   "x1": 130.3669891357422,
+   "baseline": 97.82000732421875,
+   "bottom": 100.3580093383789,
+   "text": "for a branch"
+  },
+  {
+   "page": 1,
+   "x0": 77.66400146484375,
+   "x1": 329.8730773925781,
+   "baseline": 118.219970703125,
+   "bottom": 120.75797271728516,
+   "text": "is the legal entity named above a branch in a different jurisdiction"
+  },
+  {
+   "page": 1,
+   "x0": 77.66400146484375,
+   "x1": 245.35699462890625,
+   "baseline": 130.0999755859375,
+   "bottom": 132.63796997070312,
+   "text": "from where the headquarters is registered?"
+  },
+  {
+   "page": 1,
+   "x0": 77.66400146484375,
+   "x1": 293.9570007324219,
+   "baseline": 142.4599609375,
+   "bottom": 144.99795532226562,
+   "text": "if yes, in which jurisdiction is the headquarters located?"
+  },
+  {
+   "page": 1,
+   "x0": 77.66400146484375,
+   "x1": 171.88699340820312,
+   "baseline": 166.82000732421875,
+   "bottom": 169.35800170898438,
+   "text": "specified u.s. person^"
+  },
+  {
+   "page": 1,
+   "x0": 77.66400146484375,
+   "x1": 224.7169952392578,
+   "baseline": 183.13995361328125,
+   "bottom": 185.67794799804688,
+   "text": "is the entity a specified u.s. person^?"
+  },
+  {
+   "page": 1,
+   "x0": 77.66400146484375,
+   "x1": 515.8375854492188,
+   "baseline": 203.53997802734375,
+   "bottom": 206.07797241210938,
+   "text": "if yes, please provide the tin (united states):_____________________________________________ and the appropriate"
+  },
+  {
+   "page": 1,
+   "x0": 77.66400146484375,
+   "x1": 147.64700317382812,
+   "baseline": 215.29998779296875,
+   "bottom": 217.83798217773438,
+   "text": "us irs form w-9."
+  },
+  {
+   "page": 1,
+   "x0": 77.66400146484375,
+   "x1": 513.0511474609375,
+   "baseline": 227.65997314453125,
+   "bottom": 230.19796752929688,
+   "text": "if no, please complete the following table indicating (i) where the entity is tax resident; and (ii) provide the entity’s"
+  },
+  {
+   "page": 1,
+   "x0": 77.66400146484375,
+   "x1": 516.500244140625,
+   "baseline": 239.53997802734375,
+   "bottom": 242.07797241210938,
+   "text": "tin for each country / reportable jurisdiction indicated. countries / jurisdictions adopting the wider approach may"
+  },
+  {
+   "page": 1,
+   "x0": 77.66400146484375,
+   "x1": 517.451416015625,
+   "baseline": 251.41998291015625,
+   "bottom": 253.95797729492188,
+   "text": "require that the self-certification include a tax identifying number for each jurisdiction of residence (rather than for"
+  },
+  {
+   "page": 1,
+   "x0": 77.66400146484375,
+   "x1": 191.56700134277344,
+   "baseline": 263.29998779296875,
+   "bottom": 265.8379821777344,
+   "text": "each reportable jurisdiction)."
+  },
+  {
+   "page": 1,
+   "x0": 77.66400146484375,
+   "x1": 490.2059020996094,
+   "baseline": 286.969970703125,
+   "bottom": 289.5079650878906,
+   "text": "if the tax residence(s) of the legal entity does not match the jurisdiction of incorporation/organisation or the"
+  },
+  {
+   "page": 1,
+   "x0": 77.66400146484375,
+   "x1": 514.22705078125,
+   "baseline": 298.8499755859375,
+   "bottom": 301.3879699707031,
+   "text": "registered addresses provided in part 1 of this form or if the legal entity has multiple jurisdictions of tax residence,"
+  },
+  {
+   "page": 1,
+   "x0": 77.66400146484375,
+   "x1": 154.3669891357422,
+   "baseline": 310.72998046875,
+   "bottom": 313.2679748535156,
+   "text": "please explain why."
+  },
+  {
+   "page": 1,
+   "x0": 77.66400146484375,
+   "x1": 502.38336181640625,
+   "baseline": 334.3699951171875,
+   "bottom": 336.9079895019531,
+   "text": "if the entity is a tax resident in the following more than three countries (indicate the tax reference/jurisdictions,"
+  },
+  {
+   "page": 1,
+   "x0": 77.66400146484375,
+   "x1": 189.88699340820312,
+   "baseline": 346.2499694824219,
+   "bottom": 348.7879638671875,
+   "text": "please use a separate sheet."
+  },
+  {
+   "page": 1,
+   "x0": 77.66400146484375,
+   "x1": 429.3370056152344,
+   "baseline": 370.0099792480469,
+   "bottom": 372.5479736328125,
+   "text": "if a tin is unavailable, please provide the appropriate reason a, b+ or c, where appropriate:"
+  },
+  {
+   "page": 1,
+   "x0": 105.73999786376953,
+   "x1": 211.70599365234375,
+   "baseline": 382.3699951171875,
+   "bottom": 384.9079895019531,
+   "text": "country/ jurisdiction of tax"
+  },
+  {
+   "page": 1,
+   "x0": 105.73999786376953,
+   "x1": 152.44699096679688,
+   "baseline": 394.2499694824219,
+   "bottom": 396.7879638671875,
+   "text": "residence*"
+  },
+  {
+   "page": 1,
+   "x0": 325.6099853515625,
+   "x1": 497.49200439453125,
+   "baseline": 382.3699951171875,
+   "bottom": 384.9079895019531,
+   "text": "reason if no tin is available, please select 1"
+  },
+  {
+   "page": 1,
+   "x0": 325.6099853515625,
+   "x1": 429.3370056152344,
+   "baseline": 394.2499694824219,
+   "bottom": 396.7879638671875,
+   "text": "option – reason a, b+ or c"
+  },
+  {
+   "page": 1,
+   "x0": 240.52999877929688,
+   "x1": 307.7419738769531,
+   "baseline": 382.3699951171875,
+   "bottom": 384.9079895019531,
+   "text": "tax identification"
+  },
+  {
+   "page": 1,
+   "x0": 240.52999877929688,
+   "x1": 298.3970031738281,
+   "baseline": 394.2499694824219,
+   "bottom": 396.7879638671875,
+   "text": "number (tin)*"
+  },
+  {
+   "page": 1,
+   "x0": 103.04000091552734,
+   "x1": 166.5800018310547,
+   "baseline": 408.5199890136719,
+   "bottom": 411.21099853515625,
+   "text": "singapore"
+  },
+  {
+   "page": 1,
+   "x0": 77.66400146484375,
+   "x1": 476.0469970703125,
+   "baseline": 449.3299865722656,
+   "bottom": 451.86798095703125,
+   "text": "if the entity is tax resident in more than 3 countries / jurisdictions, please attach a separate sheet."
+  },
+  {
+   "page": 1,
+   "x0": 77.66400146484375,
+   "x1": 461.2569885253906,
+   "baseline": 472.989990234375,
+   "bottom": 475.5279846191406,
+   "text": "reason a country/jurisdiction where the entity is resident does not issue tins to its residents."
+  },
+  {
+   "page": 1,
+   "x0": 77.66400146484375,
+   "x1": 397.8970031738281,
+   "baseline": 496.7499694824219,
+   "bottom": 499.2879638671875,
+   "text": "reason b+ the entity is otherwise unable to obtain a tin or equivalent number."
+  },
+  {
+   "page": 1,
+   "x0": 77.66400146484375,
+   "x1": 517.1871948242188,
+   "baseline": 520.510009765625,
+   "bottom": 523.0480346679688,
+   "text": "reason c no tin is required. this reason only applies if the domestic law of the relevant jurisdiction does not"
+  },
+  {
+   "page": 1,
+   "x0": 148.5800018310547,
+   "x1": 378.8169860839844,
+   "baseline": 532.27001953125,
+   "bottom": 534.8080444335938,
+   "text": "require the collection of the tin issued by such jurisdiction."
+  },
+  {
+   "page": 1,
+   "x0": 77.66400146484375,
+   "x1": 377.3769836425781,
+   "baseline": 556.0299682617188,
+   "bottom": 558.5679931640625,
+   "text": "if you have selected “reason b+” for any of the country/jurisdiction indicated:"
+  },
+  {
+   "page": 1,
+   "x0": 77.66400146484375,
+   "x1": 203.23699951171875,
+   "baseline": 568.3900146484375,
+   "bottom": 570.9280395507812,
+   "text": "i have selected ‘reason b+’ for"
+  },
+  {
+   "page": 1,
+   "x0": 247.61000061035156,
+   "x1": 360.9369812011719,
+   "baseline": 568.3900146484375,
+   "bottom": 570.9280395507812,
+   "text": "explanation for ‘reason b+’"
+  },
+  {
+   "page": 1,
+   "x0": 120.0199966430664,
+   "x1": 163.2469940185547,
+   "baseline": 588.7899780273438,
+   "bottom": 591.3280029296875,
+   "text": "country 1"
+  },
+  {
+   "page": 1,
+   "x0": 120.0199966430664,
+   "x1": 161.44699096679688,
+   "baseline": 612.9099731445312,
+   "bottom": 615.447998046875,
+   "text": "country 2"
+  },
+  {
+   "page": 1,
+   "x0": 120.0199966430664,
+   "x1": 161.44699096679688,
+   "baseline": 637.1499633789062,
+   "bottom": 639.68798828125,
+   "text": "country 3"
+  },
+  {
+   "page": 1,
+   "x0": 77.42400360107422,
+   "x1": 395.85699462890625,
+   "baseline": 682.1799926757812,
+   "bottom": 684.718017578125,
+   "text": "please choose either one of the type of entity that is applicable in section 2 below:"
+  },
+  {
+   "page": 1,
+   "x0": 77.42400360107422,
+   "x1": 292.156982421875,
+   "baseline": 702.0999755859375,
+   "bottom": 704.6380004882812,
+   "text": "1. financial institution to select either one from a to f."
+  },
+  {
+   "page": 1,
+   "x0": 77.42400360107422,
+   "x1": 341.3769836425781,
+   "baseline": 713.02001953125,
+   "bottom": 715.5580444335938,
+   "text": "2. active non-financial institution to select either one from g to l."
+  },
+  {
+   "page": 1,
+   "x0": 77.42400360107422,
+   "x1": 270.4911193847656,
+   "baseline": 724.0599975585938,
+   "bottom": 727.1732788085938,
+   "text": "3. passive non-financial institution to select m."
+  },
+  {
+   "page": 1,
+   "x0": 13.4399995803833,
+   "x1": 159.33212280273438,
+   "baseline": 827.4959716796875,
+   "bottom": 829.7632446289062,
+   "text": "fatca & crs – for entity (november 2025)"
+  },
+  {
+   "page": 2,
+   "x0": 113.66000366210938,
+   "x1": 250.0131378173828,
+   "baseline": 98.77996826171875,
+   "bottom": 101.58869171142578,
+   "text": "type of entity (select one only)"
+  },
+  {
+   "page": 2,
+   "x0": 77.66400146484375,
+   "x1": 258.33697509765625,
+   "baseline": 135.8599853515625,
+   "bottom": 138.39797973632812,
+   "text": "fatca status (not applicable for u.s. entity)"
+  },
+  {
+   "page": 2,
+   "x0": 410.59002685546875,
+   "x1": 507.7080383300781,
+   "baseline": 163.0999755859375,
+   "bottom": 165.63796997070312,
+   "text": "institution (participating)"
+  },
+  {
+   "page": 2,
+   "x0": 133.5800018310547,
+   "x1": 349.8230285644531,
+   "baseline": 152.29998779296875,
+   "bottom": 154.83798217773438,
+   "text": "the entity is a participating foreign financial institution"
+  },
+  {
+   "page": 2,
+   "x0": 133.5800018310547,
+   "x1": 343.6300048828125,
+   "baseline": 164.05999755859375,
+   "bottom": 166.59799194335938,
+   "text": "its giin (global intermediary identification number) is"
+  },
+  {
+   "page": 2,
+   "x0": 133.5800018310547,
+   "x1": 319.6560363769531,
+   "baseline": 207.5,
+   "bottom": 210.03799438476562,
+   "text": "a non-participating foreign financial institution"
+  },
+  {
+   "page": 2,
+   "x0": 410.5899963378906,
+   "x1": 473.92401123046875,
+   "baseline": 218.29998779296875,
+   "bottom": 220.83798217773438,
+   "text": "institution (non-"
+  },
+  {
+   "page": 2,
+   "x0": 410.59002685546875,
+   "x1": 463.9100341796875,
+   "baseline": 230.17999267578125,
+   "bottom": 232.71798706054688,
+   "text": "participating)"
+  },
+  {
+   "page": 2,
+   "x0": 133.5800018310547,
+   "x1": 307.9129638671875,
+   "baseline": 243.6199951171875,
+   "bottom": 246.15798950195312,
+   "text": "other types of foreign financial institutions."
+  },
+  {
+   "page": 2,
+   "x0": 133.5800018310547,
+   "x1": 374.6559753417969,
+   "baseline": 255.5,
+   "bottom": 258.0379943847656,
+   "text": "please complete and submit the appropriate us irs form w-8"
+  },
+  {
+   "page": 2,
+   "x0": 133.5800018310547,
+   "x1": 378.8770751953125,
+   "baseline": 287.0899658203125,
+   "bottom": 289.6279602050781,
+   "text": "the entity is an investment entity located in a non-participating"
+  },
+  {
+   "page": 2,
+   "x0": 133.58006286621094,
+   "x1": 356.18115234375,
+   "baseline": 298.969970703125,
+   "bottom": 301.5079650878906,
+   "text": "jurisdiction and managed by another financial institution"
+  },
+  {
+   "page": 2,
+   "x0": 133.5800018310547,
+   "x1": 363.3569641113281,
+   "baseline": 311.92999267578125,
+   "bottom": 314.4679870605469,
+   "text": "please complete section 3 and the self-certification on tax"
+  },
+  {
+   "page": 2,
+   "x0": 133.5800018310547,
+   "x1": 373.498046875,
+   "baseline": 323.80999755859375,
+   "bottom": 326.3479919433594,
+   "text": "residency status (individual) form of all controlling persons1."
+  },
+  {
+   "page": 2,
+   "x0": 410.5899963378906,
+   "x1": 480.363037109375,
+   "baseline": 287.0899658203125,
+   "bottom": 289.6279602050781,
+   "text": "non-participating"
+  },
+  {
+   "page": 2,
+   "x0": 133.5800018310547,
+   "x1": 295.1839904785156,
+   "baseline": 340.1299743652344,
+   "bottom": 342.66796875,
+   "text": "an investment entity other than (d) above"
+  },
+  {
+   "page": 2,
+   "x0": 133.5800018310547,
+   "x1": 398.33807373046875,
+   "baseline": 358.0099792480469,
+   "bottom": 360.5479736328125,
+   "text": "a depository institution, custodial institution or specified insurance"
+  },
+  {
+   "page": 2,
+   "x0": 133.58001708984375,
+   "x1": 173.1070098876953,
+   "baseline": 369.8899841308594,
+   "bottom": 372.427978515625,
+   "text": "company"
+  },
+  {
+   "page": 2,
+   "x0": 113.66000366210938,
+   "x1": 244.51699829101562,
+   "baseline": 410.2099914550781,
+   "bottom": 412.74798583984375,
+   "text": "active non-financial institution"
+  },
+  {
+   "page": 2,
+   "x0": 360.19000244140625,
+   "x1": 416.3769836425781,
+   "baseline": 430.6099853515625,
+   "bottom": 433.1479797363281,
+   "text": "fatca status"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 212.1169891357422,
+   "baseline": 446.92999267578125,
+   "bottom": 449.4679870605469,
+   "text": "an active business"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 336.5598449707031,
+   "baseline": 458.80999755859375,
+   "bottom": 461.3479919433594,
+   "text": "• it derives less than 50% of its gross income (for the"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 340.1869201660156,
+   "baseline": 470.7099914550781,
+   "bottom": 473.24798583984375,
+   "text": "previous calendar year) from passive income such as"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 335.49700927734375,
+   "baseline": 482.5899963378906,
+   "bottom": 485.12799072265625,
+   "text": "dividends, interest, rents, royalties or annuities, and"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 324.949951171875,
+   "baseline": 494.469970703125,
+   "bottom": 497.0079650878906,
+   "text": "• less than 50% of its assets are used to produce"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 314.47698974609375,
+   "baseline": 506.22998046875,
+   "bottom": 508.7679748535156,
+   "text": "passive income for the previous calendar year."
+  },
+  {
+   "page": 2,
+   "x0": 364.1499938964844,
+   "x1": 412.4169921875,
+   "baseline": 446.92999267578125,
+   "bottom": 449.4679870605469,
+   "text": "active nffe"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 210.677001953125,
+   "baseline": 518.5899658203125,
+   "bottom": 521.1279907226562,
+   "text": "start-up company"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 342.4459533691406,
+   "baseline": 530.469970703125,
+   "bottom": 533.0079956054688,
+   "text": "• it is just starting and not yet in operation, and has no"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 239.95700073242188,
+   "baseline": 542.3499755859375,
+   "bottom": 544.8880004882812,
+   "text": "prior operating history; and"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 342.9590759277344,
+   "baseline": 554.22998046875,
+   "bottom": 556.7680053710938,
+   "text": "• it is investing capital into assets with the intention to"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 321.3409729003906,
+   "baseline": 565.989990234375,
+   "bottom": 568.5280151367188,
+   "text": "operate a business other than that of a financial"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 194.68699645996094,
+   "baseline": 577.8699951171875,
+   "bottom": 580.4080200195312,
+   "text": "institution; and"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 325.7870178222656,
+   "baseline": 589.75,
+   "bottom": 592.2880249023438,
+   "text": "• the date of its incorporation is not more than 24"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 343.656982421875,
+   "baseline": 601.6300048828125,
+   "bottom": 604.1680297851562,
+   "text": "months prior to the date of this self-certification form"
+  },
+  {
+   "page": 2,
+   "x0": 358.75,
+   "x1": 415.92999267578125,
+   "baseline": 518.5899658203125,
+   "bottom": 521.1279907226562,
+   "text": "excepted non-"
+  },
+  {
+   "page": 2,
+   "x0": 357.9100036621094,
+   "x1": 416.7699890136719,
+   "baseline": 530.469970703125,
+   "bottom": 533.0079956054688,
+   "text": "financial start-"
+  },
+  {
+   "page": 2,
+   "x0": 361.989990234375,
+   "x1": 414.4570007324219,
+   "baseline": 542.3499755859375,
+   "bottom": 544.8880004882812,
+   "text": "up company"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 222.31700134277344,
+   "baseline": 613.989990234375,
+   "bottom": 616.5280151367188,
+   "text": "a public sector entity"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 329.8640441894531,
+   "baseline": 625.8699951171875,
+   "bottom": 628.4080200195312,
+   "text": "• government agencies, statutory boards, entities"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 325.89501953125,
+   "baseline": 637.6300048828125,
+   "bottom": 640.1680297851562,
+   "text": "owned by statutory boards, public sector entities"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 328.6671142578125,
+   "baseline": 649.510009765625,
+   "bottom": 652.0480346679688,
+   "text": "and/or foreign embassies or trade representative"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 163.8470001220703,
+   "baseline": 661.4199829101562,
+   "bottom": 663.9580078125,
+   "text": "offices"
+  },
+  {
+   "page": 2,
+   "x0": 362.1099853515625,
+   "x1": 414.3370056152344,
+   "baseline": 613.989990234375,
+   "bottom": 616.5280151367188,
+   "text": "entity wholly"
+  },
+  {
+   "page": 2,
+   "x0": 445.75,
+   "x1": 505.5669860839844,
+   "baseline": 625.8699951171875,
+   "bottom": 628.4080200195312,
+   "text": "(governmental"
+  },
+  {
+   "page": 2,
+   "x0": 367.989990234375,
+   "x1": 408.4570007324219,
+   "baseline": 625.8699951171875,
+   "bottom": 628.4080200195312,
+   "text": "owned by"
+  },
+  {
+   "page": 2,
+   "x0": 372.6700134277344,
+   "x1": 403.75604248046875,
+   "baseline": 637.6300048828125,
+   "bottom": 640.1680297851562,
+   "text": "exempt"
+  },
+  {
+   "page": 2,
+   "x0": 367.989990234375,
+   "x1": 408.4570007324219,
+   "baseline": 649.510009765625,
+   "bottom": 652.0480346679688,
+   "text": "beneficial"
+  },
+  {
+   "page": 2,
+   "x0": 458.8299865722656,
+   "x1": 492.48699951171875,
+   "baseline": 637.6300048828125,
+   "bottom": 640.1680297851562,
+   "text": "entity or"
+  },
+  {
+   "page": 2,
+   "x0": 448.3900146484375,
+   "x1": 502.927001953125,
+   "baseline": 649.510009765625,
+   "bottom": 652.0480346679688,
+   "text": "central bank)"
+  },
+  {
+   "page": 2,
+   "x0": 372.30999755859375,
+   "x1": 404.2569885253906,
+   "baseline": 661.4199829101562,
+   "bottom": 663.9580078125,
+   "text": "owners"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 254.23699951171875,
+   "baseline": 673.7799682617188,
+   "bottom": 676.3179931640625,
+   "text": "an international organisation"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 340.0789489746094,
+   "baseline": 685.6599731445312,
+   "bottom": 688.197998046875,
+   "text": "• it is an international organisation or a supranational"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 308.5970153808594,
+   "baseline": 697.5399780273438,
+   "bottom": 700.0780029296875,
+   "text": "organisation comprised primarily of non-u.s."
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 324.1399841308594,
+   "baseline": 709.2999877929688,
+   "bottom": 711.8380126953125,
+   "text": "governments (for fatca) and of governments (for"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 174.52699279785156,
+   "baseline": 721.1799926757812,
+   "bottom": 723.718017578125,
+   "text": "crs); and"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 340.240966796875,
+   "baseline": 733.0599975585938,
+   "bottom": 735.5980224609375,
+   "text": "• it has in effect headquarters or substantially similar"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 305.27593994140625,
+   "baseline": 744.9359741210938,
+   "bottom": 747.4739990234375,
+   "text": "agreement with singapore (for fatca) or the"
+  },
+  {
+   "page": 2,
+   "x0": 134.05999755859375,
+   "x1": 236.8369903564453,
+   "baseline": 756.8159790039062,
+   "bottom": 759.35400390625,
+   "text": "jurisdiction (for crs); and"
+  },
+  {
+   "page": 2,
+   "x0": 362.4700012207031,
+   "x1": 413.97698974609375,
+   "baseline": 673.7799682617188,
+   "bottom": 676.3179931640625,
+   "text": "international"
+  },
+  {
+   "page": 2,
+   "x0": 362.5899963378906,
+   "x1": 413.97698974609375,
+   "baseline": 685.6599731445312,
+   "bottom": 688.197998046875,
+   "text": "organisation"
+  },
+  {
+   "page": 2,
+   "x0": 448.510009765625,
+   "x1": 502.6869812011719,
+   "baseline": 685.6599731445312,
+   "bottom": 688.197998046875,
+   "text": "(international"
+  },
+  {
+   "page": 2,
+   "x0": 448.6300048828125,
+   "x1": 502.6869812011719,
+   "baseline": 697.5399780273438,
+   "bottom": 700.0780029296875,
+   "text": "organisation)"
+  },
+  {
+   "page": 2,
+   "x0": 13.4399995803833,
+   "x1": 159.33212280273438,
+   "baseline": 827.4959716796875,
+   "bottom": 829.7632446289062,
+   "text": "fatca & crs – for entity (november 2025)"
+  },
+  {
+   "page": 3,
+   "x0": 134.05999755859375,
+   "x1": 330.7820739746094,
+   "baseline": 97.82000732421875,
+   "bottom": 100.3580093383789,
+   "text": "• its income does not inure to the benefit of private"
+  },
+  {
+   "page": 3,
+   "x0": 134.05999755859375,
+   "x1": 169.72698974609375,
+   "baseline": 109.70001220703125,
+   "bottom": 112.2380142211914,
+   "text": "persons."
+  },
+  {
+   "page": 3,
+   "x0": 134.05999755859375,
+   "x1": 327.4369812011719,
+   "baseline": 122.05999755859375,
+   "bottom": 124.5979995727539,
+   "text": "a publicly listed company or its related entity"
+  },
+  {
+   "page": 3,
+   "x0": 134.05999755859375,
+   "x1": 305.49200439453125,
+   "baseline": 133.94000244140625,
+   "bottom": 136.47799682617188,
+   "text": "• its stock is regularly traded on one or more"
+  },
+  {
+   "page": 3,
+   "x0": 134.05999755859375,
+   "x1": 266.8370056152344,
+   "baseline": 145.82000732421875,
+   "bottom": 148.35800170898438,
+   "text": "established securities markets, or"
+  },
+  {
+   "page": 3,
+   "x0": 134.05999755859375,
+   "x1": 325.2109375,
+   "baseline": 157.70001220703125,
+   "bottom": 160.23800659179688,
+   "text": "• it is an affiliate (in other words, a member) or an"
+  },
+  {
+   "page": 3,
+   "x0": 134.05999755859375,
+   "x1": 323.83392333984375,
+   "baseline": 169.4599609375,
+   "bottom": 171.99795532226562,
+   "text": "entity the stock of which is regularly traded on an"
+  },
+  {
+   "page": 3,
+   "x0": 134.05999755859375,
+   "x1": 250.27699279785156,
+   "baseline": 181.3399658203125,
+   "bottom": 183.87796020507812,
+   "text": "established securities market"
+  },
+  {
+   "page": 3,
+   "x0": 444.07000732421875,
+   "x1": 507.24700927734375,
+   "baseline": 133.94000244140625,
+   "bottom": 136.47799682617188,
+   "text": "(publicly traded"
+  },
+  {
+   "page": 3,
+   "x0": 360.6700134277344,
+   "x1": 415.7770080566406,
+   "baseline": 133.94000244140625,
+   "bottom": 136.47799682617188,
+   "text": "nffe or nffe"
+  },
+  {
+   "page": 3,
+   "x0": 364.510009765625,
+   "x1": 412.0570068359375,
+   "baseline": 145.82000732421875,
+   "bottom": 148.35800170898438,
+   "text": "affiliate of a"
+  },
+  {
+   "page": 3,
+   "x0": 465.3399963378906,
+   "x1": 485.8869934082031,
+   "baseline": 145.82000732421875,
+   "bottom": 148.35800170898438,
+   "text": "nfe)"
+  },
+  {
+   "page": 3,
+   "x0": 364.0299987792969,
+   "x1": 412.5369873046875,
+   "baseline": 169.4599609375,
+   "bottom": 171.99795532226562,
+   "text": "corporation"
+  },
+  {
+   "page": 3,
+   "x0": 134.05999755859375,
+   "x1": 207.78497314453125,
+   "baseline": 193.70001220703125,
+   "bottom": 196.23800659179688,
+   "text": "other than (a)-(e)"
+  },
+  {
+   "page": 3,
+   "x0": 134.05999755859375,
+   "x1": 343.9609680175781,
+   "baseline": 205.5799560546875,
+   "bottom": 208.11795043945312,
+   "text": "(for example a non-profit nffe/nfe, holding company"
+  },
+  {
+   "page": 3,
+   "x0": 134.05999755859375,
+   "x1": 334.6879577636719,
+   "baseline": 217.4599609375,
+   "bottom": 219.99795532226562,
+   "text": "of nonfinancial groups, liquidating or emerging from"
+  },
+  {
+   "page": 3,
+   "x0": 134.05999755859375,
+   "x1": 331.8890686035156,
+   "baseline": 229.3399658203125,
+   "bottom": 231.87796020507812,
+   "text": "bankruptcy company, treasury / financing centre of"
+  },
+  {
+   "page": 3,
+   "x0": 134.05999755859375,
+   "x1": 218.35699462890625,
+   "baseline": 241.0999755859375,
+   "bottom": 243.63796997070312,
+   "text": "non-financial groups)"
+  },
+  {
+   "page": 3,
+   "x0": 364.1499938964844,
+   "x1": 412.4169921875,
+   "baseline": 193.70001220703125,
+   "bottom": 196.23800659179688,
+   "text": "active nffe"
+  },
+  {
+   "page": 3,
+   "x0": 113.66000366210938,
+   "x1": 250.15699768066406,
+   "baseline": 277.8499755859375,
+   "bottom": 280.3879699707031,
+   "text": "passive non-financial institution"
+  },
+  {
+   "page": 3,
+   "x0": 360.30999755859375,
+   "x1": 416.49700927734375,
+   "baseline": 298.25,
+   "bottom": 300.7879943847656,
+   "text": "fatca status"
+  },
+  {
+   "page": 3,
+   "x0": 451.75,
+   "x1": 499.4469909667969,
+   "baseline": 298.25,
+   "bottom": 300.7879943847656,
+   "text": "crs status"
+  },
+  {
+   "page": 3,
+   "x0": 134.05999755859375,
+   "x1": 213.07699584960938,
+   "baseline": 314.57000732421875,
+   "bottom": 317.1080017089844,
+   "text": "a passive business"
+  },
+  {
+   "page": 3,
+   "x0": 361.6300048828125,
+   "x1": 415.177001953125,
+   "baseline": 314.57000732421875,
+   "bottom": 317.1080017089844,
+   "text": "passive nffe"
+  },
+  {
+   "page": 3,
+   "x0": 451.1499938964844,
+   "x1": 500.0469970703125,
+   "baseline": 314.57000732421875,
+   "bottom": 317.1080017089844,
+   "text": "passive nfe"
+  },
+  {
+   "page": 3,
+   "x0": 134.05999755859375,
+   "x1": 341.13189697265625,
+   "baseline": 338.3299865722656,
+   "bottom": 340.86798095703125,
+   "text": "• it derives more than 50% of its gross income (for the"
+  },
+  {
+   "page": 3,
+   "x0": 134.05999755859375,
+   "x1": 340.1869201660156,
+   "baseline": 350.2099914550781,
+   "bottom": 352.74798583984375,
+   "text": "previous calendar year) from passive income such as"
+  },
+  {
+   "page": 3,
+   "x0": 134.05999755859375,
+   "x1": 334.7770080566406,
+   "baseline": 361.969970703125,
+   "bottom": 364.5079650878906,
+   "text": "investments, dividends, interests, rents or royalties."
+  },
+  {
+   "page": 3,
+   "x0": 134.05999755859375,
+   "x1": 326.8669738769531,
+   "baseline": 373.8499755859375,
+   "bottom": 376.3879699707031,
+   "text": "• more than 50% of its assets are used to produce"
+  },
+  {
+   "page": 3,
+   "x0": 134.05999755859375,
+   "x1": 312.5570068359375,
+   "baseline": 385.72998046875,
+   "bottom": 388.2679748535156,
+   "text": "passive income for the previous calendar year"
+  },
+  {
+   "page": 3,
+   "x0": 134.05999755859375,
+   "x1": 336.7519836425781,
+   "baseline": 409.489990234375,
+   "bottom": 412.0279846191406,
+   "text": "please complete section 3 and the self certification"
+  },
+  {
+   "page": 3,
+   "x0": 134.05999755859375,
+   "x1": 319.5109558105469,
+   "baseline": 421.2499694824219,
+   "bottom": 423.7879638671875,
+   "text": "on tax residency status (individual) form for all"
+  },
+  {
+   "page": 3,
+   "x0": 113.66000366210938,
+   "x1": 280.7118835449219,
+   "baseline": 477.0099792480469,
+   "bottom": 481.5586853027344,
+   "text": "declaration of controlling person(s)1"
+  },
+  {
+   "page": 3,
+   "x0": 77.66400146484375,
+   "x1": 496.2220458984375,
+   "baseline": 491.3499755859375,
+   "bottom": 493.8879699707031,
+   "text": "this section is only applicable if you have selected “d” or “m” under section 2 above. please complete for all"
+  },
+  {
+   "page": 3,
+   "x0": 77.66400146484375,
+   "x1": 518.9521484375,
+   "baseline": 526.989990234375,
+   "bottom": 529.5280151367188,
+   "text": "in addition, each controlling person is to provide the tax residence information by completing the self certification"
+  },
+  {
+   "page": 3,
+   "x0": 77.66400146484375,
+   "x1": 241.9969940185547,
+   "baseline": 538.8699951171875,
+   "bottom": 541.4080200195312,
+   "text": "on tax residency status (individual) form."
+  },
+  {
+   "page": 3,
+   "x0": 77.66400146484375,
+   "x1": 162.0469970703125,
+   "baseline": 553.0299682617188,
+   "bottom": 555.5679931640625,
+   "text": "controlling person 1"
+  },
+  {
+   "page": 3,
+   "x0": 92.1719970703125,
+   "x1": 206.35699462890625,
+   "baseline": 600.5499877929688,
+   "bottom": 603.0880126953125,
+   "text": "legal person – by ownership"
+  },
+  {
+   "page": 3,
+   "x0": 293.9179992675781,
+   "x1": 493.3269958496094,
+   "baseline": 600.6699829101562,
+   "bottom": 603.2080078125,
+   "text": "legal arrangement (non-trust) – settlor-equivalent"
+  },
+  {
+   "page": 3,
+   "x0": 92.1719970703125,
+   "x1": 258.1969909667969,
+   "baseline": 616.510009765625,
+   "bottom": 619.0480346679688,
+   "text": "legal person – by senior managing official"
+  },
+  {
+   "page": 3,
+   "x0": 293.9179992675781,
+   "x1": 496.0870056152344,
+   "baseline": 616.6300048828125,
+   "bottom": 619.1680297851562,
+   "text": "legal arrangement (non-trust) – trustee-equivalent"
+  },
+  {
+   "page": 3,
+   "x0": 88.5719985961914,
+   "x1": 213.07699584960938,
+   "baseline": 632.949951171875,
+   "bottom": 635.4879760742188,
+   "text": "legal person – by other means"
+  },
+  {
+   "page": 3,
+   "x0": 293.9179992675781,
+   "x1": 504.1269836425781,
+   "baseline": 632.1099853515625,
+   "bottom": 634.6480102539062,
+   "text": "legal arrangement (non-trust) – protector-equivalent"
+  },
+  {
+   "page": 3,
+   "x0": 92.1719970703125,
+   "x1": 149.927001953125,
+   "baseline": 648.6699829101562,
+   "bottom": 651.2080078125,
+   "text": "trust – settlor"
+  },
+  {
+   "page": 3,
+   "x0": 293.9179992675781,
+   "x1": 510.24700927734375,
+   "baseline": 648.5499877929688,
+   "bottom": 651.0880126953125,
+   "text": "legal arrangement (non-trust) – beneficiary equivalent"
+  },
+  {
+   "page": 3,
+   "x0": 92.1719970703125,
+   "x1": 152.32699584960938,
+   "baseline": 665.739990234375,
+   "bottom": 668.2780151367188,
+   "text": "trust – trustee"
+  },
+  {
+   "page": 3,
+   "x0": 293.9179992675781,
+   "x1": 488.6470031738281,
+   "baseline": 664.7799682617188,
+   "bottom": 667.3179931640625,
+   "text": "legal arrangement (non-trust) – other-equivalent"
+  },
+  {
+   "page": 3,
+   "x0": 92.1719970703125,
+   "x1": 160.8470001220703,
+   "baseline": 681.0999755859375,
+   "bottom": 683.6380004882812,
+   "text": "trust – protector"
+  },
+  {
+   "page": 3,
+   "x0": 92.1719970703125,
+   "x1": 167.927001953125,
+   "baseline": 698.02001953125,
+   "bottom": 700.5580444335938,
+   "text": "trust – beneficiary"
+  },
+  {
+   "page": 3,
+   "x0": 92.1719970703125,
+   "x1": 145.2469940185547,
+   "baseline": 714.0999755859375,
+   "bottom": 716.6380004882812,
+   "text": "trust – other"
+  },
+  {
+   "page": 3,
+   "x0": 77.66400146484375,
+   "x1": 162.0469970703125,
+   "baseline": 728.3800048828125,
+   "bottom": 730.9180297851562,
+   "text": "controlling person 2"
+  },
+  {
+   "page": 3,
+   "x0": 13.4399995803833,
+   "x1": 159.33212280273438,
+   "baseline": 827.4959716796875,
+   "bottom": 829.7632446289062,
+   "text": "fatca & crs – for entity (november 2025)"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 162.0469970703125,
+   "baseline": 228.5,
+   "bottom": 231.03799438476562,
+   "text": "controlling person 3"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 211.15699768066406,
+   "baseline": 244.70001220703125,
+   "bottom": 247.23800659179688,
+   "text": "name (please underline surname)"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 285.0769958496094,
+   "baseline": 260.77996826171875,
+   "bottom": 263.3179626464844,
+   "text": "type of controlling person (please select only 1 type):"
+  },
+  {
+   "page": 4,
+   "x0": 113.66000366210938,
+   "x1": 142.8018798828125,
+   "baseline": 425.0899963378906,
+   "bottom": 427.8987121582031,
+   "text": "notes"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 519.47314453125,
+   "baseline": 437.80999755859375,
+   "bottom": 440.3479919433594,
+   "text": "^specified us person - the term “specified u.s. person” means a u.s. person, other than: (i) a corporation the stock"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 519.2400512695312,
+   "baseline": 448.72998046875,
+   "bottom": 451.2679748535156,
+   "text": "of which is regularly traded on one or more established securities markets; (ii) any corporation that is a member of"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 519.4810180664062,
+   "baseline": 459.7699890136719,
+   "bottom": 462.3079833984375,
+   "text": "the same expanded affiliated group, as defined in section 1471(e)(2) of the u.s. internal revenue code, as a"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 519.3031005859375,
+   "baseline": 470.7099914550781,
+   "bottom": 473.24798583984375,
+   "text": "corporation described in clause (i); (iii) the united states or any wholly owned agency or instrumentality thereof; (iv)"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 519.5859985351562,
+   "baseline": 481.7499694824219,
+   "bottom": 484.2879638671875,
+   "text": "any state of the united states, any u.s. territory, any political subdivision of any of the foregoing, or any wholly"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 519.1949462890625,
+   "baseline": 492.66998291015625,
+   "bottom": 495.2079772949219,
+   "text": "owned agency or instrumentality of any one or more of the foregoing; (v) any organization exempt from taxation"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 519.213134765625,
+   "baseline": 503.7099914550781,
+   "bottom": 506.24798583984375,
+   "text": "under section 501(a) of the u.s. internal revenue code or an individual retirement plan as defined in section"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 519.1280517578125,
+   "baseline": 514.75,
+   "bottom": 517.2880249023438,
+   "text": "7701(a)(37) of the u.s. internal revenue code; (vi) any bank as defined in section 581 of the u.s. internal revenue"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 519.2041625976562,
+   "baseline": 525.6699829101562,
+   "bottom": 528.2080078125,
+   "text": "code; (vii) any real estate investment trust as defined in section 856 of the u.s. internal revenue code; (viii) any"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 519.44921875,
+   "baseline": 536.7099609375,
+   "bottom": 539.2479858398438,
+   "text": "regulated investment company as defined in section 851 of the u.s. internal revenue code or any entity registered"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 519.5950317382812,
+   "baseline": 547.6300048828125,
+   "bottom": 550.1680297851562,
+   "text": "with the u.s. securities and exchange commission under the investment company act of 1940 (15 u.s.c. 80a-64);"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 519.4931030273438,
+   "baseline": 558.6699829101562,
+   "bottom": 561.2080078125,
+   "text": "(ix) any common trust fund as defined in section 584(a) of the u.s. internal revenue code; (x) any trust that is"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 519.4199829101562,
+   "baseline": 569.5899658203125,
+   "bottom": 572.1279907226562,
+   "text": "exempt from tax under section 664(c) of the u.s. internal revenue code or that is described in section 4947(a)(1) of"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 519.1591186523438,
+   "baseline": 580.6300048828125,
+   "bottom": 583.1680297851562,
+   "text": "the u.s. internal revenue code; (xi) a dealer in securities, commodities, or derivative financial instruments"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 519.1981201171875,
+   "baseline": 591.5499877929688,
+   "bottom": 594.0880126953125,
+   "text": "(including notional principal contracts, futures, forwards, and options) that is registered as such under the laws of"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 519.2849731445312,
+   "baseline": 602.5899658203125,
+   "bottom": 605.1279907226562,
+   "text": "the united states or any state; (xii) a broker as defined in section 6045(c) of the u.s. internal revenue code; or (xiii)"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 519.2301025390625,
+   "baseline": 613.6300048828125,
+   "bottom": 616.1680297851562,
+   "text": "any tax-exempt trust under a plan that is described in section 403(b) or section 457(g) of the u.s. internal revenue"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 103.00700378417969,
+   "baseline": 624.5499877929688,
+   "bottom": 627.0880126953125,
+   "text": "code."
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 519.1799926757812,
+   "baseline": 645.010009765625,
+   "bottom": 649.0480346679688,
+   "text": "1controlling persons means the natural persons who exercise control over an entity. in the case of a trust, such"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 519.0870971679688,
+   "baseline": 657.5799560546875,
+   "bottom": 660.1179809570312,
+   "text": "term means the settlor(s), the trustee(s), the protector(s) (if any), the beneficiary(ies) or class(es) of beneficiaries,"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 519.1641235351562,
+   "baseline": 668.5,
+   "bottom": 671.0380249023438,
+   "text": "and any other natural person(s) exercising ultimate effective control over the trust, and in the case of a legal"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 519.2041625976562,
+   "baseline": 679.5399780273438,
+   "bottom": 682.0780029296875,
+   "text": "arrangement other than a trust, such term means persons in equivalent or similar positions. the term “controlling"
+  },
+  {
+   "page": 4,
+   "x0": 77.66400146484375,
+   "x1": 503.406982421875,
+   "baseline": 690.4599609375,
+   "bottom": 692.9979858398438,
+   "text": "persons” must be interpreted in a manner consistent with the financial action task force recommendations."
+  },
+  {
+   "page": 4,
+   "x0": 113.66000366210938,
+   "x1": 215.31187438964844,
+   "baseline": 723.3399658203125,
+   "bottom": 726.148681640625,
+   "text": "declaration & sign-off"
+  },
+  {
+   "page": 4,
+   "x0": 113.66000366210938,
+   "x1": 519.4361572265625,
+   "baseline": 736.0599975585938,
+   "bottom": 738.5980224609375,
+   "text": "i understand that the information supplied by me is covered by the full provision of the terms and"
+  },
+  {
+   "page": 4,
+   "x0": 113.66000366210938,
+   "x1": 519.2091674804688,
+   "baseline": 746.9759521484375,
+   "bottom": 749.5139770507812,
+   "text": "conditions governing the account holder’s relationship with gldb setting out how gldb may use and"
+  },
+  {
+   "page": 4,
+   "x0": 113.66000366210938,
+   "x1": 262.2770080566406,
+   "baseline": 758.0159912109375,
+   "bottom": 760.5540161132812,
+   "text": "share the information supplied by me."
+  },
+  {
+   "page": 4,
+   "x0": 13.4399995803833,
+   "x1": 159.33212280273438,
+   "baseline": 827.4959716796875,
+   "bottom": 829.7632446289062,
+   "text": "fatca & crs – for entity (november 2025)"
+  },
+  {
+   "page": 5,
+   "x0": 113.66000366210938,
+   "x1": 519.2451171875,
+   "baseline": 108.8599853515625,
+   "bottom": 111.39798736572266,
+   "text": "i acknowledge that the information contained in this form and information regarding the account holder"
+  },
+  {
+   "page": 5,
+   "x0": 113.66000366210938,
+   "x1": 519.3800048828125,
+   "baseline": 119.77996826171875,
+   "bottom": 122.3179702758789,
+   "text": "and any reportable account(s) may be reported to the tax authorities of the country / jurisdiction in which"
+  },
+  {
+   "page": 5,
+   "x0": 113.66000366210938,
+   "x1": 519.341064453125,
+   "baseline": 130.82000732421875,
+   "bottom": 133.35800170898438,
+   "text": "this account(s) is / are maintained and exchanged with tax authorities of another country / jurisdiction or"
+  },
+  {
+   "page": 5,
+   "x0": 113.66000366210938,
+   "x1": 519.1732177734375,
+   "baseline": 141.739990234375,
+   "bottom": 144.27798461914062,
+   "text": "countries / jurisdictions in which the account holder may be tax resident pursuant to intergovernmental"
+  },
+  {
+   "page": 5,
+   "x0": 113.66000366210938,
+   "x1": 329.59698486328125,
+   "baseline": 152.77996826171875,
+   "bottom": 155.31796264648438,
+   "text": "agreements to exchange financial account information."
+  },
+  {
+   "page": 5,
+   "x0": 113.66000366210938,
+   "x1": 519.1642456054688,
+   "baseline": 174.739990234375,
+   "bottom": 177.27798461914062,
+   "text": "i certify that i am authorised to sign for the account holder in respect of all the account(s) to which this"
+  },
+  {
+   "page": 5,
+   "x0": 113.66000366210938,
+   "x1": 165.1669921875,
+   "baseline": 185.65997314453125,
+   "bottom": 188.19796752929688,
+   "text": "form relates."
+  },
+  {
+   "page": 5,
+   "x0": 113.66000366210938,
+   "x1": 519.2090454101562,
+   "baseline": 207.6199951171875,
+   "bottom": 210.15798950195312,
+   "text": "i declare that all statements made in this declaration are, to the best of my knowledge and belief, true,"
+  },
+  {
+   "page": 5,
+   "x0": 113.66000366210938,
+   "x1": 201.7969970703125,
+   "baseline": 218.65997314453125,
+   "bottom": 221.19796752929688,
+   "text": "correct and complete."
+  },
+  {
+   "page": 5,
+   "x0": 113.66000366210938,
+   "x1": 519.227294921875,
+   "baseline": 240.6199951171875,
+   "bottom": 243.15798950195312,
+   "text": "i undertake to advise gldb within 30 days of any change in circumstances which affects the tax residency"
+  },
+  {
+   "page": 5,
+   "x0": 113.66000366210938,
+   "x1": 519.395263671875,
+   "baseline": 251.65997314453125,
+   "bottom": 254.19796752929688,
+   "text": "status of the account holder identified in section 3 of this form or causes the information contained herein"
+  },
+  {
+   "page": 5,
+   "x0": 113.66000366210938,
+   "x1": 519.244873046875,
+   "baseline": 262.5799560546875,
+   "bottom": 265.1179504394531,
+   "text": "to become incorrect or incomplete (including any changes to the information on controlling persons"
+  },
+  {
+   "page": 5,
+   "x0": 113.66000366210938,
+   "x1": 519.4119873046875,
+   "baseline": 273.6199951171875,
+   "bottom": 276.1579895019531,
+   "text": "identified in the controlling person self-certification form that you may be filling out after this), and to"
+  },
+  {
+   "page": 5,
+   "x0": 113.66000366210938,
+   "x1": 519.3499755859375,
+   "baseline": 284.57000732421875,
+   "bottom": 287.1080017089844,
+   "text": "provide gldb with a suitably updated self-certification and declaration within 30 days of such change in"
+  },
+  {
+   "page": 5,
+   "x0": 113.66000366210938,
+   "x1": 176.20700073242188,
+   "baseline": 295.6099853515625,
+   "bottom": 298.1479797363281,
+   "text": "circumstances."
+  },
+  {
+   "page": 5,
+   "x0": 128.24000549316406,
+   "x1": 179.75599670410156,
+   "baseline": 452.0799865722656,
+   "bottom": 454.77099609375,
+   "text": "director"
+  },
+  {
+   "page": 5,
+   "x0": 77.66400146484375,
+   "x1": 519.3046264648438,
+   "baseline": 490.5099792480469,
+   "bottom": 493.0479736328125,
+   "text": "note: director(s)/partner(s)/authorised signatory(ies) who sign off the account opening extract of board resolution"
+  },
+  {
+   "page": 5,
+   "x0": 77.66400146484375,
+   "x1": 122.8070068359375,
+   "baseline": 501.42999267578125,
+   "bottom": 503.9679870605469,
+   "text": "with gldb."
+  },
+  {
+   "page": 5,
+   "x0": 72.02400207519531,
+   "x1": 222.6929473876953,
+   "baseline": 532.75,
+   "bottom": 535.2880249023438,
+   "text": "more information on fatca and crs"
+  },
+  {
+   "page": 5,
+   "x0": 108.0199966430664,
+   "x1": 520.3599853515625,
+   "baseline": 553.27001953125,
+   "bottom": 555.8080444335938,
+   "text": "for fatca, please refer to: http://www.irs.gov/businesses/corporations/foreign-account-tax-compliance-"
+  },
+  {
+   "page": 5,
+   "x0": 108.0199966430664,
+   "x1": 497.44000244140625,
+   "baseline": 565.1500244140625,
+   "bottom": 567.6880493164062,
+   "text": "act-fatca and https://www.iras.gov.sg/taxes/international-tax/foreign-account-tax-compliance-act-"
+  },
+  {
+   "page": 5,
+   "x0": 108.0199966430664,
+   "x1": 381.8169860839844,
+   "baseline": 577.0299682617188,
+   "bottom": 579.5679931640625,
+   "text": "(fatca)/basic-information-for-account-holders-of-financial-institutions"
+  },
+  {
+   "page": 5,
+   "x0": 108.0199966430664,
+   "x1": 434.04400634765625,
+   "baseline": 589.510009765625,
+   "bottom": 592.0480346679688,
+   "text": "for crs, please refer to: https://web-archive.oecd.org/tax/automatic-exchange/ and"
+  },
+  {
+   "page": 5,
+   "x0": 108.0199966430664,
+   "x1": 511.4800109863281,
+   "baseline": 601.27001953125,
+   "bottom": 603.8080444335938,
+   "text": "https://www.iras.gov.sg/taxes/international-tax/common-reporting-standard-(crs)/basic-information-for-"
+  },
+  {
+   "page": 5,
+   "x0": 108.0199966430664,
+   "x1": 268.3970031738281,
+   "baseline": 613.0299682617188,
+   "bottom": 615.5679931640625,
+   "text": "account-holders-of-financial-institutions"
+  },
+  {
+   "page": 5,
+   "x0": 13.4399995803833,
+   "x1": 159.33212280273438,
+   "baseline": 827.4959716796875,
+   "bottom": 829.7632446289062,
+   "text": "fatca & crs – for entity (november 2025)"
+  }
+ ],
+ "slots": [
+  {
+   "page": 0,
+   "x0": 95.66400146484375,
+   "x1": 103.10100555419922,
+   "baseline": 372.16998291015625,
+   "bottom": 374.7079772949219,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 237.9199981689453,
+   "x1": 439.5379638671875,
+   "baseline": 386.91998291015625,
+   "bottom": 389.6109924316406,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 237.9199981689453,
+   "x1": 301.4599914550781,
+   "baseline": 400.47998046875,
+   "bottom": 403.1709899902344,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 240.52999877929688,
+   "x1": 264.1969909667969,
+   "baseline": 412.6099853515625,
+   "bottom": 415.1479797363281,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 338.8399963378906,
+   "x1": 346.34600830078125,
+   "baseline": 414.03997802734375,
+   "bottom": 416.7309875488281,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 338.8399963378906,
+   "x1": 424.3849792480469,
+   "baseline": 427.5999755859375,
+   "bottom": 430.2909851074219,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 240.52999877929688,
+   "x1": 265.6369934082031,
+   "baseline": 439.72998046875,
+   "bottom": 442.2679748535156,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 240.52999877929688,
+   "x1": 262.2770080566406,
+   "baseline": 466.8699951171875,
+   "bottom": 469.4079895019531,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 378.6700134277344,
+   "x1": 383.61700439453125,
+   "baseline": 466.8699951171875,
+   "bottom": 469.4079895019531,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 395.5899963378906,
+   "x1": 413.49700927734375,
+   "baseline": 466.8699951171875,
+   "bottom": 469.4079895019531,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 338.8399963378906,
+   "x1": 353.85198974609375,
+   "baseline": 468.27996826171875,
+   "bottom": 470.9709777832031,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 444.20001220703125,
+   "x1": 459.2120056152344,
+   "baseline": 468.27996826171875,
+   "bottom": 470.9709777832031,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 240.52999877929688,
+   "x1": 273.7969970703125,
+   "baseline": 487.1499938964844,
+   "bottom": 489.68798828125,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 240.52999877929688,
+   "x1": 284.7170104980469,
+   "baseline": 507.54998779296875,
+   "bottom": 510.0879821777344,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 338.8399963378906,
+   "x1": 402.3800048828125,
+   "baseline": 508.9599609375,
+   "bottom": 511.6509704589844,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 240.52999877929688,
+   "x1": 289.2770080566406,
+   "baseline": 521.1099853515625,
+   "bottom": 523.6480102539062,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 240.52999877929688,
+   "x1": 273.677001953125,
+   "baseline": 534.5499877929688,
+   "bottom": 537.0880126953125,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 338.8399963378906,
+   "x1": 383.8760070800781,
+   "baseline": 522.52001953125,
+   "bottom": 525.2109985351562,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 338.8399963378906,
+   "x1": 402.3800048828125,
+   "baseline": 536.0800170898438,
+   "bottom": 538.77099609375,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 240.52999877929688,
+   "x1": 264.1969909667969,
+   "baseline": 561.0699462890625,
+   "bottom": 563.6079711914062,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 240.52999877929688,
+   "x1": 265.6369934082031,
+   "baseline": 574.6300048828125,
+   "bottom": 577.1680297851562,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 240.52999877929688,
+   "x1": 262.2770080566406,
+   "baseline": 615.3099975585938,
+   "bottom": 617.8480224609375,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 372.30999755859375,
+   "x1": 377.2569885253906,
+   "baseline": 615.3099975585938,
+   "bottom": 617.8480224609375,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 393.54998779296875,
+   "x1": 411.4570007324219,
+   "baseline": 615.3099975585938,
+   "bottom": 617.8480224609375,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 240.52999877929688,
+   "x1": 273.7969970703125,
+   "baseline": 628.8699951171875,
+   "bottom": 631.4080200195312,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 240.52999877929688,
+   "x1": 284.7170104980469,
+   "baseline": 656.02001953125,
+   "bottom": 658.5580444335938,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 240.52999877929688,
+   "x1": 289.2770080566406,
+   "baseline": 669.5799560546875,
+   "bottom": 672.1179809570312,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 240.52999877929688,
+   "x1": 273.677001953125,
+   "baseline": 683.1400146484375,
+   "bottom": 685.6780395507812,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 517.5399780273438,
+   "x1": 525.6611328125,
+   "baseline": 791.4959716796875,
+   "bottom": 794.6092529296875,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 362.8550109863281,
+   "x1": 375.1490783691406,
+   "baseline": 125.84697723388672,
+   "bottom": 128.01998901367188,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 379.10198974609375,
+   "x1": 397.7979736328125,
+   "baseline": 122.41998291015625,
+   "bottom": 124.9579849243164,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 448.8999938964844,
+   "x1": 467.8869934082031,
+   "baseline": 122.41998291015625,
+   "bottom": 124.9579849243164,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 384.7900085449219,
+   "x1": 399.7209777832031,
+   "baseline": 186.01995849609375,
+   "bottom": 188.55795288085938,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 450.822998046875,
+   "x1": 469.8070068359375,
+   "baseline": 186.01995849609375,
+   "bottom": 188.55795288085938,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 362.8550109863281,
+   "x1": 375.1490783691406,
+   "baseline": 189.99298095703125,
+   "bottom": 192.16598510742188,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 79.46399688720703,
+   "x1": 94.85100555419922,
+   "baseline": 382.3699951171875,
+   "bottom": 384.9079895019531,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 83.90399932861328,
+   "x1": 90.531005859375,
+   "baseline": 406.6099853515625,
+   "bottom": 409.1479797363281,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 340.13800048828125,
+   "x1": 351.09698486328125,
+   "baseline": 407.6899719238281,
+   "bottom": 410.22796630859375,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 408.5379943847656,
+   "x1": 424.4169921875,
+   "baseline": 407.6899719238281,
+   "bottom": 410.22796630859375,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 477.0880126953125,
+   "x1": 488.8869934082031,
+   "baseline": 407.6899719238281,
+   "bottom": 410.22796630859375,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 83.90399932861328,
+   "x1": 90.531005859375,
+   "baseline": 421.0099792480469,
+   "bottom": 423.5479736328125,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 340.1180114746094,
+   "x1": 351.09698486328125,
+   "baseline": 422.2099914550781,
+   "bottom": 424.74798583984375,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 408.5379943847656,
+   "x1": 424.4169921875,
+   "baseline": 422.2099914550781,
+   "bottom": 424.74798583984375,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 477.0580139160156,
+   "x1": 488.8869934082031,
+   "baseline": 422.2099914550781,
+   "bottom": 424.74798583984375,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 237.8000030517578,
+   "x1": 313.8589782714844,
+   "baseline": 408.5199890136719,
+   "bottom": 411.21099853515625,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 83.90399932861328,
+   "x1": 90.531005859375,
+   "baseline": 435.7699890136719,
+   "bottom": 438.3079833984375,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 336.54998779296875,
+   "x1": 351.09698486328125,
+   "baseline": 436.3699951171875,
+   "bottom": 438.9079895019531,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 408.5379943847656,
+   "x1": 424.4169921875,
+   "baseline": 436.3699951171875,
+   "bottom": 438.9079895019531,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 477.0580139160156,
+   "x1": 488.8869934082031,
+   "baseline": 436.3699951171875,
+   "bottom": 438.9079895019531,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 120.0199966430664,
+   "x1": 223.8769989013672,
+   "baseline": 600.5499877929688,
+   "bottom": 603.0880126953125,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 120.0199966430664,
+   "x1": 223.8769989013672,
+   "baseline": 624.7899780273438,
+   "bottom": 627.3280029296875,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 120.0199966430664,
+   "x1": 223.8769989013672,
+   "baseline": 649.0299682617188,
+   "bottom": 651.5679931640625,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 517.5399780273438,
+   "x1": 525.6611328125,
+   "baseline": 791.4959716796875,
+   "bottom": 794.6092529296875,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 95.66400146484375,
+   "x1": 103.10100555419922,
+   "baseline": 98.77996826171875,
+   "bottom": 101.3179702758789,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 95.66400146484375,
+   "x1": 103.16400146484375,
+   "baseline": 115.5799560546875,
+   "bottom": 118.11795806884766,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 113.66000366210938,
+   "x1": 197.23399353027344,
+   "baseline": 115.5799560546875,
+   "bottom": 118.11795806884766,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 410.5899963378906,
+   "x1": 478.2330322265625,
+   "baseline": 151.3399658203125,
+   "bottom": 153.87796020507812,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 82.2239990234375,
+   "x1": 92.36400604248047,
+   "baseline": 152.29998779296875,
+   "bottom": 154.83798217773438,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 218.2100067138672,
+   "x1": 223.74501037597656,
+   "baseline": 187.3399658203125,
+   "bottom": 189.29296875,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 298.25,
+   "x1": 303.7850036621094,
+   "baseline": 187.3399658203125,
+   "bottom": 189.29296875,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 82.34400177001953,
+   "x1": 91.86900329589844,
+   "baseline": 207.5,
+   "bottom": 210.03799438476562,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 410.5899963378906,
+   "x1": 478.2900390625,
+   "baseline": 206.41998291015625,
+   "bottom": 208.95797729492188,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 81.98400115966797,
+   "x1": 92.1570053100586,
+   "baseline": 243.6199951171875,
+   "bottom": 246.15798950195312,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 77.66400146484375,
+   "x1": 125.40001678466797,
+   "baseline": 271.82000732421875,
+   "bottom": 274.3580017089844,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 82.10399627685547,
+   "x1": 92.09099578857422,
+   "baseline": 288.16998291015625,
+   "bottom": 290.7079772949219,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 410.5899963378906,
+   "x1": 479.7850036621094,
+   "baseline": 298.969970703125,
+   "bottom": 301.5079650878906,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 82.46399688720703,
+   "x1": 91.94100189208984,
+   "baseline": 336.16998291015625,
+   "bottom": 338.7079772949219,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 410.5899963378906,
+   "x1": 479.6360168457031,
+   "baseline": 340.1299743652344,
+   "bottom": 342.66796875,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 83.18399810791016,
+   "x1": 90.30900573730469,
+   "baseline": 356.4499816894531,
+   "bottom": 358.98797607421875,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 410.5899963378906,
+   "x1": 489.13507080078125,
+   "baseline": 356.4499816894531,
+   "bottom": 358.98797607421875,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 95.66400146484375,
+   "x1": 103.16400146484375,
+   "baseline": 410.2099914550781,
+   "bottom": 412.74798583984375,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 451.75,
+   "x1": 499.4469909667969,
+   "baseline": 430.6099853515625,
+   "bottom": 433.1479797363281,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 81.98400115966797,
+   "x1": 92.45100402832031,
+   "baseline": 446.92999267578125,
+   "bottom": 449.4679870605469,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 437.8299865722656,
+   "x1": 513.3670043945312,
+   "baseline": 446.92999267578125,
+   "bottom": 449.4679870605469,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 107.58099365234375,
+   "x1": 119.87506866455078,
+   "baseline": 453.7749938964844,
+   "bottom": 455.947998046875,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 81.86399841308594,
+   "x1": 92.57100677490234,
+   "baseline": 518.5899658203125,
+   "bottom": 521.1279907226562,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 437.8299865722656,
+   "x1": 513.3670043945312,
+   "baseline": 518.5899658203125,
+   "bottom": 521.1279907226562,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 83.78399658203125,
+   "x1": 90.531005859375,
+   "baseline": 613.989990234375,
+   "bottom": 616.5280151367188,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 453.7900085449219,
+   "x1": 497.406982421875,
+   "baseline": 613.989990234375,
+   "bottom": 616.5280151367188,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 83.66400146484375,
+   "x1": 90.77100372314453,
+   "baseline": 673.7799682617188,
+   "bottom": 676.3179931640625,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 453.7900085449219,
+   "x1": 497.406982421875,
+   "baseline": 673.7799682617188,
+   "bottom": 676.3179931640625,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 517.5399780273438,
+   "x1": 525.6611328125,
+   "baseline": 791.4959716796875,
+   "bottom": 794.6092529296875,
+   "text": null
+  },
+  {
+   "page": 3,
+   "x0": 82.46399688720703,
+   "x1": 91.97100067138672,
+   "baseline": 122.05999755859375,
+   "bottom": 124.5979995727539,
+   "text": null
+  },
+  {
+   "page": 3,
+   "x0": 358.0299987792969,
+   "x1": 418.5369873046875,
+   "baseline": 122.05999755859375,
+   "bottom": 124.5979995727539,
+   "text": null
+  },
+  {
+   "page": 3,
+   "x0": 453.7900085449219,
+   "x1": 497.406982421875,
+   "baseline": 122.05999755859375,
+   "bottom": 124.5979995727539,
+   "text": null
+  },
+  {
+   "page": 3,
+   "x0": 358.0299987792969,
+   "x1": 418.5369873046875,
+   "baseline": 157.70001220703125,
+   "bottom": 160.23800659179688,
+   "text": null
+  },
+  {
+   "page": 3,
+   "x0": 82.7040023803711,
+   "x1": 91.61100006103516,
+   "baseline": 193.70001220703125,
+   "bottom": 196.23800659179688,
+   "text": null
+  },
+  {
+   "page": 3,
+   "x0": 453.7900085449219,
+   "x1": 497.406982421875,
+   "baseline": 193.70001220703125,
+   "bottom": 196.23800659179688,
+   "text": null
+  },
+  {
+   "page": 3,
+   "x0": 95.66400146484375,
+   "x1": 105.72200012207031,
+   "baseline": 277.8499755859375,
+   "bottom": 280.3879699707031,
+   "text": null
+  },
+  {
+   "page": 3,
+   "x0": 81.38400268554688,
+   "x1": 92.93099975585938,
+   "baseline": 314.57000732421875,
+   "bottom": 317.1080017089844,
+   "text": null
+  },
+  {
+   "page": 3,
+   "x0": 134.05999755859375,
+   "x1": 214.27699279785156,
+   "baseline": 433.1299743652344,
+   "bottom": 435.66796875,
+   "text": null
+  },
+  {
+   "page": 3,
+   "x0": 95.66400146484375,
+   "x1": 105.60199737548828,
+   "baseline": 478.7499694824219,
+   "bottom": 481.2879638671875,
+   "text": null
+  },
+  {
+   "page": 3,
+   "x0": 77.66400146484375,
+   "x1": 157.8470001220703,
+   "baseline": 503.22998046875,
+   "bottom": 505.7679748535156,
+   "text": null
+  },
+  {
+   "page": 3,
+   "x0": 77.66400146484375,
+   "x1": 211.15699768066406,
+   "baseline": 569.1099853515625,
+   "bottom": 571.6480102539062,
+   "text": null
+  },
+  {
+   "page": 3,
+   "x0": 77.66400146484375,
+   "x1": 285.0769958496094,
+   "baseline": 585.3099975585938,
+   "bottom": 587.8480224609375,
+   "text": null
+  },
+  {
+   "page": 3,
+   "x0": 77.66400146484375,
+   "x1": 211.15699768066406,
+   "baseline": 744.4559936523438,
+   "bottom": 746.9940185546875,
+   "text": null
+  },
+  {
+   "page": 3,
+   "x0": 77.66400146484375,
+   "x1": 285.0769958496094,
+   "baseline": 760.5360107421875,
+   "bottom": 763.0740356445312,
+   "text": null
+  },
+  {
+   "page": 3,
+   "x0": 517.5399780273438,
+   "x1": 525.6611328125,
+   "baseline": 791.4959716796875,
+   "bottom": 794.6092529296875,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 92.1719970703125,
+   "x1": 206.35699462890625,
+   "baseline": 98.65997314453125,
+   "bottom": 101.1979751586914,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 293.9179992675781,
+   "x1": 493.3269958496094,
+   "baseline": 98.65997314453125,
+   "bottom": 101.1979751586914,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 92.1719970703125,
+   "x1": 258.1969909667969,
+   "baseline": 114.6199951171875,
+   "bottom": 117.15799713134766,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 293.9179992675781,
+   "x1": 496.0870056152344,
+   "baseline": 114.3800048828125,
+   "bottom": 116.91800689697266,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 92.1719970703125,
+   "x1": 214.8769989013672,
+   "baseline": 130.70001220703125,
+   "bottom": 133.23800659179688,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 293.9179992675781,
+   "x1": 504.1269836425781,
+   "baseline": 130.70001220703125,
+   "bottom": 133.23800659179688,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 92.1719970703125,
+   "x1": 149.927001953125,
+   "baseline": 146.65997314453125,
+   "bottom": 149.19796752929688,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 293.9179992675781,
+   "x1": 510.24700927734375,
+   "baseline": 147.01995849609375,
+   "bottom": 149.55795288085938,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 92.1719970703125,
+   "x1": 152.32699584960938,
+   "baseline": 162.739990234375,
+   "bottom": 165.27798461914062,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 293.9179992675781,
+   "x1": 488.6470031738281,
+   "baseline": 162.97998046875,
+   "bottom": 165.51797485351562,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 92.1719970703125,
+   "x1": 160.8470001220703,
+   "baseline": 178.70001220703125,
+   "bottom": 181.23800659179688,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 92.1719970703125,
+   "x1": 167.927001953125,
+   "baseline": 194.77996826171875,
+   "bottom": 197.31796264648438,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 92.1719970703125,
+   "x1": 145.2469940185547,
+   "baseline": 211.0999755859375,
+   "bottom": 213.63796997070312,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 92.1719970703125,
+   "x1": 206.35699462890625,
+   "baseline": 275.41998291015625,
+   "bottom": 277.9579772949219,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 293.9179992675781,
+   "x1": 493.3269958496094,
+   "baseline": 275.41998291015625,
+   "bottom": 277.9579772949219,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 92.1719970703125,
+   "x1": 258.1969909667969,
+   "baseline": 291.52996826171875,
+   "bottom": 294.0679626464844,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 293.9179992675781,
+   "x1": 496.0870056152344,
+   "baseline": 291.52996826171875,
+   "bottom": 294.0679626464844,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 92.1719970703125,
+   "x1": 214.8769989013672,
+   "baseline": 307.489990234375,
+   "bottom": 310.0279846191406,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 293.9179992675781,
+   "x1": 504.1269836425781,
+   "baseline": 307.489990234375,
+   "bottom": 310.0279846191406,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 92.1719970703125,
+   "x1": 149.927001953125,
+   "baseline": 323.80999755859375,
+   "bottom": 326.3479919433594,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 293.9179992675781,
+   "x1": 510.24700927734375,
+   "baseline": 323.80999755859375,
+   "bottom": 326.3479919433594,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 92.1719970703125,
+   "x1": 152.32699584960938,
+   "baseline": 339.7699890136719,
+   "bottom": 342.3079833984375,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 293.9179992675781,
+   "x1": 488.6470031738281,
+   "baseline": 339.7699890136719,
+   "bottom": 342.3079833984375,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 92.1719970703125,
+   "x1": 160.8470001220703,
+   "baseline": 355.8499755859375,
+   "bottom": 358.3879699707031,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 92.1719970703125,
+   "x1": 167.927001953125,
+   "baseline": 372.16998291015625,
+   "bottom": 374.7079772949219,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 92.1719970703125,
+   "x1": 145.2469940185547,
+   "baseline": 388.1299743652344,
+   "bottom": 390.66796875,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 95.66400146484375,
+   "x1": 105.60199737548828,
+   "baseline": 425.0899963378906,
+   "bottom": 427.62799072265625,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 95.66400146484375,
+   "x1": 105.60199737548828,
+   "baseline": 723.3399658203125,
+   "bottom": 725.8779907226562,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 86.18399810791016,
+   "x1": 96.00599670410156,
+   "baseline": 736.0599975585938,
+   "bottom": 738.5980224609375,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 517.5399780273438,
+   "x1": 525.6611328125,
+   "baseline": 791.4959716796875,
+   "bottom": 794.6092529296875,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 86.18399810791016,
+   "x1": 96.00599670410156,
+   "baseline": 108.8599853515625,
+   "bottom": 111.39798736572266,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 86.18399810791016,
+   "x1": 96.00599670410156,
+   "baseline": 174.739990234375,
+   "bottom": 177.27798461914062,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 86.18399810791016,
+   "x1": 96.00599670410156,
+   "baseline": 207.6199951171875,
+   "bottom": 210.15798950195312,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 86.18399810791016,
+   "x1": 96.00599670410156,
+   "baseline": 240.6199951171875,
+   "bottom": 243.15798950195312,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 115.78256225585938,
+   "x1": 126.64924621582031,
+   "baseline": 334.1521911621094,
+   "bottom": 335.4810791015625,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 338.85052490234375,
+   "x1": 349.71722412109375,
+   "baseline": 334.1521911621094,
+   "bottom": 335.4810791015625,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 114.48699951171875,
+   "x1": 183.21817016601562,
+   "baseline": 358.04998779296875,
+   "bottom": 362.3699951171875,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 117.86000061035156,
+   "x1": 247.9969940185547,
+   "baseline": 373.0099792480469,
+   "bottom": 375.5479736328125,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 343.2699890136719,
+   "x1": 473.406982421875,
+   "baseline": 373.0099792480469,
+   "bottom": 375.5479736328125,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 106.04000091552734,
+   "x1": 191.57598876953125,
+   "baseline": 387.27996826171875,
+   "bottom": 389.9709777832031,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 77.66400146484375,
+   "x1": 105.64700317382812,
+   "baseline": 411.40997314453125,
+   "bottom": 413.9479675292969,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 297.1700134277344,
+   "x1": 325.156982421875,
+   "baseline": 411.40997314453125,
+   "bottom": 413.9479675292969,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 77.66400146484375,
+   "x1": 128.56700134277344,
+   "baseline": 454.1299743652344,
+   "bottom": 456.66796875,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 297.1700134277344,
+   "x1": 348.09698486328125,
+   "baseline": 454.1299743652344,
+   "bottom": 456.66796875,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 149.9600067138672,
+   "x1": 220.01600646972656,
+   "baseline": 472.3599853515625,
+   "bottom": 475.0509948730469,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 77.66400146484375,
+   "x1": 150.1669921875,
+   "baseline": 474.54998779296875,
+   "bottom": 477.0879821777344,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 297.1700134277344,
+   "x1": 369.6969909667969,
+   "baseline": 474.54998779296875,
+   "bottom": 477.0879821777344,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 90.02400207519531,
+   "x1": 94.16400146484375,
+   "baseline": 553.27001953125,
+   "bottom": 555.2139892578125,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 90.02400207519531,
+   "x1": 94.16400146484375,
+   "baseline": 589.510009765625,
+   "bottom": 591.4539794921875,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 517.5399780273438,
+   "x1": 525.6611328125,
+   "baseline": 791.4959716796875,
+   "bottom": 794.6092529296875,
+   "text": null
+  }
+ ]
+}
