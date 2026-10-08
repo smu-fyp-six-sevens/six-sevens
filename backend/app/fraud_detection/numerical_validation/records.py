@@ -423,7 +423,7 @@ def _check_poa_balance_arithmetic(
     """Previous balance minus payment equals outstanding; outstanding plus current charges equals total payable."""
     findings = []
     ran_any = False
-    if None not in (previous_balance, payment_received, outstanding_balance):
+    if previous_balance is not None and payment_received is not None and outstanding_balance is not None:
         ran_any = True
         expected = previous_balance - payment_received
         if abs(expected - outstanding_balance) > _MONEY_TOLERANCE:
@@ -433,7 +433,7 @@ def _check_poa_balance_arithmetic(
                 f"{_money(expected)}, but outstanding balance shows {_money(outstanding_balance)}",
                 field="outstanding_balance", stated=_money(outstanding_balance), expected=_money(expected),
             ))
-    if None not in (outstanding_balance, current_charges, total_payable):
+    if outstanding_balance is not None and current_charges is not None and total_payable is not None:
         ran_any = True
         expected = outstanding_balance + current_charges
         if abs(expected - total_payable) > _MONEY_TOLERANCE:

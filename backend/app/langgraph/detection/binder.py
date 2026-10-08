@@ -74,7 +74,12 @@ async def bind_numerical_checks(document_type: str | None, fields: list[Any]) ->
         return BindingResult()
     model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, _BINDER_MAX_TOKENS)
     user = "\n\n".join([render_check_roles(document_type, fields), render_field_catalogue(fields, document_type)])
-    messages = [SystemMessage(content=_BINDER_SYSTEM), HumanMessage(content=user)]
+    messages = [
+        SystemMessage(content=[
+            {"type": "text", "text": _BINDER_SYSTEM, "cache_control": {"type": "ephemeral"}},
+        ]),
+        HumanMessage(content=user),
+    ]
     try:
         with telemetry.get_tracer().start_as_current_span("detection.numerical_binder") as span:
             response = await model.ainvoke(messages)

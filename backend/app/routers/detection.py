@@ -18,6 +18,7 @@ from ..fraud_detection.font_consistency import (
     FontConsistencyResult,
     check_font_consistency,
 )
+from ..fraud_detection.image_integrity import ImageIntegrityReport, build_image_integrity_report
 from ..fraud_detection.image_manipulation import (
     ImageManipulationResult,
     ImageTamperingResult,
@@ -203,8 +204,13 @@ async def get_ai_generation(
 
 
 class ImageIntegrityResult(BaseModel):
-    """Both image checks on one document: SCRUM-64 and SCRUM-65."""
+    """
+    Both image checks on one document: SCRUM-64 and SCRUM-65. `report` comes
+    first and is written for a reader; the raw measurement-level results
+    follow unchanged for debugging.
+    """
 
+    report: ImageIntegrityReport
     manipulation: ImageManipulationResult
     tampering: ImageTamperingResult
 
@@ -226,7 +232,11 @@ async def get_image_integrity(
         asyncio.to_thread(check_image_manipulation, document_id, file_bytes),
         asyncio.to_thread(check_image_tampering, document_id, file_bytes),
     )
-    return ImageIntegrityResult(manipulation=manipulation, tampering=tampering)
+    return ImageIntegrityResult(
+        report=build_image_integrity_report(manipulation, tampering),
+        manipulation=manipulation,
+        tampering=tampering,
+    )
 
 
 @router.get(

@@ -644,7 +644,8 @@ def test_image_integrity_runs_both_checks_on_one_download() -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"manipulation", "tampering"}
+    assert set(body) == {"report", "manipulation", "tampering"}
+    assert body["report"]["status"] == "clear"
     mock_storage.download_file.assert_called_once()
     mock_m.assert_called_once_with("doc-1", b"%PDF-1.4")
     mock_t.assert_called_once_with("doc-1", b"%PDF-1.4")
