@@ -1,6 +1,6 @@
 """Cached GETs to the public registries, with rate-limit backoff.
 
-Registry data changes slowly (ACRA's datasets monthly, MAS's directory rarely), so
+Registry data changes slowly (ACRA's datasets monthly, OneMap's addresses rarely), so
 answers are cached in-process for a day. A 429 is retried after the server's
 Retry-After, up to a total wait; past that the lookup is reported as unavailable.
 """
@@ -32,10 +32,10 @@ def clear_cache() -> None:
 
 
 async def get(url: str, *, params: dict | None = None, headers: dict | None = None, as_json: bool = True,
-              rate_limit_hint: str = "") -> Any:
+              rate_limit_hint: str = "", cache_ttl: float = _CACHE_TTL_SECONDS) -> Any:
     key = f"{url}?{json.dumps(params or {}, sort_keys=True)}"
     cached = _cache.get(key)
-    if cached and time.monotonic() - cached[0] < _CACHE_TTL_SECONDS:
+    if cached and time.monotonic() - cached[0] < cache_ttl:
         return cached[1]
 
     waited = 0.0

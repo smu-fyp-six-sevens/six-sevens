@@ -1,7 +1,8 @@
 """Singapore public holidays, and the days GIRO is processed.
 
-Holidays: MOM's "Singapore Public Holidays (consolidated)" dataset on data.gov.sg
-(d_8ef23381f9417e4d4254ee8b4dcdb176), including observed in-lieu days.
+Holidays: MOM's "Singapore Public Holidays (consolidated)" dataset on data.gov.sg,
+including observed in-lieu days. It's looked up live (registry_lookups/public_holidays.py);
+the table below is a copy of it, used when data.gov.sg can't be reached.
 
 GIRO processing days:
 * Interbank GIRO runs on business days only: Singapore moved to a 5-day clearing week
@@ -18,6 +19,7 @@ GIRO processing days:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date
 
 SG_PUBLIC_HOLIDAYS: dict[date, str] = {
@@ -49,14 +51,27 @@ SG_PUBLIC_HOLIDAYS: dict[date, str] = {
 HOLIDAY_YEARS = frozenset(d.year for d in SG_PUBLIC_HOLIDAYS)
 
 
-def giro_closed_reason(day: date) -> str | None:
+@dataclass(frozen=True)
+class PublicHolidays:
+    days: dict[date, str]
+    years: frozenset[int]  # the years whose holidays are known
+    source: str
+
+    def covers(self, day: date) -> bool:
+        return day.year in self.years
+
+
+BUNDLED_HOLIDAYS = PublicHolidays(days=SG_PUBLIC_HOLIDAYS, years=HOLIDAY_YEARS, source="the bundled copy of MOM's list")
+
+
+def giro_closed_reason(day: date, holidays: PublicHolidays = BUNDLED_HOLIDAYS) -> str | None:
     """Why no bank processes GIRO on this day, or None if it can.
 
-    Sundays are always closed. Public holidays are only known for HOLIDAY_YEARS;
+    Sundays are always closed. Public holidays are only known for holidays.years;
     outside them only the Sunday rule applies.
     """
-    if day in SG_PUBLIC_HOLIDAYS:
-        return f"a public holiday ({SG_PUBLIC_HOLIDAYS[day]})"
+    if day in holidays.days:
+        return f"a public holiday ({holidays.days[day]})"
     if day.weekday() == 6:
         return "a Sunday"
     return None

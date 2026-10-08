@@ -41,7 +41,9 @@ def test_cpf_tables_reproduce_cpf_boards_published_maximum_contributions() -> No
 
 
 def test_cpf_low_wage_bands_follow_cpf_formula() -> None:
-    under_55 = bands_in_force(date(2026, 3, 31))[0]
+    bands = bands_in_force(date(2026, 3, 31))
+    assert bands is not None
+    under_55 = bands[0]
     assert contribution(under_55, 50, 8000) == (0, 0)
     assert contribution(under_55, 400, 8000) == (68, 0)  # 17% of TW, employer only
     # $600: 17% x 600 + 0.6 x 100 = 162 total, employee 0.6 x 100 = 60
@@ -50,6 +52,7 @@ def test_cpf_low_wage_bands_follow_cpf_formula() -> None:
 
 def test_cpf_age_band_changes_the_month_after_the_birthday() -> None:
     bands = bands_in_force(date(2026, 1, 31))
+    assert bands is not None
     born = date(1971, 3, 15)  # turns 55 in March 2026
     assert band_for_age(bands, born, date(2026, 3, 31)).label == "55 & below"
     assert band_for_age(bands, born, date(2026, 4, 30)).label == "above 55 to 60"
@@ -173,3 +176,45 @@ def test_giro_closed_on_sundays_and_public_holidays_but_not_saturdays() -> None:
     assert giro_closed_reason(date(2025, 5, 3)) == "a public holiday (Polling Day)"  # a Saturday holiday
     assert giro_closed_reason(date(2026, 8, 1)) is None  # an ordinary Saturday
     assert giro_closed_reason(date(2026, 8, 3)) is None
+
+
+# --- Payslips that itemise CPF as "Employee contribution" and show deductions as negatives ---------
+
+# As extracted from a real test payslip (document f7514257).
+_PAYSLIP = [
+    ("earnings_items", [{"amount": "8,950.00", "description": "Basic salary"},
+                        {"amount": "320.00", "description": "Allowances"},
+                        {"amount": "140.00", "description": "Overtime"}]),
+    ("deductions_items", [{"amount": "-1,790.00", "description": "Employee contribution"},
+                          {"amount": "-58.93", "description": "Other deductions"}]),
+    ("total_earnings", "9,410.00"), ("total_deductions", "1,848.93"), ("net_pay", "SGD 7,561.07"),
+    ("basic_pay", "8,950.00"), ("pay_date", "2026-03-31"),
+]
+
+
+def test_negative_deduction_lines_match_a_positive_total() -> None:
+    result = _run([_field(n, v) for n, v in _PAYSLIP], "payslip")
+    assert _codes(result, "PAY.DEDUCTIONS_SUM") == [] and _codes(result, "PAY.NET") == []
+
+
+def test_employee_contribution_line_is_the_cpf_and_earnings_are_the_ordinary_wages() -> None:
+    result = _run([_field(n, v) for n, v in _PAYSLIP], "payslip")
+    # $1,790 is 20% of basic pay; CPF's 2026 ceiling of $8,000 caps the employee's share at $1,600.
+    ceiling = _codes(result, "PAY.CPF_CEILING")
+    assert len(ceiling) == 1 and ceiling[0].field == "deductions_items"
+    rate = _codes(result, "PAY.CPF_RATE")
+    assert len(rate) == 1 and rate[0].severity == "impossible"
+
+
+def test_self_help_group_contributions_are_not_cpf() -> None:
+    deductions = [{"description": "CDAC contribution", "amount": -3}, {"description": "Employer contribution", "amount": 1500}]
+    result = _run([_field("deductions_items", deductions), _field("ordinary_wages", "5000"),
+                   _field("pay_date", "2026-03-31")], "payslip")
+    assert any(s.check_code == "PAY.CPF_RATE" and "employee_cpf" in s.reason for s in result.skipped)
+
+
+def test_ordinary_wages_are_not_taken_from_earnings_with_a_bonus() -> None:
+    earnings = [{"description": "Basic salary", "amount": 5000}, {"description": "Performance bonus", "amount": 5000}]
+    result = _run([_field("earnings_items", earnings), _field("employee_cpf", "1000"),
+                   _field("pay_date", "2026-03-31")], "payslip")
+    assert any(s.check_code == "PAY.CPF_RATE" and "ordinary_wages" in s.reason for s in result.skipped)

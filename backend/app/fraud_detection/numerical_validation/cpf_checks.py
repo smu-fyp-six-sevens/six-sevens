@@ -2,49 +2,32 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from ..sg_reference.cpf import band_for_age, bands_in_force, contribution
-from .common import REFERENCE_DATA, CheckResult, _as_number, _finding, _in_force_on, _money, _parse_field_date, _rows, skipped
+from .common import REFERENCE_DATA, CheckResult, _finding, _in_force_on, _money, _parse_field_date, skipped
+from .payslip_inputs import employee_cpf_input, ordinary_wages_input
 from .registry import Num, check
 
 # CPF rounds to whole dollars (total to the nearest dollar, employee share down), so a
 # payslip can be a dollar off the exact percentage.
 _DOLLAR_TOLERANCE = 1.0
 
-_CPF_LINE_RE = re.compile(r"\bcpf\b", re.IGNORECASE)
-# The employer's share isn't deducted from pay; a payslip that lists it shows it for information.
-_EMPLOYER_LINE_RE = re.compile(r"employer|company", re.IGNORECASE)
-
-
-def _employee_cpf_from_deductions(deductions_items: Any) -> float | None:
-    """The employee's CPF from the deduction lines, when the payslip only itemises it there.
-
-    Sums every CPF line that isn't the employer's (a payslip can split ordinary and
-    additional wage CPF into two lines). Deductions may be extracted as negatives.
-    """
-    amounts = []
-    for row in _rows(deductions_items):
-        label = " ".join(str(row.get(key) or "") for key in ("description", "label"))
-        amount = _as_number(row.get("amount"))
-        if amount is not None and _CPF_LINE_RE.search(label) and not _EMPLOYER_LINE_RE.search(label):
-            amounts.append(abs(amount))
-    return round(sum(amounts), 2) if amounts else None
-
 
 @check(code="PAY.CPF_RATE", applies=("payslip",))
 def _check_cpf_rate(
-    *, ordinary_wages: Num, employee_cpf: Num | None = None, deductions_items: Any = None,
+    *, ordinary_wages: Num | None = None, earnings_items: Any = None,
+    employee_cpf: Num | None = None, deductions_items: Any = None,
     pay_date: Any = None, pay_period_end: Any = None,
     employer_cpf: Num | None = None, date_of_birth: Any = None, additional_wages: Num | None = None,
 ) -> CheckResult:
     """Employee (and employer) CPF must match CPF Board's rate for the wage and age band on the pay date."""
-    source_field = "employee_cpf"
-    if employee_cpf is None:
-        employee_cpf, source_field = _employee_cpf_from_deductions(deductions_items), "deductions_items"
+    employee_cpf, source_field = employee_cpf_input(employee_cpf, deductions_items)
     if employee_cpf is None:
         return [], skipped(reason="Required field(s) not extracted: employee_cpf (or a CPF line in deductions_items)")
+    ordinary_wages, _ = ordinary_wages_input(ordinary_wages, earnings_items)
+    if ordinary_wages is None:
+        return [], skipped(reason="Required field(s) not extracted: ordinary_wages (or earnings_items without a bonus)")
     when = _parse_field_date(pay_date) or _parse_field_date(pay_period_end)
     if when is None:
         return [], skipped(reason="Required field(s) not extracted: pay_date or pay_period_end")

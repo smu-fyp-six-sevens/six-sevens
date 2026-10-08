@@ -6,7 +6,7 @@
 * onemap.py      OneMap postal code search (SLA)
 * hdb.py         HDB block lookup: is the block residential or commercial
 * addresses.py   address checks: postal code exists, street matches, residential block
-* mas.py         MAS Financial Institutions Directory: licensed banks
+* public_holidays.py  MOM's public holiday list (for the GIRO date check)
 * models.py      result types
 * runner.py      runs the applicable lookups for one document
 
@@ -15,6 +15,7 @@ rather than a finding: a registry being down is never evidence about the documen
 """
 
 from .models import RegistryFinding, RegistryResult
+from .public_holidays import public_holidays, public_holidays_for
 from .runner import verify_against_registries
 
-__all__ = ["RegistryFinding", "RegistryResult", "verify_against_registries"]
+__all__ = ["RegistryFinding", "RegistryResult", "public_holidays", "public_holidays_for", "verify_against_registries"]

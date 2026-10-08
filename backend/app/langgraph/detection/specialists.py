@@ -86,7 +86,7 @@ SPECIALISTS: dict[str, Specialist] = {
             "pick the right fields and row indices. Applies to nearly any document — the numerical tool "
             "decides internally which of its checks actually apply to this document's type. It can also "
             "check the document's facts against Singapore's public registries (ACRA company records, "
-            "OneMap/HDB addresses, MAS-licensed banks)."
+            "OneMap/HDB addresses)."
         ),
         tools=(
             detection_tools.spelling_tool,

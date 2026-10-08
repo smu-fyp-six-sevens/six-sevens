@@ -34,7 +34,7 @@ from ..fraud_detection.date_anomalies import (
     check_date_anomalies,
 )
 from ..fraud_detection.spelling_anomaly import SpellingAnomalyResult, check_spelling_anomalies
-from ..fraud_detection.registry_lookups import RegistryResult, verify_against_registries
+from ..fraud_detection.registry_lookups import RegistryResult, public_holidays_for, verify_against_registries
 
 router = APIRouter(prefix="/documents", tags=["detection"])
 cases_router = APIRouter(prefix="/cases", tags=["detection"])
@@ -396,11 +396,13 @@ async def get_date_anomalies(
     re-ingestion.
     """
     extracted_fields = await _fetch_extracted_fields(document_id)
+    holidays = await public_holidays_for(document.document_type)
     result = await asyncio.to_thread(
         check_date_anomalies,
         document_id,
         extracted_fields,
         document.document_type,
+        holidays,
     )
     await _trace_check(
         document_id, "check_date_anomalies",
@@ -416,8 +418,8 @@ async def get_registry_verification(
     """
     The document's extracted facts against Singapore's public registries, live: ACRA
     (the company exists, under this name, is live, with this incorporation date and
-    registered address), OneMap and HDB (the address exists and, for a home address,
-    is a residential block), and MAS (a bank statement's bank is licensed). Read-only.
+    registered address), and OneMap and HDB (the address exists and, for a home address,
+    is a residential block). Read-only.
     A registry that can't be reached is reported as a skipped check, never a finding.
     """
     extracted_fields = await _fetch_extracted_fields(document_id)

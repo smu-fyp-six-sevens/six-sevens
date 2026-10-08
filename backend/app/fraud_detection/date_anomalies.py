@@ -56,6 +56,7 @@ from .numerical_validation.common import _apply_needs_review, _as_number, _confi
 from .numerical_validation.identity_company import _UEN_RE, _is_forward_looking_date_field, _looks_like_date_field
 from .numerical_validation.models import Severity, SkippedCheck
 from .numerical_validation.statements import _noa_year
+from .sg_reference.holidays import BUNDLED_HOLIDAYS, PublicHolidays
 
 
 class _Ctx(BaseModel):
@@ -65,6 +66,7 @@ class _Ctx(BaseModel):
     fields: dict[str, Any]
     document_type: str | None
     today: date
+    public_holidays: PublicHolidays = BUNDLED_HOLIDAYS
 
 
 def _need(ctx: _Ctx, code: str, *names: str) -> list[Any] | None:
@@ -400,15 +402,25 @@ def _check_giro_business_day(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck
     values = _need(ctx, "BS.GIRO_BUSINESS_DAY", "transactions")
     if values is None:
         return [], _skip_missing("BS.GIRO_BUSINESS_DAY", "transactions")
-    return [
+    scan = giro_on_closed_days(values[0], ctx.public_holidays)
+    findings = [
         _finding(
             "BS.GIRO_BUSINESS_DAY", "inconsistent",
             f"Transaction {hit.index + 1} ({hit.description[:60]}) is a GIRO payment dated "
             f"{hit.day.isoformat()}, {hit.reason}. No Singapore bank processes GIRO on Sundays or public holidays.",
             field=f"transactions[{hit.index}].date", stated=hit.day.isoformat(), expected="a bank business day",
         )
-        for hit in giro_on_closed_days(values[0])
-    ], None
+        for hit in scan.closed_days
+    ]
+    skip = None
+    if scan.unknown_holiday_years:
+        years = ", ".join(str(y) for y in scan.unknown_holiday_years)
+        skip = SkippedCheck(
+            check_code="BS.GIRO_BUSINESS_DAY",
+            reason=f"Singapore's public holidays for {years} aren't known from {ctx.public_holidays.source}, "
+                   "so GIRO dates in those years were only checked against Sundays",
+        )
+    return findings, skip
 
 
 BANK_STATEMENT_DATE_CHECKS: list[CheckFn] = [_check_period_bounds, _check_giro_business_day]
@@ -1062,6 +1074,7 @@ def check_date_anomalies(
     document_id: str,
     extracted_fields: list[ExtractedField] | None = None,
     document_type: str | None = None,
+    public_holidays: PublicHolidays = BUNDLED_HOLIDAYS,
 ) -> DateAnomalyResult:
     """
     AC1/AC2: extracts and labels every identifiable date. Then runs every
@@ -1070,6 +1083,9 @@ def check_date_anomalies(
     recorded in `skipped_checks`, never silently dropped. AC7: Unable to
     Assess when no date could be reliably extracted at all.
 
+    public_holidays: pass registry_lookups.public_holidays() for MOM's live list
+    (fetched by the async caller, since this runs in a worker thread).
+
     Works from extracted_fields alone — no file download or re-ingestion.
     extracted_fields is trusted as already human-reviewed by the time this
     runs, so there's no need to re-derive or corroborate anything from the
@@ -1077,7 +1093,7 @@ def check_date_anomalies(
     """
     fields = _fields_by_name(extracted_fields)
     confidences = _confidence_by_name(extracted_fields)
-    ctx = _Ctx(fields=fields, document_type=document_type, today=date.today())
+    ctx = _Ctx(fields=fields, document_type=document_type, today=date.today(), public_holidays=public_holidays)
 
     dates_extracted = extract_labeled_dates(ctx, confidences)
 

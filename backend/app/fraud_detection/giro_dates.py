@@ -13,7 +13,7 @@ from datetime import date
 from typing import Any
 
 from .numerical_validation.common import _parse_field_date, _rows
-from .sg_reference.holidays import giro_closed_reason
+from .sg_reference.holidays import BUNDLED_HOLIDAYS, PublicHolidays, giro_closed_reason
 
 # "GIRO", "Interbank GIRO", "IBG", "PayNow GIRO" — all settle through GIRO on business days.
 _GIRO_RE = re.compile(r"\bgiro\b|\bibg\b", re.IGNORECASE)
@@ -27,8 +27,16 @@ class ClosedDayGiro:
     description: str
 
 
-def giro_on_closed_days(transactions: Any) -> list[ClosedDayGiro]:
+@dataclass(frozen=True)
+class GiroScan:
+    closed_days: list[ClosedDayGiro]
+    # Years with GIRO transactions whose public holidays aren't known: only Sundays were checked.
+    unknown_holiday_years: list[int]
+
+
+def giro_on_closed_days(transactions: Any, holidays: PublicHolidays = BUNDLED_HOLIDAYS) -> GiroScan:
     found = []
+    unknown_years: set[int] = set()
     for index, row in enumerate(_rows(transactions)):
         description = " ".join(str(row.get("description") or "").split())
         if not _GIRO_RE.search(description):
@@ -36,7 +44,9 @@ def giro_on_closed_days(transactions: Any) -> list[ClosedDayGiro]:
         day = _parse_field_date(row.get("value_date")) or _parse_field_date(row.get("date"))
         if day is None:
             continue
-        reason = giro_closed_reason(day)
+        if not holidays.covers(day):
+            unknown_years.add(day.year)
+        reason = giro_closed_reason(day, holidays)
         if reason:
             found.append(ClosedDayGiro(index=index, day=day, reason=reason, description=description))
-    return found
+    return GiroScan(closed_days=found, unknown_holiday_years=sorted(unknown_years))

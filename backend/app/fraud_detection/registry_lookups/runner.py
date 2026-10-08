@@ -8,7 +8,6 @@ from ..font_consistency import ExtractedField
 from ..numerical_validation.common import _apply_needs_review, _confidence_by_name, _fields_by_name
 from .acra import check_entity
 from .addresses import check_addresses
-from .mas import check_bank_licensed
 from .models import RegistryResult
 
 
@@ -17,8 +16,6 @@ async def verify_against_registries(
 ) -> RegistryResult:
     fields = _fields_by_name(extracted_fields)
     lookups = [check_entity(fields, document_type), check_addresses(fields, document_type)]
-    if document_type == "bank_statement":
-        lookups.append(check_bank_licensed(fields))
     outcomes = await asyncio.gather(*lookups)
 
     findings = _apply_needs_review(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.langgraph.detection.binder import BindingResult
@@ -15,6 +16,7 @@ from app.fraud_detection.image_manipulation import (
 from app.fraud_detection.metadata_analysis import MetadataAnalysisResult
 from app.fraud_detection.layout_anomalies import CheckAssessment, LayoutAnomalyResult
 from app.fraud_detection.date_anomalies import DateAnomalyResult
+from app.fraud_detection.sg_reference.holidays import BUNDLED_HOLIDAYS
 from app.fraud_detection.spelling_anomaly import SpellingAnomaly, SpellingAnomalyResult
 from app.main import app
 from app.models import DocumentRecord, DocumentStatus
@@ -490,6 +492,13 @@ def test_image_manipulation_document_missing() -> None:
     assert response.status_code == 404
 
 
+@pytest.fixture(autouse=True)
+def bundled_holidays():
+    """The date-anomalies endpoint fetches MOM's live holiday list for bank statements; tests stay offline."""
+    with patch("app.routers.detection.public_holidays_for", new=AsyncMock(return_value=BUNDLED_HOLIDAYS)) as mock:
+        yield mock
+
+
 def _date_anomaly_result() -> DateAnomalyResult:
     return DateAnomalyResult(
         document_id="doc-1",
@@ -526,6 +535,7 @@ def test_get_date_anomalies_passes_extracted_fields_and_document_type() -> None:
     args = mock_check.call_args[0]
     assert args[1] == fields
     assert args[2] == "bank_statement"
+    assert args[3] is BUNDLED_HOLIDAYS
 
 
 def test_get_date_anomalies_writes_nothing() -> None:

@@ -20,6 +20,7 @@ from .common import (
     _skip_reference,
 )
 
+from .payslip_inputs import employee_cpf_input, ordinary_wages_input
 from .registry import Num, check
 
 
@@ -48,11 +49,15 @@ def _check_payslip_sums(
                     f"Earnings lines sum to {_money(total)}, but total earnings shows {_money(total_earnings)}",
                     field="total_earnings", stated=_money(total_earnings), expected=_money(total),
                 ))
+    if total_deductions is not None:
+        # A payslip may show deductions as negatives ("-1,790.00") and their total as a positive, or
+        # the reverse: only the size of the deductions is compared.
+        total_deductions = abs(total_deductions)
     if deductions_items is not None and total_deductions is not None:
         amounts = [_as_amount(r) for r in _rows(deductions_items)]
         numeric_amounts = [a for a in amounts if a is not None]
         if amounts and len(numeric_amounts) == len(amounts):
-            total = sum(numeric_amounts)
+            total = abs(sum(numeric_amounts))
             if abs(total - total_deductions) > _MONEY_TOLERANCE:
                 findings.append(_finding(
                     "PAY.DEDUCTIONS_SUM", "impossible",
@@ -72,8 +77,16 @@ def _check_payslip_sums(
 
 
 @check(code="PAY.CPF_CEILING", applies=("payslip",))
-def _check_cpf_ceiling(*, employee_cpf: Num, ordinary_wages: Num, pay_date: Any) -> CheckResult:
+def _check_cpf_ceiling(
+    *, pay_date: Any, employee_cpf: Num | None = None, deductions_items: Any = None,
+    ordinary_wages: Num | None = None, earnings_items: Any = None,
+) -> CheckResult:
     """Employee CPF must not exceed 20% of the lower of ordinary wages and the ceiling for the pay year."""
+    employee_cpf, cpf_field = employee_cpf_input(employee_cpf, deductions_items)
+    ordinary_wages, _ = ordinary_wages_input(ordinary_wages, earnings_items)
+    if employee_cpf is None or ordinary_wages is None:
+        return [], skipped(reason="Required field(s) not extracted: employee_cpf and ordinary_wages "
+                                  "(or a CPF deduction line and earnings lines)")
     pay_date_val = _parse_field_date(pay_date)
     if pay_date_val is None:
         return [], skipped(reason="pay_date could not be read as a date")
@@ -86,14 +99,22 @@ def _check_cpf_ceiling(*, employee_cpf: Num, ordinary_wages: Num, pay_date: Any)
             "PAY.CPF_CEILING", "impossible",
             f"Employee CPF contribution {_money(employee_cpf)} exceeds 20% of the lower of ordinary "
             f"wages and the ceiling ({_money(max_contribution)})",
-            field="employee_cpf", stated=_money(employee_cpf), expected=f"<= {_money(max_contribution)}",
+            field=cpf_field, stated=_money(employee_cpf), expected=f"<= {_money(max_contribution)}",
         )], None
     return [], None
 
 
 @check(code="PAY.CPF_BASE", applies=("payslip",))
-def _check_cpf_base(*, employee_cpf: Num, basic_pay: Num, ordinary_wages: Num) -> CheckResult:
+def _check_cpf_base(
+    *, basic_pay: Num, employee_cpf: Num | None = None, deductions_items: Any = None,
+    ordinary_wages: Num | None = None, earnings_items: Any = None,
+) -> CheckResult:
     """CPF is calculated on ordinary wages (basic pay plus allowances and overtime), not basic pay alone."""
+    employee_cpf, cpf_field = employee_cpf_input(employee_cpf, deductions_items)
+    ordinary_wages, _ = ordinary_wages_input(ordinary_wages, earnings_items)
+    if employee_cpf is None or ordinary_wages is None:
+        return [], skipped(reason="Required field(s) not extracted: employee_cpf and ordinary_wages "
+                                  "(or a CPF deduction line and earnings lines)")
     if basic_pay <= 0 or ordinary_wages <= basic_pay:
         return [], skipped(reason="basic pay or ordinary wages not usable")
     rate_on_basic = employee_cpf / basic_pay
@@ -104,7 +125,7 @@ def _check_cpf_base(*, employee_cpf: Num, basic_pay: Num, ordinary_wages: Num) -
             "PAY.CPF_BASE", "inconsistent",
             f"CPF appears calculated on basic pay ({_money(basic_pay)}) rather than the wider "
             f"ordinary wages base ({_money(ordinary_wages)})",
-            field="employee_cpf", stated=_money(employee_cpf),
+            field=cpf_field, stated=_money(employee_cpf),
         )], None
     return [], None
 

@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from app.fraud_detection.font_consistency import ExtractedField
 from app.fraud_detection.registry_lookups import verify_against_registries
+from app.fraud_detection.registry_lookups.datagov import Collection
 from app.fraud_detection.registry_lookups.hdb import same_street
 from app.fraud_detection.registry_lookups.http import LookupUnavailable
-from app.fraud_detection.registry_lookups.mas import _licensed_name
 
 # Real records as data.gov.sg returned them for OCBC.
 _OCBC_BASIC = {"uen": "193200032W", "uen_status_desc": "Registered", "entity_name": "OVERSEA-CHINESE BANKING CORPORATION LIMITED",
@@ -26,6 +27,37 @@ def no_network():
     """Fails any test that would reach a live registry."""
     with patch("app.fraud_detection.registry_lookups.http.httpx.AsyncClient",
                side_effect=AssertionError("test tried to call a live registry")):
+        yield
+
+
+# The catalogue as data.gov.sg returned it (collection 1, and the collection 2 datasets used below).
+_ACRA_UEN, _OTHER_UEN = "d_3f960c10fed6145404ca7b821f263b87", "d_b1d2b840ab9e993570c037b706b39bb8"
+_DETAIL_O, _DETAIL_M = "d_5c4ef48b025fdfbc80056401f06e3df9", "d_9af9317c646a1c881bb5591c91817cc6"
+_DATASET_NAMES = {
+    _ACRA_UEN: "Entities Registered with ACRA",
+    _OTHER_UEN: "Entities Registered with Other UEN Issuance Agencies",
+    _DETAIL_O: "ACRA Information on Corporate Entities ('O')",
+    _DETAIL_M: "ACRA Information on Corporate Entities ('M')",
+}
+
+
+def _catalogue(last_updated: datetime):
+    collections = {1: Collection((_OTHER_UEN, _ACRA_UEN), last_updated), 2: Collection((_DETAIL_M, _DETAIL_O), last_updated)}
+
+    async def collection(collection_id):
+        return collections[collection_id]
+
+    async def dataset_name(dataset_id):
+        return _DATASET_NAMES[dataset_id]
+
+    return (patch("app.fraud_detection.registry_lookups.acra.collection", side_effect=collection),
+            patch("app.fraud_detection.registry_lookups.acra.dataset_name", side_effect=dataset_name))
+
+
+@pytest.fixture(autouse=True)
+def fresh_catalogue():
+    first, second = _catalogue(datetime.now(timezone.utc) - timedelta(days=10))
+    with first, second:
         yield
 
 
@@ -93,6 +125,30 @@ async def test_acra_flags_a_uen_that_does_not_exist() -> None:
     assert _codes(result, "REG.UEN_EXISTS")[0].severity == "impossible"
 
 
+async def test_acra_does_not_report_a_missing_uen_against_a_stale_register() -> None:
+    first, second = _catalogue(datetime.now(timezone.utc) - timedelta(days=90))
+    with first, second, patch("app.fraud_detection.registry_lookups.acra.datastore_search", side_effect=_datastore({})):
+        result = await verify_against_registries("d", [_field("uen", "209912345Z")], "certificate_of_incorporation")
+    assert _codes(result, "REG.UEN_EXISTS") == []
+    assert any(s.check_code == "REG.UEN_EXISTS" and "last updated" in s.reason for s in result.skipped_checks)
+
+
+async def test_acra_finds_datasets_from_the_catalogue_whatever_their_order() -> None:
+    # The catalogue lists the "other agencies" dataset first; ACRA's own must still be searched first,
+    # and the detail record found by its ('O') name, not by a fixed ID.
+    searched = []
+
+    async def search(resource_id, filters, limit=10):
+        searched.append(resource_id)
+        return {_ACRA_UEN: [_OCBC_BASIC], _DETAIL_O: [_OCBC_DETAIL]}.get(resource_id, [])
+
+    with patch("app.fraud_detection.registry_lookups.acra.datastore_search", side_effect=search):
+        result = await verify_against_registries("d", [_field("uen", "193200032W"),
+                                                       _field("incorporation_date", "1932-10-31")], "certificate_of_incorporation")
+    assert searched == [_ACRA_UEN, _DETAIL_O]
+    assert result.findings == []
+
+
 async def test_rate_limited_registry_is_a_skip_not_a_finding() -> None:
     with patch("app.fraud_detection.registry_lookups.acra.datastore_search",
                AsyncMock(side_effect=LookupUnavailable("rate limited"))):
@@ -141,22 +197,3 @@ def test_hdb_street_abbreviations_match_onemap_road_names() -> None:
     assert same_street("C'WEALTH CRES", "COMMONWEALTH CRESCENT")
     assert same_street("BEDOK STH AVE 1", "BEDOK SOUTH AVENUE 1")
     assert not same_street("BEDOK NTH AVE 1", "BEDOK SOUTH AVENUE 1")
-
-
-# --- MAS -------------------------------------------------------------------------------------------
-
-_MAS = ["DBS BANK LTD.", "OVERSEA-CHINESE BANKING CORPORATION LIMITED", "UNITED OVERSEAS BANK LIMITED",
-        "P.T. BANK NEGARA INDONESIA (PERSERO) TBK", "HSBC BANK (SINGAPORE) LIMITED", "GREEN LINK DIGITAL BANK PTE. LTD."]
-
-
-def test_mas_matches_statement_names_to_licensed_banks() -> None:
-    for name in ("OCBC Bank", "POSB", "UOB (United Overseas Bank)", "Bank Negara Indonesia", "HSBC", "Green Link Digital Bank"):
-        assert _licensed_name(name, _MAS), name
-    for name in ("Bank", "Revolut", "Sunrise Provisions Bank"):
-        assert _licensed_name(name, _MAS) is None, name
-
-
-async def test_mas_signals_an_unlicensed_bank() -> None:
-    with patch("app.fraud_detection.registry_lookups.mas.licensed_banks", AsyncMock(return_value=_MAS)):
-        result = await verify_against_registries("d", [_field("bank_name", "Revolut")], "bank_statement")
-    assert _codes(result, "REG.BANK_LICENSED")[0].severity == "signal"

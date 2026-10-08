@@ -6,43 +6,32 @@ Two data.gov.sg collections, both published by ACRA and updated monthly:
 * "ACRA Information on Corporate Entities" (collection 2): the detailed record
   (incorporation date, full registered address, up to 15 former names), split into 27
   datasets by the first letter of the entity name. Found from collection 1's name.
+
+The datasets in each collection are looked up from data.gov.sg's catalogue (cached for an
+hour), never hardcoded, so a republish under new dataset IDs is picked up on its own.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any
 
 from ...case_match import company_names_match, normalize_uen
 from ..numerical_validation.common import _parse_field_date
 from ..numerical_validation.models import SkippedCheck
-from .datagov import datastore_search
+from .datagov import collection, dataset_name, datastore_search
 from .http import LookupUnavailable
 from .models import RegistryFinding
 
 SOURCE = "ACRA (data.gov.sg)"
-UEN_DATASETS = (
-    "d_3f960c10fed6145404ca7b821f263b87",  # Entities Registered with ACRA
-    "d_b1d2b840ab9e993570c037b706b39bb8",  # Entities Registered with Other UEN Issuance Agencies
-)
-DETAIL_DATASETS = {
-    "A": "d_8575e84912df3c28995b8e6e0e05205a", "B": "d_3a3807c023c61ddfba947dc069eb53f2",
-    "C": "d_c0650f23e94c42e7a20921f4c5b75c24", "D": "d_acbc938ec77af18f94cecc4a7c9ec720",
-    "E": "d_124a9bd407c7a25f8335b93b86e50fdd", "F": "d_4526d47d6714d3b052eed4a30b8b1ed6",
-    "G": "d_b58303c68e9cf0d2ae93b73ffdbfbfa1", "H": "d_fa2ed456cf2b8597bb7e064b08fc3c7c",
-    "I": "d_85518d970b8178975850457f60f1e738", "J": "d_478f45a9c541cbe679ca55d1cd2b970b",
-    "K": "d_5573b0db0575db32190a2ad27919a7aa", "L": "d_a2141adf93ec2a3c2ec2837b78d6d46e",
-    "M": "d_9af9317c646a1c881bb5591c91817cc6", "N": "d_67e99e6eabc4aad9b5d48663b579746a",
-    "O": "d_5c4ef48b025fdfbc80056401f06e3df9", "P": "d_181005ca270b45408b4cdfc954980ca2",
-    "Q": "d_4130f1d9d365d9f1633536e959f62bb7", "R": "d_2b8c54b2a490d2fa36b925289e5d9572",
-    "S": "d_df7d2d661c0c11a7c367c9ee4bf896c1", "T": "d_72f37e5c5d192951ddc5513c2b134482",
-    "U": "d_0cc5f52a1f298b916f317800251057f3", "V": "d_e97e8e7fc55b85a38babf66b0fa46b73",
-    "W": "d_af2042c77ffaf0db5d75561ce9ef5688", "X": "d_1cd970d8351b42be4a308d628a6dd9d3",
-    "Y": "d_31af23fdb79119ed185c256f03cb5773", "Z": "d_4e3db8955fdcda6f9944097bef3d2724",
-    "OTHERS": "d_300ddc8da4e8f7bdc1bfc62d0d99e2e7",
-}
+UEN_COLLECTION = 1  # "Registered Entities with Unique Entity Number"
+DETAIL_COLLECTION = 2  # "ACRA Information on Corporate Entities"
+# Collection 2's datasets are named "ACRA Information on Corporate Entities ('O')".
+_LETTER_RE = re.compile(r"\('([^']+)'\)\s*$")
+# ACRA publishes monthly. Past this, "not in the register" may just mean the copy is old.
+_STALE_AFTER_DAYS = 45
 # Where a document's UEN lives: a NOA's tax reference number and a FATCA form's TIN are the UEN.
 UEN_FIELDS = ("uen", "tax_reference_number", "tin")
 # Types whose company_address is the company's current registered address, so it should match ACRA's.
@@ -69,20 +58,55 @@ def _value(record: dict, key: str) -> str:
     return "" if value.lower() == "na" else value
 
 
-async def lookup_entity(uen: str) -> AcraEntity | None:
+async def _uen_datasets() -> tuple[list[str], datetime | None]:
+    """Collection 1's datasets, ACRA's own first (it registers most companies)."""
+    uen_collection = await collection(UEN_COLLECTION)
+    names = {dataset_id: await dataset_name(dataset_id) for dataset_id in uen_collection.dataset_ids}
+    ordered = sorted(uen_collection.dataset_ids, key=lambda d: 0 if "with ACRA" in names[d] else 1)
+    return ordered, uen_collection.last_updated
+
+
+async def _detail_dataset(entity_name: str) -> str | None:
+    """The collection 2 dataset holding names starting with this entity's first letter."""
+    letter = entity_name[:1].upper()
+    wanted = letter if letter.isalpha() else "OTHERS"
+    for dataset_id in (await collection(DETAIL_COLLECTION)).dataset_ids:
+        match = _LETTER_RE.search(await dataset_name(dataset_id))
+        if match and match.group(1).upper() == wanted:
+            return dataset_id
+    return None
+
+
+async def _detail_record(uen: str, entity_name: str) -> dict:
+    """The detailed record, or {} if it can't be fetched: it only enriches the basic one."""
+    try:
+        dataset_id = await _detail_dataset(entity_name)
+        rows = await datastore_search(dataset_id, {"uen": uen}, limit=1) if dataset_id else []
+    except LookupUnavailable:
+        return {}
+    return rows[0] if rows else {}
+
+
+def _is_stale(last_updated: datetime | None) -> bool:
+    if last_updated is None:
+        return False
+    updated = last_updated if last_updated.tzinfo else last_updated.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - updated).days > _STALE_AFTER_DAYS
+
+
+async def lookup_entity(uen: str) -> tuple[AcraEntity | None, datetime | None]:
+    """The entity, and when ACRA's register was last updated (to judge a "not found")."""
+    datasets, last_updated = await _uen_datasets()
     basic = None
-    for dataset in UEN_DATASETS:
-        rows = await datastore_search(dataset, {"uen": uen}, limit=1)
+    for dataset_id in datasets:
+        rows = await datastore_search(dataset_id, {"uen": uen}, limit=1)
         if rows:
             basic = rows[0]
             break
     if basic is None:
-        return None
+        return None, last_updated
     name = _value(basic, "entity_name")
-    letter = name[:1].upper()
-    detail_rows = await datastore_search(DETAIL_DATASETS.get(letter if letter.isalpha() else "OTHERS",
-                                                            DETAIL_DATASETS["OTHERS"]), {"uen": uen}, limit=1)
-    detail = detail_rows[0] if detail_rows else {}
+    detail = await _detail_record(uen, name)
     address_parts = [_value(detail, k) for k in ("block", "street_name", "building_name")]
     unit = "-".join(p for p in (_value(detail, "level_no"), _value(detail, "unit_no")) if p)
     postal = _value(detail, "postal_code") or _value(basic, "reg_postal_code")
@@ -100,7 +124,7 @@ async def lookup_entity(uen: str) -> AcraEntity | None:
         postal_code=postal or None,
         address=address,
         former_names=tuple(n for i in range(1, 16) if (n := _value(detail, f"former_entity_name{i}"))),
-    )
+    ), last_updated
 
 
 def _finding(code: str, severity: Any, summary: str, **kwargs: Any) -> RegistryFinding:
@@ -121,10 +145,17 @@ async def check_entity(fields: dict[str, Any], document_type: str | None) -> tup
         return [], [SkippedCheck(check_code="REG.ACRA_ENTITY", reason="No UEN extracted from this document")]
     uen_field, uen = found
     try:
-        entity = await lookup_entity(uen)
+        entity, last_updated = await lookup_entity(uen)
     except LookupUnavailable as exc:
         return [], [SkippedCheck(check_code="REG.ACRA_ENTITY", reason=f"ACRA lookup unavailable: {exc}")]
 
+    if entity is None and _is_stale(last_updated):
+        return [], [SkippedCheck(
+            check_code="REG.UEN_EXISTS",
+            reason=f"UEN {uen} isn't in ACRA's register, but data.gov.sg's copy was last updated "
+                   f"{last_updated.date().isoformat() if last_updated else 'at an unknown date'}, so a "
+                   "recently registered company may be missing",
+        )]
     if entity is None:
         return [_finding(
             "REG.UEN_EXISTS", "impossible",
