@@ -180,7 +180,7 @@ export function DocumentSummaryCard({
                     <div key={`${comparison.document_field}:${comparison.document_value}`}>
                       {comparison.reason}
                       {comparison.case_value && (
-                        <> (certificate of incumbency: {comparison.case_value})</>
+                        <> ({comparison.other_filename ?? comparison.reference_filename ?? 'certificate of incumbency'}: {comparison.case_value})</>
                       )}
                     </div>
                   ))

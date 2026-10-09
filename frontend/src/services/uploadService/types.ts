@@ -45,6 +45,10 @@ export interface CaseMatchComparison {
   outcome: 'match' | 'mismatch';
   document_field: string;
   document_value: string;
+  reference_document_id?: string | null;
+  reference_filename?: string | null;
+  other_document_id?: string | null;
+  other_filename?: string | null;
   case_value: string | null;
   reason: string;
 }
