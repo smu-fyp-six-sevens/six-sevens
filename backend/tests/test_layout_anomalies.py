@@ -182,7 +182,7 @@ def _margin_mismatch_pdf() -> bytes:
     return _pdf_bytes(build)
 
 
-def _cover_then_clause_pages_pdf(*, inset_last: bool = False) -> bytes:
+def _cover_then_clause_pages_pdf(*, inset_last: bool = False, inner_pages: int = 2) -> bytes:
     def build(doc):
         cover = doc.new_page(width=612, height=792)
         titles = [
@@ -197,9 +197,9 @@ def _cover_then_clause_pages_pdf(*, inset_last: bool = False) -> bytes:
         for title in titles:
             _textbox(cover, pymupdf.Rect(160, y, 450, y + 28), title, align=1)
             y += 40
-        for page_index in range(2):
+        for page_index in range(inner_pages):
             page = doc.new_page(width=612, height=792)
-            inset = 50 if inset_last and page_index == 1 else 0
+            inset = 50 if inset_last and page_index == inner_pages - 1 else 0
             left, top, right = 72 + inset, 90 + inset, 540 - inset
             y = top
             for _ in range(3):
@@ -380,24 +380,6 @@ def _single_line_pdf() -> bytes:
 
     return _pdf_bytes(build)
 
-def _text_overlap_pdf() -> bytes:
-    def build(doc):
-        page = doc.new_page(width=400, height=240)
-        page.insert_text(
-            (80, 100),
-            "Original text",
-            fontsize=12,
-            fontname="helv",
-        )
-        page.insert_text(
-            (80, 100),
-            "Overlaid text",
-            fontsize=12,
-            fontname="helv",
-        )
-
-    return _pdf_bytes(build)
-
 def _line(bbox, **kwargs) -> _Line:
     values = dict(
         text="The registered office of the Company shall be in Singapore.",
@@ -428,71 +410,6 @@ def _block(lines: list[_Line], **kwargs) -> _Block:
     )
     values.update(kwargs)
     return _Block(**values)
-
-def test_text_overlap_detects_overlapping_text_boxes() -> None:
-    left = _line(
-        (100.0, 100.0, 220.0, 120.0),
-        text="Original text",
-    )
-    right = _line(
-        (170.0, 105.0, 280.0, 125.0),
-        text="Overlaid text",
-    )
-
-    findings = lr._check_text_overlaps(
-        [
-            _block([left]),
-            _block([right]),
-        ]
-    )
-
-    assert len(findings) == 1
-
-    finding = findings[0]
-
-    assert finding.anomaly_type == "Text Overlay"
-    assert finding.page == 1
-    assert finding.evidence["kind"] == "text-overlay"
-    assert finding.evidence["left_text"] == "Original text"
-    assert finding.evidence["right_text"] == "Overlaid text"
-    assert finding.evidence["overlap_ratio"] > 0.20
-    assert finding.bbox == (170.0, 105.0, 220.0, 120.0)
-
-def test_repeated_central_watermark_overlap_is_ignored() -> None:
-    blocks = [
-        _block([
-            _line(
-                (170.0, 360.0, 440.0, 410.0),
-                text="CONFIDENTIAL",
-                page=0,
-            ),
-        ]),
-        _block([
-            _line(
-                (170.0, 360.0, 440.0, 410.0),
-                text="CONFIDENTIAL",
-                page=1,
-            ),
-        ]),
-        _block([
-            _line(
-                (150.0, 380.0, 450.0, 400.0),
-                text="Document body text",
-                page=0,
-            ),
-        ]),
-        _block([
-            _line(
-                (150.0, 380.0, 450.0, 400.0),
-                text="Different body text",
-                page=1,
-            ),
-        ]),
-    ]
-
-    findings = lr._check_text_overlaps(blocks)
-
-    assert findings == []
 
 def _ml_block(y0: float, leadings: list[float], *, x0: float = 72.0, x1: float = 540.0) -> _Block:
     y = y0
@@ -609,26 +526,6 @@ def test_content_column_and_page_margins() -> None:
 # public API — Unable to Assess (AC5)
 # ---------------------------------------------------------------------------
 
-def test_public_api_detects_text_overlay() -> None:
-    result = check_layout_anomalies("doc-1", _text_overlap_pdf())
-
-    overlays = [
-        finding
-        for finding in result.anomalies
-        if finding.anomaly_type == "Text Overlay"
-    ]
-
-    assert overlays
-
-    finding = overlays[0]
-
-    assert finding.page == 1
-    assert finding.evidence["kind"] == "text-overlay"
-    assert "Original text" in finding.evidence["left_text"]
-    assert "Overlaid text" in finding.evidence["right_text"]
-    assert finding.bbox
-    assert finding.confidence > 0
-
 def test_check_invalid_empty_and_image_only() -> None:
     bad = check_layout_anomalies("doc-1", b"not-a-pdf")
     assert bad.unable_to_assess is True
@@ -646,16 +543,6 @@ def test_check_invalid_empty_and_image_only() -> None:
     image_only = check_layout_anomalies("doc-1", _image_only_pdf())
     assert image_only.unable_to_assess is True
     assert "embedded images" in (image_only.unable_to_assess_reason or "")
-
-def test_image_only_document_has_no_text_overlay_finding() -> None:
-    result = check_layout_anomalies("doc-1", _image_only_pdf())
-
-    assert result.unable_to_assess is True
-    assert result.anomalies == []
-    assert not any(
-        finding.anomaly_type == "Text Overlay"
-        for finding in result.anomalies
-    )
 
 def test_check_returns_empty_on_internal_error(monkeypatch) -> None:
     monkeypatch.setattr(
@@ -1015,6 +902,42 @@ def test_paragraph_past_the_usual_right_edge_is_named() -> None:
     assert edges[0].page == 3
 
 
+def test_a_wide_address_does_not_set_the_body_right_edge() -> None:
+    blocks: list[_Block] = []
+    for page in range(3):
+        body_right = 590 if page == 2 else 500
+        for index in range(3):
+            right = body_right if index == 1 else 500
+            blocks.append(
+                _block(
+                    [
+                        _line(
+                            (72, 90 + index * 30, right, 112 + index * 30),
+                            text=f"Body paragraph {page}-{index} fills the usual column today",
+                            page=page,
+                        )
+                    ]
+                )
+            )
+        blocks.append(
+            _block(
+                [
+                    _line(
+                        (72, 400, 580, 422),
+                        text="42 Orchard Road #01-02 Singapore 238801",
+                        page=page,
+                    )
+                ],
+                role="address",
+            )
+        )
+    findings = lr._check_protruding_right(blocks)
+    assert len(findings) == 1
+    assert findings[0].page == 3
+    assert "Orchard" not in findings[0].text
+    assert "body" in (findings[0].baseline or "")
+
+
 def test_flags_indented_paragraph() -> None:
     result = check_layout_anomalies("doc-1", _indented_pdf())
     assert result.unable_to_assess is False
@@ -1181,12 +1104,14 @@ def test_single_cover_page_is_not_flagged_against_inner_margins() -> None:
 
 
 def test_inner_page_margin_mismatch_still_flags_when_cover_exists() -> None:
+    # Two inner pages have no majority margin, so neither can be called the
+    # odd one out. Three give a pattern for the inset last page to break.
     result = check_layout_anomalies(
-        "doc-1", _cover_then_clause_pages_pdf(inset_last=True)
+        "doc-1", _cover_then_clause_pages_pdf(inset_last=True, inner_pages=3)
     )
     margins = [a for a in result.anomalies if a.anomaly_type == "Margin"]
-    assert any(a.page == 3 for a in margins)
-    assert all(a.page != 1 for a in margins)
+    assert any(a.page == 4 for a in margins)
+    assert all(a.page not in (1, 2, 3) for a in margins)
 
 
 def test_split_leading_headings_separates_clause_title() -> None:
@@ -1220,6 +1145,214 @@ def test_looks_like_signature_requires_zone_and_keyword() -> None:
         role="body",
     )
     assert _looks_like_signature(lower_unrelated) is False
+
+
+def test_structural_role_refines_body_before_comparison() -> None:
+    heading = _block([_line((72, 80, 280, 94), text="2. REGISTERED OFFICE")], role="heading")
+    body = _block([_sentence(72, 110, 540, "The company is registered and operates from Singapore.")])
+    listed = _block([_sentence(108, 140, 540, "(a) NRIC of the borrower and each guarantor")])
+    label = _block([_line((72, 170, 280, 184), text="Name: John Tan")])
+    address = _block([_line((72, 200, 420, 214), text="42 Orchard Road #01-02 Singapore 238801")])
+    dated = _block([_line((72, 230, 180, 244), text="06 Jan 2024")])
+    header = _block([_line((200, 20, 400, 34), text="GOLDEN HARVEST TRADING PTE LTD")], role="header")
+
+    assert lr.classify_structural_role(heading) == "heading"
+    assert lr.classify_structural_role(header) == "header"
+    assert lr.classify_structural_role(body) == "body"
+    assert lr.classify_structural_role(listed) == "list_item"
+    assert lr.classify_structural_role(label) == "label_value"
+    assert lr.classify_structural_role(address) == "address"
+    assert lr.classify_structural_role(dated) == "date"
+
+    blocks = [heading, body, listed, label, address, dated, header]
+    lr._assign_structural_roles(blocks)
+    for block in blocks:
+        block.alignment = "left-aligned"
+    heading.alignment = "centred"
+    groups = lr.build_comparable_groups(blocks)
+    by_role = {group.role: group for group in groups}
+    assert set(by_role) == {
+        "heading",
+        "body",
+        "list_item",
+        "label_value",
+        "address",
+        "date",
+        "header",
+    }
+    assert by_role["heading"].alignment == "centred"
+    assert by_role["body"].alignment == "left-aligned"
+    assert by_role["body"].page_region == "body"
+    assert all("Name:" not in block.text for block in by_role["body"].members)
+    assert "(a) NRIC" in by_role["list_item"].members[0].text
+
+
+def _list_and_body(*, shift_last: bool) -> list[_Block]:
+    """Full-width list under left-aligned clauses. The list indent is shared."""
+    intro = _block(
+        [_sentence(72, 90, 540, "The Borrower shall provide the following documents today")]
+    )
+    labels = (
+        "(a) NRIC of the borrower and each guarantor on this loan",
+        "(b) Proof of address for the borrower and each guarantor",
+        "(c) Bank statement for the last three months of trading",
+    )
+    items = []
+    for index, label in enumerate(labels):
+        left = 150.0 if shift_last and index == 2 else 108.0
+        items.append(_block([_sentence(left, 120 + index * 20, 540, label)]))
+    closing = _block(
+        [_sentence(72, 200, 540, "The company is registered and operates in Singapore today")]
+    )
+    return [intro, *items, closing]
+
+
+def test_consistent_list_indent_is_not_an_anomaly() -> None:
+    blocks = _list_and_body(shift_last=False)
+    lr._assign_structural_roles(blocks)
+    assert {block.role for block in blocks[1:4]} == {"list_item"}
+    findings, check = lr._check_indentation(blocks)
+    assert check.unable_to_assess is False
+    assert findings == []
+
+
+def test_a_list_item_off_the_list_indent_is_an_anomaly() -> None:
+    blocks = _list_and_body(shift_last=True)
+    lr._assign_structural_roles(blocks)
+    findings, check = lr._check_indentation(blocks)
+    assert check.unable_to_assess is False
+    assert findings
+    assert any("(c) Bank statement" in finding.text for finding in findings)
+    assert all("(a) NRIC" not in finding.text for finding in findings)
+    assert all("(b) Proof" not in finding.text for finding in findings)
+
+
+def test_list_structure_retires_an_indent_signal() -> None:
+    """An indent signal on a consistent list is the list, not a tamper."""
+    blocks = _list_and_body(shift_last=False)
+    openings = lr._consistent_list_openings(blocks)
+    assert {(page, text[:3]) for page, text in openings} == {(1, "(a)"), (1, "(b)"), (1, "(c)")}
+
+    sample = next(block for block in blocks if block.text.startswith("(a)"))
+    finding = lr._anomaly(
+        "Indentation",
+        sample,
+        detected="108 pt",
+        expected="72 pt",
+        baseline=None,
+        deviation="+36 pt",
+        confidence=0.8,
+        evidence={"kind": "indentation", "side": "left", "left_delta_pt": 36.0},
+    )
+    signal = lr._layout_signal(finding)
+    assert signal.type == "indentation"
+    assert signal.strength == 0.8
+    assert signal.deviation == 36.0
+    assert lr._decide_from_signals([signal], blocks) == []
+
+    shifted = _list_and_body(shift_last=True)
+    outlier = next(block for block in shifted if block.text.startswith("(c)"))
+    outlier_finding = lr._anomaly(
+        "Indentation",
+        outlier,
+        detected="150 pt",
+        expected="108 pt",
+        baseline=None,
+        deviation="+42 pt",
+        confidence=0.84,
+        evidence={"kind": "indentation", "side": "left", "left_delta_pt": 42.0},
+    )
+    kept = lr._decide_from_signals([lr._layout_signal(outlier_finding)], shifted)
+    assert kept == [outlier_finding]
+
+
+def _clause_paragraphs(*, shift_clause: int | None = None, shift_index: int | None = None) -> list[_Block]:
+    """Three clauses. Body under a clause is only compared with that clause."""
+    blocks: list[_Block] = []
+    y = 80.0
+    for clause in (1, 2, 3):
+        blocks.append(
+            _block(
+                [_line((72, y, 280, y + 14), text=f"{clause}. TERMS OF THIS CLAUSE")],
+                role="heading",
+            )
+        )
+        y += 22
+        for index in range(3):
+            left = 72.0
+            if clause == shift_clause and index == shift_index:
+                left = 108.0
+            elif shift_clause == clause and shift_index is None:
+                left = 108.0
+            blocks.append(
+                _block(
+                    [
+                        _sentence(
+                            left,
+                            y,
+                            540,
+                            f"Clause {clause} paragraph {index} runs across this content column",
+                        )
+                    ]
+                )
+            )
+            y += 24
+        y += 12
+    return blocks
+
+
+def test_a_clause_keeps_its_own_indent_baseline() -> None:
+    blocks = _clause_paragraphs(shift_clause=3)
+    findings, check = lr._check_indentation(blocks)
+    assert check.unable_to_assess is False
+    assert findings == []
+    groups = [group for group in lr.build_comparable_groups(blocks) if group.role == "body"]
+    assert len(groups) == 3
+    assert {group.section for group in groups} == {0, 1, 2}
+
+
+def test_a_paragraph_is_judged_against_its_own_clause() -> None:
+    blocks = _clause_paragraphs(shift_clause=3, shift_index=1)
+    findings, check = lr._check_indentation(blocks)
+    assert check.unable_to_assess is False
+    named = [finding for finding in findings if "paragraph 1" in finding.text]
+    assert named
+    assert all("Clause 1" not in finding.text and "Clause 2" not in finding.text for finding in findings)
+    assert named[0].evidence["left_delta_pt"] == 36.0
+
+
+def test_three_neighbours_with_one_indent_are_a_structural_pattern() -> None:
+    blocks = [
+        _block(
+            [_sentence(108, 100 + index * 18, 420, f"({letter}) Item {letter} of this repeated list")],
+            role="list_item",
+        )
+        for index, letter in enumerate("abc")
+    ]
+    odd = _block(
+        [_sentence(150, 160, 420, "(d) Item d sits off the list indent")],
+        role="list_item",
+    )
+    patterns = lr.repeated_structural_patterns(blocks + [odd])
+    assert len(patterns) == 1
+    assert patterns[0].role == "list_item"
+    assert patterns[0].indentation == pytest.approx(108.0, abs=1.0)
+    assert len(patterns[0].members) == 3
+    assert all(lr._matches_structural_pattern(block, patterns) for block in blocks)
+    assert lr._matches_structural_pattern(odd, patterns) is False
+
+    sample = blocks[0]
+    finding = lr._anomaly(
+        "Indentation",
+        sample,
+        detected="108 pt",
+        expected="72 pt",
+        baseline=None,
+        deviation="+36 pt",
+        confidence=0.8,
+        evidence={"kind": "indentation", "side": "left", "left_delta_pt": 36.0},
+    )
+    assert lr._decide_from_signals([lr._layout_signal(finding)], blocks + [odd]) == []
 
 
 def test_row_alignment_flags_vertically_shifted_amount() -> None:
@@ -1480,15 +1613,19 @@ def test_line_spacing_ignores_uniform_leading() -> None:
     assert findings == []
 
 
-def test_paragraph_spacing_flags_a_wide_gap() -> None:
-    result = check_layout_anomalies("doc-1", _wide_paragraph_gap_pdf())
+def test_paragraph_spacing_measures_a_wide_gap_but_needs_corroboration() -> None:
+    """The check measures the gap; on its own a gap describes the template."""
+    pdf = _wide_paragraph_gap_pdf()
+    doc = pymupdf.open(stream=pdf, filetype="pdf")
+    blocks = lr._extract_blocks(doc)
+    lr._assign_structural_roles(blocks)
+    findings, check = lr._check_paragraph_spacing(blocks, lr.build_comparable_groups(blocks))
+    assert check.unable_to_assess is False
+    assert any(abs(a.evidence["gap_delta_pt"]) >= 8 for a in findings)
+
+    result = check_layout_anomalies("doc-1", pdf)
     assert result.spacing.unable_to_assess is False
-    gaps = [a for a in result.anomalies if "paragraph-spacing" in _kinds(a)]
-    assert gaps
-    assert any(
-        abs((_signal(a, "paragraph-spacing") or a.evidence)["gap_delta_pt"]) >= 8
-        for a in gaps
-    )
+    assert not any(_kinds(a) == {"paragraph-spacing"} for a in result.anomalies)
 
 
 def test_paragraph_spacing_records_space_before_and_after_gap() -> None:
@@ -1977,12 +2114,12 @@ def test_paragraph_spacing_skips_thin_or_overlapping_pages() -> None:
     assert check.unable_to_assess is True
 
 
-def test_paragraph_spacing_ignores_section_break_gaps(monkeypatch) -> None:
-    monkeypatch.setattr(lr, "_PARA_SECTION_BREAK_MULT", 0.5)
+def test_paragraph_spacing_ignores_section_break_gaps() -> None:
     blocks = [
         _block([_line((72, 90, 540, 130), text=BODY)]),
         _block([_line((72, 140, 540, 180), text=BODY)]),
-        _block([_line((72, 260, 540, 300), text=BODY)]),
+        _block([_line((72, 190, 540, 230), text=BODY)]),
+        _block([_line((72, 430, 540, 470), text=BODY)]),
     ]
     findings, check = lr._check_paragraph_spacing(blocks)
     assert check.unable_to_assess is False
@@ -2117,7 +2254,7 @@ def test_row_alignment_skips_duplicate_pair(monkeypatch) -> None:
     label = _block([_line((72, 200, 280, 214), text="Chargeable Income")])
     amount = _block([_line((460, 212, 540, 226), text="316,800")])
     monkeypatch.setattr(
-        lr, "_nearest_row_pairs", lambda _blocks: [(label, amount), (label, amount)]
+        lr.alignment, "_nearest_row_pairs", lambda _blocks: [(label, amount), (label, amount)]
     )
     findings = lr._check_row_alignment([label, amount])
     assert len(findings) == 1
@@ -2373,3 +2510,505 @@ def test_check_indentation_skips_a_shift_that_does_not_reach_the_column_right() 
     anomalies, check = lr._check_indentation([*baseline, shifted_but_short])
     assert check.unable_to_assess is False
     assert anomalies == []
+
+
+def test_delta_confidence_stays_low_just_past_the_threshold() -> None:
+    barely = lr._delta_confidence(8.2, 8.0, 1.0)
+    clear = lr._delta_confidence(24.0, 12.0, 1.0)
+    assert barely < lr._SIGNAL_STRENGTH_FLOOR
+    assert clear >= lr._SIGNAL_STRENGTH_FLOOR
+
+
+def test_decide_drops_a_weak_signal_and_a_detector_that_fires_everywhere() -> None:
+    host = _block([_line((72, 100, 540, 140), text=BODY)])
+    weak = lr._anomaly(
+        "Spacing",
+        host,
+        detected="16.2 pt",
+        expected="8 pt",
+        baseline=None,
+        deviation="+8.2 pt",
+        confidence=lr._delta_confidence(8.2, 8.0, 1.0),
+        evidence={"kind": "paragraph-spacing", "gap_delta_pt": 8.2},
+    )
+    assert lr._decide_from_signals([lr._layout_signal(weak)], [host]) == []
+
+    blocks = [
+        _block([_line((72, 40 + i * 36, 540, 70 + i * 36), text=f"{BODY} {i}")])
+        for i in range(6)
+    ]
+    signals = [
+        lr._layout_signal(
+            lr._anomaly(
+                "Spacing",
+                block,
+                detected="30 pt",
+                expected="12 pt",
+                baseline=None,
+                deviation="+18 pt",
+                confidence=0.9,
+                evidence={"kind": "paragraph-spacing", "gap_delta_pt": 18.0},
+            )
+        )
+        for block in blocks
+    ]
+    assert lr._decide_from_signals(signals, blocks) == []
+
+
+def test_decide_keeps_the_strongest_regions() -> None:
+    blocks = [
+        _block([_line((72, 30 + i * 24, 540, 48 + i * 24), text=f"{BODY} {i}")])
+        for i in range(30)
+    ]
+    signals = []
+    for index in range(12):
+        score = round(0.95 - index * 0.04, 2)
+        signals.append(
+            lr._layout_signal(
+                lr._anomaly(
+                    "Spacing",
+                    blocks[index],
+                    detected="30 pt",
+                    expected="12 pt",
+                    baseline=None,
+                    deviation="+18 pt",
+                    confidence=score,
+                    evidence={"kind": "paragraph-spacing", "gap_delta_pt": 18.0},
+                )
+            )
+        )
+    kept = lr._decide_from_signals(signals, blocks)
+    assert len(kept) == lr._MAX_FINDINGS_PER_DOCUMENT
+    assert min(item.confidence for item in kept) == pytest.approx(0.59)
+
+
+def test_line_box_and_paragraph_box_are_one_finding() -> None:
+    paragraph = lr._anomaly(
+        "Indentation",
+        _block([_line((72, 200, 540, 280), text=BODY)]),
+        detected="96 pt",
+        expected="72 pt",
+        baseline=None,
+        deviation="+24 pt",
+        confidence=0.8,
+        evidence={"kind": "indentation", "left_delta_pt": 24.0},
+    )
+    line = LayoutAnomaly(
+        anomaly_type="Indentation",
+        page=1,
+        location="Line near y=210",
+        bbox=(96.0, 210.0, 520.0, 224.0),
+        text="Moved.",
+        detected="96 pt",
+        expected="72 pt",
+        deviation="+24 pt",
+        confidence=0.7,
+        evidence={"kind": "right-edge", "right_delta_pt": -20.0},
+        summary="short",
+    )
+    merged = lr._coalesce_signals([paragraph, line])
+    assert len(merged) == 1
+    assert {item["kind"] for item in merged[0].evidence["signals"]} == {
+        "indentation",
+        "right-edge",
+    }
+    assert merged[0].bbox[1] == pytest.approx(200.0)
+
+
+def test_paragraph_spacing_attributes_a_moved_block_once() -> None:
+    height = 30.0
+    rhythm = 16.0
+    shift = 14.0
+    y = 80.0
+    blocks = []
+    for index in range(5):
+        y0 = y + (shift if index == 2 else 0.0)
+        text = f"Clause {index + 1} of the Company shall be at such place in Singapore."
+        blocks.append(_block([_line((72, y0, 540, y0 + height), text=text)]))
+        y += height + rhythm
+    findings, check = lr._check_paragraph_spacing(blocks)
+    assert check.unable_to_assess is False
+    assert len(findings) == 1
+    assert "Clause 3" in findings[0].text
+    assert findings[0].evidence["space"] == "before"
+
+
+def test_short_page_extent_is_not_a_margin_finding() -> None:
+    pages = [
+        PageMargins(
+            page=page,
+            left=72,
+            right=72 if page < 3 else 200,
+            top=72,
+            bottom=72 if page < 3 else 420,
+            page_width=612,
+            page_height=792,
+        )
+        for page in (1, 2, 3)
+    ]
+    blocks = [
+        _block([_line((72, 72, 540, 400), text=BODY, page=0)]),
+        _block([_line((72, 72, 540, 400), text=BODY, page=1)]),
+        _block([_line((72, 72, 220, 100), text=BODY, page=2)]),
+    ]
+    findings, check = lr._check_margins(pages, blocks)
+    assert check.unable_to_assess is False
+    assert findings == []
+
+
+def test_top_and_bottom_are_not_margin_findings() -> None:
+    pages = [
+        PageMargins(
+            page=1, left=72, right=72, top=72, bottom=72, page_width=612, page_height=792
+        ),
+        PageMargins(
+            page=2, left=72, right=72, top=130, bottom=360, page_width=612, page_height=792
+        ),
+    ]
+    blocks = [
+        _block([_line((72, 72, 540, 400), text=BODY, page=0)]),
+        _block([_line((72, 130, 540, 400), text=BODY, page=1)]),
+    ]
+    findings, check = lr._check_margins(pages, blocks)
+    assert check.unable_to_assess is False
+    assert findings == []
+
+
+def test_row_alignment_ignores_mixed_sizes_on_one_baseline() -> None:
+    label = _block(
+        [_line((72, 180, 280, 210), text="Chargeable Income", baseline=200.0, size=12)]
+    )
+    amount = _block(
+        [_line((460, 191, 540, 203), text="316,800", baseline=200.0, size=9)]
+    )
+    assert lr._check_row_alignment([label, amount]) == []
+
+    shifted = _block(
+        [_line((460, 203, 540, 215), text="316,800", baseline=212.0, size=9)]
+    )
+    findings = lr._check_row_alignment([label, shifted])
+    assert findings
+    assert findings[0].evidence["baseline_delta_pt"] == pytest.approx(12.0)
+
+
+def test_consecutive_neighbours_do_not_raise_confidence() -> None:
+    first = _finding(confidence=0.62, bbox=(72.0, 100.0, 540.0, 160.0))
+    second = _finding(confidence=0.62, bbox=(72.0, 180.0, 540.0, 240.0))
+    lr._mark_local_consecutive([first, second])
+    assert first.confidence == 0.62
+    assert second.confidence == 0.62
+    assert first.evidence.get("local_pattern") is True
+    assert first.evidence.get("consecutive_run") == 2
+
+
+def _form_column(shifted_left: float) -> list[_Block]:
+    """Payslip-style labels stacked on one left edge, amounts on the right."""
+    labels = ["Base pay", "Variable pay", "Benefits", "Tax withholding", "Other deductions"]
+    blocks = []
+    for index, label in enumerate(labels):
+        left = shifted_left if label == "Other deductions" else 62.7
+        y0 = 194.0 + index * 20
+        blocks.append(_block([_line((left, y0, left + 6 * len(label), y0 + 12), text=label, size=9.5)]))
+        blocks.append(
+            _block([_line((475.6, y0, 532.6, y0 + 12), text=f"SGD {index + 1}00.00", size=9.5)])
+        )
+    return blocks
+
+
+def test_unanchored_line_off_its_column_is_named() -> None:
+    findings = lr._check_unanchored_lines(_form_column(86.7))
+    assert [finding.text for finding in findings] == ["Other deductions"]
+    evidence = findings[0].evidence
+    assert evidence["unanchored"] is True
+    assert evidence["left_delta_pt"] == pytest.approx(24.0, abs=0.1)
+    assert "start at 62.7 pt" in (findings[0].baseline or "")
+
+
+def test_unanchored_check_leaves_an_intact_column_alone() -> None:
+    assert lr._check_unanchored_lines(_form_column(62.7)) == []
+
+
+def test_centred_title_is_anchored_to_the_page_centre() -> None:
+    title = _line((236.0, 60.0, 376.0, 74.0), text="STATEMENT OF ACCOUNT")
+    body = [_line((72.0, 90.0 + i * 14, 300.0, 102.0 + i * 14)) for i in range(3)]
+    assert lr._shares_an_edge(title, body) is True
+
+
+def test_text_centred_in_a_drawn_cell_is_anchored() -> None:
+    header = _line((144.0, 310.5, 208.7, 319.5), text="PRODUCT NAME")
+    rules = [(82.8, 300.0, 330.0), (270.0, 300.0, 330.0)]
+    assert lr._shares_an_edge(header, [], rules) is True
+    assert lr._shares_an_edge(header, []) is False
+
+
+def test_cell_nudged_off_its_row_is_named() -> None:
+    blocks = []
+    for index in range(3):
+        y0 = 200.0 + index * 20
+        shift = 10.0 if index == 1 else 0.0
+        blocks.append(
+            _block([_line((50.0, y0 + shift, 120.0, y0 + 12 + shift), text=f"Item {index}", baseline=y0 + 10 + shift)])
+        )
+        blocks.append(_block([_line((300.0, y0, 360.0, y0 + 12), text=f"{index}0.00", baseline=y0 + 10)]))
+        blocks.append(_block([_line((420.0, y0, 480.0, y0 + 12), text=f"{index}1.00", baseline=y0 + 10)]))
+    findings = lr._check_vertical_unanchored_lines(blocks)
+    assert [finding.text for finding in findings] == ["Item 1"]
+    assert findings[0].evidence["vertical_delta_pt"] == pytest.approx(10.0)
+
+
+def test_a_section_break_is_not_a_spacing_anomaly() -> None:
+    block = _block([_sentence(72, 300, 540, "ASSETS Non-current assets Property and equipment")])
+    finding = lr._anomaly(
+        "Spacing",
+        block,
+        detected="250 pt",
+        expected="12 pt",
+        baseline=None,
+        deviation="+237.5 pt",
+        confidence=0.9,
+        evidence={"kind": "paragraph-spacing", "space": "before", "gap_delta_pt": 237.5},
+    )
+    assert lr._decide_from_signals([lr._layout_signal(finding)], [block]) == []
+
+
+def test_larger_company_name_off_its_address_column_is_named() -> None:
+    """A heading set larger than the address under it still belongs to that column."""
+    name = _line((63.6, 74.9, 235.3, 89.4), text="Silver Oak Logistics Pte Ltd", size=13.0)
+    street = _line((39.6, 91.8, 138.9, 104.0), text="6 Battery Road, #21-08", size=9.6)
+    city = _line((39.6, 104.8, 118.1, 117.0), text="Singapore 049909", size=9.6)
+    findings = lr._check_unanchored_lines([_block([name]), _block([street]), _block([city])])
+    assert [finding.text for finding in findings] == ["Silver Oak Logistics Pte Ltd"]
+    assert findings[0].evidence["left_delta_pt"] == pytest.approx(24.0, abs=0.1)
+
+
+def _id_card(country_left: float) -> list[_Block]:
+    """NRIC-style card: each short label sits flush over its value."""
+    pairs = [
+        (188.0, 199.0, "Race", "CHINESE"),
+        (188.0, 247.0, "Date of birth", "08-12-1980"),
+        (388.0, 247.0, "Sex", "F"),
+        (188.0, 295.0, "Country/Place of birth", "SINGAPORE"),
+    ]
+    blocks = []
+    for left, top, label, value in pairs:
+        label_left = country_left if label.startswith("Country") else left
+        blocks.append(
+            _block([_line((label_left, top, label_left + 5 * len(label), top + 10), text=label, size=7.5)])
+        )
+        blocks.append(
+            _block([_line((left, top + 12, left + 7 * len(value), top + 26), text=value, size=11.5)])
+        )
+    return blocks
+
+
+def test_label_off_the_pages_label_value_offset_is_named() -> None:
+    findings = lr._check_pair_offsets(_id_card(country_left=212.0))
+    assert [finding.text for finding in findings] == ["Country/Place of birth"]
+    assert findings[0].evidence["left_delta_pt"] == pytest.approx(24.0)
+    assert "offset by 0 pt" in (findings[0].baseline or "")
+
+
+def test_flush_label_value_card_has_no_pair_finding() -> None:
+    assert lr._check_pair_offsets(_id_card(country_left=188.0)) == []
+
+
+def test_repeated_heading_indent_is_not_a_pair_finding() -> None:
+    """Items indented under their headings share one offset, so it is the design."""
+    blocks = []
+    for index, (heading, item) in enumerate(
+        [("Current assets", "Inventories"), ("Current liabilities", "Trade payables"), ("Equity", "Share capital")]
+    ):
+        top = 100.0 + index * 40
+        blocks.append(_block([_line((71.2, top, 160.0, top + 12), text=heading)]))
+        blocks.append(_block([_line((81.2, top + 13, 170.0, top + 25), text=item)]))
+    assert lr._check_pair_offsets(blocks) == []
+
+
+def test_right_aligned_amounts_are_not_a_pair_finding() -> None:
+    blocks = [
+        _block([_line((480.0, 100, 540.0, 112), text="56,889.15")]),
+        _block([_line((494.0, 113, 540.0, 125), text="9,102.40")]),
+        _block([_line((100.0, 200, 160.0, 212), text="Name")]),
+        _block([_line((100.0, 213, 190.0, 225), text="Tan Wei Ming")]),
+        _block([_line((100.0, 260, 160.0, 272), text="Account")]),
+        _block([_line((100.0, 273, 190.0, 285), text="123-456-789")]),
+    ]
+    assert lr._check_pair_offsets(blocks) == []
+
+
+def test_one_line_alignment_needs_corroboration_but_a_paragraph_does_not() -> None:
+    one_line = _block([_sentence(300, 100, 540, "Date Opened / Closed")])
+    paragraph = _block(
+        [_sentence(150, 200, 460, "This clause has been digitally inserted"), _sentence(170, 214, 440, "after the document was signed")]
+    )
+
+    def alignment(block: _Block) -> LayoutAnomaly:
+        return lr._anomaly(
+            "Alignment",
+            block,
+            detected="Centre-aligned",
+            expected="Left-aligned",
+            baseline=None,
+            deviation="1 paragraph",
+            confidence=0.9,
+            evidence={"alignment": "centred", "expected_alignment": "left-aligned"},
+        )
+
+    blocks = [one_line, paragraph]
+    assert lr._corroborated(alignment(one_line), blocks) is False
+    assert lr._corroborated(alignment(paragraph), blocks) is True
+
+
+def test_alignment_is_not_reported_on_table_cells() -> None:
+    cell = _block([_line((460, 200, 540, 214), text="316,800.00")], role="table")
+    assert not lr.alignment._reportable_alignment(cell, matching=9, comparable=10)
+
+
+def test_alignment_needs_three_quarters_of_peers_to_agree() -> None:
+    paragraph = _block([_line((72, 200, 540, 214))])
+    assert lr.alignment._reportable_alignment(paragraph, matching=3, comparable=4)
+    assert not lr.alignment._reportable_alignment(paragraph, matching=5, comparable=8)
+
+
+def test_row_alignment_highlights_both_members_of_the_pair() -> None:
+    # A moved label is as likely as a moved value, so the box covers both.
+    label = _block([_line((72, 212, 280, 226), text="Chargeable Income")])
+    amount = _block([_line((460, 200, 540, 214), text="316,800")])
+    findings = lr._check_row_alignment([label, amount])
+    assert len(findings) == 1
+    assert findings[0].bbox == (72, 200, 540, 226)
+
+
+def _kind_finding(kind: str, bbox, confidence: float, **kwargs) -> LayoutAnomaly:
+    return _finding(bbox=bbox, confidence=confidence, evidence={"kind": kind}, **kwargs)
+
+
+def test_weaker_finding_beside_a_stronger_one_is_folded_in() -> None:
+    strong = _kind_finding("indentation", (72, 100, 300, 114), 0.9)
+    beside = _kind_finding("vertical", (72, 120, 300, 134), 0.6)
+    merged = lr._merge_neighbours([beside, strong])
+    assert merged == [strong]
+    assert strong.confidence == 0.9
+    assert strong.bbox == (72, 100, 300, 134)
+    assert {s["kind"] for s in strong.evidence["signals"]} == {"indentation", "vertical"}
+
+
+def test_findings_far_apart_stay_separate() -> None:
+    first = _kind_finding("indentation", (72, 100, 300, 114), 0.9)
+    far = _kind_finding("vertical", (72, 300, 300, 314), 0.6)
+    assert lr._merge_neighbours([first, far]) == [first, far]
+
+
+def test_neighbours_do_not_chain_down_a_table() -> None:
+    rows = [_kind_finding("vertical", (72, 100 + 20 * i, 300, 114 + 20 * i), 0.9 - 0.1 * i) for i in range(4)]
+    merged = lr._merge_neighbours(list(rows))
+    # The strongest row absorbs only the row next to it; the third starts its own finding.
+    assert len(merged) == 2
+
+
+def test_margin_and_overlay_findings_are_never_folded() -> None:
+    strong = _kind_finding("indentation", (72, 100, 300, 114), 0.9)
+    margin = _kind_finding("left-margin", (72, 100, 300, 114), 0.5, anomaly_type="Margin")
+    overlay = _kind_finding("text-overlay", (80, 102, 120, 112), 0.5, anomaly_type="Text Overlay")
+    assert len(lr._merge_neighbours([strong, margin, overlay])) == 3
+
+
+def test_a_long_uppercase_table_is_not_a_numbered_heading() -> None:
+    rows = [
+        _line((51, 600 + 12 * i, 560, 611 + 12 * i), text=f"{26 + i} JUN ATM WITHDRAWAL 90.00 6,919.61")
+        for i in range(4)
+    ]
+    assert lr._is_heading_block(_block(rows)) is False
+    assert lr._is_heading_block(_block([_line((72, 100, 280, 114), text="2. REGISTERED OFFICE")])) is True
+
+
+def _wrapped_cell(x: float, row_baseline: float, texts: list[str], pitch: float = 9.2) -> _Block:
+    """A table cell wrapped over several lines, centred on its row."""
+    first = row_baseline - pitch * (len(texts) - 1) / 2
+    lines = [
+        _line((x, first + i * pitch - 7, x + 120, first + i * pitch + 1), text=text, baseline=first + i * pitch, size=7.2)
+        for i, text in enumerate(texts)
+    ]
+    return _block(lines)
+
+
+def test_lines_of_wrapped_cells_at_the_page_spacing_are_not_off_their_row() -> None:
+    blocks = []
+    for row in range(4):
+        base = 200 + 60 * row
+        blocks.append(_block([_line((40, base - 7, 90, base + 1), text=f"0{row + 1}/06/2026", baseline=base, size=7.5)]))
+        blocks.append(_block([_line((360, base - 7, 400, base + 1), text=f"{row + 1},205.50", baseline=base, size=7.5)]))
+        blocks.append(_wrapped_cell(230, base, ["OTHER ASIA LINK", "COMMODITIES PTE LTD", f"SG3P47569785280{row}"]))
+    assert lr._check_vertical_unanchored_lines(blocks) == []
+
+
+def test_a_nudged_line_breaks_its_cells_spacing_and_is_still_flagged() -> None:
+    lines = [_line((230, 190, 350, 198), text="OTHER ASIA LINK", baseline=197, size=7.2)]
+    cells = [_wrapped_cell(230, 300 + 60 * row, ["FUNDS TRANSFER", "REF 0000"]) for row in range(3)]
+    in_rhythm = lr.anchors._cell_rhythm(
+        [(cell, line) for cell in cells for line in cell.lines]
+        + [(_block(lines + [_line((230, 214, 350, 222), text="SG3P475697852806", baseline=221, size=7.2)]), line) for line in lines]
+    )
+    assert all(id(line) in in_rhythm for cell in cells for line in cell.lines)
+    assert not any(id(line) in in_rhythm for line in lines)
+
+
+def _statement_pages(issuer_x_by_page: list[float], *, band_y: float = 70.0) -> list[_Block]:
+    """Pages with a running title, an issuer line under it, and transaction rows."""
+    blocks = []
+    for page, issuer_x in enumerate(issuer_x_by_page):
+        blocks.append(_block([_line((40, 20, 300, 32), text="ACCOUNT STATEMENT", page=page)], role="header"))
+        blocks.append(_block([_line((issuer_x, band_y, issuer_x + 180, band_y + 10), text="Oversea-Chinese Banking Corp", page=page)], role="header"))
+        for row in range(3):
+            y = 300 + 40 * row + 10 * page
+            blocks.append(_block([_line((40, y, 200, y + 10), text="GIRO PAYMENT", page=page)]))
+    return blocks
+
+
+def test_issuer_line_moved_on_one_page_is_flagged_against_the_others() -> None:
+    findings = lr._check_moved_furniture(_statement_pages([40, 40, 52]))
+    assert [(a.page, a.text) for a in findings] == [(3, "Oversea-Chinese Banking Corp")]
+    assert findings[0].evidence["left_delta_pt"] == pytest.approx(12)
+
+
+def test_furniture_in_place_on_every_page_is_not_flagged() -> None:
+    assert lr._check_moved_furniture(_statement_pages([40, 40, 40])) == []
+
+
+def test_two_pages_cannot_say_which_copy_moved() -> None:
+    assert lr._check_moved_furniture(_statement_pages([40, 52])) == []
+
+
+def test_repeated_transaction_text_is_not_furniture() -> None:
+    # "GIRO PAYMENT" repeats within each page and sits mid-page: content, not furniture.
+    findings = lr._check_moved_furniture(_statement_pages([40, 40, 40]))
+    assert not any("GIRO" in a.text for a in findings)
+
+
+def test_weak_findings_are_dropped_and_the_rest_ranked_strongest_first(monkeypatch) -> None:
+    # Different kinds and far apart, so no other filter or merge touches them.
+    def fake_indentation(blocks, groups=None, **_):
+        findings = [
+            lr._anomaly(
+                anomaly_type,
+                blocks[0].model_copy(update={"bbox": (72.0, y, 540.0, y + 14)}),
+                detected="96 pt",
+                expected="72 pt",
+                baseline=None,
+                deviation="+24 pt",
+                confidence=confidence,
+                evidence={"kind": kind, "left_delta_pt": 24.0, "vertical_delta_pt": 10.0, "unanchored": True},
+            )
+            for y, confidence, anomaly_type, kind in (
+                (100.0, 0.75, "Spacing", "vertical"),
+                (300.0, 0.5, "Spacing", "vertical"),
+                (500.0, 0.95, "Indentation", "indentation"),
+            )
+        ]
+        return findings, lr._assessed()
+
+    monkeypatch.setattr(lr, "_check_indentation", fake_indentation)
+    result = check_layout_anomalies("doc-1", _consistent_pdf())
+    confidences = [a.confidence for a in result.anomalies if a.anomaly_type in {"Indentation", "Spacing"}]
+    assert confidences == [0.95, 0.75]
+    assert all(a.confidence >= lr.REPORT_MIN_CONFIDENCE for a in result.anomalies)

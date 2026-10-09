@@ -30,18 +30,14 @@ findings it dismisses.
 
 | File | Dimension | Tests |
 |---|---|---|
-| `layout_anomalies.py` | Indentation/alignment/margin/spacing deviations + text overlay | 112 |
+| `layout_anomalies/` | Indentation/alignment/margin/spacing deviations. Package: `common.py` (thresholds, result models, finding helpers), `extraction.py` (text layer/OCR into blocks), `structure.py` (roles, comparable groups, columns), `indentation.py`, `line_shifts.py`, `anchors.py`, `alignment.py`, `spacing.py`, `margins.py`, `signals.py` (filtering and merging), `profiles.py` (per-document-type rules, applied only when classification confidence meets `CLASSIFICATION_CONFIDENCE_THRESHOLD`; currently `nric`), `reference.py` (compares a standard form with a curated reference layout in `references/<document_type>/`, built with `scripts/build_layout_reference.py` from two or more genuine copies; steps aside when the reference does not fit; references exist for FATCA, NOA, certificates of incumbency and incorporation, credit report, constitution, NRIC and passport, built from the generated templates and specimens; photos and scans are compared after OCR, scaled to the reference); `__init__.py` runs `check_layout_anomalies` | 147 + 20 (`test_layout_profiles.py`) + 22 (`test_layout_reference.py`) |
+| `text_overlay.py` | Overlapping text boxes (watermarks repeated on several pages are skipped). Run by `check_layout_anomalies`; its `Text Overlay` findings appear in the layout result | 17 |
 | `numerical_validation/` | Deterministic arithmetic/identity checks over extracted fields. Package: `registry.py` (the `@check` decorator; each check's inputs come from its signature), `identity_company.py`, `statements.py`, `records.py`, `casts.py` (statement arithmetic), `common.py`, `models.py`, `runner.py` (applies bindings and builds the result) | — |
 | `metadata_analysis.py` | File-embedded metadata (author/producer/create-modify dates) tamper signals | 54 |
 | `date_anomalies.py` | Date extraction/labeling and logical date consistency (future dates, end-before-start) | 38 |
 | `spelling_anomaly.py` | Misspellings via SymSpell, filtered against `domain_terms.py` allow-list | 24 |
 | `font_consistency.py` | Font family/size/emphasis (bold/italic/underline) inconsistency | 16 |
 | `domain_terms.py` | Not a check — allow-list of legal/financial jargon feeding `spelling_anomaly.py` | — |
-
-Text overlay lives inside `layout_anomalies.py` rather than its own module — it shares that
-file's ~650-line PDF→blocks/lines extraction pipeline with every other layout check, and the
-overlay-specific logic on top of that is only ~130 lines. Splitting it out would mean duplicating
-that extraction pipeline, not avoiding duplication.
 
 `image_manipulation.py` (SCRUM-64) covers resolution and compression mismatches between a file's
 images (embedded PDF images or a standalone PNG/JPEG). The same module's `check_image_tampering` (SCRUM-65) covers
