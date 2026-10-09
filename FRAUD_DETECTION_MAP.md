@@ -36,6 +36,7 @@ findings it dismisses.
 | `date_anomalies.py` | Date extraction/labeling and logical date consistency (future dates, end-before-start) | 38 |
 | `spelling_anomaly.py` | Misspellings via SymSpell, filtered against `domain_terms.py` allow-list | 24 |
 | `font_consistency.py` | Font family/size/emphasis (bold/italic/underline) inconsistency | 16 |
+| `company_identity.py` | Company name compared against every other document in the case (except IDs, proof of address, rejected and not-yet-extracted); legal suffix, letter case and "&"/"AND" are ignored; an unrecognised document matches if the name appears anywhere in its fields. Content Validation's `company_name_consistency_tool` — its findings can't be dismissed or rated below medium, so they always flag (SCRUM-255) | 44 |
 | `domain_terms.py` | Not a check — allow-list of legal/financial jargon feeding `spelling_anomaly.py` | — |
 
 Text overlay lives inside `layout_anomalies.py` rather than its own module — it shares that
