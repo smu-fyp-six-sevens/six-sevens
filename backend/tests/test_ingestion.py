@@ -105,32 +105,28 @@ def test_extract_metadata_returns_exiftool_json(monkeypatch: pytest.MonkeyPatch)
     assert extract_metadata(b"%PDF", "doc.pdf") == payload[0]
 
 
-def test_extract_metadata_empty_json_and_errors(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        metadata_extractor.subprocess,
-        "run",
-        lambda *a, **k: SimpleNamespace(stdout="[]"),
-    )
-    assert extract_metadata(b"x", "a.png") == {}
+def test_extract_metadata_records_failures_instead_of_returning_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    # exiftool always reports basic file details, so every one of these is a
+    # failure to run, recorded under EXTRACTION_ERROR_KEY rather than as {}.
+    def error_for(run) -> str:
+        monkeypatch.setattr(metadata_extractor.subprocess, "run", run)
+        result = extract_metadata(b"x", "a.pdf")
+        assert list(result) == [metadata_extractor.EXTRACTION_ERROR_KEY]
+        return result[metadata_extractor.EXTRACTION_ERROR_KEY]
+
+    assert error_for(lambda *a, **k: SimpleNamespace(stdout="[]")) == "exiftool returned no output"
 
     def missing(*a, **k):
         raise FileNotFoundError("exiftool")
 
-    monkeypatch.setattr(metadata_extractor.subprocess, "run", missing)
-    assert extract_metadata(b"x", "a.pdf") == {}
+    assert "not installed" in error_for(missing)
 
     def failed(*a, **k):
-        raise subprocess.CalledProcessError(1, "exiftool")
+        raise subprocess.CalledProcessError(1, "exiftool", stderr="Error: File format error\n")
 
-    monkeypatch.setattr(metadata_extractor.subprocess, "run", failed)
-    assert extract_metadata(b"x", "a.pdf") == {}
+    assert error_for(failed) == "exiftool failed (Error: File format error)"
 
-    monkeypatch.setattr(
-        metadata_extractor.subprocess,
-        "run",
-        lambda *a, **k: SimpleNamespace(stdout="not-json"),
-    )
-    assert extract_metadata(b"x", "a.pdf") == {}
+    assert "couldn't be parsed" in error_for(lambda *a, **k: SimpleNamespace(stdout="not-json"))
 
 
 # ---------------------------------------------------------------------------
