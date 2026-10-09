@@ -16,6 +16,7 @@ from app.ingestion import ingestion_service, metadata_extractor, ocr_extractor
 from app.ingestion.ingestion_service import _needs_review, ingest_document
 from app.ingestion.metadata_extractor import extract_metadata
 from app.ingestion.ocr_extractor import extract_image_with_ocr
+from app.ingestion import pdf_extractor
 from app.ingestion.pdf_extractor import extract_pdf, pdf_contains_text
 
 
@@ -88,6 +89,86 @@ def test_extract_pdf_reads_spans_and_skips_image_blocks() -> None:
     texts = [element["text"] for element in result["pages"][0]["elements"]]
     assert any("Hello" in text for text in texts)
     assert all(element["extraction_method"] == "native_pdf" for element in result["pages"][0]["elements"])
+
+
+def _pdf(build) -> bytes:
+    doc = pymupdf.open()
+    page = doc.new_page(width=400, height=300)
+    build(page)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def _cover_up(page, new_text: str = "NET PAY: SGD 9,000.00", cover=(214, 86, 400, 106), **fill) -> None:
+    page.insert_text((60, 80), "Base pay   SGD 8,480.00", fontsize=11)
+    page.insert_text((216, 100), "NET PAY: SGD 8,193.27", fontsize=11)
+    page.draw_rect(pymupdf.Rect(*cover), color=None, fill=(1, 1, 1), **fill)
+    page.insert_text((216, 100), new_text, fontsize=11)
+
+
+def test_text_under_a_cover_up_box_is_not_extracted() -> None:
+    result = extract_pdf(_pdf(_cover_up))
+    assert "NET PAY: SGD 9,000.00" in result["text"]
+    assert "8,193.27" not in result["text"]
+    assert "8,480.00" in result["text"]
+    texts = [element["text"] for element in result["pages"][0]["elements"]]
+    assert "NET PAY: SGD 9,000.00" in texts
+    assert not any("8,193.27" in text for text in texts)
+
+
+def test_box_over_only_the_figure_keeps_the_label() -> None:
+    # The cover-up hides the digits; the label printed before it stays visible.
+    def build(page):
+        _cover_up(page, cover=(290, 86, 400, 106))
+    text = extract_pdf(_pdf(build))["text"]
+    assert "8,193.27" not in text
+    assert "9,000.00" in text
+
+
+def test_semi_transparent_fill_does_not_hide_text() -> None:
+    def build(page):
+        page.insert_text((216, 100), "NET PAY: SGD 8,193.27", fontsize=11)
+        page.draw_rect(pymupdf.Rect(214, 86, 400, 106), color=None, fill=(1, 1, 0), fill_opacity=0.3)
+    assert "8,193.27" in extract_pdf(_pdf(build))["text"]
+
+
+def test_text_drawn_over_text_is_two_lines_not_interleaved() -> None:
+    # Without a cover both values are visible; pymupdf's sorted text would
+    # read "NETNET PAY:PAY: SGDSGD 9,000.008,193.27".
+    def build(page):
+        page.insert_text((216, 100), "NET PAY: SGD 8,193.27", fontsize=11)
+        page.insert_text((216, 100.4), "NET PAY: SGD 9,000.00", fontsize=11)
+    lines = extract_pdf(_pdf(build))["text"].splitlines()
+    assert "NET PAY: SGD 8,193.27" in lines
+    assert "NET PAY: SGD 9,000.00" in lines
+
+
+def test_page_without_hidden_or_overlapping_text_keeps_sorted_text() -> None:
+    def build(page):
+        page.insert_text((60, 80), "Employee", fontsize=11)
+        page.insert_text((260, 80), "Sanjay s/o Selvam", fontsize=11)
+        page.insert_text((60, 100), "Period", fontsize=11)
+        page.insert_text((260, 100), "January 2026", fontsize=11)
+    data = _pdf(build)
+    doc = pymupdf.open(stream=data, filetype="pdf")
+    expected = "\n".join(
+        pdf_extractor._COLUMN_GAP_RE.sub("   ", line).rstrip()
+        for line in doc[0].get_text("text", sort=True).splitlines()
+    )
+    assert extract_pdf(data)["text"] == expected
+
+
+def test_scan_with_its_text_layer_stored_under_the_image_keeps_the_text() -> None:
+    # Most of the page's text under a later opaque image is a scan, not a cover-up.
+    def build(page):
+        page.insert_text((60, 80), "REPUBLIC OF SINGAPORE", fontsize=11)
+        page.insert_text((60, 100), "IDENTITY CARD", fontsize=11)
+        pix = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 40, 30), False)
+        pix.set_rect(pix.irect, (240, 240, 240))
+        page.insert_image(page.rect, pixmap=pix)
+    text = extract_pdf(_pdf(build))["text"]
+    assert "REPUBLIC OF SINGAPORE" in text and "IDENTITY CARD" in text
 
 
 # ---------------------------------------------------------------------------

@@ -198,6 +198,43 @@ def test_clean_document_has_no_overlay_findings() -> None:
     assert _overlays(check_layout_anomalies("doc-1", _pdf_bytes(build))) == []
 
 
+def test_stacked_header_lines_whose_letters_do_not_touch_are_not_an_overlay() -> None:
+    # A real payslip header: a 15 pt Courier-Bold company name reserves ~6 pt
+    # below its baseline, so its box overlaps the subtitle under it although
+    # the letters are clearly apart.
+    def build(doc):
+        page = doc.new_page(width=595, height=842)
+        page.insert_text((149, 77.7), "Accord Corporate Services Pte Ltd", fontname="cobo", fontsize=15)
+        page.insert_text((251.7, 89.7), "PAYROLL STATEMENT", fontname="cour", fontsize=9)
+
+    assert _overlays(check_layout_anomalies("doc-1", _pdf_bytes(build))) == []
+
+
+def test_signature_written_on_a_signature_line_is_not_an_overlay() -> None:
+    def build(doc):
+        page = doc.new_page(width=595, height=842)
+        page.insert_text((63, 488), "Rajesh Kumar s/o Suresh", fontname="tiit", fontsize=16)
+        page.insert_text((63, 492), "_________________________", fontsize=11)
+
+    assert _overlays(check_layout_anomalies("doc-1", _pdf_bytes(build))) == []
+
+
+def test_new_value_typed_slightly_below_the_original_is_still_reported() -> None:
+    def build(doc):
+        page = doc.new_page(width=595, height=842)
+        page.insert_text((215, 350), "NET PAY: SGD 3,000.00", fontsize=11)
+        page.insert_text((216, 352), "NET PAY: SGD 4,000.00", fontsize=11)
+
+    assert len(_overlays(check_layout_anomalies("doc-1", _pdf_bytes(build)))) == 1
+
+
+def test_ink_box_falls_back_to_the_line_box_without_a_baseline() -> None:
+    line = _line((72.0, 100.0, 300.0, 112.0))
+    assert to._ink_box(line) == line.bbox
+    with_baseline = _line((72.0, 100.0, 300.0, 116.0), baseline=112.0, size=10.0)
+    assert to._ink_box(with_baseline) == (72.0, 112.0 - 7.2, 300.0, 112.0 + 1.8)
+
+
 def _stamped_pages_pdf(stamped_pages: set[int]) -> bytes:
     # Each page gets its own clause. The same text at the same spot on every
     # page would itself look like a watermark.
