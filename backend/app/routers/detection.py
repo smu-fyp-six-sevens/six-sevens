@@ -8,10 +8,14 @@ from pydantic import BaseModel
 
 from ..langgraph import trace as langgraph_trace
 from ..models import DocumentRecord
-from .. import case_service, extracted_fields_repository, storage_service
+from .. import case_service, document_repository, extracted_fields_repository, storage_service
 from . import documents as documents_router
 from ._dependencies import get_document_or_404
 from ..case_match import DocumentCaseMatch
+from ..fraud_detection.company_identity import (
+    CompanyNameConsistencyResult,
+    check_company_name_consistency,
+)
 from ..fraud_detection.font_consistency import (
     ExtractedField,
     FontConsistencyResult,
@@ -410,6 +414,32 @@ async def get_date_anomalies(
     await _trace_check(
         document_id, "check_date_anomalies",
         unable_to_assess=result.unable_to_assess, finding_count=len(result.findings),
+    )
+    return result
+
+
+@router.get(
+    "/{document_id}/detection/company-name-consistency",
+    response_model=CompanyNameConsistencyResult,
+)
+async def get_company_name_consistency(
+    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
+) -> CompanyNameConsistencyResult:
+    """
+    Content Validation Specialist — "Company Identity Consistency". Compares
+    this document's company name with every other company document in its
+    case (see fraud_detection/company_identity.py). Read-only, from
+    extracted fields alone.
+    """
+    case_documents = (
+        await asyncio.to_thread(document_repository.list_documents, case_id=document.case_id)
+        if document.case_id is not None
+        else []
+    )
+    result = check_company_name_consistency(document, case_documents)
+    await _trace_check(
+        document_id, "check_company_name_consistency",
+        skipped_reason=result.skipped_reason, finding_count=len(result.discrepancies),
     )
     return result
 

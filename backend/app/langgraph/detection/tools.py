@@ -32,6 +32,7 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
 from ... import document_repository, extracted_fields_repository, storage_service
+from ...fraud_detection.company_identity import check_company_name_consistency
 from ...fraud_detection.date_anomalies import check_date_anomalies
 from ...fraud_detection.font_consistency import check_font_consistency
 from ...fraud_detection.image_manipulation import check_image_manipulation, check_image_tampering
@@ -260,6 +261,34 @@ async def date_consistency_tool(document_id: Annotated[str, InjectedState("docum
         for finding in result.findings
     ]
     return _result("date_consistency_tool", _with_ids("date_consistency_tool", findings))
+
+
+@tool
+async def company_name_consistency_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
+    """Compares this document's company name with the company name on every other document in the same case (certificate of incumbency, incorporation, constitution, corporate bank statements, FATCA/CRS, loan letters, payslips, ...). Names that differ only by legal suffix ("Pte Ltd" vs "Pte. Ltd."), letter case or "&"/"AND" match; any other difference is a finding. A document with no company name has nothing to compare. Run it on every document that has a company name."""
+    tool_name = "company_name_consistency_tool"
+    document = await asyncio.to_thread(document_repository.get_document, document_id)
+    if document is None:
+        return _result(tool_name, [], unable="Document not found")
+    case_documents = (
+        await asyncio.to_thread(document_repository.list_documents, case_id=document.case_id)
+        if document.case_id is not None
+        else []
+    )
+    result = check_company_name_consistency(document, case_documents)
+
+    findings = [
+        {
+            "field": "company_name",
+            "stated": discrepancy.stated,
+            "conflicting": discrepancy.conflicting,
+            "filenames": discrepancy.filenames,
+            "severity_hint": discrepancy.severity,
+            "summary": discrepancy.summary,
+        }
+        for discrepancy in result.discrepancies
+    ]
+    return _result(tool_name, _with_ids(tool_name, findings))
 
 
 # --- Digital Authenticity ---------------------------------------------------
