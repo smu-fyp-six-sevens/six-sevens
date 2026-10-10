@@ -10,6 +10,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 from app.fraud_detection.company_identity import (
     check_company_name_consistency,
     company_names_match,
+    legal_entity_type,
     normalize_company_name,
 )
 from app.langgraph.detection import specialists, tools
@@ -69,10 +70,47 @@ def _company(document_type: str, name: str, doc_id: str | None = None, **extra) 
         ("ACME Co Trading Pte Ltd", "ACME Trading Pte Ltd", False),  # "Co" mid-name is part of the name
         ("", "ACME Pte Ltd", False),
         (None, None, False),
+        # A suffix stating a different legal entity type is a different company...
+        ("ACME Trading Pte Ltd", "ACME Trading LLP", False),
+        ("ACME Trading Pte Ltd", "ACME Trading Limited Liability Partnership", False),
+        ("ACME Trading Pte Ltd", "ACME Trading Ltd", False),
+        ("ACME Trading Pte Ltd", "ACME Trading Sdn Bhd", False),
+        ("ACME Trading Inc", "ACME Trading Corp", False),
+        # ...but spellings of the same type match, and so does a name with no
+        # suffix or one cut short before "LTD" (a bank's account-name field).
+        ("ACME Trading LLP", "ACME Trading Limited Liability Partnership", True),
+        ("ACME Trading Sdn. Bhd.", "ACME Trading Sendirian Berhad", True),
+        ("ACME Trading LLP", "ACME Trading", True),
+        ("ACME TRADING PTE", "ACME Trading Pte Ltd", True),
     ],
 )
 def test_company_names_match(a, b, expected) -> None:
     assert company_names_match(a, b) is expected
+
+
+@pytest.mark.parametrize(
+    "name, entity_type",
+    [
+        ("ACME Pte. Ltd.", "Pte Ltd"),
+        ("ACME PRIVATE LIMITED", "Pte Ltd"),
+        ("ACME Co., Ltd.", "Pte Ltd"),
+        ("ACME LLP", "LLP"),
+        ("ACME Limited Partnership", "LP"),
+        ("ACME Sdn Bhd", "Sdn Bhd"),
+        ("ACME", None),
+        (None, None),
+    ],
+)
+def test_legal_entity_type(name, entity_type) -> None:
+    assert legal_entity_type(name) == entity_type
+
+
+def test_names_differing_only_by_entity_type_say_so() -> None:
+    document = _company("certificate_of_incumbency", "ACME Trading Pte Ltd", "inc")
+    llp = _company("bank_statement", "ACME Trading LLP", "llp")
+    result = check_company_name_consistency(document, [document, llp])
+    assert len(result.discrepancies) == 1
+    assert "The legal entity type differs (Pte Ltd vs LLP)." in result.discrepancies[0].summary
 
 
 def test_normalize_company_name_none_when_only_a_suffix() -> None:

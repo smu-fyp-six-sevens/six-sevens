@@ -4,10 +4,13 @@ Content Validation Specialist — "Company Identity Consistency" (SCRUM-255).
 As a loan officer, I want the company name compared across every company
 document in a case so that documents with discrepancies are flagged.
 
-AC1: company names that differ only by legal suffix ("Pte Ltd" vs
-     "Pte. Ltd.") are treated as matching. Letter case and "&" vs "AND" are
-     ignored too. Every other difference, including spacing and
-     punctuation within the name, counts as a discrepancy.
+AC1: company names that differ only by how the legal suffix is written
+     ("Pte Ltd" vs "Pte. Ltd." vs "Private Limited") are treated as
+     matching. Letter case and "&" vs "AND" are ignored too. A suffix that
+     states a different entity type ("LLP" vs "Pte Ltd") is a discrepancy;
+     a name with no suffix at all (a bank's account name) matches any type.
+     Every other difference, including spacing and punctuation within the
+     name, counts as a discrepancy.
 AC2: company names that don't otherwise exactly match are flagged to the
      officer — one finding per distinct conflicting name, listing every
      document in the case that carries it. Run by the Content Validation
@@ -45,13 +48,36 @@ from ..models import DocumentRecord, DocumentStatus, DocumentType, is_personal_b
 # middle of a name is part of the name.
 _LEGAL_SUFFIX_WORDS = (
     "PTE", "PRIVATE", "LTD", "LIMITED", "LLP", "LLC", "LP", "INC", "INCORPORATED",
-    "CORP", "CORPORATION", "CO", "COMPANY", "PLC", "BHD", "BERHAD", "SDN",
+    "CORP", "CORPORATION", "CO", "COMPANY", "PLC", "BHD", "BERHAD", "SDN", "SENDIRIAN",
+    "LIABILITY", "PARTNERSHIP",
 )
 _LEGAL_SUFFIX_RE = re.compile(
     r"(?:[\s,.]*\b(?:" + "|".join(_LEGAL_SUFFIX_WORDS) + r")\b\.?)+[\s,.]*$",
     re.IGNORECASE,
 )
 _AMPERSAND_RE = re.compile(r"\s*&\s*|\s+and\s+", re.IGNORECASE)
+
+# The legal suffix also states the entity type, and an LLP is not a Pte Ltd
+# even when the rest of the name is identical. Abbreviations are spelled out
+# first, then spellings of the same type share one label. A suffix not
+# listed here is its own type.
+_SUFFIX_ABBREVIATIONS = {
+    "PTE": "PRIVATE", "LTD": "LIMITED", "INC": "INCORPORATED", "CORP": "CORPORATION",
+    "CO": "COMPANY", "SDN": "SENDIRIAN", "BHD": "BERHAD",
+}
+_ENTITY_TYPES = {
+    ("PRIVATE", "LIMITED"): "Pte Ltd",
+    ("COMPANY", "LIMITED"): "Pte Ltd",
+    # "PTE" alone: a name cut short before "LTD" (a bank's account-name field).
+    ("PRIVATE",): "Pte Ltd",
+    ("LLP",): "LLP",
+    ("LIMITED", "LIABILITY", "PARTNERSHIP"): "LLP",
+    ("LP",): "LP",
+    ("LIMITED", "PARTNERSHIP"): "LP",
+    ("LLC",): "LLC",
+    ("LIMITED", "LIABILITY", "COMPANY"): "LLC",
+    ("SENDIRIAN", "BERHAD"): "Sdn Bhd",
+}
 
 # Not compared: ID documents and proof of address. A bank statement held by
 # an individual is proof of address too (see models.is_personal_bank_statement).
@@ -115,9 +141,37 @@ def _normalize_text(value: str) -> str:
     return " ".join(_AMPERSAND_RE.sub(" & ", value.upper()).split())
 
 
+def legal_entity_type(value: object) -> Optional[str]:
+    """The entity type the name's legal suffix states ("Pte Ltd", "LLP", ...), or None without one."""
+    if not isinstance(value, str):
+        return None
+    suffix = _LEGAL_SUFFIX_RE.search(value.strip())
+    words = tuple(
+        _SUFFIX_ABBREVIATIONS.get(word, word)
+        for word in re.findall(r"[A-Z]+", suffix.group(0).upper())
+    ) if suffix else ()
+    if not words:
+        return None
+    return _ENTITY_TYPES.get(words, " ".join(words).title())
+
+
+def _entity_types_agree(a: object, b: object) -> bool:
+    """A name with no suffix (a bank's account name) says nothing about the type, so it agrees."""
+    type_a, type_b = legal_entity_type(a), legal_entity_type(b)
+    return type_a is None or type_b is None or type_a == type_b
+
+
 def company_names_match(a: object, b: object) -> bool:
+    """Same name once the legal suffix is set aside, and the suffixes don't state different entity types."""
     normalized_a, normalized_b = normalize_company_name(a), normalize_company_name(b)
-    return normalized_a is not None and normalized_a == normalized_b
+    return normalized_a is not None and normalized_a == normalized_b and _entity_types_agree(a, b)
+
+
+def _entity_type_note(a: str, b: str) -> str:
+    """Says so when the names differ only in the entity type their suffixes state."""
+    if normalize_company_name(a) != normalize_company_name(b) or _entity_types_agree(a, b):
+        return ""
+    return f" The legal entity type differs ({legal_entity_type(a)} vs {legal_entity_type(b)})."
 
 
 def _strings(value: object) -> list[str]:
@@ -180,7 +234,7 @@ def check_company_name_consistency(
     if not others:
         result.skipped_reason = "No other document in the case has a company name to compare against"
         return result
-    by_name: dict[str, list[DocumentRecord]] = {}
+    by_name: dict[tuple[str, Optional[str]], list[DocumentRecord]] = {}
     for other in others:
         other_name = _company_name(other.extracted_fields)
         assert other_name is not None  # filtered above
@@ -195,7 +249,7 @@ def check_company_name_consistency(
             matches=matches,
         ))
         if not matches:
-            key = normalize_company_name(other_name) or other_name
+            key = (normalize_company_name(other_name) or other_name, legal_entity_type(other_name))
             by_name.setdefault(key, []).append(other)
 
     for group in by_name.values():
@@ -210,6 +264,7 @@ def check_company_name_consistency(
             summary=(
                 f'Company name "{company_name}" differs from "{conflicting}" on '
                 f"{len(group)} other document(s) in the case: {', '.join(filenames)}."
+                + _entity_type_note(company_name, conflicting)
             ),
         ))
     return result
