@@ -179,7 +179,15 @@ async def layout_anomalies_tool(document_id: Annotated[str, InjectedState("docum
     if file_bytes is None:
         return _result("layout_anomalies_tool", [], unable="Document file is not available in storage")
 
-    result = await asyncio.to_thread(check_layout_anomalies, document_id, file_bytes)
+    # The type selects a layout profile; an unknown document gets the generic checks.
+    document = await _document(document_id)
+    result = await asyncio.to_thread(
+        check_layout_anomalies,
+        document_id,
+        file_bytes,
+        getattr(document, "document_type", None),
+        getattr(document, "classification_confidence", None),
+    )
     if result.unable_to_assess:
         return _result(
             "layout_anomalies_tool", [], unable=result.unable_to_assess_reason or "Unable to assess"
