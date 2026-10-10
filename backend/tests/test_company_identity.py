@@ -113,6 +113,37 @@ def test_names_differing_only_by_entity_type_say_so() -> None:
     assert "The legal entity type differs (Pte Ltd vs LLP)." in result.discrepancies[0].summary
 
 
+@pytest.mark.parametrize(
+    "account_name, matches",
+    [
+        # OCBC prints one line of the account name, cutting it at a word.
+        ("CRIMSON TEXTILE", True),
+        ("CRIMSON TEXTILE MANUFACTURING", True),
+        ("Crimson  textile", True),
+        # Not a cut at a word boundary, or not the start of the name.
+        ("CRIMSON TEX", False),
+        ("CRIMSON TEXTILES", False),
+        ("TEXTILE MANUFACTURING", False),
+        # One word is too little to tell the company apart.
+        ("CRIMSON", False),
+        # Still carries a suffix, so it wasn't cut off: a shorter, different name.
+        ("CRIMSON TEXTILE PTE LTD", False),
+    ],
+)
+def test_bank_account_name_cut_off_at_a_word_matches(account_name, matches) -> None:
+    incumbency = _company("certificate_of_incumbency", "CRIMSON TEXTILE MANUFACTURING PTE LTD", "inc")
+    bank = _company("bank_statement", account_name, "bank")
+    # Both directions: checked from the statement, and from the incumbency.
+    assert (check_company_name_consistency(bank, [incumbency, bank]).discrepancies == []) is matches
+    assert (check_company_name_consistency(incumbency, [incumbency, bank]).discrepancies == []) is matches
+
+
+def test_a_cut_off_name_only_matches_on_a_bank_statement() -> None:
+    incumbency = _company("certificate_of_incumbency", "CRIMSON TEXTILE MANUFACTURING PTE LTD", "inc")
+    loan_letter = _company("list_of_loans", "CRIMSON TEXTILE", "loans")
+    assert len(check_company_name_consistency(loan_letter, [incumbency, loan_letter]).discrepancies) == 1
+
+
 def test_normalize_company_name_none_when_only_a_suffix() -> None:
     assert normalize_company_name("Pte. Ltd.") is None
 

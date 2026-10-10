@@ -9,6 +9,8 @@ AC1: company names that differ only by how the legal suffix is written
      matching. Letter case and "&" vs "AND" are ignored too. A suffix that
      states a different entity type ("LLP" vs "Pte Ltd") is a discrepancy;
      a name with no suffix at all (a bank's account name) matches any type.
+     A bank statement's account name cut off at a word boundary ("CRIMSON
+     TEXTILE" for "Crimson Textile Manufacturing Pte Ltd") also matches.
      Every other difference, including spacing and punctuation within the
      name, counts as a discrepancy.
 AC2: company names that don't otherwise exactly match are flagged to the
@@ -174,6 +176,37 @@ def _entity_type_note(a: str, b: str) -> str:
     return f" The legal entity type differs ({legal_entity_type(a)} vs {legal_entity_type(b)})."
 
 
+# A cut-off account name keeps at least this many words of the full name.
+_MIN_ACCOUNT_NAME_WORDS = 2
+
+
+def _account_name_cut_short(document: DocumentRecord, account_name: str, full_name: str) -> bool:
+    """
+    A bank statement's account name that the bank cut off at a word
+    boundary: OCBC prints one line of the name, so "CRIMSON TEXTILE
+    MANUFACTURING PTE LTD" comes out as "CRIMSON TEXTILE". It matches when
+    its words are the first whole words of the full name.
+
+    Bank statements only: elsewhere a shorter name is a different name. A
+    cut-off name has lost its legal suffix, so one that still carries a
+    suffix ("CRIMSON TEXTILE PTE LTD") is a different, shorter company,
+    and a partial word ("CRIMSON TEX") or a single word ("CRIMSON") is not
+    accepted.
+    """
+    if document.document_type != DocumentType.BANK_STATEMENT.value:
+        return False
+    if legal_entity_type(account_name) is not None:
+        return False
+    short, full = normalize_company_name(account_name), normalize_company_name(full_name)
+    if short is None or full is None:
+        return False
+    short_words, full_words = short.split(), full.split()
+    return (
+        _MIN_ACCOUNT_NAME_WORDS <= len(short_words) < len(full_words)
+        and full_words[: len(short_words)] == short_words
+    )
+
+
 def _strings(value: object) -> list[str]:
     if isinstance(value, str):
         return [value]
@@ -238,8 +271,11 @@ def check_company_name_consistency(
     for other in others:
         other_name = _company_name(other.extracted_fields)
         assert other_name is not None  # filtered above
-        matches = company_names_match(company_name, other_name) or (
-            other.document_type == DocumentType.UNRECOGNISED.value and _mentions(other, company_name)
+        matches = (
+            company_names_match(company_name, other_name)
+            or _account_name_cut_short(document, company_name, other_name)
+            or _account_name_cut_short(other, other_name, company_name)
+            or (other.document_type == DocumentType.UNRECOGNISED.value and _mentions(other, company_name))
         )
         result.compared_documents.append(ComparedDocument(
             document_id=other.id,
