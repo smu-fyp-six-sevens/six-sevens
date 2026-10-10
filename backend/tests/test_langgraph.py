@@ -237,6 +237,46 @@ def test_drop_unprinted_numbers_skips_when_text_has_no_figures():
     assert extract._drop_unprinted_numbers(result, "")["extracted_fields"] == {"net_pay": 5000}
 
 
+def test_drop_empty_fields_leaves_out_optional_fields_the_document_does_not_print():
+    # A statement with per-month totals only: the LLM returns the
+    # whole-statement totals empty and flags them as uncertain.
+    result = {
+        "extracted_fields": {
+            "bank_name": None,
+            "account_number": "123-456",
+            "transactions": [],
+            "holds": [],
+            "total_credits": None,
+            "total_debits": "  ",
+            "company_name": "ACME PTE LTD",
+        },
+        "field_confidences": {"total_credits": 0.3, "total_debits": 0.3, "company_name": 0.95},
+        "field_reasons": {"total_credits": "not printed", "total_debits": "not printed"},
+        "confidence": 0.5,
+    }
+    out = extract._drop_empty_fields(result, "bank_statement")
+    # Required fields stay even when empty, so they still count as missing;
+    # an empty list is kept as "none".
+    assert out["extracted_fields"] == {
+        "bank_name": None,
+        "account_number": "123-456",
+        "transactions": [],
+        "holds": [],
+        "company_name": "ACME PTE LTD",
+    }
+    assert out["field_confidences"] == {"company_name": 0.95}
+    assert out["field_reasons"] == {}
+    assert out["confidence"] == pytest.approx(0.95)
+    assert out["dropped_empty_fields"] == ["total_credits", "total_debits"]
+
+
+def test_drop_empty_fields_keeps_the_document_confidence_when_no_field_confidences_remain():
+    result = {"extracted_fields": {"total_credits": None}, "field_confidences": {"total_credits": 0.2}, "confidence": 0.8}
+    out = extract._drop_empty_fields(result, "bank_statement")
+    assert out["extracted_fields"] == {}
+    assert out["confidence"] == 0.8
+
+
 def test_split_prompt_for_caching_keeps_raw_text_separate_from_the_schema_prefix():
     prefix, text = extract._split_prompt_for_caching("payslip", "Net pay: 5000")
     assert text == "Net pay: 5000"

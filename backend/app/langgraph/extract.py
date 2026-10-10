@@ -11,7 +11,7 @@ import logging
 import re
 
 from ..config import settings
-from .extraction_prompts import build_extraction_prompt
+from .extraction_prompts import build_extraction_prompt, drop_empty_optional_fields
 from .. import telemetry
 
 logger = logging.getLogger("classifier_pipeline.langgraph.extract")
@@ -52,6 +52,7 @@ async def run_extraction(document_type: str, raw_text: str) -> dict:
         telemetry.record_usage(span, response)
         llm_output = response.content if isinstance(response.content, str) else str(response.content)
         result = _drop_unprinted_numbers(parse_extraction_output(llm_output), raw_text)
+        result = _drop_empty_fields(result, document_type)
         span.set_attribute("dropped_unprinted_fields", len(result.get("dropped_unprinted_fields", [])))
         return result
 
@@ -165,6 +166,28 @@ def _drop_unprinted_numbers(result: dict, raw_text: str) -> dict:
         logger.info("Dropped extracted fields not printed in the document: %s", dropped)
         result["confidence"] = _average_field_confidence(result.get("field_confidences", {}))
     result["dropped_unprinted_fields"] = dropped
+    return result
+
+
+def _drop_empty_fields(result: dict, document_type: str) -> dict:
+    """
+    An optional field the LLM returned as null ("not printed on this
+    document") is left out rather than stored empty, where manual review
+    would ask for a value that doesn't exist. See
+    extraction_prompts.drop_empty_optional_fields.
+    """
+    dropped = drop_empty_optional_fields(document_type, result.get("extracted_fields") or {})
+    confidences = result.get("field_confidences", {})
+    for name in dropped:
+        confidences.pop(name, None)
+        result.get("field_reasons", {}).pop(name, None)
+    if dropped:
+        logger.info("Dropped empty optional fields: %s", dropped)
+        # An empty field is usually one the LLM flagged as uncertain, so it
+        # no longer drags the document's confidence down.
+        if any(isinstance(v, (int, float)) for v in confidences.values()):
+            result["confidence"] = _average_field_confidence(confidences)
+    result["dropped_empty_fields"] = dropped
     return result
 
 
