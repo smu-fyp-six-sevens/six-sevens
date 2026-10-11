@@ -421,6 +421,43 @@ def test_decide_after_extract_escalation_past_budget_is_unresolved():
     assert _decide_after_extract(state) == "unresolved"
 
 
+def _redacted_ic_state(escalation: dict, *, basis: str = "certain_match") -> dict:
+    # redacted_ic.jpg: a rule trigger made it certainly an NRIC; its number is blacked out.
+    return {
+        "classification": {"document_type": "nric", "basis": basis},
+        "extraction": {"escalation": escalation},
+        "attempts": 0,
+    }
+
+
+def test_escalation_naming_the_same_type_is_not_a_reclassify():
+    from app.langgraph.graph import _decide_after_extract
+
+    escalation = {"reason": "This is a Singapore Identity Card", "suggested_document_type": "nric"}
+    assert _decide_after_extract(_redacted_ic_state(escalation)) == "analyzed"
+
+
+def test_escalation_without_another_type_on_a_certain_classification_is_not_a_reclassify():
+    from app.langgraph.graph import _decide_after_extract
+
+    escalation = {"reason": "NRIC number is absent from the OCR text"}
+    assert _decide_after_extract(_redacted_ic_state(escalation)) == "analyzed"
+
+
+def test_escalation_naming_a_different_type_still_reclassifies():
+    from app.langgraph.graph import _decide_after_extract
+
+    escalation = {"reason": "This is a passport", "suggested_document_type": "passport"}
+    assert _decide_after_extract(_redacted_ic_state(escalation)) == "reclassify"
+
+
+def test_escalation_without_another_type_on_an_uncertain_classification_still_reclassifies():
+    from app.langgraph.graph import _decide_after_extract
+
+    escalation = {"reason": "Doesn't look like an NRIC"}
+    assert _decide_after_extract(_redacted_ic_state(escalation, basis="uncorroborated")) == "reclassify"
+
+
 def test_get_document_graph_builds_once_and_caches():
     pytest.importorskip("langgraph", reason="langgraph not installed — see requirements.txt")
     from app.langgraph import graph as document_graph_module
