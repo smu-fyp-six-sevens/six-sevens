@@ -1243,3 +1243,31 @@ def test_bank_identifiers_skips_a_value_not_shaped_like_the_identifier() -> None
     assert [f for f in outcome.findings if f.check_code == "BS.BANK_IDENTIFIERS"] == []
     skip = next(s for s in outcome.skipped if s.check_code == "BS.BANK_IDENTIFIERS")
     assert "isn't shaped like a SWIFT BIC" in skip.reason
+
+
+def test_nric_checksum_reads_nested_rows_and_reports_each_number_once() -> None:
+    shareholders = [{"name": "NG BEE LENG", "identification_no": "S7845632F"}]
+    result = _run(
+        [_field("shareholders", shareholders), _field("notes", "Ng Bee Leng (S7845632F) subscribed 100,000 shares"),
+         _field("subscriber_2_id", "S7845632F")],
+        document_type="company_constitution",
+    )
+    findings = _codes(result, "ID.NRIC_CHECKSUM")
+    assert len(findings) == 1
+    # The ID field is named before the table row, and free text last.
+    assert findings[0].field == "subscriber_2_id"
+    assert findings[0].summary.startswith("S7845632F in Subscriber 2 ID has an invalid check letter")
+    assert "Also printed in Shareholder 1 (NG BEE LENG), Identification No and Notes" in findings[0].summary
+
+
+def test_nric_finding_needs_review_only_if_every_copy_was_extracted_with_low_confidence() -> None:
+    def run(flat_confidence: float, table_confidence: float):
+        fields = [
+            ExtractedField(field_name="nric_number", field_type="string", field_value="S8934521C", confidence=flat_confidence),
+            ExtractedField(field_name="shareholders", field_type="array",
+                           field_value=[{"name": "CHIA WEI MING", "identification_no": "S8934521C"}], confidence=table_confidence),
+        ]
+        return _codes(_run(fields, document_type="certificate_of_incumbency"), "ID.NRIC_CHECKSUM")[0]
+
+    assert run(0.75, 1.0).needs_review is False  # the table read it confidently
+    assert run(0.75, 0.75).needs_review is True

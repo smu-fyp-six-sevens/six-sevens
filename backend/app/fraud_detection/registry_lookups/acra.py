@@ -39,7 +39,8 @@ REGISTERED_ADDRESS_TYPES = frozenset({"certificate_of_incumbency"})
 
 _GONE_RE = re.compile(r"struck off|deregistered|dissolved|ceased|cancel|terminated|expired|amalgamated", re.I)
 _DISTRESS_RE = re.compile(r"liquidation|judicial management|receivership|winding up", re.I)
-_POSTAL_RE = re.compile(r"\b(\d{6})\b")
+# Six digits not part of a longer number, so "S049514" and "Singapore 049514" both count.
+_POSTAL_RE = re.compile(r"(?<!\d)(\d{6})(?!\d)")
 
 
 @dataclass(frozen=True)

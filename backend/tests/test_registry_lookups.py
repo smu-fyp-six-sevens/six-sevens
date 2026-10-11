@@ -216,3 +216,20 @@ async def test_address_needs_the_whole_road_name_not_just_the_block_and_town() -
     assert len(_codes(wrong_road, "REG.ADDRESS_MATCH")) == 1
     assert len(_codes(wrong_block, "REG.ADDRESS_MATCH")) == 1
     assert abbreviated.findings == []
+
+
+async def test_addresses_in_a_table_are_checked_once_however_often_they_are_printed() -> None:
+    # The NRIC_8823 shareholder's address, printed three ways across the constitution's fields.
+    fields = [
+        _field("shareholders", [{"name": "NG BEE LENG", "address": "22 BEDOK NORTH AVENUE 3, #10-12, SINGAPORE 460022"}]),
+        _field("subscriber_2_address", "22 Bedok North Avenue 3, #10-12, Singapore 460022"),
+        _field("individual_address", ["Blk 22 Bedok Nth Ave 3 #10-12 S460022"]),
+    ]
+    lookup = AsyncMock(return_value=_BEDOK_22)
+    with patch("app.fraud_detection.registry_lookups.onemap.addresses_at_postal_code", lookup):
+        result = await verify_against_registries("d", fields, "company_constitution")
+    findings = _codes(result, "REG.ADDRESS_MATCH")
+    assert len(findings) == 1 and lookup.await_count == 1
+    assert findings[0].field == "subscriber_2_address"
+    assert findings[0].summary.startswith("Subscriber 2 Address gives")
+    assert "Also printed in Shareholder 1 (NG BEE LENG), Address and Individual Address 1" in findings[0].summary

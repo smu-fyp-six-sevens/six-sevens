@@ -18,6 +18,8 @@ class RegistryFinding(BaseModel):
     needs_review: bool = False
     severity_note: str | None = None
     summary: str
+    # Other fields the same value was extracted from; needs_review uses the most confident of them.
+    also_fields: list[str] = []
 
 
 class RegistryResult(BaseModel):

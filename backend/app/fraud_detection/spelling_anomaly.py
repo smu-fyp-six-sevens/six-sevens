@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import importlib.resources
-import json
 import logging
 import mimetypes
 import re
@@ -13,6 +12,7 @@ from symspellpy import SymSpell, Verbosity
 
 from ..ingestion.ingestion_service import ingest_document
 from .domain_terms import DOMAIN_TERMS
+from .field_values import text_values
 from .font_consistency import ExtractedField
 
 logger = logging.getLogger("fraud_detection.spelling_anomaly")
@@ -237,24 +237,6 @@ def _tokenize(text: str) -> list[str]:
     return [word for word in words if len(word) >= MIN_WORD_LENGTH]
 
 
-def _decode_field_text(value: object) -> str | None:
-    """
-    field_value comes back from the JSON-typed extracted_fields column as
-    whatever native type the stored JSON value is, and some string values
-    are themselves JSON-encoded a second time (e.g. '"ACME Pte Ltd"' instead
-    of 'ACME Pte Ltd') — same quirk font_consistency._field_search_text
-    documents. One decode attempt, falling back to the value itself.
-    """
-    if isinstance(value, str):
-        try:
-            decoded = json.loads(value)
-        except (json.JSONDecodeError, TypeError):
-            decoded = value
-    else:
-        decoded = value
-    return decoded if isinstance(decoded, str) else None
-
-
 def _known_terms_from_extracted_fields(fields: list[ExtractedField] | None) -> set[str]:
     """
     Words drawn from the document's own already-extracted field values
@@ -267,11 +249,9 @@ def _known_terms_from_extracted_fields(fields: list[ExtractedField] | None) -> s
     that replaces sending ambiguous words to an LLM for judgement.
     """
     known: set[str] = set()
-    for field in fields or []:
-        text = _decode_field_text(field.field_value)
-        if text is None:
-            continue
-        known.update(word.lower() for word in _tokenize(text))
+    # Nested values too: a name or address that only appears in a table field (shareholders, officers).
+    for value in text_values({field.field_name: field.field_value for field in fields or []}):
+        known.update(word.lower() for word in _tokenize(value.text))
     return known
 
 

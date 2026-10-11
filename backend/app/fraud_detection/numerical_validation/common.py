@@ -100,7 +100,7 @@ def _bank_reference(bank_name: Any) -> dict | None:
 
 def _decode(value: Any) -> Any:
     """Extracted field values are sometimes JSON-encoded a second time —
-    the same quirk spelling_anomaly._decode_field_text documents."""
+    the same quirk field_values._decoded handles."""
     if isinstance(value, str):
         try:
             import json
@@ -332,6 +332,10 @@ def _apply_needs_review(
     file on every check run just to sanity-check a field a human has
     already verified).
 
+    A value extracted in several places (also_fields) uses the most
+    confident of them: one confident reading is enough to rule out an
+    extraction artefact.
+
     A finding with no `field` (nothing to look up) is never downgraded.
     """
     if not findings:
@@ -340,9 +344,10 @@ def _apply_needs_review(
     updated: list[FindingT] = []
 
     for finding in findings:
-        base_field = (finding.field or "").split("[")[0]
-        confidence = confidences.get(base_field)
-        low_confidence = confidence is not None and confidence < settings.EXTRACTION_CONFIDENCE_THRESHOLD
+        # A nested value's path ("shareholders[1].address", "officer.address") comes from its top-level field.
+        paths = [finding.field or "", *getattr(finding, "also_fields", [])]
+        known = [c for p in paths if (c := confidences.get(re.split(r"[\[.]", p, maxsplit=1)[0])) is not None]
+        low_confidence = bool(known) and max(known) < settings.EXTRACTION_CONFIDENCE_THRESHOLD
 
         if low_confidence and not finding.needs_review:
             updated.append(finding.model_copy(update={"needs_review": True}))
@@ -364,11 +369,12 @@ CheckResult = tuple[list[NumericalFinding], SkippedCheck | None]
 def _finding(
     code: str, severity: Severity, summary: str, *,
     field: str | None = None, stated: str | None = None, expected: str | None = None,
-    severity_note: str | None = None,
+    severity_note: str | None = None, also_fields: list[str] | None = None,
 ) -> NumericalFinding:
     return NumericalFinding(
         check_code=code, severity=severity, summary=summary,
         field=field, stated=stated, expected=expected, severity_note=severity_note,
+        also_fields=also_fields or [],
     )
 
 
