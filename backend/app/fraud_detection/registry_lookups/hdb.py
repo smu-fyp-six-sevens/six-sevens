@@ -23,11 +23,11 @@ class HdbBlock:
     commercial: bool
 
 
-def _tokens(street: str) -> list[str]:
+def street_tokens(street: str) -> list[str]:
     return re.sub(r"[^A-Z0-9 ]", "", street.upper()).split()
 
 
-def _abbreviates(short: str, full: str) -> bool:
+def abbreviates(short: str, full: str) -> bool:
     """HDB abbreviates street words (ST, AVE, CTRL, NTH, C'WEALTH): the short form's
     letters appear in order in the full word, starting with the same letter."""
     if short == full:
@@ -39,8 +39,8 @@ def _abbreviates(short: str, full: str) -> bool:
 
 
 def same_street(hdb_street: str, road_name: str) -> bool:
-    short, full = _tokens(hdb_street), _tokens(road_name)
-    return len(short) == len(full) and all(_abbreviates(s, f) for s, f in zip(short, full))
+    short, full = street_tokens(hdb_street), street_tokens(road_name)
+    return len(short) == len(full) and all(abbreviates(s, f) for s, f in zip(short, full))
 
 
 async def hdb_block(block: str, road_name: str) -> HdbBlock | None:

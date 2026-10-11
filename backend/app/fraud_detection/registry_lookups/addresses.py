@@ -24,10 +24,6 @@ RESIDENTIAL_ADDRESS_TYPES = frozenset({"nric", "credit_report", "proof_of_addres
 
 _POSTAL_RE = re.compile(r"(?:singapore|s)?\s*\(?\b(\d{6})\b\)?", re.IGNORECASE)
 _BLOCK_RE = re.compile(r"^\s*(?:blk|block)?\s*(\d{1,4}[A-Z]?)\b(?!\s*-)", re.IGNORECASE)
-# Words that say what kind of road it is, or a direction; not what distinguishes it.
-_GENERIC = frozenset("""STREET ST AVENUE AVE ROAD RD DRIVE DR CRESCENT CRES CLOSE CL PLACE PL LANE LN WAY
-    TERRACE TER LINK LK WALK VIEW RISE GROVE CENTRAL CTRL NORTH NTH SOUTH STH EAST WEST UPPER UPP LOWER
-    SINGAPORE BLK BLOCK""".split())
 
 
 def _address_fields(fields: dict[str, Any], document_type: str | None) -> list[tuple[str, str]]:
@@ -42,25 +38,38 @@ def _is_residential_field(name: str, document_type: str | None) -> bool:
     return name in RESIDENTIAL_FIELDS or (name == "address" and document_type in RESIDENTIAL_ADDRESS_TYPES)
 
 
-def _distinctive(text: str) -> set[str]:
-    words = re.sub(r"[^A-Z ]", " ", text.upper()).split()
-    return {w for w in words if w not in _GENERIC and len(w) > 1}
-
-
 def _street_part(address: str) -> str:
     """The text before the unit number, postal code or first comma."""
     return re.split(r"#|,|\bsingapore\b|\(?s\)?\s*\d{6}", address, maxsplit=1, flags=re.IGNORECASE)[0]
 
 
+def _names_in(address: str, name: str) -> bool:
+    """The address contains this road or building name, word for word, allowing abbreviations either way
+    ("BEDOK NTH AVE 3" for "BEDOK NORTH AVENUE 3"). Every word counts, direction and number included:
+    Bedok North Avenue 3 is not Bedok South Avenue 1."""
+    wanted = hdb.street_tokens(name)
+    words = hdb.street_tokens(address)
+    if not wanted or wanted == ["NIL"]:
+        return False
+    return any(
+        all(hdb.abbreviates(w, n) or hdb.abbreviates(n, w) for w, n in zip(words[i:i + len(wanted)], wanted))
+        for i in range(len(words) - len(wanted) + 1)
+    )
+
+
 def _matches(address: str, results: list[dict]) -> bool:
+    """Some building at the postal code has the address's block number (if it gives one) and its road or
+    building name. Both must hold for the same building: a matching block number on another road isn't it."""
     block = _BLOCK_RE.match(address)
-    words = _distinctive(_street_part(address))
+    street = _street_part(address)
+    if not block and not re.search(r"[A-Za-z]{2}", street):
+        return True  # nothing to compare
     for result in results:
-        if block and block.group(1).upper() == str(result.get("BLK_NO", "")).upper():
+        if block and block.group(1).upper() != str(result.get("BLK_NO", "")).upper():
+            continue
+        if _names_in(address, str(result.get("ROAD_NAME", ""))) or _names_in(address, str(result.get("BUILDING", ""))):
             return True
-        if words and words & _distinctive(f"{result.get('ROAD_NAME', '')} {result.get('BUILDING', '')}"):
-            return True
-    return not block and not words  # nothing to compare
+    return False
 
 
 def _finding(code: str, severity: Any, summary: str, source: str, **kwargs: Any) -> RegistryFinding:

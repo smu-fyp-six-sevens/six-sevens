@@ -197,3 +197,22 @@ def test_hdb_street_abbreviations_match_onemap_road_names() -> None:
     assert same_street("C'WEALTH CRES", "COMMONWEALTH CRESCENT")
     assert same_street("BEDOK STH AVE 1", "BEDOK SOUTH AVENUE 1")
     assert not same_street("BEDOK NTH AVE 1", "BEDOK SOUTH AVENUE 1")
+
+
+_BEDOK_22 = [{"BLK_NO": "22", "ROAD_NAME": "BEDOK SOUTH AVENUE 1", "BUILDING": "NIL",
+              "ADDRESS": "22 BEDOK SOUTH AVENUE 1 SINGAPORE 460022", "POSTAL": "460022"}]
+
+
+async def test_address_needs_the_whole_road_name_not_just_the_block_and_town() -> None:
+    # Regression: the NRIC_8823 back gives "22 Bedok North Avenue 3", but 460022 is 22 Bedok South Avenue 1.
+    # A matching block number and the word "Bedok" used to be enough.
+    with patch("app.fraud_detection.registry_lookups.onemap.addresses_at_postal_code", AsyncMock(return_value=_BEDOK_22)):
+        wrong_road = await verify_against_registries(
+            "d", [_field("individual_address", "22 BEDOK NORTH AVENUE 3 #10-12 SINGAPORE 460022")], "nric")
+        wrong_block = await verify_against_registries(
+            "d", [_field("company_address", "23 Bedok South Avenue 1 Singapore 460022")], "payslip")
+        abbreviated = await verify_against_registries(
+            "d", [_field("company_address", "Blk 22 Bedok Sth Ave 1 #03-11 S460022")], "payslip")
+    assert len(_codes(wrong_road, "REG.ADDRESS_MATCH")) == 1
+    assert len(_codes(wrong_block, "REG.ADDRESS_MATCH")) == 1
+    assert abbreviated.findings == []
