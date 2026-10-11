@@ -267,6 +267,7 @@ async def extract_node(state: DocumentGraphState) -> dict:
         "field_count": len(extraction.get("extracted_fields") or {}),
         "dropped_unprinted_fields": extraction.get("dropped_unprinted_fields", []),
         "dropped_empty_fields": extraction.get("dropped_empty_fields", []),
+        "dropped_period_totals": extraction.get("dropped_period_totals", []),
         "escalation": extraction.get("escalation"),
         # The agent's own reasoning for each field it wasn't confident in — not persisted to the
         # extracted_fields table, visible here in the trace only (see extract.py's field_reasons).

@@ -277,6 +277,41 @@ def test_drop_empty_fields_keeps_the_document_confidence_when_no_field_confidenc
     assert out["confidence"] == 0.8
 
 
+_THREE_MONTH_TEXT = (
+    "Total   36,182.85   70,506.33   Balance Carried Forward   109,129.65\n"
+    "Total   54,836.12   51,736.01\n"
+    "Total   42,639.19   47,306.64"
+)
+
+
+def test_drop_period_totals_removes_a_month_copied_into_the_statement_totals():
+    # AcctStatement_MWS: the LLM put June's totals in total_credits/total_debits.
+    result = {
+        "extracted_fields": {
+            "total_credits": "70,506.33", "total_debits": "36,182.85",
+            "june_total_deposits": "70,506.33", "june_total_withdrawals": "36,182.85",
+        },
+        "field_confidences": {"total_credits": 0.85, "total_debits": 0.85},
+    }
+    out = extract._drop_period_totals(result, _THREE_MONTH_TEXT)
+    assert out["dropped_period_totals"] == ["total_credits", "total_debits"]
+    assert set(out["extracted_fields"]) == {"june_total_deposits", "june_total_withdrawals"}
+    assert out["field_confidences"] == {}
+
+
+def test_drop_period_totals_catches_a_copy_from_the_printed_total_lines_alone():
+    result = {"extracted_fields": {"total_credits": "51,736.01"}, "field_confidences": {}}
+    assert extract._drop_period_totals(result, _THREE_MONTH_TEXT)["extracted_fields"] == {}
+
+
+def test_drop_period_totals_keeps_a_single_whole_statement_total():
+    text = "Total Credits SGD 169,548.98\nTotal Debits SGD 35.00"
+    fields = {"total_credits": "169,548.98", "total_deposits": "169,548.98", "total_debits": "35.00"}
+    out = extract._drop_period_totals({"extracted_fields": dict(fields), "field_confidences": {}}, text)
+    assert out["extracted_fields"] == fields
+    assert out["dropped_period_totals"] == []
+
+
 def test_split_prompt_for_caching_keeps_raw_text_separate_from_the_schema_prefix():
     prefix, text = extract._split_prompt_for_caching("payslip", "Net pay: 5000")
     assert text == "Net pay: 5000"

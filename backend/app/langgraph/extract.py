@@ -53,6 +53,7 @@ async def run_extraction(document_type: str, raw_text: str) -> dict:
         llm_output = response.content if isinstance(response.content, str) else str(response.content)
         result = _drop_unprinted_numbers(parse_extraction_output(llm_output), raw_text)
         result = _drop_empty_fields(result, document_type)
+        result = _drop_period_totals(result, raw_text)
         span.set_attribute("dropped_unprinted_fields", len(result.get("dropped_unprinted_fields", [])))
         return result
 
@@ -166,6 +167,54 @@ def _drop_unprinted_numbers(result: dict, raw_text: str) -> dict:
         logger.info("Dropped extracted fields not printed in the document: %s", dropped)
         result["confidence"] = _average_field_confidence(result.get("field_confidences", {}))
     result["dropped_unprinted_fields"] = dropped
+    return result
+
+
+_STATEMENT_TOTAL_FIELDS = ("total_credits", "total_debits")
+# A bare "Total" row followed by figures (one per month or page). A labelled
+# "Total Credits 169,548.98" line is a whole-statement total, not one of these.
+_TOTAL_LINE_RE = re.compile(r"\s*total\s*:?\s*[-(]?\d", re.IGNORECASE)
+# A field named for one period ("june_total_deposits", "q2_total", "period_2_total").
+_PERIOD_KEY_RE = re.compile(
+    r"jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|month|period|q[1-4]|20\d\d", re.IGNORECASE
+)
+
+
+def _drop_period_totals(result: dict, raw_text: str) -> dict:
+    """
+    total_credits/total_debits are whole-statement totals. A statement that
+    prints one "Total" line per month has none, but the LLM tends to copy
+    the first month's figures into them anyway: printed, so
+    _drop_unprinted_numbers keeps them, and BS.TOTALS then compares one
+    month's total with every month's transactions. Dropped when the figure
+    is also extracted as one period's total (june_total_deposits), or sits
+    on one of two or more bare "Total" rows.
+    """
+    fields = result.get("extracted_fields") or {}
+    total_lines = [line for line in (raw_text or "").splitlines() if _TOTAL_LINE_RE.match(line)]
+    per_period_lines = total_lines if len(total_lines) >= 2 else []
+    dropped = []
+    for name in _STATEMENT_TOTAL_FIELDS:
+        figure = _as_figure(fields.get(name))
+        if figure is None:
+            continue
+        copied = any(
+            other not in _STATEMENT_TOTAL_FIELDS and "total" in other.lower() and _PERIOD_KEY_RE.search(other)
+            and _as_figure(value) is not None and abs(_as_figure(value) - figure) < 0.005
+            for other, value in fields.items()
+        )
+        on_period_line = any(
+            abs(float(token.replace(",", "")) - figure) < 0.005
+            for line in per_period_lines for token in _TEXT_NUMBER_RE.findall(line)
+        )
+        if copied or on_period_line:
+            dropped.append(name)
+            del fields[name]
+            result.get("field_confidences", {}).pop(name, None)
+            result.get("field_reasons", {}).pop(name, None)
+    if dropped:
+        logger.info("Dropped whole-statement totals that are one period's total: %s", dropped)
+    result["dropped_period_totals"] = dropped
     return result
 
 
