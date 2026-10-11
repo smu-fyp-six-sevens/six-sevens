@@ -1000,6 +1000,19 @@ def test_acra_officers_flags_no_director() -> None:
     assert len(_codes(result, "ACRA.OFFICERS")) == 1
 
 
+def test_acra_officers_reads_the_role_whatever_its_column_is_called() -> None:
+    # A real ACRA extract: the role column was transcribed as "position_held".
+    officers = [
+        {"name": "CHIA WEI MING", "position_held": "Director", "date_of_appointment": "15/03/2022"},
+        {"name": "RAJESWARI D/O MUTHUSAMY", "position_held": "Secretary", "date_of_appointment": "09/05/2022"},
+    ]
+    result = _run(
+        [_field("officers", officers), _field("incorporation_date", "2022-03-15")],
+        document_type="certificate_of_incumbency",
+    )
+    assert _codes(result, "ACRA.OFFICERS") == []
+
+
 def test_acra_capital_per_share_flags_an_implausible_per_share_value() -> None:
     result = _run(
         [_field("share_capital", "2000000"), _field("issued_shares", "1")],
@@ -1097,6 +1110,34 @@ def test_mrz_checkdigits_flags_corrupted_check_digit() -> None:
     lines[1] = lines[1][:9] + corrupted_char + lines[1][10:]
     result = _run([_field("mrz", "\n".join(lines))], document_type="passport")
     assert len(_codes(result, "ID.MRZ_CHECKDIGITS")) >= 1
+
+
+# The C067 passport as extracted: the LLM wrote one "<" too many in the run
+# after the name, and OCR read the printed ID's check letter I as a 1.
+_C067_MRZ_LINE1 = "PASGPCHIA<<WEI<MING<<<<<<<<<<<<<<<<<<<<<<<<<"
+_C067_MRZ_LINE2 = "K5690850D0SGP8904126F3511060S8934521I<<<<<22"
+
+
+def test_a_miscounted_run_of_mrz_filler_is_not_a_format_error() -> None:
+    too_long = _C067_MRZ_LINE1 + "<"
+    too_short = _C067_MRZ_LINE2.replace("<<<<<", "<<<<", 1)
+    for mrz in (too_long + "\n" + _C067_MRZ_LINE2, _C067_MRZ_LINE1 + "\n" + too_short):
+        result = _run([_field("mrz", mrz)], document_type="passport")
+        assert _codes(result, "ID.MRZ_FORMAT") == []
+        assert _codes(result, "ID.MRZ_CHECKDIGITS") == []
+
+
+def test_an_mrz_line_well_off_44_is_still_a_format_error() -> None:
+    mrz = _C067_MRZ_LINE1 + "<<<" + "\n" + _C067_MRZ_LINE2
+    assert len(_codes(_run([_field("mrz", mrz)], document_type="passport"), "ID.MRZ_FORMAT")) == 1
+
+
+def test_mrz_vs_viz_allows_letters_ocr_reads_as_digits() -> None:
+    mrz = _C067_MRZ_LINE1 + "\n" + _C067_MRZ_LINE2
+    misread = _run([_field("mrz", mrz), _field("nric_number", "S89345211")], document_type="passport")
+    assert _codes(misread, "ID.MRZ_VS_VIZ") == []
+    different = _run([_field("mrz", mrz), _field("nric_number", "S8934521J")], document_type="passport")
+    assert len(_codes(different, "ID.MRZ_VS_VIZ")) == 1
 
 
 def test_mrz_vs_viz_flags_passport_number_mismatch() -> None:

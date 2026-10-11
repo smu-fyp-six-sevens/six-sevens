@@ -21,9 +21,9 @@ pandas>=2.1
 # LangGraph pipeline (backend/app/langgraph) — imported unconditionally by
 # main.py (via queue_service -> langgraph.pipeline -> langgraph.graph), so
 # these are hard runtime dependencies, not optional.
-langgraph>=0.2,<0.3
-langchain-anthropic>=0.3,<0.4
-langgraph-checkpoint-postgres>=2.0,<3.0
+langgraph>=1.2,<2.0
+langchain-anthropic>=1.7,<2.0
+langgraph-checkpoint-postgres>=3.0,<4.0
 psycopg[binary,pool]>=3.1,<4.0
 
 # Observability (see app/telemetry.py) — also imported unconditionally by

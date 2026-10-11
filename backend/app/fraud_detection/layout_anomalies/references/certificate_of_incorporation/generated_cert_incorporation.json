@@ -1,0 +1,200 @@
+{
+ "name": "generated_cert_incorporation",
+ "document_type": "certificate_of_incorporation",
+ "labels": [
+  {
+   "page": 0,
+   "x0": 52.5,
+   "x1": 488.9998474121094,
+   "baseline": 233.25,
+   "bottom": 239.00625610351562,
+   "text": "certificate confirming incorporation of company"
+  },
+  {
+   "page": 0,
+   "x0": 52.5,
+   "x1": 204.23399353027344,
+   "baseline": 279.0,
+   "bottom": 281.46673583984375,
+   "text": "this certificate is presented to"
+  },
+  {
+   "page": 0,
+   "x0": 52.5,
+   "x1": 83.66848754882812,
+   "baseline": 369.7499694824219,
+   "bottom": 372.2167053222656,
+   "text": "of uen"
+  },
+  {
+   "page": 0,
+   "x0": 52.5,
+   "x1": 231.7312469482422,
+   "baseline": 489.7499694824219,
+   "bottom": 492.2167053222656,
+   "text": "the company was formerly known as:"
+  },
+  {
+   "page": 0,
+   "x0": 52.5,
+   "x1": 115.85248565673828,
+   "baseline": 513.0,
+   "bottom": 515.302490234375,
+   "text": "previous name(s)"
+  },
+  {
+   "page": 0,
+   "x0": 483.18060302734375,
+   "x1": 535.275634765625,
+   "baseline": 513.0,
+   "bottom": 515.302490234375,
+   "text": "effective from"
+  },
+  {
+   "page": 0,
+   "x0": 52.5,
+   "x1": 357.6479187011719,
+   "baseline": 536.699951171875,
+   "bottom": 538.4939575195312,
+   "text": "only the 5 most recent former names are listed. any change in name effected before 13 jan 2003 will not be listed."
+  },
+  {
+   "page": 0,
+   "x0": 353.7756042480469,
+   "x1": 446.2956237792969,
+   "baseline": 769.1397705078125,
+   "bottom": 771.4422607421875,
+   "text": "verify document instantly"
+  },
+  {
+   "page": 0,
+   "x0": 353.7756042480469,
+   "x1": 493.8232421875,
+   "baseline": 787.1397705078125,
+   "bottom": 789.3822631835938,
+   "text": "check if this document is issued by acra"
+  },
+  {
+   "page": 0,
+   "x0": 353.7756042480469,
+   "x1": 412.14068603515625,
+   "baseline": 797.6397705078125,
+   "bottom": 799.8822631835938,
+   "text": "and is up-to-date."
+  },
+  {
+   "page": 0,
+   "x0": 52.5,
+   "x1": 233.29193115234375,
+   "baseline": 797.1897583007812,
+   "bottom": 799.2080078125,
+   "text": "asst registrar of companies & business names"
+  },
+  {
+   "page": 0,
+   "x0": 52.5,
+   "x1": 289.90423583984375,
+   "baseline": 806.30224609375,
+   "bottom": 808.3204956054688,
+   "text": "accounting and corporate regulatory authority singapore"
+  },
+  {
+   "page": 0,
+   "x0": 353.7756042480469,
+   "x1": 500.07489013671875,
+   "baseline": 814.8897705078125,
+   "bottom": 816.9080200195312,
+   "text": "https://www.acratrustbar.gov.sg/verify/4n3niedm"
+  }
+ ],
+ "slots": [
+  {
+   "page": 0,
+   "x0": 52.5,
+   "x1": 289.80303955078125,
+   "baseline": 306.0,
+   "bottom": 309.91424560546875,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 52.5,
+   "x1": 221.58294677734375,
+   "baseline": 333.7499694824219,
+   "bottom": 336.44097900390625,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 52.5,
+   "x1": 125.50652313232422,
+   "baseline": 396.7499694824219,
+   "bottom": 400.6642150878906,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 52.5,
+   "x1": 442.50006103515625,
+   "baseline": 437.9999694824219,
+   "bottom": 440.53271484375,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 52.5,
+   "x1": 160.70700073242188,
+   "baseline": 450.7499694824219,
+   "bottom": 453.28271484375,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 52.5,
+   "x1": 149.6797332763672,
+   "baseline": 524.25,
+   "bottom": 526.2682495117188,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 498.12359619140625,
+   "x1": 535.2755737304688,
+   "baseline": 524.25,
+   "bottom": 526.2682495117188,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 52.5,
+   "x1": 107.05199432373047,
+   "baseline": 776.8272705078125,
+   "bottom": 780.42724609375,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 52.5,
+   "x1": 102.00450134277344,
+   "baseline": 788.0772705078125,
+   "bottom": 790.1495361328125,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 52.5,
+   "x1": 166.92608642578125,
+   "baseline": 815.414794921875,
+   "bottom": 817.4330444335938,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 52.5,
+   "x1": 130.1722869873047,
+   "baseline": 824.5272827148438,
+   "bottom": 826.5455322265625,
+   "text": null
+  }
+ ]
+}

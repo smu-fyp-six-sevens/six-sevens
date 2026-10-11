@@ -672,6 +672,32 @@ def schema_field_names(document_type: str) -> list[str]:
     return [*schema.get("required", []), *schema.get("additional", [])]
 
 
+def drop_empty_optional_fields(document_type: str | None, fields: dict) -> list[str]:
+    """
+    Removes, in place, every field whose value is None or a blank string,
+    unless the document type requires it. An optional field the document
+    doesn't print (a statement with per-month totals only has no
+    total_credits) is absent, not a field with nothing in it: stored as an
+    empty row, it shows up in manual review as a field to fill in, and the
+    reviewer can't make it go away.
+
+    A required field stays even when empty, so it still counts as missing
+    (case_service.missing_required_fields). Empty lists and objects are
+    left alone: some checks read [] as "none", which is not the same as
+    "not extracted". Returns the names removed.
+    """
+    schema = EXTRACTION_SCHEMAS.get(document_type or "", {})
+    required = {*schema.get("required", []), *schema.get("required_when_individual", [])}
+    dropped = [
+        name for name, value in fields.items()
+        if name not in required
+        and (value is None or (isinstance(value, str) and not value.strip()))
+    ]
+    for name in dropped:
+        del fields[name]
+    return dropped
+
+
 # The "0.9" below mirrors settings.EXTRACTION_CONFIDENCE_THRESHOLD (the point past which a field
 # needs no manual review) — kept as a literal since this is prompt text, not code.
 _FIELD_WRAPPER_INSTRUCTIONS = (

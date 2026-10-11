@@ -53,8 +53,18 @@ def test_extract_supported_metadata_treats_blank_string_as_absent() -> None:
 def test_unable_to_assess_when_metadata_is_empty() -> None:
     result = check_metadata_anomalies("doc-1", {})
     assert result.unable_to_assess is True
-    assert "No metadata was captured" in result.unable_to_assess_reason
+    # exiftool always reports basic file details, so empty means it didn't run.
+    assert "exiftool wasn't available" in result.unable_to_assess_reason
+    assert "didn't run" in result.unable_to_assess_reason
     assert result.anomalies == []
+
+
+def test_unable_to_assess_reports_the_recorded_extraction_failure() -> None:
+    result = check_metadata_anomalies(
+        "doc-1", {"MetadataExtractionError": "exiftool is not installed on the server that processed this document"}
+    )
+    assert result.unable_to_assess is True
+    assert "couldn't be read when it was uploaded: exiftool is not installed" in result.unable_to_assess_reason
 
 
 def test_unable_to_assess_when_metadata_is_none() -> None:

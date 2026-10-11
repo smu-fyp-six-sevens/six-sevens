@@ -11,6 +11,7 @@ from app.fraud_detection.spelling_anomaly import (
     _find_candidates,
     _known_terms_from_extracted_fields,
     _looks_like_probable_proper_noun,
+    _strip_non_prose,
     _tokenize,
     check_spelling_anomalies,
 )
@@ -23,6 +24,51 @@ def test_tokenize_normalizes_punctuation_and_drops_short_tokens() -> None:
     # around the digits, which MIN_WORD_LENGTH then drops, same as the
     # standalone "A".
     assert words == ["Helllo", "Mr", "O'Brien"]
+
+
+def test_tokenize_drops_possessive_s() -> None:
+    assert _tokenize("the Bank's and Borrower's assets") == ["the", "Bank", "and", "Borrower", "assets"]
+
+
+def test_tokenize_ignores_letters_touching_digits() -> None:
+    # Reference/account codes: the letters aren't pulled out as words.
+    assert _tokenize("EBACT51059664352 0016RF7097939 verify/4n3NIEdM ok") == ["verify", "ok"]
+
+
+def test_strip_non_prose_removes_urls_emails_and_mrz() -> None:
+    result = _strip_non_prose([
+        "See https://www.iras.gov.sg/taxes or mytax.iras.gov.sg now",
+        "Email ops@bank.com.sg today",
+        "PASGP<<MUHAMMAD<FAIZ<BIN<AHMAD<<<<<<",
+    ])
+    assert _tokenize(" ".join(result)) == ["See", "or", "now", "Email", "today"]
+
+
+def test_strip_non_prose_drops_url_continued_on_the_next_span() -> None:
+    # A wrapped URL would otherwise be rejoined by _dehyphenate_spans into a
+    # fake word ("for-" + "account" -> "foraccount").
+    result = _strip_non_prose([
+        "https://www.iras.gov.sg/basic-information-for-",
+        "account-holders-of-financial-institutions and more",
+        "plain text-",
+        "continues here",
+    ])
+    assert _tokenize(" ".join(_dehyphenate_spans(result))) == ["and", "more", "plain", "textcontinues", "here"]
+
+
+def test_strip_non_prose_removes_roman_enumerators_and_plural_suffixes() -> None:
+    result = _strip_non_prose(["(iv) the beneficiary(ies) or class(es); ix) any (vi) trust"])
+    assert _tokenize(result[0]) == ["the", "beneficiary", "or", "class", "any", "trust"]
+
+
+def test_strip_non_prose_removes_company_names_ending_in_a_legal_suffix() -> None:
+    result = _strip_non_prose([
+        "Employer: Ivory Pharma Distribution Pte. Ltd., Singapore",
+        "EVERBRIGHT CONSTRUCTION PTE LTD",
+        "Kallang Corporate Management Pte Ltd and Merlion Holdings LLP",
+        "Helllo Everbright workers",  # no legal suffix -> still checked
+    ])
+    assert _tokenize(" ".join(result)) == ["Employer", "Singapore", "and", "Helllo", "Everbright", "workers"]
 
 
 def test_tokenize_skips_urls_domains_and_emails() -> None:
@@ -186,7 +232,7 @@ def test_looks_like_probable_proper_noun_false_when_suggestion_exists() -> None:
 def test_looks_like_probable_proper_noun_false_when_lowercase() -> None:
     # A lowercase, totally-unrecognised token (no suggestion) doesn't match
     # the "proper noun" pattern — kept as an anomaly rather than suppressed.
-    pages = [{"page_number": 1, "elements": [{"text": "zzqxw123abc appears here"}]}]
+    pages = [{"page_number": 1, "elements": [{"text": "zzqxw appears here"}]}]
     candidates = [c for c in _find_candidates(pages, known_terms=set()) if not c.word[0].isupper()]
     assert candidates
     assert all(_looks_like_probable_proper_noun(c) is False for c in candidates)
@@ -199,6 +245,19 @@ def test_looks_like_probable_proper_noun_true_for_short_acronym_with_suggestion(
     pages = [{"page_number": 1, "elements": [{"text": "Grade HH applies"}]}]
     hh = next(c for c in _find_candidates(pages, known_terms=set()) if c.word == "HH")
     assert _looks_like_probable_proper_noun(hh) is True
+
+
+def test_looks_like_probable_proper_noun_true_for_plural_acronym() -> None:
+    pages = [{"page_number": 1, "elements": [{"text": "list all UENs"}]}]
+    uens = next(c for c in _find_candidates(pages, known_terms=set()) if c.word == "UENs")
+    assert _looks_like_probable_proper_noun(uens) is True
+
+
+def test_find_candidates_skips_mixed_case_bank_shorthand() -> None:
+    pages = [{"page_number": 1, "elements": [
+        {"text": "Txn Charges Billing"}, {"text": "Funds Trf - FAST"}, {"text": "Inward Cr - FAST"},
+    ]}]
+    assert _find_candidates(pages, known_terms=set()) == []
 
 
 def test_filter_candidates_drops_only_probable_proper_nouns() -> None:

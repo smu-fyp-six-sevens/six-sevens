@@ -52,7 +52,7 @@ from pydantic import BaseModel
 
 from .font_consistency import ExtractedField
 from .giro_dates import giro_on_closed_days
-from .numerical_validation.common import _apply_needs_review, _as_number, _confidence_by_name, _fields_by_name, _parse_field_date, _rows, _skip_missing
+from .numerical_validation.common import officer_appointed, officer_role, _apply_needs_review, _as_number, _confidence_by_name, _fields_by_name, _parse_field_date, _rows, _skip_missing
 from .numerical_validation.identity_company import _UEN_RE, _is_forward_looking_date_field, _looks_like_date_field
 from .numerical_validation.models import Severity, SkippedCheck
 from .numerical_validation.statements import _noa_year
@@ -226,6 +226,9 @@ def extract_labeled_dates(ctx: _Ctx, confidences: dict[str, float]) -> list[Extr
         for i, row in enumerate(rows):
             for subfield, label in subfields:
                 raw = row.get(subfield)
+                if raw is None and subfield == "date_appointed":
+                    # The column may be transcribed as date_of_appointment, appointment_date, ...
+                    raw = officer_appointed(row)
                 if not isinstance(raw, str):
                     continue
                 parsed = _parse_field_date(raw)
@@ -823,7 +826,7 @@ def _check_acra_date_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck |
 
     findings = []
     for officer in _rows(ctx.fields.get("officers")):
-        appointed = _parse_field_date(officer.get("date_appointed"))
+        appointed = _parse_field_date(officer_appointed(officer))
         if appointed and appointed < incorporation:
             findings.append(_finding(
                 "ACRA.DATE_LOGIC", "inconsistent",
@@ -878,10 +881,10 @@ def _check_acra_secretary_timing(ctx: _Ctx) -> tuple[list[DateFinding], SkippedC
     incorporation = _parse_field_date(incorporation_raw)
     if incorporation is None:
         return [], _skip_missing("ACRA.SECRETARY_TIMING", "incorporation_date (unparseable)")
-    secretary = next((o for o in _rows(rows) if "secretary" in str(o.get("role", "")).lower()), None)
+    secretary = next((o for o in _rows(rows) if "secretary" in officer_role(o).lower()), None)
     if secretary is None:
         return [], None  # ACRA.OFFICERS already reports a missing secretary
-    appointed = _parse_field_date(secretary.get("date_appointed"))
+    appointed = _parse_field_date(officer_appointed(secretary))
     if appointed and (appointed - incorporation).days > 180:
         return [_finding(
             "ACRA.SECRETARY_TIMING", "inconsistent",

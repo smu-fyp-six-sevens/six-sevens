@@ -27,15 +27,51 @@ _sym_spell = SymSpell(max_dictionary_edit_distance=MAX_EDIT_DISTANCE, prefix_len
 _DICTIONARY_PATH = importlib.resources.files("symspellpy") / "frequency_dictionary_en_82_765.txt"
 _sym_spell.load_dictionary(str(_DICTIONARY_PATH), term_index=0, count_index=1)
 
-_WORD_RE = re.compile(r"[A-Za-z]+(?:'[A-Za-z]+)?")
+# Letters touching a digit are part of a reference/account code
+# ("EBACT51059664352", "4n3NIEdM"), not a word — the lookarounds stop the
+# letters being pulled out of the middle of one.
+_WORD_RE = re.compile(r"(?<![A-Za-z0-9])[A-Za-z]+(?:'[A-Za-z]+)?(?![A-Za-z0-9])")
+_POSSESSIVE_RE = re.compile(r"'[sS]$")
 _TRAILING_HYPHENATED_WORD_RE = re.compile(r"[A-Za-z]{2,}-$")
 _TRAILING_WORD_RE = re.compile(r"[A-Za-z]{2,}$")
 _LEADING_WORD_RE = re.compile(r"^[a-z]+")
 # A short, fully-uppercase token (HH, GG, SGX, HDB...) reads as an acronym
 # or a legend/grade code in a formal document, not prose a typo could occur
 # in — even when it happens to be edit-distance-close to some unrelated
-# short dictionary word (e.g. "HH" -> "he").
-_ACRONYM_RE = re.compile(r"^[A-Z]{1,4}$")
+# short dictionary word (e.g. "HH" -> "he"). A lowercase plural "s" on one
+# ("ATMs") is still an acronym.
+_ACRONYM_RE = re.compile(r"^(?:[A-Z]{1,4}|[A-Z]{2,4}s)$")
+
+# Text that isn't prose and gets blanked out before tokenizing: web
+# addresses (split into "sg", "http", "acratrustbar"... otherwise), emails,
+# passport MRZ lines ("PASGP<<MUHAMMAD<FAIZ<<<"), roman-numeral clause
+# enumerators ("(iv)", "ix)"), and optional-plural suffixes
+# ("beneficiary(ies)", "class(es)").
+_URL_RE = re.compile(
+    r"(?:https?://|www\.)\S*"
+    r"|\S+@[\w-]+(?:\.[\w-]+)+"
+    r"|\b[\w-]+(?:\.[\w-]+)*\.(?:com|net|org|gov|edu|sg|io|co|my)\b(?:/\S*)?",
+    re.IGNORECASE,
+)
+_MRZ_RE = re.compile(r"\S*<\S*")
+_ROMAN = r"(?=[ivxlcdm])m{0,3}(?:cm|cd|d?c{0,3})(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})"
+_ROMAN_ENUMERATOR_RE = re.compile(
+    rf"\(\s*{_ROMAN}\s*\)|(?:^|(?<=\s)){_ROMAN}[.)](?=\s|$)", re.IGNORECASE
+)
+_PLURAL_SUFFIX_RE = re.compile(r"(?<=[A-Za-z])\((?:s|es|ies)\)", re.IGNORECASE)
+# A company name ("Ivory Pharma Distribution Pte. Ltd.", "EVERBRIGHT
+# CONSTRUCTION PTE LTD"): a run of capitalised words ending in a legal-entity
+# suffix. Not spell-checked — coined/brand words are normal in company names,
+# and a misspelt one is caught by cross-document name comparison instead.
+_COMPANY_NAME_RE = re.compile(
+    r"\b(?:[A-Z][\w&'.,-]*\s+){1,8}?"
+    r"(?=[A-Z])(?i:pte\.?\s*ltd|private\s+limited|limited|ltd|llp|llc|inc|corporation|corp"
+    r"|sdn\.?\s*bhd|bhd|plc|gmbh|co\.)\.?(?![A-Za-z])"
+)
+# A URL cut by a line wrap: span ends inside a URL on a "-" or "/" and the
+# next span picks it up with no leading whitespace.
+_URL_CONTINUES_RE = re.compile(r"[-/]$")
+_LEADING_NON_SPACE_RE = re.compile(r"^\S+")
 
 
 class SpellingAnomaly(BaseModel):
@@ -145,6 +181,35 @@ def _dehyphenate_spans(texts: list[str], known_terms: set[str] | None = None) ->
     return texts
 
 
+def _strip_non_prose(texts: list[str]) -> list[str]:
+    """
+    Blanks out the non-prose patterns above, span by span. Runs before
+    _dehyphenate_spans: a URL wrapped across spans ("...basic-information-
+    for-" / "account-holders...") would otherwise be rejoined into a fake
+    word ("foraccount"). The continuation at the start of the next span is
+    dropped along with the URL itself. Same number of spans out as in, so
+    section indices still line up.
+    """
+    cleaned: list[str] = []
+    url_continues = False
+    for text in texts:
+        if url_continues:
+            text = _LEADING_NON_SPACE_RE.sub(" ", text, count=1)
+        stripped = text.rstrip()
+        last_url = None
+        for last_url in _URL_RE.finditer(stripped):
+            pass
+        url_continues = (
+            last_url is not None
+            and last_url.end() == len(stripped)
+            and bool(_URL_CONTINUES_RE.search(stripped))
+        )
+        for pattern in (_URL_RE, _MRZ_RE, _ROMAN_ENUMERATOR_RE, _PLURAL_SUFFIX_RE, _COMPANY_NAME_RE):
+            text = pattern.sub(" ", text)
+        cleaned.append(text)
+    return cleaned
+
+
 _TLDS = (
     "com|net|org|gov|edu|mil|int|sg|my|id|th|ph|vn|hk|cn|tw|jp|kr|in|au|nz|uk|us|ca|eu|de|fr|"
     "io|co|ai|app|biz|info|asia|xyz|online|site|tech"
@@ -163,7 +228,13 @@ _WEB_ADDRESS_RE = re.compile(
 
 def _tokenize(text: str) -> list[str]:
     text = _WEB_ADDRESS_RE.sub(" ", text)
-    return [word for word in _WORD_RE.findall(text) if len(word) >= MIN_WORD_LENGTH]
+    """
+    Letters-only words of MIN_WORD_LENGTH or more, with a possessive "'s"
+    dropped ("Bank's" -> "Bank") — SymSpell's dictionary has no possessive
+    forms, so every "X's" would otherwise be a candidate.
+    """
+    words = (_POSSESSIVE_RE.sub("", word) for word in _WORD_RE.findall(text))
+    return [word for word in words if len(word) >= MIN_WORD_LENGTH]
 
 
 def _decode_field_text(value: object) -> str | None:
@@ -209,7 +280,9 @@ def _find_candidates(pages: list[dict], known_terms: set[str]) -> list[_Candidat
     for page in pages:
         page_number = page.get("page_number", 0)
         elements = page.get("elements") or [{"text": page.get("text", "")}]
-        texts = _dehyphenate_spans([element.get("text", "") for element in elements], known_terms)
+        texts = _dehyphenate_spans(
+            _strip_non_prose([element.get("text", "") for element in elements]), known_terms
+        )
         for section, text in enumerate(texts):
             flat_spans.append((page_number, section, text))
 

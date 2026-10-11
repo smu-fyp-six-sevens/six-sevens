@@ -201,6 +201,30 @@ def _rows(value: Any) -> list[dict]:
     return [row for row in value if isinstance(row, dict)]
 
 
+def _row_value(row: dict, *key_words: str) -> Any:
+    """
+    The first non-empty value in a row whose key contains one of key_words.
+    Keys inside a list field come from the column header as the extraction
+    LLM transcribed it ("Position Held" -> position_held, "Date of
+    Appointment" -> date_of_appointment), so a value is looked up by the
+    words in its key rather than one exact name.
+    """
+    for key, value in row.items():
+        if any(word in key.lower() for word in key_words) and value not in (None, ""):
+            return value
+    return None
+
+
+def officer_role(row: dict) -> str:
+    """An officer's role ("Director", "Secretary"), however its column was named."""
+    return str(_row_value(row, "role", "position", "designation", "capacity") or "")
+
+
+def officer_appointed(row: dict) -> Any:
+    """An officer's appointment date, however its column was named."""
+    return _row_value(row, "appoint")
+
+
 def row_amount(row: dict | None, *, prior: bool = False) -> float | None:
     """The amount of one statement row (this year's, or the prior year's column)."""
     if row is None:
