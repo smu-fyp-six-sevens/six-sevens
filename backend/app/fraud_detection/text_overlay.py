@@ -16,9 +16,10 @@ from .layout_anomalies.common import (
 
 
 # Two text boxes must overlap by this fraction of the smaller one to be treated
-# as a collision. Raising this threshold filters incidental edge contact while
-# retaining the larger overlaps expected from text written over existing text.
-_TEXT_OVERLAP_MIN_RATIO = 0.30
+# as a collision. Measured on the letters' band (_ink_box), not the font box, so
+# stacked lines don't touch: at 0.20 the corpus has no false alarms, while 0.30
+# missed most values typed a few points off the original (19/26 -> 7/26 at 6 pt).
+_TEXT_OVERLAP_MIN_RATIO = 0.20
 # A watermark repeats on this many pages, so it is not an overlay finding.
 _EXPECTED_OVERLAY_MIN_PAGES = 2
 # Where the letters sit, as a fraction of the font size: capitals reach about
