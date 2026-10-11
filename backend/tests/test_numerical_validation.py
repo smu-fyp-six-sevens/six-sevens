@@ -1000,6 +1000,19 @@ def test_acra_officers_flags_no_director() -> None:
     assert len(_codes(result, "ACRA.OFFICERS")) == 1
 
 
+def test_acra_officers_reads_the_role_whatever_its_column_is_called() -> None:
+    # A real ACRA extract: the role column was transcribed as "position_held".
+    officers = [
+        {"name": "CHIA WEI MING", "position_held": "Director", "date_of_appointment": "15/03/2022"},
+        {"name": "RAJESWARI D/O MUTHUSAMY", "position_held": "Secretary", "date_of_appointment": "09/05/2022"},
+    ]
+    result = _run(
+        [_field("officers", officers), _field("incorporation_date", "2022-03-15")],
+        document_type="certificate_of_incumbency",
+    )
+    assert _codes(result, "ACRA.OFFICERS") == []
+
+
 def test_acra_capital_per_share_flags_an_implausible_per_share_value() -> None:
     result = _run(
         [_field("share_capital", "2000000"), _field("issued_shares", "1")],

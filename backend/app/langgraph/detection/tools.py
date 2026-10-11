@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Annotated, Any
 
 from langchain_core.tools import tool
@@ -93,11 +94,33 @@ async def _file_bytes(document_id: str) -> bytes | None:
     return entry["bytes"]
 
 
+# Reasons a check gives when the document simply has nothing it applies to:
+# an image with no authorship metadata, a PDF with no embedded images, a
+# document without dates. That is a pass with nothing to report, not a check
+# that failed, so it doesn't make the verdict inconclusive. Anything else
+# (a file that couldn't be opened, OCR with no text, a tool error) stays
+# Unable to Assess.
+_NOTHING_TO_CHECK_REASONS = tuple(re.compile(pattern) for pattern in (
+    r"^No embedded images found",
+    r"^Only \d+ distinct image asset",
+    r"^This \w+ image carries no authorship or editing metadata",
+    r"^None of the supported metadata fields",
+    r"^No dates could be reliably extracted",
+    r"^Not enough comparable text to assess layout",
+))
+
+
+def _is_nothing_to_check(reason: str) -> bool:
+    return any(pattern.match(reason) for pattern in _NOTHING_TO_CHECK_REASONS)
+
+
 def _result(tool_name: str, findings: list[dict], *, unable: str | None = None) -> dict:
     truncated = max(0, len(findings) - MAX_FINDINGS)
+    nothing_to_check = unable is not None and _is_nothing_to_check(unable)
     return {
         "tool": tool_name,
-        "unable_to_assess": unable is not None,
+        "unable_to_assess": unable is not None and not nothing_to_check,
+        "nothing_to_check": nothing_to_check,
         "reason": unable,
         "findings": findings[:MAX_FINDINGS],
         "truncated": truncated,

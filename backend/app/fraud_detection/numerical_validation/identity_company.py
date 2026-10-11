@@ -7,6 +7,7 @@ from datetime import date
 from typing import Any
 
 from .common import (
+    officer_role,
     skipped,
     _field_number,
     _MONEY_TOLERANCE,
@@ -359,10 +360,10 @@ def _check_acra_officers(*, officers: Any) -> CheckResult:
     officers live in date_anomalies.py."""
     rows = _rows(officers)
     findings = []
-    if not any("director" in str(o.get("role", "")).lower() for o in rows):
+    if not any("director" in officer_role(o).lower() for o in rows):
         findings.append(_finding("ACRA.OFFICERS", "inconsistent", "No director is listed among the officers",
                                  field="officers"))
-    if not any("secretary" in str(o.get("role", "")).lower() for o in rows):
+    if not any("secretary" in officer_role(o).lower() for o in rows):
         findings.append(_finding("ACRA.OFFICERS", "inconsistent", "No secretary is listed among the officers",
                                  field="officers"))
     return findings, None

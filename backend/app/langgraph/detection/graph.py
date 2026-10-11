@@ -243,6 +243,7 @@ def _compact_reports(reports: list[dict]) -> list[dict]:
             "uncertain": r["uncertain"],
             "uncertainty_reason": r["uncertainty_reason"],
             "unable_to_assess": r["unable_to_assess"],
+            "nothing_to_check": r.get("nothing_to_check", []),
             "findings": [
                 {"id": f["id"], "severity": f["severity"], "summary": f["summary"], "rationale": f["rationale"]}
                 for f in r["findings"]
@@ -342,6 +343,9 @@ def merge_reports(state: DetectionState) -> dict:
 
     findings: dict[tuple, dict] = {}
     unable: list[dict] = []
+    # Checks with nothing to examine on this document: recorded, but a pass,
+    # so they don't make the verdict inconclusive (see tools._NOTHING_TO_CHECK_REASONS).
+    nothing_to_check: list[dict] = []
     consulted: list[dict] = []
 
     for report in reports:
@@ -368,6 +372,10 @@ def merge_reports(state: DetectionState) -> dict:
             entry = {"specialist": name, **item}
             if entry not in unable:
                 unable.append(entry)
+        for item in report.get("nothing_to_check", []):
+            entry = {"specialist": name, **item}
+            if entry not in nothing_to_check:
+                nothing_to_check.append(entry)
         for finding in report["findings"]:
             key = (finding.get("tool"), finding["id"])
             merged = findings.get(key)
@@ -405,6 +413,7 @@ def merge_reports(state: DetectionState) -> dict:
             {k: request[k] for k in ("from", "to", "question", "reason")} if request else None
         ),
         "unable_to_assess": unable,
+        "nothing_to_check": nothing_to_check,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 
