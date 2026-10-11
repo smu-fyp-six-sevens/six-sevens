@@ -149,6 +149,9 @@ export interface DetectionReport {
   }[];
   second_look: { from: string; to: string; question: string; reason: string } | null;
   unable_to_assess: { specialist: string; tool: string | null; reason: string | null }[];
+  // Checks the document had nothing for (no images, no metadata, no dates): a pass, shown for the
+  // record. Absent on reports stored before it existed.
+  nothing_to_check?: { specialist: string; tool: string | null; reason: string | null }[];
   generated_at: string;
 }
 
@@ -158,8 +161,10 @@ export type IndividualCheckId =
   | 'spelling-anomaly'
   | 'numerical-validation'
   | 'date-anomalies'
+  | 'company-name-consistency'
   | 'metadata-anomaly'
-  | 'image-integrity';
+  | 'image-integrity'
+  | 'ai-generation';
 
 export interface BulkActionFailure {
   document_id: string;

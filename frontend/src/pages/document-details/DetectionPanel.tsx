@@ -116,6 +116,16 @@ export function DetectionPanel({
                 </ul>
               </>
             )}
+            {(detectionReport.nothing_to_check?.length ?? 0) > 0 && (
+              <>
+                <div>Nothing to check (passed):</div>
+                <ul>
+                  {detectionReport.nothing_to_check?.map((u, i) => (
+                    <li key={i}>{u.specialist} / {u.tool ?? 'tool'} — {u.reason ?? ''}</li>
+                  ))}
+                </ul>
+              </>
+            )}
           </>
         )}
 

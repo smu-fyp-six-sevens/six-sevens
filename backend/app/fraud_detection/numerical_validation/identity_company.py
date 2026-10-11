@@ -7,6 +7,7 @@ from datetime import date
 from typing import Any
 
 from .common import (
+    officer_role,
     skipped,
     _field_number,
     _MONEY_TOLERANCE,
@@ -173,13 +174,51 @@ def _mrz_check_digit(s: str) -> int:
     return sum(_mrz_char_value(c) * weights[i % 3] for i, c in enumerate(s)) % 10
 
 
+_TD3_LINE_LENGTH = 44
+# How far a line may be off 44 and still be a miscounted run of filler.
+_MRZ_FILLER_SLACK = 2
+_MRZ_FILLER_RUN_RE = re.compile(r"<{3,}")
+
+
+def _fit_mrz_filler(line: str) -> str:
+    """
+    A line one or two characters off 44 whose last run of "<" filler is
+    long: the run was miscounted while transcribing (about 25 identical
+    characters after a short name), so it is resized to make the line 44.
+    Filler is padding that no check digit covers, so this changes nothing
+    the checks rely on; letters and digits are never touched, and a line
+    further off is left for ID.MRZ_FORMAT to report.
+    """
+    gap = _TD3_LINE_LENGTH - len(line)
+    runs = list(_MRZ_FILLER_RUN_RE.finditer(line))
+    if gap == 0 or abs(gap) > _MRZ_FILLER_SLACK or not runs:
+        return line
+    last = runs[-1]
+    width = len(last.group(0)) + gap
+    if width < 1:
+        return line
+    return line[: last.start()] + "<" * width + line[last.end():]
+
+
 def _mrz_lines(raw: Any) -> list[str]:
     """The two TD3 lines, however extraction separated them. A real MRZ has no whitespace, so any space or newline
-    is a line break. 88 characters once whitespace is removed means a valid two-line MRZ."""
+    is a line break. 88 characters once whitespace is removed means a valid two-line MRZ. A line whose only fault
+    is a miscounted run of filler is set back to 44 (see _fit_mrz_filler)."""
     compact = "".join(str(raw).split())
     if len(compact) == 88:
         return [compact[:44], compact[44:]]
-    return [ln.strip() for ln in str(raw).strip().splitlines() if ln.strip()]
+    lines = [ln.strip() for ln in str(raw).strip().splitlines() if ln.strip()]
+    return [_fit_mrz_filler(ln) for ln in lines] if len(lines) == 2 else lines
+
+
+# Letters and digits OCR reads one for the other: the printed national ID
+# "S8934521I" comes back as "S89345211". Identifiers are compared with these
+# collapsed on both sides, so only a genuinely different number mismatches.
+_OCR_CONFUSABLE = str.maketrans({"O": "0", "I": "1", "L": "1", "S": "5", "B": "8", "Z": "2"})
+
+
+def _same_identifier(a: str, b: str) -> bool:
+    return a.upper().translate(_OCR_CONFUSABLE) == b.upper().translate(_OCR_CONFUSABLE)
 
 
 def _mrz_field(line2: str, start: int, end: int) -> str:
@@ -272,7 +311,7 @@ def _check_mrz_vs_viz(
     findings = []
     mrz_passport_no = _mrz_field(line2, 0, 9)
     stated_passport_no = str(passport_number or "").replace(" ", "").upper()
-    if stated_passport_no and mrz_passport_no and mrz_passport_no != stated_passport_no:
+    if stated_passport_no and mrz_passport_no and not _same_identifier(mrz_passport_no, stated_passport_no):
         findings.append(_finding(
             "ID.MRZ_VS_VIZ", "inconsistent",
             f"MRZ passport number ({mrz_passport_no}) does not match the printed passport number ({stated_passport_no})",
@@ -301,7 +340,7 @@ def _check_mrz_vs_viz(
 
     mrz_personal_no = _mrz_field(line2, 28, 42)
     stated_nric = str(nric_number or "").strip().upper()
-    if stated_nric and mrz_personal_no and mrz_personal_no != stated_nric:
+    if stated_nric and mrz_personal_no and not _same_identifier(mrz_personal_no, stated_nric):
         findings.append(_finding(
             "ID.MRZ_VS_VIZ", "inconsistent",
             f"MRZ personal number ({mrz_personal_no}) does not match the printed national ID number ({stated_nric})",
@@ -359,10 +398,10 @@ def _check_acra_officers(*, officers: Any) -> CheckResult:
     officers live in date_anomalies.py."""
     rows = _rows(officers)
     findings = []
-    if not any("director" in str(o.get("role", "")).lower() for o in rows):
+    if not any("director" in officer_role(o).lower() for o in rows):
         findings.append(_finding("ACRA.OFFICERS", "inconsistent", "No director is listed among the officers",
                                  field="officers"))
-    if not any("secretary" in str(o.get("role", "")).lower() for o in rows):
+    if not any("secretary" in officer_role(o).lower() for o in rows):
         findings.append(_finding("ACRA.OFFICERS", "inconsistent", "No secretary is listed among the officers",
                                  field="officers"))
     return findings, None

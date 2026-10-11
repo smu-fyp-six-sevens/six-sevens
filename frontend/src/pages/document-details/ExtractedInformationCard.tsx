@@ -303,6 +303,14 @@ export function ExtractedInformationCard({
                             );
 
                             setDocument(updated);
+                            // Save sends the whole draft and replaces every field, so a
+                            // deleted key left in it would be recreated, empty, on the
+                            // next Save. Other unsaved edits are kept.
+                            setFieldDraft((current) => {
+                              const rest = { ...current };
+                              delete rest[key];
+                              return rest;
+                            });
                           } catch (error) {
                             setDeleteFieldError(
                               error instanceof Error

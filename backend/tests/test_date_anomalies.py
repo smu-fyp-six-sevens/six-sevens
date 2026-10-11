@@ -364,6 +364,20 @@ def test_acra_secretary_timing_flags_late_appointment() -> None:
     assert len(_codes(result, "ACRA.SECRETARY_TIMING")) == 1
 
 
+def test_acra_officer_date_checks_read_the_appointment_date_whatever_its_column_is_called() -> None:
+    # "Date of Appointment" transcribed as date_of_appointment, role as position_held.
+    result = _run(
+        [_field("incorporation_date", "2020-01-01"),
+         _field("officers", [
+             {"position_held": "Director", "date_of_appointment": "2019-01-01"},
+             {"position_held": "Secretary", "date_of_appointment": "2020-12-01"},
+         ])],
+        document_type="certificate_of_incumbency",
+    )
+    assert len(_codes(result, "ACRA.DATE_LOGIC")) == 1
+    assert len(_codes(result, "ACRA.SECRETARY_TIMING")) == 1
+
+
 # ---------------------------------------------------------------------------
 # Company constitution
 # ---------------------------------------------------------------------------

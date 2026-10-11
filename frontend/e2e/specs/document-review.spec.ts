@@ -268,6 +268,27 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     expect(backend.requestsTo('DELETE', `/documents/${payslip.id}/extracted-fields/field-employer_address`)).toHaveLength(1);
   });
 
+  test('DI-others-11 a deleted field is not recreated when the other flagged fields are saved @DI-others', async ({ page, backend }) => {
+    // A field the document doesn't print, extracted as empty and flagged
+    // (a statement's total_credits when only per-month totals are printed).
+    const { fixture, cert } = certWithMissingUen(backend);
+    const fields = cert.extracted_fields as Record<string, { id?: string; value: unknown; confidence: number | null }>;
+    fields.former_names = { id: 'field-former_names', value: null, confidence: 0.4 };
+    await page.goto(fixture.documentUrl(cert));
+
+    page.once('dialog', (dialog) => dialog.accept());
+    await fieldRow(page, 'Former Names').locator('.delete-field-button').click();
+    await expect(fieldRow(page, 'Former Names')).toHaveCount(0);
+
+    await reviewRow(page, 'UEN').locator('input').fill('201634564N');
+    await page.getByRole('button', { name: 'Save fields' }).click();
+
+    const saved = backend.requestsTo('PATCH', `/documents/${cert.id}/extracted-fields`);
+    expect(saved).toHaveLength(1);
+    expect((saved[0].body as { extracted_fields: Record<string, unknown> }).extracted_fields).not.toHaveProperty('former_names');
+    await expect(fieldRow(page, 'Former Names')).toHaveCount(0);
+  });
+
   test('DI-others-09 an array field flagged for review can be edited in the review table @DI-others', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'harbor-light');
     const loans = fixture.document('ListLoans');
