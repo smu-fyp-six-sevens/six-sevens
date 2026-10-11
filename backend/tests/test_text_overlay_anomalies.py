@@ -94,6 +94,12 @@ def test_small_overlap_under_the_ratio_is_ignored() -> None:
     assert to._check_text_overlaps([_block([above]), _block([below])]) == []
 
 
+def test_minor_overlap_below_the_ratio_is_ignored() -> None:
+    first = _line((0, 0, 100, 10), text="Left value")
+    second = _line((85, 0, 185, 10), text="Right value")
+    assert to._check_text_overlaps([_block([first]), _block([second])]) == []
+
+
 def test_overlap_exactly_at_the_ratio_is_flagged() -> None:
     first = _line((0, 0, 100, 10), text="Left value")
     second = _line((80, 0, 180, 10), text="Right value")
