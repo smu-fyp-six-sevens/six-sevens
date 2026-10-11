@@ -393,24 +393,6 @@ def _check_loan_rate_band(*, interest_rate: Num, facility_type: Any) -> CheckRes
     return [], None
 
 
-@check(code="LOAN.SCHEME_PARAMS", applies=("list_of_loans",))
-def _check_loan_scheme_params(*, scheme_name: Any, loan_amount: Num | None = None) -> CheckResult:
-    """A government loan scheme's amount cap."""
-    if not REFERENCE_DATA["loan_scheme_params"]:
-        return [], _skip_reference("LOAN.SCHEME_PARAMS", "loan_scheme_params")
-    reference = REFERENCE_DATA["loan_scheme_params"].get(str(scheme_name))
-    if reference is None:
-        return [], _skip_reference("LOAN.SCHEME_PARAMS", f"loan_scheme_params[{scheme_name!r}]")
-    findings = []
-    if loan_amount is not None and reference.get("amount_cap") and loan_amount > reference["amount_cap"]:
-        findings.append(_finding(
-            "LOAN.SCHEME_PARAMS", "inconsistent",
-            f"Loan amount {_money(loan_amount)} exceeds the scheme's cap ({_money(reference['amount_cap'])})",
-            field="loan_amount", stated=_money(loan_amount), expected=f"<= {_money(reference['amount_cap'])}",
-        ))
-    return findings, None
-
-
 # ---------------------------------------------------------------------------
 # Proof of address
 # ---------------------------------------------------------------------------
