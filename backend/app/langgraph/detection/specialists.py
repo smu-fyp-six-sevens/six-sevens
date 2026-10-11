@@ -35,7 +35,10 @@ SEVERITIES = ("info", "low", "medium", "high")
 # their severity and explain them, but can't dismiss them or rate them below
 # this. A company name that differs across a case's documents (SCRUM-255) is
 # a fact for the officer to resolve, not something to judge away.
-_MIN_SEVERITY_BY_TOOL = {"company_name_consistency_tool": "medium"}
+_MIN_SEVERITY_BY_TOOL = {
+    "company_name_consistency_tool": "medium",
+    "address_consistency_tool": "medium",
+}
 _SPECIALIST_RECURSION_LIMIT = 12
 # Tool rounds (one round = one agent turn that calls tools) before the specialist must wrap up.
 _MAX_TOOL_ROUNDS = 3
@@ -91,13 +94,16 @@ SPECIALISTS: dict[str, Specialist] = {
             "pick the right fields and row indices. Applies to nearly any document — the numerical tool "
             "decides internally which of its checks actually apply to this document's type. Also whether "
             "the document's company name matches the company name on the case's other documents — run "
-            "that check on every document with a company name; a mismatch always stays on the report."
+            "that check on every document with a company name; a mismatch always stays on the report. "
+            "Also compare this document's personal and company addresses against the other documents "
+            "in the case; address differences are relevant findings and always stay on the report."
         ),
         tools=(
             detection_tools.spelling_tool,
             detection_tools.date_consistency_tool,
             field_tools.numerical_checks_tool,
             detection_tools.company_name_consistency_tool,
+            detection_tools.address_consistency_tool,
         ),
         uses_field_catalogue=True,
     ),

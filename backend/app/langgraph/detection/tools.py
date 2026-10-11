@@ -33,6 +33,7 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
 from ... import document_repository, extracted_fields_repository, storage_service
+from ...address_matching import find_address_mismatches
 from ...fraud_detection.ai_generation import AIImageAssessment, AIIndicator, check_ai_generation
 from ...fraud_detection.company_identity import check_company_name_consistency
 from ...fraud_detection.date_anomalies import check_date_anomalies
@@ -312,6 +313,47 @@ async def company_name_consistency_tool(document_id: Annotated[str, InjectedStat
         }
         for discrepancy in result.discrepancies
     ]
+    return _result(tool_name, _with_ids(tool_name, findings))
+
+
+@tool
+async def address_consistency_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
+    """Compares this document's personal and company addresses with other extracted addresses in its case. Ignores case, punctuation and common abbreviations such as Blk/Block and Rd/Road. Differences, including different postal codes, are reported with both values and filenames."""
+    tool_name = "address_consistency_tool"
+    document = await asyncio.to_thread(document_repository.get_document, document_id)
+    if document is None:
+        return _result(tool_name, [], unable="Document not found")
+    if document.case_id is None:
+        return _result(tool_name, [])
+
+    case_documents = await asyncio.to_thread(
+        document_repository.list_documents, case_id=document.case_id
+    )
+    mismatches = find_address_mismatches(
+        doc for doc in case_documents
+        if doc.status.value != "rejected" and doc.extracted_fields
+    )
+    findings = []
+    for mismatch in mismatches:
+        if document_id not in (mismatch.first.document_id, mismatch.second.document_id):
+            continue
+        source, other = (
+            (mismatch.first, mismatch.second)
+            if mismatch.first.document_id == document_id
+            else (mismatch.second, mismatch.first)
+        )
+        findings.append({
+            "field": source.field_name,
+            "stated": source.value,
+            "conflicting": other.value,
+            "filenames": [source.filename, other.filename],
+            "severity_hint": "inconsistent",
+            "summary": (
+                f'{"Company" if source.scope == "company" else "Personal"} address '
+                f'"{source.value}" in {source.filename} differs from '
+                f'"{other.value}" in {other.filename}.'
+            ),
+        })
     return _result(tool_name, _with_ids(tool_name, findings))
 
 
