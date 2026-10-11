@@ -1112,6 +1112,34 @@ def test_mrz_checkdigits_flags_corrupted_check_digit() -> None:
     assert len(_codes(result, "ID.MRZ_CHECKDIGITS")) >= 1
 
 
+# The C067 passport as extracted: the LLM wrote one "<" too many in the run
+# after the name, and OCR read the printed ID's check letter I as a 1.
+_C067_MRZ_LINE1 = "PASGPCHIA<<WEI<MING<<<<<<<<<<<<<<<<<<<<<<<<<"
+_C067_MRZ_LINE2 = "K5690850D0SGP8904126F3511060S8934521I<<<<<22"
+
+
+def test_a_miscounted_run_of_mrz_filler_is_not_a_format_error() -> None:
+    too_long = _C067_MRZ_LINE1 + "<"
+    too_short = _C067_MRZ_LINE2.replace("<<<<<", "<<<<", 1)
+    for mrz in (too_long + "\n" + _C067_MRZ_LINE2, _C067_MRZ_LINE1 + "\n" + too_short):
+        result = _run([_field("mrz", mrz)], document_type="passport")
+        assert _codes(result, "ID.MRZ_FORMAT") == []
+        assert _codes(result, "ID.MRZ_CHECKDIGITS") == []
+
+
+def test_an_mrz_line_well_off_44_is_still_a_format_error() -> None:
+    mrz = _C067_MRZ_LINE1 + "<<<" + "\n" + _C067_MRZ_LINE2
+    assert len(_codes(_run([_field("mrz", mrz)], document_type="passport"), "ID.MRZ_FORMAT")) == 1
+
+
+def test_mrz_vs_viz_allows_letters_ocr_reads_as_digits() -> None:
+    mrz = _C067_MRZ_LINE1 + "\n" + _C067_MRZ_LINE2
+    misread = _run([_field("mrz", mrz), _field("nric_number", "S89345211")], document_type="passport")
+    assert _codes(misread, "ID.MRZ_VS_VIZ") == []
+    different = _run([_field("mrz", mrz), _field("nric_number", "S8934521J")], document_type="passport")
+    assert len(_codes(different, "ID.MRZ_VS_VIZ")) == 1
+
+
 def test_mrz_vs_viz_flags_passport_number_mismatch() -> None:
     mrz = _build_mrz("E1234567A", "900101", "300101")
     result = _run(
