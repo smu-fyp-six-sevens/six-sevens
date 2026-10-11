@@ -52,6 +52,8 @@ export const INDIVIDUAL_DETECTION_CHECKS: { id: IndividualCheckId; label: string
   { id: 'metadata-anomaly', label: 'Metadata anomaly' },
   // Runs both image checks (SCRUM-64 resolution/compression, SCRUM-65 tampering) and returns the result.
   { id: 'image-integrity', label: 'Image integrity' },
+  // SCRUM-67: AI-generation likelihood score with every indicator's value and contribution.
+  { id: 'ai-generation', label: 'AI generation' },
 ];
 
 // Each check has its own result shape (FontConsistencyResult, LayoutAnomalyResult, ...).

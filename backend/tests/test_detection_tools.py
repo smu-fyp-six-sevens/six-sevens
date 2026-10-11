@@ -272,3 +272,96 @@ async def test_numerical_checks_tool_surfaces_non_bank_statement_findings() -> N
         )
 
     assert output["findings"][0]["check_code"] == "FS.BALANCES"
+
+
+# --- ai_generation_tool -------------------------------------------------------
+
+
+def _ai_result(*images, unable: str | None = None, file_provenance=None):
+    from app.fraud_detection.ai_generation import AIGenerationConfig, AIGenerationResult
+
+    return AIGenerationResult(
+        document_id="doc-1",
+        score=max([i.score for i in images], default=0.0),
+        likelihood="low",
+        images=list(images),
+        file_provenance=file_provenance,
+        config=AIGenerationConfig(),
+        unable_to_assess=unable is not None,
+        unable_to_assess_reason=unable,
+    )
+
+
+def _ai_image(score: float, likelihood: str):
+    from app.fraud_detection.ai_generation import AIImageAssessment, AIIndicator
+
+    return AIImageAssessment(
+        source="embedded", page=1, xref=7, bbox=(10.0, 20.0, 110.0, 120.0),
+        pixel_width=800, pixel_height=600, format="jpeg", photographic=True,
+        score=score, likelihood=likelihood, coverage=0.9,
+        indicators=[
+            AIIndicator(indicator="Spectral Peaks", assessed=True, value=40.0,
+                        detail="Strongest periodic peak: 40.0x at a 2px period (fixed pattern).",
+                        strength=1.0, weight=0.35, contribution=0.35),
+            AIIndicator(indicator="Noise Level", assessed=True, value=0.3,
+                        detail="Median noise 0.30 grey levels.", strength=1.0, weight=0.25, contribution=0.25),
+            AIIndicator(indicator="Provenance", assessed=True, value=0.0, detail="None declared."),
+        ],
+    )
+
+
+@pytest.mark.asyncio
+async def test_ai_generation_tool_reports_only_medium_and_high_images() -> None:
+    result = _ai_result(_ai_image(0.6, "medium"), _ai_image(0.1, "low"))
+    with (
+        patch.object(tools, "_file_bytes", AsyncMock(return_value=b"x")),
+        patch.object(tools, "check_ai_generation", return_value=result),
+    ):
+        output = await tools.ai_generation_tool.ainvoke({"document_id": "doc-1"})
+
+    assert len(output["findings"]) == 1
+    finding = output["findings"][0]
+    assert finding["id"] == "ai_generation_tool-1"
+    assert finding["page"] == 2
+    assert finding["severity_hint"] == "medium"
+    assert finding["summary"].startswith("[AI Generation] Image on page 2 scores 0.60")
+    assert [c["indicator"] for c in finding["contributors"]] == ["Spectral Peaks", "Noise Level"]
+
+
+@pytest.mark.asyncio
+async def test_ai_generation_tool_reports_declared_file_provenance() -> None:
+    from app.fraud_detection.ai_generation import AIIndicator
+
+    provenance = AIIndicator(
+        indicator="Provenance", assessed=True, value=0.95, strength=0.95,
+        detail="declares digital source type 'trainedalgorithmicmedia'",
+    )
+    result = _ai_result(file_provenance=provenance)
+    with (
+        patch.object(tools, "_file_bytes", AsyncMock(return_value=b"x")),
+        patch.object(tools, "check_ai_generation", return_value=result),
+    ):
+        output = await tools.ai_generation_tool.ainvoke({"document_id": "doc-1"})
+
+    assert output["findings"][0]["severity_hint"] == "high"
+    assert "trainedalgorithmicmedia" in output["findings"][0]["summary"]
+
+
+@pytest.mark.asyncio
+async def test_ai_generation_tool_reports_unable_to_assess() -> None:
+    result = _ai_result(unable="No raster images of at least 128px to analyse")
+    with (
+        patch.object(tools, "_file_bytes", AsyncMock(return_value=b"x")),
+        patch.object(tools, "check_ai_generation", return_value=result),
+    ):
+        output = await tools.ai_generation_tool.ainvoke({"document_id": "doc-1"})
+
+    assert output["unable_to_assess"] is True
+    assert output["findings"] == []
+
+
+def test_digital_authenticity_owns_the_ai_generation_tool() -> None:
+    from app.langgraph.detection.specialists import SPECIALISTS
+
+    names = {t.name for t in SPECIALISTS["digital_authenticity"].tools}
+    assert {"metadata_tool", "ai_generation_tool"} <= names

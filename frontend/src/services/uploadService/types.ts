@@ -163,7 +163,8 @@ export type IndividualCheckId =
   | 'date-anomalies'
   | 'company-name-consistency'
   | 'metadata-anomaly'
-  | 'image-integrity';
+  | 'image-integrity'
+  | 'ai-generation';
 
 export interface BulkActionFailure {
   document_id: string;

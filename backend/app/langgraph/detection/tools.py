@@ -33,6 +33,7 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
 from ... import document_repository, extracted_fields_repository, storage_service
+from ...fraud_detection.ai_generation import AIImageAssessment, AIIndicator, check_ai_generation
 from ...fraud_detection.company_identity import check_company_name_consistency
 from ...fraud_detection.date_anomalies import check_date_anomalies
 from ...fraud_detection.font_consistency import check_font_consistency
@@ -409,3 +410,64 @@ async def image_tampering_tool(document_id: Annotated[str, InjectedState("docume
         for indicator in result.indicators
     ]
     return _result("image_tampering_tool", _with_ids("image_tampering_tool", findings))
+
+
+# --- Digital Authenticity: AI generation --------------------------------------
+
+
+def _top_contributors(indicators: list[AIIndicator], limit: int = 3) -> list[AIIndicator]:
+    contributing = [i for i in indicators if i.contribution > 0]
+    return sorted(contributing, key=lambda i: i.contribution, reverse=True)[:limit]
+
+
+def _ai_image_summary(image: AIImageAssessment) -> str:
+    where = f"Image on page {image.page + 1}" if image.page is not None else "Uploaded image"
+    drivers = "; ".join(
+        f"{i.indicator} +{i.contribution:.2f} ({i.detail})" for i in _top_contributors(image.indicators)
+    )
+    return f"{where} scores {image.score:.2f} ({image.likelihood}) for AI generation: {drivers}"
+
+
+@tool
+async def ai_generation_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
+    """Scores the photographs, scans and image uploads in the file for traces of AI generation: periodic upsampling peaks in the image spectrum, too little or unnatural sensor noise, compression history (double compression, error level analysis, quantisation tables), missing camera metadata, and any provenance the file declares (C2PA manifest, IPTC digital source type, a generator's own tags). Reports images scoring medium or high, each with the indicators that drove its score. Logos and other flat graphics are not scored. Works on PDFs (their embedded images) and image uploads."""
+    file_bytes = await _file_bytes(document_id)
+    if file_bytes is None:
+        return _result("ai_generation_tool", [], unable="Document file is not available in storage")
+
+    result = await asyncio.to_thread(check_ai_generation, document_id, file_bytes)
+    if result.unable_to_assess:
+        return _result("ai_generation_tool", [], unable=result.unable_to_assess_reason or "Unable to assess")
+
+    def contributors(indicators: list[AIIndicator]) -> list[dict]:
+        return [
+            {"indicator": i.indicator, "value": i.value, "contribution": i.contribution}
+            for i in _top_contributors(indicators)
+        ]
+
+    # Low scores are not findings — like every other tool, a clean result is
+    # an empty list. The full per-indicator breakdown stays on the on-demand
+    # endpoint.
+    findings = [
+        {
+            "indicator": "AI Generation",
+            "page": image.page + 1 if image.page is not None else None,
+            "bbox": image.bbox,
+            "bbox_units": result.bbox_units,
+            "score": image.score,
+            "contributors": contributors(image.indicators),
+            "severity_hint": image.likelihood,
+            "summary": _with_indicator("AI Generation", _ai_image_summary(image)),
+        }
+        for image in result.images
+        if image.likelihood != "low"
+    ]
+    provenance = result.file_provenance
+    if provenance is not None and provenance.assessed and provenance.strength >= result.config.medium_threshold:
+        findings.append({
+            "indicator": "AI Generation",
+            "score": provenance.strength,
+            "severity_hint": "high" if provenance.strength >= result.config.high_threshold else "medium",
+            "summary": _with_indicator("AI Generation", f"The file's own metadata declares an AI source: {provenance.detail}"),
+        })
+    return _result("ai_generation_tool", _with_ids("ai_generation_tool", findings))
