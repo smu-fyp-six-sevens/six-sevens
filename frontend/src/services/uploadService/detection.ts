@@ -48,6 +48,7 @@ export const INDIVIDUAL_DETECTION_CHECKS: { id: IndividualCheckId; label: string
   { id: 'spelling-anomaly', label: 'Spelling anomaly' },
   { id: 'numerical-validation', label: 'Numerical validation' },
   { id: 'date-anomalies', label: 'Date anomalies' },
+  { id: 'company-name-consistency', label: 'Company name consistency' },
   { id: 'metadata-anomaly', label: 'Metadata anomaly' },
   // Runs both image checks (SCRUM-64 resolution/compression, SCRUM-65 tampering) and returns the result.
   { id: 'image-integrity', label: 'Image integrity' },

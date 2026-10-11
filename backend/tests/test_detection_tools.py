@@ -190,8 +190,7 @@ async def test_image_tampering_tool_maps_indicators_to_findings() -> None:
     assert "evidence" not in finding
 
 
-@pytest.mark.asyncio
-async def test_image_tampering_tool_reports_unable_to_assess() -> None:
+async def _tampering_output(reason: str) -> dict:
     result = ImageTamperingResult(
         document_id="doc-1",
         regions=[],
@@ -199,16 +198,49 @@ async def test_image_tampering_tool_reports_unable_to_assess() -> None:
         pages_checked=1,
         tolerances=TamperingTolerances(),
         unable_to_assess=True,
-        unable_to_assess_reason="No embedded images found across 1 page(s)",
+        unable_to_assess_reason=reason,
     )
     with (
         patch.object(tools, "_file_bytes", AsyncMock(return_value=b"x")),
         patch.object(tools, "check_image_tampering", return_value=result),
     ):
-        output = await tools.image_tampering_tool.ainvoke({"document_id": "doc-1"})
+        return await tools.image_tampering_tool.ainvoke({"document_id": "doc-1"})
 
-    assert output["unable_to_assess"] is True
+
+@pytest.mark.asyncio
+async def test_image_tampering_tool_with_no_images_has_nothing_to_check() -> None:
+    # A document with no embedded images passes: there is nothing to tamper with.
+    output = await _tampering_output("No embedded images found across 1 page(s)")
+    assert output["unable_to_assess"] is False
+    assert output["nothing_to_check"] is True
+    assert output["reason"].startswith("No embedded images found")
     assert output["findings"] == []
+
+
+@pytest.mark.asyncio
+async def test_image_tampering_tool_that_cannot_open_the_file_is_unable_to_assess() -> None:
+    output = await _tampering_output("Failed to open document as a PDF: ValueError: bad")
+    assert output["unable_to_assess"] is True
+    assert output["nothing_to_check"] is False
+
+
+@pytest.mark.parametrize(
+    "reason, nothing",
+    [
+        ("No embedded images found across 2 page(s), so there are no image regions to compare.", True),
+        ("Only 1 distinct image asset(s) large enough to compare (of 4 placement(s) found)", True),
+        ("This PNG image carries no authorship or editing metadata (no author, ...)", True),
+        ("None of the supported metadata fields (author, creator, ...) were present", True),
+        ("No dates could be reliably extracted from this document", True),
+        ("Not enough comparable text to assess layout. A one-page document ...", True),
+        ("No metadata was recorded for this document, which means exiftool wasn't available", False),
+        ("No extractable text found in document", False),
+        ("Failed to decode the image: OSError: truncated", False),
+        ("Tool error: boom", False),
+    ],
+)
+def test_nothing_to_check_covers_only_documents_a_check_does_not_apply_to(reason, nothing) -> None:
+    assert tools._is_nothing_to_check(reason) is nothing
 
 
 def test_layout_rendering_owns_both_image_tools() -> None:

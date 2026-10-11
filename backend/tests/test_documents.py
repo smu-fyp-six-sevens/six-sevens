@@ -344,6 +344,43 @@ def test_update_extracted_fields_success() -> None:
     # since that call is mocked.
 
 
+def test_update_extracted_fields_removes_optional_fields_saved_empty() -> None:
+    # An officer clearing a field the document doesn't print removes it
+    # instead of storing an empty row they'd be asked to fill in again. A
+    # required field saved empty stays, so it still blocks approval.
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+    ):
+        original = DocumentRecord(
+            id="doc-1",
+            case_id="case-1",
+            filename="payslip.pdf",
+            document_type="payslip",
+            storage_path="case-1/doc-1_payslip.pdf",
+            status=DocumentStatus.ANALYZED,
+            uploaded_at=_TIMESTAMP,
+        )
+        mock_dep_repo.get_document.return_value = original
+        mock_repo.get_document.return_value = original
+        mock_fields_repo.get_extracted_fields.return_value = []
+
+        response = client.patch(
+            "/documents/doc-1/extracted-fields",
+            json={"extracted_fields": {
+                "individual_name": "Jane Tan",
+                "net_pay": None,
+                "total_earnings": None,
+                "pay_date": "",
+            }},
+        )
+
+    assert response.status_code == 200
+    saved = mock_fields_repo.replace_extracted_fields.call_args.args[1]
+    assert saved == {"individual_name": "Jane Tan", "net_pay": None}
+
+
 def test_update_extracted_fields_preserves_confidence_for_already_reviewed_field() -> None:
     # A field that already had a real (non-blank) value and high confidence
     # wasn't part of this manual review — its saved value happens to equal

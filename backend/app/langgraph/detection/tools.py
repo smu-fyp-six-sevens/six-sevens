@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Annotated, Any
 
 from langchain_core.tools import tool
@@ -33,6 +34,7 @@ from langgraph.prebuilt import InjectedState
 
 from ... import document_repository, extracted_fields_repository, storage_service
 from ...fraud_detection.ai_generation import AIImageAssessment, AIIndicator, check_ai_generation
+from ...fraud_detection.company_identity import check_company_name_consistency
 from ...fraud_detection.date_anomalies import check_date_anomalies
 from ...fraud_detection.font_consistency import check_font_consistency
 from ...fraud_detection.image_manipulation import check_image_manipulation, check_image_tampering
@@ -93,11 +95,33 @@ async def _file_bytes(document_id: str) -> bytes | None:
     return entry["bytes"]
 
 
+# Reasons a check gives when the document simply has nothing it applies to:
+# an image with no authorship metadata, a PDF with no embedded images, a
+# document without dates. That is a pass with nothing to report, not a check
+# that failed, so it doesn't make the verdict inconclusive. Anything else
+# (a file that couldn't be opened, OCR with no text, a tool error) stays
+# Unable to Assess.
+_NOTHING_TO_CHECK_REASONS = tuple(re.compile(pattern) for pattern in (
+    r"^No embedded images found",
+    r"^Only \d+ distinct image asset",
+    r"^This \w+ image carries no authorship or editing metadata",
+    r"^None of the supported metadata fields",
+    r"^No dates could be reliably extracted",
+    r"^Not enough comparable text to assess layout",
+))
+
+
+def _is_nothing_to_check(reason: str) -> bool:
+    return any(pattern.match(reason) for pattern in _NOTHING_TO_CHECK_REASONS)
+
+
 def _result(tool_name: str, findings: list[dict], *, unable: str | None = None) -> dict:
     truncated = max(0, len(findings) - MAX_FINDINGS)
+    nothing_to_check = unable is not None and _is_nothing_to_check(unable)
     return {
         "tool": tool_name,
-        "unable_to_assess": unable is not None,
+        "unable_to_assess": unable is not None and not nothing_to_check,
+        "nothing_to_check": nothing_to_check,
         "reason": unable,
         "findings": findings[:MAX_FINDINGS],
         "truncated": truncated,
@@ -179,7 +203,15 @@ async def layout_anomalies_tool(document_id: Annotated[str, InjectedState("docum
     if file_bytes is None:
         return _result("layout_anomalies_tool", [], unable="Document file is not available in storage")
 
-    result = await asyncio.to_thread(check_layout_anomalies, document_id, file_bytes)
+    # The type selects a layout profile; an unknown document gets the generic checks.
+    document = await _document(document_id)
+    result = await asyncio.to_thread(
+        check_layout_anomalies,
+        document_id,
+        file_bytes,
+        getattr(document, "document_type", None),
+        getattr(document, "classification_confidence", None),
+    )
     if result.unable_to_assess:
         return _result(
             "layout_anomalies_tool", [], unable=result.unable_to_assess_reason or "Unable to assess"
@@ -253,6 +285,34 @@ async def date_consistency_tool(document_id: Annotated[str, InjectedState("docum
         for finding in result.findings
     ]
     return _result("date_consistency_tool", _with_ids("date_consistency_tool", findings))
+
+
+@tool
+async def company_name_consistency_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
+    """Compares this document's company name with the company name on every other document in the same case (certificate of incumbency, incorporation, constitution, corporate bank statements, FATCA/CRS, loan letters, payslips, ...). Names that differ only by legal suffix ("Pte Ltd" vs "Pte. Ltd."), letter case or "&"/"AND" match; any other difference is a finding. A document with no company name has nothing to compare. Run it on every document that has a company name."""
+    tool_name = "company_name_consistency_tool"
+    document = await asyncio.to_thread(document_repository.get_document, document_id)
+    if document is None:
+        return _result(tool_name, [], unable="Document not found")
+    case_documents = (
+        await asyncio.to_thread(document_repository.list_documents, case_id=document.case_id)
+        if document.case_id is not None
+        else []
+    )
+    result = check_company_name_consistency(document, case_documents)
+
+    findings = [
+        {
+            "field": "company_name",
+            "stated": discrepancy.stated,
+            "conflicting": discrepancy.conflicting,
+            "filenames": discrepancy.filenames,
+            "severity_hint": discrepancy.severity,
+            "summary": discrepancy.summary,
+        }
+        for discrepancy in result.discrepancies
+    ]
+    return _result(tool_name, _with_ids(tool_name, findings))
 
 
 # --- Digital Authenticity ---------------------------------------------------

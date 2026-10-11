@@ -30,9 +30,27 @@ def _route_after_check_text(state: DocumentGraphState) -> str:
     return "fail" if state.get("status") == "failed" else "extract"
 
 
-def _decide_after_extract(state: DocumentGraphState) -> str:
+def _escalation_disputes_type(state: DocumentGraphState) -> bool:
+    """
+    Whether Extraction's escalation could change the document type. It can't
+    when it names the type the document already has (the generic schema
+    reporting "this is an NRIC" on an NRIC), or names none while a rule
+    trigger made the type certain: Extraction then really means a field it
+    expected is missing (a redacted NRIC number), which manual review
+    handles. Reclassifying would only land on the same type and fail.
+    """
     escalation = (state.get("extraction") or {}).get("escalation")
     if not escalation:
+        return False
+    classification = state.get("classification") or {}
+    suggested = escalation.get("suggested_document_type") if isinstance(escalation, dict) else None
+    if suggested:
+        return suggested != classification.get("document_type")
+    return classification.get("basis") != "certain_match"
+
+
+def _decide_after_extract(state: DocumentGraphState) -> str:
+    if not _escalation_disputes_type(state):
         return "analyzed"
     if state.get("attempts", 0) < settings.MAX_RECLASSIFICATION_ATTEMPTS:
         return "reclassify"

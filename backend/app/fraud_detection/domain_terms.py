@@ -36,7 +36,15 @@ _RAW_DOMAIN_TERMS: set[str] = {
     "constitution", "incumbency", "declarant", "rtf",
     "Maybank", "DBS", "OCBC", "UOB", "Citi", "HSBC","XXXX", "CIMB",
     "StandardChartered", "StandardCharteredBank", "GLDB", "NFE", "NFFE",
-    "FATCA", "GIIN", "IRS", "https", "www", "oecd", "paynow","eStatements"
+    "FATCA", "GIIN", "IRS", "https", "www", "oecd", "paynow","eStatements",
+    "bizfile", "mytax",
+    # Bank statement shorthand ("Txn Charges", "Funds Trf", "Inward Cr")
+    "txn", "txns", "trf", "xfer", "cr", "chq", "acct", "accts", "amt",
+    "bal", "ibg", "giro", "atm", "atms", "pmt",
+    # Finance/legal words missing from SymSpell's general dictionary
+    "nonfinancial", "drawdown", "drawdowns", "undrawn", "annum", "payables",
+    "receivables", "lodgment", "lodgments", "unformatted", "chargee",
+    "chargees", "chargor", "endeavor", "megastore",
 }
 
 # Lowercased once here rather than trusting every entry above to already be
