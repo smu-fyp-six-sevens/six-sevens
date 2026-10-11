@@ -170,11 +170,7 @@ export function DocumentSummaryCard({
           {caseMatch?.status === 'manual_review' && (
             <div className="review-message review-message--warning details-failure-reason">
               <div>
-                <strong>
-                  {caseMatch.case_mismatch
-                    ? 'Case mismatch — sent to manual review'
-                    : 'Sent to manual review'}
-                </strong>
+                <strong>Sent to manual review</strong>
                 {caseMatchMismatches.length > 0 ? (
                   caseMatchMismatches.map((comparison) => (
                     <div key={`${comparison.document_field}:${comparison.document_value}`}>

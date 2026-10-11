@@ -1,6 +1,6 @@
 """
 Case-match check — does each uploaded document actually belong to this
-case's company (and its people), before fraud detection runs on it?
+case's company (and its people), as part of fraud detection after approval?
 
 The certificate of incumbency (ACRA Business Profile) is the reference: it's
 compulsory for every case and is the one document that authoritatively lists
@@ -17,7 +17,8 @@ the company's UEN, name, officers and shareholders. Three steps:
    the document has one, otherwise company name with fuzzy matching (see
    company_names_match).
 3. Compare each individual a document names against the incumbency's
-   officers/shareholders — ID number first, otherwise name.
+   officers/shareholders — ID number first, otherwise name. Mismatches are
+   returned for the fraud detection report; they do not block approval.
 
 Computed live from the documents table on every read, never stored — the same
 reasoning as case_service.py: the result depends on every document in the
@@ -121,10 +122,11 @@ class CheckOutcome(str, Enum):
 class DocumentMatchStatus(str, Enum):
     # Belongs to this case — can proceed to fraud detection (AC2).
     MATCH = "match"
-    # Needs an officer's eye: the company or an individual doesn't match the
-    # case (DocumentCaseMatch.case_mismatch is set — AC3), the incumbency
-    # itself is in doubt, or the document has no company/individual details
-    # to compare at all.
+    # Identity differs from another case document. It can still proceed to
+    # fraud detection, where the comparison is shown as a finding.
+    MISMATCH = "mismatch"
+    # Needs an officer's eye because the incumbency itself is in doubt or the
+    # document has no company/individual details to compare at all.
     MANUAL_REVIEW = "manual_review"
     # Can't decide yet: not extracted, or the incumbency is missing or not
     # yet corroborated.
@@ -173,9 +175,8 @@ class DocumentCaseMatch(BaseModel):
     document_type: Optional[str] = None
     status: DocumentMatchStatus
     can_proceed_to_fraud_detection: bool
-    # AC3: the document's company or an individual on it doesn't match the
-    # case. Always paired with status=manual_review, so an officer confirms
-    # it before anything else happens to the document.
+    # The document's company or an individual on it differs from the case.
+    # Mismatches are assessed by fraud detection after approval.
     case_mismatch: bool = False
     reason: str
     comparisons: list[FieldComparison] = Field(default_factory=list)
@@ -651,7 +652,10 @@ def _match_document(
             filename=doc.filename,
             document_type=doc.document_type,
             status=status,
-            can_proceed_to_fraud_detection=status == DocumentMatchStatus.MATCH,
+            can_proceed_to_fraud_detection=status in {
+                DocumentMatchStatus.MATCH,
+                DocumentMatchStatus.MISMATCH,
+            },
             case_mismatch=case_mismatch,
             reason=reason,
             comparisons=list(comparisons),
@@ -714,7 +718,7 @@ def _match_document(
     mismatches = [c for c in comparisons if c.outcome == CheckOutcome.MISMATCH]
     if mismatches:
         return result(
-            DocumentMatchStatus.MANUAL_REVIEW,
+            DocumentMatchStatus.MISMATCH,
             "; ".join(c.reason for c in mismatches),
             comparisons,
             case_mismatch=True,
@@ -858,10 +862,10 @@ def _apply_pairwise_person_checks(
             updated.append(match)
             continue
         reasons = [reason for _, reason in additions]
-        prior_reason = match.reason if match.status == DocumentMatchStatus.MANUAL_REVIEW else ""
+        prior_reason = match.reason if match.status == DocumentMatchStatus.MISMATCH else ""
         updated.append(match.model_copy(update={
-            "status": DocumentMatchStatus.MANUAL_REVIEW,
-            "can_proceed_to_fraud_detection": False,
+            "status": DocumentMatchStatus.MISMATCH,
+            "can_proceed_to_fraud_detection": True,
             "case_mismatch": True,
             "reason": "; ".join(([prior_reason] if prior_reason else []) + reasons),
             "comparisons": [*match.comparisons, *(comparison for comparison, _ in additions)],
