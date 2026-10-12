@@ -96,10 +96,14 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # earnings_items through pay_date (not doc_gen-verified — added for
         # fraud_detection.numerical_validation's PAY.* checks): the itemised
         # breakdown behind net_pay, where the payslip shows one.
+        # employer_cpf / date_of_birth / additional_wages: read by PAY.CPF_RATE
+        # (CPF Board's age-band rates). additional_wages is a bonus or other
+        # non-monthly pay, only where the payslip shows one.
         "additional": [
             "company_address", "earnings_items", "deductions_items",
             "total_earnings", "total_deductions", "employee_cpf",
             "ordinary_wages", "basic_pay", "pay_period_end", "pay_date",
+            "employer_cpf", "date_of_birth", "additional_wages",
         ],
     },
     # Split from a single former "id_document" type — passport and NRIC
@@ -238,11 +242,14 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # billing_period_end through contract_end_date (not doc_gen-verified
         # — added for fraud_detection.numerical_validation's POA.* checks):
         # the utility-bill figures a genuine bill itemises.
+        # gst_amount / charges_before_gst: read by POA.GST (IRAS's rate for
+        # the bill date), only where the bill prints a GST line.
         "additional": [
             "individual_name", "individual_address", "company_name", "company_address",
             "billing_period_end", "bill_date", "usage_this_period", "consumption_trend",
             "previous_balance", "payment_received", "outstanding_balance",
             "current_charges", "total_payable", "due_date", "contract_end_date",
+            "gst_amount", "charges_before_gst",
         ],
     },
     "source_of_wealth": {

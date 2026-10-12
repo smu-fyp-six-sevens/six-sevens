@@ -71,6 +71,23 @@ def test_strip_non_prose_removes_company_names_ending_in_a_legal_suffix() -> Non
     assert _tokenize(" ".join(result)) == ["Employer", "Singapore", "and", "Helllo", "Everbright", "workers"]
 
 
+def test_tokenize_skips_urls_domains_and_emails() -> None:
+    text = (
+        "Website: www.iras.gov.sg myTax Portal: mytax.iras.gov.sg "
+        "see https://www.dbs.com.sg/personal/support/bank-general.html or email enquiry@cbs.com.sg"
+    )
+    assert _tokenize(text) == ["Website", "myTax", "Portal", "see", "or", "email"]
+    # A URL wrapped onto its own line continues as a bare path.
+    assert _tokenize("taxes/corporate-income-tax/basics") == []
+
+
+def test_tokenize_still_keeps_real_typos_next_to_web_like_text() -> None:
+    words = _tokenize("Payment recieved on the acount. Ended here.Then cotninued, and/or a statment")
+    for typo in ("recieved", "acount", "cotninued", "statment"):
+        assert typo in words
+    assert "and" in words and "or" in words
+
+
 def test_dehyphenate_spans_joins_line_wrapped_word() -> None:
     result = _dehyphenate_spans(["this is a compre-", "hension test"])
     assert result == ["this is a comprehension", " test"]

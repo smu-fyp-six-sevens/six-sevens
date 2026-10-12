@@ -162,6 +162,7 @@ export type IndividualCheckId =
   | 'numerical-validation'
   | 'date-anomalies'
   | 'company-name-consistency'
+  | 'registry-verification'
   | 'metadata-anomaly'
   | 'image-integrity'
   | 'ai-generation';

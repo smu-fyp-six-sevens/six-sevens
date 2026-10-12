@@ -36,6 +36,7 @@ from ... import document_repository, extracted_fields_repository, storage_servic
 from ...fraud_detection.ai_generation import AIImageAssessment, AIIndicator, check_ai_generation
 from ...fraud_detection.company_identity import check_company_name_consistency
 from ...fraud_detection.date_anomalies import check_date_anomalies
+from ...fraud_detection.registry_lookups import public_holidays_for, verify_against_registries
 from ...fraud_detection.font_consistency import check_font_consistency
 from ...fraud_detection.image_manipulation import check_image_manipulation, check_image_tampering
 from ...fraud_detection.layout_anomalies import check_layout_anomalies
@@ -266,8 +267,9 @@ async def date_consistency_tool(document_id: Annotated[str, InjectedState("docum
         return _result("date_consistency_tool", [], unable="Document not found")
 
     fields = await _extracted_fields(document_id)
+    holidays = await public_holidays_for(document.document_type)
     result = await asyncio.to_thread(
-        check_date_anomalies, document_id, fields, document.document_type
+        check_date_anomalies, document_id, fields, document.document_type, holidays
     )
     if result.unable_to_assess:
         return _result(
@@ -315,6 +317,34 @@ async def company_name_consistency_tool(document_id: Annotated[str, InjectedStat
         for discrepancy in result.discrepancies
     ]
     return _result(tool_name, _with_ids(tool_name, findings))
+
+
+@tool
+async def registry_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
+    """Checks the document's facts against Singapore's public registries, live: ACRA (the UEN exists, the company name matches, the company is live, the incorporation date and registered address match), OneMap and HDB (an address's postal code exists and matches its street; a home address is a residential block). Use it on any document with a UEN, a company or an address."""
+    document = await _document(document_id)
+    if document is None:
+        return _result("registry_tool", [], unable="Document not found")
+
+    fields = await _extracted_fields(document_id)
+    result = await verify_against_registries(document_id, fields, document.document_type)
+    if result.unable_to_assess:
+        return _result("registry_tool", [], unable=result.unable_to_assess_reason or "Unable to assess")
+
+    findings = [
+        {
+            "check_code": finding.check_code,
+            "severity_hint": finding.severity,
+            "source": finding.source,
+            "field": finding.field,
+            "stated": finding.stated,
+            "expected": finding.expected,
+            "needs_review": finding.needs_review,
+            "summary": finding.summary,
+        }
+        for finding in result.findings
+    ]
+    return _result("registry_tool", _with_ids("registry_tool", findings))
 
 
 # --- Digital Authenticity ---------------------------------------------------

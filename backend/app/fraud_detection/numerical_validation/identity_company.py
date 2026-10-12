@@ -18,6 +18,7 @@ from .common import (
     _parse_field_date,
     _rows,
 )
+from ..field_values import also_printed_in, describe_path, text_values
 from .models import NumericalFinding
 from .registry import Num, check
 
@@ -35,6 +36,8 @@ _NRIC_TABLE_ST = "JZIHGFEDCBA"
 _NRIC_TABLE_FG = "XWUTRQPNMLK"
 _NRIC_TABLE_M = "KLJNPQRTUWX"
 _NRIC_RE = re.compile(r"\b([STFGM])(\d{7})([A-Z])\b", re.IGNORECASE)
+# A field or column that holds an ID number, as opposed to free text that happens to mention one.
+_ID_KEY_RE = re.compile(r"nric|fin\b|identification|(?:^|_)id(?:$|_)|passport|personal_no", re.IGNORECASE)
 
 
 def _nric_expected_letter(prefix: str, digits: str) -> str | None:
@@ -51,30 +54,41 @@ def _nric_expected_letter(prefix: str, digits: str) -> str | None:
     return None
 
 
-def _extract_nric_candidates(fields: dict[str, Any]) -> list[str]:
-    candidates: set[str] = set()
-    for value in fields.values():
-        if isinstance(value, str):
-            candidates.update(m.group(0).upper() for m in _NRIC_RE.finditer(value))
-    return sorted(candidates)
+def _extract_nric_candidates(fields: dict[str, Any]) -> dict[str, list[str]]:
+    """Every NRIC/FIN-shaped value in the document, nested ones included (a shareholder table's
+    identification_no), each once, with every field path it appears at (top-level fields first)."""
+    candidates: dict[str, list[str]] = {}
+    keys: dict[str, str] = {}
+    for value in text_values(fields):
+        keys.setdefault(value.path, value.key)
+        for match in _NRIC_RE.finditer(value.text):
+            paths = candidates.setdefault(match.group(0).upper(), [])
+            if value.path not in paths:
+                paths.append(value.path)
+    # Report a number at the field that holds it (subscriber_2_id) before free text that mentions it (notes).
+    for paths in candidates.values():
+        paths.sort(key=lambda path: not _ID_KEY_RE.search(keys[path]))
+    return candidates
 
 
 @check(code="ID.NRIC_CHECKSUM")
 def _check_nric_checksum(*, fields: dict[str, Any]) -> CheckResult:
-    """Any field whose value looks like an NRIC or FIN must carry a valid check letter."""
+    """Any value anywhere in the document that looks like an NRIC or FIN must carry a valid check letter.
+    The same number printed in several places is checked, and reported, once."""
     candidates = _extract_nric_candidates(fields)
     if not candidates:
         return [], skipped(reason="no NRIC-shaped value in any field")
 
     findings = []
-    for value in candidates:
+    for value, paths in sorted(candidates.items()):
         prefix, digits, letter = value[0], value[1:8], value[8]
         expected = _nric_expected_letter(prefix, digits)
         if expected and expected != letter:
             findings.append(_finding(
                 "ID.NRIC_CHECKSUM", "impossible",
-                f"{value} has an invalid check letter — expected {expected}, got {letter}",
-                field="nric_number", stated=value, expected=f"{value[:8]}{expected}",
+                f"{value} in {describe_path(fields, paths[0])} has an invalid check letter — expected {expected}, "
+                f"got {letter}{also_printed_in(fields, paths[1:])}",
+                field=paths[0], stated=value, expected=f"{value[:8]}{expected}", also_fields=paths[1:],
             ))
     return findings, None
 

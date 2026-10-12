@@ -114,5 +114,11 @@ class Settings:
     GOOGLE_CLOUD_PROJECT: str = _env("GOOGLE_CLOUD_PROJECT", "")
     OTEL_SERVICE_NAME: str = _env("OTEL_SERVICE_NAME", "six-sevens-backend")
 
+    # --- Public registry lookups (fraud_detection/registry_lookups) ---
+    # Both optional: without them the anonymous limits apply, and a lookup
+    # that hits its rate limit is reported as unable to assess.
+    DATA_GOV_SG_API_KEY: str = _env("DATA_GOV_SG_API_KEY")
+    ONEMAP_API_TOKEN: str = _env("ONEMAP_API_TOKEN")
+
 
 settings = Settings()

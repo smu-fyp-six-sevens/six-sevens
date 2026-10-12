@@ -16,14 +16,6 @@ from .models import NumericalFinding, Severity, SkippedCheck
 # supplied; every check below degrades to SKIPPED, never a guess.
 # ---------------------------------------------------------------------------
 
-_YA2024_2026_SCHEME = {
-    "exempt_first_pct": 0.75, "exempt_first_cap": 10_000,
-    "exempt_next_pct": 0.50, "exempt_next_cap": 190_000,
-    "tax_rate_pct": 0.17,
-    # Total of rebate + cash grant is capped at rebate_cap; the NOA prints the
-    # rebate net of the grant for companies that received one.
-    "rebate_pct": 0.50, "rebate_cap": 40_000, "cash_grant": 2_000,
-}
 
 REFERENCE_DATA: dict[str, dict] = {
     # Canonical bank name -> how it's named on statements, and its ACRA
@@ -41,42 +33,37 @@ REFERENCE_DATA: dict[str, dict] = {
     # GST registration numbers are deliberately absent: none could be
     # confirmed from an official source, and a guessed one would flag
     # genuine statements. BS.BANK_IDENTIFIERS only compares fields present here.
+    # account_digits (BS.ACCOUNT_NUMBER_FORMAT): DBS 10 and POSB 9 from DBS's
+    # "Bank & Branch Codes" page; OCBC "10 or 12 digits" from OCBC's help page;
+    # UOB 10 from OCBC's funds-transfer tips PDF. Green Link publishes none.
+    # All four registration numbers also match ACRA's own register
+    # (data.gov.sg "Entities Registered with ACRA").
     "bank_identifiers": {
         # POSB is a DBS brand: same legal entity, UEN and BIC (DBS's SWIFT page
         # gives "DBS & POSB" one code).
+        # gst_no: an IRAS GST number of the pre-UEN format, not the UEN; real DBS
+        # statements print "Co. Reg. No. 196800306E GST Registration No:
+        # MR-8500180-3". OCBC's, UOB's and GLDB's GST numbers couldn't be
+        # confirmed from a reliable source (IRAS's register needs a CAPTCHA or an
+        # API key), so they're left out and their GST check doesn't run.
         "DBS Bank Ltd": {
             "aliases": ("dbs", "posb", "development bank of singapore"),
-            "registration_no": "196800306E", "bic": "DBSSSGSG",
+            "registration_no": "196800306E", "gst_no": "MR-8500180-3", "bic": "DBSSSGSG",
+            "account_digits": (9, 10),
         },
         "Oversea-Chinese Banking Corporation Limited": {
             "aliases": ("ocbc", "oversea-chinese banking", "oversea chinese banking"),
-            "registration_no": "193200032W", "bic": "OCBCSGSG",
+            "registration_no": "193200032W", "bic": "OCBCSGSG", "account_digits": (10, 12),
         },
         "United Overseas Bank Limited": {
             "aliases": ("uob", "united overseas bank"), "registration_no": "193500026Z",
-            "bic": "UOVBSGSG",
+            "bic": "UOVBSGSG", "account_digits": (10,),
         },
         "Green Link Digital Bank Pte. Ltd.": {
             "aliases": ("green link digital bank", "gldb"), "registration_no": "202115950G",
             "bic": "GLDTSGSG",
         },
     },
-    # Effective date -> SDIC deposit insurance limit per depositor (SGD).
-    # SDIC media releases of 28 Mar 2019 ($75,000 from 1 Apr 2019) and
-    # 1 Apr 2024 ($100,000 from that day).
-    "deposit_insurance_limits": {"2019-04-01": 75_000, "2024-04-01": 100_000},
-    # Deliberately empty: government loan schemes (e.g. Enterprise Financing
-    # Scheme) have per-sub-scheme caps and risk shares that changed several
-    # times, including temporary COVID-era terms — too many conditions to
-    # encode reliably. LOAN.SCHEME_PARAMS stays SKIPPED.
-    # scheme_name -> {"amount_cap": ..., "risk_share_pct": ..., "effective_from": ...}
-    "loan_scheme_params": {},
-    # Year of assessment -> corporate tax parameters. IRAS Budget 2024
-    # overview (YA 2024) and the Form C-S explanatory notes (YA 2025, YA
-    # 2026): partial exemption 75% of first $10k + 50% of next $190k (since
-    # YA 2020), 17%, CIT Rebate 50% with a $2,000 cash grant, total capped at
-    # $40,000. Other years fall back to _CURRENT_NOA_SCHEME.
-    "noa_tax_parameters": {2024: _YA2024_2026_SCHEME, 2025: _YA2024_2026_SCHEME, 2026: _YA2024_2026_SCHEME},
     # Effective date -> CPF ordinary wage ceiling (SGD/month), per CPF Board's
     # "What is the Ordinary Wage (OW) ceiling?" page. Keyed by date, not
     # year: the ceiling changed mid-2023.
@@ -103,16 +90,6 @@ def _bank_reference(bank_name: Any) -> dict | None:
                 return reference
     return None
 
-# The current scheme this pipeline's own NOA generator uses (see
-# doc_gen_scripts/optional_documents/company_noa/generate_noa.py's
-# compute_noa_tax) — real, current Singapore corporate tax policy, kept
-# here as the fallback for a year not found in REFERENCE_DATA.
-_CURRENT_NOA_SCHEME = {
-    "exempt_first_pct": 0.75, "exempt_first_cap": 10_000,
-    "exempt_next_pct": 0.50, "exempt_next_cap": 190_000,
-    "tax_rate_pct": 0.17,
-    "rebate_pct": 0.50, "rebate_cap": 40_000,
-}
 
 
 
@@ -123,7 +100,7 @@ _CURRENT_NOA_SCHEME = {
 
 def _decode(value: Any) -> Any:
     """Extracted field values are sometimes JSON-encoded a second time —
-    the same quirk spelling_anomaly._decode_field_text documents."""
+    the same quirk field_values._decoded handles."""
     if isinstance(value, str):
         try:
             import json
@@ -355,6 +332,10 @@ def _apply_needs_review(
     file on every check run just to sanity-check a field a human has
     already verified).
 
+    A value extracted in several places (also_fields) uses the most
+    confident of them: one confident reading is enough to rule out an
+    extraction artefact.
+
     A finding with no `field` (nothing to look up) is never downgraded.
     """
     if not findings:
@@ -363,9 +344,10 @@ def _apply_needs_review(
     updated: list[FindingT] = []
 
     for finding in findings:
-        base_field = (finding.field or "").split("[")[0]
-        confidence = confidences.get(base_field)
-        low_confidence = confidence is not None and confidence < settings.EXTRACTION_CONFIDENCE_THRESHOLD
+        # A nested value's path ("shareholders[1].address", "officer.address") comes from its top-level field.
+        paths = [finding.field or "", *getattr(finding, "also_fields", [])]
+        known = [c for p in paths if (c := confidences.get(re.split(r"[\[.]", p, maxsplit=1)[0])) is not None]
+        low_confidence = bool(known) and max(known) < settings.EXTRACTION_CONFIDENCE_THRESHOLD
 
         if low_confidence and not finding.needs_review:
             updated.append(finding.model_copy(update={"needs_review": True}))
@@ -387,11 +369,12 @@ CheckResult = tuple[list[NumericalFinding], SkippedCheck | None]
 def _finding(
     code: str, severity: Severity, summary: str, *,
     field: str | None = None, stated: str | None = None, expected: str | None = None,
-    severity_note: str | None = None,
+    severity_note: str | None = None, also_fields: list[str] | None = None,
 ) -> NumericalFinding:
     return NumericalFinding(
         check_code=code, severity=severity, summary=summary,
         field=field, stated=stated, expected=expected, severity_note=severity_note,
+        also_fields=also_fields or [],
     )
 
 
