@@ -456,6 +456,10 @@ def _as_bbox(raw) -> BBox | None:
     return (float(raw[0]), float(raw[1]), float(raw[2]), float(raw[3]))
 
 
+def _rounded_bbox(bbox: BBox) -> BBox:
+    return (round(bbox[0], 2), round(bbox[1], 2), round(bbox[2], 2), round(bbox[3], 2))
+
+
 def _union_bbox(bboxes) -> BBox:
     xs0, ys0, xs1, ys1 = zip(*bboxes)
     return (min(xs0), min(ys0), max(xs1), max(ys1))
@@ -580,7 +584,7 @@ def _anomaly(
         anomaly_type=anomaly_type,
         page=block.page + 1,
         location=location or _location_label(block),
-        bbox=tuple(round(v, 2) for v in block.bbox),  # type: ignore[arg-type]
+        bbox=_rounded_bbox(block.bbox),
         text=_clip(block.text),
         detected=detected,
         expected=expected,
@@ -710,7 +714,7 @@ def _abs_pt_phrase(evidence: dict, deviation: str) -> str:
 
 def _label_alignment(value: object) -> str:
     if value in _ALIGNMENT_LABEL:
-        return _ALIGNMENT_LABEL[value]  # type: ignore[index]
+        return _ALIGNMENT_LABEL[value]
     return str(value).replace("-", " ")
 
 

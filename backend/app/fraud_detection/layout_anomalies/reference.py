@@ -135,20 +135,20 @@ def build_reference(name: str, document_type: str, copies: list[list[_Block]]) -
     # Text repeated on a page ("Single" in every row of a table) is a value
     # that happened to line up in these copies, not a fixed label.
     per_page = Counter((line.page, _norm(line.text)) for _, line in first)
-    labels, slots = [], []
+    labels: list[ReferenceLine] = []
+    slots: list[ReferenceLine] = []
     for _, line in first:
-        entry = dict(
+        text = _norm(line.text)
+        is_label = _is_label_text(text) and per_page[(line.page, text)] == 1 and in_every_copy(line)
+        entry = ReferenceLine(
             page=line.page,
             x0=line.bbox[0],
             x1=line.bbox[2],
             baseline=_line_baseline(line),
             bottom=line.bbox[3],
+            text=text if is_label else None,
         )
-        text = _norm(line.text)
-        if _is_label_text(text) and per_page[(line.page, text)] == 1 and in_every_copy(line):
-            labels.append(ReferenceLine(**entry, text=_norm(line.text)))
-        else:
-            slots.append(ReferenceLine(**entry))
+        (labels if is_label else slots).append(entry)
     return ReferenceLayout(name=name, document_type=document_type, labels=labels, slots=slots)
 
 

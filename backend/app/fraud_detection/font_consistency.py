@@ -565,12 +565,16 @@ def _style_dict(font: str | None, size: float | None, emphasis: Emphasis | None)
     }
 
 
+_SINGLE_DEVIATION: dict[str, Literal["font", "size", "emphasis"]] = {
+    "font": "font", "size": "size", "emphasis": "emphasis",
+}
+
+
 def _raw_anomaly(
     run: _Run, dims: _Dims, expected: _Expectation, *, fragment: _Span | None = None
 ) -> _RawAnomaly:
     contributing = [dim for dim in ("font", "size", "emphasis") if dims[dim]]
-    deviation_type: Literal["font", "size", "emphasis", "combo"]
-    deviation_type = "combo" if len(contributing) >= 2 else contributing[0]  # type: ignore[assignment]
+    deviation_type = "combo" if len(contributing) >= 2 else _SINGLE_DEVIATION[contributing[0]]
     if fragment is not None:
         bbox, text = fragment.bbox, fragment.text
         detected = _style_dict(fragment.font, fragment.size, (fragment.bold, fragment.italic, fragment.underline))

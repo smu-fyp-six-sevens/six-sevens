@@ -12,7 +12,7 @@ from .common import (
     _CLAUSE_HEADING_RE, _CLAUSE_STRETCH_MIN_WIDTH_PT, _clip, _COARSE_ROLES, _DATE_LINE_RE,
     _dominant, INDENT_THRESHOLD_PT, JUSTIFY_FILL_RATIO, _LABEL_VALUE_RE, LayoutAnomaly,
     LayoutElement, _Line, _LIST_MARKER_RE, MIN_BLOCK_CHARS, _NO_RHYTHM_ROLES,
-    _NUMBERED_ITEM_RE, SHORT_WIDTH_RATIO, StructuralRole,
+    _NUMBERED_ITEM_RE, _rounded_bbox, SHORT_WIDTH_RATIO, StructuralRole,
 )
 from .extraction import (
     _is_clause_heading_text, _is_heading_block, _position_band,
@@ -334,7 +334,7 @@ def _compile_elements(blocks: list[_Block]) -> list[LayoutElement]:
         elements.append(
             LayoutElement(
                 page=block.page + 1,
-                bbox=tuple(round(v, 2) for v in block.bbox),  # type: ignore[arg-type]
+                bbox=_rounded_bbox(block.bbox),
                 left=round(block.x0, 2),
                 top=round(block.y0, 2),
                 right=round(block.x1, 2),
