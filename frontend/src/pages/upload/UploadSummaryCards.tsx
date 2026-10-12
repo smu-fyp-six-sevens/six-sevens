@@ -1,4 +1,4 @@
-import type { DocumentRecord, DocumentCaseMatch } from '../../services/uploadService';
+import type { CaseRisk, DocumentRecord, DocumentCaseMatch } from '../../services/uploadService';
 import {
   CLASSIFICATION_CONFIDENCE_THRESHOLD,
   EXTRACTION_CONFIDENCE_THRESHOLD,
@@ -8,17 +8,20 @@ import {
   lowestFieldConfidence,
 } from '../../services/uploadService';
 import { humanizeFieldKey } from '../../utils/fieldLabels';
+import { CaseRiskCard } from './CaseRiskCard';
 
 export function UploadSummaryCards({
   caseMatchNeedsReview,
   caseMatches,
   flaggedDocuments,
   onOpenDocument,
+  risk,
 }: {
   caseMatchNeedsReview: (document: DocumentRecord) => boolean;
   caseMatches: Map<string, DocumentCaseMatch>;
   flaggedDocuments: DocumentRecord[];
   onOpenDocument: (documentId: string) => void;
+  risk: CaseRisk | null;
 }) {
   return (
     <>
@@ -137,29 +140,7 @@ export function UploadSummaryCards({
               )}
             </section>
 
-            <section className="summary-card">
-              <div className="summary-card-header">
-                <div className="summary-card-title">
-                  <span className="summary-icon summary-icon--risk">
-                    ▥
-                  </span>
-                  <h2>Customer Risk Summary</h2>
-                </div>
-              </div>
-
-              <div className="summary-message summary-message--info">
-                <span className="summary-message-icon">ⓘ</span>
-
-                <div>
-                  <strong>Risk summary not available yet.</strong>
-
-                  <p>
-                    Risk analysis results will appear here once document
-                    extraction and fraud analysis are completed.
-                  </p>
-                </div>
-              </div>
-            </section>
+            <CaseRiskCard risk={risk} />
 
             <section className="summary-card">
               <div className="summary-card-header">

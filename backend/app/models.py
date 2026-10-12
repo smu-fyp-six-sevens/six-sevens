@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -301,6 +301,55 @@ class IdDocumentCoverage(BaseModel):
     missing_side: Optional[str] = None
 
 
+RiskState = Literal["scored", "pending", "failed", "no_documents"]
+RiskLevel = Literal["Low", "Medium", "High", "Critical"]
+
+
+class ContributingFinding(BaseModel):
+    document_id: str
+    filename: str
+    document_type: Optional[str] = None
+    finding_id: str
+    tool: Optional[str] = None
+    severity: str
+    summary: str
+    rationale: str
+    # Points this finding added after the document's noise cap.
+    points: float
+    # The specialist kept the tool's finding without ever assessing it.
+    unreviewed: bool = False
+
+
+class UnassessedCheck(BaseModel):
+    document_id: str
+    filename: str
+    tool: Optional[str] = None
+    reason: Optional[str] = None
+
+
+class CaseRisk(BaseModel):
+    """
+    The case's risk level, rolled up from its documents' detection
+    findings — see case_risk.compute_case_risk for how it's scored. Only
+    "scored" carries a level; the other states say why there isn't one yet.
+    """
+
+    state: RiskState
+    level: Optional[RiskLevel] = None
+    # 0-100, anchored to level (see case_risk.SCORE_BANDS) — what officers see.
+    score: Optional[int] = None
+    # The raw points total the level is banded from.
+    points: Optional[float] = None
+    contributing_findings: list[ContributingFinding] = Field(default_factory=list)
+    # Checks that couldn't run — listed, never scored: not being able to
+    # check something isn't evidence of fraud.
+    unassessed_checks: list[UnassessedCheck] = Field(default_factory=list)
+    # Why the case got its level, e.g. which Critical rule fired.
+    reasons: list[str] = Field(default_factory=list)
+    documents_scanned: int = 0
+    documents_total: int = 0
+
+
 class CaseSummary(CaseRecord):
     """
     documents_status and fulfilled_requirements are both computed live from
@@ -320,6 +369,8 @@ class CaseSummary(CaseRecord):
     id_document_coverage: IdDocumentCoverage = Field(
         default_factory=lambda: IdDocumentCoverage(covered=0, total=0)
     )
+    # None when the documents' detection reports couldn't be loaded.
+    risk: Optional[CaseRisk] = None
 
 
 class UpdateCaseRequest(BaseModel):
@@ -462,6 +513,13 @@ def is_classification_confirmed(document: DocumentRecord) -> bool:
     if document.document_type in (None, "", "unrecognised"):
         return confidence >= 1.0
     return confidence >= settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
+
+
+def skips_detection(document: DocumentRecord) -> bool:
+    """Fraud detection never runs on an unrecognised (Other) document: with
+    no known type there's no schema or document-specific check to run it
+    against. Approving one as Other is allowed, it just isn't scanned."""
+    return document.document_type in (None, "", "unrecognised")
 
 
 def counts_towards_checklist(document: DocumentRecord) -> bool:

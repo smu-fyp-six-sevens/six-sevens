@@ -33,6 +33,7 @@ from ..models import (
     UpdateExtractedFieldsRequest,
     compute_fulfilled_requirements,
     is_classification_confirmed,
+    skips_detection,
 )
 from ..langgraph import pipeline as langgraph_pipeline
 from ..langgraph import trace as langgraph_trace
@@ -95,13 +96,6 @@ async def _run_detection_task(document_id: str, case_id: str | None) -> None:
         _detection_tasks.pop(document_id, None)
         if case_id:
             await _push_case_snapshot(case_id)
-
-
-def skips_detection(document: DocumentRecord) -> bool:
-    """Fraud detection never runs on an unrecognised (Other) document: with
-    no known type there's no schema or document-specific check to run it
-    against. Approving one as Other is allowed, it just isn't scanned."""
-    return document.document_type in (None, "", "unrecognised")
 
 
 def _launch_detection(document_id: str, case_id: str | None) -> None:
