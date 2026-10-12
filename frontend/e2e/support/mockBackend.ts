@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Page, Route, WebSocketRoute } from '@playwright/test';
+import type { CaseRisk } from '../../src/services/uploadService/types';
 
 /**
  * Each document type's required extraction fields, exported from the
@@ -76,6 +77,8 @@ export interface CaseRow {
   fulfilled_requirements: string[];
   proof_of_address_coverage: { covered: number; total: number; unmatched_names: string[] };
   id_document_coverage: { covered: number; total: number; missing_side: string | null };
+  // Computed by backend/app/case_risk.py on every case read.
+  risk: CaseRisk | null;
 }
 
 export interface DocumentRow {
@@ -130,6 +133,23 @@ export function makeCase(overrides: Partial<CaseRow> = {}): CaseRow {
     fulfilled_requirements: [],
     proof_of_address_coverage: { covered: 0, total: 0, unmatched_names: [] },
     id_document_coverage: { covered: 0, total: 0, missing_side: null },
+    risk: makeRisk(),
+    ...overrides,
+  };
+}
+
+/** Defaults to what the backend reports for a case with nothing to scan yet. */
+export function makeRisk(overrides: Partial<CaseRisk> = {}): CaseRisk {
+  return {
+    state: 'no_documents',
+    level: null,
+    score: null,
+    points: null,
+    contributing_findings: [],
+    unassessed_checks: [],
+    reasons: [],
+    documents_scanned: 0,
+    documents_total: 0,
     ...overrides,
   };
 }

@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../support/test';
-import { makeCase, makeDocument, type MockBackend } from '../support/mockBackend';
+import { makeCase, makeDocument, makeRisk, type MockBackend } from '../support/mockBackend';
+import type { CaseRiskFinding } from '../../src/services/uploadService/types';
 
 /**
  * Case Management (Sprint 2) — "Test Cases - Sprint 2.xlsx", Case Management
@@ -162,8 +163,101 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
 
     const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
     await expect(section).toBeVisible();
-    // Risk analysis isn't built yet — the section shows its placeholder.
-    await expect(section).toContainText('Risk summary not available yet.');
+    // Nothing uploaded yet, so there's nothing to score.
+    await expect(section).toContainText('No documents to score yet.');
+  });
+
+  test('CM-007 a case still being scanned shows how many documents are done @CM-007', async ({ page, backend }) => {
+    const harbor = makeCase({
+      greenlink_case_id: 'GLDB-2001',
+      risk: makeRisk({ state: 'pending', documents_scanned: 2, documents_total: 3 }),
+    });
+    backend.cases.push(harbor);
+    await page.goto(`/cases/${harbor.greenlink_case_id}`);
+
+    const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
+    await expect(section).toContainText('2 of 3 documents scanned.');
+    await expect(section.locator('.risk-badge')).toHaveCount(0);
+  });
+
+  test('CM-007 a scored case shows its risk level and contributing findings @CM-007', async ({ page, backend }) => {
+    const finding = (overrides: Partial<CaseRiskFinding>): CaseRiskFinding => ({
+      document_id: 'doc-payslip',
+      filename: 'C011_Payslip.pdf',
+      document_type: 'payslip',
+      finding_id: 'font_consistency_tool-1',
+      tool: 'font_consistency_tool',
+      severity: 'high',
+      summary: 'Net pay is in a different font from the rest of the payslip.',
+      rationale: 'Only the figure that matters differs.',
+      points: 8,
+      unreviewed: false,
+      ...overrides,
+    });
+    const harbor = makeCase({
+      greenlink_case_id: 'GLDB-2002',
+      risk: makeRisk({
+        state: 'scored',
+        level: 'High',
+        score: 57,
+        points: 14,
+        documents_scanned: 2,
+        documents_total: 2,
+        reasons: ['Rated High from the combined severity of 4 finding(s).'],
+        contributing_findings: [
+          finding({}),
+          ...[1, 2, 3].map((n) =>
+            finding({
+              finding_id: `layout_anomalies_tool-${n}`,
+              tool: 'layout_anomalies_tool',
+              severity: 'medium',
+              summary: 'This label and amount on the same row are vertically offset by 20 pt.',
+              points: n === 1 ? 3 : 0.75,
+            }),
+          ),
+          finding({
+            document_id: 'doc-statement',
+            filename: 'C011_BankStatement.pdf',
+            document_type: 'bank_statement',
+            finding_id: 'spelling_tool-1',
+            tool: 'spelling_tool',
+            severity: 'low',
+            summary: 'Possible misspelling "Statment".',
+            points: 1,
+          }),
+        ],
+        unassessed_checks: [
+          { document_id: 'doc-statement', filename: 'C011_BankStatement.pdf', tool: 'metadata_tool', reason: 'No metadata' },
+        ],
+      }),
+    });
+    backend.cases.push(harbor);
+    await page.goto(`/cases/${harbor.greenlink_case_id}`);
+
+    const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
+    await expect(section.locator('.risk-badge')).toHaveText('High risk');
+    await expect(section).toContainText('Score 57/100');
+    await expect(section).toContainText('1 high · 3 medium · 1 low');
+
+    // Documents start collapsed; the low-only bank statement is hidden behind "Show more".
+    const documents = section.locator('.risk-document');
+    await expect(documents).toHaveCount(1);
+    await expect(documents.first()).toContainText('C011_Payslip.pdf');
+    await expect(section.locator('.risk-findings')).toHaveCount(0);
+
+    // Expanding merges the three identical layout findings into one ×3 row.
+    await documents.first().getByRole('button').click();
+    const rows = section.locator('.risk-findings li');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(1)).toContainText('×3');
+
+    await section.getByRole('button', { name: 'Show 1 low-severity finding' }).click();
+    await expect(documents).toHaveCount(2);
+    await expect(documents.nth(1)).toContainText('C011_BankStatement.pdf');
+    await expect(section.getByRole('button', { name: 'Show less' })).toBeVisible();
+
+    await section.getByText("Couldn't verify (1)").click();
+    await expect(section).toContainText('C011_BankStatement.pdf — Metadata: No metadata');
   });
 
   test('CM-008 flagged anomalies are accessible from case details @CM-008', async ({ page, backend }) => {
