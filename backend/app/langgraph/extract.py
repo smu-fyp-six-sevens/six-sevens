@@ -200,7 +200,7 @@ def _drop_period_totals(result: dict, raw_text: str) -> dict:
             continue
         copied = any(
             other not in _STATEMENT_TOTAL_FIELDS and "total" in other.lower() and _PERIOD_KEY_RE.search(other)
-            and _as_figure(value) is not None and abs(_as_figure(value) - figure) < 0.005
+            and (other_figure := _as_figure(value)) is not None and abs(other_figure - figure) < 0.005
             for other, value in fields.items()
         )
         on_period_line = any(

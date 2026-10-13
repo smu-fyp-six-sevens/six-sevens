@@ -68,6 +68,16 @@ class DetectionState(TypedDict, total=False):
     result: dict
 
 
+class SpecialistInput(TypedDict, total=False):
+    """What `Send` hands one specialist: its own input, not the graph state."""
+
+    document_id: Required[str]
+    document_type: Required[str]
+    name: Required[str]
+    brief: Required[str]
+    second_look: bool
+
+
 _DEFAULT_BRIEF = "Review this document within your expertise."
 
 
@@ -214,21 +224,21 @@ def _dispatch(state: DetectionState):
     ]
 
 
-async def specialist_node(payload: dict) -> dict:
+async def specialist_node(state: SpecialistInput) -> dict:
     logger.info(
         "Document %s: %s specialist starting%s",
-        payload["document_id"], payload["name"], " (second look)" if payload.get("second_look") else "",
+        state["document_id"], state["name"], " (second look)" if state.get("second_look") else "",
     )
-    report = await run_specialist(payload["name"], payload["document_id"], payload["document_type"], payload["brief"])
-    if payload.get("second_look"):
+    report = await run_specialist(state["name"], state["document_id"], state["document_type"], state["brief"])
+    if state.get("second_look"):
         report = {**report, "second_look": True}
     logger.info(
         "Document %s: %s specialist done — %d finding(s), tools called: %s",
-        payload["document_id"], payload["name"], len(report["findings"]), report["tools_called"] or "none",
+        state["document_id"], state["name"], len(report["findings"]), report["tools_called"] or "none",
     )
     trace.record(
-        payload["document_id"], "detection_specialist",
-        specialist=payload["name"], tools_called=report["tools_called"],
+        state["document_id"], "detection_specialist",
+        specialist=state["name"], tools_called=report["tools_called"],
         finding_count=len(report["findings"]), dismissed=report["dismissed"], uncertain=report["uncertain"],
         tool_calls=report["tool_calls"],
     )
@@ -445,10 +455,7 @@ def build_detection_graph():
 
     graph.set_entry_point("load_context")
     graph.add_edge("load_context", "lead_plan")
-    # _dispatch returning list[Send] for the map/fan-out case is LangGraph's
-    # documented Send pattern; add_conditional_edges' stub just doesn't
-    # include Send in its declared return-type union.
-    graph.add_conditional_edges("lead_plan", _dispatch, ["specialist"])  # pyright: ignore[reportArgumentType]
+    graph.add_conditional_edges("lead_plan", _dispatch, ["specialist"])
     graph.add_edge("specialist", "lead_review")
     graph.add_conditional_edges("lead_review", _after_review, {"run_second_look": "run_second_look", "synthesize": "synthesize"})
     graph.add_edge("run_second_look", "lead_review")
