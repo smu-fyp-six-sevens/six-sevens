@@ -157,6 +157,17 @@ async def test_rate_limited_registry_is_a_skip_not_a_finding() -> None:
     assert any("rate limited" in s.reason for s in result.skipped_checks)
 
 
+async def test_a_passport_has_nothing_to_look_up() -> None:
+    # No UEN and no address on a passport: no lookup runs (no_network would fail one), and the
+    # detection tool reports it as nothing to check, not as a check that couldn't run.
+    from app.langgraph.detection.tools import _result
+
+    result = await verify_against_registries("d", [_field("passport_number", "K5690850D")], "passport")
+    assert result.findings == [] and result.skipped_checks == []
+    tool_output = _result("registry_tool", [], unable=result.unable_to_assess_reason)
+    assert tool_output["nothing_to_check"] and not tool_output["unable_to_assess"]
+
+
 # --- addresses -----------------------------------------------------------------------------------
 
 _HOUGANG_207 = [{"BLK_NO": "207", "ROAD_NAME": "HOUGANG STREET 21", "BUILDING": "PAYA LEBAR KOVAN COMMUNITY CLUB",
@@ -168,6 +179,15 @@ async def test_address_flags_a_street_that_is_not_at_the_postal_code() -> None:
     with patch("app.fraud_detection.registry_lookups.onemap.addresses_at_postal_code", AsyncMock(return_value=_HOUGANG_207)):
         result = await verify_against_registries("d", [_field("address", "34 Jurong West Avenue, #11-80, Singapore 530207")], "credit_report")
     assert len(_codes(result, "REG.ADDRESS_MATCH")) == 1
+
+
+async def test_a_payslip_checks_its_address_but_never_looks_up_acra() -> None:
+    with patch("app.fraud_detection.registry_lookups.acra.datastore_search",
+               AsyncMock(side_effect=AssertionError("a payslip has no UEN to look up"))), \
+         patch("app.fraud_detection.registry_lookups.onemap.addresses_at_postal_code", AsyncMock(return_value=_HOUGANG_207)):
+        result = await verify_against_registries(
+            "d", [_field("company_address", "207 Hougang Street 21, Singapore 530207")], "payslip")
+    assert result.findings == [] and result.skipped_checks == [] and not result.unable_to_assess
 
 
 async def test_address_flags_a_postal_code_that_does_not_exist() -> None:

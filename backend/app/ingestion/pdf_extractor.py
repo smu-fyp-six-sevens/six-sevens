@@ -185,6 +185,27 @@ def _reading_order_text(segments: list[_Segment]) -> str:
     return "\n".join(lines)
 
 
+# A line whose writing direction is further than this from left-to-right
+# (cos of the angle, about 8 degrees) is printed sideways.
+_HORIZONTAL_MIN_COS = 0.99
+
+
+def _sideways_lines(page: pymupdf.Page) -> list[str]:
+    """Lines printed at an angle, e.g. a bank's "Co. Reg. No. ... GST Reg No: ..."
+    running up the margin, each read in its own direction. Sorted text breaks
+    such a line into single words stacked bottom to top, which strands a value
+    away from its label."""
+    lines = []
+    for block in cast(dict, page.get_text("dict")).get("blocks", []):
+        for line in block.get("lines", []):
+            if abs(line["dir"][0]) >= _HORIZONTAL_MIN_COS:
+                continue
+            text = _COLUMN_GAP_RE.sub("   ", "".join(span["text"] for span in line["spans"])).strip()
+            if text:
+                lines.append(text)
+    return lines
+
+
 def _page_text(page: pymupdf.Page) -> tuple[str, list[_Segment] | None]:
     """
     Text in on-page reading order (top to bottom, left to right), not the
@@ -196,13 +217,16 @@ def _page_text(page: pymupdf.Page) -> tuple[str, list[_Segment] | None]:
     a cover-up box and interleaves two values drawn on top of each other
     ("SGD 9,000.008,193.27"), so a page with hidden or overlapping text is
     rebuilt from its visible runs, which are returned too. Every other page
-    keeps pymupdf's sorted text, and None.
+    keeps pymupdf's sorted text, and None. Either way, a line printed
+    sideways is added whole at the end of the page.
     """
     segments, hidden = _visible_segments(page)
+    sideways = _sideways_lines(page)
     if hidden or _has_overlapping_text(segments):
-        return _reading_order_text(segments), segments
+        return "\n".join([_reading_order_text(segments), *sideways]), segments
     text = cast(str, page.get_text("text", sort=True))
-    return "\n".join(_COLUMN_GAP_RE.sub("   ", line).rstrip() for line in text.splitlines()), None
+    lines = [_COLUMN_GAP_RE.sub("   ", line).rstrip() for line in text.splitlines()]
+    return "\n".join(lines + sideways), None
 
 
 def extract_pdf(file_bytes: bytes):
