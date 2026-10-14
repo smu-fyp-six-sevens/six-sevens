@@ -47,6 +47,10 @@ export interface CaseMatchComparison {
   outcome: 'match' | 'mismatch';
   document_field: string;
   document_value: string;
+  reference_document_id?: string | null;
+  reference_filename?: string | null;
+  other_document_id?: string | null;
+  other_filename?: string | null;
   case_value: string | null;
   reason: string;
 }
@@ -55,7 +59,7 @@ export interface DocumentCaseMatch {
   document_id: string;
   filename: string;
   document_type: string | null;
-  status: 'match' | 'manual_review' | 'pending';
+  status: 'match' | 'mismatch' | 'manual_review' | 'pending';
   can_proceed_to_fraud_detection: boolean;
   // The company or an individual on the document doesn't match the case.
   case_mismatch: boolean;

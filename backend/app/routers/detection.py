@@ -523,7 +523,7 @@ async def get_case_match(
 ) -> DocumentCaseMatch:
     """
     Whether this document belongs to its case's company and individuals —
-    the gate before fraud detection (see case_match.py). The check needs
+    the identity comparison used by fraud detection (see case_match.py). The check needs
     every document in the case (the certificate of incumbency is only
     trusted once other documents corroborate it), so this runs the whole
     case's check and returns this document's entry. Read-only.

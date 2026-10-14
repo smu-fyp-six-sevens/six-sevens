@@ -428,8 +428,98 @@ def merge_reports(state: DetectionState) -> dict:
     }
 
 
+def add_case_match_findings(report: dict, case_match: Any | None) -> dict:
+    """Add verified cross-document identity mismatches to a detection report."""
+    if case_match is None or not case_match.case_mismatch:
+        return report
+
+    findings = list(report["findings"])
+    existing_ids = {finding["id"] for finding in findings}
+    added = 0
+    for comparison in case_match.comparisons:
+        if comparison.outcome != "mismatch":
+            continue
+        counterpart_id = comparison.other_document_id or comparison.reference_document_id
+        counterpart_name = comparison.other_filename or comparison.reference_filename
+        finding_id = ":".join((
+            "case-identity",
+            comparison.check,
+            comparison.document_field,
+            counterpart_id or "reference",
+            comparison.document_value,
+        ))
+        if finding_id in existing_ids:
+            continue
+        citations = [case_match.filename]
+        if counterpart_name:
+            citations.append(counterpart_name)
+        findings.append({
+            "id": finding_id,
+            "tool": "case_identity_match",
+            "summary": f"{comparison.reason} ({'; '.join(citations)})",
+            "severity": "high" if comparison.check in {"individual_id", "company_uen"} else "medium",
+            "rationale": "Extracted identity details differ across case documents; review the cited documents.",
+            "specialists": ["identity_matching"],
+            "via_second_look": False,
+        })
+        existing_ids.add(finding_id)
+        added += 1
+
+    if not added:
+        return report
+
+    identity_brief = "Compare extracted names and identifiers with the other documents in this case."
+    identity_summary = f"Identity matching found {added} cross-document mismatch(es)."
+    updated = {
+        **report,
+        "findings": findings,
+        "verdict": "flagged",
+        "consulted": [
+            *report["consulted"],
+            {
+                "specialist": "identity_matching",
+                "title": "Identity Matching",
+                "brief": identity_brief,
+                "tools_called": ["case_identity_match"],
+                "summary": identity_summary,
+                "uncertain": False,
+                "dismissed": [],
+                "second_look": False,
+            },
+        ],
+    }
+    updated["summary"] = (
+        f"{report['summary']} {identity_summary}"
+        if report["verdict"] == "flagged"
+        else identity_summary
+    )
+    return updated
+
+
 async def synthesize_node(state: DetectionState) -> dict:
     result = merge_reports(state)
+    try:
+        # Imported here to keep case service and detection graph initialization
+        # independent. Identity comparison is deterministic and runs only once
+        # the approved document has completed the normal fraud checks.
+        from ... import case_service
+
+        case_match = await asyncio.to_thread(
+            case_service.get_case_match_for_document, state["document_id"]
+        )
+        result = add_case_match_findings(result, case_match)
+    except Exception as exc:
+        logger.exception("Identity matching failed during detection for %s", state["document_id"])
+        unable = list(result["unable_to_assess"])
+        unable.append({
+            "specialist": "Identity Matching",
+            "tool": "case_identity_match",
+            "reason": f"Could not compare identity fields across case documents: {type(exc).__name__}",
+        })
+        result = {**result, "unable_to_assess": unable}
+        if result["verdict"] == "clean":
+            result["verdict"] = "inconclusive"
+            result["summary"] = "No findings, but identity matching could not be completed."
     logger.info(
         "Document %s: detection done — verdict %s, %d finding(s)",
         state["document_id"], result["verdict"], len(result["findings"]),

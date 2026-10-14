@@ -200,7 +200,7 @@ def test_company_name_match_counts_towards_verifying_incumbency() -> None:
     assert bank_statement.id in result.incumbency.corroborating_document_ids
 
 
-def test_foreign_passport_goes_to_manual_review_once_incumbency_verified() -> None:
+def test_foreign_passport_proceeds_to_detection_once_incumbency_verified() -> None:
     bank_statement = _doc("bank_statement", {"company_name": "ACME Trading Pte Ltd", "bank_name": "DBS"})
     passport = _doc("passport", {"individual_name": "TEO KAI MING", "nric_number": "S7273147P"})
     result = check_case_match(
@@ -208,8 +208,9 @@ def test_foreign_passport_goes_to_manual_review_once_incumbency_verified() -> No
     )
 
     match = _by_id(result, passport.id)
-    assert match.status == DocumentMatchStatus.MANUAL_REVIEW
+    assert match.status == DocumentMatchStatus.MISMATCH
     assert match.case_mismatch
+    assert match.can_proceed_to_fraud_detection
     assert "S7273147P" in match.reason
 
 
@@ -256,14 +257,14 @@ def test_two_incumbencies_with_different_uens_go_to_manual_review() -> None:
 # --- step 2: company check ----------------------------------------------------
 
 
-def test_document_with_other_uen_is_a_case_mismatch_sent_to_manual_review() -> None:
+def test_document_with_other_uen_is_a_case_mismatch_for_fraud_detection() -> None:
     stray = _doc("notice_of_assessment", {"company_name": "ACME Trading", "tax_reference_number": OTHER_UEN})
     result = check_case_match(_case(), [_incumbency(), *_corroborating(3), stray])
 
     match = _by_id(result, stray.id)
-    assert match.status == DocumentMatchStatus.MANUAL_REVIEW
+    assert match.status == DocumentMatchStatus.MISMATCH
     assert match.case_mismatch
-    assert not match.can_proceed_to_fraud_detection
+    assert match.can_proceed_to_fraud_detection
     assert result.mismatched_document_ids == [stray.id]
     # AC4: identifies both the document's value and the case's.
     comparison = match.comparisons[0]
@@ -283,7 +284,7 @@ def test_uen_takes_priority_over_company_name() -> None:
 
 @pytest.mark.parametrize(
     "company_name, expected",
-    [("ACME Pte Ltd", DocumentMatchStatus.MATCH), ("ACNE Pte Ltd", DocumentMatchStatus.MANUAL_REVIEW)],
+    [("ACME Pte Ltd", DocumentMatchStatus.MATCH), ("ACNE Pte Ltd", DocumentMatchStatus.MISMATCH)],
 )
 def test_company_name_fuzzy_match_when_document_has_no_uen(company_name, expected) -> None:
     doc = _doc("bank_statement", {"company_name": company_name, "bank_name": "DBS"})
@@ -291,7 +292,7 @@ def test_company_name_fuzzy_match_when_document_has_no_uen(company_name, expecte
 
     match = _by_id(result, doc.id)
     assert match.status == expected
-    assert match.case_mismatch is (expected == DocumentMatchStatus.MANUAL_REVIEW)
+    assert match.case_mismatch is (expected == DocumentMatchStatus.MISMATCH)
     assert match.comparisons[0].check == "company_name"
 
 
@@ -316,12 +317,91 @@ def test_nric_matched_by_id_number() -> None:
     assert match.comparisons[0].check == "individual_id"
 
 
+def test_matching_id_still_flags_name_mismatch_and_cites_reference_document() -> None:
+    nric = _doc(
+        "nric",
+        {"nric_number": "S1234567A", "individual_name": "TAN WEI JUN"},
+        "director-nric",
+    )
+    incumbency = _incumbency(doc_id="director-incumbency")
+    result = check_case_match(_case(), [incumbency, *_corroborating(3), nric])
+
+    match = _by_id(result, nric.id)
+    name_finding = next(c for c in match.comparisons if c.check == "individual_name")
+    assert match.status == DocumentMatchStatus.MISMATCH
+    assert name_finding.outcome == CheckOutcome.MISMATCH
+    assert name_finding.document_value == "TAN WEI JUN"
+    assert name_finding.reference_document_id == incumbency.id
+    assert name_finding.reference_filename == incumbency.filename
+
+
+@pytest.mark.story("SCRUM-253", "identity mismatch cites both documents")
+def test_pairwise_name_mismatch_flags_and_cites_nric_and_personal_bank_statement() -> None:
+    incumbency_fields = dict(INCUMBENCY_FIELDS)
+    incumbency_fields.update({
+        "individual_name": "Goh Ka Yee",
+        "director_name": "Goh Ka Yee",
+        "shareholder_1_name": "Goh Ka Yee",
+    })
+    nric = _doc(
+        "nric",
+        {"nric_number": "S1234567A", "individual_name": "Goh Ka Yee"},
+        "director-nric",
+    )
+    bank_statement = _doc(
+        "bank_statement",
+        {"account_holder_name": "Goh Ka Yeo"},
+        "personal-bank-statement",
+    )
+    result = check_case_match(
+        _case(), [_incumbency(incumbency_fields), *_corroborating(3), nric, bank_statement]
+    )
+
+    nric_match = _by_id(result, nric.id)
+    statement_match = _by_id(result, bank_statement.id)
+    nric_finding = next(
+        c for c in nric_match.comparisons
+        if c.check == "individual_name" and c.other_document_id == bank_statement.id
+    )
+    statement_finding = next(
+        c for c in statement_match.comparisons
+        if c.check == "individual_name" and c.other_document_id == nric.id
+    )
+
+    assert nric_match.case_mismatch and statement_match.case_mismatch
+    assert nric_match.status == DocumentMatchStatus.MISMATCH
+    assert statement_match.status == DocumentMatchStatus.MISMATCH
+    assert nric_match.can_proceed_to_fraud_detection
+    assert statement_match.can_proceed_to_fraud_detection
+    assert nric_finding.other_filename == bank_statement.filename
+    assert statement_finding.other_filename == nric.filename
+    assert nric_finding.document_value == "Goh Ka Yee"
+    assert nric_finding.case_value == "Goh Ka Yeo"
+
+
+def test_pairwise_name_comparison_treats_case_and_order_as_equal() -> None:
+    nric = _doc(
+        "nric",
+        {"nric_number": "S1234567A", "individual_name": "Tan Wei Ming"},
+    )
+    bank_statement = _doc(
+        "bank_statement",
+        {"account_holder_name": "WEI MING TAN"},
+    )
+    result = check_case_match(
+        _case(), [_incumbency(), *_corroborating(3), nric, bank_statement]
+    )
+
+    assert _by_id(result, nric.id).status == DocumentMatchStatus.MATCH
+    assert _by_id(result, bank_statement.id).status == DocumentMatchStatus.MATCH
+
+
 def test_id_decides_even_when_name_matches() -> None:
     nric = _doc("nric", {"nric_number": "S9999999Z", "individual_name": "Tan Wei Ming"})
     result = check_case_match(_case(), [_incumbency(), *_corroborating(3), nric])
 
     match = _by_id(result, nric.id)
-    assert match.status == DocumentMatchStatus.MANUAL_REVIEW
+    assert match.status == DocumentMatchStatus.MISMATCH
     assert match.case_mismatch
     assert "S9999999Z" in match.reason
 
@@ -333,7 +413,7 @@ def test_individual_matched_by_name_when_no_id() -> None:
 
     assert _by_id(result, doc.id).status == DocumentMatchStatus.MATCH
     mismatch = _by_id(result, stranger.id)
-    assert mismatch.status == DocumentMatchStatus.MANUAL_REVIEW
+    assert mismatch.status == DocumentMatchStatus.MISMATCH
     assert mismatch.case_mismatch
     assert mismatch.comparisons[0].case_value == "TAN WEI MING, LIM HUI LING"
 
@@ -375,7 +455,7 @@ def test_real_incumbency_lists_every_officer_and_shareholder_once() -> None:
         ({"nric_number": "S8003014B"}, DocumentMatchStatus.MATCH),  # shareholder_2
         ({"nric_number": "S7999362E"}, DocumentMatchStatus.MATCH),  # secretary
         ({"individual_name": "Vikram Singh s/o Harjit", "nric_number": "S9023453H"}, DocumentMatchStatus.MATCH),
-        ({"nric_number": "S1111111A"}, DocumentMatchStatus.MANUAL_REVIEW),
+        ({"nric_number": "S1111111A"}, DocumentMatchStatus.MISMATCH),
     ],
 )
 def test_real_incumbency_individuals_matched_by_id(fields, expected) -> None:
@@ -428,7 +508,7 @@ def test_current_schema_incumbency_lists_every_person_with_their_id() -> None:
         ({"individual_name": "TAN WEI JUN", "nric_number": "S8000000A"}, DocumentMatchStatus.MATCH),
         ({"nric_number": "S6627954G"}, DocumentMatchStatus.MATCH),  # secretary, ID only
         ({"individual_name": "TAN WEI MING", "nric_number": "S8012345A"}, DocumentMatchStatus.MATCH),
-        ({"individual_name": "TEO KAI MING", "nric_number": "S7273147P"}, DocumentMatchStatus.MANUAL_REVIEW),
+        ({"individual_name": "TEO KAI MING", "nric_number": "S7273147P"}, DocumentMatchStatus.MISMATCH),
     ],
 )
 def test_current_schema_incumbency_matches_each_person_by_id(nric_fields, expected) -> None:
@@ -546,9 +626,9 @@ def test_document_case_match_endpoint_returns_that_documents_entry() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["document_id"] == "stray"
-    assert body["status"] == "manual_review"
+    assert body["status"] == "mismatch"
     assert body["case_mismatch"] is True
-    assert body["can_proceed_to_fraud_detection"] is False
+    assert body["can_proceed_to_fraud_detection"] is True
 
 
 def test_document_case_match_endpoint_404_without_case() -> None:
@@ -618,7 +698,7 @@ def test_case_snapshot_includes_case_match_computed_from_plain_fields() -> None:
 
     assert snapshot["case_match"]["incumbency"]["status"] == "verified"
     passport_match = next(d for d in snapshot["case_match"]["documents"] if d["document_id"] == "pp")
-    assert passport_match["status"] == "manual_review"
+    assert passport_match["status"] == "mismatch"
     assert passport_match["case_mismatch"] is True
 
 
