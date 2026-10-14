@@ -8,10 +8,15 @@ from pydantic import BaseModel
 
 from ..langgraph import trace as langgraph_trace
 from ..models import DocumentRecord
-from .. import case_service, extracted_fields_repository, storage_service
+from .. import case_service, document_repository, extracted_fields_repository, storage_service
 from . import documents as documents_router
 from ._dependencies import get_document_or_404
 from ..case_match import DocumentCaseMatch
+from ..fraud_detection.company_identity import (
+    CompanyNameConsistencyResult,
+    check_company_name_consistency,
+)
+from ..fraud_detection.ai_generation import AIGenerationResult, check_ai_generation
 from ..fraud_detection.font_consistency import (
     ExtractedField,
     FontConsistencyResult,
@@ -34,6 +39,7 @@ from ..fraud_detection.date_anomalies import (
     check_date_anomalies,
 )
 from ..fraud_detection.spelling_anomaly import SpellingAnomalyResult, check_spelling_anomalies
+from ..fraud_detection.registry_lookups import RegistryResult, public_holidays_for, verify_against_registries
 
 router = APIRouter(prefix="/documents", tags=["detection"])
 cases_router = APIRouter(prefix="/cases", tags=["detection"])
@@ -189,6 +195,23 @@ async def get_image_tampering(
     """
     file_bytes = await _download_document_bytes(document)
     return await asyncio.to_thread(check_image_tampering, document_id, file_bytes)
+
+
+@router.get(
+    "/{document_id}/detection/ai-generation",
+    response_model=AIGenerationResult,
+)
+async def get_ai_generation(
+    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
+) -> AIGenerationResult:
+    """
+    On-demand, side-effect free: scores the document's photographs, scans or
+    image upload for traces of AI generation, with every indicator's
+    measured value and contribution to the score. A low score means no
+    indicator crossed its threshold — not that the image is proven genuine.
+    """
+    file_bytes = await _download_document_bytes(document)
+    return await asyncio.to_thread(check_ai_generation, document_id, file_bytes)
 
 
 class ImageIntegrityResult(BaseModel):
@@ -401,15 +424,63 @@ async def get_date_anomalies(
     re-ingestion.
     """
     extracted_fields = await _fetch_extracted_fields(document_id)
+    holidays = await public_holidays_for(document.document_type)
     result = await asyncio.to_thread(
         check_date_anomalies,
         document_id,
         extracted_fields,
         document.document_type,
+        holidays,
     )
     await _trace_check(
         document_id, "check_date_anomalies",
         unable_to_assess=result.unable_to_assess, finding_count=len(result.findings),
+    )
+    return result
+
+
+@router.get("/{document_id}/detection/registry-verification", response_model=RegistryResult)
+async def get_registry_verification(
+    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
+) -> RegistryResult:
+    """
+    The document's extracted facts against Singapore's public registries, live: ACRA
+    (the company exists, under this name, is live, with this incorporation date and
+    registered address), and OneMap and HDB (the address exists and, for a home address,
+    is a residential block). Read-only.
+    A registry that can't be reached is reported as a skipped check, never a finding.
+    """
+    extracted_fields = await _fetch_extracted_fields(document_id)
+    result = await verify_against_registries(document_id, extracted_fields, document.document_type)
+    await _trace_check(
+        document_id, "check_registry_verification",
+        unable_to_assess=result.unable_to_assess, finding_count=len(result.findings),
+    )
+    return result
+
+
+@router.get(
+    "/{document_id}/detection/company-name-consistency",
+    response_model=CompanyNameConsistencyResult,
+)
+async def get_company_name_consistency(
+    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
+) -> CompanyNameConsistencyResult:
+    """
+    Content Validation Specialist — "Company Identity Consistency". Compares
+    this document's company name with every other company document in its
+    case (see fraud_detection/company_identity.py). Read-only, from
+    extracted fields alone.
+    """
+    case_documents = (
+        await asyncio.to_thread(document_repository.list_documents, case_id=document.case_id)
+        if document.case_id is not None
+        else []
+    )
+    result = check_company_name_consistency(document, case_documents)
+    await _trace_check(
+        document_id, "check_company_name_consistency",
+        skipped_reason=result.skipped_reason, finding_count=len(result.discrepancies),
     )
     return result
 

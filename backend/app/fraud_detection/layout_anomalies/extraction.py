@@ -192,7 +192,7 @@ def _extract_blocks(doc: pymupdf.Document) -> list[_Block]:
                     page_height=page_height,
                     text=text,
                     role=_position_band(block_bbox, page_height),
-                    font=_dominant(fonts) if fonts else None,  # type: ignore[arg-type]
+                    font=_dominant(fonts) if fonts else None,
                     size=float(median(sizes)) if sizes else None,
                 )
             )
@@ -230,7 +230,7 @@ def _line_text_and_style(
     font = _dominant(fonts) if fonts else None
     size = float(median(sizes)) if sizes else None
     baseline = float(median(origins)) if origins else None
-    return joined, font, size, baseline  # type: ignore[return-value]
+    return joined, font, size, baseline
 
 
 def _table_rects(page: pymupdf.Page) -> list[pymupdf.Rect]:
@@ -294,7 +294,7 @@ def _block_from_lines(
         page_height=source.page_height,
         text=" ".join(line.text for line in lines),
         role=role or source.role,
-        font=_dominant(fonts) if fonts else None,  # type: ignore[arg-type]
+        font=_dominant(fonts) if fonts else None,
         size=float(median(sizes)) if sizes else None,
         alignment=source.alignment,
     )

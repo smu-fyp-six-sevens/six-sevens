@@ -22,6 +22,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from ..ingestion.metadata_extractor import EXTRACTION_ERROR_KEY
+
 # Canonical field name -> the exiftool tag names that can supply it, tried
 # in order. exiftool normalises PDF's CreationDate/ModDate to CreateDate/
 # ModifyDate (and does the same for EXIF's date family), so those are the
@@ -608,8 +610,21 @@ _IMAGE_FILE_TYPES = frozenset({"PNG", "JPEG", "GIF", "WEBP", "TIFF", "BMP", "HEI
 
 
 def _unable_to_assess_reason(raw_metadata: dict | None) -> str:
+    extraction_error = (raw_metadata or {}).get(EXTRACTION_ERROR_KEY)
+    if extraction_error:
+        return (
+            f"The file's metadata couldn't be read when it was uploaded: {extraction_error}. "
+            "This check didn't run, so it says nothing about whether the file was edited."
+        )
     if not raw_metadata:
-        return "No metadata was captured for this document"
+        # Documents uploaded before extraction failures were recorded: exiftool
+        # always returns basic file details, so an empty record means it didn't
+        # run, not that the file has no metadata.
+        return (
+            "No metadata was recorded for this document, which means exiftool wasn't "
+            "available when it was uploaded. This check didn't run, so it says nothing "
+            "about whether the file was edited."
+        )
     file_type = str(raw_metadata.get("FileType") or "").upper()
     if file_type in _IMAGE_FILE_TYPES:
         return (

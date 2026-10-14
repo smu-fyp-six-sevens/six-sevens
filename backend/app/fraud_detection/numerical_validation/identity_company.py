@@ -7,6 +7,7 @@ from datetime import date
 from typing import Any
 
 from .common import (
+    officer_role,
     skipped,
     _field_number,
     _MONEY_TOLERANCE,
@@ -17,6 +18,7 @@ from .common import (
     _parse_field_date,
     _rows,
 )
+from ..field_values import also_printed_in, describe_path, text_values
 from .models import NumericalFinding
 from .registry import Num, check
 
@@ -34,6 +36,8 @@ _NRIC_TABLE_ST = "JZIHGFEDCBA"
 _NRIC_TABLE_FG = "XWUTRQPNMLK"
 _NRIC_TABLE_M = "KLJNPQRTUWX"
 _NRIC_RE = re.compile(r"\b([STFGM])(\d{7})([A-Z])\b", re.IGNORECASE)
+# A field or column that holds an ID number, as opposed to free text that happens to mention one.
+_ID_KEY_RE = re.compile(r"nric|fin\b|identification|(?:^|_)id(?:$|_)|passport|personal_no", re.IGNORECASE)
 
 
 def _nric_expected_letter(prefix: str, digits: str) -> str | None:
@@ -50,30 +54,41 @@ def _nric_expected_letter(prefix: str, digits: str) -> str | None:
     return None
 
 
-def _extract_nric_candidates(fields: dict[str, Any]) -> list[str]:
-    candidates: set[str] = set()
-    for value in fields.values():
-        if isinstance(value, str):
-            candidates.update(m.group(0).upper() for m in _NRIC_RE.finditer(value))
-    return sorted(candidates)
+def _extract_nric_candidates(fields: dict[str, Any]) -> dict[str, list[str]]:
+    """Every NRIC/FIN-shaped value in the document, nested ones included (a shareholder table's
+    identification_no), each once, with every field path it appears at (top-level fields first)."""
+    candidates: dict[str, list[str]] = {}
+    keys: dict[str, str] = {}
+    for value in text_values(fields):
+        keys.setdefault(value.path, value.key)
+        for match in _NRIC_RE.finditer(value.text):
+            paths = candidates.setdefault(match.group(0).upper(), [])
+            if value.path not in paths:
+                paths.append(value.path)
+    # Report a number at the field that holds it (subscriber_2_id) before free text that mentions it (notes).
+    for paths in candidates.values():
+        paths.sort(key=lambda path: not _ID_KEY_RE.search(keys[path]))
+    return candidates
 
 
 @check(code="ID.NRIC_CHECKSUM")
 def _check_nric_checksum(*, fields: dict[str, Any]) -> CheckResult:
-    """Any field whose value looks like an NRIC or FIN must carry a valid check letter."""
+    """Any value anywhere in the document that looks like an NRIC or FIN must carry a valid check letter.
+    The same number printed in several places is checked, and reported, once."""
     candidates = _extract_nric_candidates(fields)
     if not candidates:
         return [], skipped(reason="no NRIC-shaped value in any field")
 
     findings = []
-    for value in candidates:
+    for value, paths in sorted(candidates.items()):
         prefix, digits, letter = value[0], value[1:8], value[8]
         expected = _nric_expected_letter(prefix, digits)
         if expected and expected != letter:
             findings.append(_finding(
                 "ID.NRIC_CHECKSUM", "impossible",
-                f"{value} has an invalid check letter — expected {expected}, got {letter}",
-                field="nric_number", stated=value, expected=f"{value[:8]}{expected}",
+                f"{value} in {describe_path(fields, paths[0])} has an invalid check letter — expected {expected}, "
+                f"got {letter}{also_printed_in(fields, paths[1:])}",
+                field=paths[0], stated=value, expected=f"{value[:8]}{expected}", also_fields=paths[1:],
             ))
     return findings, None
 
@@ -173,13 +188,51 @@ def _mrz_check_digit(s: str) -> int:
     return sum(_mrz_char_value(c) * weights[i % 3] for i, c in enumerate(s)) % 10
 
 
+_TD3_LINE_LENGTH = 44
+# How far a line may be off 44 and still be a miscounted run of filler.
+_MRZ_FILLER_SLACK = 2
+_MRZ_FILLER_RUN_RE = re.compile(r"<{3,}")
+
+
+def _fit_mrz_filler(line: str) -> str:
+    """
+    A line one or two characters off 44 whose last run of "<" filler is
+    long: the run was miscounted while transcribing (about 25 identical
+    characters after a short name), so it is resized to make the line 44.
+    Filler is padding that no check digit covers, so this changes nothing
+    the checks rely on; letters and digits are never touched, and a line
+    further off is left for ID.MRZ_FORMAT to report.
+    """
+    gap = _TD3_LINE_LENGTH - len(line)
+    runs = list(_MRZ_FILLER_RUN_RE.finditer(line))
+    if gap == 0 or abs(gap) > _MRZ_FILLER_SLACK or not runs:
+        return line
+    last = runs[-1]
+    width = len(last.group(0)) + gap
+    if width < 1:
+        return line
+    return line[: last.start()] + "<" * width + line[last.end():]
+
+
 def _mrz_lines(raw: Any) -> list[str]:
     """The two TD3 lines, however extraction separated them. A real MRZ has no whitespace, so any space or newline
-    is a line break. 88 characters once whitespace is removed means a valid two-line MRZ."""
+    is a line break. 88 characters once whitespace is removed means a valid two-line MRZ. A line whose only fault
+    is a miscounted run of filler is set back to 44 (see _fit_mrz_filler)."""
     compact = "".join(str(raw).split())
     if len(compact) == 88:
         return [compact[:44], compact[44:]]
-    return [ln.strip() for ln in str(raw).strip().splitlines() if ln.strip()]
+    lines = [ln.strip() for ln in str(raw).strip().splitlines() if ln.strip()]
+    return [_fit_mrz_filler(ln) for ln in lines] if len(lines) == 2 else lines
+
+
+# Letters and digits OCR reads one for the other: the printed national ID
+# "S8934521I" comes back as "S89345211". Identifiers are compared with these
+# collapsed on both sides, so only a genuinely different number mismatches.
+_OCR_CONFUSABLE = str.maketrans({"O": "0", "I": "1", "L": "1", "S": "5", "B": "8", "Z": "2"})
+
+
+def _same_identifier(a: str, b: str) -> bool:
+    return a.upper().translate(_OCR_CONFUSABLE) == b.upper().translate(_OCR_CONFUSABLE)
 
 
 def _mrz_field(line2: str, start: int, end: int) -> str:
@@ -272,7 +325,7 @@ def _check_mrz_vs_viz(
     findings = []
     mrz_passport_no = _mrz_field(line2, 0, 9)
     stated_passport_no = str(passport_number or "").replace(" ", "").upper()
-    if stated_passport_no and mrz_passport_no and mrz_passport_no != stated_passport_no:
+    if stated_passport_no and mrz_passport_no and not _same_identifier(mrz_passport_no, stated_passport_no):
         findings.append(_finding(
             "ID.MRZ_VS_VIZ", "inconsistent",
             f"MRZ passport number ({mrz_passport_no}) does not match the printed passport number ({stated_passport_no})",
@@ -301,7 +354,7 @@ def _check_mrz_vs_viz(
 
     mrz_personal_no = _mrz_field(line2, 28, 42)
     stated_nric = str(nric_number or "").strip().upper()
-    if stated_nric and mrz_personal_no and mrz_personal_no != stated_nric:
+    if stated_nric and mrz_personal_no and not _same_identifier(mrz_personal_no, stated_nric):
         findings.append(_finding(
             "ID.MRZ_VS_VIZ", "inconsistent",
             f"MRZ personal number ({mrz_personal_no}) does not match the printed national ID number ({stated_nric})",
@@ -359,10 +412,10 @@ def _check_acra_officers(*, officers: Any) -> CheckResult:
     officers live in date_anomalies.py."""
     rows = _rows(officers)
     findings = []
-    if not any("director" in str(o.get("role", "")).lower() for o in rows):
+    if not any("director" in officer_role(o).lower() for o in rows):
         findings.append(_finding("ACRA.OFFICERS", "inconsistent", "No director is listed among the officers",
                                  field="officers"))
-    if not any("secretary" in str(o.get("role", "")).lower() for o in rows):
+    if not any("secretary" in officer_role(o).lower() for o in rows):
         findings.append(_finding("ACRA.OFFICERS", "inconsistent", "No secretary is listed among the officers",
                                  field="officers"))
     return findings, None

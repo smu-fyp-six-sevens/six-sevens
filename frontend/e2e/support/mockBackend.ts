@@ -79,6 +79,8 @@ export interface CaseRow {
   id_document_coverage: { covered: number; total: number; missing_side: string | null };
   // Computed by backend/app/case_risk.py on every case read.
   risk: CaseRisk | null;
+  // Computed by backend/app/supporting_documents.py on every case read.
+  supporting_document_recommendations: unknown[];
 }
 
 export interface DocumentRow {
@@ -134,6 +136,7 @@ export function makeCase(overrides: Partial<CaseRow> = {}): CaseRow {
     proof_of_address_coverage: { covered: 0, total: 0, unmatched_names: [] },
     id_document_coverage: { covered: 0, total: 0, missing_side: null },
     risk: makeRisk(),
+    supporting_document_recommendations: [],
     ...overrides,
   };
 }

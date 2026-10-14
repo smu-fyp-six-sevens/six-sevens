@@ -304,6 +304,102 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     // Audit events aren't recorded yet — the section shows its placeholder.
     await expect(section).toContainText('No audit events available yet.');
   });
+
+  test('a case with nothing needing further evidence recommends no documents', async ({ page, backend }) => {
+    const { harbor } = seedQueue(backend);
+    await page.goto(`/cases/${harbor.greenlink_case_id}`);
+
+    const section = page.locator('.summary-card', {
+      has: page.getByRole('heading', { name: 'Recommended Supporting Documents' }),
+    });
+    await expect(section).toContainText('No additional documents needed.');
+  });
+
+  test('recommended documents show why and what to request', async ({ page, backend }) => {
+    const harbor = makeCase({
+      greenlink_case_id: 'GLDB-2003',
+      supporting_document_recommendations: [
+        {
+          document_type: 'purchase_order',
+          title: 'Purchase Order',
+          reason: 'C001_BankStatement.pdf shows 1 large supplier payment (of at least 20,000.00).',
+          request: 'Request a purchase order for this transaction:',
+          source_document_id: 'doc-statement',
+          source_filename: 'C001_BankStatement.pdf',
+          items: [
+            {
+              date: '11-Jun-26',
+              description: 'REMITTANCE TRANSFER OF FUNDS RTF UNITED PAPER SUPPLY PTE. LTD. SGD 22,506',
+              amount: -22506.48,
+              prior_amount: null,
+              counterparty: 'UNITED PAPER SUPPLY PTE. LTD.',
+              reason: 'Payment of 22,506.48 on 11-Jun-26 to UNITED PAPER SUPPLY PTE. LTD.',
+              breakdown: [],
+            },
+          ],
+        },
+        {
+          document_type: 'bank_loan_evidence',
+          title: 'Bank Loan Statements or Bank Loan Repayment Schedules',
+          reason:
+            'C001_Financials.pdf shows a 43.3% increase in total bank borrowings compared with the prior year, exceeding the 40% threshold.',
+          request: 'Request bank loan statements or bank loan repayment schedules for this amount:',
+          source_document_id: 'doc-financials',
+          source_filename: 'C001_Financials.pdf',
+          items: [
+            {
+              date: null,
+              description: 'Total bank borrowings',
+              amount: 1850790,
+              prior_amount: 1291530,
+              counterparty: null,
+              reason: 'Total bank borrowings: 1,850,790.00 (prior year: 1,291,530.00).',
+              breakdown: [
+                {
+                  date: null,
+                  description: 'Bank borrowings, current portion',
+                  amount: 516090,
+                  prior_amount: 343330,
+                  counterparty: null,
+                  reason: 'Bank borrowings, current portion: 516,090.00 (prior year: 343,330.00).',
+                  breakdown: [],
+                },
+                {
+                  date: null,
+                  description: 'Bank borrowings, non-current portion',
+                  amount: 1334700,
+                  prior_amount: 948200,
+                  counterparty: null,
+                  reason: 'Bank borrowings, non-current portion: 1,334,700.00 (prior year: 948,200.00).',
+                  breakdown: [],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    backend.cases.push(harbor);
+    await page.goto(`/cases/${harbor.greenlink_case_id}`);
+
+    const section = page.locator('.summary-card', {
+      has: page.getByRole('heading', { name: 'Recommended Supporting Documents' }),
+    });
+    await expect(section).toContainText('2 requests');
+    await expect(section).toContainText('Purchase Order');
+    await expect(section).toContainText('shows 1 large supplier payment');
+    await expect(section).toContainText('Request a purchase order for this transaction:');
+    await expect(section).toContainText('Payment of 22,506.48 on 11-Jun-26 to UNITED PAPER SUPPLY PTE. LTD.');
+    await expect(section).toContainText('Bank Loan Statements or Bank Loan Repayment Schedules');
+    await expect(section).toContainText('Total bank borrowings: 1,850,790.00 (prior year: 1,291,530.00).');
+    // The portions are tabled with the total they make up as the last row.
+    await expect(section.locator('.supporting-document-breakdown tbody tr')).toHaveText([
+      /current portion\s*343,330\.00\s*516,090\.00\s*\+172,760\.00 \(\+50\.3%\)/,
+      /non-current portion\s*948,200\.00\s*1,334,700\.00\s*\+386,500\.00 \(\+40\.8%\)/,
+      /Total bank borrowings\s*1,291,530\.00\s*1,850,790\.00\s*\+559,260\.00 \(\+43\.3%\)/,
+    ]);
+    await expect(section.getByRole('button', { name: 'View' })).toHaveCount(0);
+  });
 });
 
 test.describe('Create case @sprint2 @SCRUM-96', () => {

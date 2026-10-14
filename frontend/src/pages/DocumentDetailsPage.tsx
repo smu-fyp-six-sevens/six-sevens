@@ -86,12 +86,18 @@ export default function DocumentDetailsPage({
 
   const hasExtractedInfo = hasExtractedInformation(document?.extracted_fields ?? null);
 
+  // An Other document's fields come from no schema, so an officer has to save them before
+  // approval, however confident Extraction was. Every other type only needs its flagged fields saved.
+  const isOtherDocument = document?.document_type === 'unrecognised';
+  const otherFieldsUnsaved = isOtherDocument && !document?.fields_reviewed_at;
+
   const canApprove =
     document?.status === 'analyzed' &&
     isTypeConfirmed &&
     hasExtractedInfo &&
     (document.missing_required_fields?.length ?? 0) === 0 &&
-    lowConfidenceFields.length === 0;
+    lowConfidenceFields.length === 0 &&
+    !otherFieldsUnsaved;
 
   const missingRequiredFields = useMemo(
     () => document?.missing_required_fields ?? [],
@@ -158,10 +164,12 @@ export default function DocumentDetailsPage({
     missingRequiredFields.length > 0;
 
   // Set once a loan officer has clicked "Save fields": the PATCH endpoint writes.
-  const areFieldsVerified =
-    document?.routing_status === 'accepted' &&
-    document.extraction_confidence === 1 &&
-    !needsManualReview;
+  // Extraction can report 1.0 too, so an Other document is only verified once it has been saved.
+  const areFieldsVerified = isOtherDocument
+    ? !otherFieldsUnsaved
+    : document?.routing_status === 'accepted' &&
+      document.extraction_confidence === 1 &&
+      !needsManualReview;
   const canEditFields = !isLocked && !areFieldsVerified;
 
   // The type can only be corrected once the pipeline has finished with the document. Same rule as
@@ -537,6 +545,14 @@ export default function DocumentDetailsPage({
                 </strong>
                 . Check {lowConfidenceFields.length > 1 ? 'them' : 'it'} in Manual Review and press{' '}
                 <strong>Save fields</strong> before approving.
+              </div>
+            )}
+
+            {document.status === 'analyzed' && isTypeConfirmed && otherFieldsUnsaved && (
+              <div className="approval-warning">
+                Cannot approve yet. This document is set to <strong>Other</strong>, so every field
+                needs your review. Check them in Manual Review and press <strong>Save fields</strong>{' '}
+                before approving.
               </div>
             )}
 

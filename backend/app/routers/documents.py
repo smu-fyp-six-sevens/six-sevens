@@ -15,6 +15,7 @@ from ._dependencies import get_document_or_404
 from ..config import settings
 from ..langgraph.extraction_prompts import (
     KNOWN_DOCUMENT_TYPES,
+    drop_empty_optional_fields,
     schema_field_names,
 )
 from ..models import (
@@ -443,6 +444,10 @@ async def update_extracted_fields(
     back above the threshold so the frontend stops showing it as editable.
     """
     _ensure_unlocked(document, "edited")
+    # An optional field saved empty is removed rather than stored as an
+    # empty row the officer would be asked to fill in again. A required one
+    # stays, so it still blocks approval as missing.
+    drop_empty_optional_fields(document.document_type, request.extracted_fields)
     try:
         # Recomputed rather than left as whatever the automated pipeline last
         # wrote — a loan officer correcting individual_address (e.g. filling
@@ -521,6 +526,7 @@ async def update_extracted_fields(
             1.0,
             fulfilled_requirements,
             routing_status=RoutingStatus.ACCEPTED.value,
+            fields_reviewed=is_unrecognised_document,
         )
 
         await asyncio.to_thread(
@@ -786,6 +792,17 @@ async def approve_document(
                 ),
             )
 
+        # An Other document's fields come from no schema, however confident
+        # Extraction was about them, so an officer has to have saved them.
+        if document.document_type == "unrecognised" and document.fields_reviewed_at is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Cannot approve document. Review and save the fields of "
+                    "a document set to Other first."
+                ),
+            )
+
         await asyncio.to_thread(
             document_repository.approve_document,
             document_id,
@@ -905,6 +922,8 @@ async def update_document_type(
                 evidence=[],
                 fulfilled_requirements=compute_fulfilled_requirements(document_type, None),
             )
+            if document.fields_reviewed_at is not None:
+                await asyncio.to_thread(document_repository.clear_fields_review, document_id)
             await asyncio.to_thread(
                 document_repository.update_status,
                 document_id,

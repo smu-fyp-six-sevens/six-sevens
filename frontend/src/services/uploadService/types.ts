@@ -32,6 +32,8 @@ export interface DocumentRecord {
   extracted_fields: Record<string, unknown> | null;
   // Extraction's own confidence in extracted_fields.
   extraction_confidence: number | null;
+  // When an officer saved the fields of an Other document; approving one needs it.
+  fields_reviewed_at?: string | null;
   escalation_reason: string | null;
   metadata: Record<string, unknown> | null;
   // Only present on documents pushed via the case-status websocket.
@@ -109,6 +111,42 @@ export interface CaseRisk {
   documents_total: number;
 }
 
+// Mirrors SupportingDocumentRecommendation in backend/app/models.py (see backend/app/supporting_documents.py).
+export interface SupportingDocumentRecommendation {
+  document_type:
+    | 'purchase_order'
+    | 'sales_invoice'
+    | 'related_party_repayment_evidence'
+    | 'bank_loan_evidence';
+  // What to ask for, e.g. "Purchase Order".
+  title: string;
+  // Why: what the source document shows.
+  reason: string;
+  // The ask, introducing items, e.g. "Request purchase orders for these transactions:".
+  request: string;
+  source_document_id: string;
+  source_filename: string;
+  // Bank statement transactions, or financial statement lines.
+  items: RecommendationItem[];
+}
+
+// Mirrors RecommendationItem in backend/app/models.py.
+export interface RecommendationItem {
+  date: string | null;
+  // The transaction description or line label, as printed.
+  description: string;
+  // Negative for a payment out, positive for a receipt.
+  amount: number;
+  // A financial statement line's prior-year figure, where it has one.
+  prior_amount: number | null;
+  // The supplier paid or customer paying, when the statement names one.
+  counterparty: string | null;
+  reason: string;
+  // The lines this one totals, e.g. a total's portions — shown as a table of these
+  // lines plus this one as its total row.
+  breakdown: RecommendationItem[];
+}
+
 // Mirrors the subset of CaseSummary in backend/app/models.py this page needs.
 export interface CaseRequirementCoverage {
   fulfilled_requirements: string[];
@@ -119,6 +157,8 @@ export interface CaseRequirementCoverage {
   id_document_coverage: { covered: number; total: number; missing_side: string | null };
   // null when the backend couldn't load the case's detection reports.
   risk: CaseRisk | null;
+  // Empty when nothing in the case needs further evidence.
+  supporting_document_recommendations: SupportingDocumentRecommendation[];
 }
 
 // Mirrors UpdateCaseRequest in backend/app/models.py.
@@ -183,6 +223,9 @@ export interface DetectionReport {
   }[];
   second_look: { from: string; to: string; question: string; reason: string } | null;
   unable_to_assess: { specialist: string; tool: string | null; reason: string | null }[];
+  // Checks the document had nothing for (no images, no metadata, no dates): a pass, shown for the
+  // record. Absent on reports stored before it existed.
+  nothing_to_check?: { specialist: string; tool: string | null; reason: string | null }[];
   generated_at: string;
 }
 
@@ -192,8 +235,11 @@ export type IndividualCheckId =
   | 'spelling-anomaly'
   | 'numerical-validation'
   | 'date-anomalies'
+  | 'company-name-consistency'
+  | 'registry-verification'
   | 'metadata-anomaly'
-  | 'image-integrity';
+  | 'image-integrity'
+  | 'ai-generation';
 
 export interface BulkActionFailure {
   document_id: string;

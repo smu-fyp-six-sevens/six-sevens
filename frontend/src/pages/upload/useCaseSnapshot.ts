@@ -9,7 +9,12 @@ import {
   isClassificationConfirmed,
   lowestFieldConfidence,
 } from '../../services/uploadService';
-import type { CaseRisk, DocumentCaseMatch, DocumentRecord } from '../../services/uploadService';
+import type {
+  CaseRisk,
+  DocumentCaseMatch,
+  DocumentRecord,
+  SupportingDocumentRecommendation,
+} from '../../services/uploadService';
 import { acceptedIdentityNames } from './uploadHelpers';
 
 // Live case state from the case WebSocket, plus the lists derived from it.
@@ -27,6 +32,9 @@ export function useCaseSnapshot(caseId: string) {
     missing_side: string | null;
   }>({ covered: 0, total: 0, missing_side: null });
   const [risk, setRisk] = useState<CaseRisk | null>(null);
+  const [supportingDocumentRecommendations, setSupportingDocumentRecommendations] = useState<
+    SupportingDocumentRecommendation[]
+  >([]);
   const [wsConnected, setWsConnected] = useState(false);
   // Case-match result per document (see backend/app/case_match.py), pushed with every case snapshot.
   const [caseMatches, setCaseMatches] = useState<Map<string, DocumentCaseMatch>>(new Map());
@@ -87,6 +95,7 @@ export function useCaseSnapshot(caseId: string) {
         setProofOfAddressCoverage(caseSummary.proof_of_address_coverage);
         setIdDocumentCoverage(caseSummary.id_document_coverage);
         setRisk(caseSummary.risk ?? null);
+        setSupportingDocumentRecommendations(caseSummary.supporting_document_recommendations ?? []);
       },
       (connected) => {
         if (isMountedRef.current) setWsConnected(connected);
@@ -145,6 +154,7 @@ export function useCaseSnapshot(caseId: string) {
     proofOfAddressCoverage,
     idDocumentCoverage,
     risk,
+    supportingDocumentRecommendations,
     wsConnected,
     caseMatches,
     setCaseMatches,

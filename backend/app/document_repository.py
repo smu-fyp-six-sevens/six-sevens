@@ -235,6 +235,7 @@ def update_extracted_fields(
     fulfilled_requirements: Optional[list[str]] = None,
     *,
     routing_status: Optional[str] = None,
+    fields_reviewed: bool = False,
 ) -> None:
     """
     Persists the Extraction-stage confidence into its own extraction_confidence
@@ -268,9 +269,17 @@ def update_extracted_fields(
     # resolves the document's manual review, so it's now ACCEPTED.
     if routing_status is not None:
         update["routing_status"] = routing_status
+    # An officer saved an Other document's fields, which approving it requires.
+    if fields_reviewed:
+        update["fields_reviewed_at"] = datetime.now(timezone.utc).isoformat()
     result = supabase_client.table("documents").update(update).eq("id", document_id).execute()
     if result.data:
         _sync_case(_row(result.data[0]).get("case_id"))
+
+
+def clear_fields_review(document_id: str) -> None:
+    """The fields are being extracted again, so the officer's earlier review no longer covers them."""
+    supabase_client.table("documents").update({"fields_reviewed_at": None}).eq("id", document_id).execute()
 
 
 def record_escalation(document_id: str, reason: str) -> None:

@@ -1,4 +1,9 @@
-import type { CaseRisk, DocumentRecord, DocumentCaseMatch } from '../../services/uploadService';
+import type {
+  CaseRisk,
+  DocumentRecord,
+  DocumentCaseMatch,
+  SupportingDocumentRecommendation,
+} from '../../services/uploadService';
 import {
   CLASSIFICATION_CONFIDENCE_THRESHOLD,
   EXTRACTION_CONFIDENCE_THRESHOLD,
@@ -9,6 +14,7 @@ import {
 } from '../../services/uploadService';
 import { humanizeFieldKey } from '../../utils/fieldLabels';
 import { CaseRiskCard } from './CaseRiskCard';
+import { SupportingDocumentsCard } from './SupportingDocumentsCard';
 
 export function UploadSummaryCards({
   caseMatchNeedsReview,
@@ -16,12 +22,14 @@ export function UploadSummaryCards({
   flaggedDocuments,
   onOpenDocument,
   risk,
+  supportingDocumentRecommendations,
 }: {
   caseMatchNeedsReview: (document: DocumentRecord) => boolean;
   caseMatches: Map<string, DocumentCaseMatch>;
   flaggedDocuments: DocumentRecord[];
   onOpenDocument: (documentId: string) => void;
   risk: CaseRisk | null;
+  supportingDocumentRecommendations: SupportingDocumentRecommendation[];
 }) {
   return (
     <>
@@ -141,6 +149,8 @@ export function UploadSummaryCards({
             </section>
 
             <CaseRiskCard risk={risk} />
+
+            <SupportingDocumentsCard recommendations={supportingDocumentRecommendations} />
 
             <section className="summary-card">
               <div className="summary-card-header">

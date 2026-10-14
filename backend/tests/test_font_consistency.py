@@ -1,13 +1,6 @@
 """
-Font-consistency: open/empty/error paths plus real mixed-style PDFs.
-
-This module was originally font_consistency_v2.py, written to replace an
-earlier font_consistency.py (v1) — since renamed back to font_consistency.py
-now that v1 is long gone and the "v2" suffix no longer meant anything. The
-span-extraction/style-comparison building blocks v1 originated (_Span,
-_compile_detected_styles, _dimension_deviations, _dominant_pattern,
-_extract_spans) moved into this module rather than being deleted, since it
-still relies on them unchanged.
+Font-consistency: a run is judged against its structural peers (its column,
+the section headings), styled rows and signatures are not deviations.
 """
 
 from __future__ import annotations
@@ -21,19 +14,19 @@ from app.fraud_detection import font_consistency as fc
 from app.fraud_detection.font_consistency import (
     ExtractedField,
     _Span,
+    _agreed,
     _build_rows,
-    _check_field_anchored,
+    _build_runs,
     _compile_detected_styles,
-    _dimension_deviations,
-    _dominant_pattern,
     _extract_spans,
     _field_search_text,
-    _group_anomalies_v2,
-    _match_field_occurrences,
+    _group_anomalies,
     _overlaps,
-    _score_row_deviations,
     check_font_consistency,
 )
+
+_LABELS = ["Inventories", "Trade receivables", "Other receivables", "Cash and bank", "Prepayments", "Deposits paid"]
+_AMOUNTS = ["$119,620", "$194,390", "$233,890", "$1,223,500", "$88,100", "$14,900"]
 
 
 def _pdf_bytes(build) -> bytes:
@@ -44,32 +37,43 @@ def _pdf_bytes(build) -> bytes:
     return data
 
 
-def _consistent_pdf() -> bytes:
+def _table_pdf(
+    *,
+    label_font: dict[int, str] | None = None,
+    label_size: dict[int, float] | None = None,
+    bold_row: int | None = None,
+) -> bytes:
+    """A label column and an amount column; per-row overrides tamper with one label."""
+
     def build(doc):
-        page = doc.new_page(width=400, height=240)
-        page.insert_text((48, 80), "Golden Harvest", fontsize=12, fontname="helv")
-        page.insert_text((48, 120), "Trading Pte Ltd", fontsize=12, fontname="helv")
+        page = doc.new_page(width=400, height=300)
+        for i, (label, amount) in enumerate(zip(_LABELS, _AMOUNTS)):
+            y = 80 + i * 18
+            font = (label_font or {}).get(i, "hebo" if i == bold_row else "helv")
+            size = (label_size or {}).get(i, 9)
+            page.insert_text((50, y), label, fontsize=size, fontname=font)
+            page.insert_text((250, y), amount, fontsize=9, fontname="hebo" if i == bold_row else "helv")
 
     return _pdf_bytes(build)
 
 
-def _mixed_line_pdf(*, font: bool = False, size: bool = False, bold: bool = False) -> bytes:
-    def build(doc):
-        page = doc.new_page(width=600, height=200)
-        page.insert_text((40, 100), "AAA", fontsize=12, fontname="helv")
-        page.insert_text((90, 100), "BBB", fontsize=12, fontname="helv")
-        second_font = "cour" if font else ("hebo" if bold else "helv")
-        second_size = 20 if size else 12
-        page.insert_text((140, 100), "XXX", fontsize=second_size, fontname=second_font)
+def _flagged_texts(data: bytes) -> list[str]:
+    result = check_font_consistency("doc-1", data)
+    assert result.unable_to_assess is False
+    return [loc.text for anomaly in result.anomalies for loc in anomaly.locations]
 
-    return _pdf_bytes(build)
+
+def _span(**kwargs) -> _Span:
+    values = dict(
+        text="HELLO", font="Helvetica", size=12.0, bold=False, italic=False,
+        underline=False, bbox=(10.0, 20.0, 80.0, 34.0), page=0,
+    )
+    values.update(kwargs)
+    return _Span(**values)
 
 
 def _blank_pdf() -> bytes:
-    def build(doc):
-        doc.new_page(width=200, height=200)
-
-    return _pdf_bytes(build)
+    return _pdf_bytes(lambda doc: doc.new_page(width=200, height=200))
 
 
 def _image_only_pdf() -> bytes:
@@ -85,143 +89,123 @@ def _image_only_pdf() -> bytes:
     return _pdf_bytes(build)
 
 
-def _span(**kwargs) -> _Span:
-    values = dict(
-        text="HELLO",
-        font="Helvetica",
-        size=12.0,
-        bold=False,
-        italic=False,
-        underline=False,
-        bbox=(10.0, 20.0, 80.0, 34.0),
-        page=0,
-        line_key=(0, 0, 0),
-    )
-    values.update(kwargs)
-    return _Span(**values)
+# --- the three tampers the check must catch ---------------------------------
 
 
-# ---------------------------------------------------------------------------
-# span extraction & style-comparison building blocks (originated in the now-
-# retired v1 module; v2 depends on them directly, unchanged)
-# ---------------------------------------------------------------------------
+def test_clean_table_has_no_findings() -> None:
+    assert _flagged_texts(_table_pdf()) == []
 
 
-def test_extract_spans_skips_non_text_empty_and_bad_bbox() -> None:
-    page = SimpleNamespace(
-        get_drawings=lambda: [{}, {"rect": None}, {"rect": pymupdf.Rect(0, 15.5, 30, 16.5)}],
-        get_text=lambda mode: {
-            "blocks": [
-                {"type": 1},
-                {
-                    "type": 0,
-                    "lines": [
-                        {
-                            "spans": [
-                                {"text": "  "},
-                                {"text": "Hi", "bbox": [0, 0, 1]},
-                                {
-                                    "text": "Yo",
-                                    "bbox": [1, 2, 20, 16],
-                                    "font": "Helv",
-                                    "size": 12,
-                                    "flags": 16 | 2,
-                                },
-                            ]
-                        }
-                    ],
-                },
-            ]
-        },
-    )
-    spans = _extract_spans([page])
-    assert len(spans) == 1
-    assert spans[0].text == "Yo"
-    assert spans[0].bold is True
-    assert spans[0].italic is True
+def test_label_in_another_font_is_flagged() -> None:
+    assert _flagged_texts(_table_pdf(label_font={2: "cour"})) == ["Other receivables"]
 
 
-def test_compile_detected_styles_and_dimension_deviations() -> None:
-    """
-    _compile_detected_styles and _dimension_deviations originated in the
-    retired v1 module and now live directly in font_consistency.py (see
-    this file's module docstring) — kept here as unit coverage since v2's
-    own tests only exercise these indirectly.
-    """
-    majority = _span(text="AAA", font="Helvetica", size=12.0, bbox=(0, 0, 20, 12))
-    majority2 = _span(text="BBB", font="Helvetica", size=12.0, bbox=(20, 0, 40, 12))
-    deviant = _span(text="XXX", font="Courier", size=18.0, bold=True, bbox=(40, 0, 80, 12))
-    spans = [majority, majority2, deviant]
-
-    styles = _compile_detected_styles(spans)
-    assert styles[0].occurrence_count >= 1
-
-    dims = _dimension_deviations(deviant, _dominant_pattern(spans))
-    assert dims["font"] is True
-    assert dims["size"] is True
+def test_label_in_another_size_is_flagged() -> None:
+    assert _flagged_texts(_table_pdf(label_size={0: 12})) == ["Inventories"]
 
 
-# ---------------------------------------------------------------------------
-# v2 helpers
-# ---------------------------------------------------------------------------
+def test_underlined_heading_among_plain_headings_is_flagged() -> None:
+    def build(doc):
+        page = doc.new_page(width=400, height=400)
+        for i, title in enumerate(["Entity Information", "Business Activity", "Capital", "Audit Firms", "Charges"]):
+            y = 60 + i * 70
+            page.insert_text((40, y), title, fontsize=10, fontname="hebo")
+            page.insert_text((60, y + 18), f"Detail line for {title}", fontsize=9, fontname="helv")
+            page.insert_text((250, y + 18), f"value {i}", fontsize=9, fontname="helv")
+            if title == "Capital":
+                page.draw_line((40, y + 2), (40 + fc.pymupdf.get_text_length(title, "hebo", 10), y + 2), width=0.6)
+
+    result = check_font_consistency("doc-1", _pdf_bytes(build))
+    flagged = [a for a in result.anomalies if a.locations[0].text == "Capital"]
+    assert len(result.anomalies) == 1
+    assert flagged[0].deviation_type == "emphasis"
+    assert flagged[0].detected["underline"] is True
+    assert flagged[0].expected["underline"] is False
 
 
-def test_field_search_text_handles_json_numbers_and_blank() -> None:
-    assert _field_search_text(ExtractedField(field_name="n", field_type="number", field_value=12.5, confidence=1)) is None
-    assert _field_search_text(ExtractedField(field_name="n", field_type="string", field_value="  ", confidence=1)) is None
-    assert (
-        _field_search_text(
-            ExtractedField(field_name="c", field_type="string", field_value='"ACME Pte Ltd"', confidence=1)
-        )
-        == "ACME Pte Ltd"
-    )
-    assert (
-        _field_search_text(ExtractedField(field_name="c", field_type="string", field_value="ACME", confidence=1))
-        == "ACME"
-    )
-    assert _field_search_text(ExtractedField(field_name="t", field_type="object", field_value={"a": 1}, confidence=1)) is None
-    assert _field_search_text(ExtractedField(field_name="l", field_type="string", field_value="not json", confidence=1)) == "not json"
+# --- what must not fire -----------------------------------------------------
 
 
-def test_overlaps_and_zero_area(monkeypatch: pytest.MonkeyPatch) -> None:
-    rect = pymupdf.Rect(10, 10, 40, 30)
-    assert _overlaps((10, 10, 40, 30), rect) is True
-    assert _overlaps((100, 100, 120, 120), rect) is False
-    monkeypatch.setattr(pymupdf.Rect, "get_area", lambda self: 0.0)
-    assert _overlaps((10, 10, 40, 30), pymupdf.Rect(10, 10, 40, 30)) is False
+def test_styled_total_row_is_not_flagged() -> None:
+    # A bold row whose label and amount agree is a total, not a deviation.
+    assert _flagged_texts(_table_pdf(bold_row=3)) == []
 
 
-def test_build_rows_splits_on_baseline() -> None:
-    top = _span(text="A", bbox=(0, 0, 20, 12), line_key=(0, 0, 0))
-    same = _span(text="B", bbox=(30, 0, 50, 12.5), line_key=(0, 0, 1))
-    below = _span(text="C", bbox=(0, 40, 20, 54), line_key=(0, 1, 0))
-    rows = _build_rows([top, same, below])
-    assert len(rows) == 2
-    assert len(next(iter(rows.values()))) == 2
+def test_bold_column_head_is_not_flagged() -> None:
+    def build(doc):
+        page = doc.new_page(width=400, height=300)
+        page.insert_text((50, 60), "Description", fontsize=9, fontname="hebo")
+        for i, label in enumerate(_LABELS):
+            page.insert_text((50, 80 + i * 18), label, fontsize=9, fontname="helv")
+
+    assert _flagged_texts(_pdf_bytes(build)) == []
 
 
-def test_match_field_occurrences_skips_empty_pages_and_search_errors(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    doc = pymupdf.open()
-    page = doc.new_page(width=300, height=200)
-    page.insert_text((40, 80), "ACME Pte Ltd", fontsize=12, fontname="helv")
-    doc.new_page(width=300, height=200)
-    spans = _extract_spans(doc)
-    found = _match_field_occurrences(doc, {0: spans}, "ACME Pte Ltd")
-    assert found
-    monkeypatch.setattr(
-        pymupdf.Page,
-        "search_for",
-        lambda self, text: (_ for _ in ()).throw(ValueError("bad query")),
-    )
-    assert _match_field_occurrences(doc, {0: spans}, "ACME Pte Ltd") == []
-    doc.close()
+def test_signature_in_another_font_on_a_signing_rule_is_not_flagged() -> None:
+    def build(doc):
+        page = doc.new_page(width=400, height=400)
+        for i, label in enumerate(_LABELS):
+            page.insert_text((50, 60 + i * 18), label, fontsize=9, fontname="helv")
+        page.insert_text((50, 220), "Tan Wei Ming", fontsize=16, fontname="tiit")
+        page.insert_text((50, 232), "_" * 28, fontsize=9, fontname="helv")
+        page.insert_text((50, 246), "Director", fontsize=9, fontname="helv")
+
+    assert _flagged_texts(_pdf_bytes(build)) == []
 
 
-# ---------------------------------------------------------------------------
-# v2 public API
-# ---------------------------------------------------------------------------
+def test_script_font_name_is_a_signature() -> None:
+    assert fc._SCRIPT_FONT_RE.search("DancingScript-Regular")
+    assert not fc._SCRIPT_FONT_RE.search("Helvetica-Bold")
+
+
+def test_separator_punctuation_in_another_size_is_not_flagged() -> None:
+    def build(doc):
+        page = doc.new_page(width=400, height=300)
+        for i, label in enumerate(_LABELS):
+            y = 60 + i * 20
+            page.insert_text((50, y), label, fontsize=8.5, fontname="helv")
+            page.insert_text((180, y), ":", fontsize=10, fontname="helv")
+            page.insert_text((200, y), _AMOUNTS[i], fontsize=8.5, fontname="helv")
+
+    assert _flagged_texts(_pdf_bytes(build)) == []
+
+
+def test_inline_bold_term_in_a_sentence_is_not_flagged() -> None:
+    def build(doc):
+        page = doc.new_page(width=500, height=200)
+        for i in range(5):
+            y = 60 + i * 14
+            page.insert_text((40, y), "the Company means", fontsize=9, fontname="helv")
+            page.insert_text((140, y), "Golden Harvest Pte Ltd", fontsize=9, fontname="hebo")
+            page.insert_text((262, y), "and its successors in title", fontsize=9, fontname="helv")
+
+    assert _flagged_texts(_pdf_bytes(build)) == []
+
+
+def test_restyled_word_inside_a_sentence_is_flagged() -> None:
+    def build(doc):
+        page = doc.new_page(width=500, height=200)
+        page.insert_text((40, 80), "The facility amount is", fontsize=10, fontname="helv")
+        width = pymupdf.get_text_length("The facility amount is ", "helv", 10)
+        page.insert_text((40 + width, 80), "$4,500,000", fontsize=10, fontname="cour")
+        width2 = pymupdf.get_text_length("$4,500,000 ", "cour", 10)
+        page.insert_text((40 + width + width2, 80), "payable monthly", fontsize=10, fontname="helv")
+
+    assert _flagged_texts(_pdf_bytes(build)) == ["$4,500,000"]
+
+
+def test_style_recurring_in_a_column_is_a_tier_not_a_deviation() -> None:
+    def build(doc):
+        page = doc.new_page(width=400, height=300)
+        rows = [("Name A", "hebo"), ("1 Road", "helv"), ("Name B", "hebo"), ("2 Road", "helv"), ("Name C", "hebo"),
+                ("3 Road", "helv"), ("Name D", "hebo")]
+        for i, (text, font) in enumerate(rows):
+            page.insert_text((50, 60 + i * 16), text, fontsize=9, fontname=font)
+
+    assert _flagged_texts(_pdf_bytes(build)) == []
+
+
+# --- public API edges -------------------------------------------------------
 
 
 def test_check_font_consistency_invalid_empty_and_image_only() -> None:
@@ -240,112 +224,129 @@ def test_check_font_consistency_invalid_empty_and_image_only() -> None:
 
 def test_check_font_consistency_returns_empty_on_internal_error(monkeypatch) -> None:
     monkeypatch.setattr(fc, "_extract_spans", lambda doc: (_ for _ in ()).throw(RuntimeError("boom")))
-    result = check_font_consistency("doc-1", _consistent_pdf())
+    result = check_font_consistency("doc-1", _table_pdf())
     assert result.unable_to_assess is True
     assert "Unexpected error" in (result.unable_to_assess_reason or "")
 
 
-def test_score_row_deviations_and_group_v2() -> None:
-    majority = _span(text="AAA", font="Helvetica", size=12.0)
-    majority2 = _span(text="BBB", font="Helvetica", size=12.0, bbox=(20, 20, 40, 34))
-    deviant = _span(text="XXX", font="Courier", size=18.0, bold=True, bbox=(40, 20, 80, 34))
-    spans = [majority, majority2, deviant]
-    key = (0, 0)
-    raw = _score_row_deviations(
-        spans,
-        {id(span): key for span in spans},
-        {key: _dominant_pattern(spans)},
-    )
-    assert raw
-    assert raw[0].deviation_type == "combo"
-    grouped = _group_anomalies_v2(raw + raw)
-    assert grouped[0].occurrence_count >= 1
-    assert grouped[0].occurrence_count <= grouped[-1].occurrence_count or len(grouped) == 1
-
-
-def test_check_field_anchored_flags_deviating_occurrence(monkeypatch: pytest.MonkeyPatch) -> None:
-    majority = _span(text="ACME Pte Ltd", font="Helvetica", size=12.0)
-    deviant = _span(text="ACME Pte Ltd", font="Courier", size=18.0, bbox=(10, 80, 90, 98))
-    monkeypatch.setattr(
-        fc,
-        "_match_field_occurrences",
-        lambda *args, **kwargs: [[majority], [deviant]],
-    )
-    raw = _check_field_anchored(
-        [
-            ExtractedField(field_name="skip", field_type="number", field_value=1, confidence=1),
-            ExtractedField(field_name="company", field_type="string", field_value="ACME Pte Ltd", confidence=1),
-            ExtractedField(field_name="missing", field_type="string", field_value="NOPE", confidence=1),
-        ],
-        SimpleNamespace(),
-        {0: [majority, deviant]},
-        _dominant_pattern([majority, majority, deviant]),
-    )
-    assert any(item.field_name == "company" for item in raw)
-    monkeypatch.setattr(fc, "_match_field_occurrences", lambda *a, **k: [])
-    assert (
-        _check_field_anchored(
-            [ExtractedField(field_name="company", field_type="string", field_value="ACME Pte Ltd", confidence=1)],
-            SimpleNamespace(),
-            {0: [majority]},
-            _dominant_pattern([majority]),
-        )
-        == []
-    )
-
-
-def test_check_font_consistency_row_and_field_anchored() -> None:
-    consistent = check_font_consistency("doc-1", _consistent_pdf())
-    assert consistent.unable_to_assess is False
-    assert consistent.all_detected_styles
-
-    mixed = check_font_consistency("doc-1", _mixed_line_pdf(font=True))
-    assert mixed.unable_to_assess is False
-
-    def build(doc):
-        page = doc.new_page(width=420, height=240)
-        page.insert_text((40, 80), "ACME Pte Ltd", fontsize=12, fontname="helv")
-        page.insert_text((40, 140), "Other text on the page", fontsize=12, fontname="helv")
-        page.insert_text((40, 180), "ACME Pte Ltd", fontsize=12, fontname="cour")
-
-    pdf = _pdf_bytes(build)
+def test_finding_is_named_after_the_extracted_field_it_sits_on() -> None:
     fields = [
         ExtractedField(field_name="amount", field_type="number", field_value=100.0, confidence=1),
-        ExtractedField(field_name="blank", field_type="string", field_value="   ", confidence=1),
+        ExtractedField(field_name="blank", field_type="string", field_value="  ", confidence=1),
         ExtractedField(field_name="missing", field_type="string", field_value="NOT IN DOC", confidence=1),
-        ExtractedField(
-            field_name="company",
-            field_type="string",
-            field_value='"ACME Pte Ltd"',
-            confidence=0.9,
-        ),
+        ExtractedField(field_name="asset", field_type="string", field_value='"Other receivables"', confidence=1),
     ]
-    anchored = check_font_consistency("doc-1", pdf, fields)
-    assert anchored.unable_to_assess is False
+    result = check_font_consistency("doc-1", _table_pdf(label_font={2: "cour"}), fields)
+    assert [a.field_name for a in result.anomalies] == ["asset"]
 
 
-def test_check_field_anchored_direct(monkeypatch) -> None:
-    def build(doc):
-        page = doc.new_page(width=300, height=160)
-        page.insert_text((40, 80), "HELLO WORLD", fontsize=12, fontname="helv")
+# --- building blocks --------------------------------------------------------
 
-    pdf = _pdf_bytes(build)
-    doc = pymupdf.open(stream=pdf, filetype="pdf")
-    spans = _extract_spans(doc)
-    by_page = {0: spans}
-    baseline = _dominant_pattern(spans)
-    raw = _check_field_anchored(
-        [ExtractedField(field_name="x", field_type="string", field_value="HELLO WORLD", confidence=1)],
-        doc,
-        by_page,
-        baseline,
+
+def test_extract_spans_skips_non_text_empty_and_bad_bbox() -> None:
+    page = SimpleNamespace(
+        rect=pymupdf.Rect(0, 0, 600, 800),
+        get_drawings=lambda: [{}, {"rect": None}, {"rect": pymupdf.Rect(0, 15.5, 30, 16.5)}],
+        get_text=lambda mode: {
+            "blocks": [
+                {"type": 1},
+                {
+                    "type": 0,
+                    "lines": [
+                        {
+                            "spans": [
+                                {"text": "  "},
+                                {"text": "Hi", "bbox": [0, 0, 1]},
+                                {"text": "Yo", "bbox": [1, 2, 20, 16], "font": "Helv", "size": 12, "flags": 16 | 2},
+                            ]
+                        }
+                    ],
+                },
+            ]
+        },
     )
-    assert isinstance(raw, list)
-    doc.close()
+    spans = _extract_spans([page])
+    assert len(spans) == 1
+    assert spans[0].text == "Yo"
+    assert spans[0].bold is True
+    assert spans[0].italic is True
+
+
+def test_underline_ignores_page_wide_rules() -> None:
+    narrow = SimpleNamespace(
+        rect=pymupdf.Rect(0, 0, 600, 800),
+        get_drawings=lambda: [{"rect": pymupdf.Rect(0, 100, 500, 100.5)}],
+    )
+    assert fc._underline_rects(narrow) == []
+
+
+def test_runs_split_on_column_gaps_not_word_gaps() -> None:
+    spans = [
+        _span(text="Name", bbox=(10, 0, 40, 12)),
+        _span(text="Tan", bbox=(43, 0, 60, 12)),
+        _span(text="S1234567D", bbox=(200, 0, 260, 12)),
+    ]
+    runs = _build_runs(spans)
+    assert sorted(run.text for run in runs) == ["Name Tan", "S1234567D"]
+
+
+def test_build_rows_splits_on_baseline() -> None:
+    top = _span(text="A", bbox=(0, 0, 20, 12))
+    same = _span(text="B", bbox=(30, 0, 50, 12.5))
+    below = _span(text="C", bbox=(0, 40, 20, 54))
+    rows = _build_rows([top, same, below])
+    assert len(rows) == 2
+    assert len(next(iter(rows.values()))) == 2
+
+
+def test_agreed_needs_a_clear_majority() -> None:
+    assert _agreed(["a", "a", "a", "b"], 3, 0.6) == "a"
+    assert _agreed(["a", "a", "b"], 3, 0.6) is None
+    assert _agreed(["a", "a", "a", "b", "b", "b"], 3, 0.6) is None
+    assert _agreed([], 3, 0.6) is None
+
+
+def test_compile_detected_styles_counts_each_style() -> None:
+    styles = _compile_detected_styles([_span(), _span(), _span(font="Courier")])
+    assert styles[0].occurrence_count == 2
+
+
+def test_group_anomalies_merges_identical_deviations_rarest_first() -> None:
+    base = dict(
+        page=0, bbox=(0, 0, 1, 1), text="x", deviation_type="font",
+        detected={"font": "Courier"}, expected={"font": "Helvetica"},
+    )
+    other = dict(base, text="y", detected={"font": "Times"})
+    grouped = _group_anomalies(
+        [fc._RawAnomaly(**base), fc._RawAnomaly(**base), fc._RawAnomaly(**other)]
+    )
+    assert [a.occurrence_count for a in grouped] == [1, 2]
+
+
+def test_field_search_text_handles_json_numbers_and_blank() -> None:
+    assert _field_search_text(ExtractedField(field_name="n", field_type="number", field_value=12.5, confidence=1)) is None
+    assert _field_search_text(ExtractedField(field_name="n", field_type="string", field_value="  ", confidence=1)) is None
+    assert (
+        _field_search_text(
+            ExtractedField(field_name="c", field_type="string", field_value='"ACME Pte Ltd"', confidence=1)
+        )
+        == "ACME Pte Ltd"
+    )
+    assert _field_search_text(ExtractedField(field_name="l", field_type="string", field_value="not json", confidence=1)) == "not json"
+    assert _field_search_text(ExtractedField(field_name="t", field_type="object", field_value={"a": 1}, confidence=1)) is None
+
+
+def test_overlaps_and_zero_area(monkeypatch: pytest.MonkeyPatch) -> None:
+    rect = pymupdf.Rect(10, 10, 40, 30)
+    assert _overlaps((10, 10, 40, 30), rect) is True
+    assert _overlaps((100, 100, 120, 120), rect) is False
+    monkeypatch.setattr(pymupdf.Rect, "get_area", lambda self: 0.0)
+    assert _overlaps((10, 10, 40, 30), pymupdf.Rect(10, 10, 40, 30)) is False
 
 
 def test_font_family_returns_original_name_when_stripping_leaves_nothing() -> None:
     assert fc._font_family("Bold") == "Bold"
+    assert fc._font_family("ABCDEF+Aptos,Bold") == "Aptos"
 
 
 def test_is_underlined_false_for_zero_width_span() -> None:
@@ -357,6 +358,25 @@ def test_is_underlined_false_when_no_rect_is_near_the_baseline() -> None:
     assert fc._is_underlined((0.0, 0.0, 100.0, 20.0), [far_rect]) is False
 
 
-def test_dominant_empty_and_tie() -> None:
-    assert fc._dominant([]) is None
-    assert fc._dominant(["a", "b"]) is None
+def test_document_title_larger_than_its_section_headings_is_not_flagged() -> None:
+    def build(doc):
+        page = doc.new_page(width=400, height=500)
+        page.insert_text((40, 40), "ANNUAL FINANCIAL STATEMENTS", fontsize=16, fontname="hebo")
+        for i, title in enumerate(["1. GENERAL INFORMATION", "2. BASIS OF PREPARATION", "3. REVENUE", "4. OTHER INCOME"]):
+            page.insert_text((40, 90 + i * 60), title, fontsize=9.5, fontname="hebo")
+            page.insert_text((40, 106 + i * 60), "Body text that follows the heading above it.", fontsize=9, fontname="helv")
+
+    assert _flagged_texts(_pdf_bytes(build)) == []
+
+
+def test_underlined_instruction_sentence_is_not_flagged() -> None:
+    def build(doc):
+        page = doc.new_page(width=500, height=300)
+        for i, label in enumerate(_LABELS):
+            page.insert_text((40, 60 + i * 18), label, fontsize=9, fontname="helv")
+        sentence = "If you have selected Reason B for any of the countries please explain below"
+        page.insert_text((40, 60 + 3 * 18), sentence, fontsize=9, fontname="helv")
+        width = pymupdf.get_text_length(sentence, "helv", 9)
+        page.draw_line((40, 60 + 3 * 18 + 1.5), (40 + width, 60 + 3 * 18 + 1.5), width=0.6)
+
+    assert _flagged_texts(_pdf_bytes(build)) == []

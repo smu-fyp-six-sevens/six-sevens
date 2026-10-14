@@ -39,6 +39,7 @@ from .models import (
     is_classification_confirmed,
 )
 from .monitoring import is_stuck
+from .supporting_documents import recommend_supporting_documents
 
 
 def compute_documents_status(documents: list[DocumentRecord]) -> CaseDocumentsStatus:
@@ -200,6 +201,7 @@ def build_summary(
             covered=id_covered, total=id_total, missing_side=id_missing_side
         ),
         risk=risk,
+        supporting_document_recommendations=recommend_supporting_documents(documents),
     )
 
 

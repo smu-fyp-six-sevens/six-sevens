@@ -43,6 +43,13 @@ def test_bank_statement_includes_transaction_structure_guidance():
     assert '"balance"' in prompt
 
 
+def test_bank_statement_transactions_name_their_counterparty():
+    # supporting_documents names the supplier/customer in its purchase order and
+    # sales invoice requests from this.
+    prompt = build_extraction_prompt("bank_statement", "sample text")
+    assert '"counterparty"' in prompt
+
+
 def test_typed_prompt_marks_schema_fields_required_and_allows_extras():
     prompt = build_extraction_prompt("payslip", "sample text")
     assert "REQUIRED" in prompt

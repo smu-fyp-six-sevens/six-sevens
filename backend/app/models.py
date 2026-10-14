@@ -350,6 +350,47 @@ class CaseRisk(BaseModel):
     documents_total: int = 0
 
 
+class RecommendationItem(BaseModel):
+    """
+    One thing a supporting document is requested for: a bank statement
+    transaction, or a line of a financial statement.
+    """
+
+    date: Optional[str] = None
+    # The transaction description or line label, as printed.
+    description: str
+    # Signed as extracted: negative for a payment out, positive for a receipt.
+    amount: float
+    # A financial statement line's prior-year figure, where it has one.
+    prior_amount: Optional[float] = None
+    # The supplier paid or customer paying, when the statement names one.
+    counterparty: Optional[str] = None
+    reason: str
+    # The lines this one totals, e.g. a total's portions — shown as a table
+    # of these lines plus this one as its total row.
+    breakdown: list["RecommendationItem"] = Field(default_factory=list)
+
+
+class SupportingDocumentRecommendation(BaseModel):
+    """
+    A document the officer should request from the client, and why — see
+    supporting_documents.recommend_supporting_documents.
+    """
+
+    document_type: Literal[
+        "purchase_order", "sales_invoice", "related_party_repayment_evidence", "bank_loan_evidence"
+    ]
+    # What to ask for, e.g. "Purchase Order".
+    title: str
+    # Why: what the source document shows.
+    reason: str
+    # The ask, introducing items, e.g. "Request purchase orders for these transactions:".
+    request: str
+    source_document_id: str
+    source_filename: str
+    items: list[RecommendationItem] = Field(default_factory=list)
+
+
 class CaseSummary(CaseRecord):
     """
     documents_status and fulfilled_requirements are both computed live from
@@ -371,6 +412,12 @@ class CaseSummary(CaseRecord):
     )
     # None when the documents' detection reports couldn't be loaded.
     risk: Optional[CaseRisk] = None
+    # Further evidence to request from the client; empty when nothing in the
+    # case needs any. Unlike recommended_additional_documents (missing
+    # checklist items), these come from what the documents themselves show.
+    supporting_document_recommendations: list[SupportingDocumentRecommendation] = Field(
+        default_factory=list
+    )
 
 
 class UpdateCaseRequest(BaseModel):
@@ -425,6 +472,10 @@ class DocumentRecord(BaseModel):
     # `classification_confidence` above. Set to 1.0 when a loan officer
     # manually saves corrected fields.
     extraction_confidence: Optional[float] = None
+    # When a loan officer saved the fields of an Other ("unrecognised")
+    # document. Its fields come from no schema, so approving one needs it —
+    # unlike extraction_confidence, which Extraction can also report as 1.0.
+    fields_reviewed_at: Optional[datetime] = None
     escalation_reason: Optional[str] = None
     metadata: Optional[dict] = None
 

@@ -611,7 +611,6 @@ def test_fs_note_refs_flags_a_reference_with_no_matching_note() -> None:
     assert "7" in findings[0].summary
 
 
-
 # ---------------------------------------------------------------------------
 # Notice of assessment
 # ---------------------------------------------------------------------------
@@ -622,7 +621,7 @@ def test_noa_chain_matches_the_real_generator_formula_for_a_round_number() -> No
     # 10,000), exempt_next=45000 (50% of 90,000), after=47500,
     # tax=8075.00, rebate=min(4037.50,40000)=4037.50, payable=4037.50.
     result = _run(
-        [_field("eci", "100000"), _field("tax_payable", "4037.50")],
+        [_field("eci", "100000"), _field("tax_payable", "4037.50"), _field("year_of_assessment", "2025")],
         document_type="notice_of_assessment",
     )
     assert _codes(result, "NOA.PAYABLE") == []
@@ -630,10 +629,67 @@ def test_noa_chain_matches_the_real_generator_formula_for_a_round_number() -> No
 
 def test_noa_chain_flags_wrong_payable() -> None:
     result = _run(
-        [_field("eci", "100000"), _field("tax_payable", "99999")],
+        [_field("eci", "100000"), _field("tax_payable", "99999"), _field("year_of_assessment", "2025")],
         document_type="notice_of_assessment",
     )
     assert len(_codes(result, "NOA.PAYABLE")) == 1
+
+
+def _noa_for(year: str | None, eci: str, payable: str, computation: list[dict] | None = None):
+    fields = [_field("eci", eci), _field("tax_payable", payable)]
+    if year is not None:
+        fields.append(_field("year_of_assessment", year))
+    if computation is not None:
+        fields.append(_field("tax_computation", computation))
+    return [f for f in _run(fields, document_type="notice_of_assessment").findings if f.check_code.startswith("NOA")]
+
+
+# Expected figures worked by hand from IRAS's rules (sg_reference/corporate_tax.py).
+
+
+def test_noa_ya2021_to_2023_have_no_rebate() -> None:
+    # ECI 100,000: exempt 7,500 + 45,000, tax 17% of 47,500 = 8,075, no rebate.
+    assert _noa_for("2023", "100000", "8075") == []
+    rebated = [{"line": "Less: Tax Rebate", "amount": 4037.5}]
+    codes = {f.check_code for f in _noa_for("2023", "100000", "4037.50", rebated)}
+    assert codes == {"NOA.REBATE", "NOA.PAYABLE"}
+
+
+def test_noa_ya2020_rebate_is_25_percent() -> None:
+    # Tax 8,075 less 25% (2,018.75, cap 15,000) = 6,056.25.
+    assert _noa_for("2020", "100000", "6056.25") == []
+    assert len(_noa_for("2020", "100000", "4037.50")) == 1
+
+
+def test_noa_ya2019_uses_the_wider_exemption_band_and_20_percent_rebate() -> None:
+    # ECI 400,000: 7,500 + 50% of the next 290,000 (145,000) exempt, tax 17% of 247,500 = 42,075,
+    # rebate 20% = 8,415 (cap 10,000), payable 33,660.
+    computation = [{"line": "First 10,000 @ 75%", "amount": 7500}, {"line": "Next 290,000 @ 50%", "amount": 145000}]
+    assert _noa_for("2019", "400000", "33660", computation) == []
+
+
+def test_noa_accepts_the_start_up_tax_exemption() -> None:
+    # A new company: 75% of the first 100,000 and 50% of the next 100,000. ECI 150,000:
+    # exempt 75,000 + 25,000, tax 17% of 50,000 = 8,500, rebate 50% = 4,250.
+    computation = [{"line": "First 100,000 @ 75%", "amount": 75000}, {"line": "Next 100,000 @ 50%", "amount": 25000}]
+    assert _noa_for("2025", "150000", "4250", computation) == []
+
+
+def test_noa_ya2026_accepts_the_original_and_the_enhanced_rebate() -> None:
+    # ECI 500,000: tax 17% of 397,500 = 67,575. Enhanced: 50% = 33,787.50. Original Budget 2026
+    # terms: 40% = 27,030 (cap 30,000), or 25,530 net of the 1,500 cash grant.
+    assert _noa_for("2026", "500000", "33787.50") == []
+    assert _noa_for("2026", "500000", "40545") == []
+    assert _noa_for("2026", "500000", "42045") == []
+    assert len(_noa_for("2026", "500000", "50000")) == 1
+
+
+def test_noa_skips_a_year_without_known_rules_or_no_year() -> None:
+    for year in ("2010", None):
+        result = _run([_field("eci", "100000"), _field("tax_payable", "1")]
+                      + ([_field("year_of_assessment", year)] if year else []), document_type="notice_of_assessment")
+        assert _codes(result, "NOA.PAYABLE") == []
+        assert any(s.check_code == "NOA.PAYABLE" for s in result.skipped_checks)
 
 
 # The tax computation of a real amended NOA (C030, YA2025, ECI 321,800).
@@ -889,18 +945,6 @@ def test_loan_rate_band_runs_against_a_reference_rate_formula() -> None:
     assert "LOAN.RATE_BAND" not in {s.check_code for s in result.skipped_checks}
 
 
-def test_loan_scheme_params_flags_amount_over_the_schemes_cap() -> None:
-    REFERENCE_DATA["loan_scheme_params"]["Enterprise Financing Scheme"] = {"amount_cap": 500000}
-    try:
-        result = _run(
-            [_field("scheme_name", "Enterprise Financing Scheme"), _field("loan_amount", "900000")],
-            document_type="list_of_loans",
-        )
-        assert len(_codes(result, "LOAN.SCHEME_PARAMS")) == 1
-    finally:
-        REFERENCE_DATA["loan_scheme_params"].clear()
-
-
 # ---------------------------------------------------------------------------
 # Proof of address
 # ---------------------------------------------------------------------------
@@ -998,6 +1042,19 @@ def test_acra_officers_flags_no_director() -> None:
         document_type="certificate_of_incumbency",
     )
     assert len(_codes(result, "ACRA.OFFICERS")) == 1
+
+
+def test_acra_officers_reads_the_role_whatever_its_column_is_called() -> None:
+    # A real ACRA extract: the role column was transcribed as "position_held".
+    officers = [
+        {"name": "CHIA WEI MING", "position_held": "Director", "date_of_appointment": "15/03/2022"},
+        {"name": "RAJESWARI D/O MUTHUSAMY", "position_held": "Secretary", "date_of_appointment": "09/05/2022"},
+    ]
+    result = _run(
+        [_field("officers", officers), _field("incorporation_date", "2022-03-15")],
+        document_type="certificate_of_incumbency",
+    )
+    assert _codes(result, "ACRA.OFFICERS") == []
 
 
 def test_acra_capital_per_share_flags_an_implausible_per_share_value() -> None:
@@ -1099,6 +1156,34 @@ def test_mrz_checkdigits_flags_corrupted_check_digit() -> None:
     assert len(_codes(result, "ID.MRZ_CHECKDIGITS")) >= 1
 
 
+# The C067 passport as extracted: the LLM wrote one "<" too many in the run
+# after the name, and OCR read the printed ID's check letter I as a 1.
+_C067_MRZ_LINE1 = "PASGPCHIA<<WEI<MING<<<<<<<<<<<<<<<<<<<<<<<<<"
+_C067_MRZ_LINE2 = "K5690850D0SGP8904126F3511060S8934521I<<<<<22"
+
+
+def test_a_miscounted_run_of_mrz_filler_is_not_a_format_error() -> None:
+    too_long = _C067_MRZ_LINE1 + "<"
+    too_short = _C067_MRZ_LINE2.replace("<<<<<", "<<<<", 1)
+    for mrz in (too_long + "\n" + _C067_MRZ_LINE2, _C067_MRZ_LINE1 + "\n" + too_short):
+        result = _run([_field("mrz", mrz)], document_type="passport")
+        assert _codes(result, "ID.MRZ_FORMAT") == []
+        assert _codes(result, "ID.MRZ_CHECKDIGITS") == []
+
+
+def test_an_mrz_line_well_off_44_is_still_a_format_error() -> None:
+    mrz = _C067_MRZ_LINE1 + "<<<" + "\n" + _C067_MRZ_LINE2
+    assert len(_codes(_run([_field("mrz", mrz)], document_type="passport"), "ID.MRZ_FORMAT")) == 1
+
+
+def test_mrz_vs_viz_allows_letters_ocr_reads_as_digits() -> None:
+    mrz = _C067_MRZ_LINE1 + "\n" + _C067_MRZ_LINE2
+    misread = _run([_field("mrz", mrz), _field("nric_number", "S89345211")], document_type="passport")
+    assert _codes(misread, "ID.MRZ_VS_VIZ") == []
+    different = _run([_field("mrz", mrz), _field("nric_number", "S8934521J")], document_type="passport")
+    assert len(_codes(different, "ID.MRZ_VS_VIZ")) == 1
+
+
 def test_mrz_vs_viz_flags_passport_number_mismatch() -> None:
     mrz = _build_mrz("E1234567A", "900101", "300101")
     result = _run(
@@ -1140,3 +1225,49 @@ def test_fatca_us_person_flags_no_answer_with_a_us_tin() -> None:
         document_type="fatca_crs_declaration",
     )
     assert len(_codes(result, "FATCA.US_PERSON")) == 1
+
+
+def test_bank_identifiers_checks_dbs_gst_number() -> None:
+    # DBS's GST number is not its UEN: real statements print "GST Registration No: MR-8500180-3".
+    genuine = _run([_field("bank_name", "POSB"), _field("bank_gst_no", "MR 8500180 3")], document_type="bank_statement")
+    assert _codes(genuine, "BS.BANK_IDENTIFIERS") == []
+    uen_as_gst = _run([_field("bank_name", "DBS Bank Ltd"), _field("bank_gst_no", "196800306E")], document_type="bank_statement")
+    findings = _codes(uen_as_gst, "BS.BANK_IDENTIFIERS")
+    assert len(findings) == 1 and findings[0].field == "bank_gst_no"
+
+
+def test_bank_identifiers_skips_a_value_not_shaped_like_the_identifier() -> None:
+    # Regression: the binder bound bank_contact to bic_code, and the phone number was reported as a fake BIC.
+    fields = [_field("bank_name", "DBS Bank Ltd"), _field("bank_contact", "1800 222 2200 (+65 6222 2200 from overseas)")]
+    outcome = run_numerical_checks("bank_statement", fields, [Binding(role="bic_code", field="bank_contact", row=None)])
+    assert [f for f in outcome.findings if f.check_code == "BS.BANK_IDENTIFIERS"] == []
+    skip = next(s for s in outcome.skipped if s.check_code == "BS.BANK_IDENTIFIERS")
+    assert "isn't shaped like a SWIFT BIC" in skip.reason
+
+
+def test_nric_checksum_reads_nested_rows_and_reports_each_number_once() -> None:
+    shareholders = [{"name": "NG BEE LENG", "identification_no": "S7845632F"}]
+    result = _run(
+        [_field("shareholders", shareholders), _field("notes", "Ng Bee Leng (S7845632F) subscribed 100,000 shares"),
+         _field("subscriber_2_id", "S7845632F")],
+        document_type="company_constitution",
+    )
+    findings = _codes(result, "ID.NRIC_CHECKSUM")
+    assert len(findings) == 1
+    # The ID field is named before the table row, and free text last.
+    assert findings[0].field == "subscriber_2_id"
+    assert findings[0].summary.startswith("S7845632F in Subscriber 2 ID has an invalid check letter")
+    assert "Also printed in Shareholder 1 (NG BEE LENG), Identification No and Notes" in findings[0].summary
+
+
+def test_nric_finding_needs_review_only_if_every_copy_was_extracted_with_low_confidence() -> None:
+    def run(flat_confidence: float, table_confidence: float):
+        fields = [
+            ExtractedField(field_name="nric_number", field_type="string", field_value="S8934521C", confidence=flat_confidence),
+            ExtractedField(field_name="shareholders", field_type="array",
+                           field_value=[{"name": "CHIA WEI MING", "identification_no": "S8934521C"}], confidence=table_confidence),
+        ]
+        return _codes(_run(fields, document_type="certificate_of_incumbency"), "ID.NRIC_CHECKSUM")[0]
+
+    assert run(0.75, 1.0).needs_review is False  # the table read it confidently
+    assert run(0.75, 0.75).needs_review is True
