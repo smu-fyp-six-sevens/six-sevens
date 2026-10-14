@@ -287,7 +287,7 @@ def test_update_extracted_fields_success() -> None:
             }
         )
         mock_dep_repo.get_document.return_value = original
-        mock_repo.get_document.return_value = updated
+        mock_repo.update_extracted_fields.return_value = mock_repo.get_document.return_value = updated
         # First call is the handler's own existing-fields lookup (used to
         # decide which fields were "editable"/human-verified); the field is
         # new here (empty existing set), so it's treated as verified with
@@ -364,7 +364,7 @@ def test_update_extracted_fields_removes_optional_fields_saved_empty() -> None:
             uploaded_at=_TIMESTAMP,
         )
         mock_dep_repo.get_document.return_value = original
-        mock_repo.get_document.return_value = original
+        mock_repo.update_extracted_fields.return_value = mock_repo.get_document.return_value = original
         mock_fields_repo.get_extracted_fields.return_value = []
 
         response = client.patch(
@@ -402,7 +402,7 @@ def test_update_extracted_fields_preserves_confidence_for_already_reviewed_field
             uploaded_at=_TIMESTAMP,
         )
         mock_dep_repo.get_document.return_value = original
-        mock_repo.get_document.return_value = original
+        mock_repo.update_extracted_fields.return_value = mock_repo.get_document.return_value = original
         mock_fields_repo.get_extracted_fields.side_effect = [
             [
                 ExtractedField(
@@ -449,7 +449,7 @@ def test_update_extracted_fields_bumps_confidence_for_low_confidence_existing_fi
             uploaded_at=_TIMESTAMP,
         )
         mock_dep_repo.get_document.return_value = original
-        mock_repo.get_document.return_value = original
+        mock_repo.update_extracted_fields.return_value = mock_repo.get_document.return_value = original
         mock_fields_repo.get_extracted_fields.side_effect = [
             [
                 ExtractedField(
@@ -496,7 +496,7 @@ def test_update_extracted_fields_treats_blank_existing_value_as_editable() -> No
             uploaded_at=_TIMESTAMP,
         )
         mock_dep_repo.get_document.return_value = original
-        mock_repo.get_document.return_value = original
+        mock_repo.update_extracted_fields.return_value = mock_repo.get_document.return_value = original
         mock_fields_repo.get_extracted_fields.side_effect = [
             [
                 ExtractedField(
@@ -861,7 +861,7 @@ def test_add_extracted_field_inserts_and_returns_refetched_document() -> None:
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
         mock_dep_repo.get_document.return_value = _payslip_document()
-        mock_repo.get_document.return_value = _payslip_document()
+        mock_repo.update_extracted_fields.return_value = mock_repo.get_document.return_value = _payslip_document()
         # 1st call: the duplicate-name check (no fields yet). 2nd: the
         # re-read that rebuilds documents.extracted_fields. 3rd: the
         # get_document() refetch that builds the response body.
@@ -905,7 +905,7 @@ def test_add_extracted_field_trims_whitespace_from_name() -> None:
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
         mock_dep_repo.get_document.return_value = _payslip_document()
-        mock_repo.get_document.return_value = _payslip_document()
+        mock_repo.update_extracted_fields.return_value = mock_repo.get_document.return_value = _payslip_document()
         mock_fields_repo.get_extracted_fields.side_effect = [[], [], []]
 
         response = client.post(
@@ -983,7 +983,7 @@ def test_add_extracted_field_skips_case_sync_for_caseless_document() -> None:
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
         mock_dep_repo.get_document.return_value = document
-        mock_repo.get_document.return_value = document
+        mock_repo.update_extracted_fields.return_value = mock_repo.get_document.return_value = document
         mock_fields_repo.get_extracted_fields.side_effect = [[], [], []]
 
         response = client.post(
@@ -1032,7 +1032,7 @@ def test_delete_extracted_field_removes_and_recomputes_requirements() -> None:
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
         mock_dep_repo.get_document.return_value = _payslip_document()
-        mock_repo.get_document.return_value = _payslip_document()
+        mock_repo.update_extracted_fields.return_value = mock_repo.get_document.return_value = _payslip_document()
         mock_fields_repo.get_extracted_fields.side_effect = [
             [doomed, kept],  # lookup that resolves field_id
             [kept],          # re-read after the delete
@@ -1099,7 +1099,7 @@ def test_delete_extracted_field_skips_case_sync_for_caseless_document() -> None:
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
         mock_dep_repo.get_document.return_value = document
-        mock_repo.get_document.return_value = document
+        mock_repo.update_extracted_fields.return_value = mock_repo.get_document.return_value = document
         mock_fields_repo.get_extracted_fields.side_effect = [[doomed], [], []]
 
         response = client.delete("/documents/doc-1/extracted-fields/field-1")
@@ -1341,7 +1341,7 @@ def test_approve_document_success() -> None:
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
         mock_dep_repo.get_document.return_value = document
-        mock_repo.get_document.return_value = document.model_copy(
+        mock_repo.approve_document.return_value = mock_repo.get_document.return_value = document.model_copy(
             update={"status": DocumentStatus.APPROVED}
         )
         mock_fields_repo.get_extracted_fields.return_value = [
@@ -1423,7 +1423,7 @@ def test_reject_document_success() -> None:
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
         mock_dep_repo.get_document.return_value = document
-        mock_repo.get_document.return_value = document.model_copy(
+        mock_repo.reject_document.return_value = mock_repo.get_document.return_value = document.model_copy(
             update={"status": DocumentStatus.REJECTED}
         )
         mock_fields_repo.get_extracted_fields.return_value = []
@@ -1676,7 +1676,7 @@ def test_approve_document_allows_officer_confirmed_unrecognised() -> None:
         patch("app.routers.documents._launch_detection") as mock_launch,
     ):
         mock_dep_repo.get_document.return_value = document
-        mock_repo.get_document.return_value = document
+        mock_repo.approve_document.return_value = mock_repo.get_document.return_value = document
         mock_fields_repo.get_extracted_fields.return_value = [
             ExtractedField(field_name="summary", field_type="string", field_value="x", confidence=0.99),
         ]
@@ -1723,7 +1723,7 @@ def test_approve_document_does_not_require_saved_fields_for_a_known_type() -> No
         patch("app.routers.documents._launch_detection"),
     ):
         mock_dep_repo.get_document.return_value = document
-        mock_repo.get_document.return_value = document
+        mock_repo.approve_document.return_value = mock_repo.get_document.return_value = document
         mock_fields_repo.get_extracted_fields.return_value = [
             ExtractedField(field_name=name, field_type="string", field_value="x", confidence=1.0)
             for name in ("individual_name", "company_name", "net_pay")
@@ -1744,7 +1744,7 @@ def test_saving_an_other_documents_fields_records_the_review() -> None:
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
         mock_dep_repo.get_document.return_value = document
-        mock_repo.get_document.return_value = document
+        mock_repo.update_extracted_fields.return_value = mock_repo.get_document.return_value = document
         mock_fields_repo.get_extracted_fields.return_value = [
             ExtractedField(field_name="summary", field_type="string", field_value="x", confidence=1.0),
         ]

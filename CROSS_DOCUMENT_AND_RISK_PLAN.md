@@ -1,15 +1,23 @@
 # Plan: cross-document validation and risk outlook
 
-Status: first version implemented on branch `agentic-experiments`, untested. Code is under `backend/app/case_pipeline/`.
+Status: implemented on branch `agentic-experiments` and run end to end on generated cases (updated 2026-10-15). Code is under `backend/app/case_pipeline/`. The automatic trigger (Step 0), evals and a dismissal flow are not built, and the repo has no unit tests yet for the hypothesiser, the tools, `verify.py`, `outlook.py` or `summary.py`.
 
 Changes from the plan below:
-- **Officer-triggered first.** A "Run case analysis" button (shown when every approved document is scanned) starts a run. The automatic gate, supersede and debounce (Step 0) are deferred. A newer run replaces an older one, and a result over changed documents is marked stale and not counted in the score.
-- **Existing cases are untouched** unless an officer runs the analysis. A case with no analysis scores exactly as before.
+- **Officer-triggered first.** A "Run case analysis" button (shown when every approved document is scanned) starts a run. The automatic gate, supersede and debounce (Step 0) are deferred. A newer run replaces an older one.
+- **The run is the only place a case's risk score and supporting-document recommendations are produced.** The case page and the case list read them from the latest complete run (`case_analysis_runs.result.risk`, `.supporting_documents`; one `risk_scores` row per run). Nothing recomputes them on a read. A case never analysed shows no score. When documents change after a run, the run is marked out of date and its result stays visible with a notice, rather than being dropped from the score.
 - **Layout on Other documents runs in generic mode.** The layout check only uses per-type reference templates when the type is known and confident, so for Other it uses the document's own structure.
 - **The two orphaned consistency tools** (company name, address) and the modules behind them (`company_identity.py`, `address_matching.py`) now live in `case_pipeline/cross_document/`, not in the detection agent.
-- **Migration:** `backend/migrations/002_case_analysis_runs.sql` must be applied before the first run.
+- **Table:** `case_analysis_runs` must exist before the first run (see `README.md` for the database objects the backend expects).
 - **Kill switch:** `CASE_ANALYSIS_ENABLED=false`.
 - **Run trace:** each run also writes a step-by-step `trace` (hypotheses tried, tool calls, verdicts, why each was kept or discarded) to its row, shown in a debug panel on the case page. It is for debugging and does not affect the score.
+- **Structured output.** The plan and the judge each answer by calling a forced tool (`submit_hypotheses`, `submit_verdicts`), so the reply is always JSON. A text reply is still read as a fallback.
+- **Hard call budget.** The plan and judge are 2 model calls (`MAX_MODEL_CALLS_PER_RUN`); a third is refused before any request. Output is capped (3,000 and 2,500 tokens) and the dossier is capped at 24,000 characters, shared fairly across documents.
+- **Prompt caching.** Both calls share one cached system prompt (rules, bias policy, tool catalogue) and declare the same two tools, so the judge reads the cache the plan wrote. Check `cache read / write` on the run's `perf` log line.
+- **No bias, enforced in code** (`cross_document/bias.py`), at four points: protected fields are removed from the dossier and refused by the tools; the prompt forbids them and every proxy for them (what a name, address or postcode "suggests"); a hypothesis whose text touches one is dropped before any check runs (`dropped_for_bias`); a verdict whose text touches one is discarded.
+- **Verifier rules added.** A finding must cite at least two documents, or at least one fact a tool computed over the data (`transaction_stats`, `query_transactions`, `top_counterparties`, `monthly_flow`, `compare_periods`, or the dossier's transaction summary); otherwise it is the per-document scan's business. The same test runs at proposal time (`dropped_for_scope`) so such hypotheses never reach the judge. A refutation probe that only re-reads the fields the claim's own checks already read does not count.
+- **Year-less statement dates** (`20 JUN`) take their year from the statement period; a date the period can't place stays undated rather than guessed.
+- **The summary is told which checks could not run** and may not describe them as clear.
+- **Supporting documents are separate from the outlook.** The rule-based recommendations are stored on the run as their own list and no longer enter the outlook's request list. Later they will feed the agent, and what the agent concludes will be saved to `cases.recommended_additional_documents`.
 
 ## Scope
 
@@ -19,7 +27,7 @@ Changes from the plan below:
 | `external_validation/` | Not part of this module. Runs per document. Its findings reach the agent through each document's detection report. |
 | `company_name_consistency_tool`, `address_consistency_tool` | Currently orphaned. Become investigator tools. |
 | `case_risk.py` | Stays the only source of the score (deterministic). |
-| `supporting_documents.py` | Rule-based recommendations become one source in a unified list. |
+| `supporting_documents.py` | Rule-based recommendations; run inside the analysis and stored on the run. Planned: they feed the agent, and the agent's conclusion is what is saved. |
 
 ## Step 0: per-case trigger (build first)
 
@@ -45,7 +53,7 @@ The run record lives in the database, so the fence survives a restart.
 
 ### Other documents are scanned and counted
 
-Today an approved "Other" (unrecognised) document is never scanned and never counted. Approval itself is already allowed. After it, the approve handler hits `skips_detection` and logs "detection skipped". That changes: **an approved Other document is detected like any other and counts towards risk.** It is the catch-all for shipping, trade and similar documents, so exempting it would leave a gap.
+**Implemented.** An approved Other document is detected like any other and counts towards risk once its detection has started. `skips_detection` now applies only to a document with no type at all. It is the catch-all for shipping, trade and similar documents, so exempting it would leave a gap.
 
 - **Rule: only checks that need no type and no template baseline run on Other.** A bespoke invoice or shipping contract compared against a canonical template would raise false alarms.
 - **Runs (type-agnostic, within the document):** font consistency, text overlay, spelling, image splicing and AI-generation, and the metadata checks that compare the document with itself (creator vs export date, edit traces).
@@ -57,7 +65,7 @@ Today an approved "Other" (unrecognised) document is never scanned and never cou
 - **Fairness:** fewer applicable checks means less coverage, not more suspicion. Generic checks on unfamiliar layouts risk false positives (e.g. spelling on unknown terms), so Other-type documents must be in the clean-case eval.
 - **Provenance:** the officer has saved its fields before approval, so the dossier marks them officer-confirmed.
 
-Code that changes:
+Code that changed (done):
 - `routers/documents.py` approve handler: remove the `skips_detection` branch and launch detection. Existing approval prerequisites stay.
 - `models.skips_detection`: narrow or remove it.
 - `case_risk.counts_towards_risk` and the gate: include Other.
@@ -76,12 +84,14 @@ dossier (code) -> plan: hypotheses + checks (LLM) -> run the checks (code) -> ju
    - statement period, transaction count and totals, median and max transaction size, top counterparties
    - declared business activity, SSIC, share capital, directors, addresses
    - each document's detection findings
-2. **Plan (one Sonnet call).** At most 3 strong hypotheses, each with a claim, what would prove it, a **refutation test**, and up to 4 checks to run (tool plus arguments), at least one of them a refutation probe. Everything is planned up front.
+2. **Plan (one Sonnet call, forced structured output).** At most 3 strong hypotheses, each with a claim, what would prove it, a **refutation test**, and up to 4 checks to run (tool plus arguments), at least one of them a refutation probe, and that probe must read something the claim does not already rest on. Everything is planned up front. Hypotheses that touch a protected attribute, or concern one document with nothing computed behind them, are dropped before any check runs.
 3. **Run the checks (plain code, no model call).** The planned checks run against the read-only evidence tools. Unknown tools are dropped and a failed check is recorded as unavailable.
 4. **Judge (one call).** A single call judges every hypothesis from its evidence and returns `conclusive`, `severity`, `category` and `citations` for each.
 5. **Verify (code).** A verdict stands only if:
    - every citation is a ref id a tool returned in this run (exact match, no fuzzy matching)
-   - a refutation probe ran: at least one tool call tagged `is_refutation_probe=True` on the complementary document the hypothesis named, which succeeded (`available: true`) and covers the relevant period
+   - a refutation probe ran: at least one tool call tagged `is_refutation_probe=True` on the complementary document the hypothesis named, which succeeded (`available: true`) and covers the relevant period, and which, if it was a plain field read, read a field the claim's own checks had not
+   - it cites at least two documents, or at least one tool-computed fact
+   - nothing in its text (claim, summary, rationale, probe summary) touches a protected attribute
    - the severity cap and category rules below pass
 
    Anything else is discarded.
@@ -113,7 +123,7 @@ Code can tell which case applies without trusting the model: a tool that detects
 
 ### Cost
 
-**3 model calls per case, 4 at most**: the plan, the judge, a short summary on Haiku, and the evidence-request call on Haiku only when a reducible finding exists. There is no tool loop. It runs It runs as a background job, so the constraints are provider rate limits and cost, not a request timeout.
+**3 model calls per case, 4 at most**: the plan and the judge (Sonnet, a hard cap of 2), a short summary on Haiku, and the evidence-request call on Haiku only when a reducible finding exists. There is no tool loop. It runs as a background job, so the constraints are provider rate limits and cost, not a request timeout. A recent run used about 9.5k input and 1.7k output tokens in total, with 1,606 tokens read from the cache on the judge call.
 
 ### Investigator tools
 
@@ -130,13 +140,13 @@ Rules:
 |---|---|---|
 | Reading | `list_documents`, `get_fields`, `get_business_profile` | Documents and types, field values with confidence, and the declared profile merged across documents (both values if they disagree) |
 | Behaviour | `transaction_stats`, `query_transactions`, `top_counterparties`, `monthly_flow`, `compare_periods` | Count, totals, median, p90, max; filtered rows; counterparty shares; monthly flow; period gaps and balance continuity |
-| Agreement | `compare_company_names`, `compare_addresses`, `compare_people` | Whether names, addresses and people across documents refer to the same entity |
+| Agreement | `compare_identifiers`, `compare_people`, `company_name_consistency_tool`, `address_consistency_tool` | Whether identifiers, people, company names and addresses across documents refer to the same entity |
 
 These reuse the existing row and amount helpers and the matching logic in the orphaned tools. No new parsing.
 
 ### Storage
 
-Results are persisted with their input fingerprint. Only conclusive findings are stored.
+Results are persisted with their input fingerprint. Only conclusive findings are stored, together with the run's risk, outlook, summary and supporting documents. A completed run also writes one `risk_scores` row whose `flag_ids` are the UUIDs of the per-document `flags` behind the score.
 
 ## Part 2: Risk scoring and outlook
 
@@ -193,7 +203,7 @@ RiskOutlook {
 ```
 
 6. It is a conditional estimate, not a prediction. Requests are ranked by score drop. The best case is a combined re-score, not a sum, and never goes below what unreducible findings leave.
-7. `supporting_documents.py` recommendations use the same `EvidenceRequest` shape, so the officer sees one list.
+7. `supporting_documents.py` recommendations are produced in the same run but kept as their own list on the run (`supporting_documents`), shown in their own card. They do not enter the outlook's re-scoring.
 
 ## Guardrails and governance
 
@@ -202,7 +212,7 @@ Referenced: MAS FEAT, PDPA (and PDPC NRIC guidance), IMDA Model AI Governance Fr
 | Principle | Control |
 |---|---|
 | Human accountability | Advisory only. Never approves, declines or changes a status. Overrides are logged with a reason. |
-| Fairness | Findings rest only on document content and consistency. Protected attributes (race, religion, gender, nationality, a person's age) are banned as inputs and filtered from outputs. Subgroup false-positive rates are measured. |
+| Fairness | Findings rest only on document content and consistency. Protected attributes (race, ethnicity, nationality, citizenship, religion, gender or sex, age or date of birth, marital status, disability and similar) and their proxies are removed from the model's input, forbidden in its prompt, and screened from its proposals and verdicts (`bias.py`). Subgroup false-positive rates are measured. |
 | Proportionality | A request must address a finding, and the number of requests is capped. |
 | Transparency | Evidence refs resolve to real data, the summary cites findings, AI text is labelled, and the score shows its arithmetic. |
 | Contestability | An officer can dismiss a cross-document finding with a reason. It leaves the score and the dismissal is kept. |
@@ -250,3 +260,6 @@ Open questions for the sponsor:
 2. Severity is capped. A hypothesis alone can't reach High without a calculation or registry mismatch.
 3. The pipeline triggers automatically when all approved documents are scanned, and supersedes on change.
 4. Approved Other documents are scanned and counted towards risk.
+5. A case's risk score and supporting-document recommendations come only from an analysis run; the views read them.
+6. This module produces cross-document findings only. A finding about one document's own figures, with nothing computed behind it, is left to that document's scan.
+7. The model is never shown a person's protected attributes, and a hypothesis or verdict that touches one is dropped.

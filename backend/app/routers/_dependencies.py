@@ -21,9 +21,11 @@ from ..models import CaseRecord, DocumentRecord
 logger = logging.getLogger(__name__)
 
 
-async def get_document_or_404(document_id: str) -> DocumentRecord:
+async def _load_document(document_id: str, include_fields: bool) -> DocumentRecord:
     try:
-        document = await asyncio.to_thread(document_repository.get_document, document_id)
+        document = await asyncio.to_thread(
+            document_repository.get_document, document_id, include_fields=include_fields
+        )
     except Exception as exc:
         logger.exception("Failed to fetch document %s", document_id)
         raise HTTPException(
@@ -34,6 +36,19 @@ async def get_document_or_404(document_id: str) -> DocumentRecord:
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
     return document
+
+
+async def get_document_or_404(document_id: str) -> DocumentRecord:
+    """
+    The document row only: most handlers read the fields themselves, in the shape they need
+    (with ids and confidences), so loading them here too was a second, unused read.
+    """
+    return await _load_document(document_id, include_fields=False)
+
+
+async def get_document_with_fields_or_404(document_id: str) -> DocumentRecord:
+    """For the handlers that read document.extracted_fields (a plain {name: value} dict)."""
+    return await _load_document(document_id, include_fields=True)
 
 
 async def get_case_or_404(case_id: str) -> CaseRecord:

@@ -139,6 +139,12 @@ def delete_case(case_id: str) -> None:
     documents = document_repository.list_documents(case_id=case_id)
     document_repository.remove_documents(documents)
     case_repository.delete_case(case_id)
+    _synced_finalized.pop(case_id, None)
+
+
+# The value last written per case by this process, so an unchanged flag costs no write (and no
+# Realtime event, and doesn't restamp finalized_at). Only ever a shortcut: a miss just writes.
+_synced_finalized: dict[str, bool] = {}
 
 
 def sync_submission_finalized(case_id: str) -> None:
@@ -155,7 +161,11 @@ def sync_submission_finalized(case_id: str) -> None:
     """
     documents = document_repository.list_documents(case_id=case_id)
     _, missing = compute_requirement_coverage(documents)
-    case_repository.set_submission_finalized(case_id, finalized=not missing)
+    finalized = not missing
+    if _synced_finalized.get(case_id) == finalized:
+        return
+    case_repository.set_submission_finalized(case_id, finalized=finalized)
+    _synced_finalized[case_id] = finalized
 
 
 # (reports by document_id, ids whose last detection run failed) — see

@@ -1,6 +1,6 @@
 # Fraud Detection — Implementation Map
 
-Snapshot of where fraud/anomaly detection logic lives and is tested, as of 2026-10-14.
+Snapshot of where fraud/anomaly detection logic lives and is tested, as of 2026-10-15.
 
 ## 0. Plain-language summary
 
@@ -25,6 +25,15 @@ approval, and approval is locked after it.
 
 The three specialists always run. What varies is which of each specialist's tools it runs, and which
 findings it dismisses.
+
+**Flags.** After the report is saved, plain code writes each finding a specialist assessed and did not
+dismiss to the `flags` table (`app/flags_repository.py`), one row per finding, before the document becomes
+`detected`. The model never writes it. A finding nobody assessed stays in the report (and counts towards
+the case risk as "unreviewed") but is not a flag, and case-level findings (`case_identity_match`, and any
+cross-document tool) are never flags. Each flag's UUID is stamped on the finding as `flag_id`, so the
+report, the `flags` row and `risk_scores.flag_ids` agree. A retry replaces the document's open flags; the
+delete goes through the service client because the backend role may only read and insert (RLS). A failed
+write is recorded on the trace as `flags_error` and does not fail the run.
 
 An approved "Other" (unrecognised) document is scanned like any other. Checks that need a document
 type report "nothing to check" for it, and layout runs in generic mode (no per-type reference template).
@@ -64,25 +73,26 @@ decisions: `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
 | File / folder | What it does |
 |---|---|
 | `readiness.py` | `is_ready_for_analysis`: at least one approved document and all approved documents detected (`analysis_ready` on the case summary) |
-| `service.py`, `repository.py`, `state.py` | Starts a run in the background, stores it in `case_analysis_runs` (`backend/migrations/002_case_analysis_runs.sql`), and reports whether it is stale (documents changed) or interrupted |
+| `service.py`, `repository.py`, `state.py` | Starts a run in the background, stores it in the `case_analysis_runs` table together with the run's risk and supporting documents, writes the `risk_scores` row, and reports whether a run is stale (documents changed) or interrupted. Tells the summary which checks were clean and which could not run |
 | `trace.py` | `RunTrace`: the run's step-by-step log (run start, dossier, hypotheses, each tool call, verdicts, verification, the scoring breakdown with each finding's points, requests, how each was re-scored, summary), saved to the run row's `trace` column after planning, after judging and at the end. A debugging aid; shown on the case page as "Case analysis trace (debug)" |
 | `models.py`, `categories.py` | `CrossDocFinding`, `RiskOutlook`, `CaseAnalysis`; `FindingCategory` assigned by code from a static tool-to-category map |
-| `cross_document/evidence.py` | The case as the analysis sees it: dossier, masked identifiers, and the ledger of every ref id issued in a run |
-| `cross_document/agents.py`, `graph.py`, `verify.py` | Plan (at most 3 hypotheses, each with the checks to run), run the checks (code, no model), judge all hypotheses in one call, then verify each verdict in code. Two Sonnet calls in total |
+| `cross_document/evidence.py` | The case as the analysis sees it: dossier (protected fields removed, capped at 24,000 characters), masked identifiers, the ledger of every ref id issued in a run, and the run's model-call counter |
+| `cross_document/bias.py` | What the analysis may never reason from: protected field names and the text patterns for them and their proxies. Used by the dossier, the tools, the hypothesis screen and the verifier |
+| `cross_document/agents.py`, `graph.py`, `verify.py` | Plan (at most 3 hypotheses, each with the checks to run), run the checks (code, no model), judge all hypotheses in one call, then verify each verdict in code. Two Sonnet calls in total, a hard budget (`MAX_MODEL_CALLS_PER_RUN`). Both answer through a forced tool call and share one cached system prompt (rules, bias policy, tool catalogue). A hypothesis is dropped before any check runs if it touches a protected attribute or is about one document with nothing computed behind it. `verify.py` keeps a verdict only if its citations are tool-issued, its refutation probe looked at something the claim doesn't rest on, it cites at least two documents or a computed fact, and its text is clear of protected attributes |
 | `cross_document/tools/` | The read-only evidence tools: `reading.py`, `transactions.py`, `comparisons.py`, `consistency.py` (company name and address consistency) |
 | `cross_document/company_identity.py`, `address_matching.py` | The company-name and address matching behind the consistency tools |
-| `risk/case_risk.py` | Deterministic score, level and findings (cross-document findings enter only from a current analysis) |
-| `risk/store.py` | Saves the score to the existing `risk_scores` table when it changes (a case read or snapshot build triggers it) and reads the latest per case through the `latest_risk_scores` view (migration `003`). The case list uses the saved score; the case page still computes live for the findings behind it |
-| `risk/outlook.py` | Evidence requests and the deterministic what-if re-scoring |
+| `risk/case_risk.py` | Deterministic score, level and findings. Called only by an analysis run. Each contributing finding's id is `<document id prefix>:<tool>-<n>`, and carries the `flag_id` of its flag when it has one |
+| `risk/store.py` | Writes one `risk_scores` row per completed run (with the flags' UUIDs in `flag_ids`) and reads the latest per case through the `latest_risk_scores` view. The case list reads that; nothing else computes a score |
+| `risk/outlook.py` | The agent's evidence requests and the deterministic what-if re-scoring |
 | `risk/summary.py` | Grounded plain-language summary, with a deterministic fallback |
-| `risk/supporting_documents.py` | Rule-based supporting-document recommendations (bank statement trades, related-party balances, borrowing growth) |
+| `risk/supporting_documents.py` | Rule-based supporting-document recommendations (bank statement trades, related-party balances, borrowing growth). Run only inside an analysis and stored on the run |
 
-API: `POST /cases/{id}/analysis/run` (409 unless ready or already running), `GET /cases/{id}/analysis`.
+API: `POST /cases/{id}/analysis/run` (409 unless ready or already running), `GET /cases/{id}/analysis`. A case's snapshot carries the risk and supporting documents of its latest complete run; a case never analysed has none.
 Shared helpers: `langgraph/llm_output.py` reads a model reply (text and JSON) for detection, the binder and this package.
 
 ## 2. Detection Agent — files
 
-- **`tools.py`** — 7 tools, each a thin adapter onto a deterministic check in `fraud_detection/*.py`.
+- **`tools.py`** — 8 tools here (font, layout, spelling, date, metadata, image manipulation, image tampering, AI generation) plus the 2 field-driven tools below, so 10 in all; each a thin adapter onto a deterministic check in `fraud_detection/*.py`.
   Every tool returns the same shape (`tool`, `unable_to_assess`, `reason`, `findings`, `truncated`).
   Findings are capped at 15 per tool. A check's own severity is passed through as `severity_hint`,
   kept separate from the specialist's own `info/low/medium/high` scale.
@@ -99,9 +109,18 @@ Shared helpers: `langgraph/llm_output.py` reads a model reply (text and JSON) fo
   - Layout & Rendering: font consistency, layout anomalies, image manipulation, image tampering.
   - Content Validation: spelling, date consistency, `numerical_checks_tool` and `external_validation_tool`. It also
     gets the document's field list and the two check menus, with the roles each one reads, in its prompt.
-  - Digital Authenticity: metadata.
+  - Digital Authenticity: metadata, AI generation.
   Each specialist is a tool-calling loop (agent, tools, collect). "Collect" merges tool results with
-  the LLM's assessments. A finding the LLM doesn't assess is still kept, marked `medium`.
+  the LLM's assessments. A finding the LLM doesn't assess is still kept, marked `medium`, with
+  `ai_accepted: false`; one it assessed and kept has `ai_accepted: true`. A tool with a severity floor
+  (`_MIN_SEVERITY_BY_TOOL`) keeps its finding at that floor even when dismissed, also with
+  `ai_accepted: false`. Only `ai_accepted` per-document findings become flags.
+- **Per-run fetch cache (`tools.py`)** — the document row, its fields and its file are each fetched once
+  per run. The cache holds the in-flight fetch, so the specialists, which start together, wait for one
+  fetch instead of each making their own; a failed fetch is dropped and retried. `load_context` primes it
+  with the document and fields it already read.
+- **`app/flags_repository.py`** — builds the `flags` rows from a report's findings and replaces a
+  document's open flags (see §0).
 - **`graph.py`** — the lead investigator graph, the merge into a verdict, and `run_detection()`,
   the entry point. Also holds the lead's prompts and `_normalise_plan`.
 - **Fixed earlier:** every tool finding must carry `summary` (asserted in `_with_ids`), and the
@@ -116,13 +135,20 @@ Reference for anyone changing the detection code. Line numbers are approximate a
 
 `run_detection(document_id)` (`graph.py:545`) does, in order:
 
-1. `trace.resume(document_id)`, then `trace.record(..., "detection_start")`.
+1. `trace.resume(document_id)`, then `trace.record(..., "detection_start")`, then marks the document
+   `detecting`.
 2. `get_detection_graph().ainvoke({"document_id", "reports": [], "second_look_used": False},
    config={"recursion_limit": 40})`. The graph is compiled once and cached (`_RECURSION_LIMIT = 40`).
-3. In `finally`, `detection_tools.clear_context(document_id)` drops the per-run file cache.
-4. On any exception: `trace.record(..., "detection_error", error="<Type>: <msg>")`, then re-raise.
-   `CancelledError` is not caught here; `_run_detection_task` records it instead.
-5. Returns `final["result"]`.
+3. In `finally`, `detection_tools.clear_context(document_id)` drops the per-run fetch cache.
+4. On any exception: `trace.record(..., "detection_error", error="<Type>: <msg>")`, the document goes back
+   to `approved`, then re-raise. `CancelledError` is not caught here; `_run_detection_task` records it
+   instead.
+5. On success, in order: wait for the trace write that holds the report (`trace.flush`), store the flags,
+   mark the document `detected`, return `final["result"]`. The report is saved before the status changes,
+   so a snapshot never shows "detected" without a report.
+
+`_run_detection_task` runs this inside a semaphore (`DETECTION_CONCURRENCY`, default 2), so a bulk approval
+queues the rest.
 
 `DetectionState` (`graph.py:61`):
 
@@ -135,7 +161,8 @@ Reference for anyone changing the detection code. Line numbers are approximate a
 | `second_look_used` | caller (False), `run_second_look` (True) | the "once" rule is enforced here |
 | `second_look` | `lead_review` | a validated request or absent |
 | `lead_summary` | `lead_review` | the lead's prose summary, or "" |
-| `result` | `synthesize` | the final combined report |
+| `result` | `synthesize` | the final combined report; its flag-eligible findings carry `flag_id` |
+| `case_id` | `load_context` | kept out of `context` so it isn't in the lead's prompt |
 
 ### 2A.2 Lead graph wiring (`build_detection_graph`)
 
@@ -161,9 +188,9 @@ Edges, as declared:
 Node details:
 
 - **`load_context_node`**: loads the document with `include_fields=False`. Raises `DetectionError` if the
-  row or `storage_path` is missing. Loads extracted field names (first 30); a failure here is logged and
-  tolerated. Builds `context` with `document_type`, `filename`, `has_extracted_fields`,
-  and `file_extension`. The lead gets no field names.
+  row or `storage_path` is missing. Loads the extracted fields; a failure here is logged and tolerated.
+  Primes the per-run fetch cache with both. Builds `context` with `document_type`, `filename`,
+  `has_extracted_fields`, and `file_extension`. The lead gets no field names.
 - **`lead_plan_node`**: calls `_ask_lead(_PLAN_SYSTEM_PROMPT, {"document": context})`. The result goes
   through `_normalise_plan`, which keeps the brief for each specialist. A missing or blank brief becomes
   "Review this document within your expertise." The trace event `detection_plan` records the briefs.
@@ -193,16 +220,17 @@ Node details:
     to run. `clean` = otherwise.
   - Summary = the lead's prose if present; otherwise a template ("N finding(s) worth a human look." /
     "No findings, but not every check could be run." / "Nothing worth flagging was found.").
-- **`synthesize_node`**: calls `merge_reports`, records `detection_done` with the verdict and the full
-  report on the trace.
+- **`synthesize_node`**: calls `merge_reports`, adds the case-identity findings, stamps `flag_id` on every
+  flag-eligible finding, then records `detection_done` with the verdict and the full report on the trace.
 
 ### 2A.3 Specialist subgraph (`specialists.py`)
 
 Each specialist is compiled once and cached in `_graphs` (`run_specialist`, `specialists.py:264`).
 Shape: `agent → (tool calls ? tools : collect)`, `tools → agent`, `collect → END`.
 
-- **`agent`** (`_make_agent_node`, `specialists.py:149`): Haiku (`LANGGRAPH_HAIKU_MODEL`), max 1024
-  tokens, `bind_tools` with that specialist's tools only.
+- **`agent`** (`_make_agent_node`, `specialists.py:149`): Haiku (`LANGGRAPH_HAIKU_MODEL`), max 4096
+  tokens (the final JSON covers every finding), `bind_tools` with that specialist's tools only. A
+  specialist gets at most `_MAX_TOOL_ROUNDS = 3` rounds of tool calls before it must wrap up.
   - First turn: a `SystemMessage` with two content blocks. The first is the static prompt
     (`cache_control: ephemeral`), and the second is the dynamic prompt (document type and brief). Then
     a `HumanMessage("Begin your review.")`. The call runs through `cache_gate` under key
@@ -223,13 +251,14 @@ Shape: `agent → (tool calls ? tools : collect)`, `tools → agent`, `collect �
   - `uncertainty_reason` falls back to "Specialist output was incomplete or no tool was run." when
     nothing else is given.
   - Report shape: `{specialist, brief, tools_called, unable_to_assess, findings, summary, uncertain,
-    uncertainty_reason}`, with `dismissed` added.
-- Recursion limit per specialist run: 12 (`_SPECIALIST_RECURSION_LIMIT`), which is about five
-  tool rounds.
+    uncertainty_reason}`, with `dismissed` added. Each finding carries `ai_accepted`.
+- Recursion limit per specialist run: 12 (`_SPECIALIST_RECURSION_LIMIT`), a safety net behind the
+  3-round limit.
 
 ### 2A.4 Lead model call (`_ask_lead`, `graph.py:162`)
 
-- Model: Sonnet (`LANGGRAPH_SONNET_MODEL`), max 1500 tokens, temperature 0.
+- Model: Sonnet (`LANGGRAPH_SONNET_MODEL`), max 1500 tokens, temperature 0. One model instance per
+  (model, max tokens) is reused for every call (`langgraph/_anthropic.py`).
 - The system prompt is one `SystemMessage` with `cache_control: ephemeral`. The user message is
   `json.dumps(payload, default=str)`.
 - Cache key: `detection_lead_plan` for the plan call, `detection_lead_review` for the review call.
@@ -315,7 +344,7 @@ Specialist to tool map (`specialists.py:42`):
 |---|---|
 | `layout_rendering` | `font_consistency_tool`, `layout_anomalies_tool`, `image_manipulation_tool`, `image_tampering_tool` |
 | `content_validation` | `spelling_tool`, `date_consistency_tool`, `numerical_checks_tool`, `external_validation_tool` |
-| `digital_authenticity` | `metadata_tool` |
+| `digital_authenticity` | `metadata_tool`, `ai_generation_tool` |
 
 ### 2A.8 Trace events and telemetry
 
@@ -329,9 +358,11 @@ Every event goes through `trace.record` (`langgraph/trace.py`) under the documen
 | `detection_second_look` | before a second look | from, to, question |
 | `detection_done` | end of `synthesize` | verdict, full report (`detection_report`) |
 | `detection_error` | any exception in `run_detection`, or cancel | error text |
+| `flags_error` | storing the flags failed (the run still completes) | error text |
 
 The report is read back from the `detection_report` key by `_require_detection_has_run` and the
-report endpoint.
+report endpoint. Trace writes are coalesced: at most one write per document is queued, and it saves the
+latest state. Nothing in the trace is a fresh row per step.
 
 Spans (OpenTelemetry, via `telemetry.get_tracer()`): `detection.run`, `detection.lead_plan`,
 `detection.lead_review`, `detection.specialist.<name>`. Token usage is recorded on each LLM span with
@@ -347,6 +378,10 @@ Spans (OpenTelemetry, via `telemetry.get_tracer()`): `detection.run`, `detection
   key never blocks again.
 - Keys: `detection_lead_plan`, `detection_lead_review`, `detection_specialist:<name>` (one per
   specialist). Specialist continuation turns are not gated.
+- In practice the specialists' prompts are shorter than Haiku's minimum cacheable prompt, so the
+  `cache_control` markers there are a no-op and the `perf` line shows `cache read 0` for detection.
+  Caching does pay off for classification, extraction and the case analysis. The `perf` line's
+  `cache read / write` counters are how to check.
 
 ### 2A.10 Silent fallbacks (no error recorded)
 
@@ -406,22 +441,22 @@ There is **no** `POST /detection/run`. The first run only starts automatically o
 - The other check modules in §1 have their own test files.
 
 Not tested: the lead plan, the merge into a verdict, the second-look rules, specialist report
-collection, and the new bugs in §6. Those are the main gap in this area.
+collection, `flags_repository.py`, and the new bugs in §6. Those are the main gap in this area.
 
 ## 6. Known bugs — Detection Agent
 
-Found on 2026-10-05 by reading the code. Items marked **reproduced** were confirmed by running a
-small check; the rest are from reading and still need confirming in the app.
+Found on 2026-10-05 by reading the code; statuses re-checked 2026-10-15. Items marked **reproduced**
+were confirmed by running a small check; the rest are from reading and still need confirming in the app.
 
 | # | Severity | Where | What happens | Status |
 |---|---|---|---|---|
 | 1 | Low | `graph.py` `_normalise_plan` | If the lead's JSON can't be parsed, every specialist runs with the generic brief. The run completes and nothing records the lead's failure. Previously this was a High bug (no specialist ran); it can no longer produce an empty plan. | Reading |
 | 2 | High | `routers/detection.py` cancel/retry, `DetectionPanel.tsx` | If a run is lost (server restart, dropped task) before recording an error, the panel shows "Scanning…" forever. Cancel returns 409 (no task is running). Retry returns 409 (it needs a recorded error). Nothing can start the run again. | Reading: endpoint conditions |
-| 3 | Medium–High | `specialists.py` `_collect_node`, `graph.py` merge | A finding the LLM doesn't assess becomes `medium` with "Not assessed by the specialist." A missing assessment can therefore flag a document. | Reading |
+| 3 | Medium–High | `specialists.py` `_collect_node`, `graph.py` merge | A finding the LLM doesn't assess becomes `medium` with "Not assessed by the specialist." A missing assessment can therefore flag a document and still counts towards the case risk (as "unreviewed"). It is no longer stored as a flag: only `ai_accepted` findings are. | Partly mitigated |
 | 4 | Medium | `tools.py` `metadata_tool` | Calls the synchronous `check_metadata_anomalies` inside an `async` function. That blocks the event loop while it runs, so other requests stall. The other tools use `asyncio.to_thread`. | Reading |
 | 5 | — | `graph.py` | Removed. The default-team and deviation logic no longer exists, because every specialist always runs. | Fixed by removal |
 | 6 | Medium | `tools.py` `_with_ids`, `specialists.py` `_collect_node` | Finding IDs are numbered per tool call. If a specialist calls the same tool twice, `_collect_node` keys findings by ID and silently overwrites the first. The second-look lookup also relies on IDs being unique. | Reading |
-| 7 | Low | `tools.py` `_context` cache | Parallel specialists can both download the same file, since the cache check isn't locked. Two runs of the same document share one cache, and the first to finish clears it for the other. | Reading |
+| 7 | — | `tools.py` `_context` cache | Parallel specialists each downloaded the file and re-read the document and fields, since the cache check wasn't locked. Now the cache holds the in-flight fetch and the run's first step primes it; a measured run went from 5 file downloads to 1. Two runs of the same document still share one cache entry. | Fixed 2026-10-15 |
 | 8 | Low | `routers/documents.py` `_run_detection_task` | Its `finally` removes `_detection_tasks[document_id]`. If a new run started meanwhile, that entry is removed and cancel can no longer find it. | Reading, needs timing |
 | 9 | Low | `specialists.py` `_collect_node` | `uncertain` is set whenever no tool ran, even when the specialist correctly judged none applicable. The lead may read that as doubt. | Reading |
 

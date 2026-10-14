@@ -10,13 +10,17 @@ from __future__ import annotations
 from typing import Any
 
 from ..evidence import CaseContext
-from .common import BREACH_FLAGS, IDENTITY_FLAGS, VARIANCE_FLAGS, ToolKit
+from .common import (
+    BREACH_FLAGS, COMPUTED_TOOLS, CROSS_DOCUMENT_TOOLS, IDENTITY_FLAGS, VARIANCE_FLAGS, ToolKit,
+)
 from .comparisons import build_comparison_tools
 from .consistency import build_consistency_tools
 from .reading import build_reading_tools
 from .transactions import build_transaction_tools
 
-__all__ = ["BREACH_FLAGS", "IDENTITY_FLAGS", "VARIANCE_FLAGS", "build_tools"]
+__all__ = [
+    "BREACH_FLAGS", "COMPUTED_TOOLS", "CROSS_DOCUMENT_TOOLS", "IDENTITY_FLAGS", "VARIANCE_FLAGS", "build_tools",
+]
 
 
 def build_tools(context: CaseContext, calls: list[dict[str, Any]]) -> list:

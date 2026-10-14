@@ -11,7 +11,7 @@ from .. import case_service, document_repository, extracted_fields_repository, m
 from ..extracted_fields_repository import normalise_field_name
 from ..case_broadcaster import broadcaster
 
-from ._dependencies import get_document_or_404
+from ._dependencies import get_document_or_404, get_document_with_fields_or_404
 from ..config import settings
 from ..langgraph.extraction_prompts import (
     KNOWN_DOCUMENT_TYPES,
@@ -130,12 +130,32 @@ async def list_documents(
         ) from exc
 
 
+def _present(document: DocumentRecord, fields: list) -> DocumentRecord:
+    """
+    The document as the API returns it: its fields wrapped with id and confidence, and which required
+    ones are missing. Built from a document row and the fields the caller already holds, so an endpoint
+    that just wrote them doesn't read them all back.
+    """
+    if fields:
+        document.extracted_fields = {
+            field.field_name: {
+                **({"id": field.id} if field.id is not None else {}),
+                "value": field.field_value,
+                "confidence": field.confidence,
+            }
+            for field in fields
+        }
+    document.missing_required_fields = case_service.missing_required_fields(document.document_type, fields)
+    return document
+
+
 @router.get("/{document_id}", response_model=DocumentRecord)
 async def get_document(document_id: str) -> DocumentRecord:
     try:
         document = await asyncio.to_thread(
             document_repository.get_document,
             document_id,
+            include_fields=False,
         )
     except Exception as exc:
         logger.exception("Failed to fetch document %s", document_id)
@@ -165,22 +185,7 @@ async def get_document(document_id: str) -> DocumentRecord:
             detail="Failed to fetch extracted fields.",
         ) from exc
 
-    if extracted_fields:
-        document.extracted_fields = {
-            field.field_name: {
-                **({"id": field.id} if field.id is not None else {}),
-                "value": field.field_value,
-                "confidence": field.confidence,
-            }
-            for field in extracted_fields
-        }
-
-    document.missing_required_fields = case_service.missing_required_fields(
-        document.document_type,
-        extracted_fields,
-    )
-
-    return document
+    return _present(document, extracted_fields)
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -538,13 +543,17 @@ async def update_extracted_fields(
             )
         )
 
-        await asyncio.to_thread(
+        updated = await asyncio.to_thread(
             document_repository.update_extracted_fields,
             document_id,
             1.0,
             fulfilled_requirements,
             routing_status=RoutingStatus.ACCEPTED.value,
             fields_reviewed=is_unrecognised_document,
+        )
+        # Read back once: the rows just written have new ids the page needs.
+        saved_fields = await asyncio.to_thread(
+            extracted_fields_repository.get_extracted_fields, document_id
         )
     except Exception as exc:
         logger.exception("Failed to update extracted fields for document %s", document_id)
@@ -553,8 +562,7 @@ async def update_extracted_fields(
             detail="Failed to save extracted fields. Check Supabase table access.",
         ) from exc
 
-    updated = await get_document(document_id)
-    return updated
+    return _present(updated or document, saved_fields)
 
 @router.post(
     "/{document_id}/extracted-fields",
@@ -621,7 +629,7 @@ async def add_extracted_field(
             extracted_fields,
         )
 
-        await asyncio.to_thread(
+        updated = await asyncio.to_thread(
             document_repository.update_extracted_fields,
             document_id,
             # The new field itself is stored at 1.0, but adding one isn't
@@ -632,7 +640,7 @@ async def add_extracted_field(
             fulfilled_requirements,
         )
 
-        return await get_document(document_id)
+        return _present(updated or document, all_fields)
 
     except HTTPException:
         raise
@@ -685,10 +693,8 @@ async def delete_extracted_field(
             field_id,
         )
 
-        remaining_fields = await asyncio.to_thread(
-            extracted_fields_repository.get_extracted_fields,
-            document_id,
-        )
+        # What was read above, less the one just deleted: no need to read the table again.
+        remaining_fields = [field for field in existing_fields if str(field.id) != field_id]
 
         extracted_fields = {
             field.field_name: field.field_value
@@ -700,7 +706,7 @@ async def delete_extracted_field(
             extracted_fields,
         )
 
-        await asyncio.to_thread(
+        updated = await asyncio.to_thread(
             document_repository.update_extracted_fields,
             document_id,
             # A deletion doesn't make the document human-verified (unlike
@@ -711,7 +717,7 @@ async def delete_extracted_field(
             fulfilled_requirements,
         )
 
-        return await get_document(document_id)
+        return _present(updated or document, remaining_fields)
 
     except HTTPException:
         raise
@@ -810,17 +816,19 @@ async def approve_document(
                 ),
             )
 
-        await asyncio.to_thread(
+        approved = await asyncio.to_thread(
             document_repository.approve_document,
             document_id,
         )
+        if approved is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
         if skips_detection(document):
             logger.info("Document %s approved with no type; detection skipped", document_id)
         else:
             _launch_detection(document_id, document.case_id)
 
-        return await get_document(document_id)
+        return _present(approved, extracted_fields)
 
     except HTTPException:
         raise
@@ -842,13 +850,18 @@ async def reject_document(
         )
 
     try:
-        await asyncio.to_thread(
+        rejected = await asyncio.to_thread(
             document_repository.reject_document,
             document_id,
         )
+        if rejected is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
-        return await get_document(document_id)
+        fields = await asyncio.to_thread(extracted_fields_repository.get_extracted_fields, document_id)
+        return _present(rejected, fields)
 
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception("Failed to reject document %s", document_id)
         raise HTTPException(
@@ -862,7 +875,7 @@ async def update_document_type(
     document_id: str,
     request: UpdateDocumentTypeRequest,
     background_tasks: BackgroundTasks,
-    document: DocumentRecord = Depends(get_document_or_404),
+    document: DocumentRecord = Depends(get_document_with_fields_or_404),
 ) -> DocumentRecord:
     """
     A loan officer confirming or correcting a low-confidence document_type

@@ -13,15 +13,33 @@ from ..models import (
 )
 from .bias import has_protected_text
 from .evidence import CaseContext
-from .tools import BREACH_FLAGS, IDENTITY_FLAGS, VARIANCE_FLAGS
+from .tools import BREACH_FLAGS, COMPUTED_TOOLS, IDENTITY_FLAGS, VARIANCE_FLAGS
 
 _SEVERITIES = ("low", "medium", "high")
 _MAX_CITATIONS = 12
 
 
+def _read_keys(context: CaseContext, call: dict[str, Any]) -> set[tuple[str, str]]:
+    """The (document, field) pairs one tool call read."""
+    return {
+        (entry["doc_key"], entry["field"])
+        for ref in call.get("refs", []) if (entry := context.ledger.refs.get(ref))
+    }
+
+
 def _probe_ran(context: CaseContext, hypothesis: Hypothesis, calls: list[dict[str, Any]]) -> bool:
+    """
+    Whether a real attempt to disprove the claim ran. Reading back the very fields the claim's own
+    checks already read tests nothing, so that doesn't count: a probe has to look at something else.
+    """
+    supporting: set[tuple[str, str]] = set()
+    for call in calls:
+        if not call.get("probe"):
+            supporting |= _read_keys(context, call)
     for call in calls:
         if not call.get("probe") or not call.get("available"):
+            continue
+        if call.get("tool") == "get_fields" and not (_read_keys(context, call) - supporting):
             continue
         if hypothesis.refutation_document is None:
             return True
@@ -54,6 +72,11 @@ def verify_verdict(
         return None, "rests on a protected attribute"
 
     entries = [context.ledger.refs[c] for c in citations]
+    # This module relates documents to each other. One document's own figures looking odd is the
+    # per-document scan's business, unless the evidence is something computed over the data.
+    computed = any(e.get("source") in COMPUTED_TOOLS or e.get("field") == "transaction_summary" for e in entries)
+    if len({e["doc_key"] for e in entries}) < 2 and not computed:
+        return None, "cites a single document and no computed fact"
     flags = sorted({e["breach_flag"] for e in entries if e.get("breach_flag") in BREACH_FLAGS})
     registry_backed = any(e.get("category") == FindingCategory.REGISTRY_DISCREPANCY.value for e in entries)
 

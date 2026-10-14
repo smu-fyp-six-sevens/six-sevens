@@ -26,6 +26,17 @@ VARIANCE_FLAGS = frozenset({"NAME_MISMATCH", "ADDRESS_MISMATCH", "PERSON_MISMATC
 
 MAX_ROWS = 10
 
+# Tools that compute something over the data (counts, totals, flows, periods) rather than read a field back.
+# A fact one of them issued is evidence on its own, even when it comes from a single document.
+COMPUTED_TOOLS = frozenset({
+    "transaction_stats", "query_transactions", "top_counterparties", "monthly_flow", "compare_periods",
+})
+# Tools whose very job is to relate documents to each other.
+CROSS_DOCUMENT_TOOLS = frozenset({
+    "get_business_profile", "compare_identifiers", "compare_people", "compare_periods",
+    "company_name_consistency_tool", "address_consistency_tool",
+})
+
 
 def unavailable(reason: str) -> dict[str, Any]:
     return {"available": False, "reason": reason}

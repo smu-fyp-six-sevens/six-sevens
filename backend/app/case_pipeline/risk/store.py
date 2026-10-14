@@ -1,6 +1,6 @@
 """
 Saves each case's risk score to the existing `risk_scores` table and reads
-the latest back (through the `latest_risk_scores` view, migration 003).
+the latest back (through the `latest_risk_scores` view).
 
 Written once per completed case analysis (the only place a case's risk is
 computed), so the table is a history of scores, one row per run. The case

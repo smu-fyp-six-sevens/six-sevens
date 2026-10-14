@@ -31,11 +31,11 @@ from ...langgraph.llm_output import message_text, parse_json_object, salvage_lis
 from ..models import Hypothesis, PlannedCheck
 from .bias import has_protected_text
 from .evidence import CaseContext, render_dossier
-from .tools import build_tools
+from .tools import COMPUTED_TOOLS, CROSS_DOCUMENT_TOOLS, build_tools
 
 logger = logging.getLogger("classifier_pipeline.case_pipeline.agents")
 
-PROMPT_VERSION = "cross-doc-v3"
+PROMPT_VERSION = "cross-doc-v4"
 MAX_HYPOTHESES = 3
 MAX_CHECKS_PER_HYPOTHESIS = 4
 # One call to plan and one to judge. Nothing here loops or retries a call; this is the ceiling that
@@ -72,16 +72,17 @@ Tools you may plan checks with (use these document names exactly):
 """
 
 _PLAN_INSTRUCTIONS = """Propose AT MOST {limit} hypotheses, and only strong ones: a specific, checkable way these documents may be inconsistent or implausible together (for example: what the company says it does against how its money moves; stated scale against capital or how long the company has existed; dates that cannot all be true; money going round in a circle; an address or identity that changes between documents; a source of wealth the evidence does not support). Propose fewer, or none, when nothing looks off.
-Skip anything the per-document detection findings below already say, anything that needs documents we do not have, weak or generic worries, and anything that touches rule 1.
+Every hypothesis must be about how documents relate to each other: it has to involve at least two documents, or rest on a computed measure over one (transaction totals, monthly flow, counterparties). A single document's own figures merely looking unusual is not a hypothesis here.
+Never restate a per-document detection finding listed below, even in other words (for example an identifier missing from a register). Also skip anything that needs documents we do not have, weak or generic worries, and anything that touches rule 1.
 
-Be terse: a claim is one sentence. For each hypothesis list the checks to run, at most {max_checks}, using only the tools above. Run everything you need up front: you will not see results before judging. Include at least one check that could show the claim is wrong (refutation_probe true) on the document where a contrary result would appear.
+Be terse: a claim is one sentence. For each hypothesis list the checks to run, at most {max_checks}, using only the tools above. Run everything you need up front: you will not see results before judging. Include at least one check that could show the claim is wrong (refutation_probe true), and it must look at something the claim does not already rest on: a different document or a different field. Reading back the same fields again is not a test.
 
 Submit your answer by calling submit_hypotheses.
 
 Documents:
 {dossier}"""
 
-_JUDGE_INSTRUCTIONS = """For each hypothesis decide whether it is conclusive: the evidence is sufficient to prove it AND the refutation check did not refute it. Suspicion, a plausible story, a missing document or an unavailable result is not conclusive. If unsure, it is not conclusive. A hypothesis that touches rule 1 is never conclusive.
+_JUDGE_INSTRUCTIONS = """For each hypothesis decide whether it is conclusive: the evidence is sufficient to prove it AND the refutation check did not refute it. Suspicion, a plausible story, a missing document or an unavailable result is not conclusive. If unsure, it is not conclusive. A hypothesis that touches rule 1 is never conclusive. A claim about one document's own figures that no computed measure or second document supports is never conclusive here. A refutation check that merely restates the claim, or re-reads the fields it rests on, has not tested it: then the hypothesis is not conclusive.
 severity is low, medium or high and only matters when conclusive. category is behavioural_anomaly or unsupported_claim. citations are ref ids from the evidence below.
 Keep every field short: the reply has a hard length limit. For a hypothesis that is not conclusive, give a one-sentence summary and leave rationale, citations and probe_summary empty.
 
@@ -250,6 +251,7 @@ async def hypothesise(context: CaseContext) -> list[Hypothesis]:
 
     hypotheses: list[Hypothesis] = []
     dropped_for_bias: list[dict[str, str]] = []
+    dropped_for_scope: list[dict[str, str]] = []
     for index, item in enumerate(items):
         if not isinstance(item, dict) or not str(item.get("claim") or "").strip():
             continue
@@ -262,6 +264,17 @@ async def hypothesise(context: CaseContext) -> list[Hypothesis]:
         checks = _planned_checks(item.get("checks"), tool_names, refutation_document)
         if not checks:
             continue  # nothing to test it with
+        # Relating documents to each other is this module's job: a claim about one document's own figures,
+        # with nothing computed behind it, is left to that document's own scan.
+        checked_args = json.dumps([c.args for c in checks], default=str)
+        documents_involved = {k for k in context.docs if k in checked_args} | {
+            d for d in item.get("documents") or [] if isinstance(d, str) and d in context.docs
+        }
+        if len(documents_involved) < 2 and not any(
+            c.tool in COMPUTED_TOOLS or c.tool in CROSS_DOCUMENT_TOOLS for c in checks
+        ):
+            dropped_for_scope.append({"claim": str(item["claim"])[:200], "reason": "one document, nothing computed"})
+            continue
         hypotheses.append(Hypothesis(
             id=f"h{index + 1}",
             claim=str(item["claim"])[:300],
@@ -277,6 +290,7 @@ async def hypothesise(context: CaseContext) -> list[Hypothesis]:
         "hypotheses", dossier_chars=len(dossier), via=via,
         stop_reason=response.response_metadata.get("stop_reason"), usage=_usage(response),
         proposed=[h.model_dump() for h in hypotheses], dropped_for_bias=dropped_for_bias,
+        dropped_for_scope=dropped_for_scope,
         raw=None if hypotheses or via == "tool" else message_text(response.content)[:600],
     )
     return hypotheses

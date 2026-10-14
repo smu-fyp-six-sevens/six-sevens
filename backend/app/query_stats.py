@@ -154,7 +154,11 @@ class _LLMUsage(AsyncCallbackHandler):
                 input_tokens += usage.get("input_tokens", 0)
                 output_tokens += usage.get("output_tokens", 0)
                 cache_read += details.get("cache_read", 0)
-                cache_write += details.get("cache_creation", 0)
+                # The API may report a write only under its per-lifetime keys, leaving the total at 0.
+                cache_write += max(
+                    details.get("cache_creation", 0),
+                    details.get("ephemeral_5m_input_tokens", 0) + details.get("ephemeral_1h_input_tokens", 0),
+                )
         _active().add_llm(input_tokens, output_tokens, cache_read, cache_write)
 
 

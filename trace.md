@@ -1,80 +1,62 @@
 ▥
 Customer Risk Summary
-Critical risk
-Score 90/100
-Based on 5 documents
-11 high · 7 medium · 4 low
-Rated Critical: high-severity findings on 4 documents.
+High risk
+Score 64/100
+Based on 2 documents
+2 high · 2 medium · 4 low
+Rated High from the combined severity of 8 finding(s).
 
-C008-P2_NRICPassport.pdf
-Passport
-1 high
-Numerical checks: S8000959H in NRIC Number has an invalid check letter — expected C, got H
-›
-
-C008-P2_ProofAddress.pdf
-Bank statement
-1 high
-7 medium
-External validation: Postal code 101897 in Individual Address doesn't exist in OneMap's register of Singapore addresses
-›
-
-C008_CertIncorp.pdf
+C007_CertIncorp.pdf
 Certificate of incorporation
 1 high
-External validation: UEN 201878901H is not in ACRA's register or any other UEN issuance agency's register
+External validation: UEN 201567890G is not in ACRA's register or any other UEN issuance agency's register
 ›
 
-C008_CertIncumbency.pdf
-Certificate of incumbency
-8 high
-Date consistency: last_agm_date (2026-05-05) is after the document date (2026-02-09)
+C007_NOA.pdf
+Notice of assessment
+1 high
+2 medium
+External validation: UEN 201567890G is not in ACRA's register or any other UEN issuance agency's register
 ›
 Show 4 low-severity findings
-Couldn't verify (6)
+Couldn't verify (2)
 ◇
 Case Analysis
 Run again
-This application presents a critical fraud risk. The applicant has submitted multiple documents with serious problems that suggest forgery or tampering rather than honest mistakes. The personal identity document contains an invalid identification number that fails mathematical validation checks. The address provided does not exist in official Singapore records. Most concerning, the company documents reference a business registration number that does not exist in any official register, and the same invalid identification numbers appear repeatedly across different roles in the company paperwork. Additionally, dates in the company documents are impossible—they reference meetings and filings that supposedly happened in the future relative to when the documents were issued. One financial statement shows ATM withdrawal amounts that fluctuate wildly rather than staying consistent. The checks that examined the documents for signs of digital manipulation, font inconsistencies, and image tampering all came back clean, but the mathematical and registry problems are severe enough on their own. No additional evidence has been identified that would resolve these concerns.
+This application presents a high fraud risk (score 64/100), primarily because the company's registration number does not appear in any official business registry. This same invalid number appears on both the certificate of incorporation and the tax notice, which raises concerns about document authenticity. Additionally, the tax notice shows unusual financial figures where the tax owed, a tax credit, and a tax payment are all identical at $32,521, resulting in zero net tax despite substantial income—an outcome that would be extremely rare in legitimate tax assessments. The tax notice also shows signs of physical alteration, with the tax discharge amount positioned significantly off from where it should normally appear on the document. Several checks for common fraud indicators, including font consistency, image manipulation, and spelling errors, found nothing wrong. To substantially improve confidence in this application, the applicant would need to provide official correspondence from the tax authority explaining how these identical figures were calculated, or an independent auditor's report commenting on the tax position and any unusual adjustments.
 
-✓
-No cross-document findings.
-Nothing was proven across this case's documents.
+medium
+Unusual behaviour: The amended NOA shows tax payable, tax rebate, and tax discharge amount all equal at 32,521.00, resulting in zero net tax on substantial chargeable income of 382,600 — an unusual outcome for a legitimate amended assessment.
+All three figures (tax_payable, tax_rebate, tax_discharge_amount) are identically 32,521.00 per the extracted fields, meaning the amended assessment produces exactly zero net tax on a chargeable income of 382,600. The refutation check (a legitimate amended NOA where rebate equals full tax payable) describes a scenario that is itself the anomaly, not a refutation of it.
+What would change the score
+Currently 64 (High). If everything below supports the client, the best case is 63 (High).
+
+Tax Authority Correspondence or Assessment Details — would become 63 (High)
+Official communication from the tax authority explaining the amended NOA calculation, including how tax payable, rebate, and discharge were determined and reconciled.
+Auditor's Report or Financial Statement Notes — would become 63 (High)
+Independent auditor commentary on the tax position and any unusual tax adjustments or credits claimed in the year corresponding to the amended NOA.
+An estimate that assumes the evidence supports the client. If it does not, the score stays where it is.
 
 
 Case analysis trace (debug)
-run_id: e73059f2-42c5-4cd4-bd8c-772df88d7064
+run_id: 3c774244-0c32-49f6-8a6a-9b093ab63464
 status: complete
-started_at: 2026-10-14T16:07:54.484503Z
-finished_at: 2026-10-14T16:08:40.589191Z
-hypotheses proposed / kept after verification: 3 / 0
+started_at: 2026-10-14T16:58:25.476768Z
+finished_at: 2026-10-14T16:58:54.383069Z
+hypotheses proposed / kept after verification: 2 / 1
 Scoring
-Critical · score 90/100 · 65.24 points from 22 finding(s) on 5/5 documents
-without cross-document findings: Critical · 90 (0 added)
-Rated Critical: high-severity findings on 4 documents.
+High · score 64/100 · 23.75 points from 8 finding(s) on 2/2 documents
+without cross-document findings: High · 62 (1 added)
+Rated High from the combined severity of 8 finding(s).
 points	severity	category	tool	document
-8	high	tampering_forensic	numerical_checks_tool	C008-P2_NRICPassport.pdf
-8	high	registry_discrepancy	external_validation_tool	C008-P2_ProofAddress.pdf
-8	high	registry_discrepancy	external_validation_tool	C008_CertIncorp.pdf
-8	high	tampering_forensic	date_consistency_tool	C008_CertIncumbency.pdf
-8	high	tampering_forensic	numerical_checks_tool	C008_CertIncumbency.pdf
-8	high	registry_discrepancy	external_validation_tool	C008_CertIncumbency.pdf
-2.25	medium	tampering_forensic	numerical_checks_tool	C008-P2_ProofAddress.pdf
-2	high	tampering_forensic	date_consistency_tool	C008_CertIncumbency.pdf
-2	high	tampering_forensic	numerical_checks_tool	C008_CertIncumbency.pdf
-2	high	tampering_forensic	numerical_checks_tool	C008_CertIncumbency.pdf
-2	high	registry_discrepancy	external_validation_tool	C008_CertIncumbency.pdf
-2	high	registry_discrepancy	external_validation_tool	C008_CertIncumbency.pdf
-1	low	tampering_forensic	layout_anomalies_tool	C008_CertIncorp.pdf
-0.56	medium	tampering_forensic	numerical_checks_tool	C008-P2_ProofAddress.pdf
-0.56	medium	tampering_forensic	numerical_checks_tool	C008-P2_ProofAddress.pdf
-0.56	medium	tampering_forensic	numerical_checks_tool	C008-P2_ProofAddress.pdf
-0.56	medium	tampering_forensic	numerical_checks_tool	C008-P2_ProofAddress.pdf
-0.56	medium	tampering_forensic	numerical_checks_tool	C008-P2_ProofAddress.pdf
-0.56	medium	tampering_forensic	numerical_checks_tool	C008-P2_ProofAddress.pdf
-0.25	low	tampering_forensic	layout_anomalies_tool	C008_CertIncorp.pdf
-0.19	low	tampering_forensic	numerical_checks_tool	C008-P2_ProofAddress.pdf
-0.19	low	tampering_forensic	numerical_checks_tool	C008-P2_ProofAddress.pdf
+8	high	registry_discrepancy	external_validation_tool	C007_CertIncorp.pdf
+8	high	registry_discrepancy	external_validation_tool	C007_NOA.pdf
+3	medium	tampering_forensic	layout_anomalies_tool	C007_NOA.pdf
+3	medium	behavioural_anomaly	cross_document_analysis	C007_NOA.pdf (case)
+1	low	tampering_forensic	layout_anomalies_tool	C007_CertIncorp.pdf
+0.25	low	tampering_forensic	layout_anomalies_tool	C007_CertIncorp.pdf
+0.25	low	tampering_forensic	layout_anomalies_tool	C007_NOA.pdf
+0.25	low	tampering_forensic	layout_anomalies_tool	C007_NOA.pdf
 Rules applied
 {
   "severity_points": {
@@ -104,256 +86,124 @@ Rules applied
     {
       "tool": "metadata_tool",
       "reason": "The file's metadata couldn't be read when it was uploaded: exiftool is not installed on the server that processed this document. This check didn't run, so it says nothing about whether the file was edited.",
-      "document": "C008-P2_ProofAddress.pdf"
-    },
-    {
-      "tool": "external_validation_tool",
-      "reason": "No address with a Singapore postal code extracted; Required field(s) not extracted: employee_cpf (or a CPF line in deductions_items); Required field(s) not extracted: employee_cpf and ordinary_wages (or a CPF deduction line and earnings lines)",
-      "document": "C008-P2_Payslip.pdf"
+      "document": "C007_NOA.pdf"
     },
     {
       "tool": "metadata_tool",
       "reason": "The file's metadata couldn't be read when it was uploaded: exiftool is not installed on the server that processed this document. This check didn't run, so it says nothing about whether the file was edited.",
-      "document": "C008-P2_Payslip.pdf"
-    },
-    {
-      "tool": "metadata_tool",
-      "reason": "The file's metadata couldn't be read when it was uploaded: exiftool is not installed on the server that processed this document. This check didn't run, so it says nothing about whether the file was edited.",
-      "document": "C008-P2_NRICPassport.pdf"
-    },
-    {
-      "tool": "metadata_tool",
-      "reason": "The file's metadata couldn't be read when it was uploaded: exiftool is not installed on the server that processed this document. This check didn't run, so it says nothing about whether the file was edited.",
-      "document": "C008_CertIncorp.pdf"
-    },
-    {
-      "tool": "metadata_tool",
-      "reason": "The file's metadata couldn't be read when it was uploaded: exiftool is not installed on the server that processed this document. This check didn't run, so it says nothing about whether the file was edited.",
-      "document": "C008_CertIncumbency.pdf"
+      "document": "C007_CertIncorp.pdf"
     }
   ]
 }
-Full step log (25 steps)
+Outlook (current 64, best case 63)
+Tax Authority Correspondence or Assessment Details → 63 (High)
+{
+  "title": "Tax Authority Correspondence or Assessment Details",
+  "effect": "partial",
+  "scored": true,
+  "source": "agent",
+  "dropped": [],
+  "addressed": [
+    {
+      "points": 3,
+      "category": "behavioural_anomaly",
+      "finding_id": "xd-h2",
+      "points_after": 1.5
+    }
+  ],
+  "level_if_supports": "High",
+  "score_if_supports": 63
+}
+Auditor's Report or Financial Statement Notes → 63 (High)
+{
+  "title": "Auditor's Report or Financial Statement Notes",
+  "effect": "partial",
+  "scored": true,
+  "source": "agent",
+  "dropped": [],
+  "addressed": [
+    {
+      "points": 3,
+      "category": "behavioural_anomaly",
+      "finding_id": "xd-h2",
+      "points_after": 1.5
+    }
+  ],
+  "level_if_supports": "High",
+  "score_if_supports": 63
+}
+Full step log (18 steps)
 [
   {
     "at": 0,
     "step": "run_start",
-    "case_id": "019a16e6-1f14-41d0-b56d-825e29eebf41",
+    "case_id": "1172d529-65ef-4be7-b098-1b2e2ff66f33",
     "documents": [
       {
-        "id": "c452133a-cc3e-4c6f-83fd-ff0dbd25ff8e",
-        "type": "bank_statement",
+        "id": "50a6f8fb-9865-4592-b77e-e51a60201ff8",
+        "type": "notice_of_assessment",
         "status": "detected",
-        "filename": "C008-P2_ProofAddress.pdf"
+        "filename": "C007_NOA.pdf"
       },
       {
-        "id": "32dd5e9c-ffe0-48c9-b08c-f55aa41b3c9f",
-        "type": "payslip",
-        "status": "detected",
-        "filename": "C008-P2_Payslip.pdf"
-      },
-      {
-        "id": "a2a5ac14-b1d2-4020-9fe8-7420a75a2f09",
-        "type": "passport",
-        "status": "detected",
-        "filename": "C008-P2_NRICPassport.pdf"
-      },
-      {
-        "id": "a25f9fc4-3428-40fa-8b10-4b340f8e3660",
+        "id": "82454cd5-95e9-49fc-be6c-4168cae63c19",
         "type": "certificate_of_incorporation",
         "status": "detected",
-        "filename": "C008_CertIncorp.pdf"
-      },
-      {
-        "id": "62b0eed5-3716-4cf5-aff5-843d7da9d8ba",
-        "type": "certificate_of_incumbency",
-        "status": "detected",
-        "filename": "C008_CertIncumbency.pdf"
+        "filename": "C007_CertIncorp.pdf"
       }
     ],
-    "fingerprint": "96218e69afe50758d7979194f4067ae71629464a1ea1804bdc4822f297678fb4"
+    "fingerprint": "90a106f145debb87ddc55d9bc4795c7d5d8f11f623f6ad16c294e8753282067e"
   },
   {
     "at": 0,
     "step": "dossier",
     "documents": {
-      "payslip_1": {
-        "id": "32dd5e9c-ffe0-48c9-b08c-f55aa41b3c9f",
-        "filename": "C008-P2_Payslip.pdf",
-        "findings": 0
-      },
-      "passport_1": {
-        "id": "a2a5ac14-b1d2-4020-9fe8-7420a75a2f09",
-        "filename": "C008-P2_NRICPassport.pdf",
-        "findings": 1
-      },
-      "bank_statement_1": {
-        "id": "c452133a-cc3e-4c6f-83fd-ff0dbd25ff8e",
-        "filename": "C008-P2_ProofAddress.pdf",
-        "findings": 10
-      },
-      "certificate_of_incumbency_1": {
-        "id": "62b0eed5-3716-4cf5-aff5-843d7da9d8ba",
-        "filename": "C008_CertIncumbency.pdf",
-        "findings": 8
+      "notice_of_assessment_1": {
+        "id": "50a6f8fb-9865-4592-b77e-e51a60201ff8",
+        "filename": "C007_NOA.pdf",
+        "findings": 4
       },
       "certificate_of_incorporation_1": {
-        "id": "a25f9fc4-3428-40fa-8b10-4b340f8e3660",
-        "filename": "C008_CertIncorp.pdf",
+        "id": "82454cd5-95e9-49fc-be6c-4168cae63c19",
+        "filename": "C007_CertIncorp.pdf",
         "findings": 3
       }
     }
   },
   {
-    "at": 29.53,
+    "at": 12.72,
     "raw": null,
+    "via": "tool",
     "step": "hypotheses",
-    "parsed": false,
+    "usage": {
+      "input_tokens": 3578,
+      "total_tokens": 4391,
+      "output_tokens": 813,
+      "input_token_details": {
+        "cache_read": 0,
+        "cache_creation": 0,
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 1606
+      }
+    },
     "proposed": [
       {
         "id": "h1",
-        "claim": "The passport identifies GOH WAN TING as male (sex = M) yet the same individual is listed as a shareholder/director of a company where the certificate of incumbency and bank statement are submitted together for a loan — the sex field conflict suggests the identity document may be fabricated or belong",
-        "proof": "Passport field sex = M for a name (Goh Wan Ting) that is typically female, combined with an invalid NRIC check digit on both the passport and incumbency certificate, indicates the passport is not genuine.",
+        "claim": "The UEN 201567890G on the Certificate of Incorporation and the Notice of Assessment does not exist in ACRA's register, meaning the company may not be legitimately incorporated and the documents may be fabricated.",
+        "proof": "Both documents share the same unregistered UEN, confirmed by high-severity external validation findings on both.",
         "checks": [
-          {
-            "args": {
-              "names": [
-                "sex",
-                "mrz",
-                "nric_number",
-                "individual_name"
-              ],
-              "document": "passport_1"
-            },
-            "tool": "get_fields",
-            "refutation_probe": false
-          },
-          {
-            "args": {
-              "items": [
-                {
-                  "field": "individual_name",
-                  "value": "GOH WAN TING",
-                  "document": "passport_1"
-                },
-                {
-                  "field": "individual_name",
-                  "value": "GOH WAN TING",
-                  "document": "bank_statement_1"
-                },
-                {
-                  "field": "shareholder_name",
-                  "value": "GOH WAN TING",
-                  "document": "certificate_of_incumbency_1"
-                }
-              ]
-            },
-            "tool": "compare_people",
-            "refutation_probe": false
-          },
-          {
-            "args": {
-              "names": [
-                "shareholders",
-                "officers"
-              ],
-              "document": "certificate_of_incumbency_1"
-            },
-            "tool": "get_fields",
-            "refutation_probe": true
-          }
-        ],
-        "documents": [
-          "passport_1",
-          "certificate_of_incumbency_1",
-          "bank_statement_1"
-        ],
-        "refutation_test": "If the MRZ line 2 encodes sex as 'F' rather than 'M', the visible field may be a transcription error rather than fabrication.",
-        "refutation_document": "passport_1"
-      },
-      {
-        "id": "h2",
-        "claim": "The payslip shows a January 2026 net pay of SGD 8,027.85 from Pacific Rim Seafood Trading, but the bank statement covers June–August 2026 and the largest single credit is SGD 8,027.85 — if that credit is the salary, it appears months after the pay period, and no regular monthly salary credits matchi",
-        "proof": "Only one credit of ~8,027.85 appears in the Jun–Aug 2026 statement, with no equivalent credits in the other two months, inconsistent with a regular monthly salary.",
-        "checks": [
-          {
-            "args": {
-              "limit": 10,
-              "document": "bank_statement_1",
-              "direction": "credit",
-              "max_amount": 8100,
-              "min_amount": 7900
-            },
-            "tool": "query_transactions",
-            "refutation_probe": false
-          },
-          {
-            "args": {
-              "document": "bank_statement_1"
-            },
-            "tool": "monthly_flow",
-            "refutation_probe": false
-          },
-          {
-            "args": {
-              "n": 10,
-              "document": "bank_statement_1",
-              "direction": "credit"
-            },
-            "tool": "top_counterparties",
-            "refutation_probe": false
-          },
-          {
-            "args": {
-              "names": [
-                "net_pay",
-                "pay_period_end",
-                "basic_pay",
-                "company_name"
-              ],
-              "document": "payslip_1"
-            },
-            "tool": "get_fields",
-            "refutation_probe": true
-          }
-        ],
-        "documents": [
-          "payslip_1",
-          "bank_statement_1"
-        ],
-        "refutation_test": "If three separate monthly credits of ~8,027.85 (or a consistent salary amount) appear across June, July and August 2026, the income pattern would be consistent with regular employment.",
-        "refutation_document": "bank_statement_1"
-      },
-      {
-        "id": "h3",
-        "claim": "The certificate of incumbency records the company's principal activity as 'RETAIL SALE IN NON-SPECIALISED STORES N.E.C. (47199)' — a generic retail code — which is inconsistent with the company name 'Pacific Rim Seafood Trading Pte Ltd' that implies a specialised seafood wholesale/trading business, ",
-        "proof": "A seafood trading company would be expected to carry a wholesale fish/seafood SSIC code (e.g. 46302) rather than a non-specialised retail code, and the UEN is already flagged as not appearing in ACRA's register.",
-        "checks": [
-          {
-            "args": {
-              "names": [
-                "principal_activity",
-                "uen",
-                "company_name",
-                "share_capital"
-              ],
-              "document": "certificate_of_incumbency_1"
-            },
-            "tool": "get_fields",
-            "refutation_probe": false
-          },
           {
             "args": {
               "items": [
                 {
                   "field": "uen",
-                  "value": "201878901H",
-                  "document": "certificate_of_incumbency_1"
-                },
-                {
-                  "field": "uen",
-                  "value": "201878901H",
+                  "value": "201567890G",
                   "document": "certificate_of_incorporation_1"
+                },
+                {
+                  "field": "tax_reference_number",
+                  "value": "201567890G",
+                  "document": "notice_of_assessment_1"
                 }
               ]
             },
@@ -362,293 +212,279 @@ Full step log (25 steps)
           },
           {
             "args": {
-              "document": "certificate_of_incumbency_1"
+              "names": [
+                "uen",
+                "incorporation_date",
+                "company_name"
+              ],
+              "document": "certificate_of_incorporation_1"
             },
-            "tool": "company_name_consistency_tool",
+            "tool": "get_fields",
+            "refutation_probe": false
+          },
+          {
+            "args": {
+              "names": [
+                "tax_reference_number",
+                "company_name",
+                "year_of_assessment",
+                "noa_date"
+              ],
+              "document": "notice_of_assessment_1"
+            },
+            "tool": "get_fields",
             "refutation_probe": true
           }
         ],
         "documents": [
-          "certificate_of_incumbency_1",
-          "certificate_of_incorporation_1"
+          "certificate_of_incorporation_1",
+          "notice_of_assessment_1"
         ],
-        "refutation_test": "If ACRA's register (or another document in the case) confirms the company's registered activity is indeed 47199 for this entity, the mismatch would be explained.",
-        "refutation_document": "certificate_of_incumbency_1"
+        "refutation_test": "A UEN lookup returning a valid registered entity for 201567890G would refute this.",
+        "refutation_document": null
+      },
+      {
+        "id": "h2",
+        "claim": "The Notice of Assessment for Year of Assessment 2025 is dated 14 Jul 2025, but the company was only incorporated on 23 Mar 2015, and the NOA tax rebate exactly equals the full tax payable (making net tax zero), which is arithmetically implausible for a legitimate amended assessment.",
+        "proof": "tax_payable = 32,521.00 and tax_rebate = 32,521.00 and tax_discharge_amount = 32,521.00 — all three are identical, meaning the assessment results in zero net tax, which is unusual for an amended NOA.",
+        "checks": [
+          {
+            "args": {
+              "names": [
+                "tax_payable",
+                "tax_rebate",
+                "tax_discharge_amount",
+                "chargeable_income_after_exempt",
+                "eci",
+                "assessment_type",
+                "noa_date",
+                "previous_assessment_date"
+              ],
+              "document": "notice_of_assessment_1"
+            },
+            "tool": "get_fields",
+            "refutation_probe": false
+          },
+          {
+            "args": {
+              "names": [
+                "incorporation_date",
+                "company_name"
+              ],
+              "document": "certificate_of_incorporation_1"
+            },
+            "tool": "get_fields",
+            "refutation_probe": true
+          }
+        ],
+        "documents": [
+          "notice_of_assessment_1"
+        ],
+        "refutation_test": "A legitimate amended NOA where the rebate equals the full tax payable and discharge amount would refute this as anomalous.",
+        "refutation_document": null
       }
     ],
-    "salvaged": true,
-    "stop_reason": "end_turn",
-    "dossier_chars": 10934
+    "stop_reason": "tool_use",
+    "dossier_chars": 3976,
+    "dropped_for_bias": []
   },
   {
-    "at": 29.86,
-    "args": {
-      "names": [
-        "sex",
-        "mrz",
-        "nric_number",
-        "individual_name"
-      ],
-      "document": "passport_1"
-    },
-    "step": "tool_call",
-    "tool": "get_fields",
-    "probe": false,
-    "result": "{\"available\": true, \"fields\": [{\"field\": \"sex\", \"value\": \"\\\"M\\\"\", \"ref\": \"ref:passport_1:sex\"}, {\"field\": \"mrz\", \"value\": \"\\\"PASGPGOH<<WAN<TING<<<<<<<<<<<<<<<<<<<<<<<<<<\\\\nK5885423Z6SGP8012263M3312131S8000959H<<<<<80\\\"\", \"ref\": \"ref:passport_1:mrz\"}, {\"field\": \"nric_number\", \"value\": \"\\\"S****959H\\\"\", \"ref\": \"ref:passport_1:nric_number\"}, {\"field\": \"individual_name\", \"value\": \"\\\"GOH WAN TING\\\"\", \"ref\": \"ref:passport_1:individual_name\"}]}",
-    "hypothesis": "h1"
-  },
-  {
-    "at": 29.86,
-    "args": {
-      "limit": 10,
-      "document": "bank_statement_1",
-      "direction": "credit",
-      "max_amount": 8100,
-      "min_amount": 7900
-    },
-    "step": "tool_call",
-    "tool": "query_transactions",
-    "probe": false,
-    "result": "{\"available\": true, \"match_count\": 3, \"rows_scanned\": 24, \"rows\": [{\"ref\": \"ref:bank_statement_1:transactions:6\", \"date\": \"20 JUN\", \"amount\": 8027.85, \"description\": \"PAYROLL CREDIT\", \"counterparty\": null}, {\"ref\": \"ref:bank_statement_1:transactions:11\", \"date\": \"15 JUL\", \"amount\": 8027.85, \"description\": \"PAYROLL CREDIT\", \"counterparty\": null}, {\"ref\": \"ref:bank_statement_1:transactions:22\", \"date\": \"21 AUG\", \"amount\": 8027.85, \"description\": \"PAYROLL CREDIT\", \"counterparty\": null}]}",
-    "hypothesis": "h2"
-  },
-  {
-    "at": 29.86,
-    "args": {
-      "names": [
-        "principal_activity",
-        "uen",
-        "company_name",
-        "share_capital"
-      ],
-      "document": "certificate_of_incumbency_1"
-    },
-    "step": "tool_call",
-    "tool": "get_fields",
-    "probe": false,
-    "result": "{\"available\": true, \"fields\": [{\"field\": \"principal_activity\", \"value\": \"\\\"RETAIL SALE IN NON-SPECIALISED STORES N.E.C. (47199)\\\"\", \"ref\": \"ref:certificate_of_incumbency_1:principal_activity\"}, {\"field\": \"uen\", \"value\": \"\\\"201878901H\\\"\", \"ref\": \"ref:certificate_of_incumbency_1:uen\"}, {\"field\": \"company_name\", \"value\": \"\\\"PACIFIC RIM SEAFOOD TRADING PTE LTD\\\"\", \"ref\": \"ref:certificate_of_incumbency_1:company_name\"}, {\"field\": \"share_capital\", \"value\": \"\\\"250,000.00\\\"\", \"ref\": \"ref:certificate_of_incumbency_1:share_capital\"}]}",
-    "hypothesis": "h3"
-  },
-  {
-    "at": 29.86,
-    "args": {
-      "items": [
-        {
-          "field": "individual_name",
-          "value": "GOH WAN TING",
-          "document": "passport_1"
-        },
-        {
-          "field": "individual_name",
-          "value": "GOH WAN TING",
-          "document": "bank_statement_1"
-        },
-        {
-          "field": "shareholder_name",
-          "value": "GOH WAN TING",
-          "document": "certificate_of_incumbency_1"
-        }
-      ]
-    },
-    "step": "tool_call",
-    "tool": "compare_people",
-    "probe": false,
-    "result": "{\"available\": true, \"same\": false, \"mismatches\": [{\"between\": [\"ref:passport_1:individual_name\", \"ref:certificate_of_incumbency_1:shareholder_name\"]}, {\"between\": [\"ref:bank_statement_1:individual_name\", \"ref:certificate_of_incumbency_1:shareholder_name\"]}], \"breach_flags\": [\"PERSON_MISMATCH\"], \"values\": [{\"document\": \"passport_1\", \"field\": \"individual_name\", \"value\": \"GOH WAN TING\", \"ref\": \"ref:passport_1:individual_name\"}, {\"document\": \"bank_statement_1\", \"field\": \"individual_name\", \"value\": \"GOH WAN TING\", \"ref\": \"ref:bank_statement_1:individual_name\"}, {\"document\": \"certificate_of_incumbency_1\", \"field\": \"shareholder_name\", \"value\": \"KOH JUN JIE\", \"ref\": \"ref:certificate_of_incumbency_1:",
-    "hypothesis": "h1"
-  },
-  {
-    "at": 29.86,
-    "args": {
-      "document": "bank_statement_1"
-    },
-    "step": "tool_call",
-    "tool": "monthly_flow",
-    "probe": false,
-    "result": "{\"available\": true, \"months\": {}, \"undated_rows\": 24, \"ref\": \"ref:bank_statement_1:monthly_flow\"}",
-    "hypothesis": "h2"
-  },
-  {
-    "at": 29.88,
+    "at": 12.88,
     "args": {
       "items": [
         {
           "field": "uen",
-          "value": "201878901H",
-          "document": "certificate_of_incumbency_1"
-        },
-        {
-          "field": "uen",
-          "value": "201878901H",
+          "value": "201567890G",
           "document": "certificate_of_incorporation_1"
+        },
+        {
+          "field": "tax_reference_number",
+          "value": "201567890G",
+          "document": "notice_of_assessment_1"
         }
       ]
     },
     "step": "tool_call",
     "tool": "compare_identifiers",
     "probe": false,
-    "result": "{\"available\": true, \"same\": true, \"mismatches\": [], \"breach_flags\": [], \"values\": [{\"document\": \"certificate_of_incumbency_1\", \"field\": \"uen\", \"value\": \"201878901H\", \"ref\": \"ref:certificate_of_incumbency_1:uen\"}, {\"document\": \"certificate_of_incorporation_1\", \"field\": \"uen\", \"value\": \"201878901H\", \"ref\": \"ref:certificate_of_incorporation_1:uen\"}], \"missing\": []}",
-    "hypothesis": "h3"
-  },
-  {
-    "at": 29.88,
-    "args": {
-      "names": [
-        "shareholders",
-        "officers"
-      ],
-      "document": "certificate_of_incumbency_1"
-    },
-    "step": "tool_call",
-    "tool": "get_fields",
-    "probe": true,
-    "result": "{\"available\": true, \"fields\": [{\"field\": \"shareholders\", \"value\": \"[{\\\"name\\\": \\\"KOH JUN JIE\\\", \\\"address\\\": \\\"14 FARRER PARK ROAD, #08-33, SINGAPORE 725811\\\", \\\"share_type\\\": \\\"ORDINARY\\\", \\\"nationality\\\": \\\"SINGAPORE CITIZEN\\\", \\\"no_of_shares\\\": \\\"150,000\\\", \\\"identification_no\\\": \\\"S****901H\\\"}, {\\\"name\\\": \\\"GOH WAN TING\\\", \\\"address\\\": \\\"8 BEDOK RESERVOIR ROAD, #08-50, SINGAPORE 101897\\\", \\\"share_type\\\": \\\"ORDINARY\\\", \\\"nationality\\\": \\\"SINGAPORE CITIZEN\\\", \\\"no_of_shares\\\": \\\"100,000\\\", \\\"identification_no\\\": \\\"S****959H\\\"}]\", \"ref\": \"ref:certificate_of_incumbency_1:shareholders\"}, {\"field\": \"officers\", \"value\": \"[{\\\"name\\\": \\\"KOH JUN JIE\\\", \\\"address\\\": \\\"14 FARRER PARK ROAD, #08-33, S",
+    "result": "{\"available\": true, \"same\": true, \"mismatches\": [], \"breach_flags\": [], \"values\": [{\"document\": \"certificate_of_incorporation_1\", \"field\": \"uen\", \"value\": \"201567890G\", \"ref\": \"ref:certificate_of_incorporation_1:uen\"}, {\"document\": \"notice_of_assessment_1\", \"field\": \"tax_reference_number\", \"value\": \"201567890G\", \"ref\": \"ref:notice_of_assessment_1:tax_reference_number\"}], \"missing\": []}",
     "hypothesis": "h1"
   },
   {
-    "at": 29.88,
+    "at": 12.88,
     "args": {
-      "n": 10,
-      "document": "bank_statement_1",
-      "direction": "credit"
+      "names": [
+        "tax_payable",
+        "tax_rebate",
+        "tax_discharge_amount",
+        "chargeable_income_after_exempt",
+        "eci",
+        "assessment_type",
+        "noa_date",
+        "previous_assessment_date"
+      ],
+      "document": "notice_of_assessment_1"
     },
     "step": "tool_call",
-    "tool": "top_counterparties",
+    "tool": "get_fields",
     "probe": false,
-    "result": "{\"available\": true, \"counterparties\": [{\"counterparty\": \"(unnamed)\", \"count\": 8, \"total\": 24420.6, \"share_of_volume\": 1.0}], \"ref\": \"ref:bank_statement_1:top_counterparties[credit]\"}",
+    "result": "{\"available\": true, \"fields\": [{\"field\": \"tax_payable\", \"value\": \"\\\"32,521.00\\\"\", \"ref\": \"ref:notice_of_assessment_1:tax_payable\"}, {\"field\": \"tax_rebate\", \"value\": \"\\\"32,521.00\\\"\", \"ref\": \"ref:notice_of_assessment_1:tax_rebate\"}, {\"field\": \"tax_discharge_amount\", \"value\": \"\\\"32,521.00\\\"\", \"ref\": \"ref:notice_of_assessment_1:tax_discharge_amount\"}, {\"field\": \"chargeable_income_after_exempt\", \"value\": \"\\\"382,600\\\"\", \"ref\": \"ref:notice_of_assessment_1:chargeable_income_after_exempt\"}, {\"field\": \"eci\", \"value\": \"\\\"485,100\\\"\", \"ref\": \"ref:notice_of_assessment_1:eci\"}, {\"field\": \"assessment_type\", \"value\": \"\\\"Amended\\\"\", \"ref\": \"ref:notice_of_assessment_1:assessment_type\"}, {\"field\": \"noa_date\", \"",
     "hypothesis": "h2"
   },
   {
-    "at": 29.88,
-    "args": {
-      "document": "certificate_of_incumbency_1"
-    },
-    "step": "tool_call",
-    "tool": "company_name_consistency_tool",
-    "probe": true,
-    "result": "{\"available\": true, \"same\": true, \"compared_documents\": 2, \"discrepancies\": [], \"breach_flags\": [], \"refs\": [\"ref:certificate_of_incumbency_1:company_name\"]}",
-    "hypothesis": "h3"
-  },
-  {
-    "at": 29.88,
+    "at": 12.88,
     "args": {
       "names": [
-        "net_pay",
-        "pay_period_end",
-        "basic_pay",
+        "uen",
+        "incorporation_date",
         "company_name"
       ],
-      "document": "payslip_1"
+      "document": "certificate_of_incorporation_1"
+    },
+    "step": "tool_call",
+    "tool": "get_fields",
+    "probe": false,
+    "result": "{\"available\": true, \"fields\": [{\"field\": \"uen\", \"value\": \"\\\"201567890G\\\"\", \"ref\": \"ref:certificate_of_incorporation_1:uen\"}, {\"field\": \"incorporation_date\", \"value\": \"\\\"23 Mar 2015\\\"\", \"ref\": \"ref:certificate_of_incorporation_1:incorporation_date\"}, {\"field\": \"company_name\", \"value\": \"\\\"IVORY PHARMA DISTRIBUTION PTE LTD\\\"\", \"ref\": \"ref:certificate_of_incorporation_1:company_name\"}]}",
+    "hypothesis": "h1"
+  },
+  {
+    "at": 12.88,
+    "args": {
+      "names": [
+        "incorporation_date",
+        "company_name"
+      ],
+      "document": "certificate_of_incorporation_1"
     },
     "step": "tool_call",
     "tool": "get_fields",
     "probe": true,
-    "result": "{\"available\": true, \"fields\": [{\"field\": \"net_pay\", \"value\": \"\\\"SGD 8,027.85\\\"\", \"ref\": \"ref:payslip_1:net_pay\"}, {\"field\": \"pay_period_end\", \"value\": \"\\\"January 2026\\\"\", \"ref\": \"ref:payslip_1:pay_period_end\"}, {\"field\": \"basic_pay\", \"value\": \"\\\"SGD 8,310.00\\\"\", \"ref\": \"ref:payslip_1:basic_pay\"}, {\"field\": \"company_name\", \"value\": \"\\\"Pacific Rim Seafood Trading Pte Ltd\\\"\", \"ref\": \"ref:payslip_1:company_name\"}]}",
+    "result": "{\"available\": true, \"fields\": [{\"field\": \"incorporation_date\", \"value\": \"\\\"23 Mar 2015\\\"\", \"ref\": \"ref:certificate_of_incorporation_1:incorporation_date\"}, {\"field\": \"company_name\", \"value\": \"\\\"IVORY PHARMA DISTRIBUTION PTE LTD\\\"\", \"ref\": \"ref:certificate_of_incorporation_1:company_name\"}]}",
     "hypothesis": "h2"
   },
   {
-    "at": 40.97,
-    "raw": null,
-    "step": "judge_reply",
-    "parsed": true,
-    "salvaged": false,
-    "stop_reason": "end_turn"
+    "at": 12.88,
+    "args": {
+      "names": [
+        "tax_reference_number",
+        "company_name",
+        "year_of_assessment",
+        "noa_date"
+      ],
+      "document": "notice_of_assessment_1"
+    },
+    "step": "tool_call",
+    "tool": "get_fields",
+    "probe": true,
+    "result": "{\"available\": true, \"fields\": [{\"field\": \"tax_reference_number\", \"value\": \"\\\"201567890G\\\"\", \"ref\": \"ref:notice_of_assessment_1:tax_reference_number\"}, {\"field\": \"company_name\", \"value\": \"\\\"IVORY PHARMA DISTRIBUTION PTE LTD\\\"\", \"ref\": \"ref:notice_of_assessment_1:company_name\"}, {\"field\": \"year_of_assessment\", \"value\": \"2025\", \"ref\": \"ref:notice_of_assessment_1:year_of_assessment\"}, {\"field\": \"noa_date\", \"value\": \"\\\"14 Jul 2025\\\"\", \"ref\": \"ref:notice_of_assessment_1:noa_date\"}]}",
+    "hypothesis": "h1"
   },
   {
-    "at": 40.97,
+    "at": 21.95,
+    "raw": null,
+    "via": "tool",
+    "step": "judge_reply",
+    "usage": {
+      "input_tokens": 3911,
+      "total_tokens": 4363,
+      "output_tokens": 452,
+      "input_token_details": {
+        "cache_read": 1606,
+        "cache_creation": 0,
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      }
+    },
+    "parsed": true,
+    "stop_reason": "tool_use"
+  },
+  {
+    "at": 21.95,
     "step": "verdict",
     "parsed": true,
     "verdict": {
       "id": "h1",
-      "summary": "The passport MRZ encodes sex as 'M' and this is confirmed in the visible field, yet the name GOH WAN TING on the incumbency certificate belongs to a different individual (KOH JUN JIE is listed as the primary shareholder/director), indicating an identity or document inconsistency.",
-      "category": "unsupported_claim",
-      "severity": "high",
-      "citations": [
-        "ref:passport_1:sex",
-        "ref:passport_1:mrz",
-        "ref:passport_1:individual_name",
-        "ref:certificate_of_incumbency_1:shareholder_name"
-      ],
-      "rationale": "The MRZ second line contains 'M' at the sex position (ref:passport_1:mrz), confirming the visible field is not a transcription error and the refutation check fails. The compare_people tool found a PERSON_MISMATCH because the incumbency certificate lists KOH JUN JIE as shareholder, not GOH WAN TING, despite GOH WAN TING appearing on the passport and bank statement.",
-      "conclusive": true,
-      "probe_summary": "The MRZ line 2 encodes sex as 'M', not 'F', so the visible field is not a transcription error and the fabrication concern stands."
+      "summary": "The UEN 201567890G is consistent across both documents, but no external ACRA registry lookup was performed, so fabrication cannot be confirmed from the available evidence.",
+      "conclusive": false
     },
     "hypothesis": "h1"
   },
   {
-    "at": 40.97,
+    "at": 21.95,
     "step": "verdict",
     "parsed": true,
     "verdict": {
       "id": "h2",
-      "summary": "Three payroll credits of SGD 8,027.85 appear in June, July and August 2026, consistent with regular monthly salary, so the hypothesis of a single anomalous credit is not proven.",
+      "summary": "The amended NOA shows tax payable, tax rebate, and tax discharge amount all equal at 32,521.00, resulting in zero net tax on substantial chargeable income of 382,600 — an unusual outcome for a legitimate amended assessment.",
       "category": "behavioural_anomaly",
-      "severity": "low",
-      "citations": [],
-      "rationale": "",
-      "conclusive": false,
-      "probe_summary": ""
+      "severity": "medium",
+      "citations": [
+        "ref:notice_of_assessment_1:tax_payable",
+        "ref:notice_of_assessment_1:tax_rebate",
+        "ref:notice_of_assessment_1:tax_discharge_amount",
+        "ref:notice_of_assessment_1:chargeable_income_after_exempt",
+        "ref:notice_of_assessment_1:assessment_type"
+      ],
+      "rationale": "All three figures (tax_payable, tax_rebate, tax_discharge_amount) are identically 32,521.00 per the extracted fields, meaning the amended assessment produces exactly zero net tax on a chargeable income of 382,600. The refutation check (a legitimate amended NOA where rebate equals full tax payable) describes a scenario that is itself the anomaly, not a refutation of it.",
+      "conclusive": true,
+      "probe_summary": "The refutation check did not identify any legitimate basis for a full rebate equalling full tax payable on an amended NOA; the three identical values remain unexplained."
     },
     "hypothesis": "h2"
   },
   {
-    "at": 40.97,
-    "step": "verdict",
-    "parsed": true,
-    "verdict": {
-      "id": "h3",
-      "summary": "The SSIC code mismatch is noted but no tool result confirms the UEN is absent from ACRA's register, and the UEN is consistent across documents, so the hypothesis is not conclusively proven.",
-      "category": "unsupported_claim",
-      "severity": "low",
-      "citations": [],
-      "rationale": "",
-      "conclusive": false,
-      "probe_summary": ""
-    },
-    "hypothesis": "h3"
-  },
-  {
-    "at": 40.97,
+    "at": 21.95,
     "kept": false,
     "step": "verify",
-    "reason": "refutation probe did not run",
+    "reason": "not conclusive",
     "finding": null,
     "hypothesis": "h1"
   },
   {
-    "at": 40.97,
-    "kept": false,
+    "at": 21.95,
+    "kept": true,
     "step": "verify",
-    "reason": "not conclusive",
-    "finding": null,
+    "reason": null,
+    "finding": {
+      "id": "xd-h2",
+      "summary": "The amended NOA shows tax payable, tax rebate, and tax discharge amount all equal at 32,521.00, resulting in zero net tax on substantial chargeable income of 382,600 — an unusual outcome for a legitimate amended assessment.",
+      "category": "behavioural_anomaly",
+      "severity": "medium",
+      "citations": [
+        "ref:notice_of_assessment_1:tax_payable",
+        "ref:notice_of_assessment_1:tax_rebate",
+        "ref:notice_of_assessment_1:tax_discharge_amount",
+        "ref:notice_of_assessment_1:chargeable_income_after_exempt",
+        "ref:notice_of_assessment_1:assessment_type"
+      ],
+      "rationale": "All three figures (tax_payable, tax_rebate, tax_discharge_amount) are identically 32,521.00 per the extracted fields, meaning the amended assessment produces exactly zero net tax on a chargeable income of 382,600. The refutation check (a legitimate amended NOA where rebate equals full tax payable) describes a scenario that is itself the anomaly, not a refutation of it.",
+      "breach_flags": [],
+      "document_ids": [
+        "50a6f8fb-9865-4592-b77e-e51a60201ff8"
+      ],
+      "hypothesis_id": "h2",
+      "probe_summary": "The refutation check did not identify any legitimate basis for a full rebate equalling full tax payable on an amended NOA; the three identical values remain unexplained."
+    },
     "hypothesis": "h2"
   },
   {
-    "at": 40.97,
-    "kept": false,
-    "step": "verify",
-    "reason": "not conclusive",
-    "finding": null,
-    "hypothesis": "h3"
-  },
-  {
-    "at": 40.97,
+    "at": 21.97,
     "step": "scoring",
-    "level": "Critical",
-    "score": 90,
+    "level": "High",
+    "score": 64,
     "state": "scored",
-    "points": 65.24,
+    "points": 23.75,
     "reasons": [
-      "Rated Critical: high-severity findings on 4 documents."
+      "Rated High from the combined severity of 8 finding(s)."
     ],
     "findings": [
       {
-        "tool": "numerical_checks_tool",
+        "tool": "external_validation_tool",
         "points": 8,
         "source": "document",
-        "category": "tampering_forensic",
-        "document": "C008-P2_NRICPassport.pdf",
+        "category": "registry_discrepancy",
+        "document": "C007_CertIncorp.pdf",
         "severity": "high",
-        "finding_id": "a2a5ac14:numerical_checks_tool-1",
+        "finding_id": "82454cd5:external_validation_tool-1",
         "unreviewed": false
       },
       {
@@ -656,109 +492,29 @@ Full step log (25 steps)
         "points": 8,
         "source": "document",
         "category": "registry_discrepancy",
-        "document": "C008-P2_ProofAddress.pdf",
+        "document": "C007_NOA.pdf",
         "severity": "high",
-        "finding_id": "c452133a:external_validation_tool-1",
+        "finding_id": "50a6f8fb:external_validation_tool-1",
         "unreviewed": false
       },
       {
-        "tool": "external_validation_tool",
-        "points": 8,
-        "source": "document",
-        "category": "registry_discrepancy",
-        "document": "C008_CertIncorp.pdf",
-        "severity": "high",
-        "finding_id": "a25f9fc4:external_validation_tool-1",
-        "unreviewed": false
-      },
-      {
-        "tool": "date_consistency_tool",
-        "points": 8,
+        "tool": "layout_anomalies_tool",
+        "points": 3,
         "source": "document",
         "category": "tampering_forensic",
-        "document": "C008_CertIncumbency.pdf",
-        "severity": "high",
-        "finding_id": "62b0eed5:date_consistency_tool-1",
-        "unreviewed": false
-      },
-      {
-        "tool": "numerical_checks_tool",
-        "points": 8,
-        "source": "document",
-        "category": "tampering_forensic",
-        "document": "C008_CertIncumbency.pdf",
-        "severity": "high",
-        "finding_id": "62b0eed5:numerical_checks_tool-1",
-        "unreviewed": false
-      },
-      {
-        "tool": "external_validation_tool",
-        "points": 8,
-        "source": "document",
-        "category": "registry_discrepancy",
-        "document": "C008_CertIncumbency.pdf",
-        "severity": "high",
-        "finding_id": "62b0eed5:external_validation_tool-1",
-        "unreviewed": false
-      },
-      {
-        "tool": "numerical_checks_tool",
-        "points": 2.25,
-        "source": "document",
-        "category": "tampering_forensic",
-        "document": "C008-P2_ProofAddress.pdf",
+        "document": "C007_NOA.pdf",
         "severity": "medium",
-        "finding_id": "c452133a:numerical_checks_tool-1",
+        "finding_id": "50a6f8fb:layout_anomalies_tool-1",
         "unreviewed": false
       },
       {
-        "tool": "date_consistency_tool",
-        "points": 2,
-        "source": "document",
-        "category": "tampering_forensic",
-        "document": "C008_CertIncumbency.pdf",
-        "severity": "high",
-        "finding_id": "62b0eed5:date_consistency_tool-2",
-        "unreviewed": false
-      },
-      {
-        "tool": "numerical_checks_tool",
-        "points": 2,
-        "source": "document",
-        "category": "tampering_forensic",
-        "document": "C008_CertIncumbency.pdf",
-        "severity": "high",
-        "finding_id": "62b0eed5:numerical_checks_tool-2",
-        "unreviewed": false
-      },
-      {
-        "tool": "numerical_checks_tool",
-        "points": 2,
-        "source": "document",
-        "category": "tampering_forensic",
-        "document": "C008_CertIncumbency.pdf",
-        "severity": "high",
-        "finding_id": "62b0eed5:numerical_checks_tool-3",
-        "unreviewed": false
-      },
-      {
-        "tool": "external_validation_tool",
-        "points": 2,
-        "source": "document",
-        "category": "registry_discrepancy",
-        "document": "C008_CertIncumbency.pdf",
-        "severity": "high",
-        "finding_id": "62b0eed5:external_validation_tool-2",
-        "unreviewed": false
-      },
-      {
-        "tool": "external_validation_tool",
-        "points": 2,
-        "source": "document",
-        "category": "registry_discrepancy",
-        "document": "C008_CertIncumbency.pdf",
-        "severity": "high",
-        "finding_id": "62b0eed5:external_validation_tool-3",
+        "tool": "cross_document_analysis",
+        "points": 3,
+        "source": "cross_document",
+        "category": "behavioural_anomaly",
+        "document": "C007_NOA.pdf",
+        "severity": "medium",
+        "finding_id": "xd-h2",
         "unreviewed": false
       },
       {
@@ -766,69 +522,9 @@ Full step log (25 steps)
         "points": 1,
         "source": "document",
         "category": "tampering_forensic",
-        "document": "C008_CertIncorp.pdf",
+        "document": "C007_CertIncorp.pdf",
         "severity": "low",
-        "finding_id": "a25f9fc4:layout_anomalies_tool-1",
-        "unreviewed": false
-      },
-      {
-        "tool": "numerical_checks_tool",
-        "points": 0.56,
-        "source": "document",
-        "category": "tampering_forensic",
-        "document": "C008-P2_ProofAddress.pdf",
-        "severity": "medium",
-        "finding_id": "c452133a:numerical_checks_tool-2",
-        "unreviewed": false
-      },
-      {
-        "tool": "numerical_checks_tool",
-        "points": 0.56,
-        "source": "document",
-        "category": "tampering_forensic",
-        "document": "C008-P2_ProofAddress.pdf",
-        "severity": "medium",
-        "finding_id": "c452133a:numerical_checks_tool-3",
-        "unreviewed": false
-      },
-      {
-        "tool": "numerical_checks_tool",
-        "points": 0.56,
-        "source": "document",
-        "category": "tampering_forensic",
-        "document": "C008-P2_ProofAddress.pdf",
-        "severity": "medium",
-        "finding_id": "c452133a:numerical_checks_tool-6",
-        "unreviewed": false
-      },
-      {
-        "tool": "numerical_checks_tool",
-        "points": 0.56,
-        "source": "document",
-        "category": "tampering_forensic",
-        "document": "C008-P2_ProofAddress.pdf",
-        "severity": "medium",
-        "finding_id": "c452133a:numerical_checks_tool-7",
-        "unreviewed": false
-      },
-      {
-        "tool": "numerical_checks_tool",
-        "points": 0.56,
-        "source": "document",
-        "category": "tampering_forensic",
-        "document": "C008-P2_ProofAddress.pdf",
-        "severity": "medium",
-        "finding_id": "c452133a:numerical_checks_tool-8",
-        "unreviewed": false
-      },
-      {
-        "tool": "numerical_checks_tool",
-        "points": 0.56,
-        "source": "document",
-        "category": "tampering_forensic",
-        "document": "C008-P2_ProofAddress.pdf",
-        "severity": "medium",
-        "finding_id": "c452133a:numerical_checks_tool-9",
+        "finding_id": "82454cd5:layout_anomalies_tool-1",
         "unreviewed": false
       },
       {
@@ -836,34 +532,34 @@ Full step log (25 steps)
         "points": 0.25,
         "source": "document",
         "category": "tampering_forensic",
-        "document": "C008_CertIncorp.pdf",
+        "document": "C007_CertIncorp.pdf",
         "severity": "low",
-        "finding_id": "a25f9fc4:layout_anomalies_tool-2",
+        "finding_id": "82454cd5:layout_anomalies_tool-2",
         "unreviewed": false
       },
       {
-        "tool": "numerical_checks_tool",
-        "points": 0.19,
+        "tool": "layout_anomalies_tool",
+        "points": 0.25,
         "source": "document",
         "category": "tampering_forensic",
-        "document": "C008-P2_ProofAddress.pdf",
+        "document": "C007_NOA.pdf",
         "severity": "low",
-        "finding_id": "c452133a:numerical_checks_tool-4",
+        "finding_id": "50a6f8fb:layout_anomalies_tool-2",
         "unreviewed": false
       },
       {
-        "tool": "numerical_checks_tool",
-        "points": 0.19,
+        "tool": "layout_anomalies_tool",
+        "points": 0.25,
         "source": "document",
         "category": "tampering_forensic",
-        "document": "C008-P2_ProofAddress.pdf",
+        "document": "C007_NOA.pdf",
         "severity": "low",
-        "finding_id": "c452133a:numerical_checks_tool-5",
+        "finding_id": "50a6f8fb:layout_anomalies_tool-3",
         "unreviewed": false
       }
     ],
     "repeat_weight": 0.25,
-    "documents_total": 5,
+    "documents_total": 2,
     "severity_points": {
       "low": 1,
       "high": 8,
@@ -884,316 +580,243 @@ Full step log (25 steps)
         "Low"
       ]
     ],
-    "documents_scanned": 5,
+    "documents_scanned": 2,
     "unassessed_checks": [
       {
         "tool": "metadata_tool",
         "reason": "The file's metadata couldn't be read when it was uploaded: exiftool is not installed on the server that processed this document. This check didn't run, so it says nothing about whether the file was edited.",
-        "document": "C008-P2_ProofAddress.pdf"
-      },
-      {
-        "tool": "external_validation_tool",
-        "reason": "No address with a Singapore postal code extracted; Required field(s) not extracted: employee_cpf (or a CPF line in deductions_items); Required field(s) not extracted: employee_cpf and ordinary_wages (or a CPF deduction line and earnings lines)",
-        "document": "C008-P2_Payslip.pdf"
+        "document": "C007_NOA.pdf"
       },
       {
         "tool": "metadata_tool",
         "reason": "The file's metadata couldn't be read when it was uploaded: exiftool is not installed on the server that processed this document. This check didn't run, so it says nothing about whether the file was edited.",
-        "document": "C008-P2_Payslip.pdf"
-      },
-      {
-        "tool": "metadata_tool",
-        "reason": "The file's metadata couldn't be read when it was uploaded: exiftool is not installed on the server that processed this document. This check didn't run, so it says nothing about whether the file was edited.",
-        "document": "C008-P2_NRICPassport.pdf"
-      },
-      {
-        "tool": "metadata_tool",
-        "reason": "The file's metadata couldn't be read when it was uploaded: exiftool is not installed on the server that processed this document. This check didn't run, so it says nothing about whether the file was edited.",
-        "document": "C008_CertIncorp.pdf"
-      },
-      {
-        "tool": "metadata_tool",
-        "reason": "The file's metadata couldn't be read when it was uploaded: exiftool is not installed on the server that processed this document. This check didn't run, so it says nothing about whether the file was edited.",
-        "document": "C008_CertIncumbency.pdf"
+        "document": "C007_CertIncorp.pdf"
       }
     ],
     "noise_cap_per_document": 6,
-    "cross_document_findings": 0,
-    "level_without_cross_document": "Critical",
-    "score_without_cross_document": 90,
+    "cross_document_findings": 1,
+    "level_without_cross_document": "High",
+    "score_without_cross_document": 62,
     "critical_needs_high_documents": 3
   },
   {
-    "at": 40.97,
+    "at": 24.41,
     "step": "evidence_requests",
-    "proposed": [],
+    "proposed": [
+      {
+        "title": "Tax Authority Correspondence or Assessment Details",
+        "source": "agent",
+        "addresses": [
+          "xd-h2"
+        ],
+        "what_it_shows": "Official communication from the tax authority explaining the amended NOA calculation, including how tax payable, rebate, and discharge were determined and reconciled.",
+        "expected_effect": "partial"
+      },
+      {
+        "title": "Auditor's Report or Financial Statement Notes",
+        "source": "agent",
+        "addresses": [
+          "xd-h2"
+        ],
+        "what_it_shows": "Independent auditor commentary on the tax position and any unusual tax adjustments or credits claimed in the year corresponding to the amended NOA.",
+        "expected_effect": "partial"
+      }
+    ],
     "supporting_documents": []
   },
   {
-    "at": 40.98,
+    "at": 24.41,
     "step": "outlook",
-    "requests": [],
-    "current_score": 90,
-    "best_case_level": "Critical",
-    "best_case_score": 90,
+    "requests": [
+      {
+        "title": "Tax Authority Correspondence or Assessment Details",
+        "effect": "partial",
+        "scored": true,
+        "source": "agent",
+        "dropped": [],
+        "addressed": [
+          {
+            "points": 3,
+            "category": "behavioural_anomaly",
+            "finding_id": "xd-h2",
+            "points_after": 1.5
+          }
+        ],
+        "level_if_supports": "High",
+        "score_if_supports": 63
+      },
+      {
+        "title": "Auditor's Report or Financial Statement Notes",
+        "effect": "partial",
+        "scored": true,
+        "source": "agent",
+        "dropped": [],
+        "addressed": [
+          {
+            "points": 3,
+            "category": "behavioural_anomaly",
+            "finding_id": "xd-h2",
+            "points_after": 1.5
+          }
+        ],
+        "level_if_supports": "High",
+        "score_if_supports": 63
+      }
+    ],
+    "current_score": 64,
+    "best_case_level": "High",
+    "best_case_score": 63,
     "remaining_share": {
       "full": 0,
       "partial": 0.5
     },
     "unreducible_finding_ids": [
-      "a2a5ac14:numerical_checks_tool-1",
-      "c452133a:external_validation_tool-1",
-      "a25f9fc4:external_validation_tool-1",
-      "62b0eed5:date_consistency_tool-1",
-      "62b0eed5:numerical_checks_tool-1",
-      "62b0eed5:external_validation_tool-1",
-      "c452133a:numerical_checks_tool-1",
-      "62b0eed5:date_consistency_tool-2",
-      "62b0eed5:numerical_checks_tool-2",
-      "62b0eed5:numerical_checks_tool-3",
-      "62b0eed5:external_validation_tool-2",
-      "62b0eed5:external_validation_tool-3",
-      "a25f9fc4:layout_anomalies_tool-1",
-      "c452133a:numerical_checks_tool-2",
-      "c452133a:numerical_checks_tool-3",
-      "c452133a:numerical_checks_tool-6",
-      "c452133a:numerical_checks_tool-7",
-      "c452133a:numerical_checks_tool-8",
-      "c452133a:numerical_checks_tool-9",
-      "a25f9fc4:layout_anomalies_tool-2",
-      "c452133a:numerical_checks_tool-4",
-      "c452133a:numerical_checks_tool-5"
+      "82454cd5:external_validation_tool-1",
+      "50a6f8fb:external_validation_tool-1",
+      "50a6f8fb:layout_anomalies_tool-1",
+      "82454cd5:layout_anomalies_tool-1",
+      "82454cd5:layout_anomalies_tool-2",
+      "50a6f8fb:layout_anomalies_tool-2",
+      "50a6f8fb:layout_anomalies_tool-3"
     ]
   },
   {
-    "at": 45.8,
+    "at": 28.59,
     "step": "summary",
-    "text": "This application presents a critical fraud risk. The applicant has submitted multiple documents with serious problems that suggest forgery or tampering rather than honest mistakes. The personal identity document contains an invalid identification number that fails mathematical validation checks. The address provided does not exist in official Singapore records. Most concerning, the company documents reference a business registration number that does not exist in any official register, and the same invalid identification numbers appear repeatedly across different roles in the company paperwork. Additionally, dates in the company documents are impossible—they reference meetings and filings that supposedly happened in the future relative to when the documents were issued. One financial statement shows ATM withdrawal amounts that fluctuate wildly rather than staying consistent. The checks that examined the documents for signs of digital manipulation, font inconsistencies, and image tampering all came back clean, but the mathematical and registry problems are severe enough on their own. No additional evidence has been identified that would resolve these concerns."
+    "text": "This application presents a high fraud risk (score 64/100), primarily because the company's registration number does not appear in any official business registry. This same invalid number appears on both the certificate of incorporation and the tax notice, which raises concerns about document authenticity. Additionally, the tax notice shows unusual financial figures where the tax owed, a tax credit, and a tax payment are all identical at $32,521, resulting in zero net tax despite substantial income—an outcome that would be extremely rare in legitimate tax assessments. The tax notice also shows signs of physical alteration, with the tax discharge amount positioned significantly off from where it should normally appear on the document. Several checks for common fraud indicators, including font consistency, image manipulation, and spelling errors, found nothing wrong. To substantially improve confidence in this application, the applicant would need to provide official correspondence from the tax authority explaining how these identical figures were calculated, or an independent auditor's report commenting on the tax position and any unusual adjustments."
   },
   {
-    "at": 45.8,
+    "at": 28.59,
     "step": "done",
     "status": "complete",
-    "findings": 0
+    "findings": 1
   }
 ]
-Audit (10 tool calls)
+Audit (5 tool calls)
 {
   "models": {
     "analysis": "claude-sonnet-4-6"
   },
-  "prompt_version": "cross-doc-v2",
-  "hypotheses_tried": 3,
-  "findings_discarded": 3,
+  "prompt_version": "cross-doc-v3",
+  "hypotheses_tried": 2,
+  "findings_discarded": 1,
   "tool_calls": [
     {
       "args": {
-        "names": [
-          "sex",
-          "mrz",
-          "nric_number",
-          "individual_name"
-        ],
-        "document": "passport_1"
-      },
-      "refs": [
-        "ref:passport_1:sex",
-        "ref:passport_1:mrz",
-        "ref:passport_1:nric_number",
-        "ref:passport_1:individual_name"
-      ],
-      "tool": "get_fields",
-      "probe": false,
-      "document": "passport_1",
-      "available": true,
-      "hypothesis": "h1",
-      "breach_flags": []
-    },
-    {
-      "args": {
         "items": [
-          {
-            "field": "individual_name",
-            "document": "passport_1"
-          },
-          {
-            "field": "individual_name",
-            "document": "bank_statement_1"
-          },
-          {
-            "field": "shareholder_name",
-            "document": "certificate_of_incumbency_1"
-          }
-        ]
-      },
-      "refs": [
-        "ref:passport_1:individual_name",
-        "ref:bank_statement_1:individual_name",
-        "ref:certificate_of_incumbency_1:shareholder_name"
-      ],
-      "tool": "compare_people",
-      "probe": false,
-      "document": null,
-      "available": true,
-      "hypothesis": "h1",
-      "breach_flags": [
-        "PERSON_MISMATCH"
-      ]
-    },
-    {
-      "args": {
-        "names": [
-          "shareholders",
-          "officers"
-        ],
-        "document": "certificate_of_incumbency_1"
-      },
-      "refs": [
-        "ref:certificate_of_incumbency_1:shareholders",
-        "ref:certificate_of_incumbency_1:officers"
-      ],
-      "tool": "get_fields",
-      "probe": true,
-      "document": "certificate_of_incumbency_1",
-      "available": true,
-      "hypothesis": "h1",
-      "breach_flags": []
-    },
-    {
-      "args": {
-        "date_to": null,
-        "document": "bank_statement_1",
-        "date_from": null,
-        "direction": "credit",
-        "max_amount": 8100,
-        "min_amount": 7900,
-        "counterparty": null,
-        "description_contains": null
-      },
-      "refs": [
-        "ref:bank_statement_1:transactions:6",
-        "ref:bank_statement_1:transactions:11",
-        "ref:bank_statement_1:transactions:22"
-      ],
-      "tool": "query_transactions",
-      "probe": false,
-      "document": "bank_statement_1",
-      "available": true,
-      "hypothesis": "h2",
-      "breach_flags": []
-    },
-    {
-      "args": {
-        "document": "bank_statement_1"
-      },
-      "refs": [
-        "ref:bank_statement_1:monthly_flow"
-      ],
-      "tool": "monthly_flow",
-      "probe": false,
-      "document": "bank_statement_1",
-      "available": true,
-      "hypothesis": "h2",
-      "breach_flags": []
-    },
-    {
-      "args": {
-        "n": 10,
-        "document": "bank_statement_1",
-        "direction": "credit"
-      },
-      "refs": [
-        "ref:bank_statement_1:top_counterparties[credit]"
-      ],
-      "tool": "top_counterparties",
-      "probe": false,
-      "document": "bank_statement_1",
-      "available": true,
-      "hypothesis": "h2",
-      "breach_flags": []
-    },
-    {
-      "args": {
-        "names": [
-          "net_pay",
-          "pay_period_end",
-          "basic_pay",
-          "company_name"
-        ],
-        "document": "payslip_1"
-      },
-      "refs": [
-        "ref:payslip_1:net_pay",
-        "ref:payslip_1:pay_period_end",
-        "ref:payslip_1:basic_pay",
-        "ref:payslip_1:company_name"
-      ],
-      "tool": "get_fields",
-      "probe": true,
-      "document": "payslip_1",
-      "available": true,
-      "hypothesis": "h2",
-      "breach_flags": []
-    },
-    {
-      "args": {
-        "names": [
-          "principal_activity",
-          "uen",
-          "company_name",
-          "share_capital"
-        ],
-        "document": "certificate_of_incumbency_1"
-      },
-      "refs": [
-        "ref:certificate_of_incumbency_1:principal_activity",
-        "ref:certificate_of_incumbency_1:uen",
-        "ref:certificate_of_incumbency_1:company_name",
-        "ref:certificate_of_incumbency_1:share_capital"
-      ],
-      "tool": "get_fields",
-      "probe": false,
-      "document": "certificate_of_incumbency_1",
-      "available": true,
-      "hypothesis": "h3",
-      "breach_flags": []
-    },
-    {
-      "args": {
-        "items": [
-          {
-            "field": "uen",
-            "document": "certificate_of_incumbency_1"
-          },
           {
             "field": "uen",
             "document": "certificate_of_incorporation_1"
+          },
+          {
+            "field": "tax_reference_number",
+            "document": "notice_of_assessment_1"
           }
         ]
       },
       "refs": [
-        "ref:certificate_of_incumbency_1:uen",
-        "ref:certificate_of_incorporation_1:uen"
+        "ref:certificate_of_incorporation_1:uen",
+        "ref:notice_of_assessment_1:tax_reference_number"
       ],
       "tool": "compare_identifiers",
       "probe": false,
       "document": null,
       "available": true,
-      "hypothesis": "h3",
+      "hypothesis": "h1",
       "breach_flags": []
     },
     {
       "args": {
-        "document": "certificate_of_incumbency_1"
+        "names": [
+          "uen",
+          "incorporation_date",
+          "company_name"
+        ],
+        "document": "certificate_of_incorporation_1"
       },
       "refs": [
-        "ref:certificate_of_incumbency_1:company_name"
+        "ref:certificate_of_incorporation_1:uen",
+        "ref:certificate_of_incorporation_1:incorporation_date",
+        "ref:certificate_of_incorporation_1:company_name"
       ],
-      "tool": "company_name_consistency_tool",
-      "probe": true,
-      "document": "certificate_of_incumbency_1",
+      "tool": "get_fields",
+      "probe": false,
+      "document": "certificate_of_incorporation_1",
       "available": true,
-      "hypothesis": "h3",
+      "hypothesis": "h1",
+      "breach_flags": []
+    },
+    {
+      "args": {
+        "names": [
+          "tax_reference_number",
+          "company_name",
+          "year_of_assessment",
+          "noa_date"
+        ],
+        "document": "notice_of_assessment_1"
+      },
+      "refs": [
+        "ref:notice_of_assessment_1:tax_reference_number",
+        "ref:notice_of_assessment_1:company_name",
+        "ref:notice_of_assessment_1:year_of_assessment",
+        "ref:notice_of_assessment_1:noa_date"
+      ],
+      "tool": "get_fields",
+      "probe": true,
+      "document": "notice_of_assessment_1",
+      "available": true,
+      "hypothesis": "h1",
+      "breach_flags": []
+    },
+    {
+      "args": {
+        "names": [
+          "tax_payable",
+          "tax_rebate",
+          "tax_discharge_amount",
+          "chargeable_income_after_exempt",
+          "eci",
+          "assessment_type",
+          "noa_date",
+          "previous_assessment_date"
+        ],
+        "document": "notice_of_assessment_1"
+      },
+      "refs": [
+        "ref:notice_of_assessment_1:tax_payable",
+        "ref:notice_of_assessment_1:tax_rebate",
+        "ref:notice_of_assessment_1:tax_discharge_amount",
+        "ref:notice_of_assessment_1:chargeable_income_after_exempt",
+        "ref:notice_of_assessment_1:eci",
+        "ref:notice_of_assessment_1:assessment_type",
+        "ref:notice_of_assessment_1:noa_date",
+        "ref:notice_of_assessment_1:previous_assessment_date"
+      ],
+      "tool": "get_fields",
+      "probe": false,
+      "document": "notice_of_assessment_1",
+      "available": true,
+      "hypothesis": "h2",
+      "breach_flags": []
+    },
+    {
+      "args": {
+        "names": [
+          "incorporation_date",
+          "company_name"
+        ],
+        "document": "certificate_of_incorporation_1"
+      },
+      "refs": [
+        "ref:certificate_of_incorporation_1:incorporation_date",
+        "ref:certificate_of_incorporation_1:company_name"
+      ],
+      "tool": "get_fields",
+      "probe": true,
+      "document": "certificate_of_incorporation_1",
+      "available": true,
+      "hypothesis": "h2",
       "breach_flags": []
     }
   ]
@@ -1203,6 +826,3 @@ Recommended Supporting Documents
 ✓
 No additional documents needed.
 If anything in the submitted documents needs further evidence, the documents to request from the client will be listed here.
-
-
-

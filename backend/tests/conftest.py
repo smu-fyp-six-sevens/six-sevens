@@ -24,6 +24,16 @@ collect_ignore = [
 
 
 @pytest.fixture(autouse=True)
+def _reset_case_sync_memo():
+    """case_service remembers the last submission_finalized it wrote per case; tests reuse case ids."""
+    from app import case_service
+
+    case_service._synced_finalized.clear()
+    yield
+    case_service._synced_finalized.clear()
+
+
+@pytest.fixture(autouse=True)
 def _bypass_auth():
     """
     Every route except /health and /auth/login requires require_auth (see

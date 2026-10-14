@@ -1,4 +1,4 @@
-"""Storage for per-case analysis runs (migrations/002_case_analysis_runs.sql)."""
+"""Storage for per-case analysis runs (the `case_analysis_runs` table)."""
 
 from __future__ import annotations
 

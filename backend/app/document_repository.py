@@ -111,25 +111,21 @@ def update_status(
     if expected_current_statuses is not None:
         query = query.in_("status", [s.value for s in expected_current_statuses])
     result = query.execute()
-    # Only the ANALYZED transition can change requirement coverage (a
-    # document's routing_status/fulfilled_requirements are set
-    # earlier, by record_classification/update_extracted_fields) — every
-    # other status this function sets (queued/processing/extracting/failed)
-    # never did resync before either, so this deliberately doesn't sync on
-    # those to avoid extra writes with no coverage-affecting reason.
-    if status == DocumentStatus.ANALYZED and result.data:
-        _sync_case(_row(result.data[0]).get("case_id"))
+    # No case resync here. Coverage depends on routing_status, the confirmed type,
+    # rejection and the fields (see models.counts_towards_checklist), and
+    # record_classification / update_extracted_fields already resync when they
+    # write those. A status change alone, ANALYZED included, can't move it.
     return bool(result.data)
 
-def approve_document(document_id: str) -> None:
+def approve_document(document_id: str) -> Optional[DocumentRecord]:
+    """Approving doesn't change checklist coverage (only rejection does), so no case resync."""
     result = (
         supabase_client.table("documents")
         .update({"status": DocumentStatus.APPROVED.value})
         .eq("id", document_id)
         .execute()
     )
-    if result.data:
-        _sync_case(_row(result.data[0]).get("case_id"))
+    return DocumentRecord(**_row(result.data[0])) if result.data else None
 
 def mark_detecting(document_id: str) -> None:
     """The Detection Agent has started — shown live as "Scanning" (see langgraph/detection/graph.py)."""
@@ -152,7 +148,7 @@ def revert_to_approved(document_id: str) -> None:
     ).eq("id", document_id).execute()
 
 
-def reject_document(document_id: str) -> None:
+def reject_document(document_id: str) -> Optional[DocumentRecord]:
     result = (
         supabase_client.table("documents")
         .update({"status": DocumentStatus.REJECTED.value})
@@ -162,8 +158,10 @@ def reject_document(document_id: str) -> None:
     # A rejected document no longer fulfils the checklist (see
     # case_service.compute_requirement_coverage), so the case's
     # submission_finalized flag can change here too.
-    if result.data:
-        _sync_case(_row(result.data[0]).get("case_id"))
+    if not result.data:
+        return None
+    _sync_case(_row(result.data[0]).get("case_id"))
+    return DocumentRecord(**_row(result.data[0]))
 
 
 def get_documents_by_ids(
@@ -244,8 +242,10 @@ def update_extracted_fields(
     *,
     routing_status: Optional[str] = None,
     fields_reviewed: bool = False,
-) -> None:
+) -> Optional[DocumentRecord]:
     """
+    Returns the updated document row, so a caller that must answer with it needn't read it back.
+
     Persists the Extraction-stage confidence into its own extraction_confidence
     column — kept separate from record_classification's confidence (the
     Classifier's confidence in document_type) so neither stage's number
@@ -281,8 +281,10 @@ def update_extracted_fields(
     if fields_reviewed:
         update["fields_reviewed_at"] = datetime.now(timezone.utc).isoformat()
     result = supabase_client.table("documents").update(update).eq("id", document_id).execute()
-    if result.data:
-        _sync_case(_row(result.data[0]).get("case_id"))
+    if not result.data:
+        return None
+    _sync_case(_row(result.data[0]).get("case_id"))
+    return DocumentRecord(**_row(result.data[0]))
 
 
 def clear_fields_review(document_id: str) -> None:
