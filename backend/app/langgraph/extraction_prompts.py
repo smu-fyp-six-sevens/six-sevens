@@ -518,8 +518,13 @@ EXTRA_FIELD_GUIDANCE: dict[str, str] = {
         'For "transactions", its "value" should be an array of objects — one per '
         'transaction line visible in the statement — each with these keys: "date" '
         '(as shown in the document), "description", "amount" (numeric; negative for '
-        "debits/withdrawals, positive for credits/deposits), and \"balance\" (the "
-        "running balance after that transaction, if shown, else null). Include "
+        "debits/withdrawals, positive for credits/deposits), \"balance\" (the "
+        "running balance after that transaction, if shown, else null), and "
+        '"counterparty" (the name of the other party as printed in the description '
+        "— who was paid or who paid, e.g. a supplier or customer company — without "
+        "reference numbers, payment channel words like FAST/GIRO/PayNow, or the "
+        "amount; null when the line names no other party, e.g. bank charges or "
+        "interest). Include "
         "every transaction you can find in the text — do not summarise, truncate, "
         "or only include a sample. Its \"confidence\" should reflect your overall "
         "confidence in the transaction list as a whole.\n\n"

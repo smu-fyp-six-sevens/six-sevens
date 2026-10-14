@@ -83,6 +83,74 @@ export interface CaseMatchResult {
 // A document sitting in APPROVED status is, from an officer's point of view, still doing something.
 export type DocumentDetectionStage = 'scanning' | 'detected' | 'skipped' | 'failed' | null;
 
+// Mirrors CaseRisk in backend/app/models.py (scored in backend/app/case_risk.py).
+export type CaseRiskLevel = 'Low' | 'Medium' | 'High' | 'Critical';
+
+export interface CaseRiskFinding {
+  document_id: string;
+  filename: string;
+  document_type: string | null;
+  finding_id: string;
+  tool: string | null;
+  severity: DetectionSeverity;
+  summary: string;
+  rationale: string;
+  points: number;
+  // The specialist kept the tool's finding without assessing it.
+  unreviewed: boolean;
+}
+
+export interface CaseRisk {
+  // Only 'scored' carries a level; the others say why there isn't one yet.
+  state: 'scored' | 'pending' | 'failed' | 'no_documents';
+  level: CaseRiskLevel | null;
+  // 0-100, anchored to level (see SCORE_BANDS in backend/app/case_risk.py).
+  score: number | null;
+  // The raw points total the level is banded from.
+  points: number | null;
+  contributing_findings: CaseRiskFinding[];
+  unassessed_checks: { document_id: string; filename: string; tool: string | null; reason: string | null }[];
+  reasons: string[];
+  documents_scanned: number;
+  documents_total: number;
+}
+
+// Mirrors SupportingDocumentRecommendation in backend/app/models.py (see backend/app/supporting_documents.py).
+export interface SupportingDocumentRecommendation {
+  document_type:
+    | 'purchase_order'
+    | 'sales_invoice'
+    | 'related_party_repayment_evidence'
+    | 'bank_loan_evidence';
+  // What to ask for, e.g. "Purchase Order".
+  title: string;
+  // Why: what the source document shows.
+  reason: string;
+  // The ask, introducing items, e.g. "Request purchase orders for these transactions:".
+  request: string;
+  source_document_id: string;
+  source_filename: string;
+  // Bank statement transactions, or financial statement lines.
+  items: RecommendationItem[];
+}
+
+// Mirrors RecommendationItem in backend/app/models.py.
+export interface RecommendationItem {
+  date: string | null;
+  // The transaction description or line label, as printed.
+  description: string;
+  // Negative for a payment out, positive for a receipt.
+  amount: number;
+  // A financial statement line's prior-year figure, where it has one.
+  prior_amount: number | null;
+  // The supplier paid or customer paying, when the statement names one.
+  counterparty: string | null;
+  reason: string;
+  // The lines this one totals, e.g. a total's portions — shown as a table of these
+  // lines plus this one as its total row.
+  breakdown: RecommendationItem[];
+}
+
 // Mirrors the subset of CaseSummary in backend/app/models.py this page needs.
 export interface CaseRequirementCoverage {
   fulfilled_requirements: string[];
@@ -91,6 +159,10 @@ export interface CaseRequirementCoverage {
   proof_of_address_coverage: { covered: number; total: number; unmatched_names: string[] };
   // How many of the case's identified individuals (grouped the same way as proof_of_address_coverage.
   id_document_coverage: { covered: number; total: number; missing_side: string | null };
+  // null when the backend couldn't load the case's detection reports.
+  risk: CaseRisk | null;
+  // Empty when nothing in the case needs further evidence.
+  supporting_document_recommendations: SupportingDocumentRecommendation[];
 }
 
 // Mirrors UpdateCaseRequest in backend/app/models.py.
