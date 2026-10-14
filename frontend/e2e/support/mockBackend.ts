@@ -76,6 +76,10 @@ export interface CaseRow {
   fulfilled_requirements: string[];
   proof_of_address_coverage: { covered: number; total: number; unmatched_names: string[] };
   id_document_coverage: { covered: number; total: number; missing_side: string | null };
+  // Computed by backend/app/case_risk.py on every case read.
+  risk: CaseRisk | null;
+  // Computed by backend/app/supporting_documents.py on every case read.
+  supporting_document_recommendations: unknown[];
 }
 
 export interface DocumentRow {
@@ -130,6 +134,24 @@ export function makeCase(overrides: Partial<CaseRow> = {}): CaseRow {
     fulfilled_requirements: [],
     proof_of_address_coverage: { covered: 0, total: 0, unmatched_names: [] },
     id_document_coverage: { covered: 0, total: 0, missing_side: null },
+    risk: makeRisk(),
+    supporting_document_recommendations: [],
+    ...overrides,
+  };
+}
+
+/** Defaults to what the backend reports for a case with nothing to scan yet. */
+export function makeRisk(overrides: Partial<CaseRisk> = {}): CaseRisk {
+  return {
+    state: 'no_documents',
+    level: null,
+    score: null,
+    points: null,
+    contributing_findings: [],
+    unassessed_checks: [],
+    reasons: [],
+    documents_scanned: 0,
+    documents_total: 0,
     ...overrides,
   };
 }

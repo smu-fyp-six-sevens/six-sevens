@@ -1,4 +1,9 @@
-import type { DocumentRecord, DocumentCaseMatch } from '../../services/uploadService';
+import type {
+  CaseRisk,
+  DocumentRecord,
+  DocumentCaseMatch,
+  SupportingDocumentRecommendation,
+} from '../../services/uploadService';
 import {
   CLASSIFICATION_CONFIDENCE_THRESHOLD,
   EXTRACTION_CONFIDENCE_THRESHOLD,
@@ -8,17 +13,23 @@ import {
   lowestFieldConfidence,
 } from '../../services/uploadService';
 import { humanizeFieldKey } from '../../utils/fieldLabels';
+import { CaseRiskCard } from './CaseRiskCard';
+import { SupportingDocumentsCard } from './SupportingDocumentsCard';
 
 export function UploadSummaryCards({
   caseMatchNeedsReview,
   caseMatches,
   flaggedDocuments,
   onOpenDocument,
+  risk,
+  supportingDocumentRecommendations,
 }: {
   caseMatchNeedsReview: (document: DocumentRecord) => boolean;
   caseMatches: Map<string, DocumentCaseMatch>;
   flaggedDocuments: DocumentRecord[];
   onOpenDocument: (documentId: string) => void;
+  risk: CaseRisk | null;
+  supportingDocumentRecommendations: SupportingDocumentRecommendation[];
 }) {
   return (
     <>
@@ -137,29 +148,9 @@ export function UploadSummaryCards({
               )}
             </section>
 
-            <section className="summary-card">
-              <div className="summary-card-header">
-                <div className="summary-card-title">
-                  <span className="summary-icon summary-icon--risk">
-                    ▥
-                  </span>
-                  <h2>Customer Risk Summary</h2>
-                </div>
-              </div>
+            <CaseRiskCard risk={risk} />
 
-              <div className="summary-message summary-message--info">
-                <span className="summary-message-icon">ⓘ</span>
-
-                <div>
-                  <strong>Risk summary not available yet.</strong>
-
-                  <p>
-                    Risk analysis results will appear here once document
-                    extraction and fraud analysis are completed.
-                  </p>
-                </div>
-              </div>
-            </section>
+            <SupportingDocumentsCard recommendations={supportingDocumentRecommendations} />
 
             <section className="summary-card">
               <div className="summary-card-header">

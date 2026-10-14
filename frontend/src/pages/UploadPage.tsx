@@ -50,6 +50,8 @@ export default function UploadPage({
     fulfilledRequirements,
     proofOfAddressCoverage,
     idDocumentCoverage,
+    risk,
+    supportingDocumentRecommendations,
     wsConnected,
     caseMatches,
     setCaseMatches,
@@ -455,6 +457,8 @@ export default function UploadPage({
             caseMatches={caseMatches}
             flaggedDocuments={flaggedDocuments}
             onOpenDocument={onOpenDocument}
+            risk={risk}
+            supportingDocumentRecommendations={supportingDocumentRecommendations}
           />
         </section>
 
