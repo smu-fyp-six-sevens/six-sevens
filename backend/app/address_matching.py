@@ -44,14 +44,20 @@ _ADDRESS_ABBREVIATIONS = {
     "BL": "BLOCK",
     "BLDG": "BUILDING",
     "CRES": "CRESCENT",
+    "CTRL": "CENTRAL",
+    "CWEALTH": "COMMONWEALTH",
     "CT": "COURT",
     "DR": "DRIVE",
     "JLN": "JALAN",
     "LN": "LANE",
+    "LWR": "LOWER",
+    "NTH": "NORTH",
     "PK": "PARK",
     "RD": "ROAD",
+    "STH": "SOUTH",
     "ST": "STREET",
     "TER": "TERRACE",
+    "UPP": "UPPER",
 }
 
 
@@ -80,8 +86,23 @@ def normalize_address(value: object) -> str:
     text = unicodedata.normalize("NFKD", value)
     text = "".join(char for char in text if not unicodedata.combining(char)).upper()
     text = re.sub(r"#\s*", " UNIT ", text)
+    text = re.sub(r"\bC['’]?WEALTH\b", "COMMONWEALTH", text)
     tokens = re.findall(r"[A-Z0-9]+", text)
-    return " ".join(_ADDRESS_ABBREVIATIONS.get(token, token) for token in tokens)
+    normalized: list[str] = []
+    for index, token in enumerate(tokens):
+        # Singapore's older six-digit postal format is often written S123456.
+        # It is equivalent to the current Singapore 123456 format.
+        if re.fullmatch(r"S\d{6}", token):
+            token = token[1:]
+        if token == "SINGAPORE":
+            continue
+        token = _ADDRESS_ABBREVIATIONS.get(token, token)
+        # In a Singapore address, "Blk/Block 22" and "22" identify the same
+        # block; other uses of "block" (for example "Block A") are retained.
+        if token == "BLOCK" and index + 1 < len(tokens) and tokens[index + 1].isdigit():
+            continue
+        normalized.append(token)
+    return " ".join(normalized)
 
 
 def postal_code(value: object) -> str | None:
@@ -254,7 +275,10 @@ def _same_entity(first: AddressRecord, second: AddressRecord) -> bool:
         return False
     if first.scope == "personal":
         return bool(first.identity_keys & second.identity_keys)
-    return not (first.company_key and second.company_key and first.company_key != second.company_key)
+    # If extraction did not identify a company, its address could belong to a
+    # supplier, customer, or other third party. Do not compare it as though it
+    # belonged to the case company.
+    return bool(first.company_key and first.company_key == second.company_key)
 
 
 def find_address_mismatches(documents: Iterable[DocumentRecord]) -> list[AddressMismatch]:
