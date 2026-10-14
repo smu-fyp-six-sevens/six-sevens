@@ -26,6 +26,32 @@ Product roadmap (Detection Agent, Per-Case Pipeline, 5-service Pub/Sub split) st
   truncated" reason and no reclassify. The cap was raised 4096 → 16000 (`_EXTRACTION_MAX_TOKENS`), which only
   defers it; very long bank statements may still overflow and need chunked transaction extraction.
 
+## Case pipeline (cross-document analysis and risk outlook)
+
+First version is built and untested end to end. Design: `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
+
+- **Apply the migration** `backend/migrations/002_case_analysis_runs.sql` in Supabase before the first run.
+- **Tests** — none yet for the hypothesiser, investigators, tools, `verify.py`, `outlook.py`, `summary.py`,
+  `service.py` or the endpoints. `test_company_identity.py` still references the two consistency tools
+  that moved out of `langgraph/detection/tools.py`.
+- **Automatic trigger** — the officer starts a run by hand. The gate on every document completion,
+  supersede with a run-id fence, debounce and re-run cap (plan Step 0) are not built.
+- **Evals** — false-positive rate on clean generated cases (including Other documents), recall on planted
+  contradictions, and false-positive parity across subgroups.
+- **Guardrails still open** — a dismissal flow for cross-document findings, an output filter beyond the
+  protected-attribute check in `verify.py`, audit retention, and the three sponsor questions in the plan.
+- **Case-level frontend** — no frontend unit tests for `CaseAnalysisCard.tsx`; no Playwright spec.
+- **Duplicated normalisers** — `case_match.py`, `company_identity.py` and `address_matching.py` each define
+  their own company and person name normalisers with different rules. Consolidate in one pass, since the
+  rules differ and the checks' results would change.
+- **`Scrum-254-address-matching`** — commit `4a0742c` (address normalisation edge cases) is applied by hand
+  to `case_pipeline/cross_document/address_matching.py`, not merged. Merge the branch to record it.
+- **Pyright** — `address_matching.py` and `case_match.py:819` report 3 errors that came from merged branches.
+- **Vertical text** — `text_overlay.py` skips vertical text by an aspect-ratio guess because `_Line` records no
+  direction. Extracting the direction from PyMuPDF would replace the guess.
+- **Unrelated failing test** — `test_layout_reference.py::test_committed_references_load_and_have_no_value_text`
+  fails on Windows (it reads the reference JSON with the default cp1252 encoding).
+
 ## Architecture (Kong / Prometheus / Grafana)
 
 Not started, no urgency until the Cloud Native award work picks up:

@@ -1,6 +1,6 @@
 # Fraud Detection — Implementation Map
 
-Snapshot of where fraud/anomaly detection logic lives and is tested, as of 2026-10-06.
+Snapshot of where fraud/anomaly detection logic lives and is tested, as of 2026-10-14.
 
 ## 0. Plain-language summary
 
@@ -26,30 +26,57 @@ approval, and approval is locked after it.
 The three specialists always run. What varies is which of each specialist's tools it runs, and which
 findings it dismisses.
 
+An approved "Other" (unrecognised) document is scanned like any other. Checks that need a document
+type report "nothing to check" for it, and layout runs in generic mode (no per-type reference template).
+Comparing a document with the rest of its case is not done here: that is the per-case analysis, see §1B.
+
 ## 1. Core check modules — `backend/app/fraud_detection/`
 
 | File | Dimension | Tests |
 |---|---|---|
 | `layout_anomalies/` | Indentation/alignment/margin/spacing deviations. Package: `common.py` (thresholds, result models, finding helpers), `extraction.py` (text layer/OCR into blocks), `structure.py` (roles, comparable groups, columns), `indentation.py`, `line_shifts.py`, `anchors.py`, `alignment.py`, `spacing.py`, `margins.py`, `signals.py` (filtering and merging), `profiles.py` (per-document-type rules, applied only when classification confidence meets `CLASSIFICATION_CONFIDENCE_THRESHOLD`; currently `nric`), `reference.py` (compares a standard form with a curated reference layout in `references/<document_type>/`, built with `scripts/build_layout_reference.py` from two or more genuine copies; steps aside when the reference does not fit; references exist for FATCA, NOA, certificates of incumbency and incorporation, credit report, constitution, NRIC and passport, built from the generated templates and specimens; photos and scans are compared after OCR, scaled to the reference); `__init__.py` runs `check_layout_anomalies` | 147 + 20 (`test_layout_profiles.py`) + 22 (`test_layout_reference.py`) |
-| `text_overlay.py` | Overlapping text boxes (watermarks repeated on several pages are skipped). Run by `check_layout_anomalies`; its `Text Overlay` findings appear in the layout result | 17 |
+| `layout_anomalies/text_overlay.py` | Overlapping text boxes (watermarks repeated on several pages are skipped; long tall-and-narrow boxes are taken as vertical text and skipped; confidence scales with the overlap). Linear per page, so a 3,000-line statement takes milliseconds. Run by `check_layout_anomalies`; its `Text Overlay` findings appear in the layout result | 22 |
 | `numerical_validation/` | Deterministic arithmetic/identity checks over extracted fields. Package: `registry.py` (the `@check` decorator; each check's inputs come from its signature), `identity_company.py`, `statements.py`, `records.py`, `casts.py` (statement arithmetic), `common.py`, `models.py`, `runner.py` (applies bindings and builds the result) | — |
 | `metadata_analysis.py` | File-embedded metadata (author/producer/create-modify dates) tamper signals | 54 |
 | `date_anomalies.py` | Date extraction/labeling and logical date consistency (future dates, end-before-start) | 38 |
 | `spelling_anomaly.py` | Misspellings via SymSpell, filtered against `domain_terms.py` allow-list | 24 |
 | `external_validation/` | The document's facts against outside references, chosen by document type. `runner.py` is the entry point; `registry_lookups/` holds the live ACRA, OneMap, HDB and MOM holiday lookups; `sg_reference/` holds the published tables (CPF rates and ceilings, GST rate, IRAS tax rules, bank identifiers, public holidays); `reference_checks/` holds the checks that read those tables (`PAY.CPF_RATE`, `PAY.CPF_CEILING`, `POA.GST`, `NOA.PAYABLE`, `BS.BANK_IDENTIFIERS`, `BS.ACCOUNT_NUMBER_FORMAT`), registered as `group="external"`; `giro.py` is the GIRO closed-day check. Run by `external_validation_tool` and the `external-validation` endpoint | — |
 | `font_consistency.py` | Font family/size/emphasis (bold/italic/underline) inconsistency | 16 |
-| `company_identity.py` (now `case_pipeline/cross_document/`, with `address_matching.py`) | Company name compared against every other document in the case (except IDs, proof of address, rejected and not-yet-extracted); legal suffix, letter case and "&"/"AND" are ignored; an unrecognised document matches if the name appears anywhere in its fields. `company_name_consistency_tool`, a cross-document check used by the case analysis (`case_pipeline/cross_document/tools/consistency.py`), not by a per-document specialist. Its findings can't be dismissed or rated below medium, so they always flag (SCRUM-255) | 44 |
 | `domain_terms.py` | Not a check — allow-list of legal/financial jargon feeding `spelling_anomaly.py` | — |
 
 `image_manipulation.py` (SCRUM-64) covers resolution and compression mismatches between a file's
 images (embedded PDF images or a standalone PNG/JPEG). The same module's `check_image_tampering` (SCRUM-65) covers
 images edited in after the fact: painted over and replaced (Image Overlay), stretched or rotated
 (Scaling Anomaly), pasted with a seam or halo (Visible Boundary), or with altered brightness,
-colour, sharpness or noise (Quality Mismatch). No AI-generated-content check exists yet.
+colour, sharpness or noise (Quality Mismatch). `ai_generation.py` (SCRUM-67) scores how likely a file is
+AI-generated and lists each indicator's value and contribution.
 
-`case_match.py` (696 lines, 46 tests) — cross-document validation: verifies each case document's
-company/individuals against the certificate of incumbency (UEN/name/ID fuzzy matching). Gates
-fraud detection per its own docstring.
+`case_match.py` — the upload check: verifies each case document's company/individuals against the
+certificate of incumbency (UEN/name/ID fuzzy matching), so a document that belongs to another case is
+caught. It is not a fraud signal and is not part of the per-case analysis. A mismatch it finds is still
+added to that document's detection report as a `case_identity_match` finding.
+
+## 1B. Case pipeline — `backend/app/case_pipeline/`
+
+Runs per case, on an officer's request, once every approved document has been scanned. Design and
+decisions: `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
+
+| File / folder | What it does |
+|---|---|
+| `readiness.py` | `is_ready_for_analysis`: at least one approved document and all approved documents detected (`analysis_ready` on the case summary) |
+| `service.py`, `repository.py`, `state.py` | Starts a run in the background, stores it in `case_analysis_runs` (`backend/migrations/002_case_analysis_runs.sql`), and reports whether it is stale (documents changed) or interrupted |
+| `models.py`, `categories.py` | `CrossDocFinding`, `RiskOutlook`, `CaseAnalysis`; `FindingCategory` assigned by code from a static tool-to-category map |
+| `cross_document/evidence.py` | The case as the analysis sees it: dossier, masked identifiers, and the ledger of every ref id issued in a run |
+| `cross_document/agents.py`, `graph.py`, `verify.py` | Hypothesiser, investigators (parallel `Send`), and the code-side verification of each verdict |
+| `cross_document/tools/` | The read-only evidence tools: `reading.py`, `transactions.py`, `comparisons.py`, `consistency.py` (company name and address consistency) |
+| `cross_document/company_identity.py`, `address_matching.py` | The company-name and address matching behind the consistency tools |
+| `risk/case_risk.py` | Deterministic score, level and findings (cross-document findings enter only from a current analysis) |
+| `risk/outlook.py` | Evidence requests and the deterministic what-if re-scoring |
+| `risk/summary.py` | Grounded plain-language summary, with a deterministic fallback |
+| `risk/supporting_documents.py` | Rule-based supporting-document recommendations (bank statement trades, related-party balances, borrowing growth) |
+
+API: `POST /cases/{id}/analysis/run` (409 unless ready or already running), `GET /cases/{id}/analysis`.
+Shared helpers: `langgraph/llm_output.py` reads a model reply (text and JSON) for detection, the binder and this package.
 
 ## 2. Detection Agent — files
 
@@ -65,7 +92,7 @@ fraud detection per its own docstring.
   unbound roles is skipped with the reason. The rule for which group a check is in: a lookup in a static table or
   live source is external, a calculation is numerical (`group=` on `@check` in `numerical_validation/registry.py`).
   `field_checks/binder.py` is the one-call binder used only by the officer endpoints, where there is no tool loop.
-  Company-name, address and identity matching are cross-document checks and are not attached to any specialist.
+  Company-name and address consistency are cross-document checks: they live in `case_pipeline/cross_document/tools/consistency.py` and are not attached to any specialist.
 - **`specialists.py`** — the three specialists and their tool sets:
   - Layout & Rendering: font consistency, layout anomalies, image manipulation, image tampering.
   - Content Validation: spelling, date consistency, `numerical_checks_tool` and `external_validation_tool`. It also
@@ -204,7 +231,7 @@ Shape: `agent → (tool calls ? tools : collect)`, `tools → agent`, `collect �
 - The system prompt is one `SystemMessage` with `cache_control: ephemeral`. The user message is
   `json.dumps(payload, default=str)`.
 - Cache key: `detection_lead_plan` for the plan call, `detection_lead_review` for the review call.
-- Parsing: `_parse_json_object` (`specialists.py`) strips code fences, takes the text from the first
+- Parsing: `parse_json_object` (`langgraph/llm_output.py`) strips code fences, takes the text from the first
   `{` to the last `}`, and returns `None` on any failure.
 - **Failure behaviour:** `None` from `lead_plan` silently gives every specialist the generic brief. All
   three still run (see §2A.10).
@@ -348,6 +375,7 @@ them.
   otherwise).
 - `GET /documents/{id}/detection/case-match` — ungated, wraps `case_service`.
 - `GET /cases/{case_id}/detection/reports` — all stored reports for a case.
+- `POST /cases/{case_id}/analysis/run`, `GET /cases/{case_id}/analysis` — the per-case analysis (§1B).
 
 There is **no** `POST /detection/run`. The first run only starts automatically on approval
 (`routers/documents.py::approve_document` → `_launch_detection`).
@@ -358,8 +386,11 @@ There is **no** `POST /detection/run`. The first run only starts automatically o
   dismissed and why, the second look if one happened, findings, and anything that could not be assessed.
 - Buttons: "Retry detection" when the last run failed, and "Cancel detection" while an approved
   document is still scanning. There is no "Run detection" button.
-- "Run an individual check": seven buttons (font consistency, layout, spelling, numerical, date,
-  metadata, image integrity). They stay disabled until a report exists.
+- "Run an individual check": buttons for font consistency, layout, spelling, numerical validation, date,
+  company name consistency, external validation, metadata, image integrity and AI generation. They stay
+  disabled until a report exists.
+- Case page (`pages/upload/CaseAnalysisCard.tsx`): a "Run case analysis" button, shown once `analysis_ready`,
+  then the summary, cross-document findings and the what-if list, with an "Out of date" notice when documents changed.
 
 ## 5. Test coverage — `backend/tests/`
 
@@ -367,6 +398,9 @@ There is **no** `POST /detection/run`. The first run only starts automatically o
 - `test_detection_tools.py` — the tool result contract.
 - `test_langgraph.py` — the whole pipeline. Only one test touches detection, and it only checks that the graph compiles.
 - `test_numerical_validation.py`, `test_statement_casts.py`, `test_numerical_binder.py` — the numerical checks, statement casts and the binder.
+- `test_case_risk.py`, `test_supporting_documents.py`, `test_case_analysis.py` — case risk, supporting-document
+  recommendations and readiness. The case pipeline's cross-document graph, tools, verification, outlook and
+  summary have no tests yet.
 - The other check modules in §1 have their own test files.
 
 Not tested: the lead plan, the merge into a verdict, the second-look rules, specialist report

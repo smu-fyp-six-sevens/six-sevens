@@ -6,9 +6,7 @@ Each check lives in its own module. Every name is re-exported here, so
 
 from __future__ import annotations
 
-# Imported as a module, not by name: text_overlay imports .common from this
-# package, so its functions may not exist yet while this file is loading.
-from .. import text_overlay
+from . import text_overlay
 from .profiles import confident_type, LayoutProfile, profile_for
 from .reference import best_reference, build_reference, ReferenceLayout
 from .common import (  # noqa: F401

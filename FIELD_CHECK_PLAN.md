@@ -1,6 +1,9 @@
 # Field-driven detection checks: plan
 
-Status: draft for feedback. Nothing here is implemented yet.
+Status: implemented. This is the original plan; where the code differs, `FRAUD_DETECTION_MAP.md` is current.
+Changes since: the batched tool became two tools in `langgraph/detection/field_checks/` (`numerical_checks_tool`
+and `external_validation_tool`, selected by document type), the binder moved to `field_checks/binder.py`, and
+static-table checks moved to `fraud_detection/external_validation/`.
 
 ## Goal
 
@@ -154,8 +157,7 @@ The detection agent sees which fields a document has and which checks apply. It 
 - `common.py`: shared helpers and reference tables (empty until real tables exist).
 - `models.py`: result types.
 - `runner.py`: applies bindings to the checks and builds the result.
-- `langgraph/detection/field_tools.py`: the batched tool the content specialist calls.
-- `langgraph/detection/binder.py`: one Haiku call that fills in the bindings for the officer's numerical-validation endpoint. If the call fails, the endpoint still runs with exact-name matches and returns a `binding_error`.
+- `langgraph/detection/field_checks/` (was `field_tools.py` and `binder.py`): the two tools the content specialist calls, and `binder.py`, one Haiku call that fills in the bindings for the officer's numerical-validation endpoint. If the call fails, the endpoint still runs with exact-name matches and returns a `binding_error`.
 - `fraud_detection/date_anomalies.py`: a separate module with its own checks and its own small context class. It has not been moved to the new style yet.
 
 ### Checks

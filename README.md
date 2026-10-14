@@ -6,7 +6,7 @@ The system automates the forgery-check stage of GLDB's loan origination workflow
 
 ## Structure
 
-- `backend/` FastAPI app. Document pipeline and detection agent run on LangGraph (`app/langgraph/`), with Supabase for data and file storage, and the Claude API for LLM calls.
+- `backend/` FastAPI app. Document pipeline and detection agent run on LangGraph (`app/langgraph/`), the per-case cross-document analysis and risk scoring live in `app/case_pipeline/`, with Supabase for data and file storage, and the Claude API for LLM calls.
 - `frontend/` React + TypeScript (Vite) app for officers: case upload, document review, and detection results. Live case status comes over a WebSocket.
 - `docs/regression/` regression test report.
 - `docker-compose.yml` local container setup for both services.
@@ -15,6 +15,7 @@ Design and status documents at the root:
 
 - `CLAUDE.md` project context, decisions, and the planned architecture.
 - `FRAUD_DETECTION_MAP.md` how the fraud checks and the detection agent are wired, plus known detection bugs.
+- `CROSS_DOCUMENT_AND_RISK_PLAN.md` design of the per-case analysis: hypotheses, investigator tools, verification, risk outlook and guardrails.
 - `PENDING_WORK.md` open work only.
 
 ## Prerequisites
@@ -30,6 +31,8 @@ Backend (from `backend/`):
 pip install -e ".[dev]"
 uvicorn app.main:app --reload
 ```
+
+SQL migrations are in `backend/migrations/`. Apply them in Supabase in order; the case analysis needs `002_case_analysis_runs.sql`. Set `CASE_ANALYSIS_ENABLED=false` to switch the case analysis off.
 
 The API runs on `http://localhost:8000`. The interactive docs are at `/docs`.
 
