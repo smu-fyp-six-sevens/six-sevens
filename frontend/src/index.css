@@ -3817,3 +3817,83 @@ h1 {
 .approved-documents-card {
   margin-top: 24px;
 }
+/* Not found state */
+.not-found {
+  max-width: 520px;
+  margin: 56px auto 0;
+  padding: 40px 36px 32px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(18, 32, 61, 0.04), 0 8px 24px rgba(18, 32, 61, 0.06);
+  text-align: center;
+}
+
+.not-found__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  margin-bottom: 18px;
+  border-radius: 50%;
+  background: #eef2f7;
+  color: var(--steel);
+}
+
+.not-found .eyebrow {
+  margin: 0 0 6px;
+}
+
+.not-found__title {
+  margin: 0 0 10px;
+  font-size: 24px;
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+.not-found__desc {
+  margin: 0 auto 6px;
+  max-width: 400px;
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+
+.not-found__prompt {
+  margin-bottom: 22px;
+}
+
+.not-found__actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.not-found__primary {
+  margin: 0;
+}
+
+.not-found__hints {
+  margin: 28px 0 0;
+  padding: 18px 0 0 18px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.not-found__hints li + li {
+  margin-top: 4px;
+}
+
+@media (max-width: 560px) {
+  .not-found {
+    margin-top: 24px;
+    padding: 32px 20px 24px;
+  }
+
+  .not-found__primary {
+    width: 100%;
+  }
+}
