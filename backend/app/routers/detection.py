@@ -12,7 +12,7 @@ from .. import case_service, document_repository, extracted_fields_repository, s
 from . import documents as documents_router
 from ._dependencies import get_document_or_404
 from ..case_match import DocumentCaseMatch
-from ..fraud_detection.company_identity import (
+from ..case_pipeline.cross_document.company_identity import (
     CompanyNameConsistencyResult,
     check_company_name_consistency,
 )
@@ -96,7 +96,7 @@ async def _require_detection_has_run(
     if documents_router.skips_detection(document):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Detection doesn't run on unrecognised documents.",
+            detail="Detection doesn't run on documents with no type.",
         )
     try:
         persisted = await asyncio.to_thread(langgraph_trace.get_persisted, document_id)
@@ -338,7 +338,7 @@ async def retry_document_detection(
     if documents_router.skips_detection(document):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Detection doesn't run on unrecognised documents.",
+            detail="Detection doesn't run on documents with no type.",
         )
     existing = documents_router._detection_tasks.get(document_id)
     if existing is not None and not existing.done():
@@ -471,7 +471,7 @@ async def get_company_name_consistency(
     """
     Content Validation Specialist — "Company Identity Consistency". Compares
     this document's company name with every other company document in its
-    case (see fraud_detection/company_identity.py). Read-only, from
+    case (see case_pipeline/cross_document/company_identity.py). Read-only, from
     extracted fields alone.
     """
     case_documents = (

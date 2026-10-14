@@ -35,6 +35,9 @@ IN_FLIGHT_STATUSES = frozenset({
     DocumentStatus.EXTRACTING,
 })
 
+# An officer has approved the document: from approval through detection (locked against edits).
+APPROVED_STATUSES = frozenset({DocumentStatus.APPROVED, DocumentStatus.DETECTING, DocumentStatus.DETECTED})
+
 
 class RoutingStatus(str, Enum):
     """
@@ -318,6 +321,10 @@ class ContributingFinding(BaseModel):
     points: float
     # The specialist kept the tool's finding without ever assessing it.
     unreviewed: bool = False
+    # See case_pipeline.models.FindingCategory: decides whether more evidence can reduce it.
+    category: Optional[str] = None
+    # "cross_document" for a finding from the case analysis rather than one document's scan.
+    source: Literal["document", "cross_document"] = "document"
 
 
 class UnassessedCheck(BaseModel):
@@ -391,6 +398,17 @@ class SupportingDocumentRecommendation(BaseModel):
     items: list[RecommendationItem] = Field(default_factory=list)
 
 
+class CaseAnalysisOverview(BaseModel):
+    """The latest per-case analysis in brief; the full result is GET /cases/{id}/analysis."""
+
+    run_id: str
+    status: Literal["running", "complete", "failed", "superseded"]
+    # The case's documents changed since this run read them.
+    stale: bool = False
+    finished_at: Optional[datetime] = None
+    finding_count: int = 0
+
+
 class CaseSummary(CaseRecord):
     """
     documents_status and fulfilled_requirements are both computed live from
@@ -418,6 +436,10 @@ class CaseSummary(CaseRecord):
     supporting_document_recommendations: list[SupportingDocumentRecommendation] = Field(
         default_factory=list
     )
+    # Every approved document has been scanned, so the case analysis can be run.
+    analysis_ready: bool = False
+    # None when the case has never been analysed.
+    analysis: Optional[CaseAnalysisOverview] = None
 
 
 class UpdateCaseRequest(BaseModel):
@@ -567,10 +589,10 @@ def is_classification_confirmed(document: DocumentRecord) -> bool:
 
 
 def skips_detection(document: DocumentRecord) -> bool:
-    """Fraud detection never runs on an unrecognised (Other) document: with
-    no known type there's no schema or document-specific check to run it
-    against. Approving one as Other is allowed, it just isn't scanned."""
-    return document.document_type in (None, "", "unrecognised")
+    """Detection doesn't run on a document with no type at all. An approved
+    Other ("unrecognised") document is scanned: only the checks that need no
+    type run on it, the rest report nothing to check."""
+    return document.document_type in (None, "")
 
 
 def counts_towards_checklist(document: DocumentRecord) -> bool:

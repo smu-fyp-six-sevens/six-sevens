@@ -8,7 +8,7 @@ import pytest
 
 from app import case_service
 from app.models import CaseRecord, DocumentRecord, DocumentStatus, RoutingStatus
-from app.supporting_documents import _counterparty_from_description, recommend_supporting_documents
+from app.case_pipeline.risk.supporting_documents import _counterparty_from_description, recommend_supporting_documents
 
 COMPANY = "ANCHORPOINT INSURANCE BROKERS PTE LTD"
 

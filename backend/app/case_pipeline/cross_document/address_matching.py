@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from itertools import combinations
 from typing import Iterable
 
-from .models import DocumentRecord, is_personal_bank_statement
+from ...models import DocumentRecord, is_personal_bank_statement
 
 _PERSONAL_DOCUMENT_TYPES = {
     "credit_report",

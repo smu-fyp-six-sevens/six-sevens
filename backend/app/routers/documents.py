@@ -33,6 +33,7 @@ from ..models import (
     UpdateDocumentTypeRequest,
     UpdateExtractedFieldsRequest,
     compute_fulfilled_requirements,
+    APPROVED_STATUSES,
     is_classification_confirmed,
     skips_detection,
 )
@@ -48,12 +49,10 @@ _TYPE_OVERRIDE_BLOCKED_STATUSES = IN_FLIGHT_STATUSES
 # A loan officer's decision is final: approved (and everything detection does
 # afterwards) and rejected documents are locked against field edits, type
 # corrections and moves.
-_LOCKED_STATUSES = frozenset({
-    DocumentStatus.APPROVED, DocumentStatus.DETECTING, DocumentStatus.DETECTED, DocumentStatus.REJECTED,
-})
+_LOCKED_STATUSES = APPROVED_STATUSES | {DocumentStatus.REJECTED}
 # Same "approved or further along" set, for the two places below that check
 # specifically for APPROVED alone rather than going through _ensure_unlocked.
-_UNDELETABLE_STATUSES = frozenset({DocumentStatus.APPROVED, DocumentStatus.DETECTING, DocumentStatus.DETECTED})
+_UNDELETABLE_STATUSES = APPROVED_STATUSES
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 logger = logging.getLogger(__name__)
@@ -809,7 +808,7 @@ async def approve_document(
         )
 
         if skips_detection(document):
-            logger.info("Document %s approved as unrecognised; detection skipped", document_id)
+            logger.info("Document %s approved with no type; detection skipped", document_id)
         else:
             _launch_detection(document_id, document.case_id)
 

@@ -38,7 +38,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from .models import (
+from ..categories import category_for_finding
+from ..models import CrossDocFinding
+from ...models import (
     CaseRisk,
     ContributingFinding,
     DocumentRecord,
@@ -52,7 +54,7 @@ SEVERITY_POINTS: dict[str, float] = {"info": 0, "low": 1, "medium": 3, "high": 8
 REPEAT_WEIGHT = 0.25
 NOISE_CAP_PER_DOCUMENT = 6.0
 # (minimum total, level), checked highest first.
-LEVEL_THRESHOLDS: list[tuple[float, str]] = [(8, "High"), (3, "Medium"), (0, "Low")]
+LEVEL_THRESHOLDS: list[tuple[float, RiskLevel]] = [(8, "High"), (3, "Medium"), (0, "Low")]
 CRITICAL_MIN_HIGH_DOCUMENTS = 3
 # level -> (lowest score, highest score, the level's minimum points, half-fill
 # points). The score starts at the lowest at the minimum points, and every
@@ -70,16 +72,32 @@ SCORE_BANDS: dict[str, tuple[int, int, float, float]] = {
 # rationale (see langgraph/detection/specialists.py's _collect_node).
 _UNASSESSED_RATIONALE = "Not assessed by the specialist."
 
-def counts_towards_risk(document: DocumentRecord) -> bool:
-    """Documents detection runs on: not unrecognised, not rejected or cancelled."""
-    return not skips_detection(document) and document.status not in (
-        DocumentStatus.REJECTED,
-        DocumentStatus.CANCELLED,
+def _detection_started(document: DocumentRecord, reports: dict[str, Any], failed_ids: set[str]) -> bool:
+    return (
+        document.status in (DocumentStatus.DETECTING, DocumentStatus.DETECTED)
+        or document.id in reports
+        or document.id in failed_ids
     )
 
 
+def counts_towards_risk(
+    document: DocumentRecord, reports: dict[str, Any], failed_ids: set[str]
+) -> bool:
+    """
+    Documents detection runs on: not rejected or cancelled. An Other
+    document counts only once its detection has started, so one approved
+    before Other documents were scanned (no run, no report) stays out
+    instead of holding its case at pending.
+    """
+    if skips_detection(document) or document.status in (DocumentStatus.REJECTED, DocumentStatus.CANCELLED):
+        return False
+    if document.document_type == "unrecognised":
+        return _detection_started(document, reports, failed_ids)
+    return True
+
+
 def _level_for(score: float) -> RiskLevel:
-    return next(level for minimum, level in LEVEL_THRESHOLDS if score >= minimum)  # type: ignore[return-value]
+    return next(level for minimum, level in LEVEL_THRESHOLDS if score >= minimum)
 
 
 def _score_out_of_100(level: RiskLevel, points: float) -> int:
@@ -115,31 +133,76 @@ def _score_document(document: DocumentRecord, report: dict[str, Any]) -> list[Co
             rationale=finding.get("rationale") or "",
             points=round(points * (1.0 if finding["severity"] == "high" else noise_scale), 2),
             unreviewed=finding.get("rationale") == _UNASSESSED_RATIONALE,
+            category=category_for_finding(finding).value,
         )
         for finding, points in zip(findings, base_points)
     ]
+
+
+# A finding backed by several documents counts more, up to this multiple.
+_CORROBORATION_STEP = 0.25
+_CORROBORATION_CAP = 1.5
+
+
+def contributing_from_cross_document(
+    finding: CrossDocFinding, documents_by_id: dict[str, DocumentRecord]
+) -> ContributingFinding:
+    anchor = next((documents_by_id[d] for d in finding.document_ids if d in documents_by_id), None)
+    multiple = min(_CORROBORATION_CAP, 1 + _CORROBORATION_STEP * (len(finding.document_ids) - 1))
+    return ContributingFinding(
+        document_id=anchor.id if anchor else "",
+        filename=anchor.filename if anchor else "Case",
+        document_type=anchor.document_type if anchor else None,
+        finding_id=finding.id,
+        tool="cross_document_analysis",
+        severity=finding.severity,
+        summary=finding.summary,
+        rationale=finding.rationale,
+        points=round(SEVERITY_POINTS[finding.severity] * max(1.0, multiple), 2),
+        category=finding.category.value,
+        source="cross_document",
+    )
+
+
+def rate_findings(findings: list[ContributingFinding]) -> tuple[RiskLevel, int, float, str]:
+    """(level, 0-100 score, points, reason) for a set of findings: the same banding a case read uses."""
+    points = round(sum(f.points for f in findings), 2)
+    level = _level_for(points)
+    reason = (
+        f"Rated {level} from the combined severity of {len(findings)} finding(s)."
+        if findings
+        else "Rated Low: detection found nothing worth flagging."
+    )
+    high_documents = {f.document_id for f in findings if f.severity == "high"}
+    if len(high_documents) >= CRITICAL_MIN_HIGH_DOCUMENTS:
+        level = "Critical"
+        reason = f"Rated Critical: high-severity findings on {len(high_documents)} documents."
+    return level, _score_out_of_100(level, points), points, reason
 
 
 def compute_case_risk(
     documents: list[DocumentRecord],
     reports: dict[str, dict[str, Any]],
     failed_ids: set[str],
+    cross_findings: list[CrossDocFinding] | None = None,
 ) -> CaseRisk:
     """
     reports: document_id -> its stored detection report.
     failed_ids: documents whose last detection run crashed or was cancelled
     and left no report (see langgraph/trace.py).
+    cross_findings: the case analysis's verified findings, when a current one
+    exists (see case_pipeline.service); a case that was never analysed passes none.
     """
-    eligible = [d for d in documents if counts_towards_risk(d)]
+    eligible = [d for d in documents if counts_towards_risk(d, reports, failed_ids)]
     scanned = [d for d in eligible if d.status == DocumentStatus.DETECTED and d.id in reports]
-    counts = {"documents_scanned": len(scanned), "documents_total": len(eligible)}
+    scanned_count, total_count = len(scanned), len(eligible)
 
     if not eligible:
-        return CaseRisk(state="no_documents", **counts)
+        return CaseRisk(state="no_documents", documents_scanned=scanned_count, documents_total=total_count)
     if any(d.id in failed_ids and d.id not in reports for d in eligible):
-        return CaseRisk(state="failed", **counts)
+        return CaseRisk(state="failed", documents_scanned=scanned_count, documents_total=total_count)
     if len(scanned) < len(eligible):
-        return CaseRisk(state="pending", **counts)
+        return CaseRisk(state="pending", documents_scanned=scanned_count, documents_total=total_count)
 
     findings: list[ContributingFinding] = []
     unassessed: list[UnassessedCheck] = []
@@ -156,27 +219,19 @@ def compute_case_risk(
             for item in report.get("unable_to_assess") or []
         )
 
-    points = round(sum(f.points for f in findings), 2)
-    level = _level_for(points)
-    reason = (
-        f"Rated {level} from the combined severity of {len(findings)} finding(s)."
-        if findings
-        else "Rated Low: detection found nothing worth flagging."
-    )
+    documents_by_id = {d.id: d for d in documents}
+    findings.extend(contributing_from_cross_document(f, documents_by_id) for f in cross_findings or [])
 
-    high_documents = {f.document_id for f in findings if f.severity == "high"}
-    if len(high_documents) >= CRITICAL_MIN_HIGH_DOCUMENTS:
-        level = "Critical"
-        reason = f"Rated Critical: high-severity findings on {len(high_documents)} documents."
+    level, score, points, reason = rate_findings(findings)
 
     findings.sort(key=lambda f: (-f.points, -SEVERITY_POINTS[f.severity], f.filename))
     return CaseRisk(
         state="scored",
         level=level,
-        score=_score_out_of_100(level, points),
+        score=score,
         points=points,
         contributing_findings=findings,
         unassessed_checks=unassessed,
         reasons=[reason],
-        **counts,
+        documents_scanned=scanned_count, documents_total=total_count,
     )

@@ -120,5 +120,9 @@ class Settings:
     DATA_GOV_SG_API_KEY: str = _env("DATA_GOV_SG_API_KEY")
     ONEMAP_API_TOKEN: str = _env("ONEMAP_API_TOKEN")
 
+    # --- Per-case analysis (case_pipeline/) ---
+    # Kill switch: off falls back to document-level detection and scoring only.
+    CASE_ANALYSIS_ENABLED: bool = os.environ.get("CASE_ANALYSIS_ENABLED", "true").lower() == "true"
+
 
 settings = Settings()

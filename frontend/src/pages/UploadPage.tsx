@@ -51,6 +51,8 @@ export default function UploadPage({
     proofOfAddressCoverage,
     idDocumentCoverage,
     risk,
+    analysisReady,
+    analysisOverview,
     supportingDocumentRecommendations,
     wsConnected,
     caseMatches,
@@ -453,6 +455,9 @@ export default function UploadPage({
 
 
           <UploadSummaryCards
+            analysisOverview={analysisOverview}
+            analysisReady={analysisReady}
+            caseId={selectedCase.id}
             caseMatchNeedsReview={caseMatchNeedsReview}
             caseMatches={caseMatches}
             flaggedDocuments={flaggedDocuments}

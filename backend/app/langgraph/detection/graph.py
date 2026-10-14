@@ -36,7 +36,8 @@ from langgraph.types import Send
 from typing_extensions import TypedDict
 
 from . import tools as detection_tools
-from .specialists import SEVERITIES, SPECIALISTS, _parse_json_object, run_specialist
+from ..llm_output import parse_json_object
+from .specialists import SEVERITIES, SPECIALISTS, run_specialist
 from .. import trace
 from ... import document_repository, extracted_fields_repository, telemetry
 from ...config import settings
@@ -140,7 +141,7 @@ async def _ask_lead(system_prompt: str, user_payload: dict, *, span_name: str, c
     content = response.content if isinstance(response.content, str) else "".join(
         b.get("text", "") for b in response.content if isinstance(b, dict)
     )
-    return _parse_json_object(content)
+    return parse_json_object(content)
 
 
 # --- nodes ------------------------------------------------------------------

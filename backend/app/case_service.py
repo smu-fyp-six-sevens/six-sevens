@@ -6,7 +6,10 @@ from typing import Any, Optional
 
 from . import case_repository, document_repository, extracted_fields_repository
 from .case_match import CaseMatchResult, DocumentCaseMatch, check_case_match
-from .case_risk import compute_case_risk
+from .case_pipeline import repository as analysis_repository, state as analysis_state
+from .case_pipeline.models import CaseAnalysis
+from .case_pipeline.readiness import is_ready_for_analysis
+from .case_pipeline.risk.case_risk import compute_case_risk
 from .config import settings
 from .langgraph import trace as langgraph_trace
 from .langgraph.extraction_prompts import EXTRACTION_SCHEMAS
@@ -23,6 +26,7 @@ from .mapper import (
 from .models import (
     ADDITIONAL_DOCUMENT_TYPES,
     REQUIRED_DOCUMENT_TYPES,
+    CaseAnalysisOverview,
     CaseDocumentsStatus,
     CaseRecord,
     CaseRisk,
@@ -39,7 +43,7 @@ from .models import (
     is_classification_confirmed,
 )
 from .monitoring import is_stuck
-from .supporting_documents import recommend_supporting_documents
+from .case_pipeline.risk.supporting_documents import recommend_supporting_documents
 
 
 def compute_documents_status(documents: list[DocumentRecord]) -> CaseDocumentsStatus:
@@ -166,8 +170,20 @@ def _load_detection_states(documents: list[DocumentRecord]) -> Optional[Detectio
         return None
 
 
+def _load_analyses(case_ids: list[str]) -> dict[str, CaseAnalysis]:
+    """Empty when the table can't be read: a case then simply shows no analysis."""
+    try:
+        return analysis_repository.get_latest_many(case_ids)
+    except Exception:
+        logger.exception("Failed to load case analyses for %d case(s)", len(case_ids))
+        return {}
+
+
 def build_summary(
-    case, documents: list[DocumentRecord], detection_states: Optional[DetectionStates] = None
+    case,
+    documents: list[DocumentRecord],
+    detection_states: Optional[DetectionStates] = None,
+    analyses: Optional[dict[str, CaseAnalysis]] = None,
 ) -> CaseSummary:
     """
     Public (not module-private) because routers/ws.py needs it too: it
@@ -187,9 +203,18 @@ def build_summary(
     data = case.model_dump()
     data["recommended_additional_documents"] = missing
     risk: Optional[CaseRisk] = None
+    overview: Optional[CaseAnalysisOverview] = None
     if detection_states is not None:
         reports, failed_ids = detection_states
-        risk = compute_case_risk(documents, reports, failed_ids)
+        analysis = (analyses or {}).get(case.id)
+        if analysis is not None:
+            analysis = analysis_state.current_view(analysis, documents, reports)
+            overview = CaseAnalysisOverview(
+                run_id=analysis.run_id, status=analysis.status, stale=analysis.stale,
+                finished_at=analysis.finished_at, finding_count=len(analysis.findings),
+            )
+        # A case that was never analysed (or whose analysis is stale) scores exactly as before.
+        risk = compute_case_risk(documents, reports, failed_ids, analysis_state.usable_findings(analysis))
     return CaseSummary(
         **data,
         documents_status=compute_documents_status(documents),
@@ -202,6 +227,8 @@ def build_summary(
         ),
         risk=risk,
         supporting_document_recommendations=recommend_supporting_documents(documents),
+        analysis_ready=is_ready_for_analysis(documents),
+        analysis=overview,
     )
 
 
@@ -338,7 +365,7 @@ def build_case_snapshot(case_id: str) -> Optional[dict]:
     if case is None:
         return None
     detection_states = _load_detection_states(documents)
-    summary = build_summary(case, documents, detection_states)
+    summary = build_summary(case, documents, detection_states, _load_analyses([case_id]))
     # Before enrichment: that rewrites extracted_fields in place into
     # {"value", "confidence"} wrappers, while case_match (and mapper.py, via
     # build_summary above) reads the plain values document_repository
@@ -371,7 +398,7 @@ def get_case_summary(case_id: str) -> Optional[CaseSummary]:
     if case is None:
         return None
     documents = document_repository.list_documents(case_id=case_id)
-    return build_summary(case, documents, _load_detection_states(documents))
+    return build_summary(case, documents, _load_detection_states(documents), _load_analyses([case_id]))
 
 
 def list_case_summaries() -> list[CaseSummary]:
@@ -389,6 +416,7 @@ def list_case_summaries() -> list[CaseSummary]:
     detection_states = _load_detection_states(
         [document for case_documents in documents_by_case.values() for document in case_documents]
     )
+    analyses = _load_analyses([case.id for case in cases])
     return [
-        build_summary(case, documents_by_case.get(case.id, []), detection_states) for case in cases
+        build_summary(case, documents_by_case.get(case.id, []), detection_states, analyses) for case in cases
     ]

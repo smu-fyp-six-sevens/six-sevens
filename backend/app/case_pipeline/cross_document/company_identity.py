@@ -43,7 +43,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from ..models import DocumentRecord, DocumentStatus, DocumentType, is_personal_bank_statement
+from ...models import DocumentRecord, DocumentStatus, DocumentType, is_personal_bank_statement
 
 # Legal-form words, matched case-insensitively and with their punctuation
 # ("Pte.", "Ltd.,") as a run at the END of the name only — "Co" in the

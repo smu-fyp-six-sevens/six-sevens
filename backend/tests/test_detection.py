@@ -777,7 +777,7 @@ def test_retry_detection_rejected_when_nothing_ran_yet() -> None:
 
 
 
-def test_retry_detection_refused_for_unrecognised_document() -> None:
+def test_retry_detection_refused_for_untyped_document() -> None:
     from app.routers import documents as documents_router
 
     with (
@@ -787,17 +787,17 @@ def test_retry_detection_refused_for_unrecognised_document() -> None:
         patch.dict(documents_router._detection_tasks, {}, clear=True),
     ):
         mock_repo.get_document.return_value = _document(
-            status=DocumentStatus.APPROVED, document_type="unrecognised"
+            status=DocumentStatus.APPROVED, document_type=None
         )
         mock_trace.get_persisted.return_value = {"detection_error": "crashed"}
         response = client.post("/documents/doc-1/detection/retry")
 
     assert response.status_code == 409
-    assert response.json()["detail"] == "Detection doesn't run on unrecognised documents."
+    assert response.json()["detail"] == "Detection doesn't run on documents with no type."
     mock_launch.assert_not_called()
 
 
-def test_individual_checks_refused_for_unrecognised_document() -> None:
+def test_individual_checks_refused_for_untyped_document() -> None:
     with (
         patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.langgraph_trace") as mock_trace,
@@ -805,13 +805,13 @@ def test_individual_checks_refused_for_unrecognised_document() -> None:
         patch("app.routers.detection.check_image_tampering") as mock_t,
     ):
         mock_repo.get_document.return_value = _document(
-            status=DocumentStatus.APPROVED, document_type="unrecognised"
+            status=DocumentStatus.APPROVED, document_type=None
         )
         _mark_detection_already_ran(mock_trace)
         response = client.get("/documents/doc-1/detection/image-integrity")
 
     assert response.status_code == 409
-    assert response.json()["detail"] == "Detection doesn't run on unrecognised documents."
+    assert response.json()["detail"] == "Detection doesn't run on documents with no type."
     mock_m.assert_not_called()
     mock_t.assert_not_called()
 

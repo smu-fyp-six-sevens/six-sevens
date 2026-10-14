@@ -10,6 +10,7 @@ import {
   lowestFieldConfidence,
 } from '../../services/uploadService';
 import type {
+  CaseAnalysisOverview,
   CaseRisk,
   DocumentCaseMatch,
   DocumentRecord,
@@ -32,6 +33,8 @@ export function useCaseSnapshot(caseId: string) {
     missing_side: string | null;
   }>({ covered: 0, total: 0, missing_side: null });
   const [risk, setRisk] = useState<CaseRisk | null>(null);
+  const [analysisReady, setAnalysisReady] = useState(false);
+  const [analysisOverview, setAnalysisOverview] = useState<CaseAnalysisOverview | null>(null);
   const [supportingDocumentRecommendations, setSupportingDocumentRecommendations] = useState<
     SupportingDocumentRecommendation[]
   >([]);
@@ -96,6 +99,8 @@ export function useCaseSnapshot(caseId: string) {
         setProofOfAddressCoverage(caseSummary.proof_of_address_coverage);
         setIdDocumentCoverage(caseSummary.id_document_coverage);
         setRisk(caseSummary.risk ?? null);
+        setAnalysisReady(caseSummary.analysis_ready ?? false);
+        setAnalysisOverview(caseSummary.analysis ?? null);
         setSupportingDocumentRecommendations(caseSummary.supporting_document_recommendations ?? []);
       },
       (connected) => {
@@ -155,6 +160,8 @@ export function useCaseSnapshot(caseId: string) {
     proofOfAddressCoverage,
     idDocumentCoverage,
     risk,
+    analysisReady,
+    analysisOverview,
     supportingDocumentRecommendations,
     wsConnected,
     caseMatches,

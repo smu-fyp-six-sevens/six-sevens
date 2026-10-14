@@ -20,7 +20,7 @@ from ....config import settings
 from ....fraud_detection.field_catalogue import render_field_catalogue
 from ....fraud_detection.numerical_validation.runner import Binding, render_check_roles
 from ..._anthropic import build_chat_anthropic
-from ..specialists import _parse_json_object
+from ...llm_output import message_text, parse_json_object
 
 logger = logging.getLogger("classifier_pipeline.langgraph.detection.binder")
 
@@ -46,12 +46,6 @@ Reply with ONLY this JSON:
 class BindingResult:
     bindings: list[Binding] = field(default_factory=list)
     error: str | None = None
-
-
-def _text(content: Any) -> str:
-    if isinstance(content, str):
-        return content
-    return "".join(block.get("text", "") for block in content if isinstance(block, dict))
 
 
 def _parse_bindings(parsed: dict | None) -> BindingResult:
@@ -91,4 +85,4 @@ async def bind_checks(document_type: str | None, fields: list[Any], group: str =
     except Exception as exc:  # noqa: BLE001 — the endpoint degrades to exact-name matching
         logger.exception("Numerical binder call failed")
         return BindingResult(error=f"{type(exc).__name__}: {exc}")
-    return _parse_bindings(_parse_json_object(_text(getattr(response, "content", ""))))
+    return _parse_bindings(parse_json_object(message_text(getattr(response, "content", ""))))

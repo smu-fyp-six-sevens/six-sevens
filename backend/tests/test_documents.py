@@ -1685,8 +1685,8 @@ def test_approve_document_allows_officer_confirmed_unrecognised() -> None:
 
     assert response.status_code == 200
     mock_repo.approve_document.assert_called_once_with("doc-1")
-    # Approved as Other, but never scanned.
-    mock_launch.assert_not_called()
+    # Approved as Other, and scanned like any other document.
+    mock_launch.assert_called_once()
 
 
 def test_approve_document_requires_an_other_documents_fields_to_be_saved() -> None:

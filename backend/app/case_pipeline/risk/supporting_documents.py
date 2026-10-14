@@ -53,9 +53,10 @@ An empty list means nothing in the case needs further evidence.
 from __future__ import annotations
 
 import re
+from typing import Literal
 
-from .fraud_detection.numerical_validation.common import _CURRENCY_WORDS, _as_number, _decode, _money, _rows
-from .models import (
+from ...fraud_detection.numerical_validation.common import _CURRENCY_WORDS, _as_number, _decode, _money, _rows
+from ...models import (
     DocumentRecord,
     DocumentType,
     RecommendationItem,
@@ -148,10 +149,11 @@ def _recommend_for_statement(document: DocumentRecord) -> list[SupportingDocumen
 
     threshold = _money(LARGE_TRANSACTION_AMOUNT)
     recommendations: list[SupportingDocumentRecommendation] = []
-    for document_type, transactions, kind in (
+    groups: list[tuple[Literal["purchase_order", "sales_invoice"], list[RecommendationItem], str]] = [
         ("purchase_order", supplier_payments, "supplier payment"),
         ("sales_invoice", customer_receipts, "customer receipt"),
-    ):
+    ]
+    for document_type, transactions, kind in groups:
         if not transactions:
             continue
         count = len(transactions)

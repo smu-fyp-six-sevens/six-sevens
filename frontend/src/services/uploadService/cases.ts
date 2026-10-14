@@ -1,6 +1,7 @@
 import { assertOk } from './request';
 import { authFetch } from '../../lib/api';
 import type {
+  CaseAnalysis,
   CaseOption,
   CaseRequirementCoverage,
   UpdatedCase,
@@ -38,4 +39,24 @@ export async function listCaseOptions(): Promise<CaseOption[]> {
   await assertOk(response, 'Failed to list cases');
 
   return (await response.json()) as CaseOption[];
+}
+
+// Starts the per-case analysis in the background; the result arrives with the case snapshot.
+export async function runCaseAnalysis(caseId: string): Promise<CaseAnalysis> {
+  const response = await authFetch(`/cases/${caseId}/analysis/run`, { method: 'POST' });
+
+  await assertOk(response, 'Failed to start the case analysis');
+
+  return (await response.json()) as CaseAnalysis;
+}
+
+export async function getCaseAnalysis(caseId: string): Promise<CaseAnalysis | null> {
+  const response = await authFetch(`/cases/${caseId}/analysis`);
+
+  if (response.status === 404) {
+    return null;
+  }
+  await assertOk(response, 'Failed to fetch the case analysis');
+
+  return (await response.json()) as CaseAnalysis;
 }

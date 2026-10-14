@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from dataclasses import dataclass
 from typing import Annotated, Any, Required
 
@@ -27,6 +26,7 @@ from ...config import settings
 from ... import telemetry
 from ...fraud_detection.field_catalogue import render_field_catalogue
 from ...fraud_detection.numerical_validation.runner import render_check_roles
+from ..llm_output import message_text, parse_json_object
 
 logger = logging.getLogger("classifier_pipeline.langgraph.detection.specialists")
 
@@ -170,24 +170,6 @@ class SpecialistState(TypedDict, total=False):
     report: dict
 
 
-def _text(content: Any) -> str:
-    if isinstance(content, str):
-        return content
-    return "".join(block.get("text", "") for block in content if isinstance(block, dict))
-
-
-def _parse_json_object(text: str) -> dict | None:
-    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.IGNORECASE)
-    start, end = text.find("{"), text.rfind("}")
-    if start == -1 or end <= start:
-        return None
-    try:
-        parsed = json.loads(text[start : end + 1])
-    except json.JSONDecodeError:
-        return None
-    return parsed if isinstance(parsed, dict) else None
-
-
 def _make_agent_node(spec: Specialist):
     async def agent_node(state: SpecialistState) -> dict:
         from .._anthropic import build_chat_anthropic
@@ -271,9 +253,9 @@ def _collect_node(state: SpecialistState) -> dict:
         if not isinstance(message, ToolMessage):
             continue
         try:
-            result = json.loads(_text(message.content))
+            result = json.loads(message_text(message.content))
         except json.JSONDecodeError:
-            unable.append({"tool": message.name or "unknown", "reason": f"Tool error: {_text(message.content)[:200]}"})
+            unable.append({"tool": message.name or "unknown", "reason": f"Tool error: {message_text(message.content)[:200]}"})
             continue
         if result.get("unable_to_assess"):
             unable.append({"tool": result.get("tool"), "reason": result.get("reason")})
@@ -283,7 +265,7 @@ def _collect_node(state: SpecialistState) -> dict:
             findings[finding["id"]] = {"tool": result.get("tool"), **finding}
 
     final = messages[-1]
-    assessment = _parse_json_object(_text(final.content)) if isinstance(final, AIMessage) else None
+    assessment = parse_json_object(message_text(final.content)) if isinstance(final, AIMessage) else None
     if assessment is None:
         stop = final.response_metadata.get("stop_reason") if isinstance(final, AIMessage) else None
         logger.warning("Specialist %s reply was not parseable (stop_reason=%s)", state["specialist"], stop)
@@ -324,7 +306,7 @@ def _collect_node(state: SpecialistState) -> dict:
         "nothing_to_check": nothing_to_check,
         "findings": merged,
         "dismissed": dismissed,
-        "summary": assessment.get("summary") or (_text(final.content)[:300] if isinstance(final, AIMessage) else ""),
+        "summary": assessment.get("summary") or (message_text(final.content)[:300] if isinstance(final, AIMessage) else ""),
         "uncertain": bool(assessment.get("uncertain")) or not parsed_ok or not tools_called,
         "uncertainty_reason": assessment.get("uncertainty_reason")
         or (None if parsed_ok and tools_called else "Specialist output was incomplete or no tool was run."),

@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage, ToolMessage
 
-from app.fraud_detection.company_identity import (
+from app.case_pipeline.cross_document.company_identity import (
     check_company_name_consistency,
     company_names_match,
     legal_entity_type,
