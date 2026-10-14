@@ -16,10 +16,13 @@ from ...models import APPROVED_STATUSES, DocumentRecord
 from ..categories import category_for_finding
 from ..models import FindingCategory
 from ..trace import RunTrace
+from .bias import has_protected_text, is_protected_field
 
 _NRIC_RE = re.compile(r"\b([STFGM])\d{4}(\d{3}[A-Z])\b", re.IGNORECASE)
 _LONG_NUMBER_RE = re.compile(r"\b(\d[\d -]{6,}\d)\b")
 _MAX_LIST_PREVIEW = 5
+# The most the model reads about a case (about 6k tokens); each document gets an equal share past it.
+MAX_DOSSIER_CHARS = 24_000
 
 
 def mask_identifiers(text: str) -> str:
@@ -94,6 +97,8 @@ class CaseContext:
     records: list[DocumentRecord] = field(default_factory=list)
     ledger: Ledger = field(default_factory=Ledger)
     trace: Optional[RunTrace] = None
+    # Model calls spent so far in this run; agents.py refuses to go past its budget.
+    model_calls: int = 0
 
     def note(self, step: str, **fields: Any) -> None:
         """Records a step on the run's trace, if it has one."""
@@ -153,13 +158,18 @@ def transaction_summary(rows: list[dict]) -> dict[str, Any]:
     }
 
 
-def render_dossier(context: CaseContext) -> str:
-    """The text the hypothesiser reads: scalar fields with their refs, derived transaction facts, detection findings."""
+def render_dossier(context: CaseContext, max_chars: int = MAX_DOSSIER_CHARS) -> str:
+    """
+    The text the hypothesiser reads: scalar fields with their refs, derived transaction facts, detection
+    findings. A person's protected attributes are left out (see bias.py), and the whole is capped at max_chars.
+    """
     blocks: list[str] = []
     for view in context.docs.values():
         lines = [f"[{view.key}] {view.filename} - {view.document_type}"
                  + (" (fields confirmed by the officer)" if view.fields_confirmed_by_officer else "")]
         for name, value in view.fields.items():
+            if is_protected_field(name):
+                continue
             decoded = _decode(value)
             if name == "transactions" or (isinstance(decoded, list) and decoded and isinstance(decoded[0], dict)):
                 rows = _rows(decoded)
@@ -184,9 +194,15 @@ def render_dossier(context: CaseContext) -> str:
                 view.key, f"finding:{finding.get('id')}", finding.get("summary"),
                 source="detection", category=FindingCategory(finding["category"]),
             )
-            lines.append(
-                f"  finding [{finding.get('severity')}] {finding.get('tool')}: "
-                f"{mask_identifiers(str(finding.get('summary') or ''))[:200]}  {ref}"
-            )
+            summary = str(finding.get("summary") or "")
+            shown = "(details withheld: concerns a personal attribute)" if has_protected_text(summary) \
+                else mask_identifiers(summary)[:200]
+            lines.append(f"  finding [{finding.get('severity')}] {finding.get('tool')}: {shown}  {ref}")
         blocks.append("\n".join(lines))
+    if blocks and sum(len(b) for b in blocks) > max_chars:
+        share = max(200, max_chars // len(blocks))
+        blocks = [
+            b if len(b) <= share else b[:share].rsplit("\n", 1)[0] + "\n  ... (more fields not shown)"
+            for b in blocks
+        ]
     return "\n\n".join(blocks)

@@ -31,6 +31,7 @@ Risk level: {level} (score {score}/100)
 Findings (most important first):
 {findings}
 Checks that ran and found nothing: {clean}
+Checks that could not run on at least one document (their result is unknown, never describe them as clear): {not_run}
 Evidence that would help:
 {requests}
 Best case if all of it supports the client: {best}
@@ -55,7 +56,9 @@ def deterministic_summary(risk: CaseRisk, outlook: RiskOutlook) -> str:
     return " ".join(parts)
 
 
-async def write_summary(risk: CaseRisk, outlook: RiskOutlook, clean_checks: list[str]) -> str:
+async def write_summary(
+    risk: CaseRisk, outlook: RiskOutlook, clean_checks: list[str], unrun_checks: list[str] | None = None
+) -> str:
     fallback = deterministic_summary(risk, outlook)
     if risk.state != "scored":
         return fallback
@@ -74,7 +77,8 @@ async def write_summary(risk: CaseRisk, outlook: RiskOutlook, clean_checks: list
     )
     prompt = _PROMPT.format(
         level=risk.level, score=risk.score, findings=listing,
-        clean=", ".join(clean_checks) or "none recorded", requests=requests, best=best,
+        clean=", ".join(clean_checks) or "none recorded", not_run=", ".join(unrun_checks or []) or "none",
+        requests=requests, best=best,
     )
     try:
         model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 600)

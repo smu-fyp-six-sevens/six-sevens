@@ -44,15 +44,24 @@ class AnalysisAlreadyRunning(Exception):
     pass
 
 
-def _clean_checks(reports: dict[str, dict[str, Any]]) -> list[str]:
-    """Checks that ran on at least one document and raised nothing anywhere in the case."""
-    ran: set[str] = set()
+def _check_outcomes(reports: dict[str, dict[str, Any]]) -> tuple[list[str], list[str]]:
+    """
+    (clean, could_not_run). A check is clean only if it examined something, raised
+    nothing, and never failed to run on any document: being called is not the same
+    as having looked. A check that couldn't run, or had nothing to look at, says
+    nothing about that document either way.
+    """
+    examined: set[str] = set()
     flagged: set[str] = set()
+    not_run: set[str] = set()
     for report in reports.values():
+        unable = {i.get("tool") for i in report.get("unable_to_assess") or [] if i.get("tool")}
+        nothing = {i.get("tool") for i in report.get("nothing_to_check") or [] if i.get("tool")}
+        not_run |= unable
         for consulted in report.get("consulted") or []:
-            ran.update(consulted.get("tools_called") or [])
+            examined.update(t for t in consulted.get("tools_called") or [] if t not in unable | nothing)
         flagged.update(f.get("tool") for f in report.get("findings") or [] if f.get("tool"))
-    return sorted(ran - flagged)
+    return sorted(examined - flagged - not_run), sorted(not_run)
 
 
 async def start_analysis(case_id: str) -> CaseAnalysis:
@@ -121,7 +130,8 @@ async def _execute(
                      supporting_documents=[s.title for s in supporting_documents])
         outlook = build_outlook(risk, requests)
         trace.record("outlook", **outlook_trace(risk, requests, outlook))
-        summary = await write_summary(risk, outlook, _clean_checks(reports))
+        clean_checks, unrun_checks = _check_outcomes(reports)
+        summary = await write_summary(risk, outlook, clean_checks, unrun_checks)
         trace.record("summary", text=summary)
 
         analysis.findings = findings

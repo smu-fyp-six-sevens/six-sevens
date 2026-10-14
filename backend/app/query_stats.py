@@ -39,6 +39,8 @@ class _Scope:
         self.llm_calls = 0
         self.llm_input_tokens = 0
         self.llm_output_tokens = 0
+        self.llm_cache_read = 0
+        self.llm_cache_write = 0
         self._lock = threading.Lock()  # to_thread calls in one scope can run concurrently
 
     def add_call(self, label: str) -> None:
@@ -49,11 +51,13 @@ class _Scope:
         with self._lock:
             self.db_seconds += seconds
 
-    def add_llm(self, input_tokens: int, output_tokens: int) -> None:
+    def add_llm(self, input_tokens: int, output_tokens: int, cache_read: int = 0, cache_write: int = 0) -> None:
         with self._lock:
             self.llm_calls += 1
             self.llm_input_tokens += input_tokens
             self.llm_output_tokens += output_tokens
+            self.llm_cache_read += cache_read
+            self.llm_cache_write += cache_write
 
     def summary(self) -> str:
         with self._lock:
@@ -64,7 +68,8 @@ class _Scope:
                 parts[0] += f" ({detail}; {self.db_seconds * 1000:.0f}ms)"
             if self.llm_calls:
                 parts.append(
-                    f"{self.llm_calls} claude ({self.llm_input_tokens} in / {self.llm_output_tokens} out tokens)"
+                    f"{self.llm_calls} claude ({self.llm_input_tokens} in / {self.llm_output_tokens} out tokens; "
+                    f"cache read {self.llm_cache_read} / write {self.llm_cache_write})"
                 )
             return " | ".join(parts)
 
@@ -141,13 +146,16 @@ HTTPX_EVENT_HOOKS: dict[str, list[Any]] = {"request": [_on_request], "response":
 
 class _LLMUsage(AsyncCallbackHandler):
     async def on_llm_end(self, response, **kwargs: Any) -> None:
-        input_tokens = output_tokens = 0
+        input_tokens = output_tokens = cache_read = cache_write = 0
         for generations in response.generations:
             for generation in generations:
                 usage = getattr(getattr(generation, "message", None), "usage_metadata", None) or {}
+                details = usage.get("input_token_details") or {}
                 input_tokens += usage.get("input_tokens", 0)
                 output_tokens += usage.get("output_tokens", 0)
-        _active().add_llm(input_tokens, output_tokens)
+                cache_read += details.get("cache_read", 0)
+                cache_write += details.get("cache_creation", 0)
+        _active().add_llm(input_tokens, output_tokens, cache_read, cache_write)
 
 
 llm_callback = _LLMUsage()

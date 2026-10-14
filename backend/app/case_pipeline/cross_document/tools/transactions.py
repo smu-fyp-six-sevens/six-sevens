@@ -10,7 +10,9 @@ from langchain_core.tools import tool
 from ....fraud_detection.numerical_validation.common import _parse_field_date
 from ..evidence import mask_identifiers, signed_amount, transaction_summary
 from ...risk.supporting_documents import _counterparty_from_description
-from .common import MAX_ROWS, ToolKit, direction_ok, in_range, statement_rows, unavailable
+from .common import (
+    MAX_ROWS, ToolKit, direction_ok, in_range, row_date, statement_period, statement_rows, unavailable,
+)
 
 _NO_TRANSACTIONS = "This document has no transactions."
 
@@ -36,9 +38,9 @@ def build_transaction_tools(kit: ToolKit) -> list:
         rows = statement_rows(view)
         if rows is None:
             return kit.log("transaction_stats", args, unavailable(_NO_TRANSACTIONS), is_refutation_probe, view.key)
-        start, end = _parse_field_date(date_from), _parse_field_date(date_to)
+        start, end, period = _parse_field_date(date_from), _parse_field_date(date_to), statement_period(view)
         chosen = [r for r in rows if (a := signed_amount(r)) is not None and direction_ok(a, direction)
-                  and in_range(r, start, end)]
+                  and in_range(r, start, end, period)]
         summary = transaction_summary(chosen)
         ref = context.ledger.issue(view.key, f"transaction_stats[{direction}]", summary, source="transaction_stats")
         return kit.log("transaction_stats", args, {"available": True, "stats": summary, "ref": ref,
@@ -61,11 +63,11 @@ def build_transaction_tools(kit: ToolKit) -> list:
         rows = statement_rows(view)
         if rows is None:
             return kit.log("query_transactions", args, unavailable(_NO_TRANSACTIONS), is_refutation_probe, view.key)
-        start, end = _parse_field_date(date_from), _parse_field_date(date_to)
+        start, end, period = _parse_field_date(date_from), _parse_field_date(date_to), statement_period(view)
         matches = []
         for index, row in enumerate(rows):
             amount = signed_amount(row)
-            if amount is None or not direction_ok(amount, direction) or not in_range(row, start, end):
+            if amount is None or not direction_ok(amount, direction) or not in_range(row, start, end, period):
                 continue
             if min_amount is not None and abs(amount) < min_amount:
                 continue
@@ -128,20 +130,27 @@ def build_transaction_tools(kit: ToolKit) -> list:
         if rows is None:
             return kit.log("monthly_flow", args, unavailable(_NO_TRANSACTIONS), is_refutation_probe, view.key)
         months: dict[str, dict[str, float]] = defaultdict(lambda: {"credits": 0.0, "debits": 0.0, "count": 0})
-        undated = 0
+        period = statement_period(view)
+        undated = year_from_period = 0
         for row in rows:
-            amount, day = signed_amount(row), _parse_field_date(row.get("date"))
+            amount, day = signed_amount(row), row_date(row, period)
             if amount is None:
                 continue
             if day is None:
                 undated += 1
                 continue
+            if _parse_field_date(row.get("date")) is None:
+                year_from_period += 1
             bucket = months[f"{day.year}-{day.month:02d}"]
             bucket["credits" if amount > 0 else "debits"] += abs(amount)
             bucket["count"] += 1
         out = {m: {k: round(v, 2) for k, v in b.items()} for m, b in sorted(months.items())}
         ref = context.ledger.issue(view.key, "monthly_flow", out, source="monthly_flow")
-        return kit.log("monthly_flow", args, {"available": True, "months": out, "undated_rows": undated, "ref": ref},
-                       is_refutation_probe, view.key, [ref])
+        result: dict = {"available": True, "months": out, "undated_rows": undated, "ref": ref}
+        if year_from_period:
+            result["year_taken_from_statement_period"] = year_from_period
+        if undated and period == (None, None):
+            result["note"] = "Rows print no year and the statement has no period, so they could not be dated."
+        return kit.log("monthly_flow", args, result, is_refutation_probe, view.key, [ref])
 
     return [transaction_stats, query_transactions, top_counterparties, monthly_flow]

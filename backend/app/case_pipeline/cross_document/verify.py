@@ -6,23 +6,17 @@ category fit what the evidence is. The model's own account is never trusted.
 
 from __future__ import annotations
 
-import re
 from typing import Any, Optional, cast
 
 from ..models import (
     MODEL_CHOOSABLE_CATEGORIES, CrossDocFinding, FindingCategory, Hypothesis, Severity,
 )
+from .bias import has_protected_text
 from .evidence import CaseContext
 from .tools import BREACH_FLAGS, IDENTITY_FLAGS, VARIANCE_FLAGS
 
 _SEVERITIES = ("low", "medium", "high")
 _MAX_CITATIONS = 12
-# Never a basis for a finding; checked on the text a verdict produces.
-_PROTECTED_RE = re.compile(
-    r"\b(race|racial|ethnic\w*|religio\w*|gender|sex|nationalit\w*|citizenship|age of|elderly|"
-    r"chinese|malay|indian|muslim|christian|buddhist|hindu)\b",
-    re.IGNORECASE,
-)
 
 
 def _probe_ran(context: CaseContext, hypothesis: Hypothesis, calls: list[dict[str, Any]]) -> bool:
@@ -54,8 +48,9 @@ def verify_verdict(
     if not _probe_ran(context, hypothesis, calls):
         return None, "refutation probe did not run"
 
-    text = f"{verdict.get('summary', '')} {verdict.get('rationale', '')}"
-    if _PROTECTED_RE.search(text):
+    # The whole account is screened, not just the headline: any mention is grounds to discard it.
+    text = " ".join(str(verdict.get(k) or "") for k in ("summary", "rationale", "probe_summary"))
+    if has_protected_text(f"{hypothesis.claim} {text}"):
         return None, "rests on a protected attribute"
 
     entries = [context.ledger.refs[c] for c in citations]

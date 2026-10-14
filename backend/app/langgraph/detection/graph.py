@@ -179,11 +179,14 @@ async def load_context_node(state: DetectionState) -> dict:
         raise DetectionError("Document not found")
     if not document.storage_path:
         raise DetectionError("Document has no stored file")
+    fields_loaded = True
     try:
         fields = await asyncio.to_thread(extracted_fields_repository.get_extracted_fields, document_id)
     except Exception:  # noqa: BLE001 — extraction data is enrichment, not a prerequisite
         logger.exception("Failed to fetch extracted fields for document %s", document_id)
-        fields = []
+        fields, fields_loaded = [], False
+    # The tools read these too; priming means they don't fetch them again.
+    detection_tools.prime(document_id, document=document, fields=fields if fields_loaded else None)
     context = {
         "document_type": document.document_type or "unknown",
         "filename": document.filename,

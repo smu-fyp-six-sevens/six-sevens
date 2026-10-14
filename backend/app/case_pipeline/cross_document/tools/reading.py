@@ -9,6 +9,7 @@ from typing import Optional
 from langchain_core.tools import tool
 
 from ....fraud_detection.numerical_validation.common import _decode
+from ..bias import is_protected_field
 from ..evidence import mask_identifiers
 from .common import MAX_ROWS, ToolKit, unavailable
 
@@ -44,6 +45,9 @@ def build_reading_tools(kit: ToolKit) -> list:
                            is_refutation_probe)
         out, refs = [], []
         for name in names[:20]:
+            if is_protected_field(name):
+                out.append({"field": name, "available": False, "reason": "A personal attribute; never used."})
+                continue
             if name not in view.fields:
                 out.append({"field": name, "available": False})
                 continue
@@ -64,6 +68,8 @@ def build_reading_tools(kit: ToolKit) -> list:
             found = []
             for view in context.docs.values():
                 for name, value in view.fields.items():
+                    if is_protected_field(name):
+                        continue
                     if any(k in name.lower() for k in keys) and str(_decode(value) or "").strip():
                         ref = context.ledger.issue(view.key, name, value, source="get_business_profile")
                         refs.append(ref)

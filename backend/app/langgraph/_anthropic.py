@@ -26,6 +26,11 @@ if TYPE_CHECKING:
 _models: dict[tuple, Any] = {}
 
 
+def warm_up() -> None:
+    """Pays the import cost of the Anthropic client at startup, not on the first request's event loop."""
+    import langchain_anthropic  # noqa: F401
+
+
 def build_chat_anthropic(model: str, max_tokens: int, *, temperature: float = 0) -> "ChatAnthropic":
     from langchain_anthropic import ChatAnthropic  # local import: optional dep until phase 0 is installed
 

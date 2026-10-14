@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import concurrent.futures
 import logging
+import threading
 from collections import defaultdict
 from typing import Any, Optional
 
@@ -360,6 +362,17 @@ def get_case_match_for_document(document_id: str) -> Optional[DocumentCaseMatch]
     return next((match for match in result.documents if match.document_id == document_id), None)
 
 
+class _SnapshotSlot:
+    """A case's build in progress, and the one follow-up build everyone who arrived meanwhile shares."""
+
+    def __init__(self) -> None:
+        self.waiting: Optional[concurrent.futures.Future] = None
+
+
+_snapshot_slots: dict[str, _SnapshotSlot] = {}
+_snapshot_lock = threading.Lock()
+
+
 def build_case_snapshot(case_id: str) -> Optional[dict]:
     """
     Assembles the exact payload pushed over the case status WebSocket (see
@@ -367,7 +380,45 @@ def build_case_snapshot(case_id: str) -> Optional[dict]:
     Realtime-triggered push in realtime_listener.py call this, so the two
     paths can't drift out of sync with each other. Runs on a worker thread
     (supabase-py's sync client) wherever it's called from.
+
+    One build runs per case at a time. A caller that arrives mid-build is not
+    handed that build's result, which may have been read before the change
+    that made it ask; it waits for a single follow-up build, which everyone
+    who arrived during the first one shares.
     """
+    with _snapshot_lock:
+        slot = _snapshot_slots.get(case_id)
+        if slot is not None:
+            if slot.waiting is None:
+                slot.waiting = concurrent.futures.Future()
+            follow_up = slot.waiting
+        else:
+            slot = _snapshot_slots[case_id] = _SnapshotSlot()
+            follow_up = None
+    if follow_up is not None:
+        return follow_up.result()
+
+    first_result, first_error = None, None
+    try:
+        first_result = _build_case_snapshot(case_id)
+    except Exception as exc:  # noqa: BLE001 - re-raised below, after the waiters are served
+        first_error = exc
+    while True:
+        with _snapshot_lock:
+            waiting, slot.waiting = slot.waiting, None
+            if waiting is None:
+                _snapshot_slots.pop(case_id, None)
+                break
+        try:
+            waiting.set_result(_build_case_snapshot(case_id))
+        except Exception as exc:  # noqa: BLE001
+            waiting.set_exception(exc)
+    if first_error is not None:
+        raise first_error
+    return first_result
+
+
+def _build_case_snapshot(case_id: str) -> Optional[dict]:
     case = case_repository.get_case(case_id)
     if case is None:
         return None

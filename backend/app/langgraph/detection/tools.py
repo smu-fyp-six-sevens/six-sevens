@@ -27,7 +27,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from typing import Annotated, Any
+from typing import Annotated, Any, Awaitable, Callable
 
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
@@ -47,8 +47,10 @@ logger = logging.getLogger("classifier_pipeline.langgraph.detection.tools")
 MAX_FINDINGS = 15
 _MAX_TEXT = 80
 
-# Per-run cache so several specialists calling tools on the same document
-# don't each re-download the file or re-read the row. Cleared by
+# Per-run cache so the specialists, which start together and call these tools
+# at the same moment, don't each re-download the file or re-read the row. It
+# holds the fetch itself (a future) rather than its result: a plain "is it
+# cached yet" check lets every specialist miss at once. Cleared by
 # graph.run_detection when the run ends.
 _context: dict[str, dict[str, Any]] = {}
 
@@ -57,26 +59,52 @@ def clear_context(document_id: str) -> None:
     _context.pop(document_id, None)
 
 
-async def _document(document_id: str):
+async def _once(document_id: str, key: str, load: Callable[[], Awaitable[Any]]) -> Any:
+    """The first caller runs `load`; concurrent and later callers share its result.
+    A load that fails is dropped, so the next caller retries it."""
     entry = _context.setdefault(document_id, {})
-    if "document" not in entry:
-        entry["document"] = await asyncio.to_thread(
-            document_repository.get_document, document_id, include_fields=False
-        )
-    return entry["document"]
+    future = entry.get(key)
+    if future is None:
+        future = entry[key] = asyncio.ensure_future(load())
+
+        def _forget_failure(done: asyncio.Future) -> None:
+            if done.cancelled() or done.exception() is not None:
+                if entry.get(key) is done:
+                    entry.pop(key, None)
+
+        future.add_done_callback(_forget_failure)
+    # Shielded so one cancelled caller can't cancel the fetch the others are waiting on.
+    return await asyncio.shield(future)
+
+
+def prime(document_id: str, *, document: Any = None, fields: list | None = None) -> None:
+    """Seeds the cache with what the run's first step already fetched."""
+    entry = _context.setdefault(document_id, {})
+    loop = asyncio.get_running_loop()
+    for key, value in (("document", document), ("fields", fields)):
+        if value is not None and key not in entry:
+            future = loop.create_future()
+            future.set_result(value)
+            entry[key] = future
+
+
+async def _document(document_id: str):
+    return await _once(
+        document_id, "document",
+        lambda: asyncio.to_thread(document_repository.get_document, document_id, include_fields=False),
+    )
+
+
+async def _load_fields(document_id: str) -> list:
+    try:
+        return await asyncio.to_thread(extracted_fields_repository.get_extracted_fields, document_id)
+    except Exception:  # noqa: BLE001 — enrichment only; checks degrade without it
+        logger.exception("Failed to fetch extracted fields for document %s", document_id)
+        return []
 
 
 async def _extracted_fields(document_id: str) -> list:
-    entry = _context.setdefault(document_id, {})
-    if "fields" not in entry:
-        try:
-            entry["fields"] = await asyncio.to_thread(
-                extracted_fields_repository.get_extracted_fields, document_id
-            )
-        except Exception:  # noqa: BLE001 — enrichment only; checks degrade without it
-            logger.exception("Failed to fetch extracted fields for document %s", document_id)
-            entry["fields"] = []
-    return entry["fields"]
+    return await _once(document_id, "fields", lambda: _load_fields(document_id))
 
 
 async def document_fields(document_id: str) -> list:
@@ -84,15 +112,15 @@ async def document_fields(document_id: str) -> list:
     return await _extracted_fields(document_id)
 
 
+async def _load_bytes(document_id: str) -> bytes | None:
+    document = await _document(document_id)
+    if document is None or not document.storage_path:
+        return None
+    return await asyncio.to_thread(storage_service.download_file, document.storage_path)
+
+
 async def _file_bytes(document_id: str) -> bytes | None:
-    entry = _context.setdefault(document_id, {})
-    if "bytes" not in entry:
-        document = await _document(document_id)
-        if document is None or not document.storage_path:
-            entry["bytes"] = None
-        else:
-            entry["bytes"] = await asyncio.to_thread(storage_service.download_file, document.storage_path)
-    return entry["bytes"]
+    return await _once(document_id, "bytes", lambda: _load_bytes(document_id))
 
 
 # Reasons a check gives when the document simply has nothing it applies to:

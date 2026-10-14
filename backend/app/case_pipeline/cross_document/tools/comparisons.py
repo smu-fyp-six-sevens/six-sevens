@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from ....case_match import individual_names_match, normalize_uen
 from ....fraud_detection.numerical_validation.common import _as_number, _decode
+from ..bias import is_protected_field
 from ..evidence import mask_identifiers
 from .common import ToolKit, statement_period, unavailable
 
@@ -72,7 +73,8 @@ def build_comparison_tools(kit: ToolKit) -> list:
         values, refs, missing = [], [], []
         for item in items[:_MAX_ITEMS]:
             view = context.resolve(item.document)
-            raw = _decode(view.fields.get(item.field)) if view else None
+            # A personal attribute is never compared, whatever the model asks for.
+            raw = _decode(view.fields.get(item.field)) if view and not is_protected_field(item.field) else None
             if view is None or raw is None or str(raw).strip() == "":
                 missing.append({"document": item.document, "field": item.field})
                 continue

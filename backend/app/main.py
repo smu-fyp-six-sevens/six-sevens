@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from . import auth, health, query_stats, realtime_listener, telemetry
 from .config import settings
 from .health import check_db_connection
+from .langgraph._anthropic import warm_up
 from .queue_service import document_queue
 from .routers import injection, cases, detection, documents, monitoring, upload, ws
 
@@ -47,6 +48,11 @@ async def lifespan(app: FastAPI):
         # snapshot on connect" rather than taking the whole app down, e.g.
         # if SUPABASE_SECRET_KEY isn't configured in a given environment yet.
         logger.exception("Realtime listener failed to start — continuing anyway")
+
+    try:
+        await asyncio.to_thread(warm_up)
+    except Exception:
+        logger.exception("Claude client warm-up failed — continuing anyway")
 
     reporter = asyncio.create_task(query_stats.run_reporter())
 
