@@ -8,16 +8,12 @@ from typing import Any
 from .common import (
     skipped,
     _field_number,
-    REFERENCE_DATA,
     _MONEY_TOLERANCE,
     CheckResult,
     _as_number,
     _finding,
-    _in_force_on,
     _money,
-    _parse_field_date,
     _rows,
-    _skip_reference,
 )
 
 from .payslip_inputs import employee_cpf_input, ordinary_wages_input
@@ -74,34 +70,6 @@ def _check_payslip_sums(
                 field="net_pay", stated=_money(net_pay), expected=_money(expected_net),
             ))
     return findings, None
-
-
-@check(code="PAY.CPF_CEILING", applies=("payslip",))
-def _check_cpf_ceiling(
-    *, pay_date: Any, employee_cpf: Num | None = None, deductions_items: Any = None,
-    ordinary_wages: Num | None = None, earnings_items: Any = None,
-) -> CheckResult:
-    """Employee CPF must not exceed 20% of the lower of ordinary wages and the ceiling for the pay year."""
-    employee_cpf, cpf_field = employee_cpf_input(employee_cpf, deductions_items)
-    ordinary_wages, _ = ordinary_wages_input(ordinary_wages, earnings_items)
-    if employee_cpf is None or ordinary_wages is None:
-        return [], skipped(reason="Required field(s) not extracted: employee_cpf and ordinary_wages "
-                                  "(or a CPF deduction line and earnings lines)")
-    pay_date_val = _parse_field_date(pay_date)
-    if pay_date_val is None:
-        return [], skipped(reason="pay_date could not be read as a date")
-    ceiling = _in_force_on(REFERENCE_DATA["cpf_ordinary_wage_ceiling"], pay_date_val)
-    if ceiling is None:
-        return [], _skip_reference("PAY.CPF_CEILING", f"cpf_ordinary_wage_ceiling[{pay_date_val.isoformat()}]")
-    max_contribution = 0.20 * min(ordinary_wages, ceiling)
-    if employee_cpf > max_contribution + _MONEY_TOLERANCE:
-        return [_finding(
-            "PAY.CPF_CEILING", "impossible",
-            f"Employee CPF contribution {_money(employee_cpf)} exceeds 20% of the lower of ordinary "
-            f"wages and the ceiling ({_money(max_contribution)})",
-            field=cpf_field, stated=_money(employee_cpf), expected=f"<= {_money(max_contribution)}",
-        )], None
-    return [], None
 
 
 @check(code="PAY.CPF_BASE", applies=("payslip",))

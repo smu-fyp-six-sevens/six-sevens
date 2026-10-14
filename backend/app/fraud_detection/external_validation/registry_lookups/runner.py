@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 
-from ..font_consistency import ExtractedField
-from ..numerical_validation.common import _apply_needs_review, _confidence_by_name, _fields_by_name
+from ...font_consistency import ExtractedField
+from ...numerical_validation.common import _apply_needs_review, _confidence_by_name, _fields_by_name
 from .acra import check_entity
 from .addresses import check_addresses
 from .models import RegistryResult

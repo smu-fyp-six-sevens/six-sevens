@@ -11,8 +11,8 @@ import re
 from dataclasses import dataclass, field as dc_field
 from typing import Any
 
-from ..field_values import also_printed_in, describe_path, text_values
-from ..numerical_validation.models import SkippedCheck
+from ...field_values import also_printed_in, describe_path, text_values
+from ...numerical_validation.models import SkippedCheck
 from . import hdb, onemap
 from .http import LookupUnavailable
 from .models import RegistryFinding
@@ -24,8 +24,6 @@ RESIDENTIAL_FIELDS = frozenset({"individual_address", "residential_address", "ho
 # On these types the plain "address" field is the person's home address.
 RESIDENTIAL_ADDRESS_TYPES = frozenset({"nric", "credit_report", "proof_of_address"})
 
-# Six digits not part of a longer number, so "S460022" and "Singapore 460022" both count.
-_POSTAL_RE = re.compile(r"(?<!\d)(\d{6})(?!\d)")
 _BLOCK_RE = re.compile(r"^\s*(?:blk|block)?\s*(\d{1,4}[A-Z]?)\b(?!\s*-)", re.IGNORECASE)
 
 
@@ -112,7 +110,7 @@ def _addresses(fields: dict[str, Any], document_type: str | None) -> list[_Addre
     for value in text_values(fields):
         if not value.key.lower().endswith("address"):
             continue
-        postal = _POSTAL_RE.search(value.text)
+        postal = onemap.POSTAL_CODE_RE.search(value.text)
         if not postal:
             continue
         address = next((a for a in found if a.postal == postal.group(1) and _same_address(a.text, value.text)), None)

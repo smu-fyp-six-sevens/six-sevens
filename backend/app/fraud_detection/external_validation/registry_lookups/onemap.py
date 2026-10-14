@@ -7,9 +7,13 @@ when set.
 
 from __future__ import annotations
 
-from ...config import settings
+import re
+
+from ....config import settings
 from .http import get
 
+# Six digits not part of a longer number, so "S049514" and "Singapore 049514" both count.
+POSTAL_CODE_RE = re.compile(r"(?<!\d)(\d{6})(?!\d)")
 SOURCE = "OneMap (SLA)"
 _SEARCH_URL = "https://www.onemap.gov.sg/api/common/elastic/search"
 

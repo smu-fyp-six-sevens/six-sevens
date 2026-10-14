@@ -33,13 +33,13 @@ from ..fraud_detection.metadata_analysis import MetadataAnalysisResult, check_me
 from ..fraud_detection.layout_anomalies import LayoutAnomalyResult, check_layout_anomalies
 from ..fraud_detection.numerical_validation.models import NumericalValidationResult
 from ..fraud_detection.numerical_validation.runner import build_result, run_numerical_checks
-from ..langgraph.detection.binder import bind_numerical_checks
+from ..langgraph.detection.field_checks.binder import bind_checks
 from ..fraud_detection.date_anomalies import (
     DateAnomalyResult,
     check_date_anomalies,
 )
 from ..fraud_detection.spelling_anomaly import SpellingAnomalyResult, check_spelling_anomalies
-from ..fraud_detection.registry_lookups import RegistryResult, public_holidays_for, verify_against_registries
+from ..fraud_detection.external_validation.runner import ExternalValidationResult, run_external_validation
 
 router = APIRouter(prefix="/documents", tags=["detection"])
 cases_router = APIRouter(prefix="/cases", tags=["detection"])
@@ -391,7 +391,7 @@ async def get_numerical_validation(
     confirmed value metadata_analysis uses for its own type-scoped rules.
     """
     extracted_fields = await _fetch_extracted_fields(document_id)
-    bound = await bind_numerical_checks(document.document_type, extracted_fields)
+    bound = await bind_checks(document.document_type, extracted_fields)
     outcome = await asyncio.to_thread(
         run_numerical_checks, document.document_type, extracted_fields, bound.bindings,
     )
@@ -424,13 +424,11 @@ async def get_date_anomalies(
     re-ingestion.
     """
     extracted_fields = await _fetch_extracted_fields(document_id)
-    holidays = await public_holidays_for(document.document_type)
     result = await asyncio.to_thread(
         check_date_anomalies,
         document_id,
         extracted_fields,
         document.document_type,
-        holidays,
     )
     await _trace_check(
         document_id, "check_date_anomalies",
@@ -439,21 +437,25 @@ async def get_date_anomalies(
     return result
 
 
-@router.get("/{document_id}/detection/registry-verification", response_model=RegistryResult)
-async def get_registry_verification(
+@router.get("/{document_id}/detection/external-validation", response_model=ExternalValidationResult)
+async def get_external_validation(
     document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
-) -> RegistryResult:
+) -> ExternalValidationResult:
     """
-    The document's extracted facts against Singapore's public registries, live: ACRA
-    (the company exists, under this name, is live, with this incorporation date and
-    registered address), and OneMap and HDB (the address exists and, for a home address,
-    is a residential block). Read-only.
-    A registry that can't be reached is reported as a skipped check, never a finding.
+    The document's extracted facts against outside references, chosen by its document
+    type: live ACRA, OneMap and HDB lookups, and published tables (CPF rates, GST rate,
+    IRAS tax rules, a bank's published identifiers, public holidays for GIRO dates).
+    Read-only. A registry that can't be reached is reported as a skipped check, never a
+    finding. One LLM call binds the static checks' inputs, as numerical-validation does.
     """
     extracted_fields = await _fetch_extracted_fields(document_id)
-    result = await verify_against_registries(document_id, extracted_fields, document.document_type)
+    bound = await bind_checks(document.document_type, extracted_fields, "external")
+    result = await run_external_validation(
+        document_id, document.document_type, extracted_fields, bound.bindings,
+    )
+    result.binding_error = bound.error
     await _trace_check(
-        document_id, "check_registry_verification",
+        document_id, "check_external_validation",
         unable_to_assess=result.unable_to_assess, finding_count=len(result.findings),
     )
     return result

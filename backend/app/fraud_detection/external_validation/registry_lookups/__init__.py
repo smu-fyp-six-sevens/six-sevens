@@ -15,7 +15,7 @@ rather than a finding: a registry being down is never evidence about the documen
 """
 
 from .models import RegistryFinding, RegistryResult
-from .public_holidays import public_holidays, public_holidays_for
+from .public_holidays import public_holidays
 from .runner import verify_against_registries
 
-__all__ = ["RegistryFinding", "RegistryResult", "public_holidays", "public_holidays_for", "verify_against_registries"]
+__all__ = ["RegistryFinding", "RegistryResult", "public_holidays", "verify_against_registries"]

@@ -8,10 +8,10 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.fraud_detection.font_consistency import ExtractedField
-from app.fraud_detection.registry_lookups import verify_against_registries
-from app.fraud_detection.registry_lookups.datagov import Collection
-from app.fraud_detection.registry_lookups.hdb import same_street
-from app.fraud_detection.registry_lookups.http import LookupUnavailable
+from app.fraud_detection.external_validation.registry_lookups import verify_against_registries
+from app.fraud_detection.external_validation.registry_lookups.datagov import Collection
+from app.fraud_detection.external_validation.registry_lookups.hdb import same_street
+from app.fraud_detection.external_validation.registry_lookups.http import LookupUnavailable
 
 # Real records as data.gov.sg returned them for OCBC.
 _OCBC_BASIC = {"uen": "193200032W", "uen_status_desc": "Registered", "entity_name": "OVERSEA-CHINESE BANKING CORPORATION LIMITED",
@@ -25,7 +25,7 @@ _OCBC_DETAIL = {"uen": "193200032W", "entity_name": "OVERSEA-CHINESE BANKING COR
 @pytest.fixture(autouse=True)
 def no_network():
     """Fails any test that would reach a live registry."""
-    with patch("app.fraud_detection.registry_lookups.http.httpx.AsyncClient",
+    with patch("app.fraud_detection.external_validation.registry_lookups.http.httpx.AsyncClient",
                side_effect=AssertionError("test tried to call a live registry")):
         yield
 
@@ -50,8 +50,8 @@ def _catalogue(last_updated: datetime):
     async def dataset_name(dataset_id):
         return _DATASET_NAMES[dataset_id]
 
-    return (patch("app.fraud_detection.registry_lookups.acra.collection", side_effect=collection),
-            patch("app.fraud_detection.registry_lookups.acra.dataset_name", side_effect=dataset_name))
+    return (patch("app.fraud_detection.external_validation.registry_lookups.acra.collection", side_effect=collection),
+            patch("app.fraud_detection.external_validation.registry_lookups.acra.dataset_name", side_effect=dataset_name))
 
 
 @pytest.fixture(autouse=True)
@@ -78,7 +78,7 @@ def _codes(result, code: str) -> list:
 @pytest.fixture
 def ocbc_registry():
     datasets = {"d_3f960c10fed6145404ca7b821f263b87": [_OCBC_BASIC], "d_5c4ef48b025fdfbc80056401f06e3df9": [_OCBC_DETAIL]}
-    with patch("app.fraud_detection.registry_lookups.acra.datastore_search", side_effect=_datastore(datasets)):
+    with patch("app.fraud_detection.external_validation.registry_lookups.acra.datastore_search", side_effect=_datastore(datasets)):
         yield
 
 
@@ -102,7 +102,7 @@ async def test_acra_flags_wrong_name_and_incorporation_date(ocbc_registry) -> No
 async def test_acra_flags_a_registered_address_mismatch_on_an_incumbency(ocbc_registry) -> None:
     raffles = [{"BLK_NO": "1", "ROAD_NAME": "RAFFLES PLACE", "BUILDING": "ONE RAFFLES PLACE",
                 "ADDRESS": "1 RAFFLES PLACE ONE RAFFLES PLACE SINGAPORE 048616", "POSTAL": "048616"}]
-    with patch("app.fraud_detection.registry_lookups.onemap.addresses_at_postal_code", AsyncMock(return_value=raffles)):
+    with patch("app.fraud_detection.external_validation.registry_lookups.onemap.addresses_at_postal_code", AsyncMock(return_value=raffles)):
         result = await verify_against_registries("d", [
             _field("uen", "193200032W"), _field("company_address", "1 Raffles Place, Singapore 048616"),
         ], "certificate_of_incumbency")
@@ -114,20 +114,20 @@ async def test_acra_flags_a_struck_off_company() -> None:
     basic = {"uen": "201201936C", "uen_status_desc": "Deregistered", "entity_name": "MILLENNIUM AUTOMATION & SYSTEMS PTE. LTD."}
     detail = {**basic, "entity_status_description": "Struck Off"}
     datasets = {"d_3f960c10fed6145404ca7b821f263b87": [basic], "d_9af9317c646a1c881bb5591c91817cc6": [detail]}
-    with patch("app.fraud_detection.registry_lookups.acra.datastore_search", side_effect=_datastore(datasets)):
+    with patch("app.fraud_detection.external_validation.registry_lookups.acra.datastore_search", side_effect=_datastore(datasets)):
         result = await verify_against_registries("d", [_field("uen", "201201936C")], "certificate_of_incorporation")
     assert _codes(result, "REG.ENTITY_STATUS")[0].severity == "impossible"
 
 
 async def test_acra_flags_a_uen_that_does_not_exist() -> None:
-    with patch("app.fraud_detection.registry_lookups.acra.datastore_search", side_effect=_datastore({})):
+    with patch("app.fraud_detection.external_validation.registry_lookups.acra.datastore_search", side_effect=_datastore({})):
         result = await verify_against_registries("d", [_field("uen", "209912345Z")], "certificate_of_incorporation")
     assert _codes(result, "REG.UEN_EXISTS")[0].severity == "impossible"
 
 
 async def test_acra_does_not_report_a_missing_uen_against_a_stale_register() -> None:
     first, second = _catalogue(datetime.now(timezone.utc) - timedelta(days=90))
-    with first, second, patch("app.fraud_detection.registry_lookups.acra.datastore_search", side_effect=_datastore({})):
+    with first, second, patch("app.fraud_detection.external_validation.registry_lookups.acra.datastore_search", side_effect=_datastore({})):
         result = await verify_against_registries("d", [_field("uen", "209912345Z")], "certificate_of_incorporation")
     assert _codes(result, "REG.UEN_EXISTS") == []
     assert any(s.check_code == "REG.UEN_EXISTS" and "last updated" in s.reason for s in result.skipped_checks)
@@ -142,7 +142,7 @@ async def test_acra_finds_datasets_from_the_catalogue_whatever_their_order() -> 
         searched.append(resource_id)
         return {_ACRA_UEN: [_OCBC_BASIC], _DETAIL_O: [_OCBC_DETAIL]}.get(resource_id, [])
 
-    with patch("app.fraud_detection.registry_lookups.acra.datastore_search", side_effect=search):
+    with patch("app.fraud_detection.external_validation.registry_lookups.acra.datastore_search", side_effect=search):
         result = await verify_against_registries("d", [_field("uen", "193200032W"),
                                                        _field("incorporation_date", "1932-10-31")], "certificate_of_incorporation")
     assert searched == [_ACRA_UEN, _DETAIL_O]
@@ -150,7 +150,7 @@ async def test_acra_finds_datasets_from_the_catalogue_whatever_their_order() -> 
 
 
 async def test_rate_limited_registry_is_a_skip_not_a_finding() -> None:
-    with patch("app.fraud_detection.registry_lookups.acra.datastore_search",
+    with patch("app.fraud_detection.external_validation.registry_lookups.acra.datastore_search",
                AsyncMock(side_effect=LookupUnavailable("rate limited"))):
         result = await verify_against_registries("d", [_field("uen", "193200032W")], "certificate_of_incorporation")
     assert result.findings == []
@@ -176,22 +176,22 @@ _HOUGANG_207 = [{"BLK_NO": "207", "ROAD_NAME": "HOUGANG STREET 21", "BUILDING": 
 
 async def test_address_flags_a_street_that_is_not_at_the_postal_code() -> None:
     # The C028 credit report's address: 530207 is in Hougang, not Jurong West.
-    with patch("app.fraud_detection.registry_lookups.onemap.addresses_at_postal_code", AsyncMock(return_value=_HOUGANG_207)):
+    with patch("app.fraud_detection.external_validation.registry_lookups.onemap.addresses_at_postal_code", AsyncMock(return_value=_HOUGANG_207)):
         result = await verify_against_registries("d", [_field("address", "34 Jurong West Avenue, #11-80, Singapore 530207")], "credit_report")
     assert len(_codes(result, "REG.ADDRESS_MATCH")) == 1
 
 
 async def test_a_payslip_checks_its_address_but_never_looks_up_acra() -> None:
-    with patch("app.fraud_detection.registry_lookups.acra.datastore_search",
+    with patch("app.fraud_detection.external_validation.registry_lookups.acra.datastore_search",
                AsyncMock(side_effect=AssertionError("a payslip has no UEN to look up"))), \
-         patch("app.fraud_detection.registry_lookups.onemap.addresses_at_postal_code", AsyncMock(return_value=_HOUGANG_207)):
+         patch("app.fraud_detection.external_validation.registry_lookups.onemap.addresses_at_postal_code", AsyncMock(return_value=_HOUGANG_207)):
         result = await verify_against_registries(
             "d", [_field("company_address", "207 Hougang Street 21, Singapore 530207")], "payslip")
     assert result.findings == [] and result.skipped_checks == [] and not result.unable_to_assess
 
 
 async def test_address_flags_a_postal_code_that_does_not_exist() -> None:
-    with patch("app.fraud_detection.registry_lookups.onemap.addresses_at_postal_code", AsyncMock(return_value=[])):
+    with patch("app.fraud_detection.external_validation.registry_lookups.onemap.addresses_at_postal_code", AsyncMock(return_value=[])):
         result = await verify_against_registries("d", [_field("individual_address", "1 Nowhere Road Singapore 999999")], "proof_of_address")
     assert _codes(result, "REG.POSTAL_CODE_EXISTS")[0].severity == "impossible"
 
@@ -199,15 +199,15 @@ async def test_address_flags_a_postal_code_that_does_not_exist() -> None:
 async def test_address_flags_a_home_address_at_a_non_residential_hdb_block() -> None:
     hdb_row = [{"blk_no": "207", "street": "HOUGANG ST 21", "residential": "N", "commercial": "Y"}]
     with (
-        patch("app.fraud_detection.registry_lookups.onemap.addresses_at_postal_code", AsyncMock(return_value=_HOUGANG_207)),
-        patch("app.fraud_detection.registry_lookups.hdb.datastore_search", AsyncMock(return_value=hdb_row)),
+        patch("app.fraud_detection.external_validation.registry_lookups.onemap.addresses_at_postal_code", AsyncMock(return_value=_HOUGANG_207)),
+        patch("app.fraud_detection.external_validation.registry_lookups.hdb.datastore_search", AsyncMock(return_value=hdb_row)),
     ):
         result = await verify_against_registries("d", [_field("individual_address", "Blk 207 Hougang Street 21 Singapore 530207")], "proof_of_address")
     assert len(_codes(result, "REG.RESIDENTIAL_ADDRESS")) == 1
 
 
 async def test_company_address_at_a_commercial_block_is_not_flagged_as_non_residential() -> None:
-    with patch("app.fraud_detection.registry_lookups.onemap.addresses_at_postal_code", AsyncMock(return_value=_HOUGANG_207)):
+    with patch("app.fraud_detection.external_validation.registry_lookups.onemap.addresses_at_postal_code", AsyncMock(return_value=_HOUGANG_207)):
         result = await verify_against_registries("d", [_field("company_address", "207 Hougang Street 21 Singapore 530207")], "payslip")
     assert result.findings == []
 
@@ -226,7 +226,7 @@ _BEDOK_22 = [{"BLK_NO": "22", "ROAD_NAME": "BEDOK SOUTH AVENUE 1", "BUILDING": "
 async def test_address_needs_the_whole_road_name_not_just_the_block_and_town() -> None:
     # Regression: the NRIC_8823 back gives "22 Bedok North Avenue 3", but 460022 is 22 Bedok South Avenue 1.
     # A matching block number and the word "Bedok" used to be enough.
-    with patch("app.fraud_detection.registry_lookups.onemap.addresses_at_postal_code", AsyncMock(return_value=_BEDOK_22)):
+    with patch("app.fraud_detection.external_validation.registry_lookups.onemap.addresses_at_postal_code", AsyncMock(return_value=_BEDOK_22)):
         wrong_road = await verify_against_registries(
             "d", [_field("individual_address", "22 BEDOK NORTH AVENUE 3 #10-12 SINGAPORE 460022")], "nric")
         wrong_block = await verify_against_registries(
@@ -246,7 +246,7 @@ async def test_addresses_in_a_table_are_checked_once_however_often_they_are_prin
         _field("individual_address", ["Blk 22 Bedok Nth Ave 3 #10-12 S460022"]),
     ]
     lookup = AsyncMock(return_value=_BEDOK_22)
-    with patch("app.fraud_detection.registry_lookups.onemap.addresses_at_postal_code", lookup):
+    with patch("app.fraud_detection.external_validation.registry_lookups.onemap.addresses_at_postal_code", lookup):
         result = await verify_against_registries("d", fields, "company_constitution")
     findings = _codes(result, "REG.ADDRESS_MATCH")
     assert len(findings) == 1 and lookup.await_count == 1

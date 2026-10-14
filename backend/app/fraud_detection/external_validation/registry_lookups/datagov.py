@@ -11,7 +11,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime
 
-from ...config import settings
+from ....config import settings
 from .http import LookupUnavailable, get
 
 _DATASTORE_URL = "https://data.gov.sg/api/action/datastore_search"

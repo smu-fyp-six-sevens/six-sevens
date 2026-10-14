@@ -66,8 +66,8 @@ def _check_title(fn: Any) -> str:
     return doc[:140] if doc else fn.__name__
 
 
-def _applicable(document_type: str | None) -> list[Check]:
-    return checks_for(document_type)
+def _applicable(document_type: str | None, group: str = "numerical") -> list[Check]:
+    return checks_for(document_type, group)
 
 
 def _resolve_plain(role: str, bound: dict[str, str], values: dict[str, Any]) -> str | None:
@@ -79,10 +79,11 @@ def _resolve_plain(role: str, bound: dict[str, str], values: dict[str, Any]) -> 
 
 
 def _run_checks(document_type: str | None, values: dict[str, Any], confidences: dict[str, float],
-                plain: dict[str, str], rows: dict[str, tuple[str, int]], outcome: RunOutcome) -> None:
+                plain: dict[str, str], rows: dict[str, tuple[str, int]], outcome: RunOutcome,
+                group: str = "numerical") -> None:
     today = date.today()
     row_dicts = {name: array_rows(values[name]) or [] for name in {f for f, _ in rows.values()}}
-    for entry in _applicable(document_type):
+    for entry in _applicable(document_type, group):
         kwargs: dict[str, Any] = {}
         missing: list[str] = []
         rename: dict[str, str] = {}
@@ -325,8 +326,13 @@ def _shared_field_conflicts(bindings: list[Binding], values: dict[str, Any], out
     return dropped
 
 
-def run_numerical_checks(document_type: str | None, fields: list[Any], bindings: list[Binding]) -> RunOutcome:
-    """fields are ExtractedField-like objects. Returns findings, skips and what was bound."""
+def run_numerical_checks(
+    document_type: str | None, fields: list[Any], bindings: list[Binding], group: str = "numerical",
+) -> RunOutcome:
+    """fields are ExtractedField-like objects. Returns findings, skips and what was bound.
+
+    group picks which registered checks run: "numerical" (also the statement casts and Benford) or
+    "external" (lookups in static reference tables)."""
     values = {f.field_name: f.field_value for f in fields}
     confidences = {f.field_name: f.confidence for f in fields if f.confidence is not None}
     outcome = RunOutcome()
@@ -359,7 +365,9 @@ def run_numerical_checks(document_type: str | None, fields: list[Any], bindings:
         else:
             outcome.issues.append(f"'{binding.role}' is not a row role")
 
-    _run_checks(document_type, values, confidences, plain, rows, outcome)
+    _run_checks(document_type, values, confidences, plain, rows, outcome, group)
+    if group != "numerical":
+        return outcome
     if document_type in LINE_SET_TYPES:
         _statement_casts(values, plain, bound_rows, confidences, outcome)
     if document_type == "bank_statement":
@@ -381,11 +389,12 @@ def benford_summary(document_type: str | None, outcome: RunOutcome) -> Any:
     return _benford_unavailable(reason)
 
 
-def render_check_roles(document_type: str | None, fields: list[Any]) -> str:
-    """The checks that apply to this document type, and the roles each one reads."""
+def render_check_roles(document_type: str | None, fields: list[Any], group: str = "numerical") -> str:
+    """The checks of this group that apply to this document type, and the roles each one reads."""
     values = {f.field_name for f in fields}
-    lines = ["Numerical checks for this document type, and the roles each one reads:"]
-    for entry in _applicable(document_type):
+    label = "Numerical" if group == "numerical" else "External reference"
+    lines = [f"{label} checks for this document type, and the roles each one reads:"]
+    for entry in _applicable(document_type, group):
         title = _check_title(entry.fn)
         if entry.scan_all:
             lines.append(f"- {title} (reads every field; no roles to bind)")
@@ -396,7 +405,7 @@ def render_check_roles(document_type: str | None, fields: list[Any]) -> str:
         if not roles:
             continue
         lines.append(f"- {title}: " + ", ".join(roles))
-    if document_type in LINE_SET_TYPES:
+    if group == "numerical" and document_type in LINE_SET_TYPES:
         lines.append(
             "- Statement casts: bind each income statement line as income_line or expense_line with its row "
             "index (leave out subtotals; unbound rows are reported as unassigned); bind revenue, "

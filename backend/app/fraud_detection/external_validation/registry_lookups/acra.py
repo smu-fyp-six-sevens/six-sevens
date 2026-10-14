@@ -18,11 +18,12 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import Any
 
-from ...case_match import company_names_match, normalize_uen
-from ..numerical_validation.common import _parse_field_date
-from ..numerical_validation.models import SkippedCheck
+from ....case_match import company_names_match, normalize_uen
+from ...numerical_validation.common import _parse_field_date
+from ...numerical_validation.models import SkippedCheck
 from .datagov import collection, dataset_name, datastore_search
 from .http import LookupUnavailable
+from .onemap import POSTAL_CODE_RE
 from .models import RegistryFinding
 
 SOURCE = "ACRA (data.gov.sg)"
@@ -39,8 +40,6 @@ REGISTERED_ADDRESS_TYPES = frozenset({"certificate_of_incumbency"})
 
 _GONE_RE = re.compile(r"struck off|deregistered|dissolved|ceased|cancel|terminated|expired|amalgamated", re.I)
 _DISTRESS_RE = re.compile(r"liquidation|judicial management|receivership|winding up", re.I)
-# Six digits not part of a longer number, so "S049514" and "Singapore 049514" both count.
-_POSTAL_RE = re.compile(r"(?<!\d)(\d{6})(?!\d)")
 
 
 @dataclass(frozen=True)
@@ -219,7 +218,7 @@ def _date_findings(entity: AcraEntity, stated: Any) -> list[RegistryFinding]:
 
 
 def _address_findings(entity: AcraEntity, stated: Any, document_type: str | None) -> list[RegistryFinding]:
-    match = _POSTAL_RE.search(str(stated or ""))
+    match = POSTAL_CODE_RE.search(str(stated or ""))
     if not match or not entity.postal_code or match.group(1) == entity.postal_code:
         return []
     registered = document_type in REGISTERED_ADDRESS_TYPES

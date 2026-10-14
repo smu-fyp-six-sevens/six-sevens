@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from datetime import date
 
-from ..numerical_validation.common import _parse_field_date
+from ...numerical_validation.common import _parse_field_date
 from ..sg_reference.holidays import BUNDLED_HOLIDAYS, PublicHolidays
 from .datagov import collection, dataset_name, datastore_search
 from .http import LookupUnavailable
@@ -59,13 +59,3 @@ async def public_holidays() -> PublicHolidays:
     days = {d: n for d, n in BUNDLED_HOLIDAYS.days.items() if d.year not in live_years} | live
     return PublicHolidays(days=days, years=live_years | BUNDLED_HOLIDAYS.years, source=SOURCE)
 
-
-# The document types whose date checks depend on public holidays.
-_HOLIDAY_DEPENDENT_TYPES = frozenset({"bank_statement"})
-
-
-async def public_holidays_for(document_type: str | None) -> PublicHolidays:
-    """The live list for documents whose checks need it; other types don't make the lookup."""
-    if document_type in _HOLIDAY_DEPENDENT_TYPES:
-        return await public_holidays()
-    return BUNDLED_HOLIDAYS

@@ -7,9 +7,9 @@ from types import SimpleNamespace
 
 from app.fraud_detection.font_consistency import ExtractedField
 from app.fraud_detection.numerical_validation.runner import run_numerical_checks
-from app.fraud_detection.sg_reference.cpf import CPF_RATE_TABLES, band_for_age, bands_in_force, contribution
-from app.fraud_detection.sg_reference.gst import gst_rate_on, possible_rates
-from app.fraud_detection.sg_reference.holidays import giro_closed_reason
+from app.fraud_detection.external_validation.sg_reference.cpf import CPF_RATE_TABLES, band_for_age, bands_in_force, contribution
+from app.fraud_detection.external_validation.sg_reference.gst import gst_rate_on, possible_rates
+from app.fraud_detection.external_validation.sg_reference.holidays import giro_closed_reason
 
 
 def _field(name: str, value) -> ExtractedField:
@@ -17,7 +17,7 @@ def _field(name: str, value) -> ExtractedField:
 
 
 def _run(fields: list[ExtractedField], document_type: str):
-    outcome = run_numerical_checks(document_type, fields, [])
+    outcome = run_numerical_checks(document_type, fields, [], group="external")
     return SimpleNamespace(findings=outcome.findings, skipped=outcome.skipped)
 
 

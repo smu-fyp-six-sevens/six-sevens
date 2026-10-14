@@ -1,7 +1,8 @@
-"""One small LLM call that binds numerical check roles to a document's fields.
+"""One small LLM call that binds check roles to a document's fields.
 
-Used where there is no tool loop to ask, such as the officer's numerical-validation
-endpoint. It sees the same checks section and field list as the content specialist.
+Used where there is no tool loop to ask, such as the officer's numerical-validation and
+external-validation endpoints. In the agent path the specialist fills the bindings itself and
+this call is not made. It sees the same checks section and field list as the content specialist.
 A failed or malformed reply gives no bindings and an error message; the runner then
 falls back to exact-name matches only, and skips anything else.
 """
@@ -14,18 +15,18 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from ... import telemetry
-from ...config import settings
-from ...fraud_detection.field_catalogue import render_field_catalogue
-from ...fraud_detection.numerical_validation.runner import Binding, render_check_roles
-from .._anthropic import build_chat_anthropic
-from .specialists import _parse_json_object
+from .... import telemetry
+from ....config import settings
+from ....fraud_detection.field_catalogue import render_field_catalogue
+from ....fraud_detection.numerical_validation.runner import Binding, render_check_roles
+from ..._anthropic import build_chat_anthropic
+from ..specialists import _parse_json_object
 
 logger = logging.getLogger("classifier_pipeline.langgraph.detection.binder")
 
 _BINDER_MAX_TOKENS = 2048
 
-_BINDER_SYSTEM = """You fill in the inputs of a bank's forgery-check numerical checks. You are given the checks that apply to one document, the roles each one reads, and the document's fields.
+_BINDER_SYSTEM = """You fill in the inputs of a bank's forgery-check checks. You are given the checks that apply to one document, the roles each one reads, and the document's fields.
 
 Rules:
 - Bind a role only when a field clearly holds that value. Use field names exactly as listed, and row numbers exactly as listed.
@@ -69,12 +70,14 @@ def _parse_bindings(parsed: dict | None) -> BindingResult:
     return BindingResult(bindings=bindings, error="; ".join(problems) or None)
 
 
-async def bind_numerical_checks(document_type: str | None, fields: list[Any]) -> BindingResult:
-    """fields are ExtractedField-like objects. With no fields there is nothing to bind, so no call is made."""
+async def bind_checks(document_type: str | None, fields: list[Any], group: str = "numerical") -> BindingResult:
+    """fields are ExtractedField-like objects. With no fields there is nothing to bind, so no call is made.
+
+    group is "numerical" or "external": which tool's check menu the binding is for."""
     if not fields:
         return BindingResult()
     model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, _BINDER_MAX_TOKENS)
-    user = "\n\n".join([render_check_roles(document_type, fields), render_field_catalogue(fields, document_type)])
+    user = "\n\n".join([render_check_roles(document_type, fields, group), render_field_catalogue(fields, document_type)])
     messages = [
         SystemMessage(content=[
             {"type": "text", "text": _BINDER_SYSTEM, "cache_control": {"type": "ephemeral"}},

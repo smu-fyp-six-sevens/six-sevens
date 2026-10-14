@@ -4,12 +4,18 @@ from __future__ import annotations
 
 from typing import Any
 
+from ...numerical_validation.registry import Num, check
 from ..sg_reference.gst import possible_rates
-from .common import CheckResult, _finding, _money, _parse_field_date, skipped
-from .registry import Num, check
+from ...numerical_validation.common import (
+    CheckResult,
+    _finding,
+    _money,
+    _parse_field_date,
+    skipped,
+)
 
 
-@check(code="POA.GST", applies=("proof_of_address",))
+@check(code="POA.GST", applies=("proof_of_address",), group="external", source="IRAS GST rates")
 def _check_gst(
     *, gst_amount: Num, charges_before_gst: Num, bill_date: Any = None, billing_period_end: Any = None,
 ) -> CheckResult:

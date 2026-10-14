@@ -86,3 +86,18 @@ def band_for_age(bands: tuple[CpfBand, ...], date_of_birth: date, pay_date: date
         if band.above_age is not None and _passed(band.above_age):
             chosen = band
     return chosen
+
+
+# Effective date -> CPF ordinary wage ceiling (SGD/month), per CPF Board's
+# "What is the Ordinary Wage (OW) ceiling?" page. Keyed by date, not
+# year: the ceiling changed mid-2023.
+ORDINARY_WAGE_CEILINGS: dict[str, int] = {
+    "2016-01-01": 6_000, "2023-09-01": 6_300, "2024-01-01": 6_800,
+    "2025-01-01": 7_400, "2026-01-01": 8_000,
+}
+
+
+def ceiling_on(on: date) -> int | None:
+    """The ordinary wage ceiling (SGD/month) in force on a given day."""
+    applicable = [(date.fromisoformat(k), v) for k, v in ORDINARY_WAGE_CEILINGS.items() if date.fromisoformat(k) <= on]
+    return max(applicable)[1] if applicable else None

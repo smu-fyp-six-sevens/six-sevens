@@ -6,7 +6,6 @@ from types import SimpleNamespace
 from app.fraud_detection.field_catalogue import array_rows
 from app.fraud_detection.font_consistency import ExtractedField
 from app.fraud_detection.numerical_validation.runner import Binding, ROW_ROLES, benford_summary, run_numerical_checks
-from app.fraud_detection.numerical_validation.common import REFERENCE_DATA
 from app.fraud_detection.numerical_validation.identity_company import _mrz_check_digit, _nric_expected_letter
 from app.fraud_detection.numerical_validation.statements import BENFORD_MIN_SAMPLE, _benford
 
@@ -29,10 +28,13 @@ def _auto_bindings(fields: list[ExtractedField]) -> list[Binding]:
 
 
 def _run(fields: list[ExtractedField], document_type: str | None = None):
-    outcome = run_numerical_checks(document_type, fields, _auto_bindings(fields))
+    """Both check groups: the numerical tool and the external-validation tool's static reference checks."""
+    bindings = _auto_bindings(fields)
+    outcome = run_numerical_checks(document_type, fields, bindings)
+    external = run_numerical_checks(document_type, fields, bindings, group="external")
     return SimpleNamespace(
-        findings=outcome.findings,
-        skipped_checks=outcome.skipped,
+        findings=[*outcome.findings, *external.findings],
+        skipped_checks=[*outcome.skipped, *external.skipped],
         benford=benford_summary(document_type, outcome),
         benford_excluding_fees=outcome.benford_excluding_fees,
         unable_to_assess=not fields,
@@ -1239,7 +1241,9 @@ def test_bank_identifiers_checks_dbs_gst_number() -> None:
 def test_bank_identifiers_skips_a_value_not_shaped_like_the_identifier() -> None:
     # Regression: the binder bound bank_contact to bic_code, and the phone number was reported as a fake BIC.
     fields = [_field("bank_name", "DBS Bank Ltd"), _field("bank_contact", "1800 222 2200 (+65 6222 2200 from overseas)")]
-    outcome = run_numerical_checks("bank_statement", fields, [Binding(role="bic_code", field="bank_contact", row=None)])
+    outcome = run_numerical_checks(
+        "bank_statement", fields, [Binding(role="bic_code", field="bank_contact", row=None)], group="external",
+    )
     assert [f for f in outcome.findings if f.check_code == "BS.BANK_IDENTIFIERS"] == []
     skip = next(s for s in outcome.skipped if s.check_code == "BS.BANK_IDENTIFIERS")
     assert "isn't shaped like a SWIFT BIC" in skip.reason

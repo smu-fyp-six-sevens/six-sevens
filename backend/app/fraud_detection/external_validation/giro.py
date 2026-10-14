@@ -12,8 +12,11 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
-from .numerical_validation.common import _parse_field_date, _rows
+from ..numerical_validation.common import _parse_field_date, _rows
 from .sg_reference.holidays import BUNDLED_HOLIDAYS, PublicHolidays, giro_closed_reason
+
+# The document types GIRO payments appear on, so the only ones that need the holiday list.
+GIRO_DOCUMENT_TYPES = frozenset({"bank_statement"})
 
 # "GIRO", "Interbank GIRO", "IBG", "PayNow GIRO" — all settle through GIRO on business days.
 _GIRO_RE = re.compile(r"\bgiro\b|\bibg\b", re.IGNORECASE)

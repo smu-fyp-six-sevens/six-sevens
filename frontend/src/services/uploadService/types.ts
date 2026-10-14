@@ -240,7 +240,7 @@ export type IndividualCheckId =
   | 'numerical-validation'
   | 'date-anomalies'
   | 'company-name-consistency'
-  | 'registry-verification'
+  | 'external-validation'
   | 'metadata-anomaly'
   | 'image-integrity'
   | 'ai-generation';

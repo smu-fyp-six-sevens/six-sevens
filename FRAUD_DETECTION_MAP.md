@@ -36,8 +36,9 @@ findings it dismisses.
 | `metadata_analysis.py` | File-embedded metadata (author/producer/create-modify dates) tamper signals | 54 |
 | `date_anomalies.py` | Date extraction/labeling and logical date consistency (future dates, end-before-start) | 38 |
 | `spelling_anomaly.py` | Misspellings via SymSpell, filtered against `domain_terms.py` allow-list | 24 |
+| `external_validation/` | The document's facts against outside references, chosen by document type. `runner.py` is the entry point; `registry_lookups/` holds the live ACRA, OneMap, HDB and MOM holiday lookups; `sg_reference/` holds the published tables (CPF rates and ceilings, GST rate, IRAS tax rules, bank identifiers, public holidays); `reference_checks/` holds the checks that read those tables (`PAY.CPF_RATE`, `PAY.CPF_CEILING`, `POA.GST`, `NOA.PAYABLE`, `BS.BANK_IDENTIFIERS`, `BS.ACCOUNT_NUMBER_FORMAT`), registered as `group="external"`; `giro.py` is the GIRO closed-day check. Run by `external_validation_tool` and the `external-validation` endpoint | — |
 | `font_consistency.py` | Font family/size/emphasis (bold/italic/underline) inconsistency | 16 |
-| `company_identity.py` | Company name compared against every other document in the case (except IDs, proof of address, rejected and not-yet-extracted); legal suffix, letter case and "&"/"AND" are ignored; an unrecognised document matches if the name appears anywhere in its fields. Content Validation's `company_name_consistency_tool` — its findings can't be dismissed or rated below medium, so they always flag (SCRUM-255) | 44 |
+| `company_identity.py` | Company name compared against every other document in the case (except IDs, proof of address, rejected and not-yet-extracted); legal suffix, letter case and "&"/"AND" are ignored; an unrecognised document matches if the name appears anywhere in its fields. `company_name_consistency_tool`, a cross-document check that is not attached to a specialist until the cross-document module exists. Its findings can't be dismissed or rated below medium, so they always flag (SCRUM-255) | 44 |
 | `domain_terms.py` | Not a check — allow-list of legal/financial jargon feeding `spelling_anomaly.py` | — |
 
 `image_manipulation.py` (SCRUM-64) covers resolution and compression mismatches between a file's
@@ -56,13 +57,19 @@ fraud detection per its own docstring.
   Every tool returns the same shape (`tool`, `unable_to_assess`, `reason`, `findings`, `truncated`).
   Findings are capped at 15 per tool. A check's own severity is passed through as `severity_hint`,
   kept separate from the specialist's own `info/low/medium/high` scale.
-  The numerical checks run through `numerical_checks_tool` (`langgraph/detection/field_tools.py`, which calls `fraud_detection/numerical_validation/runner.py`).
-  The model binds each check's roles to document fields and, for row roles, row indices. Document
-  type comes from the run state. A check with unbound roles is skipped with the reason.
+  The field-driven checks live in `langgraph/detection/field_checks/`: `numerical_checks_tool` (calculations on the
+  document's own figures) and `external_validation_tool` (the document's facts against outside references: live
+  ACRA, OneMap and HDB lookups, and static tables for CPF, GST, IRAS tax, bank identifiers and GIRO holidays).
+  Both take a `bindings` argument that the specialist fills from the field list and check menus, and a document
+  type injected from the run state that the agent never sees; the type alone decides which checks run. A check with
+  unbound roles is skipped with the reason. The rule for which group a check is in: a lookup in a static table or
+  live source is external, a calculation is numerical (`group=` on `@check` in `numerical_validation/registry.py`).
+  `field_checks/binder.py` is the one-call binder used only by the officer endpoints, where there is no tool loop.
+  Company-name, address and identity matching are cross-document checks and are not attached to any specialist.
 - **`specialists.py`** — the three specialists and their tool sets:
   - Layout & Rendering: font consistency, layout anomalies, image manipulation, image tampering.
-  - Content Validation: spelling, date consistency, and `numerical_checks_tool`. It also gets the document's
-    field list and the checks that apply, with the roles each one reads, in its prompt.
+  - Content Validation: spelling, date consistency, `numerical_checks_tool` and `external_validation_tool`. It also
+    gets the document's field list and the two check menus, with the roles each one reads, in its prompt.
   - Digital Authenticity: metadata.
   Each specialist is a tool-calling loop (agent, tools, collect). "Collect" merges tool results with
   the LLM's assessments. A finding the LLM doesn't assess is still kept, marked `medium`.
@@ -278,7 +285,7 @@ Specialist to tool map (`specialists.py:42`):
 | Specialist | Tools |
 |---|---|
 | `layout_rendering` | `font_consistency_tool`, `layout_anomalies_tool`, `image_manipulation_tool`, `image_tampering_tool` |
-| `content_validation` | `spelling_tool`, `date_consistency_tool`, `numerical_checks_tool` |
+| `content_validation` | `spelling_tool`, `date_consistency_tool`, `numerical_checks_tool`, `external_validation_tool` |
 | `digital_authenticity` | `metadata_tool` |
 
 ### 2A.8 Trace events and telemetry
@@ -331,7 +338,7 @@ them.
 ## 3. API surface — `backend/app/routers/detection.py`
 
 - `GET /documents/{id}/detection/{font-consistency, layout-anomalies, image-manipulation,
-  image-tampering, image-integrity, spelling-anomaly, numerical-validation (one Haiku call binds the check inputs, `langgraph/detection/binder.py`), date-anomalies,
+  image-tampering, image-integrity, spelling-anomaly, numerical-validation and external-validation (one Haiku call each binds the check inputs, `langgraph/detection/field_checks/binder.py`), date-anomalies,
   metadata-anomaly}` — individual checks, gated by `_require_detection_has_run`: 409 until a
   `detection_report` exists for the document.
 - `GET /documents/{id}/detection/report` — 200 with the report; 502 if the last run recorded an
