@@ -6,10 +6,9 @@ judgement (dismissing false positives, setting each finding's severity),
 this only adds their findings up so a loan officer can see which cases
 need attention first.
 
-Computed live when one case is read (see case_service.build_summary), and
-saved to risk_scores when it changes (see store.py). The case list reads the
-saved score instead of recomputing every case, and a case with none saved is
-computed live.
+Computed only by a case analysis run (see case_pipeline/service.py), stored
+on that run and in risk_scores (see store.py). The case views read it from
+there and never recompute it.
 
 Scoring:
 - Points per finding from the specialist's final severity (SEVERITY_POINTS).
@@ -127,13 +126,15 @@ def _score_document(document: DocumentRecord, report: dict[str, Any]) -> list[Co
             document_id=document.id,
             filename=document.filename,
             document_type=document.document_type,
-            finding_id=finding["id"],
+            # Report ids ("numerical_checks_tool-1") repeat across documents; the prefix keeps them unique per case.
+            finding_id=f"{document.id[:8]}:{finding['id']}",
             tool=finding.get("tool"),
             severity=finding["severity"],
             summary=finding.get("summary") or "",
             rationale=finding.get("rationale") or "",
             points=round(points * (1.0 if finding["severity"] == "high" else noise_scale), 2),
             unreviewed=finding.get("rationale") == _UNASSESSED_RATIONALE,
+            flag_id=finding.get("flag_id"),
             category=category_for_finding(finding).value,
         )
         for finding, points in zip(findings, base_points)

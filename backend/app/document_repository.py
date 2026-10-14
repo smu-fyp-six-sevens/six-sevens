@@ -19,6 +19,14 @@ def _row(mapping: Any) -> dict:
     return cast(dict, mapping)
 
 
+# List reads skip the large exiftool `metadata` blob and the retired extracted_fields column; get_document keeps "*".
+_LIST_COLUMNS = (
+    "id, case_id, filename, document_type, classification_confidence, routing_status, storage_path, status, "
+    "retry_count, uploaded_at, queued_at, processing_started_at, failure_reason, evidence, "
+    "fulfilled_requirements, extraction_confidence, fields_reviewed_at, escalation_reason"
+)
+
+
 def _sync_case(case_id: Optional[str]) -> None:
     """
     Best-effort refresh of the case-level submission_finalized cache after a
@@ -397,7 +405,7 @@ def get_documents_in_status(
 ) -> list[DocumentRecord]:
     result = (
         supabase_client.table("documents")
-        .select("*")
+        .select(_LIST_COLUMNS)
         .in_("status", [s.value for s in statuses])
         .execute()
     )
@@ -411,7 +419,7 @@ def list_documents(
     *,
     include_fields: bool = True,
 ) -> list[DocumentRecord]:
-    query = supabase_client.table("documents").select("*")
+    query = supabase_client.table("documents").select(_LIST_COLUMNS)
     if case_id is not None:
         query = query.eq("case_id", case_id)
     if status is not None:

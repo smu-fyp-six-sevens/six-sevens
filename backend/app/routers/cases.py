@@ -10,7 +10,7 @@ from ._dependencies import get_case_or_404
 from ..case_match import CaseMatchResult
 from ..case_pipeline import service as analysis_service
 from ..case_pipeline.models import CaseAnalysis
-from ..models import IN_FLIGHT_STATUSES, CaseRecord, CaseSummary, UpdateCaseRequest
+from ..models import IN_FLIGHT_STATUSES, CaseListItem, CaseRecord, CaseSummary, UpdateCaseRequest
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 logger = logging.getLogger(__name__)
@@ -28,8 +28,8 @@ async def create_case(company_name: str | None = Body(None, embed=True)) -> Case
         ) from exc
 
 
-@router.get("", response_model=list[CaseSummary])
-async def list_cases() -> list[CaseSummary]:
+@router.get("", response_model=list[CaseListItem])
+async def list_cases() -> list[CaseListItem]:
     try:
         return await asyncio.to_thread(case_service.list_case_summaries)
     except Exception as exc:

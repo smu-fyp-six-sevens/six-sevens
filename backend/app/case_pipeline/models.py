@@ -11,6 +11,8 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from ..models import CaseRisk, SupportingDocumentRecommendation
+
 
 class FindingCategory(str, Enum):
     TAMPERING_FORENSIC = "tampering_forensic"
@@ -118,6 +120,9 @@ class CaseAnalysis(BaseModel):
     findings: list[CrossDocFinding] = Field(default_factory=list)
     outlook: Optional[RiskOutlook] = None
     summary: Optional[str] = None
+    # The case's risk and evidence requests: produced only here, then read by the case views.
+    risk: Optional[CaseRisk] = None
+    supporting_documents: list[SupportingDocumentRecommendation] = Field(default_factory=list)
     audit: AnalysisAudit = Field(default_factory=AnalysisAudit)
     # Step-by-step log of the run, for debugging. Includes hypotheses that were tried and dropped.
     trace: list[dict[str, Any]] = Field(default_factory=list)

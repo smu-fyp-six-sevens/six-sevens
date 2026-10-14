@@ -33,6 +33,7 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
 from ... import document_repository, extracted_fields_repository, storage_service
+from ...cpu_pool import run_cpu
 from ...fraud_detection.ai_generation import AIImageAssessment, AIIndicator, check_ai_generation
 from ...fraud_detection.date_anomalies import check_date_anomalies
 from ...fraud_detection.font_consistency import check_font_consistency
@@ -172,7 +173,7 @@ async def font_consistency_tool(document_id: Annotated[str, InjectedState("docum
         return _result("font_consistency_tool", [], unable="Document file is not available in storage")
 
     fields = await _extracted_fields(document_id)
-    result = await asyncio.to_thread(check_font_consistency, document_id, file_bytes, fields)
+    result = await run_cpu(check_font_consistency, document_id, file_bytes, fields)
     if result.unable_to_assess:
         return _result(
             "font_consistency_tool", [], unable=result.unable_to_assess_reason or "Unable to assess"
@@ -207,7 +208,7 @@ async def layout_anomalies_tool(document_id: Annotated[str, InjectedState("docum
 
     # The type selects a layout profile; an unknown document gets the generic checks.
     document = await _document(document_id)
-    result = await asyncio.to_thread(
+    result = await run_cpu(
         check_layout_anomalies,
         document_id,
         file_bytes,
@@ -330,7 +331,7 @@ async def image_manipulation_tool(document_id: Annotated[str, InjectedState("doc
     if file_bytes is None:
         return _result("image_manipulation_tool", [], unable="Document file is not available in storage")
 
-    result = await asyncio.to_thread(check_image_manipulation, document_id, file_bytes)
+    result = await run_cpu(check_image_manipulation, document_id, file_bytes)
     if result.unable_to_assess:
         return _result(
             "image_manipulation_tool", [], unable=result.unable_to_assess_reason or "Unable to assess"
@@ -362,7 +363,7 @@ async def image_tampering_tool(document_id: Annotated[str, InjectedState("docume
     if file_bytes is None:
         return _result("image_tampering_tool", [], unable="Document file is not available in storage")
 
-    result = await asyncio.to_thread(check_image_tampering, document_id, file_bytes)
+    result = await run_cpu(check_image_tampering, document_id, file_bytes)
     if result.unable_to_assess:
         return _result(
             "image_tampering_tool", [], unable=result.unable_to_assess_reason or "Unable to assess"
@@ -409,7 +410,7 @@ async def ai_generation_tool(document_id: Annotated[str, InjectedState("document
     if file_bytes is None:
         return _result("ai_generation_tool", [], unable="Document file is not available in storage")
 
-    result = await asyncio.to_thread(check_ai_generation, document_id, file_bytes)
+    result = await run_cpu(check_ai_generation, document_id, file_bytes)
     if result.unable_to_assess:
         return _result("ai_generation_tool", [], unable=result.unable_to_assess_reason or "Unable to assess")
 

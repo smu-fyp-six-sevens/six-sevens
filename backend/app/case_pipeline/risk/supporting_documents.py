@@ -1,9 +1,9 @@
 """
 Additional supporting documents a loan officer should request from the
 client, recommended from what the case's documents already show. Pure and
-deterministic like case_risk.py, and computed live on every case read (see
-case_service.build_summary), never stored — so it follows documents being
-added, rejected, re-extracted or edited.
+deterministic like case_risk.py. Run only as part of a case analysis (see
+case_pipeline/service.py) and stored on that run; a re-run picks up documents
+added, rejected, re-extracted or edited since.
 
 Bank statement trade transactions:
 - A large payment to a supplier needs a purchase order, and a large

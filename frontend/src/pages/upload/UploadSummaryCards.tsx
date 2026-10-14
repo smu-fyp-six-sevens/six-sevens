@@ -160,7 +160,8 @@ export function UploadSummaryCards({
 
             <CaseAnalysisCard caseId={caseId} analysisReady={analysisReady} overview={analysisOverview} />
 
-            <SupportingDocumentsCard recommendations={supportingDocumentRecommendations} />
+            {/* Both come from the latest complete case analysis, so risk is set exactly when one exists. */}
+            <SupportingDocumentsCard recommendations={supportingDocumentRecommendations} analysed={risk !== null} />
 
             <section className="summary-card">
               <div className="summary-card-header">

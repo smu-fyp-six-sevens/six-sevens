@@ -5,7 +5,7 @@ import logging
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
-from .. import case_service
+from .. import case_service, query_stats
 from ..auth import consume_ws_ticket, create_ws_ticket, require_auth
 from ..case_broadcaster import broadcaster
 
@@ -46,6 +46,7 @@ async def case_status_socket(websocket: WebSocket, case_id: str, ticket: str = "
         return
 
     await websocket.accept()
+    query_stats.count_event("ws.connect")
 
     queue = broadcaster.subscribe(case_id)
     disconnected = False
@@ -56,7 +57,8 @@ async def case_status_socket(websocket: WebSocket, case_id: str, ticket: str = "
         # a connection that just (re)opened has missed whatever Realtime
         # events happened while it was down, and this closes that gap. See
         # WS.MD's "missed-event race condition" note.
-        initial = await asyncio.to_thread(case_service.build_case_snapshot, case_id)
+        with query_stats.scope("ws connect snapshot"):
+            initial = await asyncio.to_thread(case_service.build_case_snapshot, case_id)
         if initial is None:
             await websocket.send_json({"type": "error", "detail": "Case not found"})
         else:
@@ -73,6 +75,7 @@ async def case_status_socket(websocket: WebSocket, case_id: str, ticket: str = "
 
                 if queue_task in done:
                     await websocket.send_json(queue_task.result())
+                    query_stats.count_event("ws.push")
 
                 if recv_task in done:
                     # Raises WebSocketDisconnect naturally on a client
@@ -86,9 +89,10 @@ async def case_status_socket(websocket: WebSocket, case_id: str, ticket: str = "
                     # Realtime event, useful right after an upload before
                     # the new row's insert has necessarily propagated
                     # through Realtime yet.
-                    snapshot = await asyncio.to_thread(
-                        case_service.build_case_snapshot, case_id
-                    )
+                    with query_stats.scope("ws refresh snapshot"):
+                        snapshot = await asyncio.to_thread(
+                            case_service.build_case_snapshot, case_id
+                        )
                     if snapshot is not None:
                         await websocket.send_json(snapshot)
     except WebSocketDisconnect:

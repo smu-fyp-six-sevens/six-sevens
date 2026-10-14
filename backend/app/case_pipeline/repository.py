@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Optional, cast
 
+from ..models import CaseRisk, SupportingDocumentRecommendation
 from ..supabase_client import supabase_client
 from .models import AnalysisAudit, CaseAnalysis, CrossDocFinding, RiskOutlook
 
@@ -12,7 +13,8 @@ _TABLE = "case_analysis_runs"
 _CHUNK = 100
 # What a case list needs from a run: no trace, outlook or audit, which are large and only read for one case.
 _LIST_COLUMNS = (
-    "run_id, case_id, status, fingerprint, started_at, finished_at, error, findings:result->findings"
+    "run_id, case_id, status, fingerprint, started_at, finished_at, error, findings:result->findings, "
+    "risk:result->risk, supporting_documents:result->supporting_documents"
 )
 
 
@@ -22,8 +24,8 @@ def _row(raw: Any) -> dict:
 
 def _to_analysis(row: dict) -> CaseAnalysis:
     result: dict[str, Any] = row.get("result") or {}
-    if "findings" in row:  # a list read selects only the findings out of result
-        result = {"findings": row["findings"] or []}
+    if "findings" in row:  # a list read selects only these keys out of result
+        result = {key: row.get(key) for key in ("findings", "risk", "supporting_documents")}
     return CaseAnalysis(
         run_id=row["run_id"],
         case_id=row["case_id"],
@@ -35,6 +37,8 @@ def _to_analysis(row: dict) -> CaseAnalysis:
         findings=[CrossDocFinding(**f) for f in result.get("findings") or []],
         outlook=RiskOutlook(**result["outlook"]) if result.get("outlook") else None,
         summary=result.get("summary"),
+        risk=CaseRisk(**result["risk"]) if result.get("risk") else None,
+        supporting_documents=[SupportingDocumentRecommendation(**s) for s in result.get("supporting_documents") or []],
         audit=AnalysisAudit(**(result.get("audit") or {})),
         trace=row.get("trace") or [],
     )
@@ -74,6 +78,8 @@ def finish_run(analysis: CaseAnalysis) -> bool:
         "findings": [f.model_dump(mode="json") for f in analysis.findings],
         "outlook": analysis.outlook.model_dump(mode="json") if analysis.outlook else None,
         "summary": analysis.summary,
+        "risk": analysis.risk.model_dump(mode="json") if analysis.risk else None,
+        "supporting_documents": [s.model_dump(mode="json") for s in analysis.supporting_documents],
         "audit": analysis.audit.model_dump(mode="json"),
     }
     supabase_client.table(_TABLE).update({
@@ -93,14 +99,26 @@ def get_latest(case_id: str) -> Optional[CaseAnalysis]:
     return _to_analysis(_row(rows[0])) if rows else None
 
 
+def get_latest_complete(case_id: str) -> Optional[CaseAnalysis]:
+    """The newest finished run (findings, risk and evidence requests only), for when a newer one is still going."""
+    rows = (
+        supabase_client.table(_TABLE).select(_LIST_COLUMNS).eq("case_id", case_id).eq("status", "complete")
+        .order("started_at", desc=True).limit(1).execute().data
+    )
+    return _to_analysis(_row(rows[0])) if rows else None
+
+
 def get_latest_many(case_ids: list[str]) -> dict[str, CaseAnalysis]:
     """The newest run of each case, in one query per 100 cases. Findings only: no trace, outlook or audit."""
     latest: dict[str, CaseAnalysis] = {}
     for start in range(0, len(case_ids), _CHUNK):
-        rows = (
+        query = (
             supabase_client.table(_TABLE).select(_LIST_COLUMNS).in_("case_id", case_ids[start : start + _CHUNK])
-            .order("started_at", desc=True).execute().data
+            .order("started_at", desc=True)
         )
+        if len(case_ids) == 1:
+            query = query.limit(1)  # the snapshot path: only the newest run, not every past one
+        rows = query.execute().data
         for raw in rows:
             row = _row(raw)
             latest.setdefault(row["case_id"], _to_analysis(row))

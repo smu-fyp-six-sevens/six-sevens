@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from .. import case_service, document_repository, extracted_fields_repository, monitoring, storage_service
+from .. import case_service, document_repository, extracted_fields_repository, monitoring, query_stats, storage_service
 from ..extracted_fields_repository import normalise_field_name
 from ..case_broadcaster import broadcaster
 
@@ -69,6 +69,8 @@ def _ensure_unlocked(document: DocumentRecord, action: str) -> None:
 # cancel/retry can find and interrupt it — same pattern as
 # queue_service.DocumentQueue._active_tasks.
 _detection_tasks: dict[str, asyncio.Task] = {}
+# A bulk approval queues here instead of starting every detection graph at once.
+_detection_slots = asyncio.Semaphore(settings.DETECTION_CONCURRENCY)
 
 
 async def _run_detection_task(document_id: str, case_id: str | None) -> None:
@@ -76,7 +78,9 @@ async def _run_detection_task(document_id: str, case_id: str | None) -> None:
     # doesn't watch, so completion (or cancellation) needs its own explicit
     # push for the case view's live scanning -> detected transition.
     try:
-        await run_detection(document_id)
+        async with _detection_slots:
+            with query_stats.scope(f"detection doc={document_id[:8]}"):
+                await run_detection(document_id)
     except asyncio.CancelledError:
         # Only takes effect at the graph's next await point — an Anthropic
         # call already in flight still completes, it's just not waited on.
@@ -223,8 +227,11 @@ async def _push_case_snapshot(case_id: str) -> None:
     the write that triggered this already succeeded and is the source of
     truth; a failed push just means that case's view goes stale until its
     next real update instead."""
+    if not broadcaster.has_subscribers(case_id):
+        return
     try:
-        snapshot = await asyncio.to_thread(case_service.build_case_snapshot, case_id)
+        with query_stats.scope("pushed snapshot"):
+            snapshot = await asyncio.to_thread(case_service.build_case_snapshot, case_id)
     except Exception:
         logger.exception("Failed to build case snapshot for case %s", case_id)
         return
@@ -519,15 +526,7 @@ async def update_extracted_fields(
         # The officer has now reviewed every flagged field, which resolves
         # the manual review: routing moves Manual Review -> Accepted here,
         # and only approve_document later moves it on to Approved.
-        await asyncio.to_thread(
-            document_repository.update_extracted_fields,
-            document_id,
-            1.0,
-            fulfilled_requirements,
-            routing_status=RoutingStatus.ACCEPTED.value,
-            fields_reviewed=is_unrecognised_document,
-        )
-
+        # Fields first: the documents update fires a live snapshot, which must already see them.
         await asyncio.to_thread(
             extracted_fields_repository.replace_extracted_fields,
             document_id,
@@ -537,6 +536,15 @@ async def update_extracted_fields(
             required_field_names = set(
                 schema_field_names(document.document_type or "")
             )
+        )
+
+        await asyncio.to_thread(
+            document_repository.update_extracted_fields,
+            document_id,
+            1.0,
+            fulfilled_requirements,
+            routing_status=RoutingStatus.ACCEPTED.value,
+            fields_reviewed=is_unrecognised_document,
         )
     except Exception as exc:
         logger.exception("Failed to update extracted fields for document %s", document_id)

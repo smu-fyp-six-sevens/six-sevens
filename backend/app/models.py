@@ -321,6 +321,8 @@ class ContributingFinding(BaseModel):
     points: float
     # The specialist kept the tool's finding without ever assessing it.
     unreviewed: bool = False
+    # The finding's row in the flags table, set only when a specialist approved it as genuine.
+    flag_id: Optional[str] = None
     # See case_pipeline.models.FindingCategory: decides whether more evidence can reduce it.
     category: Optional[str] = None
     # "cross_document" for a finding from the case analysis rather than one document's scan.
@@ -440,6 +442,14 @@ class CaseSummary(CaseRecord):
     analysis_ready: bool = False
     # None when the case has never been analysed.
     analysis: Optional[CaseAnalysisOverview] = None
+
+
+class CaseListItem(CaseRecord):
+    """One row of the case queue: only what the list shows, so it needs no extracted fields."""
+
+    documents_status: CaseDocumentsStatus
+    # None when the documents' detection reports couldn't be loaded.
+    risk: Optional[CaseRisk] = None
 
 
 class UpdateCaseRequest(BaseModel):

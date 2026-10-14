@@ -383,55 +383,89 @@ def _case() -> CaseRecord:
     )
 
 
-def test_case_summary_carries_the_risk() -> None:
+def _analysis(risk, status: str = "complete"):
+    from app.case_pipeline.models import CaseAnalysis
+
+    return CaseAnalysis(
+        run_id="run-1", case_id="case-1", status=status, fingerprint="",
+        started_at="2026-10-01T00:00:00Z", risk=risk,
+    )
+
+
+def test_case_summary_shows_the_risk_its_analysis_produced() -> None:
+    risk = compute_case_risk([_document("doc")], {"doc": _report(_finding("high", "font_consistency_tool"))}, set())
     with (
         patch("app.case_service.case_repository") as case_repo,
         patch("app.case_service.document_repository") as doc_repo,
         patch("app.case_service.langgraph_trace") as trace,
+        patch("app.case_service.analysis_repository") as analyses,
     ):
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = [_document("doc")]
-        trace.get_detection_states.return_value = ({"doc": _report(_finding("high", "font_consistency_tool"))}, set())
+        trace.get_detection_states.return_value = ({"doc": _report()}, set())
+        analyses.get_latest_many.return_value = {"case-1": _analysis(risk)}
 
         summary = case_service.get_case_summary("case-1")
 
     assert summary is not None and summary.risk is not None
     assert summary.risk.level == "High"
-    trace.get_detection_states.assert_called_once_with(["doc"])
 
 
-def test_case_summary_still_loads_when_reports_cannot_be_read() -> None:
+def test_case_never_analysed_has_no_risk() -> None:
     with (
         patch("app.case_service.case_repository") as case_repo,
         patch("app.case_service.document_repository") as doc_repo,
         patch("app.case_service.langgraph_trace") as trace,
+        patch("app.case_service.analysis_repository") as analyses,
     ):
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = [_document("doc")]
-        trace.get_detection_states.side_effect = RuntimeError("table unreachable")
+        trace.get_detection_states.return_value = ({"doc": _report(_finding("high", "font_consistency_tool"))}, set())
+        analyses.get_latest_many.return_value = {}
 
         summary = case_service.get_case_summary("case-1")
 
     assert summary is not None
     assert summary.risk is None
+    assert summary.supporting_document_recommendations == []
 
 
-def test_case_list_loads_every_cases_reports_in_one_call() -> None:
-    other_case = _case().model_copy(update={"id": "case-2", "greenlink_case_id": "GLDB-2"})
-    clean = _document("clean").model_copy(update={"case_id": "case-2"})
+def test_case_summary_keeps_the_last_complete_risk_while_a_rerun_is_going() -> None:
+    risk = compute_case_risk([_document("doc")], {"doc": _report(_finding("high", "font_consistency_tool"))}, set())
     with (
         patch("app.case_service.case_repository") as case_repo,
         patch("app.case_service.document_repository") as doc_repo,
         patch("app.case_service.langgraph_trace") as trace,
+        patch("app.case_service.analysis_repository") as analyses,
+    ):
+        case_repo.get_case.return_value = _case()
+        doc_repo.list_documents.return_value = [_document("doc")]
+        trace.get_detection_states.return_value = ({"doc": _report()}, set())
+        analyses.get_latest_many.return_value = {"case-1": _analysis(None, status="running")}
+        analyses.get_latest_complete.return_value = _analysis(risk)
+
+        summary = case_service.get_case_summary("case-1")
+
+    assert summary is not None and summary.risk is not None
+    assert summary.risk.level == "High"
+    assert summary.analysis is not None and summary.analysis.status == "running"
+
+
+def test_case_list_reads_saved_scores_and_never_detection_reports() -> None:
+    from app.models import CaseRisk
+
+    other_case = _case().model_copy(update={"id": "case-2", "greenlink_case_id": "GLDB-2"})
+    with (
+        patch("app.case_service.case_repository") as case_repo,
+        patch("app.case_service.document_repository") as doc_repo,
+        patch("app.case_service.langgraph_trace") as trace,
+        patch("app.case_service.risk_store") as store,
     ):
         case_repo.list_cases.return_value = [_case(), other_case]
-        doc_repo.list_documents.return_value = [_document("doc"), clean]
-        trace.get_detection_states.return_value = (
-            {"doc": _report(_finding("high", "font_consistency_tool")), "clean": _report()},
-            set(),
-        )
+        doc_repo.list_documents.return_value = [_document("doc")]
+        store.latest_many.return_value = {"case-1": CaseRisk(state="scored", level="High", score=70)}
 
-        summaries = case_service.list_case_summaries()
+        items = case_service.list_case_summaries()
 
-    assert [s.risk.level for s in summaries if s.risk] == ["High", "Low"]
-    trace.get_detection_states.assert_called_once()
+    assert [(i.id, i.risk.level if i.risk else None) for i in items] == [("case-1", "High"), ("case-2", None)]
+    trace.get_detection_states.assert_not_called()

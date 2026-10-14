@@ -39,11 +39,13 @@ function BreakdownTable({ total }: { total: RecommendationItem }) {
   );
 }
 
-// Recommended by backend/app/supporting_documents.py from what the case's documents show.
+// Produced by the case analysis run (backend supporting_documents.py), from what the case's documents show.
 export function SupportingDocumentsCard({
   recommendations,
+  analysed,
 }: {
   recommendations: SupportingDocumentRecommendation[];
+  analysed: boolean;
 }) {
   return (
     <section className="summary-card">
@@ -60,7 +62,17 @@ export function SupportingDocumentsCard({
         )}
       </div>
 
-      {recommendations.length === 0 ? (
+      {!analysed ? (
+        <div className="summary-message summary-message--info">
+          <span className="summary-message-icon">ⓘ</span>
+
+          <div>
+            <strong>Not checked yet.</strong>
+
+            <p>Run the case analysis to see which further documents to request from the client.</p>
+          </div>
+        </div>
+      ) : recommendations.length === 0 ? (
         <div className="summary-message summary-message--success">
           <span className="summary-message-icon">✓</span>
 

@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from .. import document_repository
+from .. import document_repository, query_stats
 from ..config import settings
 from ..langgraph import trace as langgraph_trace
 from ..models import DocumentRecord
@@ -20,7 +20,8 @@ from . import repository, state
 from .cross_document.evidence import build_context
 from .cross_document.agents import PROMPT_VERSION
 from .cross_document.graph import run_cross_document_analysis
-from .models import AnalysisAudit, CaseAnalysis, EvidenceRequest
+from .models import AnalysisAudit, CaseAnalysis
+from .risk import store as risk_store
 from .trace import RunTrace
 from .readiness import is_ready_for_analysis
 from .risk.case_risk import compute_case_risk, scoring_breakdown
@@ -41,13 +42,6 @@ class AnalysisNotReady(Exception):
 
 class AnalysisAlreadyRunning(Exception):
     pass
-
-
-def _rule_requests(documents: list[DocumentRecord]) -> list[EvidenceRequest]:
-    return [
-        EvidenceRequest(title=r.title, what_it_shows=r.reason, addresses=[], source="rule")
-        for r in recommend_supporting_documents(documents)
-    ]
 
 
 def _clean_checks(reports: dict[str, dict[str, Any]]) -> list[str]:
@@ -82,9 +76,17 @@ async def start_analysis(case_id: str) -> CaseAnalysis:
         started_at=datetime.now(timezone.utc),
     )
     state.running_tasks[case_id] = asyncio.create_task(
-        _execute(analysis, documents, reports, failed_ids)
+        _execute_scoped(analysis, documents, reports, failed_ids)
     )
     return analysis
+
+
+async def _execute_scoped(
+    analysis: CaseAnalysis, documents: list[DocumentRecord], reports: dict[str, dict[str, Any]],
+    failed_ids: set[str],
+) -> None:
+    with query_stats.scope(f"case analysis case={analysis.case_id[:8]}"):
+        await _execute(analysis, documents, reports, failed_ids)
 
 
 async def _execute(
@@ -113,10 +115,10 @@ async def _execute(
             cross_document_findings=len(findings),
             score_without_cross_document=document_only.score, level_without_cross_document=document_only.level,
         )
-        agent_requests = await propose_requests(risk)
-        requests = agent_requests + _rule_requests(documents)
-        trace.record("evidence_requests", proposed=[r.model_dump() for r in agent_requests],
-                     rule_based=len(requests) - len(agent_requests))
+        requests = await propose_requests(risk)
+        supporting_documents = recommend_supporting_documents(documents)
+        trace.record("evidence_requests", proposed=[r.model_dump() for r in requests],
+                     supporting_documents=[s.title for s in supporting_documents])
         outlook = build_outlook(risk, requests)
         trace.record("outlook", **outlook_trace(risk, requests, outlook))
         summary = await write_summary(risk, outlook, _clean_checks(reports))
@@ -125,6 +127,8 @@ async def _execute(
         analysis.findings = findings
         analysis.outlook = outlook
         analysis.summary = summary
+        analysis.risk = risk
+        analysis.supporting_documents = supporting_documents
         analysis.audit = AnalysisAudit(
             models={"analysis": settings.LANGGRAPH_SONNET_MODEL},
             prompt_version=PROMPT_VERSION,
@@ -142,7 +146,10 @@ async def _execute(
     finally:
         trace.save()
         try:
-            await asyncio.to_thread(repository.finish_run, analysis)
+            published = await asyncio.to_thread(repository.finish_run, analysis)
+            if published and analysis.status == "complete":
+                # The case list reads the score from here rather than opening every run.
+                await asyncio.to_thread(risk_store.save, case_id, analysis.risk)
         except Exception:
             logger.exception("Failed to store the case analysis result for case %s", case_id)
         state.running_tasks.pop(case_id, None)
@@ -153,8 +160,11 @@ async def _push_snapshot(case_id: str) -> None:
     from .. import case_service
     from ..case_broadcaster import broadcaster
 
+    if not broadcaster.has_subscribers(case_id):
+        return
     try:
-        snapshot = await asyncio.to_thread(case_service.build_case_snapshot, case_id)
+        with query_stats.scope("pushed snapshot"):
+            snapshot = await asyncio.to_thread(case_service.build_case_snapshot, case_id)
     except Exception:
         logger.exception("Failed to build case snapshot for case %s", case_id)
         return

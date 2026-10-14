@@ -39,7 +39,7 @@ from . import tools as detection_tools
 from ..llm_output import parse_json_object
 from .specialists import SEVERITIES, SPECIALISTS, run_specialist
 from .. import trace
-from ... import document_repository, extracted_fields_repository, telemetry
+from ... import document_repository, extracted_fields_repository, flags_repository, telemetry
 from ...config import settings
 
 logger = logging.getLogger("classifier_pipeline.langgraph.detection")
@@ -67,6 +67,8 @@ class DetectionState(TypedDict, total=False):
     second_look: dict | None
     lead_summary: str
     result: dict
+    # Kept out of `context`, which goes into the lead's prompt.
+    case_id: str | None
 
 
 class SpecialistInput(TypedDict, total=False):
@@ -188,7 +190,7 @@ async def load_context_node(state: DetectionState) -> dict:
         "has_extracted_fields": bool(fields),
         "file_extension": os.path.splitext(document.filename or "")[1].lower(),
     }
-    return {"context": context}
+    return {"context": context, "case_id": document.case_id}
 
 
 def _normalise_plan(raw: dict | None) -> dict:
@@ -521,6 +523,7 @@ async def synthesize_node(state: DetectionState) -> dict:
         if result["verdict"] == "clean":
             result["verdict"] = "inconclusive"
             result["summary"] = "No findings, but identity matching could not be completed."
+    flags_repository.assign_flag_ids(result["findings"])
     logger.info(
         "Document %s: detection done — verdict %s, %d finding(s)",
         state["document_id"], result["verdict"], len(result["findings"]),
@@ -564,6 +567,16 @@ def get_detection_graph():
     return _detection_graph
 
 
+async def _store_flags(document_id: str, case_id: str | None, report: dict) -> None:
+    """The report in the trace is the source of truth, so a failure here is recorded, not raised."""
+    try:
+        count = await asyncio.to_thread(flags_repository.replace_for_document, document_id, case_id, report["findings"])
+        logger.info("Document %s: %d flag(s) stored", document_id, count)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Document %s: failed to store flags", document_id)
+        trace.record(document_id, "flags_error", flags_error=f"{type(exc).__name__}: {exc}")
+
+
 async def run_detection(document_id: str) -> dict:
     """Investigates one document and returns the combined report. Raises DetectionError if it can't be investigated."""
     logger.info("Document %s: detection run starting", document_id)
@@ -594,5 +607,8 @@ async def run_detection(document_id: str) -> dict:
         result = final["result"]
         span.set_attribute("verdict", result["verdict"])
         span.set_attribute("finding_count", len(result["findings"]))
+        # The report must be saved before the status says "detected", or a snapshot can show detected with no report.
+        await asyncio.to_thread(trace.flush, document_id)
+        await _store_flags(document_id, final.get("case_id"), result)
         await asyncio.to_thread(document_repository.mark_detected, document_id)
         return result

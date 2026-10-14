@@ -16,6 +16,7 @@ affects the pipeline.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, cast
@@ -32,10 +33,17 @@ _traces: dict[str, dict[str, Any]] = {}
 _MAX_TRACES = 500  # bounded so a long-running dev process doesn't leak memory
 
 
+# Guards _traces against the writer thread copying a trace mid-update.
+_lock = threading.Lock()
+# Documents with a write already queued: later records ride along with it instead of queueing their own.
+_pending: set[str] = set()
+
+
 def start(document_id: str) -> None:
-    if len(_traces) >= _MAX_TRACES:
-        _traces.pop(next(iter(_traces)))
-    _traces[document_id] = {"document_id": document_id, "started_at": time.time(), "steps": []}
+    with _lock:
+        if len(_traces) >= _MAX_TRACES:
+            _traces.pop(next(iter(_traces)))
+        _traces[document_id] = {"document_id": document_id, "started_at": time.time(), "steps": []}
     _persist(document_id)
 
 
@@ -53,7 +61,8 @@ def resume(document_id: str) -> None:
     except Exception:  # noqa: BLE001 — falls back to a fresh trace
         persisted = None
     if persisted:
-        _traces[document_id] = persisted
+        with _lock:
+            _traces.setdefault(document_id, persisted)
 
 
 def _trace(document_id: str) -> dict[str, Any]:
@@ -61,10 +70,19 @@ def _trace(document_id: str) -> dict[str, Any]:
 
 
 def record(document_id: str, step: str, **fields: Any) -> None:
-    trace = _trace(document_id)
-    trace["steps"].append({"step": step, "at": round(time.time() - trace["started_at"], 3), **fields})
-    trace.update(fields)  # also flatten onto the top level for easy reading
+    with _lock:
+        trace = _trace(document_id)
+        trace["steps"].append({"step": step, "at": round(time.time() - trace["started_at"], 3), **fields})
+        trace.update(fields)  # also flatten onto the top level for easy reading
     _persist(document_id)
+
+
+def flush(document_id: str) -> None:
+    """Blocks until this document's queued trace write has landed. Call via asyncio.to_thread."""
+    with _lock:
+        queued = document_id in _pending
+    if queued:
+        _writer.submit(lambda: None).result()  # one worker: this runs only after the queued write
 
 
 def get(document_id: str) -> dict[str, Any] | None:
@@ -139,10 +157,21 @@ def get_persisted(document_id: str) -> dict[str, Any] | None:
 
 
 def _persist(document_id: str) -> None:
-    trace = _traces.get(document_id)
-    if trace is None:
-        return
-    _writer.submit(_write_row, {**trace, "steps": list(trace["steps"])})
+    with _lock:
+        if document_id in _pending or document_id not in _traces:
+            return
+        _pending.add(document_id)
+    _writer.submit(_flush, document_id)
+
+
+def _flush(document_id: str) -> None:
+    with _lock:
+        _pending.discard(document_id)
+        trace = _traces.get(document_id)
+        if trace is None:
+            return
+        snapshot = {**trace, "steps": list(trace["steps"])}
+    _write_row(snapshot)
 
 
 def _write_row(snapshot: dict[str, Any]) -> None:

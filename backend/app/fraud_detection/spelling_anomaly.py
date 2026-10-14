@@ -10,6 +10,7 @@ import re
 from pydantic import BaseModel
 from symspellpy import SymSpell, Verbosity
 
+from ..cpu_pool import run_cpu
 from ..ingestion.ingestion_service import ingest_document
 from .domain_terms import DOMAIN_TERMS
 from .field_values import text_values
@@ -350,7 +351,7 @@ async def check_spelling_anomalies(
     content_type = _content_type_from_filename(filename)
 
     try:
-        ingestion_result = await asyncio.to_thread(ingest_document, file_bytes, filename, content_type)
+        ingestion_result = await run_cpu(ingest_document, file_bytes, filename, content_type)
     except Exception as exc:
         reason = f"Text extraction failed: {type(exc).__name__}: {exc}"
         logger.warning("Document %s: %s", document_id, reason, exc_info=True)

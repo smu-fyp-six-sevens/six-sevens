@@ -290,10 +290,14 @@ def _collect_node(state: SpecialistState) -> dict:
         severity = assessed.get("severity") if assessed.get("severity") in SEVERITIES else "medium"
         if floor is not None and SEVERITIES.index(severity) < SEVERITIES.index(floor):
             severity = floor
+        # Only a finding the specialist assessed and did not dismiss is one it approved. A floored tool's
+        # finding it dismissed, or one it never assessed, stays on the report but is not approved.
+        ai_accepted = bool(assessed) and assessed.get("dismiss") is not True
         merged.append({
             **finding,
             "severity": severity,
             "rationale": assessed.get("rationale") or "Not assessed by the specialist.",
+            "ai_accepted": ai_accepted,
         })
 
     parsed_ok = bool(assessment)

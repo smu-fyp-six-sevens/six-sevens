@@ -94,7 +94,7 @@ export function CaseAnalysisCard({
           <span className="summary-message-icon">⚠</span>
           <div>
             <strong>Out of date.</strong>
-            <p>Documents changed since this analysis ran. Its findings are not counted in the risk score.</p>
+            <p>Documents changed since this analysis ran. The risk score and recommendations are from before that; run it again to update them.</p>
           </div>
         </div>
       )}

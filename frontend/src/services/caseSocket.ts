@@ -8,7 +8,14 @@ export interface CaseStatusSnapshot {
   caseMatch: CaseMatchResult | null;
 }
 
-const RECONNECT_DELAY_MS = 2000;
+// Reconnect backoff: 1s, 2s, 4s ... capped at 30s, with jitter so tabs don't reconnect in lockstep.
+const RECONNECT_BASE_DELAY_MS = 1000;
+const RECONNECT_MAX_DELAY_MS = 30000;
+
+function reconnectDelay(attempt: number): number {
+  const delay = Math.min(RECONNECT_MAX_DELAY_MS, RECONNECT_BASE_DELAY_MS * 2 ** attempt);
+  return delay / 2 + Math.random() * (delay / 2);
+}
 
 // A browser's native WebSocket can't set an Authorization header on the
 // handshake, so the long-lived bearer token can't safely ride in the
@@ -62,11 +69,14 @@ export function subscribeToCaseStatus(
   let socket: WebSocket | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let closed = false;
+  // Failed attempts since the last snapshot arrived; reset once the connection proves it works.
+  let attempt = 0;
 
   function scheduleReconnect() {
     onConnectionChange?.(false);
     if (closed) return;
-    reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
+    reconnectTimer = setTimeout(connect, reconnectDelay(attempt));
+    attempt += 1;
   }
 
   function connect() {
@@ -94,6 +104,7 @@ export function subscribeToCaseStatus(
           }
 
           if (payload.type === 'snapshot') {
+            attempt = 0;
             onSnapshot({
               documents: payload.documents as DocumentRecord[],
               caseSummary: payload.case as CaseRequirementCoverage,

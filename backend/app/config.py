@@ -73,6 +73,11 @@ class Settings:
     # (queue_service.py) — bounded by Anthropic rate limits, not local resources.
     QUEUE_WORKER_CONCURRENCY: int = int(os.environ.get("QUEUE_WORKER_CONCURRENCY", "4"))
 
+    # Threads for PDF/OCR/forensic work (cpu_pool.py). 1 = PyMuPDF only ever runs on one thread.
+    CPU_WORKER_CONCURRENCY: int = int(os.environ.get("CPU_WORKER_CONCURRENCY", "1"))
+    # Detection runs (lead + 3 specialists each) allowed at once; the rest wait their turn.
+    DETECTION_CONCURRENCY: int = int(os.environ.get("DETECTION_CONCURRENCY", "2"))
+
     # Below this, classification is routed to manual review regardless of
     # the guessed document_type (see langgraph/nodes._is_below_threshold).
     CLASSIFICATION_CONFIDENCE_THRESHOLD: float = 0.85
@@ -109,6 +114,8 @@ class Settings:
     # Off by default: importing the SDK is harmless with no cost/behaviour
     # change until this is set.
     OTEL_ENABLED: bool = os.environ.get("OTEL_ENABLED", "false").lower() == "true"
+    # httpx's own INFO line per Supabase call. Off by default: query_stats.py logs one summary per unit of work.
+    LOG_HTTP_REQUESTS: bool = os.environ.get("LOG_HTTP_REQUESTS", "false").lower() == "true"
     # Required for the Cloud Trace exporter; left unset -> traces print to
     # the console instead.
     GOOGLE_CLOUD_PROJECT: str = _env("GOOGLE_CLOUD_PROJECT", "")

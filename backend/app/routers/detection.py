@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from ..langgraph import trace as langgraph_trace
 from ..models import DocumentRecord
 from .. import case_service, document_repository, extracted_fields_repository, storage_service
+from ..cpu_pool import run_cpu
 from . import documents as documents_router
 from ._dependencies import get_document_or_404
 from ..case_match import DocumentCaseMatch
@@ -119,7 +120,7 @@ async def get_font_consistency(
 ) -> FontConsistencyResult:
     file_bytes = await _download_document_bytes(document)
     extracted_fields = await _fetch_extracted_fields(document_id)
-    result = await asyncio.to_thread(
+    result = await run_cpu(
         check_font_consistency, document_id, file_bytes, extracted_fields
     )
     await _trace_check(
@@ -146,7 +147,7 @@ async def get_layout_anomalies(
     and nothing crossed a threshold — not that the document is clean.
     """
     file_bytes = await _download_document_bytes(document)
-    result = await asyncio.to_thread(
+    result = await run_cpu(
         check_layout_anomalies,
         document_id,
         file_bytes,
@@ -175,7 +176,7 @@ async def get_image_manipulation(
     tolerance — not that the document is clean.
     """
     file_bytes = await _download_document_bytes(document)
-    return await asyncio.to_thread(check_image_manipulation, document_id, file_bytes)
+    return await run_cpu(check_image_manipulation, document_id, file_bytes)
 
 
 @router.get(
@@ -194,7 +195,7 @@ async def get_image_tampering(
     clean.
     """
     file_bytes = await _download_document_bytes(document)
-    return await asyncio.to_thread(check_image_tampering, document_id, file_bytes)
+    return await run_cpu(check_image_tampering, document_id, file_bytes)
 
 
 @router.get(
@@ -211,7 +212,7 @@ async def get_ai_generation(
     indicator crossed its threshold — not that the image is proven genuine.
     """
     file_bytes = await _download_document_bytes(document)
-    return await asyncio.to_thread(check_ai_generation, document_id, file_bytes)
+    return await run_cpu(check_ai_generation, document_id, file_bytes)
 
 
 class ImageIntegrityResult(BaseModel):
@@ -240,8 +241,8 @@ async def get_image_integrity(
     """
     file_bytes = await _download_document_bytes(document)
     manipulation, tampering = await asyncio.gather(
-        asyncio.to_thread(check_image_manipulation, document_id, file_bytes),
-        asyncio.to_thread(check_image_tampering, document_id, file_bytes),
+        run_cpu(check_image_manipulation, document_id, file_bytes),
+        run_cpu(check_image_tampering, document_id, file_bytes),
     )
     return ImageIntegrityResult(
         report=build_image_integrity_report(manipulation, tampering),
