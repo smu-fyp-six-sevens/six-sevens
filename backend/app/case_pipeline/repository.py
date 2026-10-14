@@ -10,6 +10,10 @@ from .models import AnalysisAudit, CaseAnalysis, CrossDocFinding, RiskOutlook
 
 _TABLE = "case_analysis_runs"
 _CHUNK = 100
+# What a case list needs from a run: no trace, outlook or audit, which are large and only read for one case.
+_LIST_COLUMNS = (
+    "run_id, case_id, status, fingerprint, started_at, finished_at, error, findings:result->findings"
+)
 
 
 def _row(raw: Any) -> dict:
@@ -17,7 +21,9 @@ def _row(raw: Any) -> dict:
 
 
 def _to_analysis(row: dict) -> CaseAnalysis:
-    result = row.get("result") or {}
+    result: dict[str, Any] = row.get("result") or {}
+    if "findings" in row:  # a list read selects only the findings out of result
+        result = {"findings": row["findings"] or []}
     return CaseAnalysis(
         run_id=row["run_id"],
         case_id=row["case_id"],
@@ -30,6 +36,7 @@ def _to_analysis(row: dict) -> CaseAnalysis:
         outlook=RiskOutlook(**result["outlook"]) if result.get("outlook") else None,
         summary=result.get("summary"),
         audit=AnalysisAudit(**(result.get("audit") or {})),
+        trace=row.get("trace") or [],
     )
 
 
@@ -41,6 +48,10 @@ def insert_run(run_id: str, case_id: str, fingerprint: str) -> None:
         "fingerprint": fingerprint,
         "started_at": datetime.now(timezone.utc).isoformat(),
     }).execute()
+
+
+def write_trace(run_id: str, events: list[dict[str, Any]]) -> None:
+    supabase_client.table(_TABLE).update({"trace": events}).eq("run_id", run_id).execute()
 
 
 def latest_run_id(case_id: str) -> Optional[str]:
@@ -83,11 +94,11 @@ def get_latest(case_id: str) -> Optional[CaseAnalysis]:
 
 
 def get_latest_many(case_ids: list[str]) -> dict[str, CaseAnalysis]:
-    """The newest run of each case, in one query per 100 cases."""
+    """The newest run of each case, in one query per 100 cases. Findings only: no trace, outlook or audit."""
     latest: dict[str, CaseAnalysis] = {}
     for start in range(0, len(case_ids), _CHUNK):
         rows = (
-            supabase_client.table(_TABLE).select("*").in_("case_id", case_ids[start : start + _CHUNK])
+            supabase_client.table(_TABLE).select(_LIST_COLUMNS).in_("case_id", case_ids[start : start + _CHUNK])
             .order("started_at", desc=True).execute().data
         )
         for raw in rows:

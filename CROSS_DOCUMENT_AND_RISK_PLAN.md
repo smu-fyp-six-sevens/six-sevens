@@ -9,6 +9,7 @@ Changes from the plan below:
 - **The two orphaned consistency tools** (company name, address) and the modules behind them (`company_identity.py`, `address_matching.py`) now live in `case_pipeline/cross_document/`, not in the detection agent.
 - **Migration:** `backend/migrations/002_case_analysis_runs.sql` must be applied before the first run.
 - **Kill switch:** `CASE_ANALYSIS_ENABLED=false`.
+- **Run trace:** each run also writes a step-by-step `trace` (hypotheses tried, tool calls, verdicts, why each was kept or discarded) to its row, shown in a debug panel on the case page. It is for debugging and does not affect the score.
 
 ## Scope
 
@@ -68,23 +69,24 @@ Code that changes:
 ### Flow
 
 ```
-dossier (code) -> hypothesise (LLM) -> investigate + verdict (parallel ReAct) -> verify (code)
+dossier (code) -> plan: hypotheses + checks (LLM) -> run the checks (code) -> judge all (LLM) -> verify (code)
 ```
 
 1. **Dossier (no LLM).** A digest per approved document, including derived facts so the model never does arithmetic:
    - statement period, transaction count and totals, median and max transaction size, top counterparties
    - declared business activity, SSIC, share capital, directors, addresses
    - each document's detection findings
-2. **Hypothesiser (one Sonnet call).** 3-4 hypotheses, each with a claim, the documents involved, what would prove it, and a **refutation test** fixed before any tool runs (the specific document, tool and query that would show the claim is wrong).
-3. **Investigators.** One sub-agent per hypothesis (`Send` fan-out, capped concurrency), with a tool budget and read-only tools. The final structured output is the verdict: `conclusive`, `severity`, `category`, `citations`. No separate adjudicator.
-4. **Verify (code).** A verdict stands only if:
+2. **Plan (one Sonnet call).** At most 3 strong hypotheses, each with a claim, what would prove it, a **refutation test**, and up to 4 checks to run (tool plus arguments), at least one of them a refutation probe. Everything is planned up front.
+3. **Run the checks (plain code, no model call).** The planned checks run against the read-only evidence tools. Unknown tools are dropped and a failed check is recorded as unavailable.
+4. **Judge (one call).** A single call judges every hypothesis from its evidence and returns `conclusive`, `severity`, `category` and `citations` for each.
+5. **Verify (code).** A verdict stands only if:
    - every citation is a ref id a tool returned in this run (exact match, no fuzzy matching)
    - a refutation probe ran: at least one tool call tagged `is_refutation_probe=True` on the complementary document the hypothesis named, which succeeded (`available: true`) and covers the relevant period
    - the severity cap and category rules below pass
 
    Anything else is discarded.
 
-Folding the verdict into the investigator saves 3-4 calls but loses an independent second opinion. Code-side checks stand in for it. If evals show over-confidence, add a separate adjudicator for High candidates only.
+One call judges every hypothesis together, and code verifies each verdict, so there is no per-hypothesis tool loop. The trade-off is that checks are fixed before any result is seen: an investigation can't re-query with a different filter. If recall is too low in the evals, add one optional follow-up round.
 
 ### Only conclusive hypotheses exist
 
@@ -92,7 +94,7 @@ Hypotheses that aren't proven are **discarded**: not shown, not stored, not scor
 
 ### Guardrails
 
-- **Structured disconfirmation.** The hypothesiser fixes the refutation test up front (which document, which kind of check). The investigator may adapt the query to what it finds (a statement that uses transaction codes instead of descriptions, a largest deposit of $48,500 instead of $50,000) but must tag the call that fulfils the test with `is_refutation_probe=True`. Code checks the tag, the document, and that the call could genuinely have failed. It does not compare query parameters, so valid adaptation isn't discarded. The verdict must also state what the probe returned, and a sample of probes is reviewed in the evals.
+- **Structured disconfirmation.** The plan fixes the refutation test and tags the check that carries it (`refutation_probe`) before any result is seen, so it can't be chosen to be easy to pass. Code checks that the tagged check ran on the named document and could genuinely have failed (the tool returned `available: true`). The verdict must also state what the probe returned, and a sample of probes is reviewed in the evals.
 - **Grounded evidence only.** No tool-issued citation, no conclusive verdict.
 - **Budgets:** hypotheses, tool calls per hypothesis, tokens, concurrency.
 - **Seeded categories, not a checklist:** declared activity vs observed flows, scale vs capital and age, timeline contradictions, circular or related-party flows, address and identity continuity, source-of-wealth coherence.
@@ -111,7 +113,7 @@ Code can tell which case applies without trusting the model: a tool that detects
 
 ### Cost
 
-About 7-13 Sonnet calls per case (1 hypothesiser + 6-12 investigator steps). It runs as a background job, so the constraints are provider rate limits and cost, not a request timeout.
+**3 model calls per case, 4 at most**: the plan, the judge, a short summary on Haiku, and the evidence-request call on Haiku only when a reducible finding exists. There is no tool loop. It runs It runs as a background job, so the constraints are provider rate limits and cost, not a request timeout.
 
 ### Investigator tools
 
@@ -224,7 +226,7 @@ Open questions for the sponsor:
 | 0 | Per-case trigger: gate, supersede with fence, debounce, fingerprint and stale flag. Scan and count Other documents. | No LLM. Test the "inputs change just before commit" race and an Other document through detection. |
 | 1 | Contracts: `FindingCategory` on every finding with the tool-to-category map, `CrossDocFinding`, `RiskOutlook`, `CaseSummary`, run table | Existing detection findings get a category |
 | 2 | Dossier and investigator tools with opaque ref ids | No LLM, unit-testable |
-| 3 | Hypothesiser, investigators with verdict, and code verification of citations, refutation test, severity cap and category | Mocked-LLM tests |
+| 3 | Plan (3 hypotheses with checks), run the checks, judge in one call, and code verification of citations, refutation test, severity cap and category | Mocked-LLM tests |
 | 4 | Fold cross-document findings into `case_risk` | Existing risk tests must pass |
 | 5 | Re-scoring and unified recommendations | Pure functions. Test an unknown document type scores like a known one. |
 | 6 | Officer summary | Grounding check: every claim maps to a finding |
@@ -238,7 +240,7 @@ Open questions for the sponsor:
 - **Over-fitting to the test set:** hypothesis categories stay general and aren't written around the injected tampers. Recall on those is measured in evals, not designed in.
 - **Self-adjudication:** mitigated by code verification. A separate adjudicator for High is the fallback.
 - **Strict citations discarding valid findings:** tool-issued ref ids make this unlikely. The discard rate is monitored.
-- **Cost and churn:** the 3-4 cap, budgets, capped concurrency, debounce, supersede and a re-run cap bound it.
+- **Cost and churn:** the 3-hypothesis cap and 4 checks each, no tool loop (2 Sonnet calls), and later the debounce, supersede and a re-run cap bound it.
 - **Synthetic-to-real gap:** theories needing outside data can't become conclusive and are discarded.
 - **Non-determinism:** temperature 0, stored results, stale flag.
 

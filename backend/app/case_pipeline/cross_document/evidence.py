@@ -15,6 +15,7 @@ from ...fraud_detection.numerical_validation.common import _as_number, _decode, 
 from ...models import APPROVED_STATUSES, DocumentRecord
 from ..categories import category_for_finding
 from ..models import FindingCategory
+from ..trace import RunTrace
 
 _NRIC_RE = re.compile(r"\b([STFGM])\d{4}(\d{3}[A-Z])\b", re.IGNORECASE)
 _LONG_NUMBER_RE = re.compile(r"\b(\d[\d -]{6,}\d)\b")
@@ -92,6 +93,12 @@ class CaseContext:
     # The approved documents themselves, for the case-wide consistency checks.
     records: list[DocumentRecord] = field(default_factory=list)
     ledger: Ledger = field(default_factory=Ledger)
+    trace: Optional[RunTrace] = None
+
+    def note(self, step: str, **fields: Any) -> None:
+        """Records a step on the run's trace, if it has one."""
+        if self.trace is not None:
+            self.trace.record(step, **fields)
 
     def by_id(self, document_id: str) -> Optional[DocView]:
         return next((d for d in self.docs.values() if d.id == document_id), None)

@@ -328,5 +328,15 @@ export interface CaseAnalysis {
   findings: CrossDocFinding[];
   outlook: RiskOutlook | null;
   summary: string | null;
+  // Tool calls, models and counts of the run.
+  audit?: { tool_calls?: unknown[]; [key: string]: unknown };
+  // Step-by-step log of the run (debug); written as the run goes.
+  trace: CaseAnalysisTraceStep[];
   stale: boolean;
+}
+
+export interface CaseAnalysisTraceStep {
+  step: string;
+  at: number;
+  [key: string]: unknown;
 }

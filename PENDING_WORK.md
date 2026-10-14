@@ -30,7 +30,16 @@ Product roadmap (Detection Agent, Per-Case Pipeline, 5-service Pub/Sub split) st
 
 First version is built and untested end to end. Design: `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
 
-- **Apply the migration** `backend/migrations/002_case_analysis_runs.sql` in Supabase before the first run.
+- **Apply the migrations** `backend/migrations/002_case_analysis_runs.sql` and `003_risk_scores_latest.sql` in Supabase. 003 grants the
+  backend access to `risk_scores` and creates the `latest_risk_scores` view; without it, scores are computed live as before.
+- **Saved scores can lag** — a score is saved when a case is read or a snapshot is built (every document change builds one). A change
+  made while the backend is down is picked up on the next read. The saved row keeps finding ids only, not their detail.
+- **Plan-then-judge has no follow-up** — the plan fixes its checks before seeing any result, so an investigation can't
+  adapt (for example re-query with a different filter). It is deliberately cheap (2 Sonnet calls). If recall is too low in
+  the evals, add one optional second round for hypotheses the judge marks "needs more evidence".
+- **Trace includes dropped hypotheses** — `case_analysis_runs.trace` (shown in the case page's debug panel) lists
+  every hypothesis tried and why it was discarded, for debugging. The plan says unproven hypotheses are never
+  shown or stored against a case. Decide before this is exposed beyond developers.
 - **Tests** — none yet for the hypothesiser, investigators, tools, `verify.py`, `outlook.py`, `summary.py`,
   `service.py` or the endpoints. `test_company_identity.py` still references the two consistency tools
   that moved out of `langgraph/detection/tools.py`.

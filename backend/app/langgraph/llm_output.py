@@ -25,3 +25,27 @@ def parse_json_object(text: str) -> dict | None:
     except json.JSONDecodeError:
         return None
     return parsed if isinstance(parsed, dict) else None
+
+
+def salvage_list(text: str, key: str) -> list[dict]:
+    """
+    The complete objects of the JSON array under `key` in a reply that was cut
+    off before it closed (the model ran out of tokens). Empty when there are none.
+    """
+    match = re.search(rf'"{re.escape(key)}"\s*:\s*\[', text)
+    if not match:
+        return []
+    decoder = json.JSONDecoder()
+    index, found = match.end(), []
+    while index < len(text):
+        while index < len(text) and (text[index].isspace() or text[index] == ","):
+            index += 1
+        if index >= len(text) or text[index] != "{":
+            break
+        try:
+            item, index = decoder.raw_decode(text, index)
+        except json.JSONDecodeError:
+            break
+        if isinstance(item, dict):
+            found.append(item)
+    return found

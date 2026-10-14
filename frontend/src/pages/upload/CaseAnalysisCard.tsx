@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { CaseAnalysis, CaseAnalysisOverview } from '../../services/uploadService';
 import { getCaseAnalysis, runCaseAnalysis } from '../../services/uploadService';
+import { CaseAnalysisTracePanel } from './CaseAnalysisTracePanel';
 
 const CATEGORY_LABELS: Record<string, string> = {
   identity_entity_conflict: 'Identity conflict',
@@ -22,12 +23,16 @@ export function CaseAnalysisCard({
   const [analysis, setAnalysis] = useState<CaseAnalysis | null>(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const load = useCallback(async () => {
+    setIsRefreshing(true);
     try {
       setAnalysis(await getCaseAnalysis(caseId));
     } catch {
       // The card still shows the overview; a failed detail fetch isn't worth an error banner.
+    } finally {
+      setIsRefreshing(false);
     }
   }, [caseId]);
 
@@ -58,6 +63,7 @@ export function CaseAnalysisCard({
   const showResult = analysis?.status === 'complete';
 
   return (
+    <>
     <section className="summary-card">
       <div className="summary-card-header">
         <div className="summary-card-title">
@@ -163,5 +169,7 @@ export function CaseAnalysisCard({
         </>
       )}
     </section>
+    <CaseAnalysisTracePanel analysis={analysis} isRefreshing={isRefreshing} onRefresh={load} />
+    </>
   );
 }

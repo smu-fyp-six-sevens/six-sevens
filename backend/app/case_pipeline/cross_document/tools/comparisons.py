@@ -14,6 +14,7 @@ from ..evidence import mask_identifiers
 from .common import ToolKit, statement_period, unavailable
 
 _MAX_ITEMS = 8
+_IDENTIFIER_FIELD_RE = re.compile(r"uen|nric|fin|passport|(?<![a-z])id(?![a-z])|_id|id_|number|registration|reg_?no|tax|tin", re.IGNORECASE)
 
 
 class FieldRef(BaseModel):
@@ -104,6 +105,12 @@ def build_comparison_tools(kit: ToolKit) -> list:
         def clean(value: Any) -> str:
             return normalize_uen(value) or re.sub(r"[^A-Z0-9]", "", str(value).upper())
 
+        # A name or address differing is a variance, not a conflicting identity; those have their own tools.
+        not_identifiers = [i.field for i in items if not _IDENTIFIER_FIELD_RE.search(i.field)]
+        if not_identifiers:
+            return kit.log("compare_identifiers", {"items": [i.model_dump() for i in items]}, unavailable(
+                f"{', '.join(not_identifiers)} is not an identifier field. Use company_name_consistency_tool, "
+                "address_consistency_tool or compare_people for names and addresses."), is_refutation_probe)
         return _compare("compare_identifiers", items, lambda a, b: clean(a) == clean(b),
                         "IDENTIFIER_CONFLICT", is_refutation_probe, normalise=clean)
 

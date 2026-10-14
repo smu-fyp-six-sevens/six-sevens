@@ -6,9 +6,10 @@ judgement (dismissing false positives, setting each finding's severity),
 this only adds their findings up so a loan officer can see which cases
 need attention first.
 
-Computed live on every case read like documents_status (see
-case_service.build_summary), never stored — so it can't go stale when a
-document is added, rejected, moved, deleted or re-detected.
+Computed live when one case is read (see case_service.build_summary), and
+saved to risk_scores when it changes (see store.py). The case list reads the
+saved score instead of recomputing every case, and a case with none saved is
+computed live.
 
 Scoring:
 - Points per finding from the specialist's final severity (SEVERITY_POINTS).
@@ -178,6 +179,34 @@ def rate_findings(findings: list[ContributingFinding]) -> tuple[RiskLevel, int, 
         level = "Critical"
         reason = f"Rated Critical: high-severity findings on {len(high_documents)} documents."
     return level, _score_out_of_100(level, points), points, reason
+
+
+def scoring_breakdown(risk: CaseRisk) -> dict[str, Any]:
+    """How a risk was arrived at, for the case analysis trace: each finding's points and the rules applied."""
+    return {
+        "state": risk.state,
+        "level": risk.level,
+        "score": risk.score,
+        "points": risk.points,
+        "reasons": risk.reasons,
+        "documents_scanned": risk.documents_scanned,
+        "documents_total": risk.documents_total,
+        "severity_points": SEVERITY_POINTS,
+        "level_thresholds": LEVEL_THRESHOLDS,
+        "critical_needs_high_documents": CRITICAL_MIN_HIGH_DOCUMENTS,
+        "noise_cap_per_document": NOISE_CAP_PER_DOCUMENT,
+        "repeat_weight": REPEAT_WEIGHT,
+        "findings": [
+            {
+                "finding_id": f.finding_id, "document": f.filename, "tool": f.tool, "severity": f.severity,
+                "points": f.points, "category": f.category, "source": f.source, "unreviewed": f.unreviewed,
+            }
+            for f in risk.contributing_findings
+        ],
+        "unassessed_checks": [
+            {"document": c.filename, "tool": c.tool, "reason": c.reason} for c in risk.unassessed_checks
+        ],
+    }
 
 
 def compute_case_risk(

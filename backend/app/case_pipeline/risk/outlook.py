@@ -9,6 +9,7 @@ seen a type for is scored like any other.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from langchain_core.messages import HumanMessage
 
@@ -55,7 +56,7 @@ async def propose_requests(risk: CaseRisk) -> list[EvidenceRequest]:
         f"{f.filename}: {f.summary[:240]}"
         for f in findings
     )
-    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, 1500)
+    model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 900)
     with telemetry.get_tracer().start_as_current_span("case_pipeline.evidence_requests") as span:
         response = await model.ainvoke([HumanMessage(content=_PROMPT.format(limit=MAX_REQUESTS, findings=listing))])
         telemetry.record_usage(span, response)
@@ -70,6 +71,40 @@ async def propose_requests(risk: CaseRisk) -> list[EvidenceRequest]:
                 expected_effect="partial" if item.get("expected_effect") == "partial" else "full",
             ))
     return requests[:MAX_REQUESTS]
+
+
+def outlook_trace(risk: CaseRisk, requests: list[EvidenceRequest], outlook: RiskOutlook) -> dict[str, Any]:
+    """How each request was re-scored, for the case analysis trace: what it addressed, what was dropped and why."""
+    by_id = {f.finding_id: f for f in risk.contributing_findings}
+    kept = {r.title: r for r in outlook.requests}
+    out = []
+    for request in requests:
+        if request.source == "rule":
+            out.append({"title": request.title, "source": "rule", "scored": False})
+            continue
+        addressed, dropped = [], []
+        for finding_id in request.addresses:
+            finding = by_id.get(finding_id)
+            if finding is None:
+                dropped.append({"finding_id": finding_id, "reason": "no such finding"})
+            elif not _reducible(finding):
+                dropped.append({"finding_id": finding_id, "reason": f"{finding.category} cannot be reduced by more evidence"})
+            else:
+                addressed.append({"finding_id": finding_id, "points": finding.points, "category": finding.category,
+                                  "points_after": round(finding.points * _REMAINING[request.expected_effect], 2)})
+        scored = kept.get(request.title)
+        out.append({
+            "title": request.title, "source": "agent", "effect": request.expected_effect,
+            "addressed": addressed, "dropped": dropped,
+            "scored": scored is not None,
+            "score_if_supports": scored.score_if_supports if scored else None,
+            "level_if_supports": scored.level_if_supports if scored else None,
+        })
+    return {
+        "remaining_share": _REMAINING, "current_score": outlook.current_score,
+        "best_case_score": outlook.best_case_score, "best_case_level": outlook.best_case_level,
+        "unreducible_finding_ids": outlook.unreducible_finding_ids, "requests": out,
+    }
 
 
 def _adjusted(findings: list[ContributingFinding], remaining: dict[str, float]) -> list[ContributingFinding]:

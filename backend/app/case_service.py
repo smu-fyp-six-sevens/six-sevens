@@ -9,6 +9,7 @@ from .case_match import CaseMatchResult, DocumentCaseMatch, check_case_match
 from .case_pipeline import repository as analysis_repository, state as analysis_state
 from .case_pipeline.models import CaseAnalysis
 from .case_pipeline.readiness import is_ready_for_analysis
+from .case_pipeline.risk import store as risk_store
 from .case_pipeline.risk.case_risk import compute_case_risk
 from .config import settings
 from .langgraph import trace as langgraph_trace
@@ -179,11 +180,25 @@ def _load_analyses(case_ids: list[str]) -> dict[str, CaseAnalysis]:
         return {}
 
 
+def _load_saved_risks(case_ids: list[str]) -> dict[str, CaseRisk]:
+    """Empty when the saved scores can't be read: the list then computes each risk live, as before."""
+    try:
+        return risk_store.latest_many(case_ids)
+    except Exception:
+        logger.exception("Failed to load saved risk scores for %d case(s)", len(case_ids))
+        return {}
+
+
+def _save_risk(summary: CaseSummary) -> None:
+    risk_store.save_if_changed(summary.id, summary.risk)
+
+
 def build_summary(
     case,
     documents: list[DocumentRecord],
     detection_states: Optional[DetectionStates] = None,
     analyses: Optional[dict[str, CaseAnalysis]] = None,
+    saved_risk: Optional[CaseRisk] = None,
 ) -> CaseSummary:
     """
     Public (not module-private) because routers/ws.py needs it too: it
@@ -193,7 +208,9 @@ def build_summary(
     time. Calling this directly with the documents it already has avoids
     that duplicate query on every poll tick.
 
-    risk is only computed when detection_states is passed (None otherwise).
+    risk is computed when detection_states is passed. saved_risk is the
+    case's latest saved score, used as it is (no findings behind it) by the
+    case list so it doesn't recompute every case.
     """
     fulfilled, missing = compute_requirement_coverage(documents)
     covered, total = compute_identity_proof_of_address_progress(documents)
@@ -204,7 +221,15 @@ def build_summary(
     data["recommended_additional_documents"] = missing
     risk: Optional[CaseRisk] = None
     overview: Optional[CaseAnalysisOverview] = None
-    if detection_states is not None:
+    if saved_risk is not None:
+        risk = saved_risk
+        analysis = (analyses or {}).get(case.id)
+        if analysis is not None:
+            overview = CaseAnalysisOverview(
+                run_id=analysis.run_id, status=analysis.status, stale=False,
+                finished_at=analysis.finished_at, finding_count=len(analysis.findings),
+            )
+    elif detection_states is not None:
         reports, failed_ids = detection_states
         analysis = (analyses or {}).get(case.id)
         if analysis is not None:
@@ -366,6 +391,7 @@ def build_case_snapshot(case_id: str) -> Optional[dict]:
         return None
     detection_states = _load_detection_states(documents)
     summary = build_summary(case, documents, detection_states, _load_analyses([case_id]))
+    _save_risk(summary)
     # Before enrichment: that rewrites extracted_fields in place into
     # {"value", "confidence"} wrappers, while case_match (and mapper.py, via
     # build_summary above) reads the plain values document_repository
@@ -398,7 +424,9 @@ def get_case_summary(case_id: str) -> Optional[CaseSummary]:
     if case is None:
         return None
     documents = document_repository.list_documents(case_id=case_id)
-    return build_summary(case, documents, _load_detection_states(documents), _load_analyses([case_id]))
+    summary = build_summary(case, documents, _load_detection_states(documents), _load_analyses([case_id]))
+    _save_risk(summary)
+    return summary
 
 
 def list_case_summaries() -> list[CaseSummary]:
@@ -413,10 +441,17 @@ def list_case_summaries() -> list[CaseSummary]:
         if doc.case_id is not None:
             documents_by_case[doc.case_id].append(doc)
 
+    saved = _load_saved_risks([case.id for case in cases])
+    # Detection reports are only read for cases with no saved score.
+    unsaved = [case for case in cases if case.id not in saved]
     detection_states = _load_detection_states(
-        [document for case_documents in documents_by_case.values() for document in case_documents]
-    )
+        [document for case in unsaved for document in documents_by_case.get(case.id, [])]
+    ) if unsaved else None
     analyses = _load_analyses([case.id for case in cases])
     return [
-        build_summary(case, documents_by_case.get(case.id, []), detection_states, analyses) for case in cases
+        build_summary(
+            case, documents_by_case.get(case.id, []),
+            None if case.id in saved else detection_states, analyses, saved.get(case.id),
+        )
+        for case in cases
     ]

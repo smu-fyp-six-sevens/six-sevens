@@ -21,9 +21,10 @@ from .cross_document.evidence import build_context
 from .cross_document.agents import PROMPT_VERSION
 from .cross_document.graph import run_cross_document_analysis
 from .models import AnalysisAudit, CaseAnalysis, EvidenceRequest
+from .trace import RunTrace
 from .readiness import is_ready_for_analysis
-from .risk.case_risk import compute_case_risk
-from .risk.outlook import build_outlook, propose_requests
+from .risk.case_risk import compute_case_risk, scoring_breakdown
+from .risk.outlook import build_outlook, outlook_trace, propose_requests
 from .risk.summary import write_summary
 from .risk.supporting_documents import recommend_supporting_documents
 
@@ -91,15 +92,35 @@ async def _execute(
     failed_ids: set[str],
 ) -> None:
     case_id = analysis.case_id
+    trace = RunTrace(analysis.run_id)
+    trace.record(
+        "run_start", case_id=case_id, fingerprint=analysis.fingerprint,
+        documents=[{"id": d.id, "filename": d.filename, "type": d.document_type, "status": d.status.value} for d in documents],
+    )
     try:
         context = build_context(case_id, documents, reports)
+        context.trace = trace
+        trace.record("dossier", documents={k: {"id": v.id, "filename": v.filename, "findings": len(v.findings)}
+                                          for k, v in context.docs.items()})
         result = await run_cross_document_analysis(context)
         findings = result.get("findings") or []
+        trace.save()
 
         risk = compute_case_risk(documents, reports, failed_ids, findings)
-        requests = await propose_requests(risk) + _rule_requests(documents)
+        document_only = compute_case_risk(documents, reports, failed_ids)
+        trace.record(
+            "scoring", **scoring_breakdown(risk),
+            cross_document_findings=len(findings),
+            score_without_cross_document=document_only.score, level_without_cross_document=document_only.level,
+        )
+        agent_requests = await propose_requests(risk)
+        requests = agent_requests + _rule_requests(documents)
+        trace.record("evidence_requests", proposed=[r.model_dump() for r in agent_requests],
+                     rule_based=len(requests) - len(agent_requests))
         outlook = build_outlook(risk, requests)
+        trace.record("outlook", **outlook_trace(risk, requests, outlook))
         summary = await write_summary(risk, outlook, _clean_checks(reports))
+        trace.record("summary", text=summary)
 
         analysis.findings = findings
         analysis.outlook = outlook
@@ -112,11 +133,14 @@ async def _execute(
             tool_calls=result.get("tool_calls") or [],
         )
         analysis.status = "complete"
+        trace.record("done", status="complete", findings=len(findings))
     except Exception as exc:  # noqa: BLE001 - recorded on the run and retryable, never silent
         logger.exception("Case analysis failed for case %s", case_id)
         analysis.status = "failed"
         analysis.error = f"{type(exc).__name__}: {exc}"[:500]
+        trace.record("error", error=analysis.error)
     finally:
+        trace.save()
         try:
             await asyncio.to_thread(repository.finish_run, analysis)
         except Exception:

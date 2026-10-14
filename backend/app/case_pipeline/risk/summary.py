@@ -77,7 +77,7 @@ async def write_summary(risk: CaseRisk, outlook: RiskOutlook, clean_checks: list
         clean=", ".join(clean_checks) or "none recorded", requests=requests, best=best,
     )
     try:
-        model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, 800)
+        model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 600)
         with telemetry.get_tracer().start_as_current_span("case_pipeline.summary") as span:
             response = await model.ainvoke([HumanMessage(content=prompt)])
             telemetry.record_usage(span, response)

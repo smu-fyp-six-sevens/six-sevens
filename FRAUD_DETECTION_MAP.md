@@ -65,12 +65,14 @@ decisions: `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
 |---|---|
 | `readiness.py` | `is_ready_for_analysis`: at least one approved document and all approved documents detected (`analysis_ready` on the case summary) |
 | `service.py`, `repository.py`, `state.py` | Starts a run in the background, stores it in `case_analysis_runs` (`backend/migrations/002_case_analysis_runs.sql`), and reports whether it is stale (documents changed) or interrupted |
+| `trace.py` | `RunTrace`: the run's step-by-step log (run start, dossier, hypotheses, each tool call, verdicts, verification, the scoring breakdown with each finding's points, requests, how each was re-scored, summary), saved to the run row's `trace` column after planning, after judging and at the end. A debugging aid; shown on the case page as "Case analysis trace (debug)" |
 | `models.py`, `categories.py` | `CrossDocFinding`, `RiskOutlook`, `CaseAnalysis`; `FindingCategory` assigned by code from a static tool-to-category map |
 | `cross_document/evidence.py` | The case as the analysis sees it: dossier, masked identifiers, and the ledger of every ref id issued in a run |
-| `cross_document/agents.py`, `graph.py`, `verify.py` | Hypothesiser, investigators (parallel `Send`), and the code-side verification of each verdict |
+| `cross_document/agents.py`, `graph.py`, `verify.py` | Plan (at most 3 hypotheses, each with the checks to run), run the checks (code, no model), judge all hypotheses in one call, then verify each verdict in code. Two Sonnet calls in total |
 | `cross_document/tools/` | The read-only evidence tools: `reading.py`, `transactions.py`, `comparisons.py`, `consistency.py` (company name and address consistency) |
 | `cross_document/company_identity.py`, `address_matching.py` | The company-name and address matching behind the consistency tools |
 | `risk/case_risk.py` | Deterministic score, level and findings (cross-document findings enter only from a current analysis) |
+| `risk/store.py` | Saves the score to the existing `risk_scores` table when it changes (a case read or snapshot build triggers it) and reads the latest per case through the `latest_risk_scores` view (migration `003`). The case list uses the saved score; the case page still computes live for the findings behind it |
 | `risk/outlook.py` | Evidence requests and the deterministic what-if re-scoring |
 | `risk/summary.py` | Grounded plain-language summary, with a deterministic fallback |
 | `risk/supporting_documents.py` | Rule-based supporting-document recommendations (bank statement trades, related-party balances, borrowing growth) |

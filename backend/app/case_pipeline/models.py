@@ -33,6 +33,14 @@ MODEL_CHOOSABLE_CATEGORIES = frozenset({FindingCategory.BEHAVIOURAL_ANOMALY, Fin
 Severity = Literal["low", "medium", "high"]
 
 
+class PlannedCheck(BaseModel):
+    """One evidence-tool call the hypothesis is to be tested with."""
+
+    tool: str
+    args: dict[str, Any] = Field(default_factory=dict)
+    refutation_probe: bool = False
+
+
 class Hypothesis(BaseModel):
     id: str
     claim: str
@@ -42,6 +50,7 @@ class Hypothesis(BaseModel):
     # Fixed before any tool runs: where and how the claim would be shown wrong.
     refutation_document: Optional[str] = None
     refutation_test: str = ""
+    checks: list[PlannedCheck] = Field(default_factory=list)
 
 
 class CrossDocFinding(BaseModel):
@@ -110,5 +119,7 @@ class CaseAnalysis(BaseModel):
     outlook: Optional[RiskOutlook] = None
     summary: Optional[str] = None
     audit: AnalysisAudit = Field(default_factory=AnalysisAudit)
+    # Step-by-step log of the run, for debugging. Includes hypotheses that were tried and dropped.
+    trace: list[dict[str, Any]] = Field(default_factory=list)
     # Computed on read: the case's documents changed since this run started.
     stale: bool = False
