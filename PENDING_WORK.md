@@ -20,6 +20,11 @@ Product roadmap (Detection Agent, Per-Case Pipeline, 5-service Pub/Sub split) st
 - **Guardrails/evals/CI** — golden-set nightly evals (classification accuracy, per-field
   extraction, escalation rate, cache hit rate) and a mocked-subset-per-PR check: not built.
 - **LangGraph Store (learning from officer corrections)** — last phase, not started.
+- **Extraction truncation detection** — `extract.run_extraction` doesn't check `stop_reason == "max_tokens"`.
+  A reply cut off at the token cap fails `json.loads`, reads as "did not return valid JSON", and triggers the
+  reclassify loop until `Unresolved after N reclassification attempt(s)`. Should fail with a clear "output
+  truncated" reason and no reclassify. The cap was raised 4096 → 16000 (`_EXTRACTION_MAX_TOKENS`), which only
+  defers it; very long bank statements may still overflow and need chunked transaction extraction.
 
 ## Architecture (Kong / Prometheus / Grafana)
 
