@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -564,6 +564,13 @@ def is_classification_confirmed(document: DocumentRecord) -> bool:
     if document.document_type in (None, "", "unrecognised"):
         return confidence >= 1.0
     return confidence >= settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
+
+
+def skips_detection(document: DocumentRecord) -> bool:
+    """Fraud detection never runs on an unrecognised (Other) document: with
+    no known type there's no schema or document-specific check to run it
+    against. Approving one as Other is allowed, it just isn't scanned."""
+    return document.document_type in (None, "", "unrecognised")
 
 
 def counts_towards_checklist(document: DocumentRecord) -> bool:

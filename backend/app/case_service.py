@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from typing import Optional
+from typing import Any, Optional
 
 from . import case_repository, document_repository, extracted_fields_repository
 from .case_match import CaseMatchResult, DocumentCaseMatch, check_case_match
+from .case_risk import compute_case_risk
 from .config import settings
 from .langgraph import trace as langgraph_trace
 from .langgraph.extraction_prompts import EXTRACTION_SCHEMAS
@@ -24,6 +25,7 @@ from .models import (
     REQUIRED_DOCUMENT_TYPES,
     CaseDocumentsStatus,
     CaseRecord,
+    CaseRisk,
     CaseSummary,
     DocumentRecord,
     DocumentStatus,
@@ -150,7 +152,23 @@ def sync_submission_finalized(case_id: str) -> None:
     case_repository.set_submission_finalized(case_id, finalized=not missing)
 
 
-def build_summary(case, documents: list[DocumentRecord]) -> CaseSummary:
+# (reports by document_id, ids whose last detection run failed) — see
+# langgraph_trace.get_detection_states.
+DetectionStates = tuple[dict[str, dict[str, Any]], set[str]]
+
+
+def _load_detection_states(documents: list[DocumentRecord]) -> Optional[DetectionStates]:
+    """None when the trace table can't be read — the case still loads, just without a risk."""
+    try:
+        return langgraph_trace.get_detection_states([document.id for document in documents])
+    except Exception:
+        logger.exception("Failed to load detection reports for %d document(s)", len(documents))
+        return None
+
+
+def build_summary(
+    case, documents: list[DocumentRecord], detection_states: Optional[DetectionStates] = None
+) -> CaseSummary:
     """
     Public (not module-private) because routers/ws.py needs it too: it
     already has to fetch a case's documents itself (to enrich them with
@@ -158,6 +176,8 @@ def build_summary(case, documents: list[DocumentRecord]) -> CaseSummary:
     get_case_summary there would fetch the same document list a second
     time. Calling this directly with the documents it already has avoids
     that duplicate query on every poll tick.
+
+    risk is only computed when detection_states is passed (None otherwise).
     """
     fulfilled, missing = compute_requirement_coverage(documents)
     covered, total = compute_identity_proof_of_address_progress(documents)
@@ -166,6 +186,10 @@ def build_summary(case, documents: list[DocumentRecord]) -> CaseSummary:
     id_missing_side = compute_id_document_missing_side(documents)
     data = case.model_dump()
     data["recommended_additional_documents"] = missing
+    risk: Optional[CaseRisk] = None
+    if detection_states is not None:
+        reports, failed_ids = detection_states
+        risk = compute_case_risk(documents, reports, failed_ids)
     return CaseSummary(
         **data,
         documents_status=compute_documents_status(documents),
@@ -313,7 +337,8 @@ def build_case_snapshot(case_id: str) -> Optional[dict]:
     case, documents = _fetch_case_and_documents(case_id)
     if case is None:
         return None
-    summary = build_summary(case, documents)
+    detection_states = _load_detection_states(documents)
+    summary = build_summary(case, documents, detection_states)
     # Before enrichment: that rewrites extracted_fields in place into
     # {"value", "confidence"} wrappers, while case_match (and mapper.py, via
     # build_summary above) reads the plain values document_repository
@@ -325,15 +350,8 @@ def build_case_snapshot(case_id: str) -> Optional[dict]:
     # — it's computed here so the frontend can tell "approved, detection
     # still running" apart from "approved, detection done" without its own
     # poll loop; this snapshot already pushes over the case-status websocket.
-    try:
-        detected_ids = {
-            report["document_id"] for report in langgraph_trace.get_case_detection_reports(case_id)
-        }
-        failed_ids = langgraph_trace.get_case_failed_detection_ids(case_id)
-    except Exception:
-        logger.exception("Failed to load detection reports for case %s", case_id)
-        detected_ids = set()
-        failed_ids = set()
+    reports, failed_ids = detection_states or ({}, set())
+    detected_ids = set(reports)
     document_dumps = []
     for document in enriched:
         dump = document.model_dump(mode="json")
@@ -353,13 +371,13 @@ def get_case_summary(case_id: str) -> Optional[CaseSummary]:
     if case is None:
         return None
     documents = document_repository.list_documents(case_id=case_id)
-    return build_summary(case, documents)
+    return build_summary(case, documents, _load_detection_states(documents))
 
 
 def list_case_summaries() -> list[CaseSummary]:
     """
-    Two queries total (all cases, all documents), not one per case — avoids
-    N+1 as the case count grows. Fine at current scale; would need
+    Three queries total (all cases, all documents, their detection
+    reports), not one per case — avoids N+1 as the case count grows. Fine at current scale; would need
     pagination/filtering if that stops being true.
     """
     cases = case_repository.list_cases(include_dev=not settings.IS_CLOUD_DEPLOYMENT)
@@ -368,4 +386,9 @@ def list_case_summaries() -> list[CaseSummary]:
         if doc.case_id is not None:
             documents_by_case[doc.case_id].append(doc)
 
-    return [build_summary(case, documents_by_case.get(case.id, [])) for case in cases]
+    detection_states = _load_detection_states(
+        [document for case_documents in documents_by_case.values() for document in case_documents]
+    )
+    return [
+        build_summary(case, documents_by_case.get(case.id, []), detection_states) for case in cases
+    ]

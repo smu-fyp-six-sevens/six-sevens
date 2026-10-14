@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Page, Route, WebSocketRoute } from '@playwright/test';
+import type { CaseRisk } from '../../src/services/uploadService/types';
 
 /**
  * Each document type's required extraction fields, exported from the

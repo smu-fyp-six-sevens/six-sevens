@@ -276,6 +276,17 @@ h1 {
   box-shadow: 0 0 0 3px rgba(23, 41, 77, 0.12);
 }
 
+.sort-toggle-btn--active {
+  border-color: #17294d;
+  background: #17294d;
+  color: #fff;
+}
+
+.sort-toggle-btn--active:hover {
+  border-color: #17294d;
+  background: #24385f;
+}
+
 .sort-toggle-arrow {
   color: var(--steel);
   font-weight: 700;
@@ -3405,6 +3416,254 @@ h1 {
   font-size: 12px;
   line-height: 1.5;
   color: var(--ink-soft);
+}
+
+/* Case risk (see pages/upload/CaseRiskCard.tsx) */
+
+.risk-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.summary-card-header .risk-badge {
+  margin-left: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.risk-badge--low {
+  background: #e8f5ee;
+  color: #1f7a4d;
+}
+
+.risk-badge--medium {
+  background: #fdf1de;
+  color: #8a5300;
+}
+
+.risk-badge--high {
+  background: #fbeaea;
+  color: #b33131;
+}
+
+.risk-badge--critical {
+  background: #b33131;
+  color: #fff;
+}
+
+.risk-overview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 0 20px 14px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.risk-overview strong {
+  color: var(--ink);
+}
+
+.risk-reason {
+  flex-basis: 100%;
+}
+
+.risk-document {
+  border-bottom: 1px solid var(--line);
+}
+
+.risk-document:last-child {
+  border-bottom: none;
+}
+
+.risk-document-toggle {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 14px 20px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.risk-document-toggle:hover {
+  background: #faf8f4;
+}
+
+.risk-document-toggle:focus-visible {
+  outline: 2px solid #17294d;
+  outline-offset: -2px;
+}
+
+.risk-document-heading {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.risk-document-heading > strong {
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.risk-document-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.risk-document-meta .risk-severity {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+}
+
+.risk-document-preview {
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--ink-soft);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.risk-chevron {
+  flex: 0 0 auto;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--ink-soft);
+  transition: transform 0.15s;
+}
+
+.risk-chevron--open {
+  transform: rotate(90deg);
+}
+
+.risk-repeat {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #f2f4f7;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: #667085;
+}
+
+.risk-findings {
+  margin: 0;
+  padding: 0 20px 12px;
+  list-style: none;
+}
+
+.risk-findings li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.risk-findings li + li {
+  border-top: 1px dashed var(--line);
+}
+
+.risk-severity {
+  flex: 0 0 58px;
+  padding: 2px 0;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.risk-severity--low {
+  background: #f2f4f7;
+  color: #667085;
+}
+
+.risk-severity--medium {
+  background: #fdf1de;
+  color: #8a5300;
+}
+
+.risk-severity--high {
+  background: #fbeaea;
+  color: #b33131;
+}
+
+.risk-finding-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.risk-finding-summary {
+  display: block;
+  color: var(--ink);
+}
+
+.risk-finding-rationale {
+  display: block;
+  color: var(--ink-soft);
+}
+
+.risk-unassessed {
+  margin: 0 20px 20px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #f2f4f7;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.risk-unassessed summary {
+  font-weight: 700;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.risk-unassessed ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.risk-toggle {
+  display: block;
+  margin: 0 20px 16px;
+  padding: 10px 0 0;
+  border: none;
+  background: transparent;
+  color: #1769c2;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.risk-toggle:hover {
+  color: var(--steel);
 }
 
 /* Flagged documents */

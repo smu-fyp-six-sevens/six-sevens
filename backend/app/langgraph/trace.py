@@ -100,14 +100,35 @@ def get_case_detection_reports(case_id: str) -> list[dict[str, Any]]:
     return reports
 
 
-def get_case_failed_detection_ids(case_id: str) -> set[str]:
-    """Documents in a case whose last detection run errored and left no report."""
-    failed = set()
-    for row in _case_trace_rows(case_id):
-        row_trace = cast(dict, row.get("trace")) or {}
-        if row_trace.get("detection_error") and not row_trace.get("detection_report"):
-            failed.add(row["document_id"])
-    return failed
+_DETECTION_STATE_CHUNK = 100  # keeps the in.(...) filter well under URL length limits
+
+
+def get_detection_states(document_ids: list[str]) -> tuple[dict[str, dict[str, Any]], set[str]]:
+    """
+    (reports by document_id, ids whose last run failed and left no report)
+    for many documents in one query per 100 — what case_risk needs for a
+    whole case list without one trace query per case. Selects only the two
+    keys it needs, not each trace's full step history. Keyed by document
+    rather than trace->>case_id so a document moved to another case still
+    counts towards the case it's in now.
+    """
+    reports: dict[str, dict[str, Any]] = {}
+    failed: set[str] = set()
+    for start_index in range(0, len(document_ids), _DETECTION_STATE_CHUNK):
+        rows = (
+            supabase_client.table("langgraph_trace")
+            .select("document_id, report:trace->detection_report, error:trace->detection_error")
+            .in_("document_id", document_ids[start_index : start_index + _DETECTION_STATE_CHUNK])
+            .execute()
+            .data
+        )
+        for raw_row in rows:
+            row = cast(dict, raw_row)
+            if row.get("report"):
+                reports[row["document_id"]] = row["report"]
+            elif row.get("error"):
+                failed.add(row["document_id"])
+    return reports, failed
 
 
 def get_persisted(document_id: str) -> dict[str, Any] | None:
