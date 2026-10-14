@@ -92,11 +92,11 @@ SPECIALISTS: dict[str, Specialist] = {
             "(revenue plus income minus expenses equals profit), and a balance sheet's sections must "
             "sum to their totals and assets must equal liabilities plus equity. Use the field list to "
             "pick the right fields and row indices. Applies to nearly any document — the numerical tool "
-            "decides internally which of its checks actually apply to this document's type. Also whether "
-            "the document's company name matches the company name on the case's other documents — run "
-            "that check on every document with a company name; a mismatch always stays on the report. "
-            "Also compare this document's personal and company addresses against the other documents "
-            "in the case; address differences are relevant findings and always stay on the report."
+            "decides internally which checks apply to this document's type. Compare the document's "
+            "company name against the other documents in the case and compare its personal and company "
+            "addresses against the corresponding addresses there; these differences always stay on the "
+            "report. The specialist can also check facts against Singapore's public registries (ACRA "
+            "company records, OneMap and HDB addresses)."
         ),
         tools=(
             detection_tools.spelling_tool,
@@ -104,6 +104,7 @@ SPECIALISTS: dict[str, Specialist] = {
             field_tools.numerical_checks_tool,
             detection_tools.company_name_consistency_tool,
             detection_tools.address_consistency_tool,
+            detection_tools.registry_tool,
         ),
         uses_field_catalogue=True,
     ),

@@ -55,10 +55,10 @@ def _check_alignment(
     for raw_blocks in _by_page(body).values():
         raw_blocks = sorted(raw_blocks, key=lambda b: (b.y0, b.x0))
         columns = _page_columns(raw_blocks)
-        groups = (
+        column_sets = (
             _column_groups(raw_blocks, columns) if len(columns) >= 2 else [raw_blocks]
         )
-        for page_blocks in groups:
+        for page_blocks in column_sets:
             column = _content_column(page_blocks)
             if column is None:
                 continue

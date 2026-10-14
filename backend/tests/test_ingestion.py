@@ -159,6 +159,16 @@ def test_page_without_hidden_or_overlapping_text_keeps_sorted_text() -> None:
     assert extract_pdf(data)["text"] == expected
 
 
+def test_line_printed_up_the_margin_is_read_whole() -> None:
+    # Sorted text alone gives "MR-8500180-3 / No: / Reg / GST / ... / Co." one word per line.
+    def build(page):
+        page.insert_text((60, 80), "Balance Carried Forward 109,129.65", fontsize=11)
+        page.insert_text((380, 280), "Co. Reg. No. 196800306E GST Reg No: MR-8500180-3", fontsize=7, rotate=90)
+    lines = extract_pdf(_pdf(build))["text"].splitlines()
+    assert "Co. Reg. No. 196800306E GST Reg No: MR-8500180-3" in lines
+    assert "Balance Carried Forward 109,129.65" in lines
+
+
 def test_scan_with_its_text_layer_stored_under_the_image_keeps_the_text() -> None:
     # Most of the page's text under a later opaque image is a scan, not a cover-up.
     def build(page):

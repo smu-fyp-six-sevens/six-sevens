@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import importlib.resources
-import json
 import logging
 import mimetypes
 import re
@@ -13,6 +12,7 @@ from symspellpy import SymSpell, Verbosity
 
 from ..ingestion.ingestion_service import ingest_document
 from .domain_terms import DOMAIN_TERMS
+from .field_values import text_values
 from .font_consistency import ExtractedField
 
 logger = logging.getLogger("fraud_detection.spelling_anomaly")
@@ -210,7 +210,24 @@ def _strip_non_prose(texts: list[str]) -> list[str]:
     return cleaned
 
 
+_TLDS = (
+    "com|net|org|gov|edu|mil|int|sg|my|id|th|ph|vn|hk|cn|tw|jp|kr|in|au|nz|uk|us|ca|eu|de|fr|"
+    "io|co|ai|app|biz|info|asia|xyz|online|site|tech"
+)
+# Removed before tokenizing, by shape rather than spelling: a misspelled word never looks
+# like one of these, so this can't hide a real typo. Whitespace-free runs only.
+_WEB_ADDRESS_RE = re.compile(
+    r"\S*://\S*"  # a scheme: https://..., mailto: is caught by the email arm
+    r"|\bwww\.\S+"
+    r"|\S+@\S+\.\S+"  # email
+    rf"|\b[\w-]+(?:\.[\w-]+)*\.(?:{_TLDS})\b(?:/\S*)?"  # bare domain, with any path
+    r"|\S*[\w-]+/[\w-]+[/.-]\S*",  # a wrapped URL's path continuing on its own: "taxes/corporate-income-tax"
+    re.IGNORECASE,
+)
+
+
 def _tokenize(text: str) -> list[str]:
+    text = _WEB_ADDRESS_RE.sub(" ", text)
     """
     Letters-only words of MIN_WORD_LENGTH or more, with a possessive "'s"
     dropped ("Bank's" -> "Bank") — SymSpell's dictionary has no possessive
@@ -218,24 +235,6 @@ def _tokenize(text: str) -> list[str]:
     """
     words = (_POSSESSIVE_RE.sub("", word) for word in _WORD_RE.findall(text))
     return [word for word in words if len(word) >= MIN_WORD_LENGTH]
-
-
-def _decode_field_text(value: object) -> str | None:
-    """
-    field_value comes back from the JSON-typed extracted_fields column as
-    whatever native type the stored JSON value is, and some string values
-    are themselves JSON-encoded a second time (e.g. '"ACME Pte Ltd"' instead
-    of 'ACME Pte Ltd') — same quirk font_consistency._field_search_text
-    documents. One decode attempt, falling back to the value itself.
-    """
-    if isinstance(value, str):
-        try:
-            decoded = json.loads(value)
-        except (json.JSONDecodeError, TypeError):
-            decoded = value
-    else:
-        decoded = value
-    return decoded if isinstance(decoded, str) else None
 
 
 def _known_terms_from_extracted_fields(fields: list[ExtractedField] | None) -> set[str]:
@@ -250,11 +249,9 @@ def _known_terms_from_extracted_fields(fields: list[ExtractedField] | None) -> s
     that replaces sending ambiguous words to an LLM for judgement.
     """
     known: set[str] = set()
-    for field in fields or []:
-        text = _decode_field_text(field.field_value)
-        if text is None:
-            continue
-        known.update(word.lower() for word in _tokenize(text))
+    # Nested values too: a name or address that only appears in a table field (shareholders, officers).
+    for value in text_values({field.field_name: field.field_value for field in fields or []}):
+        known.update(word.lower() for word in _tokenize(value.text))
     return known
 
 

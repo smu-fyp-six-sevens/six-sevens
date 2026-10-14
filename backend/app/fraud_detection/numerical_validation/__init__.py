@@ -7,6 +7,9 @@ Layout:
 * identity_company.py  general identifier checks (every type) plus NRIC, passport, company and FATCA checks
 * statements.py        bank statement, source of wealth and notice of assessment checks
 * records.py           payslip, credit report, loan list and proof of address checks
+* cpf_checks.py        payslip CPF against CPF Board's age-band rates
+* gst_checks.py        GST on a bill against IRAS's rate for the date
+* bank_checks.py       bank account number format
 * runner.py            applies bindings to the registered checks and builds the result
 
 Callers use run_numerical_checks with bindings (see runner.py). Each check only sees the fields
@@ -14,7 +17,7 @@ its roles name; a check whose roles aren't filled is skipped with the reason.
 """
 
 # Importing the check modules registers their checks (general checks first).
-from . import identity_company, records, statements  # noqa: F401
+from . import identity_company, records, statements, cpf_checks, gst_checks, bank_checks  # noqa: F401
 from .models import BenfordAnalysis, NumericalFinding, NumericalValidationResult, SkippedCheck
 from .registry import CHECKS, checks_for
 from .runner import (

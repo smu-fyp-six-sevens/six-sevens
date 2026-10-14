@@ -79,6 +79,8 @@ jobs:
             --set-env-vars "AUTH_USERNAME=${{ secrets.AUTH_USERNAME }}" \
             --set-env-vars "AUTH_PASSWORD=${{ secrets.AUTH_PASSWORD }}" \
             --set-env-vars "AUTH_SECRET_KEY=${{ secrets.AUTH_SECRET_KEY }}" \
+            --set-env-vars "DATA_GOV_SG_API_KEY=${{ secrets.DATA_GOV_SG_API_KEY }}" \
+            --set-env-vars "ONEMAP_API_TOKEN=${{ secrets.ONEMAP_API_TOKEN }}" \
             --set-env-vars "DEPLOYMENT_ENV=cloud"
 
       - name: Resolve backend URL

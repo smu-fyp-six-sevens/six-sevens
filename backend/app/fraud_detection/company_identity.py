@@ -148,10 +148,8 @@ def legal_entity_type(value: object) -> Optional[str]:
     if not isinstance(value, str):
         return None
     suffix = _LEGAL_SUFFIX_RE.search(value.strip())
-    words = tuple(
-        _SUFFIX_ABBREVIATIONS.get(word, word)
-        for word in re.findall(r"[A-Z]+", suffix.group(0).upper())
-    ) if suffix else ()
+    tokens: list[str] = re.findall(r"[A-Z]+", suffix.group(0).upper()) if suffix else []
+    words = tuple(_SUFFIX_ABBREVIATIONS.get(token, token) for token in tokens)
     if not words:
         return None
     return _ENTITY_TYPES.get(words, " ".join(words).title())
