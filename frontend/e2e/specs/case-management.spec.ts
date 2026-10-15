@@ -689,7 +689,7 @@ test.describe('Delete case and documents @sprint3 @SCRUM-117', () => {
     await expect(page.getByText(/Document not found/)).toBeVisible();
   });
 
-  test('CM-025 a case is deleted after confirming, and its link then shows "Case not found" @CM-025', async ({ page, backend }) => {
+  test('CM-025 a case is deleted after confirming, and its link then shows the case not-found page @CM-025', async ({ page, backend }) => {
     const { theCase } = seedScrum117(backend);
     seedQueue(backend);
     await page.goto(`/cases/${theCase.greenlink_case_id}`);
@@ -704,7 +704,25 @@ test.describe('Delete case and documents @sprint3 @SCRUM-117', () => {
     await expect(caseCards(page).filter({ hasText: 'scrum-117 test' })).toHaveCount(0);
     expect(backend.requestsTo('DELETE', `/cases/${theCase.id}`)).toHaveLength(1);
     await page.goto(`/cases/${theCase.greenlink_case_id}`);
-    await expect(page.getByText('Case not found.')).toBeVisible();
+    await expect(page.getByRole('heading', { name: "We couldn't find that case" })).toBeVisible();
+    await page.getByRole('button', { name: 'Go to case queue' }).click();
+    await expect(page).toHaveURL('/cases');
+  });
+
+  test('CM-029 a document link into a deleted case shows the not-found page @CM-029', async ({ page, backend }) => {
+    const { theCase, documentUrl } = seedScrum117(backend);
+    seedQueue(backend);
+    await page.goto(`/cases/${theCase.greenlink_case_id}`);
+
+    await page.getByRole('button', { name: 'Case actions' }).click();
+    await page.getByRole('menuitem', { name: 'Delete case' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+    await expect(page).toHaveURL('/cases');
+
+    await page.goto(documentUrl);
+    await expect(page.getByRole('heading', { name: "We couldn't find that document" })).toBeVisible();
+    await page.getByRole('button', { name: 'Go to case queue' }).click();
+    await expect(page).toHaveURL('/cases');
   });
 
   test('CM-026 deleting the document that fulfilled a requirement reverts the checklist @CM-026', async ({ page, backend }) => {
