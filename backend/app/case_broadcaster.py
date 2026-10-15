@@ -37,6 +37,9 @@ class CaseBroadcaster:
         if not subscribers:
             del self._subscribers[case_id]
 
+    def has_subscribers(self, case_id: str) -> bool:
+        return bool(self._subscribers.get(case_id))
+
     def publish(self, case_id: str, snapshot: dict) -> None:
         # Iterate a copy, not the live set — forecloses "RuntimeError: Set
         # changed size during iteration" even if a future edit adds an

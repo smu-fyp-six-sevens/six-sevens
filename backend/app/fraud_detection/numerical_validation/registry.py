@@ -11,7 +11,10 @@ A check is a function taking keyword-only arguments. Each argument is an input:
 An argument without a default is required: if it's missing, the runner records a skip and the
 check isn't called. An argument with a default of None is optional.
 
-@check(code=..., applies=...) takes the document types the check runs on (None = every type).
+@check(code=..., applies=..., group=...) takes the document types the check runs on (None = every type) and
+the group it belongs to: "numerical" (a calculation on the document's own figures) or "external" (a lookup
+in a static reference table such as CPF rates or a bank's published identifiers), and for an external check
+the `source` of that table.
 """
 
 from __future__ import annotations
@@ -44,6 +47,9 @@ class Check:
     fn: Callable[..., Any]
     applies: tuple[str, ...] | None
     params: tuple[Param, ...]
+    group: str = "numerical"
+    # Where an external check's reference comes from, named on its findings.
+    source: str | None = None
 
     @property
     def roles(self) -> tuple[str, ...]:
@@ -77,7 +83,9 @@ def _is_num_annotation(annotation: str) -> bool:
     return "Num" in re.split(r"[\[\]|, ]+", annotation)
 
 
-def check(*, code: str, applies: tuple[str, ...] | None = None) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def check(
+    *, code: str, applies: tuple[str, ...] | None = None, group: str = "numerical", source: str | None = None,
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     def register(fn: Callable[..., Any]) -> Callable[..., Any]:
         params = []
         for param in inspect.signature(fn).parameters.values():
@@ -88,12 +96,12 @@ def check(*, code: str, applies: tuple[str, ...] | None = None) -> Callable[[Cal
                 required=param.default is inspect.Parameter.empty,
                 kind=_param_kind(param.name),
             ))
-        CHECKS.append(Check(code=code, fn=fn, applies=applies, params=tuple(params)))
+        CHECKS.append(Check(code=code, fn=fn, applies=applies, params=tuple(params), group=group, source=source))
         return fn
 
     return register
 
 
-def checks_for(document_type: str | None) -> list[Check]:
-    """Every check that applies to this document type, in registration order."""
-    return [c for c in CHECKS if c.applies is None or document_type in c.applies]
+def checks_for(document_type: str | None, group: str = "numerical") -> list[Check]:
+    """Every check of this group that applies to this document type, in registration order."""
+    return [c for c in CHECKS if c.group == group and (c.applies is None or document_type in c.applies)]

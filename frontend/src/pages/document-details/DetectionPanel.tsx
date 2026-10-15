@@ -47,7 +47,7 @@ export function DetectionPanel({
           <p>Detection doesn't run on rejected documents.</p>
         ) : detectionSkipped && !detectionReport ? (
           <p>
-            Detection doesn't run on unrecognised documents.
+            Detection doesn't run on documents with no type.
             {status !== 'approved' &&
               ' Choose a document type above to have it scanned after approval.'}
           </p>
@@ -133,7 +133,7 @@ export function DetectionPanel({
         {status === 'rejected' ? (
           <p>Not available for rejected documents.</p>
         ) : detectionSkipped && !detectionReport ? (
-          <p>Not available for unrecognised documents.</p>
+          <p>Not available for documents with no type.</p>
         ) : !detectionReport ? (
           <p>Run full detection above first — individual checks unlock once a report exists.</p>
         ) : (

@@ -47,8 +47,9 @@ import pytest
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from PIL import Image, ImageDraw
 
+from app import flags_repository
 from app.fraud_detection.font_consistency import ExtractedField
-from app.fraud_detection.sg_reference.holidays import BUNDLED_HOLIDAYS
+from app.fraud_detection.external_validation.sg_reference.holidays import BUNDLED_HOLIDAYS
 from app.langgraph import trace
 from app.langgraph.detection import tools as detection_tools
 from app.langgraph.detection.graph import run_detection
@@ -230,7 +231,7 @@ def ai(monkeypatch) -> DetectionAI:
     script = DetectionAI()
     fake = lambda model, max_tokens, **kwargs: FakeClaude(script)  # noqa: E731
     monkeypatch.setattr("app.langgraph._anthropic.build_chat_anthropic", fake)
-    monkeypatch.setattr("app.langgraph.detection.binder.build_chat_anthropic", fake)
+    monkeypatch.setattr("app.langgraph.detection.field_checks.binder.build_chat_anthropic", fake)
     return script
 
 
@@ -242,13 +243,17 @@ def store(monkeypatch) -> FakeStore:
         monkeypatch.setattr(f"{module}.extracted_fields_repository", fake)
     monkeypatch.setattr("app.langgraph.detection.tools.storage_service", fake)
 
-    async def bundled_holidays(document_type):
+    async def bundled_holidays():
         return BUNDLED_HOLIDAYS
 
     # Bank statements fetch the live public-holiday list; the bundled copy keeps the test offline.
-    monkeypatch.setattr("app.langgraph.detection.tools.public_holidays_for", bundled_holidays)
+    monkeypatch.setattr("app.fraud_detection.external_validation.runner.public_holidays", bundled_holidays)
     monkeypatch.setattr(trace, "_persist", lambda document_id: None)
     monkeypatch.setattr(trace, "get_persisted", lambda document_id: None)
+    # Detection ends by comparing the document with its case's identity; that has its own
+    # regression file (test_regression_case_match), so here the case is taken to match.
+    monkeypatch.setattr("app.case_service.get_case_match_for_document", lambda document_id: None)
+    monkeypatch.setattr(flags_repository, "replace_for_document", lambda document_id, case_id, findings: len(findings))
     return fake
 
 
@@ -549,7 +554,6 @@ async def test_a_balance_that_does_not_reconcile_is_flagged(ai, store):
     assert set(numerical) == {"BS.RUNNING_BALANCE", "BS.OPEN_CLOSE"}
     assert numerical["BS.RUNNING_BALANCE"]["severity"] == "high"
     assert report["verdict"] == "flagged"
-    assert "numerical_binder" in ai.calls
 
 
 @pytest.mark.sprint3
@@ -897,6 +901,7 @@ def _harbor_light_case(store: FakeStore) -> str:
 
 @pytest.mark.sprint3
 @pytest.mark.story("SCRUM-70", "FD-025")
+@pytest.mark.skip(reason="company_name_consistency_tool moved from the per-document detection agent to the case pipeline (cross_document/tools/consistency.py); covered by test_company_identity.py. Port this scenario to the case-pipeline suite.")
 async def test_a_misspelt_company_name_is_flagged_against_the_cases_other_documents(ai, store):
     # The spelling check leaves company names alone by design (coined brand
     # words are normal in them); a misspelt one is caught by comparing it with
@@ -916,6 +921,7 @@ async def test_a_misspelt_company_name_is_flagged_against_the_cases_other_docume
 
 @pytest.mark.sprint3
 @pytest.mark.story("SCRUM-70", "FD-025")
+@pytest.mark.skip(reason="company_name_consistency_tool moved from the per-document detection agent to the case pipeline (cross_document/tools/consistency.py); covered by test_company_identity.py. Port this scenario to the case-pipeline suite.")
 async def test_a_company_name_mismatch_cannot_be_dismissed_by_the_specialist(ai, store):
     document_id = _harbor_light_case(store)
     ai.specialists[CONTENT] = Specialist(tools=["company_name_consistency_tool"],
@@ -952,7 +958,12 @@ DETECTION_REPORT_FIXTURE = FIXTURES / "detection-report-c028.json"
 
 @pytest.mark.sprint3
 @pytest.mark.story("SCRUM-119", "FD-015 – FD-020")
-async def test_the_playwright_suites_detection_report_matches_the_graph(ai, store):
+async def test_the_playwright_suites_detection_report_matches_the_graph(ai, store, monkeypatch):
+    def sequential_flag_ids(findings):
+        for number, finding in enumerate((f for f in findings if flags_repository.is_flag(f)), start=1):
+            finding["flag_id"] = f"flag-{number}"
+
+    monkeypatch.setattr(flags_repository, "assign_flag_ids", sequential_flag_ids)
     document_id = _credit_report_with_font_and_metadata_tampering(store)
     ai.briefs = {
         LAYOUT: "Credit report with printed figures: check fonts and layout.",

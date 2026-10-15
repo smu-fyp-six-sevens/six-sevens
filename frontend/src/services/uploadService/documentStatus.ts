@@ -165,7 +165,7 @@ export function formatDocumentStatus(status: string): string {
 }
 
 export function skipsDetection(documentType: string | null | undefined): boolean {
-  return !documentType || documentType === 'unrecognised';
+  return !documentType;
 }
 
 export function documentDetectionStage(

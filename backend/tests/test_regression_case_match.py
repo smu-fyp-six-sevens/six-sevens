@@ -114,6 +114,9 @@ def test_an_individual_document_of_someone_not_on_the_case_is_a_case_mismatch(an
     entry = _entry(check_case_match(case, [*documents, passport]), passport)
 
     assert entry.case_mismatch is True
+    # Same triage as a foreign company: it looks misfiled, so an officer reviews it.
+    assert entry.status == DocumentMatchStatus.MANUAL_REVIEW
+    assert entry.can_proceed_to_fraud_detection is False
     [person] = [c for c in entry.comparisons if c.check.startswith("individual")]
     assert person.outcome == CheckOutcome.MISMATCH
     assert person.document_value == "S7273147P"

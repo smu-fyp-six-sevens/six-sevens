@@ -16,6 +16,7 @@ affects the pipeline.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, cast
@@ -32,10 +33,17 @@ _traces: dict[str, dict[str, Any]] = {}
 _MAX_TRACES = 500  # bounded so a long-running dev process doesn't leak memory
 
 
+# Guards _traces against the writer thread copying a trace mid-update.
+_lock = threading.Lock()
+# Documents with a write already queued: later records ride along with it instead of queueing their own.
+_pending: set[str] = set()
+
+
 def start(document_id: str) -> None:
-    if len(_traces) >= _MAX_TRACES:
-        _traces.pop(next(iter(_traces)))
-    _traces[document_id] = {"document_id": document_id, "started_at": time.time(), "steps": []}
+    with _lock:
+        if len(_traces) >= _MAX_TRACES:
+            _traces.pop(next(iter(_traces)))
+        _traces[document_id] = {"document_id": document_id, "started_at": time.time(), "steps": []}
     _persist(document_id)
 
 
@@ -53,7 +61,8 @@ def resume(document_id: str) -> None:
     except Exception:  # noqa: BLE001 — falls back to a fresh trace
         persisted = None
     if persisted:
-        _traces[document_id] = persisted
+        with _lock:
+            _traces.setdefault(document_id, persisted)
 
 
 def _trace(document_id: str) -> dict[str, Any]:
@@ -61,10 +70,19 @@ def _trace(document_id: str) -> dict[str, Any]:
 
 
 def record(document_id: str, step: str, **fields: Any) -> None:
-    trace = _trace(document_id)
-    trace["steps"].append({"step": step, "at": round(time.time() - trace["started_at"], 3), **fields})
-    trace.update(fields)  # also flatten onto the top level for easy reading
+    with _lock:
+        trace = _trace(document_id)
+        trace["steps"].append({"step": step, "at": round(time.time() - trace["started_at"], 3), **fields})
+        trace.update(fields)  # also flatten onto the top level for easy reading
     _persist(document_id)
+
+
+def flush(document_id: str) -> None:
+    """Blocks until this document's queued trace write has landed. Call via asyncio.to_thread."""
+    with _lock:
+        queued = document_id in _pending
+    if queued:
+        _writer.submit(lambda: None).result()  # one worker: this runs only after the queued write
 
 
 def get(document_id: str) -> dict[str, Any] | None:
@@ -100,14 +118,35 @@ def get_case_detection_reports(case_id: str) -> list[dict[str, Any]]:
     return reports
 
 
-def get_case_failed_detection_ids(case_id: str) -> set[str]:
-    """Documents in a case whose last detection run errored and left no report."""
-    failed = set()
-    for row in _case_trace_rows(case_id):
-        row_trace = cast(dict, row.get("trace")) or {}
-        if row_trace.get("detection_error") and not row_trace.get("detection_report"):
-            failed.add(row["document_id"])
-    return failed
+_DETECTION_STATE_CHUNK = 100  # keeps the in.(...) filter well under URL length limits
+
+
+def get_detection_states(document_ids: list[str]) -> tuple[dict[str, dict[str, Any]], set[str]]:
+    """
+    (reports by document_id, ids whose last run failed and left no report)
+    for many documents in one query per 100 — what case_risk needs for a
+    whole case list without one trace query per case. Selects only the two
+    keys it needs, not each trace's full step history. Keyed by document
+    rather than trace->>case_id so a document moved to another case still
+    counts towards the case it's in now.
+    """
+    reports: dict[str, dict[str, Any]] = {}
+    failed: set[str] = set()
+    for start_index in range(0, len(document_ids), _DETECTION_STATE_CHUNK):
+        rows = (
+            supabase_client.table("langgraph_trace")
+            .select("document_id, report:trace->detection_report, error:trace->detection_error")
+            .in_("document_id", document_ids[start_index : start_index + _DETECTION_STATE_CHUNK])
+            .execute()
+            .data
+        )
+        for raw_row in rows:
+            row = cast(dict, raw_row)
+            if row.get("report"):
+                reports[row["document_id"]] = row["report"]
+            elif row.get("error"):
+                failed.add(row["document_id"])
+    return reports, failed
 
 
 def get_persisted(document_id: str) -> dict[str, Any] | None:
@@ -118,10 +157,21 @@ def get_persisted(document_id: str) -> dict[str, Any] | None:
 
 
 def _persist(document_id: str) -> None:
-    trace = _traces.get(document_id)
-    if trace is None:
-        return
-    _writer.submit(_write_row, {**trace, "steps": list(trace["steps"])})
+    with _lock:
+        if document_id in _pending or document_id not in _traces:
+            return
+        _pending.add(document_id)
+    _writer.submit(_flush, document_id)
+
+
+def _flush(document_id: str) -> None:
+    with _lock:
+        _pending.discard(document_id)
+        trace = _traces.get(document_id)
+        if trace is None:
+            return
+        snapshot = {**trace, "steps": list(trace["steps"])}
+    _write_row(snapshot)
 
 
 def _write_row(snapshot: dict[str, Any]) -> None:

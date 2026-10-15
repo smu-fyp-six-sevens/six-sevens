@@ -1,4 +1,10 @@
-import type { DocumentRecord, DocumentCaseMatch } from '../../services/uploadService';
+import type {
+  CaseAnalysisOverview,
+  CaseRisk,
+  DocumentRecord,
+  DocumentCaseMatch,
+  SupportingDocumentRecommendation,
+} from '../../services/uploadService';
 import {
   CLASSIFICATION_CONFIDENCE_THRESHOLD,
   EXTRACTION_CONFIDENCE_THRESHOLD,
@@ -8,17 +14,30 @@ import {
   lowestFieldConfidence,
 } from '../../services/uploadService';
 import { humanizeFieldKey } from '../../utils/fieldLabels';
+import { CaseAnalysisCard } from './CaseAnalysisCard';
+import { CaseRiskCard } from './CaseRiskCard';
+import { SupportingDocumentsCard } from './SupportingDocumentsCard';
 
 export function UploadSummaryCards({
+  analysisOverview,
+  analysisReady,
+  caseId,
   caseMatchNeedsReview,
   caseMatches,
   flaggedDocuments,
   onOpenDocument,
+  risk,
+  supportingDocumentRecommendations,
 }: {
+  analysisOverview: CaseAnalysisOverview | null;
+  analysisReady: boolean;
+  caseId: string;
   caseMatchNeedsReview: (document: DocumentRecord) => boolean;
   caseMatches: Map<string, DocumentCaseMatch>;
   flaggedDocuments: DocumentRecord[];
   onOpenDocument: (documentId: string) => void;
+  risk: CaseRisk | null;
+  supportingDocumentRecommendations: SupportingDocumentRecommendation[];
 }) {
   return (
     <>
@@ -137,29 +156,12 @@ export function UploadSummaryCards({
               )}
             </section>
 
-            <section className="summary-card">
-              <div className="summary-card-header">
-                <div className="summary-card-title">
-                  <span className="summary-icon summary-icon--risk">
-                    ▥
-                  </span>
-                  <h2>Customer Risk Summary</h2>
-                </div>
-              </div>
+            <CaseRiskCard risk={risk} />
 
-              <div className="summary-message summary-message--info">
-                <span className="summary-message-icon">ⓘ</span>
+            <CaseAnalysisCard caseId={caseId} analysisReady={analysisReady} overview={analysisOverview} />
 
-                <div>
-                  <strong>Risk summary not available yet.</strong>
-
-                  <p>
-                    Risk analysis results will appear here once document
-                    extraction and fraud analysis are completed.
-                  </p>
-                </div>
-              </div>
-            </section>
+            {/* Both come from the latest complete case analysis, so risk is set exactly when one exists. */}
+            <SupportingDocumentsCard recommendations={supportingDocumentRecommendations} analysed={risk !== null} />
 
             <section className="summary-card">
               <div className="summary-card-header">

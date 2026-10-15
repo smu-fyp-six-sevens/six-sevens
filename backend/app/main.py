@@ -2,13 +2,14 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from . import auth, health, realtime_listener, telemetry
+from . import auth, health, query_stats, realtime_listener, telemetry
 from .config import settings
 from .health import check_db_connection
+from .langgraph._anthropic import warm_up
 from .queue_service import document_queue
 from .routers import injection, cases, detection, documents, monitoring, upload, ws
 
@@ -21,6 +22,9 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
+# One line per Supabase call drowned everything else; the "perf" summaries (query_stats.py) replace it.
+if not settings.LOG_HTTP_REQUESTS:
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
@@ -45,13 +49,28 @@ async def lifespan(app: FastAPI):
         # if SUPABASE_SECRET_KEY isn't configured in a given environment yet.
         logger.exception("Realtime listener failed to start — continuing anyway")
 
+    try:
+        await asyncio.to_thread(warm_up)
+    except Exception:
+        logger.exception("Claude client warm-up failed — continuing anyway")
+
+    reporter = asyncio.create_task(query_stats.run_reporter())
+
     yield
 
+    reporter.cancel()
     await realtime_listener.stop()
 
 
 app = FastAPI(title="fyp API", lifespan=lifespan)
 telemetry.setup(app)
+
+
+@app.middleware("http")
+async def count_queries(request: Request, call_next):
+    # Background work a handler starts opens its own scope, so it isn't counted here.
+    with query_stats.scope(f"{request.method} {query_stats.label_path(request.url.path)}"):
+        return await call_next(request)
 
 app.add_middleware(
     CORSMiddleware,

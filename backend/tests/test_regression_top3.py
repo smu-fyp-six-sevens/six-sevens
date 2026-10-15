@@ -1,7 +1,9 @@
 """
 Regression tests (SCRUM-206) for SCRUM-109 Classifier Agent Tools to Return
 Top 3 Results (Sprint 2): each classifier tool returns up to 3 candidate
-types with reasoning, and their confidences sum to 1.
+types with reasoning, and their confidences sum to 1 whenever there is at least
+one candidate. No candidates is an empty list; the document is then routed to
+manual review as unrecognised rather than given an invented confidence.
 
 The normalisation is tested directly with fixed candidates, because a real
 document does not reliably produce exactly three matches.
@@ -55,12 +57,12 @@ def test_fewer_than_three_candidates_still_sum_to_one(normalise) -> None:
 
 @pytest.mark.sprint2
 @pytest.mark.story("SCRUM-109", "DI-others")
-def test_a_document_that_matches_nothing_returns_no_candidates() -> None:
-    # Locked in as current behaviour: no candidates means an empty list, so the
-    # confidences do not sum to 1 here. Changing this must be deliberate.
+def test_a_document_that_matches_nothing_returns_no_candidates_and_needs_review() -> None:
+    # Nothing to normalise: the sum-to-1 rule applies only when candidates exist.
     result = rule_classify.classify_by_rules("scan_0042.pdf", "Lorem ipsum dolor sit amet")
 
     assert result["top_candidates"] == []
+    assert result["needs_manual_review"] is True
 
 
 @pytest.mark.sprint2
