@@ -15,7 +15,7 @@ the company's UEN, name, officers and shareholders. Three steps:
    every other document being flagged against a bad reference.
 2. Compare each document's company against the incumbency — UEN first when
    the document has one, otherwise company name with fuzzy matching (see
-   company_names_match).
+   case_company_names_match).
 3. Compare each individual a document names against the incumbency's
    officers/shareholders — ID number first, otherwise name. Mismatches are
    returned for the fraud detection report; they do not block approval.
@@ -238,7 +238,7 @@ def _company_tokens(value: object) -> list[str]:
     return tokens
 
 
-def company_names_match(a: object, b: object) -> bool:
+def case_company_names_match(a: object, b: object) -> bool:
     """
     Fuzzy, but deliberately not typo-tolerant: "ACME Trading Pte Ltd" matches
     "ACME Pte Ltd" (one name is the other plus extra words, same leading
@@ -557,7 +557,7 @@ def _compare_company(
     company_name = next(iter(_strings(fields.get("company_name"))), None)
     if company_name is None or reference.company_name is None:
         return None
-    matched = company_names_match(company_name, reference.company_name)
+    matched = case_company_names_match(company_name, reference.company_name)
     return FieldComparison(
         check="company_name",
         outcome=CheckOutcome.MATCH if matched else CheckOutcome.MISMATCH,
@@ -803,26 +803,23 @@ def _pairwise_person_findings(
             )
             findings.append((doc.id, comparison, comparison.reason))
 
-    if (
-        left_person.name
-        and right_person.name
-        and not individual_names_match(left_person.name, right_person.name)
-    ):
-        for doc, person, other_doc, other in (
-            (left_doc, left_person, right_doc, right_person),
-            (right_doc, right_person, left_doc, left_person),
+    left_name, right_name = left_person.name, right_person.name
+    if left_name and right_name and not individual_names_match(left_name, right_name):
+        for doc, person, name, other_doc, other_name in (
+            (left_doc, left_person, left_name, right_doc, right_name),
+            (right_doc, right_person, right_name, left_doc, left_name),
         ):
             comparison = FieldComparison(
                 check="individual_name",
                 outcome=CheckOutcome.MISMATCH,
                 document_field=person.name_field,
-                document_value=person.name,
+                document_value=name,
                 other_document_id=other_doc.id,
                 other_filename=other_doc.filename,
-                case_value=other.name,
+                case_value=other_name,
                 reason=(
-                    f'Name "{person.name}" in {doc.filename} differs from '
-                    f'"{other.name}" in {other_doc.filename}'
+                    f'Name "{name}" in {doc.filename} differs from '
+                    f'"{other_name}" in {other_doc.filename}'
                 ),
             )
             findings.append((doc.id, comparison, comparison.reason))
@@ -835,7 +832,6 @@ def _apply_pairwise_person_checks(
     incumbency_doc: Optional[DocumentRecord],
 ) -> list[DocumentCaseMatch]:
     """Add cross-document identity mismatches to both documents in each pair."""
-    match_by_id = {match.document_id: match for match in matches}
     docs_with_people = [
         doc for doc in documents
         if doc.extracted_fields

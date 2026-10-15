@@ -13,7 +13,7 @@ from app.case_match import (
     DocumentMatchStatus,
     IncumbencyStatus,
     check_case_match,
-    company_names_match,
+    case_company_names_match,
     individual_names_match,
     normalize_uen,
 )
@@ -134,7 +134,7 @@ def _by_id(result, doc_id: str):
     ],
 )
 def test_company_names_match(a: str, b: str, expected: bool) -> None:
-    assert company_names_match(a, b) is expected
+    assert case_company_names_match(a, b) is expected
 
 
 def test_individual_names_match_ignores_order_and_case() -> None:
@@ -684,16 +684,29 @@ def test_case_snapshot_includes_case_match_computed_from_plain_fields() -> None:
 
     passport = _doc("passport", {"individual_name": "TEO KAI MING", "nric_number": "S7273147P"}, "pp")
     docs = [_incumbency(), *_corroborating(3), passport]
-    with patch("app.case_service.case_repository") as case_repo, patch(
-        "app.case_service.document_repository"
-    ) as doc_repo, patch("app.case_service.extracted_fields_repository") as fields_repo:
+    # The snapshot lists documents without their fields and fills them from one
+    # batch query, so the fake store must hold every document's fields.
+    stored = {
+        doc.id: [
+            ExtractedField(field_name=name, field_type="string", field_value=value, confidence=0.9)
+            for name, value in (doc.extracted_fields or {}).items()
+        ]
+        for doc in docs
+    }
+    with (
+        patch("app.case_service.case_repository") as case_repo,
+        patch("app.case_service.document_repository") as doc_repo,
+        patch("app.case_service.extracted_fields_repository") as fields_repo,
+        patch("app.case_service.langgraph_trace") as trace,
+        patch("app.case_service.analysis_repository") as analyses,
+    ):
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = docs
+        trace.get_detection_states.return_value = ({}, set())
+        analyses.get_latest_many.return_value = {}
         # Enrichment rewrites extracted_fields into {value, confidence}
         # wrappers — the case match must not see that shape.
-        fields_repo.get_extracted_fields_for_documents.return_value = {
-            "pp": [ExtractedField(field_name="nric_number", field_type="string", field_value="S7273147P", confidence=0.9)]
-        }
+        fields_repo.get_extracted_fields_for_documents.return_value = stored
         snapshot = case_service.build_case_snapshot("case-1")
 
     assert snapshot["case_match"]["incumbency"]["status"] == "verified"

@@ -7,8 +7,8 @@ Each check lives in its own module. Every name is re-exported here, so
 from __future__ import annotations
 
 from . import text_overlay
-from .profiles import confident_type, LayoutProfile, profile_for
-from .reference import best_reference, build_reference, ReferenceLayout
+from .profiles import confident_type, profile_for
+from .reference import best_reference
 from .common import (  # noqa: F401
     _abs_pt_phrase, _ADDRESS_HINT_RE, ALIGN_EDGE_TOLERANCE_PT, Alignment, _ALIGNMENT_LABEL,
     _anomaly, AnomalyType, _as_bbox, _assessed, BBox, _bbox_area, _Block, _block_for_line,

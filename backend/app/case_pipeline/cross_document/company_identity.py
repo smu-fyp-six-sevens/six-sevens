@@ -161,7 +161,7 @@ def _entity_types_agree(a: object, b: object) -> bool:
     return type_a is None or type_b is None or type_a == type_b
 
 
-def company_names_match(a: object, b: object) -> bool:
+def cross_document_company_names_match(a: object, b: object) -> bool:
     """Same name once the legal suffix is set aside, and the suffixes don't state different entity types."""
     normalized_a, normalized_b = normalize_company_name(a), normalize_company_name(b)
     return normalized_a is not None and normalized_a == normalized_b and _entity_types_agree(a, b)
@@ -270,7 +270,7 @@ def check_company_name_consistency(
         other_name = _company_name(other.extracted_fields)
         assert other_name is not None  # filtered above
         matches = (
-            company_names_match(company_name, other_name)
+            cross_document_company_names_match(company_name, other_name)
             or _account_name_cut_short(document, company_name, other_name)
             or _account_name_cut_short(other, other_name, company_name)
             or (other.document_type == DocumentType.UNRECOGNISED.value and _mentions(other, company_name))

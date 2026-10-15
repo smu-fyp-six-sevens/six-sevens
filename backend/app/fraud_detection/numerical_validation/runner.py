@@ -70,8 +70,13 @@ def _applicable(document_type: str | None, group: str = "numerical") -> list[Che
     return checks_for(document_type, group)
 
 
-def _resolve_plain(role: str, bound: dict[str, str], values: dict[str, Any]) -> str | None:
+def _resolve_plain(
+    role: str, bound: dict[str, str], values: dict[str, Any], applied: list[dict] | None = None,
+) -> str | None:
+    """The field behind a role; `applied` records a specialist binding that was actually read."""
     if role in bound:
+        if applied is not None:
+            applied.append({"role": role, "field": bound[role]})
         return bound[role]
     if role in values:
         return role
@@ -157,7 +162,7 @@ def _income_lines_from_labels(name: str, values: dict[str, Any]) -> list[tuple[s
 def _statement_casts(values: dict[str, Any], plain: dict[str, str], bound_rows: list[tuple[str, str, int]],
                      confidences: dict[str, float], outcome: RunOutcome) -> None:
     """Statement casts: the income statement (all its non-total lines) and balance sheet sections (the rows the binder names)."""
-    income_name = _resolve_plain("income_statement_items", plain, values)
+    income_name = _resolve_plain("income_statement_items", plain, values, outcome.applied)
     if income_name is not None and array_rows(values[income_name]):
         lines = _income_lines_from_labels(income_name, values)
     else:
@@ -195,13 +200,13 @@ def _income_statement(values: dict[str, Any], plain: dict[str, str], lines: list
             if (name, index) not in referenced:
                 outcome.unassigned.append({"field": name, "row": index, "label": row_label(row)})
 
-    revenue = _resolve_plain("revenue", plain, values)
-    profit = _resolve_plain("profit_for_the_year", plain, values)
+    revenue = _resolve_plain("revenue", plain, values, outcome.applied)
+    profit = _resolve_plain("profit_for_the_year", plain, values, outcome.applied)
     years = []
     if revenue and profit:
         years.append(("current year", revenue, profit, "amount"))
-    prior_revenue = _resolve_plain("revenue_prior_year", plain, values)
-    prior_profit = _resolve_plain("profit_for_the_year_prior_year", plain, values)
+    prior_revenue = _resolve_plain("revenue_prior_year", plain, values, outcome.applied)
+    prior_profit = _resolve_plain("profit_for_the_year_prior_year", plain, values, outcome.applied)
     if prior_revenue and prior_profit:
         years.append(("prior year", prior_revenue, prior_profit, "amount_prior_year"))
     if not years:
@@ -263,7 +268,7 @@ def _balance_sheet(values: dict[str, Any], plain: dict[str, str], sections: dict
         bound = sections[section]
         if not bound:
             continue
-        total_name = _resolve_plain(f"total_{section}", plain, values)
+        total_name = _resolve_plain(f"total_{section}", plain, values, outcome.applied)
         if total_name is None:
             outcome.skipped.append(SkippedCheck(check_code="FS.BS_CAST",
                                                 reason=f"{section}: no total field bound (total_{section})"))
@@ -289,7 +294,7 @@ def _balance_sheet(values: dict[str, Any], plain: dict[str, str], sections: dict
         ("current year", ("total_assets", "total_liabilities", "total_equity")),
         ("prior year", ("total_assets_prior_year", "total_liabilities_prior_year", "total_equity_prior_year")),
     ):
-        resolved_names = [name for name in (_resolve_plain(name, plain, values) for name in names) if name is not None]
+        resolved_names = [name for name in (_resolve_plain(name, plain, values, outcome.applied) for name in names) if name is not None]
         if len(resolved_names) != len(names):
             continue
         numbers = [_as_number(values[name]) for name in resolved_names]
@@ -371,7 +376,7 @@ def run_numerical_checks(
     if document_type in LINE_SET_TYPES:
         _statement_casts(values, plain, bound_rows, confidences, outcome)
     if document_type == "bank_statement":
-        name = _resolve_plain("transactions", plain, values)
+        name = _resolve_plain("transactions", plain, values, outcome.applied)
         if name is not None:
             outcome.benford, outcome.benford_excluding_fees, benford_findings = _run_benford_pair(values[name])
             outcome.findings.extend(benford_findings)

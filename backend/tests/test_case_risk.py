@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -443,12 +443,35 @@ def test_case_summary_keeps_the_last_complete_risk_while_a_rerun_is_going() -> N
         trace.get_detection_states.return_value = ({"doc": _report()}, set())
         analyses.get_latest_many.return_value = {"case-1": _analysis(None, status="running")}
         analyses.get_latest_complete.return_value = _analysis(risk)
-
-        summary = case_service.get_case_summary("case-1")
+        # A run only reads as running while this process still has its task.
+        live_task = MagicMock()
+        live_task.done.return_value = False
+        with patch.dict("app.case_pipeline.state.running_tasks", {"case-1": live_task}):
+            summary = case_service.get_case_summary("case-1")
 
     assert summary is not None and summary.risk is not None
     assert summary.risk.level == "High"
     assert summary.analysis is not None and summary.analysis.status == "running"
+
+
+def test_a_running_analysis_with_no_live_task_reads_as_interrupted() -> None:
+    risk = compute_case_risk([_document("doc")], {"doc": _report(_finding("high", "font_consistency_tool"))}, set())
+    with (
+        patch("app.case_service.case_repository") as case_repo,
+        patch("app.case_service.document_repository") as doc_repo,
+        patch("app.case_service.langgraph_trace") as trace,
+        patch("app.case_service.analysis_repository") as analyses,
+    ):
+        case_repo.get_case.return_value = _case()
+        doc_repo.list_documents.return_value = [_document("doc")]
+        trace.get_detection_states.return_value = ({"doc": _report()}, set())
+        analyses.get_latest_many.return_value = {"case-1": _analysis(None, status="running")}
+        analyses.get_latest_complete.return_value = _analysis(risk)
+
+        summary = case_service.get_case_summary("case-1")
+
+    assert summary is not None and summary.risk is not None  # the last complete score is kept
+    assert summary.analysis is not None and summary.analysis.status == "failed"
 
 
 def test_case_list_reads_saved_scores_and_never_detection_reports() -> None:

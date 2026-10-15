@@ -172,27 +172,15 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         ],
     },
     "certificate_of_incumbency": {
-        # docgen_acra_profile.py sets every one of these unconditionally —
-        # company_type is always randomly assigned (never left out), a
-        # Secretary (name/address/id) is always appended to officers even
-        # when there are no director holders, and share_capital/share_type
-        # (facts["share_class"], e.g. "Ordinary") both come straight from
-        # facts with no fallback.
+        # The people are arrays, not flat fields: shareholders is mandatory, and there are no
+        # single-shareholder fields (shareholder_name/address, nric_number).
         "required": [
             "company_name", "uen", "incorporation_date", "company_type",
-            "company_address", "shareholder_name", "shareholder_address",
-            "nric_number", "share_capital", "share_class",
+            "company_address", "share_capital", "share_class", "shareholders",
         ],
-        # shareholders/officers (not doc_gen-verified — added for
-        # fraud_detection.numerical_validation's ACRA.* checks): array forms
-        # of the same shareholder/officer facts shareholder_name/
-        # shareholder_address above only capture as a single person — same
-        # "a flat field can't hold more than one person" reasoning as
-        # company_constitution's "subscribers" below. Only extract these
-        # where the document actually lists more than the one shareholder/
-        # officer required already captures.
+        # shareholders/officers feed fraud_detection.numerical_validation's ACRA.* checks.
         "additional": [
-            "company_former_name", "shareholders", "officers",
+            "officers", "company_former_name",
             "document_date", "last_agm_date", "last_annual_return_date", "financial_year_end",
         ],
     },
@@ -464,7 +452,13 @@ EXTRA_FIELD_GUIDANCE: dict[str, str] = {
         '"ACRA Business Profile", "BizFile", "Business Profile", or '
         'similar rather than "Certificate of Incumbency" — that\'s the '
         "expected, normal title for this type in practice, not evidence "
-        "of a mismatch."
+        "of a mismatch.\n\n"
+        'For "shareholders", its "value" should be an array of objects, one '
+        "per shareholder listed, each with these keys: "
+        '"name", "identification_no" (the ID or UEN as printed), "address", '
+        '"shares" (the number held, as printed) and, where shown, '
+        '"share_class". There are no separate single-shareholder fields: '
+        "even a sole shareholder is a one-item array."
     ),
     "payslip": (
         'For "earnings_items", its "value" should be an array of objects, '
@@ -667,6 +661,15 @@ EXTRA_FIELD_GUIDANCE: dict[str, str] = {
         "letter's own dateline."
     ),
     "notice_of_assessment": (
+        'For "eci", use the line "Estimated Chargeable Income before deducting '
+        'Exempt Amount" (it may also read "Chargeable Income" or "ECI"): that '
+        "figure is the ECI, even though the label is longer than \"ECI\". It is "
+        "printed as a standalone amount, so it is not an inference. The separate "
+        'line "Estimated Chargeable Income after deducting Exempt Amount" is '
+        'not "eci"; extract it, if you want it, as "chargeable_income_after_exemption". '
+        "Do not add fields such as \"issuing_authority\" whose value only follows from "
+        "the letterhead, website, portal or the Comptroller's title: extract only what is "
+        "printed as its own labelled field.\n\n"
         'For "tax_computation", its "value" should be an array of objects — '
         "one per line of the tax computation table between chargeable income "
         'and tax payable — each with keys "line" (as labelled, e.g. "First '
@@ -851,7 +854,9 @@ that seem relevant for a loan application (e.g. additional identifiers,
 dates, amounts, addresses) beyond the two lists above — there's no fixed
 list for these, use your judgement about what a loan officer reviewing
 this document would find useful. Add them directly into extracted_fields
-using clear, descriptive snake_case keys.
+using clear, descriptive snake_case keys. Only add one whose value is printed
+in the document as its own labelled field; never one you would infer from
+context (a letterhead, logo, website, document title or signatory's role).
 {extra_guidance_block}
 {_FIELD_WRAPPER_INSTRUCTIONS}
 

@@ -86,7 +86,6 @@ Built and exercised end to end on generated cases. Design: `CROSS_DOCUMENT_AND_R
   rules differ and the checks' results would change.
 - **`Scrum-254-address-matching`** — commit `4a0742c` (address normalisation edge cases) is applied by hand
   to `case_pipeline/cross_document/address_matching.py`, not merged. Merge the branch to record it.
-- **Pyright** — `address_matching.py` and `case_match.py:819` report 3 errors that came from merged branches.
 - **Vertical text** — `text_overlay.py` skips vertical text by an aspect-ratio guess because `_Line` records no
   direction. Extracting the direction from PyMuPDF would replace the guess.
 - **Unrelated failing test** — `test_layout_reference.py::test_committed_references_load_and_have_no_value_text`

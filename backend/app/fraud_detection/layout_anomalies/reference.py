@@ -86,7 +86,7 @@ def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
-def _mask_numbers(text: str) -> str:
+def _mask_numbers(text: str | None) -> str:
     """A label that carries a figure ("discharge of $40,000.00") is still that label on another document."""
     return re.sub(r"\d[\d,.]*", "#", text or "")
 

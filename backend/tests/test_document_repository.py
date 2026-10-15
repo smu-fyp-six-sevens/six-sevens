@@ -247,7 +247,13 @@ def test_list_documents_with_no_filters_does_not_call_eq() -> None:
 
 
 def test_update_extracted_fields_sends_extraction_confidence_only() -> None:
-    with patch("app.document_repository.supabase_client") as mock_client:
+    with (
+        patch("app.document_repository.supabase_client") as mock_client,
+        patch("app.case_service.sync_submission_finalized"),
+    ):
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+            _execute_result([_row()])
+        )
         document_repository.update_extracted_fields("doc-1", 0.9)
 
         update_payload = mock_client.table.return_value.update.call_args[0][0]
@@ -260,7 +266,13 @@ def test_update_extracted_fields_sends_extraction_confidence_only() -> None:
 
 
 def test_update_extracted_fields_includes_fulfilled_requirements_when_given() -> None:
-    with patch("app.document_repository.supabase_client") as mock_client:
+    with (
+        patch("app.document_repository.supabase_client") as mock_client,
+        patch("app.case_service.sync_submission_finalized"),
+    ):
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+            _execute_result([_row()])
+        )
         document_repository.update_extracted_fields(
             "doc-1", 0.9, ["id_document", "proof_of_address"]
         )

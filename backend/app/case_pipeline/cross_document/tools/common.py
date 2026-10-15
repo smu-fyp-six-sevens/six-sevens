@@ -56,10 +56,14 @@ Period = tuple[Optional[date], Optional[date]]
 def _year_from_period(month: int, day: int, period: Period) -> Optional[date]:
     """The date a year-less day and month fall on, taking the year from the statement's own period."""
     start, end = period
-    if start is None and end is None:
+    if start is not None:
+        first_year = start.year
+        last_year = end.year if end is not None else start.year + 1
+    elif end is not None:
+        first_year = end.year - 1
+        last_year = end.year
+    else:
         return None
-    first_year = start.year if start else end.year - 1
-    last_year = end.year if end else start.year + 1
     for year in range(first_year, last_year + 1):
         try:
             candidate = date(year, month, day)

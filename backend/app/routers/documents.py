@@ -42,16 +42,12 @@ from ..langgraph import trace as langgraph_trace
 from ..langgraph.detection.graph import run_detection
 from ..queue_service import document_queue
 
-# "unrecognised" is the "Other" catch-all: Extraction has a generic schema for it.
+# "unrecognised" is the "Other" catch-all.
 _SETTABLE_DOCUMENT_TYPES = {*KNOWN_DOCUMENT_TYPES, "unrecognised"}
-# A pipeline run is already in flight for these — correcting the type now would race it.
+# A pipeline run is in flight for these; re-typing would race it.
 _TYPE_OVERRIDE_BLOCKED_STATUSES = IN_FLIGHT_STATUSES
-# A loan officer's decision is final: approved (and everything detection does
-# afterwards) and rejected documents are locked against field edits, type
-# corrections and moves.
+# The officer's decision is final: approved (and later) and rejected documents are locked.
 _LOCKED_STATUSES = APPROVED_STATUSES | {DocumentStatus.REJECTED}
-# Same "approved or further along" set, for the two places below that check
-# specifically for APPROVED alone rather than going through _ensure_unlocked.
 _UNDELETABLE_STATUSES = APPROVED_STATUSES
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -65,28 +61,20 @@ def _ensure_unlocked(document: DocumentRecord, action: str) -> None:
             detail=f"An {document.status.value} document is locked and cannot be {action}.",
         )
 
-# document_id -> the task currently running detection for it, so
-# cancel/retry can find and interrupt it — same pattern as
-# queue_service.DocumentQueue._active_tasks.
+# document_id -> its running detection task, so cancel/retry can interrupt it.
 _detection_tasks: dict[str, asyncio.Task] = {}
 # A bulk approval queues here instead of starting every detection graph at once.
 _detection_slots = asyncio.Semaphore(settings.DETECTION_CONCURRENCY)
 
 
 async def _run_detection_task(document_id: str, case_id: str | None) -> None:
-    # Detection writes to langgraph_trace, a table the realtime listener
-    # doesn't watch, so completion (or cancellation) needs its own explicit
-    # push for the case view's live scanning -> detected transition.
+    # langgraph_trace isn't watched by the realtime listener, so the finally below pushes the snapshot.
     try:
         async with _detection_slots:
             with query_stats.scope(f"detection doc={document_id[:8]}"):
                 await run_detection(document_id)
     except asyncio.CancelledError:
-        # Only takes effect at the graph's next await point — an Anthropic
-        # call already in flight still completes, it's just not waited on.
-        # Not an Exception subclass, so run_detection's own except block
-        # never runs for this path — the DETECTING -> APPROVED revert has
-        # to happen here instead.
+        # Not an Exception, so run_detection's own handler never runs; revert DETECTING -> APPROVED here.
         logger.info("Detection cancelled for document %s", document_id)
         langgraph_trace.record(document_id, "detection_error", error="Cancelled by loan officer")
         await asyncio.to_thread(document_repository.revert_to_approved, document_id)
@@ -103,10 +91,7 @@ async def _run_detection_task(document_id: str, case_id: str | None) -> None:
 
 
 def _launch_detection(document_id: str, case_id: str | None) -> None:
-    """Only entry point that starts a detection run — called on approval,
-    and on a narrow retry after a cancelled/crashed attempt (see
-    routers/detection.py's retry_document_detection). Never a general
-    "run detection" trigger."""
+    """The only entry point that starts a detection run: approval, or a retry after a cancelled/crashed run."""
     task = asyncio.create_task(_run_detection_task(document_id, case_id))
     _detection_tasks[document_id] = task
 
@@ -131,11 +116,7 @@ async def list_documents(
 
 
 def _present(document: DocumentRecord, fields: list) -> DocumentRecord:
-    """
-    The document as the API returns it: its fields wrapped with id and confidence, and which required
-    ones are missing. Built from a document row and the fields the caller already holds, so an endpoint
-    that just wrote them doesn't read them all back.
-    """
+    """The document as returned: fields wrapped with id and confidence, plus missing required ones. Uses fields the caller already holds."""
     if fields:
         document.extracted_fields = {
             field.field_name: {
@@ -192,16 +173,7 @@ async def get_document(document_id: str) -> DocumentRecord:
 async def delete_document(
     document_id: str, document: DocumentRecord = Depends(get_document_or_404)
 ) -> None:
-    """
-    Removes a document from its case. A following GET /documents/{id} or
-    a case document list no longer returns it.
-
-    Only allowed once the document has reached a terminal state (ANALYZED,
-    FAILED, REJECTED, CANCELLED) — deleting one still QUEUED/PROCESSING/
-    EXTRACTING would race the pipeline actively writing to it (status
-    updates, extracted fields) and orphan a document row mid-flight. Cancel
-    it first if you want to stop and then delete an in-flight document.
-    """
+    """Removes a document from its case. Only once it is out of flight; cancel an in-flight one first."""
     if document.status in _UNDELETABLE_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -227,11 +199,7 @@ async def delete_document(
 
 
 async def _push_case_snapshot(case_id: str) -> None:
-    """Best-effort live refresh for a case's websocket subscribers (see
-    case_service.build_case_snapshot / routers/ws.py) — never raises, since
-    the write that triggered this already succeeded and is the source of
-    truth; a failed push just means that case's view goes stale until its
-    next real update instead."""
+    """Best-effort live refresh for a case's websocket subscribers. Never raises: the write already succeeded."""
     if not broadcaster.has_subscribers(case_id):
         return
     try:
@@ -245,9 +213,7 @@ async def _push_case_snapshot(case_id: str) -> None:
 
 
 async def _resync_case(case_id: str) -> None:
-    """Persists submission_finalized and pushes a fresh websocket snapshot —
-    the two things any mutation that can change a case's document set needs
-    to do. Best-effort/never raises, same reasoning as _push_case_snapshot."""
+    """Persists submission_finalized and pushes a snapshot, for any change to a case's document set. Never raises."""
     try:
         await asyncio.to_thread(case_service.sync_submission_finalized, case_id)
     except Exception:
@@ -261,11 +227,7 @@ async def move_document(
     body: MoveDocumentRequest,
     document: DocumentRecord = Depends(get_document_or_404),
 ) -> DocumentRecord:
-    """
-    Reassigns a document to a different case — corrects a document uploaded
-    under the wrong case. Same eligibility as delete above: an approved
-    document is locked, and one still mid-pipeline would race it.
-    """
+    """Reassigns a document to another case. Same eligibility as delete."""
     if document.status in _LOCKED_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -299,10 +261,7 @@ async def move_document(
             detail="Failed to move the document. Check Supabase table access.",
         ) from exc
 
-    # document_repository.move_document already resynced the new case itself
-    # (see its own _sync_case call) — only the old case still needs it here.
-    # Its own Realtime row-change event (if any) only ever carries this
-    # document's NEW case_id, so it would never otherwise learn it lost one.
+    # The repository resyncs the new case; the old one never sees an event carrying it.
     if old_case_id is not None:
         await _resync_case(old_case_id)
 
@@ -311,12 +270,7 @@ async def move_document(
 
 @router.post("/bulk-move", response_model=BulkMoveResponse)
 async def bulk_move_documents(body: BulkMoveRequest) -> BulkMoveResponse:
-    """
-    Same eligibility as the single-document move above, applied to a batch
-    in one DB round trip — and each affected case is resynced exactly once
-    after the whole batch lands, not once per document (that's the one
-    thing a loop of N single-document moves can't do).
-    """
+    """The single move applied to a batch, with each affected case resynced once."""
     if not body.document_ids:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No documents specified.")
 
@@ -382,11 +336,7 @@ async def bulk_move_documents(body: BulkMoveRequest) -> BulkMoveResponse:
 
 @router.post("/bulk-delete", response_model=BulkDeleteResponse)
 async def bulk_delete_documents(body: BulkDeleteRequest) -> BulkDeleteResponse:
-    """
-    Same eligibility as the single-document delete above, applied to a batch
-    — each affected case is resynced exactly once after the whole batch
-    lands, not once per document.
-    """
+    """The single delete applied to a batch, with each affected case resynced once."""
     if not body.document_ids:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No documents specified.")
 
@@ -447,39 +397,23 @@ async def update_extracted_fields(
     request: UpdateExtractedFieldsRequest,
     document: DocumentRecord = Depends(get_document_or_404),
 ) -> DocumentRecord:
-    """
-    A loan officer manually correcting low-confidence extracted fields (see
-    settings.EXTRACTION_CONFIDENCE_THRESHOLD — the frontend only shows an
-    editable form below that threshold). Sets extraction_confidence to 1.0
-    since a human has now verified the values, which also takes the document
-    back above the threshold so the frontend stops showing it as editable.
-    """
+    """The officer correcting extracted fields. Marks the document human-verified (extraction_confidence 1.0)."""
     _ensure_unlocked(document, "edited")
-    # An optional field saved empty is removed rather than stored as an
-    # empty row the officer would be asked to fill in again. A required one
-    # stays, so it still blocks approval as missing.
+    # An optional field saved empty is dropped; a required one stays so it still blocks approval.
     drop_empty_optional_fields(document.document_type, request.extracted_fields)
     try:
-        # Recomputed rather than left as whatever the automated pipeline last
-        # wrote — a loan officer correcting individual_address (e.g. filling
-        # one in the classifier/extractor missed) can change whether this
-        # document now also fulfils proof_of_address.
+        # An edited address can change whether the document now fulfils proof_of_address.
         fulfilled_requirements = compute_fulfilled_requirements(
             document.document_type, request.extracted_fields
         )
-        # Get the original per-field values and confidence scores
-        # before replacing the extracted fields.
+        # Original values and confidences, read before the fields are replaced.
         existing_fields = await asyncio.to_thread(
             extracted_fields_repository.get_extracted_fields,
             document_id,
         )
 
         def normalise_value(value: object) -> str:
-            """
-            Convert values to a comparable representation because the
-            frontend sends edited fields as strings, while the database
-            may contain numbers, strings, lists, etc.
-            """
+            """The frontend sends strings; the database may hold numbers or lists."""
             if value is None:
                 return ""
 
@@ -509,7 +443,7 @@ async def update_extracted_fields(
 
             old_value = normalise_value(existing_field.field_value)
 
-            # These fields were editable/reviewable by the loan officer.
+            # Fields the officer could edit.
             was_editable = (
                 is_unrecognised_document
                 or old_value == ""
@@ -520,18 +454,13 @@ async def update_extracted_fields(
             )
 
             if was_editable:
-                # The officer reviewed this field by clicking Save,
-                # so it is now considered human-verified.
+                # Saved by the officer: human-verified.
                 field_confidences[name] = 1.0
             else:
-                # This field was not part of manual review.
-                # Preserve the original extraction confidence.
+                # Not part of the review: keep its extraction confidence.
                 field_confidences[name] = existing_field.confidence
 
-        # The officer has now reviewed every flagged field, which resolves
-        # the manual review: routing moves Manual Review -> Accepted here,
-        # and only approve_document later moves it on to Approved.
-        # Fields first: the documents update fires a live snapshot, which must already see them.
+        # Fields first: the document update fires a snapshot that must already see them.
         await asyncio.to_thread(
             extracted_fields_repository.replace_extracted_fields,
             document_id,
@@ -573,12 +502,7 @@ async def add_extracted_field(
     request: AddExtractedFieldRequest,
     document: DocumentRecord = Depends(get_document_or_404),
 ) -> DocumentRecord:
-    """
-    Adds one manually entered extracted field.
-
-    Manually added fields are considered human-verified,
-    so their confidence is automatically set to 1.0.
-    """
+    """Adds one manually entered field, stored at confidence 1.0."""
     _ensure_unlocked(document, "edited")
     field_name = normalise_field_name(request.field_name)
 
@@ -612,8 +536,7 @@ async def add_extracted_field(
             required_field_names=required_field_names,
         )
 
-        # Re-fetch the full field set (including the one just added) to
-        # recompute fulfilled_requirements against it.
+        # Re-read the full set to recompute fulfilled_requirements.
         all_fields = await asyncio.to_thread(
             extracted_fields_repository.get_extracted_fields,
             document_id,
@@ -632,10 +555,7 @@ async def add_extracted_field(
         updated = await asyncio.to_thread(
             document_repository.update_extracted_fields,
             document_id,
-            # The new field itself is stored at 1.0, but adding one isn't
-            # the officer's "Save fields" review — extraction_confidence=1.0
-            # (with routing_status=accepted) is what the frontend reads as
-            # "fields verified and locked", so it's carried through unchanged.
+            # Adding a field isn't the "Save fields" review, so the document's confidence is unchanged.
             document.extraction_confidence,
             fulfilled_requirements,
         )
@@ -663,12 +583,7 @@ async def delete_extracted_field(
     field_id: str,
     document: DocumentRecord = Depends(get_document_or_404),
 ) -> DocumentRecord:
-    """
-    Deletes one manually entered extracted field.
-
-    The field must belong to the specified document.
-    Fulfilled requirements are recalculated after deletion.
-    """
+    """Deletes one field of this document and recomputes fulfilled requirements."""
     _ensure_unlocked(document, "edited")
     try:
         existing_fields = await asyncio.to_thread(
@@ -693,7 +608,7 @@ async def delete_extracted_field(
             field_id,
         )
 
-        # What was read above, less the one just deleted: no need to read the table again.
+        # What was read above, less the deleted one.
         remaining_fields = [field for field in existing_fields if str(field.id) != field_id]
 
         extracted_fields = {
@@ -709,10 +624,7 @@ async def delete_extracted_field(
         updated = await asyncio.to_thread(
             document_repository.update_extracted_fields,
             document_id,
-            # A deletion doesn't make the document human-verified (unlike
-            # add_extracted_field's confidence=1.0), so whatever confidence
-            # it already had — including None, for a document Extraction
-            # never ran against — is carried through unchanged.
+            # A deletion isn't a verification: confidence is carried through unchanged.
             document.extraction_confidence,
             fulfilled_requirements,
         )
@@ -737,11 +649,7 @@ async def approve_document(
     document_id: str,
     document: DocumentRecord = Depends(get_document_or_404),
 ) -> DocumentRecord:
-    """
-    Approves a completed document after loan officer review.
-
-    Only documents that have finished extraction can be approved.
-    """
+    """Approves an analysed document after officer review, and starts detection."""
     if document.status != DocumentStatus.ANALYZED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -785,9 +693,7 @@ async def approve_document(
                 ),
             )
 
-        # Saving the fields marks every reviewed field 1.0 (see
-        # update_extracted_fields), so anything still under the threshold
-        # hasn't been looked at by an officer yet.
+        # Saving marks reviewed fields 1.0, so anything under the threshold is unreviewed.
         low_confidence_fields = sorted(
             field.field_name
             for field in extracted_fields
@@ -805,8 +711,7 @@ async def approve_document(
                 ),
             )
 
-        # An Other document's fields come from no schema, however confident
-        # Extraction was about them, so an officer has to have saved them.
+        # An Other document's fields come from no schema, so an officer must have saved them.
         if document.document_type == "unrecognised" and document.fields_reviewed_at is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -878,18 +783,8 @@ async def update_document_type(
     document: DocumentRecord = Depends(get_document_with_fields_or_404),
 ) -> DocumentRecord:
     """
-    A loan officer confirming or correcting a low-confidence document_type
-    (the frontend only offers this below settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
-    — enforced here too, so it can't be scripted around). Always records the
-    type as officer-confirmed (confidence 1.0, ACCEPTED).
-
-    Only actually changing the type re-runs Extraction, in the background —
-    Extraction from the wrong schema is what made the old fields wrong in
-    the first place, so a genuine correction needs a re-run. Confirming the
-    type as-is has nothing new for Extraction to find (it already ran once
-    against this same type), so that case only touches the classification
-    columns and leaves status/extracted_fields untouched — the response
-    reads EXTRACTING only when a re-run was actually kicked off.
+    The officer confirming or correcting a low-confidence type (enforced here, not just in the UI).
+    Records it as confirmed (1.0, ACCEPTED). Only a changed type re-runs Extraction, in the background.
     """
     _ensure_unlocked(document, "re-typed")
     document_type = request.document_type.strip().lower()
@@ -905,18 +800,14 @@ async def update_document_type(
             detail="Document is still being processed; try again once it finishes.",
         )
 
-    # Same rule approval uses, so a document that can't be approved yet can
-    # always be re-typed — including an "unrecognised" one the classifier
-    # was confident about, which still needs an officer's pick.
+    # Same rule approval uses.
     if is_classification_confirmed(document):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Classification confidence is above the threshold; the type can't be overridden.",
         )
 
-    # A first pass with a low-confidence or review-flagged classification was
-    # extracted generically (see nodes.extract_node), so its fields aren't from
-    # this type's schema: re-run even when the officer keeps the same type.
+    # A first pass that went to manual review was extracted generically, so re-run even for the same type.
     first_pass_generic = (
         document.routing_status == RoutingStatus.MANUAL_REVIEW
         and document.document_type not in (None, "", "unrecognised")
@@ -927,12 +818,7 @@ async def update_document_type(
 
     try:
         if needs_extraction:
-            # Self-fulfilment only, like nodes.record_classification_result's first
-            # write: the existing extracted_fields came from the wrong
-            # schema, so they shouldn't be used to claim e.g.
-            # proof_of_address for the new type — the extraction rerun
-            # recomputes this from the real re-extracted fields. Old
-            # evidence was reasoning for the wrong type, so it's cleared too.
+            # The old fields came from the wrong schema: self-fulfilment only, and the old evidence is cleared.
             await asyncio.to_thread(
                 document_repository.record_classification,
                 document_id,
@@ -951,12 +837,7 @@ async def update_document_type(
                 processing_started_at=datetime.now(timezone.utc),
             )
         else:
-            # Confirming an already-correct low-confidence guess: Extraction
-            # already ran against this exact type, so its fields are still
-            # valid — recompute fulfilled_requirements from them (more
-            # accurate than the None used above) instead of discarding
-            # anything, and keep the existing evidence since it was already
-            # reasoning for this same type.
+            # Same type confirmed: the fields and evidence are still valid.
             await asyncio.to_thread(
                 document_repository.record_classification,
                 document_id,
@@ -984,18 +865,9 @@ async def retry_document(
     document_id: str, document: DocumentRecord = Depends(get_document_or_404)
 ) -> DocumentRecord:
     """
-    Re-enqueues a document that's FAILED, or stuck — PROCESSING for longer
-    than settings.STUCK_PROCESSING_RETRY_THRESHOLD_SECONDS (see
-    monitoring.is_stuck_processing_for_retry). The stuck case exists
-    specifically for orphaned in-memory-queue state: this queue (see
-    queue_service.py) does not survive a backend restart, so a document
-    still PROCESSING at that moment is permanently abandoned — nothing else
-    will ever pick it back up. Deliberately does NOT allow retrying a
-    document that's merely QUEUED or normally PROCESSING (not yet past the
-    stuck threshold) — a worker may genuinely still be running it, and
-    racing that with a second concurrent pipeline run would duplicate LLM
-    calls and interleave writes unpredictably. Use cancel_document first if
-    you want to stop an actively-running document instead.
+    Re-enqueues a FAILED document, or one stuck in PROCESSING past the threshold (the in-memory queue
+    doesn't survive a restart). A merely queued or running one is refused: a second run would duplicate
+    model calls and interleave writes. Cancel it first.
     """
     is_stuck = monitoring.is_stuck_processing_for_retry(document)
     if document.status != DocumentStatus.FAILED and not is_stuck:
@@ -1008,10 +880,7 @@ async def retry_document(
         )
 
     try:
-        # Guards against a race with e.g. a concurrent cancel or the
-        # in-flight run itself finishing between the check above and here —
-        # if the status has moved on, this simply doesn't match and updated
-        # stays False below.
+        # Only applies if the status hasn't moved on since the check above.
         updated = await asyncio.to_thread(
             document_repository.update_status,
             document_id,
@@ -1024,12 +893,7 @@ async def retry_document(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Document's state changed; refetch and try again.",
             )
-        # update_status only ever writes fields passed as non-None, so this
-        # can't clear a stale failure_reason from the prior attempt — it's
-        # left in place and will read as stale once this retry succeeds.
-        # Pre-existing limitation of update_status, not new to this retry
-        # path (the classification-escalation loop's own success path has
-        # the same gap), so not fixed here.
+        # update_status can't clear the previous failure_reason (known; see PENDING_WORK.md).
         await document_queue.enqueue(document_id)
     except HTTPException:
         raise
@@ -1051,15 +915,8 @@ async def cancel_document(
     document_id: str, document: DocumentRecord = Depends(get_document_or_404)
 ) -> DocumentRecord:
     """
-    Stops a document that's still QUEUED, PROCESSING, or EXTRACTING. The
-    status write is an atomic compare-and-swap (only applies if the document
-    is still in one of those statuses), so two concurrent cancels — or a
-    cancel racing the pipeline reaching a terminal status on its own — can't
-    both "win". Only once that write succeeds do we attempt to interrupt an
-    in-flight run (see queue_service.DocumentQueue.cancel_document); a
-    QUEUED document that hasn't been dequeued yet needs no interruption,
-    since queue_service._process_document checks status on dequeue and
-    skips it.
+    Stops a QUEUED, PROCESSING or EXTRACTING document. The status write is a compare-and-swap, so
+    racing cancels or a finishing run can't both win; only then is the in-flight run interrupted.
     """
     updated = await asyncio.to_thread(
         document_repository.update_status,
@@ -1087,13 +944,7 @@ async def cancel_document(
 
 @router.get("/{document_id}/langgraph-trace")
 async def get_document_langgraph_trace(document_id: str) -> dict:
-    """
-    Dev-only window into the langgraph pipeline (see app/langgraph/trace.py)
-    — which route a document took (fast vs Sonnet agent), what rule/llm/
-    vision each said, whether it escalated. Read from the Supabase
-    `langgraph_trace` table; falls back to this process's in-memory copy if the
-    row isn't there yet. langgraph-test branch only; not for production use.
-    """
+    """Dev-only: the pipeline trace for a document, from `langgraph_trace`, else this process's copy."""
     try:
         result = await asyncio.to_thread(langgraph_trace.get_persisted, document_id)
     except Exception:  # noqa: BLE001 — table unreachable: fall back to in-memory
@@ -1114,16 +965,7 @@ async def get_document_download_url(
     inline: bool = False,
     document: DocumentRecord = Depends(get_document_or_404),
 ) -> DocumentDownloadResponse:
-    """
-    Returns a short-lived signed URL for the document's file in Supabase
-    Storage rather than proxying the bytes through this service.
-
-    inline=True omits the `download` option Storage otherwise sets, which is
-    what puts a `Content-Disposition: attachment` header on the response —
-    without it, a browser renders the file (PDF/image) in place instead of
-    downloading it. Used by the frontend's preview modal; plain downloads
-    (the default) still get the attachment header + filename.
-    """
+    """A short-lived signed URL for the file. inline=True lets the browser render it instead of downloading."""
     if document.storage_path is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Document has no stored file"

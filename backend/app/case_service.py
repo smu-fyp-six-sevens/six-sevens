@@ -16,7 +16,6 @@ from .config import settings
 from .langgraph import trace as langgraph_trace
 from .langgraph.extraction_prompts import EXTRACTION_SCHEMAS
 
-logger = logging.getLogger("classifier_pipeline.case_service")
 from .mapper import (
     compute_id_document_identity_coverage,
     compute_id_document_identity_progress,
@@ -41,11 +40,11 @@ from .models import (
     IdDocumentCoverage,
     IDENTITY_DOCUMENT_REQUIREMENT,
     ProofOfAddressCoverage,
-    RoutingStatus,
     counts_towards_checklist,
-    is_classification_confirmed,
 )
 from .monitoring import is_stuck
+
+logger = logging.getLogger("classifier_pipeline.case_service")
 
 
 def compute_documents_status(documents: list[DocumentRecord]) -> CaseDocumentsStatus:

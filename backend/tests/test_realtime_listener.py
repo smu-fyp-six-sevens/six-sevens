@@ -104,10 +104,21 @@ def test_on_change_ignores_record_with_no_case_id() -> None:
         mock_create_task.assert_not_called()
 
 
+def test_on_change_drops_events_for_a_case_nobody_has_open() -> None:
+    with (
+        patch("app.realtime_listener.asyncio.create_task") as mock_create_task,
+        patch("app.realtime_listener.broadcaster.has_subscribers", return_value=False),
+    ):
+        realtime_listener._on_change({"data": {"record": {"case_id": "case-1"}}})
+
+        mock_create_task.assert_not_called()
+
+
 def test_on_change_schedules_debounced_publish_for_the_records_case_id() -> None:
     with (
         patch("app.realtime_listener.asyncio.create_task") as mock_create_task,
         patch("app.realtime_listener._debounced_publish", new=MagicMock()),
+        patch("app.realtime_listener.broadcaster.has_subscribers", return_value=True),
     ):
         realtime_listener._on_change({"data": {"record": {"case_id": "case-1"}}})
 
@@ -119,6 +130,7 @@ def test_on_change_falls_back_to_old_record_when_record_is_absent() -> None:
     with (
         patch("app.realtime_listener.asyncio.create_task") as mock_create_task,
         patch("app.realtime_listener._debounced_publish", new=MagicMock()),
+        patch("app.realtime_listener.broadcaster.has_subscribers", return_value=True),
     ):
         realtime_listener._on_change({"data": {"old_record": {"case_id": "case-1"}}})
 
@@ -133,6 +145,7 @@ def test_on_change_cancels_a_still_pending_task_for_the_same_case_before_schedul
     with (
         patch("app.realtime_listener.asyncio.create_task") as mock_create_task,
         patch("app.realtime_listener._debounced_publish", new=MagicMock()),
+        patch("app.realtime_listener.broadcaster.has_subscribers", return_value=True),
     ):
         realtime_listener._on_change({"data": {"record": {"case_id": "case-1"}}})
 
@@ -146,12 +159,14 @@ def test_on_change_does_not_cancel_an_already_done_task() -> None:
     realtime_listener._pending["case-1"] = done_task
 
     with (
-        patch("app.realtime_listener.asyncio.create_task"),
+        patch("app.realtime_listener.asyncio.create_task") as mock_create_task,
         patch("app.realtime_listener._debounced_publish", new=MagicMock()),
+        patch("app.realtime_listener.broadcaster.has_subscribers", return_value=True),
     ):
         realtime_listener._on_change({"data": {"record": {"case_id": "case-1"}}})
 
         done_task.cancel.assert_not_called()
+        mock_create_task.assert_called_once()
 
 
 @pytest.mark.asyncio

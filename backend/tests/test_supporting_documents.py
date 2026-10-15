@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -408,20 +407,53 @@ def _case() -> CaseRecord:
     )
 
 
-def test_case_summary_carries_the_recommendations() -> None:
+def _analysis_recommending(documents: list[DocumentRecord]):
+    """A completed analysis run holding what recommend_supporting_documents produced for the documents."""
+    from app.case_pipeline.models import CaseAnalysis
+
+    return CaseAnalysis(
+        run_id="run-1", case_id="case-1", status="complete", fingerprint="",
+        started_at="2026-10-01T00:00:00Z",
+        supporting_documents=recommend_supporting_documents(documents),
+    )
+
+
+def test_case_summary_carries_the_recommendations_its_analysis_produced() -> None:
+    statement = _statement([SUPPLIER_PAYMENT])
     with (
         patch("app.case_service.case_repository") as case_repo,
         patch("app.case_service.document_repository") as doc_repo,
         patch("app.case_service.langgraph_trace") as trace,
+        patch("app.case_service.analysis_repository") as analyses,
     ):
         case_repo.get_case.return_value = _case()
-        doc_repo.list_documents.return_value = [_statement([SUPPLIER_PAYMENT])]
+        doc_repo.list_documents.return_value = [statement]
         trace.get_detection_states.return_value = ({}, set())
+        analyses.get_latest_many.return_value = {"case-1": _analysis_recommending([statement])}
 
         summary = case_service.get_case_summary("case-1")
 
     assert summary is not None
     assert [r.document_type for r in summary.supporting_document_recommendations] == ["purchase_order"]
+
+
+def test_case_without_an_analysis_recommends_nothing() -> None:
+    # Recommendations are produced only by an analysis run; the summary no longer recomputes them.
+    with (
+        patch("app.case_service.case_repository") as case_repo,
+        patch("app.case_service.document_repository") as doc_repo,
+        patch("app.case_service.langgraph_trace") as trace,
+        patch("app.case_service.analysis_repository") as analyses,
+    ):
+        case_repo.get_case.return_value = _case()
+        doc_repo.list_documents.return_value = [_statement([SUPPLIER_PAYMENT])]
+        trace.get_detection_states.return_value = ({}, set())
+        analyses.get_latest_many.return_value = {}
+
+        summary = case_service.get_case_summary("case-1")
+
+    assert summary is not None
+    assert summary.supporting_document_recommendations == []
 
 
 def test_case_summary_with_nothing_to_request_has_an_empty_list() -> None:
@@ -446,24 +478,21 @@ def test_related_party_balance_without_a_prior_year() -> None:
 
 
 def test_case_snapshot_pushed_to_the_page_carries_the_recommendations() -> None:
-    # build_case_snapshot rewraps each document's extracted_fields as
-    # {"value", "confidence"} after building the summary; the recommendations
-    # must come from the plain values, or the card would silently go empty.
+    # The snapshot pushed over the websocket must carry the analysis's
+    # recommendations through serialisation, or the card would silently go empty.
     statement = _statement([SUPPLIER_PAYMENT])
-    stored_fields = [
-        SimpleNamespace(field_name=name, field_value=value, confidence=0.99)
-        for name, value in statement.extracted_fields.items()
-    ]
     with (
         patch("app.case_service.case_repository") as case_repo,
         patch("app.case_service.document_repository") as doc_repo,
         patch("app.case_service.langgraph_trace") as trace,
         patch("app.case_service.extracted_fields_repository") as fields_repo,
+        patch("app.case_service.analysis_repository") as analyses,
     ):
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = [statement]
         trace.get_detection_states.return_value = ({}, set())
-        fields_repo.get_extracted_fields_for_documents.return_value = {"statement": stored_fields}
+        analyses.get_latest_many.return_value = {"case-1": _analysis_recommending([statement])}
+        fields_repo.get_extracted_fields_for_documents.return_value = {}
 
         snapshot = case_service.build_case_snapshot("case-1")
 

@@ -87,7 +87,7 @@ def normalize_address(value: object) -> str:
     text = "".join(char for char in text if not unicodedata.combining(char)).upper()
     text = re.sub(r"#\s*", " UNIT ", text)
     text = re.sub(r"\bC['’]?WEALTH\b", "COMMONWEALTH", text)
-    tokens = re.findall(r"[A-Z0-9]+", text)
+    tokens: list[str] = re.findall(r"[A-Z0-9]+", text)
     normalized: list[str] = []
     for index, token in enumerate(tokens):
         # Singapore's older six-digit postal format is often written S123456.
