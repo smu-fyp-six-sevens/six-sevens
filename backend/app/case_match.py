@@ -919,8 +919,12 @@ def check_case_match(case: CaseRecord, documents: Iterable[DocumentRecord]) -> C
         else _rejected(doc)
         for doc in documents
     ]
-    if verification.status == IncumbencyStatus.VERIFIED:
-        matches = _apply_pairwise_person_checks(matches, active, incumbency_doc)
+    # Cross-document person comparisons do not depend on trusting the
+    # certificate of incumbency. They compare the identity details extracted
+    # directly from each pair of documents (for example, an NRIC and a
+    # personal bank statement), so run them even when the case has no
+    # incumbency document or it has not yet been corroborated.
+    matches = _apply_pairwise_person_checks(matches, active, incumbency_doc)
     return CaseMatchResult(
         case_id=case.id,
         incumbency=verification,
