@@ -715,10 +715,11 @@ def _match_document(
             DocumentMatchStatus.MANUAL_REVIEW,
             "No company or individual details were extracted to compare against the case",
         )
+    # The company or a person isn't the case's: the document looks misfiled, so an officer reviews it.
     mismatches = [c for c in comparisons if c.outcome == CheckOutcome.MISMATCH]
     if mismatches:
         return result(
-            DocumentMatchStatus.MISMATCH,
+            DocumentMatchStatus.MANUAL_REVIEW,
             "; ".join(c.reason for c in mismatches),
             comparisons,
             case_mismatch=True,
@@ -858,10 +859,22 @@ def _apply_pairwise_person_checks(
             updated.append(match)
             continue
         reasons = [reason for _, reason in additions]
-        prior_reason = match.reason if match.status == DocumentMatchStatus.MISMATCH else ""
+        # A comparison with no other document was made against the case itself: that is the review case.
+        belongs_elsewhere = any(
+            comparison.outcome == CheckOutcome.MISMATCH and comparison.other_document_id is None
+            for comparison in match.comparisons
+        )
+        prior_reason = (
+            match.reason
+            if match.status in {DocumentMatchStatus.MISMATCH, DocumentMatchStatus.MANUAL_REVIEW}
+            else ""
+        )
         updated.append(match.model_copy(update={
-            "status": DocumentMatchStatus.MISMATCH,
-            "can_proceed_to_fraud_detection": True,
+            "status": (
+                DocumentMatchStatus.MANUAL_REVIEW
+                if belongs_elsewhere else DocumentMatchStatus.MISMATCH
+            ),
+            "can_proceed_to_fraud_detection": not belongs_elsewhere,
             "case_mismatch": True,
             "reason": "; ".join(([prior_reason] if prior_reason else []) + reasons),
             "comparisons": [*match.comparisons, *(comparison for comparison, _ in additions)],

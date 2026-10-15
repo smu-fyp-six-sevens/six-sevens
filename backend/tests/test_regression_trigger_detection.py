@@ -71,9 +71,11 @@ class Repo:
 
     def approve_document(self, document_id):
         self.document.status = DocumentStatus.APPROVED
+        return self.document
 
     def reject_document(self, document_id):
         self.document.status = DocumentStatus.REJECTED
+        return self.document
 
 
 def _call(document: DocumentRecord, fields: list[ExtractedField], method: str, url: str, body: dict | None = None):

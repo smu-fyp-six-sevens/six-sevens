@@ -48,8 +48,8 @@ export function useCaseSnapshot(caseId: string) {
   // One WebSocket per case (see caseSocket.ts / backend routers/ws.py) replaces the old per-document.
   const caseSocketRef = useRef<CaseStatusSubscription | null>(null);
 
-  // Only an unresolved case-match condition holds approval; identity mismatches
-  // use status "mismatch" and are reported by fraud detection after approval.
+  // A document the case match sent to manual review (wrong company or person) is flagged
+  // for the officer, who can still approve it; detection then reports the mismatch.
   const caseMatchNeedsReview = useCallback(
     (document: DocumentRecord) =>
       !hasBeenApproved(document.status) &&
