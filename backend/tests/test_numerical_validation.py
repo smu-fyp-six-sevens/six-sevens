@@ -810,10 +810,12 @@ def test_cpf_ceiling_uses_the_ceiling_in_force_on_the_pay_date_within_2023() -> 
 
 def test_cpf_base_flags_contribution_calculated_on_basic_pay_alone() -> None:
     result = _run(
-        [_field("employee_cpf", "200"), _field("basic_pay", "1000"), _field("ordinary_wages", "2000")],
+        [_field("employee_cpf", "200"), _field("basic_pay", "1000"), _field("ordinary_wages", "2000"),
+         _field("pay_date", "2026-03-31")],
         document_type="payslip",
     )
     assert len(_codes(result, "PAY.CPF_BASE")) == 1
+    assert _codes(result, "PAY.CPF_RATE") == []  # reported once, by the check that names the mistake
 
 
 # ---------------------------------------------------------------------------
@@ -1275,3 +1277,15 @@ def test_nric_finding_needs_review_only_if_every_copy_was_extracted_with_low_con
 
     assert run(0.75, 1.0).needs_review is False  # the table read it confidently
     assert run(0.75, 0.75).needs_review is True
+
+
+def test_poa_balance_accepts_a_payment_printed_as_a_negative() -> None:
+    # Regression: "-$199.60" was subtracted as a negative, giving an outstanding balance of 399.20.
+    def run(payment: str, outstanding: str, total: str):
+        return _run([_field("previous_balance", "$199.60"), _field("payment_received", payment),
+                     _field("outstanding_balance", outstanding), _field("current_charges", "$202.22"),
+                     _field("total_payable", total)], document_type="proof_of_address")
+    for payment in ("-$199.60", "$199.60"):
+        assert _codes(run(payment, "$0.00", "$202.22"), "POA.BALANCE_ARITHMETIC") == [], payment
+    # Still caught: a total that isn't the outstanding balance plus this month's charges.
+    assert len(_codes(run("-$199.60", "$0.00", "$402.22"), "POA.BALANCE_ARITHMETIC")) == 1

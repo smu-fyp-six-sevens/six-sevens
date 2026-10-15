@@ -140,6 +140,28 @@ def _block_real_supabase_network(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(supabase_module, "acreate_client", _refuse_real_realtime)
 
 
+@pytest.fixture(autouse=True)
+def _no_land_use_index(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    URA zoning (registry_lookups/land_use.py) reads an index built on disk and,
+    when there is none, downloads ~175 MB from data.gov.sg in a background
+    thread. Tests get neither: zone lookups report "unavailable" unless a test
+    patches land_use.zone_at with the zone it needs.
+    """
+    from app.fraud_detection.external_validation.registry_lookups import land_use
+    from app.fraud_detection.external_validation.registry_lookups.http import LookupUnavailable
+
+    async def _no_index():
+        raise LookupUnavailable("no land-use index in tests")
+
+    monkeypatch.setattr(land_use, "current_index", _no_index)
+    # Same for URA's Approved Residential Use (registry_lookups/ura.py): no access key, so it's
+    # never called; a test sets one and patches ura.approved_residential_use.
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "URA_API_KEY", "")
+
+
 async def _refuse_real_realtime(*args, **kwargs):
     raise RuntimeError(
         "Test attempted a real Supabase Realtime connection via acreate_client(...). "

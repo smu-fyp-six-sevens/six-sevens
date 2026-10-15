@@ -126,6 +126,13 @@ class Settings:
     # that hits its rate limit is reported as unable to assess.
     DATA_GOV_SG_API_KEY: str = _env("DATA_GOV_SG_API_KEY")
     ONEMAP_API_TOKEN: str = _env("ONEMAP_API_TOKEN")
+    # URA Data Service access key (eservice.ura.gov.sg/maps/api): for "Approved Residential
+    # Use". Optional: without it that lookup is skipped and zoning alone is used.
+    URA_API_KEY: str = _env("URA_API_KEY")
+    # URA zoning index (registry_lookups/land_use.py): whether a running server may download
+    # and build it itself (minutes, ~700 MB) when it's missing or URA has updated the map.
+    # The Docker image builds it in and sets this to false; local runs keep it on.
+    LAND_USE_RUNTIME_REBUILD: bool = os.environ.get("LAND_USE_RUNTIME_REBUILD", "true").lower() == "true"
 
     # --- Per-case analysis (case_pipeline/) ---
     # Kill switch: off falls back to document-level detection and scoring only.

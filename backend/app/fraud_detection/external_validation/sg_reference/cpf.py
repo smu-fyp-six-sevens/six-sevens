@@ -53,21 +53,26 @@ def _round_half_up(amount: float) -> int:
     return math.floor(amount + 0.5 + 1e-9)
 
 
-def contribution(band: CpfBand, ordinary_wages: float, ceiling: float) -> tuple[int, int]:
-    """(total, employee share) in whole dollars for a month with ordinary wages only.
+def contribution(
+    band: CpfBand, ordinary_wages: float, ceiling: float, additional_wages: float = 0.0,
+) -> tuple[int, int]:
+    """(total, employee share) in whole dollars for a month's wages.
 
-    CPF's steps: total rounded to the nearest dollar, employee share rounded down,
-    employer share is the difference.
+    The rates apply to the month's total wages: ordinary wages capped at the OW ceiling, plus
+    additional wages (a bonus), which have no monthly cap. (Their annual AW ceiling, $102,000
+    less the year's ordinary wages, needs the whole year's pay, so it isn't applied here.)
+    CPF's steps: total rounded to the nearest dollar, employee share rounded down, employer
+    share is the difference.
     """
-    if ordinary_wages <= 50:
+    wages = min(ordinary_wages, ceiling) + additional_wages
+    if wages <= 50:
         return 0, 0
-    if ordinary_wages <= 500:
-        return _round_half_up(band.low_wage_pct * ordinary_wages), 0
-    if ordinary_wages <= 750:
-        employee = band.phase_in * (ordinary_wages - 500)
-        return _round_half_up(band.low_wage_pct * ordinary_wages + employee), math.floor(employee + 1e-9)
-    capped = min(ordinary_wages, ceiling)
-    return _round_half_up(band.total_pct * capped), math.floor(band.employee_pct * capped + 1e-9)
+    if wages <= 500:
+        return _round_half_up(band.low_wage_pct * wages), 0
+    if wages <= 750:
+        employee = band.phase_in * (wages - 500)
+        return _round_half_up(band.low_wage_pct * wages + employee), math.floor(employee + 1e-9)
+    return _round_half_up(band.total_pct * wages), math.floor(band.employee_pct * wages + 1e-9)
 
 
 def band_for_age(bands: tuple[CpfBand, ...], date_of_birth: date, pay_date: date) -> CpfBand:

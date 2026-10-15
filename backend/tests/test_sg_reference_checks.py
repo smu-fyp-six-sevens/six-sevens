@@ -117,11 +117,15 @@ def test_cpf_rate_ignores_the_employer_cpf_line_and_skips_without_any_cpf() -> N
     assert any(s.check_code == "PAY.CPF_RATE" and "employee_cpf" in s.reason for s in result.skipped)
 
 
-def test_cpf_rate_skips_a_month_with_a_bonus() -> None:
-    result = _run([_field("employee_cpf", "3000"), _field("ordinary_wages", "5000"),
-                   _field("additional_wages", "10000"), _field("pay_date", "2026-03-31")], "payslip")
-    assert _codes(result, "PAY.CPF_RATE") == []
-    assert any(s.check_code == "PAY.CPF_RATE" for s in result.skipped)
+def test_cpf_rate_counts_a_bonus_as_additional_wages() -> None:
+    # CPF is due on ordinary wages (capped) plus additional wages: 20% of (5,000 + 10,000) = 3,000.
+    def run(cpf: str):
+        return _run([_field("employee_cpf", cpf), _field("ordinary_wages", "5000"),
+                     _field("additional_wages", "10000"), _field("pay_date", "2026-03-31")], "payslip")
+    genuine = run("3000")
+    assert _codes(genuine, "PAY.CPF_RATE") == []
+    assert not any(s.check_code == "PAY.CPF_RATE" for s in genuine.skipped)
+    assert len(_codes(run("1000"), "PAY.CPF_RATE")) == 1  # CPF on the ordinary wages only
 
 
 # --- GST --------------------------------------------------------------------------------------
@@ -200,10 +204,11 @@ def test_negative_deduction_lines_match_a_positive_total() -> None:
 def test_employee_contribution_line_is_the_cpf_and_earnings_are_the_ordinary_wages() -> None:
     result = _run([_field(n, v) for n, v in _PAYSLIP], "payslip")
     # $1,790 is 20% of basic pay; CPF's 2026 ceiling of $8,000 caps the employee's share at $1,600.
+    # One finding, from the check that names the mistake: the ceiling wasn't applied.
     ceiling = _codes(result, "PAY.CPF_CEILING")
     assert len(ceiling) == 1 and ceiling[0].field == "deductions_items"
-    rate = _codes(result, "PAY.CPF_RATE")
-    assert len(rate) == 1 and rate[0].severity == "impossible"
+    assert "basic pay (8,950.00) alone" in ceiling[0].summary
+    assert _codes(result, "PAY.CPF_RATE") == [] and _codes(result, "PAY.CPF_BASE") == []
 
 
 def test_self_help_group_contributions_are_not_cpf() -> None:
@@ -213,8 +218,40 @@ def test_self_help_group_contributions_are_not_cpf() -> None:
     assert any(s.check_code == "PAY.CPF_RATE" and "employee_cpf" in s.reason for s in result.skipped)
 
 
-def test_ordinary_wages_are_not_taken_from_earnings_with_a_bonus() -> None:
+def test_a_bonus_line_is_an_additional_wage_not_an_ordinary_one() -> None:
     earnings = [{"description": "Basic salary", "amount": 5000}, {"description": "Performance bonus", "amount": 5000}]
-    result = _run([_field("earnings_items", earnings), _field("employee_cpf", "1000"),
+
+    def run(cpf: str):
+        return _run([_field("earnings_items", earnings), _field("employee_cpf", cpf),
+                     _field("pay_date", "2026-03-31")], "payslip")
+    assert _codes(run("2000"), "PAY.CPF_RATE") == []  # 20% of 5,000 OW + 5,000 AW
+    assert len(_codes(run("1000"), "PAY.CPF_RATE")) == 1
+
+
+# C002's payslip: variable pay is an additional wage, and "Benefits" may or may not be wages.
+_C002_EARNINGS = [{"amount": "SGD 5,960.00", "description": "Base pay"},
+                  {"amount": "SGD 550.00", "description": "Variable pay"},
+                  {"amount": "SGD 300.00", "description": "Benefits"}]
+
+
+def test_an_uncertain_earnings_line_is_accepted_whichever_way_cpf_treats_it() -> None:
+    def run(cpf: str):
+        deductions = [{"description": "CPF", "amount": cpf}]
+        return _run([_field("earnings_items", _C002_EARNINGS), _field("deductions_items", deductions),
+                     _field("pay_date", "2025-12-31")], "payslip")
+    # 20% of 5,960 + 550 = 1,302 (Benefits not wages); 20% of 5,960 + 550 + 300 = 1,362 (Benefits wages).
+    for cpf in ("1302", "1362"):
+        result = run(cpf)
+        assert [f for f in result.findings if f.check_code.startswith("PAY.CPF")] == [], cpf
+    assert len(_codes(run("1500"), "PAY.CPF_RATE")) == 1
+
+
+def test_extraction_labels_override_the_description() -> None:
+    earnings = [{"description": "Base pay", "amount": 5000, "cpf_wage_type": "ordinary"},
+                {"description": "Monthly commission", "amount": 1000, "cpf_wage_type": "ordinary"},
+                {"description": "Travel claims", "amount": 400, "cpf_wage_type": "not_wages"}]
+    deductions = [{"description": "Employee contribution", "amount": -1200, "category": "employee_cpf"},
+                  {"description": "CDAC contribution", "amount": -3, "category": "self_help_group"}]
+    result = _run([_field("earnings_items", earnings), _field("deductions_items", deductions),
                    _field("pay_date", "2026-03-31")], "payslip")
-    assert any(s.check_code == "PAY.CPF_RATE" and "ordinary_wages" in s.reason for s in result.skipped)
+    assert [f for f in result.findings if f.check_code.startswith("PAY.CPF")] == []  # 20% of 6,000

@@ -55,6 +55,13 @@ def _catalogue(last_updated: datetime):
 
 
 @pytest.fixture(autouse=True)
+def no_hdb_blocks():
+    """An empty HDB register unless a test supplies blocks: every address is a private building."""
+    with patch("app.fraud_detection.external_validation.registry_lookups.hdb.datastore_search", AsyncMock(return_value=[])):
+        yield
+
+
+@pytest.fixture(autouse=True)
 def fresh_catalogue():
     first, second = _catalogue(datetime.now(timezone.utc) - timedelta(days=10))
     with first, second:
@@ -253,3 +260,203 @@ async def test_addresses_in_a_table_are_checked_once_however_often_they_are_prin
     assert findings[0].field == "subscriber_2_address"
     assert findings[0].summary.startswith("Subscriber 2 Address gives")
     assert "Also printed in Shareholder 1 (NG BEE LENG), Address and Individual Address 1" in findings[0].summary
+
+
+
+# --- building use: HDB blocks and URA zoning -------------------------------------------------------
+
+def _onemap(blk: str, road: str, postal: str, building: str = "NIL"):
+    return AsyncMock(return_value=[{"BLK_NO": blk, "ROAD_NAME": road, "BUILDING": building, "POSTAL": postal,
+                                    "ADDRESS": f"{blk} {road} SINGAPORE {postal}",
+                                    "LATITUDE": "1.33", "LONGITUDE": "103.70"}])
+
+
+def _zone(zone: str | None):
+    return patch("app.fraud_detection.external_validation.registry_lookups.land_use.zone_at", AsyncMock(return_value=zone))
+
+
+async def test_a_home_address_in_an_industrial_zone_is_inconsistent() -> None:
+    # Tradehub 21 (18 Boon Lay Way) is zoned Business 1: URA's Written Statement lists no homes there.
+    with patch("app.fraud_detection.external_validation.registry_lookups.onemap.addresses_at_postal_code",
+               _onemap("18", "BOON LAY WAY", "609966", "TRADEHUB 21")), _zone("BUSINESS 1"):
+        result = await verify_against_registries(
+            "d", [_field("individual_address", "18 Boon Lay Way #06-140 Singapore 609966")], "proof_of_address")
+    finding = _codes(result, "REG.RESIDENTIAL_ADDRESS")[0]
+    assert finding.severity == "inconsistent" and "Business 1" in finding.summary
+
+
+async def test_a_home_address_in_a_commercial_or_white_zone_is_not_flagged() -> None:
+    # Homes are allowed in Commercial (mixed use) and White zones: The Sail condo is zoned White.
+    for zone in ("COMMERCIAL", "WHITE", "RESIDENTIAL"):
+        with patch("app.fraud_detection.external_validation.registry_lookups.onemap.addresses_at_postal_code",
+                   _onemap("2", "MARINA BOULEVARD", "018987", "THE SAIL @ MARINA BAY")), _zone(zone):
+            result = await verify_against_registries(
+                "d", [_field("individual_address", "2 Marina Boulevard #40-01 Singapore 018987")], "nric")
+        assert result.findings == [], zone
+
+
+async def test_a_company_registered_at_a_private_home_is_a_signal() -> None:
+    with patch("app.fraud_detection.external_validation.registry_lookups.onemap.addresses_at_postal_code",
+               _onemap("4", "SIGLAP AVENUE", "456264", "FRANKEL ESTATE")), _zone("RESIDENTIAL"):
+        result = await verify_against_registries(
+            "d", [_field("company_address", "4 Siglap Avenue Singapore 456264")], "certificate_of_incumbency")
+    finding = _codes(result, "REG.COMPANY_ADDRESS_RESIDENTIAL")[0]
+    assert finding.severity == "signal" and "Home Office Scheme" in (finding.severity_note or "")
+
+
+async def test_a_company_at_an_hdb_flat_is_a_signal_but_not_at_an_hdb_shop_block() -> None:
+    def run(residential: str, commercial: str):
+        row = [{"blk_no": "22", "street": "BEDOK STH AVE 1", "residential": residential, "commercial": commercial}]
+        return (patch("app.fraud_detection.external_validation.registry_lookups.onemap.addresses_at_postal_code",
+                      _onemap("22", "BEDOK SOUTH AVENUE 1", "460022")),
+                patch("app.fraud_detection.external_validation.registry_lookups.hdb.datastore_search", AsyncMock(return_value=row)))
+    fields = [_field("company_address", "Blk 22 Bedok South Avenue 1 #03-11 Singapore 460022")]
+    first, second = run("Y", "N")
+    with first, second:
+        flat = await verify_against_registries("d", fields, "certificate_of_incumbency")
+    first, second = run("Y", "Y")
+    with first, second:
+        shops = await verify_against_registries("d", fields, "certificate_of_incumbency")
+    assert len(_codes(flat, "REG.COMPANY_ADDRESS_RESIDENTIAL")) == 1
+    assert shops.findings == []
+
+
+async def test_zoning_unavailable_is_a_skip_not_a_finding() -> None:
+    # conftest: no land-use index in tests, so the zone lookup reports itself unavailable.
+    with patch("app.fraud_detection.external_validation.registry_lookups.onemap.addresses_at_postal_code",
+               _onemap("18", "BOON LAY WAY", "609966", "TRADEHUB 21")):
+        result = await verify_against_registries(
+            "d", [_field("individual_address", "18 Boon Lay Way #06-140 Singapore 609966")], "proof_of_address")
+    assert result.findings == []
+    assert any(s.check_code == "REG.BUILDING_USE" for s in result.skipped_checks)
+
+
+def test_land_use_index_finds_the_zone_containing_a_point() -> None:
+    from app.fraud_detection.external_validation.registry_lookups.land_use import build_index
+
+    square = [[[103.0, 1.0], [103.2, 1.0], [103.2, 1.2], [103.0, 1.2], [103.0, 1.0]]]
+    with_hole = [[[104.0, 1.0], [104.4, 1.0], [104.4, 1.4], [104.0, 1.4], [104.0, 1.0]],
+                 [[104.1, 1.1], [104.3, 1.1], [104.3, 1.3], [104.1, 1.3], [104.1, 1.1]]]
+    geojson = {"features": [
+        {"geometry": {"type": "Polygon", "coordinates": square}, "properties": {"LU_DESC": "BUSINESS 2"}},
+        {"geometry": {"type": "MultiPolygon", "coordinates": [with_hole]}, "properties": {"LU_DESC": "RESIDENTIAL"}},
+    ]}
+    index = build_index(geojson, "2025-12-26")
+    assert index.zones_at(103.1, 1.1) == ["BUSINESS 2"]
+    assert index.zones_at(104.05, 1.05) == ["RESIDENTIAL"]
+    assert index.zones_at(104.2, 1.2) == []  # inside the hole
+    assert index.zones_at(105.0, 1.0) == []
+
+
+# Imported at collection, before conftest swaps current_index out for every test.
+from app.fraud_detection.external_validation.registry_lookups.land_use import current_index as _real_current_index  # noqa: E402
+
+
+async def test_a_deployment_never_builds_the_land_use_index_itself(monkeypatch) -> None:
+    from app.fraud_detection.external_validation.registry_lookups import land_use
+    from app.config import settings
+
+    built = []
+    monkeypatch.setattr(settings, "LAND_USE_RUNTIME_REBUILD", False)
+    monkeypatch.setattr(land_use, "_build_in_background", lambda published: built.append(published))
+    monkeypatch.setattr(land_use, "_state", {"index": None, "loaded": False, "building": False, "checked_at": 0.0})
+
+    monkeypatch.setattr(land_use, "load_index", lambda: None)
+    with pytest.raises(LookupUnavailable, match="isn't included in this deployment"):
+        await _real_current_index()
+
+    shipped = land_use.build_index({"features": []}, "2025-12-26")
+    monkeypatch.setattr(land_use, "_state", {"index": None, "loaded": False, "building": False, "checked_at": 0.0})
+    monkeypatch.setattr(land_use, "load_index", lambda: shipped)
+    assert await _real_current_index() is shipped
+    assert built == []  # no download or build was started either time
+
+
+def _ura(answer: bool):
+    return patch("app.fraud_detection.external_validation.registry_lookups.ura.approved_residential_use", AsyncMock(return_value=answer))
+
+
+@pytest.fixture
+def ura_key(monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings, "URA_API_KEY", "test-key")
+
+
+async def test_a_home_address_at_an_office_unit_is_implausible(ura_key) -> None:
+    # MBFC Tower 3 is zoned White, like The Sail condo: only URA's approved use tells the office unit apart.
+    with patch("app.fraud_detection.external_validation.registry_lookups.onemap.addresses_at_postal_code",
+               _onemap("12", "MARINA BOULEVARD", "018982", "MARINA BAY FINANCIAL CENTRE (TOWER 3)")), \
+            _zone("WHITE"), _ura(False):
+        result = await verify_against_registries(
+            "d", [_field("individual_address", "12 Marina Boulevard #17-01 Singapore 018982")], "proof_of_address")
+    finding = _codes(result, "REG.RESIDENTIAL_ADDRESS")[0]
+    assert finding.severity == "implausible" and "#17-01" in finding.summary
+
+
+async def test_an_approved_condo_unit_or_a_shophouse_home_is_not_flagged(ura_key) -> None:
+    cases = [("WHITE", True, "2 Marina Boulevard #40-01 Singapore 018987"),
+             ("RESIDENTIAL WITH COMMERCIAL AT 1ST STOREY", False, "2 Marina Boulevard #02-01 Singapore 018987"),
+             ("RESIDENTIAL WITH COMMERCIAL AT 1ST STOREY", False, "2 Marina Boulevard Singapore 018987")]
+    for zone, approved, text in cases:
+        with patch("app.fraud_detection.external_validation.registry_lookups.onemap.addresses_at_postal_code",
+                   _onemap("2", "MARINA BOULEVARD", "018987")), _zone(zone), _ura(approved):
+            result = await verify_against_registries("d", [_field("individual_address", text)], "nric")
+        assert result.findings == [], (zone, text)
+
+
+async def test_an_unknown_unit_in_a_residential_zone_is_only_a_signal(ura_key) -> None:
+    with patch("app.fraud_detection.external_validation.registry_lookups.onemap.addresses_at_postal_code",
+               _onemap("204", "OCEAN DRIVE", "098628")), _zone("RESIDENTIAL"), _ura(False):
+        result = await verify_against_registries(
+            "d", [_field("individual_address", "204 Ocean Drive #70-01 Singapore 098628")], "nric")
+    assert _codes(result, "REG.RESIDENTIAL_ADDRESS")[0].severity == "signal"
+
+
+async def test_a_company_at_an_approved_condo_unit_is_a_signal_even_in_a_white_zone(ura_key) -> None:
+    with patch("app.fraud_detection.external_validation.registry_lookups.onemap.addresses_at_postal_code",
+               _onemap("2", "MARINA BOULEVARD", "018987")), _zone("WHITE"), _ura(True):
+        result = await verify_against_registries(
+            "d", [_field("company_address", "2 Marina Boulevard #40-01 Singapore 018987")], "certificate_of_incumbency")
+    finding = _codes(result, "REG.COMPANY_ADDRESS_RESIDENTIAL")[0]
+    assert finding.source == "URA Approved Residential Use" and finding.severity == "signal"
+
+
+def test_ura_unit_numbers_are_read_as_singapore_prints_them() -> None:
+    from app.fraud_detection.external_validation.registry_lookups.ura import unit_of
+
+    assert unit_of("2 Marina Boulevard #40-01 The Sail") == ("40", "01")
+    assert unit_of("Blk 2 #4-1") == ("04", "01")
+    assert unit_of("10 Jalan Besar #B1-12A") == ("B1", "12A")
+    assert unit_of("4 Siglap Avenue South") is None
+
+
+
+async def test_a_home_address_without_a_unit_at_a_building_ura_does_not_approve_is_a_signal(ura_key) -> None:
+    # OCBC Centre given as a home with no unit: a condo home has a unit, and offices are never approved.
+    with patch("app.fraud_detection.external_validation.registry_lookups.onemap.addresses_at_postal_code",
+               _onemap("65", "CHULIA STREET", "049513", "OCBC CENTRE")), _zone("COMMERCIAL"), _ura(False):
+        result = await verify_against_registries(
+            "d", [_field("individual_address", "65 Chulia Street OCBC Centre Singapore 049513")], "nric")
+    assert [f.severity for f in _codes(result, "REG.UNIT_MISSING")] == ["signal"]
+
+
+async def test_an_approved_landed_house_needs_no_unit(ura_key) -> None:
+    with patch("app.fraud_detection.external_validation.registry_lookups.onemap.addresses_at_postal_code",
+               _onemap("4", "SIGLAP AVENUE SOUTH", "456264")), _zone("RESIDENTIAL"), _ura(True):
+        result = await verify_against_registries(
+            "d", [_field("individual_address", "4 Siglap Avenue South Singapore 456264")], "nric")
+    assert result.findings == []
+
+
+async def test_hdb_units_are_checked_against_the_blocks_storeys_and_need_a_unit() -> None:
+    row = [{"blk_no": "22", "street": "BEDOK STH AVE 1", "residential": "Y", "commercial": "N", "max_floor_lvl": "14"}]
+
+    async def run(text: str):
+        with patch("app.fraud_detection.external_validation.registry_lookups.onemap.addresses_at_postal_code",
+                   _onemap("22", "BEDOK SOUTH AVENUE 1", "460022")),                 patch("app.fraud_detection.external_validation.registry_lookups.hdb.datastore_search", AsyncMock(return_value=row)):
+            return await verify_against_registries("d", [_field("individual_address", text)], "nric")
+
+    assert (await run("Blk 22 Bedok South Avenue 1 #14-11 Singapore 460022")).findings == []
+    too_high = _codes(await run("Blk 22 Bedok South Avenue 1 #15-11 Singapore 460022"), "REG.UNIT_STOREY")
+    assert [f.severity for f in too_high] == ["impossible"] and "14 storeys" in too_high[0].summary
+    assert len(_codes(await run("Blk 22 Bedok South Avenue 1 Singapore 460022"), "REG.UNIT_MISSING")) == 1

@@ -55,6 +55,14 @@ async def dataset_name(dataset_id: str) -> str:
     return str(name)
 
 
+async def dataset_last_updated(dataset_id: str) -> str | None:
+    """When the publisher last updated a dataset (ISO 8601), from its catalogue entry; rechecked hourly."""
+    body = await get(f"{_CATALOGUE_URL}/datasets/{dataset_id}/metadata", headers=_headers(),
+                     rate_limit_hint=_KEY_HINT, cache_ttl=_COLLECTION_TTL_SECONDS)
+    updated = (body.get("data") or {}).get("lastUpdatedAt") if isinstance(body, dict) else None
+    return str(updated) if updated else None
+
+
 async def datastore_search(resource_id: str, filters: dict[str, str], limit: int = 10) -> list[dict]:
     body = await get(
         _DATASTORE_URL,

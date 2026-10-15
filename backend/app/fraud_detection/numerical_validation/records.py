@@ -16,7 +16,6 @@ from .common import (
     _rows,
 )
 
-from .payslip_inputs import employee_cpf_input, ordinary_wages_input
 from .registry import Num, check
 
 
@@ -70,32 +69,6 @@ def _check_payslip_sums(
                 field="net_pay", stated=_money(net_pay), expected=_money(expected_net),
             ))
     return findings, None
-
-
-@check(code="PAY.CPF_BASE", applies=("payslip",))
-def _check_cpf_base(
-    *, basic_pay: Num, employee_cpf: Num | None = None, deductions_items: Any = None,
-    ordinary_wages: Num | None = None, earnings_items: Any = None,
-) -> CheckResult:
-    """CPF is calculated on ordinary wages (basic pay plus allowances and overtime), not basic pay alone."""
-    employee_cpf, cpf_field = employee_cpf_input(employee_cpf, deductions_items)
-    ordinary_wages, _ = ordinary_wages_input(ordinary_wages, earnings_items)
-    if employee_cpf is None or ordinary_wages is None:
-        return [], skipped(reason="Required field(s) not extracted: employee_cpf and ordinary_wages "
-                                  "(or a CPF deduction line and earnings lines)")
-    if basic_pay <= 0 or ordinary_wages <= basic_pay:
-        return [], skipped(reason="basic pay or ordinary wages not usable")
-    rate_on_basic = employee_cpf / basic_pay
-    rate_on_ordinary = employee_cpf / ordinary_wages
-    # A contribution consistent with basic pay alone but not with the wider ordinary-wage base is the target.
-    if abs(rate_on_basic - 0.20) < 0.01 and abs(rate_on_ordinary - 0.20) > 0.02:
-        return [_finding(
-            "PAY.CPF_BASE", "inconsistent",
-            f"CPF appears calculated on basic pay ({_money(basic_pay)}) rather than the wider "
-            f"ordinary wages base ({_money(ordinary_wages)})",
-            field=cpf_field, stated=_money(employee_cpf),
-        )], None
-    return [], None
 
 
 def _as_amount(row: Any) -> float | None:
@@ -391,16 +364,19 @@ def _check_poa_balance_arithmetic(
     *, previous_balance: Num | None = None, payment_received: Num | None = None, outstanding_balance: Num | None = None,
     current_charges: Num | None = None, total_payable: Num | None = None,
 ) -> CheckResult:
-    """Previous balance minus payment equals outstanding; outstanding plus current charges equals total payable."""
+    """Previous balance minus payment equals outstanding; outstanding plus current charges equals total payable.
+    Current charges are the month's bill; total payable adds any unpaid balance carried forward."""
     findings = []
     ran_any = False
     if previous_balance is not None and payment_received is not None and outstanding_balance is not None:
         ran_any = True
-        expected = previous_balance - payment_received
+        # A bill prints the payment either way round ("-$199.60" or "$199.60"); it always reduces the balance.
+        payment = abs(payment_received)
+        expected = previous_balance - payment
         if abs(expected - outstanding_balance) > _MONEY_TOLERANCE:
             findings.append(_finding(
                 "POA.BALANCE_ARITHMETIC", "impossible",
-                f"Previous balance {_money(previous_balance)} - payment {_money(payment_received)} = "
+                f"Previous balance {_money(previous_balance)} - payment {_money(payment)} = "
                 f"{_money(expected)}, but outstanding balance shows {_money(outstanding_balance)}",
                 field="outstanding_balance", stated=_money(outstanding_balance), expected=_money(expected),
             ))

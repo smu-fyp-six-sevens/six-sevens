@@ -21,6 +21,7 @@ class HdbBlock:
     street: str
     residential: bool
     commercial: bool
+    max_floor: int | None = None  # the block's top storey (HDB's max_floor_lvl)
 
 
 def street_tokens(street: str) -> list[str]:
@@ -49,5 +50,6 @@ async def hdb_block(block: str, road_name: str) -> HdbBlock | None:
             return HdbBlock(
                 block=str(row.get("blk_no")), street=str(row.get("street")),
                 residential=row.get("residential") == "Y", commercial=row.get("commercial") == "Y",
+                max_floor=int(row["max_floor_lvl"]) if str(row.get("max_floor_lvl") or "").isdigit() else None,
             )
     return None

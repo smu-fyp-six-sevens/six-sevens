@@ -22,7 +22,7 @@ async def addresses_at_postal_code(postal_code: str) -> list[dict]:
     headers = {"Authorization": settings.ONEMAP_API_TOKEN} if settings.ONEMAP_API_TOKEN else None
     body = await get(
         _SEARCH_URL,
-        params={"searchVal": postal_code, "returnGeom": "N", "getAddrDetails": "Y", "pageNum": 1},
+        params={"searchVal": postal_code, "returnGeom": "Y", "getAddrDetails": "Y", "pageNum": 1},
         headers=headers, rate_limit_hint="Set ONEMAP_API_TOKEN.",
     )
     results = body.get("results") if isinstance(body, dict) else None

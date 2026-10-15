@@ -466,6 +466,33 @@ EXTRA_FIELD_GUIDANCE: dict[str, str] = {
         "expected, normal title for this type in practice, not evidence "
         "of a mismatch."
     ),
+    "payslip": (
+        'For "earnings_items", its "value" should be an array of objects, '
+        "one per earnings line exactly as printed, each with these keys: "
+        '"description" (the line\'s label), "amount" (as printed), and '
+        '"cpf_wage_type", how Singapore CPF treats the line: "ordinary" for '
+        "pay wholly for this month's work (basic salary, allowances — CPF "
+        "treats allowances as ordinary wages — overtime, shift pay); "
+        '"additional" for pay that is not (annual or '
+        "performance bonus, AWS / 13th month, variable pay, incentives, leave "
+        'pay or encashment, back pay); "not_wages" for payments CPF does not '
+        "treat as wages (expense reimbursements or claims, benefits in kind, "
+        'termination or retrenchment benefits); "uncertain" when the label '
+        'alone cannot tell (e.g. "Commission", "Benefits"). Do not guess: use '
+        '"uncertain" rather than pick a type the label does not support.\n\n'
+        'For "deductions_items", the same shape with "description", "amount" '
+        '(as printed, keeping a minus sign if shown) and "category": '
+        '"employee_cpf" for the employee\'s own CPF contribution (labelled '
+        'CPF, Employee CPF, Employee contribution, EE CPF and the like); '
+        '"employer_cpf" for the employer\'s share where a payslip shows it; '
+        '"self_help_group" for CDAC, SINDA, MBMF or ECF; "income_tax" for '
+        'tax withheld; "other" for anything else.\n\n'
+        'Only extract "employee_cpf", "employer_cpf", "ordinary_wages" and '
+        '"additional_wages" as separate fields when the payslip prints that '
+        "figure on its own (e.g. a \"CPF wages\" or \"Ordinary wages\" box); "
+        "never add up or work out a figure that is not printed. Leave them "
+        "out otherwise: the lines above already carry them."
+    ),
     "nric": (
         'For "document_side", its "value" should be one of "front", '
         '"back", "single", or "unknown". FRONT typically shows a face '
