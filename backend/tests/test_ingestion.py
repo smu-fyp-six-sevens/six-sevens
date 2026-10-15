@@ -16,6 +16,7 @@ from app.ingestion import ingestion_service, metadata_extractor, ocr_extractor
 from app.ingestion.ingestion_service import _needs_review, ingest_document
 from app.ingestion.metadata_extractor import extract_metadata
 from app.ingestion.ocr_extractor import extract_image_with_ocr
+from app.ingestion import pdf_extractor
 from app.ingestion.pdf_extractor import extract_pdf, pdf_contains_text
 
 
@@ -90,6 +91,96 @@ def test_extract_pdf_reads_spans_and_skips_image_blocks() -> None:
     assert all(element["extraction_method"] == "native_pdf" for element in result["pages"][0]["elements"])
 
 
+def _pdf(build) -> bytes:
+    doc = pymupdf.open()
+    page = doc.new_page(width=400, height=300)
+    build(page)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def _cover_up(page, new_text: str = "NET PAY: SGD 9,000.00", cover=(214, 86, 400, 106), **fill) -> None:
+    page.insert_text((60, 80), "Base pay   SGD 8,480.00", fontsize=11)
+    page.insert_text((216, 100), "NET PAY: SGD 8,193.27", fontsize=11)
+    page.draw_rect(pymupdf.Rect(*cover), color=None, fill=(1, 1, 1), **fill)
+    page.insert_text((216, 100), new_text, fontsize=11)
+
+
+def test_text_under_a_cover_up_box_is_not_extracted() -> None:
+    result = extract_pdf(_pdf(_cover_up))
+    assert "NET PAY: SGD 9,000.00" in result["text"]
+    assert "8,193.27" not in result["text"]
+    assert "8,480.00" in result["text"]
+    texts = [element["text"] for element in result["pages"][0]["elements"]]
+    assert "NET PAY: SGD 9,000.00" in texts
+    assert not any("8,193.27" in text for text in texts)
+
+
+def test_box_over_only_the_figure_keeps_the_label() -> None:
+    # The cover-up hides the digits; the label printed before it stays visible.
+    def build(page):
+        _cover_up(page, cover=(290, 86, 400, 106))
+    text = extract_pdf(_pdf(build))["text"]
+    assert "8,193.27" not in text
+    assert "9,000.00" in text
+
+
+def test_semi_transparent_fill_does_not_hide_text() -> None:
+    def build(page):
+        page.insert_text((216, 100), "NET PAY: SGD 8,193.27", fontsize=11)
+        page.draw_rect(pymupdf.Rect(214, 86, 400, 106), color=None, fill=(1, 1, 0), fill_opacity=0.3)
+    assert "8,193.27" in extract_pdf(_pdf(build))["text"]
+
+
+def test_text_drawn_over_text_is_two_lines_not_interleaved() -> None:
+    # Without a cover both values are visible; pymupdf's sorted text would
+    # read "NETNET PAY:PAY: SGDSGD 9,000.008,193.27".
+    def build(page):
+        page.insert_text((216, 100), "NET PAY: SGD 8,193.27", fontsize=11)
+        page.insert_text((216, 100.4), "NET PAY: SGD 9,000.00", fontsize=11)
+    lines = extract_pdf(_pdf(build))["text"].splitlines()
+    assert "NET PAY: SGD 8,193.27" in lines
+    assert "NET PAY: SGD 9,000.00" in lines
+
+
+def test_page_without_hidden_or_overlapping_text_keeps_sorted_text() -> None:
+    def build(page):
+        page.insert_text((60, 80), "Employee", fontsize=11)
+        page.insert_text((260, 80), "Sanjay s/o Selvam", fontsize=11)
+        page.insert_text((60, 100), "Period", fontsize=11)
+        page.insert_text((260, 100), "January 2026", fontsize=11)
+    data = _pdf(build)
+    doc = pymupdf.open(stream=data, filetype="pdf")
+    expected = "\n".join(
+        pdf_extractor._COLUMN_GAP_RE.sub("   ", line).rstrip()
+        for line in doc[0].get_text("text", sort=True).splitlines()
+    )
+    assert extract_pdf(data)["text"] == expected
+
+
+def test_line_printed_up_the_margin_is_read_whole() -> None:
+    # Sorted text alone gives "MR-8500180-3 / No: / Reg / GST / ... / Co." one word per line.
+    def build(page):
+        page.insert_text((60, 80), "Balance Carried Forward 109,129.65", fontsize=11)
+        page.insert_text((380, 280), "Co. Reg. No. 196800306E GST Reg No: MR-8500180-3", fontsize=7, rotate=90)
+    lines = extract_pdf(_pdf(build))["text"].splitlines()
+    assert "Co. Reg. No. 196800306E GST Reg No: MR-8500180-3" in lines
+    assert "Balance Carried Forward 109,129.65" in lines
+
+
+def test_scan_with_its_text_layer_stored_under_the_image_keeps_the_text() -> None:
+    # Most of the page's text under a later opaque image is a scan, not a cover-up.
+    def build(page):
+        page.insert_text((60, 80), "REPUBLIC OF SINGAPORE", fontsize=11)
+        page.insert_text((60, 100), "IDENTITY CARD", fontsize=11)
+        pix = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 40, 30), False)
+        pix.set_rect(pix.irect, (240, 240, 240))
+        page.insert_image(page.rect, pixmap=pix)
+    text = extract_pdf(_pdf(build))["text"]
+    assert "REPUBLIC OF SINGAPORE" in text and "IDENTITY CARD" in text
+
+
 # ---------------------------------------------------------------------------
 # metadata_extractor
 # ---------------------------------------------------------------------------
@@ -105,32 +196,28 @@ def test_extract_metadata_returns_exiftool_json(monkeypatch: pytest.MonkeyPatch)
     assert extract_metadata(b"%PDF", "doc.pdf") == payload[0]
 
 
-def test_extract_metadata_empty_json_and_errors(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        metadata_extractor.subprocess,
-        "run",
-        lambda *a, **k: SimpleNamespace(stdout="[]"),
-    )
-    assert extract_metadata(b"x", "a.png") == {}
+def test_extract_metadata_records_failures_instead_of_returning_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    # exiftool always reports basic file details, so every one of these is a
+    # failure to run, recorded under EXTRACTION_ERROR_KEY rather than as {}.
+    def error_for(run) -> str:
+        monkeypatch.setattr(metadata_extractor.subprocess, "run", run)
+        result = extract_metadata(b"x", "a.pdf")
+        assert list(result) == [metadata_extractor.EXTRACTION_ERROR_KEY]
+        return result[metadata_extractor.EXTRACTION_ERROR_KEY]
+
+    assert error_for(lambda *a, **k: SimpleNamespace(stdout="[]")) == "exiftool returned no output"
 
     def missing(*a, **k):
         raise FileNotFoundError("exiftool")
 
-    monkeypatch.setattr(metadata_extractor.subprocess, "run", missing)
-    assert extract_metadata(b"x", "a.pdf") == {}
+    assert "not installed" in error_for(missing)
 
     def failed(*a, **k):
-        raise subprocess.CalledProcessError(1, "exiftool")
+        raise subprocess.CalledProcessError(1, "exiftool", stderr="Error: File format error\n")
 
-    monkeypatch.setattr(metadata_extractor.subprocess, "run", failed)
-    assert extract_metadata(b"x", "a.pdf") == {}
+    assert error_for(failed) == "exiftool failed (Error: File format error)"
 
-    monkeypatch.setattr(
-        metadata_extractor.subprocess,
-        "run",
-        lambda *a, **k: SimpleNamespace(stdout="not-json"),
-    )
-    assert extract_metadata(b"x", "a.pdf") == {}
+    assert "couldn't be parsed" in error_for(lambda *a, **k: SimpleNamespace(stdout="not-json"))
 
 
 # ---------------------------------------------------------------------------

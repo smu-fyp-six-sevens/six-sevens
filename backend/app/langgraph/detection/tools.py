@@ -26,13 +26,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Annotated, Any
 
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
 from ... import document_repository, extracted_fields_repository, storage_service
+from ...fraud_detection.ai_generation import AIImageAssessment, AIIndicator, check_ai_generation
+from ...fraud_detection.company_identity import check_company_name_consistency
 from ...fraud_detection.date_anomalies import check_date_anomalies
+from ...fraud_detection.registry_lookups import public_holidays_for, verify_against_registries
 from ...fraud_detection.font_consistency import check_font_consistency
 from ...fraud_detection.image_manipulation import check_image_manipulation, check_image_tampering
 from ...fraud_detection.layout_anomalies import check_layout_anomalies
@@ -92,11 +96,35 @@ async def _file_bytes(document_id: str) -> bytes | None:
     return entry["bytes"]
 
 
+# Reasons a check gives when the document simply has nothing it applies to:
+# an image with no authorship metadata, a PDF with no embedded images, a
+# document without dates. That is a pass with nothing to report, not a check
+# that failed, so it doesn't make the verdict inconclusive. Anything else
+# (a file that couldn't be opened, OCR with no text, a tool error) stays
+# Unable to Assess.
+_NOTHING_TO_CHECK_REASONS = tuple(re.compile(pattern) for pattern in (
+    r"^No embedded images found",
+    r"^Only \d+ distinct image asset",
+    r"^This \w+ image carries no authorship or editing metadata",
+    r"^None of the supported metadata fields",
+    r"^No dates could be reliably extracted",
+    r"^Not enough comparable text to assess layout",
+    # AI generation says so itself; its real failures start "Could not run:".
+    r"^Nothing to check:",
+))
+
+
+def _is_nothing_to_check(reason: str) -> bool:
+    return any(pattern.match(reason) for pattern in _NOTHING_TO_CHECK_REASONS)
+
+
 def _result(tool_name: str, findings: list[dict], *, unable: str | None = None) -> dict:
     truncated = max(0, len(findings) - MAX_FINDINGS)
+    nothing_to_check = unable is not None and _is_nothing_to_check(unable)
     return {
         "tool": tool_name,
-        "unable_to_assess": unable is not None,
+        "unable_to_assess": unable is not None and not nothing_to_check,
+        "nothing_to_check": nothing_to_check,
         "reason": unable,
         "findings": findings[:MAX_FINDINGS],
         "truncated": truncated,
@@ -178,7 +206,15 @@ async def layout_anomalies_tool(document_id: Annotated[str, InjectedState("docum
     if file_bytes is None:
         return _result("layout_anomalies_tool", [], unable="Document file is not available in storage")
 
-    result = await asyncio.to_thread(check_layout_anomalies, document_id, file_bytes)
+    # The type selects a layout profile; an unknown document gets the generic checks.
+    document = await _document(document_id)
+    result = await asyncio.to_thread(
+        check_layout_anomalies,
+        document_id,
+        file_bytes,
+        getattr(document, "document_type", None),
+        getattr(document, "classification_confidence", None),
+    )
     if result.unable_to_assess:
         return _result(
             "layout_anomalies_tool", [], unable=result.unable_to_assess_reason or "Unable to assess"
@@ -231,8 +267,9 @@ async def date_consistency_tool(document_id: Annotated[str, InjectedState("docum
         return _result("date_consistency_tool", [], unable="Document not found")
 
     fields = await _extracted_fields(document_id)
+    holidays = await public_holidays_for(document.document_type)
     result = await asyncio.to_thread(
-        check_date_anomalies, document_id, fields, document.document_type
+        check_date_anomalies, document_id, fields, document.document_type, holidays
     )
     if result.unable_to_assess:
         return _result(
@@ -252,6 +289,62 @@ async def date_consistency_tool(document_id: Annotated[str, InjectedState("docum
         for finding in result.findings
     ]
     return _result("date_consistency_tool", _with_ids("date_consistency_tool", findings))
+
+
+@tool
+async def company_name_consistency_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
+    """Compares this document's company name with the company name on every other document in the same case (certificate of incumbency, incorporation, constitution, corporate bank statements, FATCA/CRS, loan letters, payslips, ...). Names that differ only by legal suffix ("Pte Ltd" vs "Pte. Ltd."), letter case or "&"/"AND" match; any other difference is a finding. A document with no company name has nothing to compare. Run it on every document that has a company name."""
+    tool_name = "company_name_consistency_tool"
+    document = await asyncio.to_thread(document_repository.get_document, document_id)
+    if document is None:
+        return _result(tool_name, [], unable="Document not found")
+    case_documents = (
+        await asyncio.to_thread(document_repository.list_documents, case_id=document.case_id)
+        if document.case_id is not None
+        else []
+    )
+    result = check_company_name_consistency(document, case_documents)
+
+    findings = [
+        {
+            "field": "company_name",
+            "stated": discrepancy.stated,
+            "conflicting": discrepancy.conflicting,
+            "filenames": discrepancy.filenames,
+            "severity_hint": discrepancy.severity,
+            "summary": discrepancy.summary,
+        }
+        for discrepancy in result.discrepancies
+    ]
+    return _result(tool_name, _with_ids(tool_name, findings))
+
+
+@tool
+async def registry_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
+    """Checks the document's facts against Singapore's public registries, live: ACRA (the UEN exists, the company name matches, the company is live, the incorporation date and registered address match), OneMap and HDB (an address's postal code exists and matches its street; a home address is a residential block). Use it on any document with a UEN, a company or an address."""
+    document = await _document(document_id)
+    if document is None:
+        return _result("registry_tool", [], unable="Document not found")
+
+    fields = await _extracted_fields(document_id)
+    result = await verify_against_registries(document_id, fields, document.document_type)
+    if result.unable_to_assess:
+        return _result("registry_tool", [], unable=result.unable_to_assess_reason or "Unable to assess")
+
+    findings = [
+        {
+            "check_code": finding.check_code,
+            "severity_hint": finding.severity,
+            "source": finding.source,
+            "field": finding.field,
+            "stated": finding.stated,
+            "expected": finding.expected,
+            "needs_review": finding.needs_review,
+            "summary": finding.summary,
+        }
+        for finding in result.findings
+    ]
+    return _result("registry_tool", _with_ids("registry_tool", findings))
 
 
 # --- Digital Authenticity ---------------------------------------------------
@@ -349,3 +442,64 @@ async def image_tampering_tool(document_id: Annotated[str, InjectedState("docume
         for indicator in result.indicators
     ]
     return _result("image_tampering_tool", _with_ids("image_tampering_tool", findings))
+
+
+# --- Digital Authenticity: AI generation --------------------------------------
+
+
+def _top_contributors(indicators: list[AIIndicator], limit: int = 3) -> list[AIIndicator]:
+    contributing = [i for i in indicators if i.contribution > 0]
+    return sorted(contributing, key=lambda i: i.contribution, reverse=True)[:limit]
+
+
+def _ai_image_summary(image: AIImageAssessment) -> str:
+    where = f"Image on page {image.page + 1}" if image.page is not None else "Uploaded image"
+    drivers = "; ".join(
+        f"{i.indicator} +{i.contribution:.2f} ({i.detail})" for i in _top_contributors(image.indicators)
+    )
+    return f"{where} scores {image.score:.2f} ({image.likelihood}) for AI generation: {drivers}"
+
+
+@tool
+async def ai_generation_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
+    """Scores the photographs, scans and image uploads in the file for traces of AI generation: periodic upsampling peaks in the image spectrum, too little or unnatural sensor noise, compression history (double compression, error level analysis, quantisation tables), missing camera metadata, and any provenance the file declares (C2PA manifest, IPTC digital source type, a generator's own tags). Reports images scoring medium or high, each with the indicators that drove its score. Logos and other flat graphics are not scored. Works on PDFs (their embedded images) and image uploads."""
+    file_bytes = await _file_bytes(document_id)
+    if file_bytes is None:
+        return _result("ai_generation_tool", [], unable="Document file is not available in storage")
+
+    result = await asyncio.to_thread(check_ai_generation, document_id, file_bytes)
+    if result.unable_to_assess:
+        return _result("ai_generation_tool", [], unable=result.unable_to_assess_reason or "Unable to assess")
+
+    def contributors(indicators: list[AIIndicator]) -> list[dict]:
+        return [
+            {"indicator": i.indicator, "value": i.value, "contribution": i.contribution}
+            for i in _top_contributors(indicators)
+        ]
+
+    # Low scores are not findings — like every other tool, a clean result is
+    # an empty list. The full per-indicator breakdown stays on the on-demand
+    # endpoint.
+    findings = [
+        {
+            "indicator": "AI Generation",
+            "page": image.page + 1 if image.page is not None else None,
+            "bbox": image.bbox,
+            "bbox_units": result.bbox_units,
+            "score": image.score,
+            "contributors": contributors(image.indicators),
+            "severity_hint": image.likelihood,
+            "summary": _with_indicator("AI Generation", _ai_image_summary(image)),
+        }
+        for image in result.images
+        if image.likelihood != "low"
+    ]
+    provenance = result.file_provenance
+    if provenance is not None and provenance.assessed and provenance.strength >= result.config.medium_threshold:
+        findings.append({
+            "indicator": "AI Generation",
+            "score": provenance.strength,
+            "severity_hint": "high" if provenance.strength >= result.config.high_threshold else "medium",
+            "summary": _with_indicator("AI Generation", f"The file's own metadata declares an AI source: {provenance.detail}"),
+        })
+    return _result("ai_generation_tool", _with_ids("ai_generation_tool", findings))

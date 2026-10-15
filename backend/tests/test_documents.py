@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import io
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, call, patch
 
 import pytest
@@ -321,8 +321,9 @@ def test_update_extracted_fields_success() -> None:
     # models.compute_fulfilled_requirements) rather than left untouched —
     # here just self-fulfilment since no individual_address was corrected in.
     # routing_status=accepted: the officer's save resolves manual review.
+    # fields_reviewed is only recorded for an Other document.
     mock_repo.update_extracted_fields.assert_called_once_with(
-        "doc-1", 1.0, ["payslip"], routing_status="accepted"
+        "doc-1", 1.0, ["payslip"], routing_status="accepted", fields_reviewed=False
     )
     # required_field_names drawn from the document's own document_type
     # ("payslip") so field_category reflects the same required/additional
@@ -342,6 +343,43 @@ def test_update_extracted_fields_success() -> None:
     # document_repository.update_extracted_fields resyncs the case itself
     # now (see document_repository._sync_case), not observable from here
     # since that call is mocked.
+
+
+def test_update_extracted_fields_removes_optional_fields_saved_empty() -> None:
+    # An officer clearing a field the document doesn't print removes it
+    # instead of storing an empty row they'd be asked to fill in again. A
+    # required field saved empty stays, so it still blocks approval.
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+    ):
+        original = DocumentRecord(
+            id="doc-1",
+            case_id="case-1",
+            filename="payslip.pdf",
+            document_type="payslip",
+            storage_path="case-1/doc-1_payslip.pdf",
+            status=DocumentStatus.ANALYZED,
+            uploaded_at=_TIMESTAMP,
+        )
+        mock_dep_repo.get_document.return_value = original
+        mock_repo.get_document.return_value = original
+        mock_fields_repo.get_extracted_fields.return_value = []
+
+        response = client.patch(
+            "/documents/doc-1/extracted-fields",
+            json={"extracted_fields": {
+                "individual_name": "Jane Tan",
+                "net_pay": None,
+                "total_earnings": None,
+                "pay_date": "",
+            }},
+        )
+
+    assert response.status_code == 200
+    saved = mock_fields_repo.replace_extracted_fields.call_args.args[1]
+    assert saved == {"individual_name": "Jane Tan", "net_pay": None}
 
 
 def test_update_extracted_fields_preserves_confidence_for_already_reviewed_field() -> None:
@@ -1626,7 +1664,10 @@ def test_approve_document_requires_a_confirmed_type(document_type, classificatio
 
 def test_approve_document_allows_officer_confirmed_unrecognised() -> None:
     # Picking "Other" in the type dropdown writes 1.0 — an explicit decision.
-    document = _typed_document(document_type="unrecognised", classification_confidence=1.0)
+    document = _typed_document(
+        document_type="unrecognised", classification_confidence=1.0,
+        fields_reviewed_at=datetime(2026, 10, 13, tzinfo=timezone.utc),
+    )
 
     with (
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
@@ -1646,6 +1687,94 @@ def test_approve_document_allows_officer_confirmed_unrecognised() -> None:
     mock_repo.approve_document.assert_called_once_with("doc-1")
     # Approved as Other, but never scanned.
     mock_launch.assert_not_called()
+
+
+def test_approve_document_requires_an_other_documents_fields_to_be_saved() -> None:
+    # Every field reads 1.0, but nobody has looked at them: an Other
+    # document's fields come from no schema, so saving them is mandatory.
+    document = _typed_document(document_type="unrecognised", classification_confidence=1.0)
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
+        mock_fields_repo.get_extracted_fields.return_value = [
+            ExtractedField(field_name="summary", field_type="string", field_value="x", confidence=1.0),
+        ]
+
+        response = client.post("/documents/doc-1/approve")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "Cannot approve document. Review and save the fields of a document set to Other first."
+    )
+    mock_repo.approve_document.assert_not_called()
+
+
+def test_approve_document_does_not_require_saved_fields_for_a_known_type() -> None:
+    document = _typed_document(classification_confidence=1.0)
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+        patch("app.routers.documents._launch_detection"),
+    ):
+        mock_dep_repo.get_document.return_value = document
+        mock_repo.get_document.return_value = document
+        mock_fields_repo.get_extracted_fields.return_value = [
+            ExtractedField(field_name=name, field_type="string", field_value="x", confidence=1.0)
+            for name in ("individual_name", "company_name", "net_pay")
+        ]
+
+        response = client.post("/documents/doc-1/approve")
+
+    assert response.status_code == 200, response.json()
+    mock_repo.approve_document.assert_called_once_with("doc-1")
+
+
+def test_saving_an_other_documents_fields_records_the_review() -> None:
+    document = _typed_document(document_type="unrecognised", classification_confidence=1.0)
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
+        mock_repo.get_document.return_value = document
+        mock_fields_repo.get_extracted_fields.return_value = [
+            ExtractedField(field_name="summary", field_type="string", field_value="x", confidence=1.0),
+        ]
+
+        response = client.patch("/documents/doc-1/extracted-fields", json={"extracted_fields": {"summary": "x"}})
+
+    assert response.status_code == 200, response.json()
+    assert mock_repo.update_extracted_fields.call_args.kwargs["fields_reviewed"] is True
+
+
+def test_retyping_a_reviewed_document_clears_the_review() -> None:
+    # The fields are extracted again for the new type, so the old review no longer covers them.
+    document = _typed_document(
+        document_type="unrecognised", classification_confidence=0.5,
+        fields_reviewed_at=datetime(2026, 10, 13, tzinfo=timezone.utc),
+    )
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository"),
+        patch("app.routers.documents.langgraph_pipeline"),
+    ):
+        mock_dep_repo.get_document.return_value = document
+        mock_repo.get_document.return_value = document
+
+        response = client.patch("/documents/doc-1/document-type", json={"document_type": "payslip"})
+
+    assert response.status_code == 200, response.json()
+    mock_repo.clear_fields_review.assert_called_once_with("doc-1")
 
 
 def test_confident_unrecognised_document_can_still_be_retyped() -> None:

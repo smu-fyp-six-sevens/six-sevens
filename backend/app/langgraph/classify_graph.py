@@ -219,6 +219,9 @@ def _apply_computed_confidence(state: DocumentGraphState, classification: dict) 
         **classification,
         "confidence": computed["confidence"],
         "needs_manual_review": bool(classification.get("needs_manual_review")) or computed["needs_manual_review"],
+        # "certain_match" when a rule trigger fixed the type (e.g. "REPUBLIC OF
+        # SINGAPORE IDENTITY CARD"); read when deciding whether to reclassify.
+        "basis": computed["basis"],
     }
 
 

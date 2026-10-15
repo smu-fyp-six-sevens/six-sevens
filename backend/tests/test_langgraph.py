@@ -237,6 +237,81 @@ def test_drop_unprinted_numbers_skips_when_text_has_no_figures():
     assert extract._drop_unprinted_numbers(result, "")["extracted_fields"] == {"net_pay": 5000}
 
 
+def test_drop_empty_fields_leaves_out_optional_fields_the_document_does_not_print():
+    # A statement with per-month totals only: the LLM returns the
+    # whole-statement totals empty and flags them as uncertain.
+    result = {
+        "extracted_fields": {
+            "bank_name": None,
+            "account_number": "123-456",
+            "transactions": [],
+            "holds": [],
+            "total_credits": None,
+            "total_debits": "  ",
+            "company_name": "ACME PTE LTD",
+        },
+        "field_confidences": {"total_credits": 0.3, "total_debits": 0.3, "company_name": 0.95},
+        "field_reasons": {"total_credits": "not printed", "total_debits": "not printed"},
+        "confidence": 0.5,
+    }
+    out = extract._drop_empty_fields(result, "bank_statement")
+    # Required fields stay even when empty, so they still count as missing;
+    # an empty list is kept as "none".
+    assert out["extracted_fields"] == {
+        "bank_name": None,
+        "account_number": "123-456",
+        "transactions": [],
+        "holds": [],
+        "company_name": "ACME PTE LTD",
+    }
+    assert out["field_confidences"] == {"company_name": 0.95}
+    assert out["field_reasons"] == {}
+    assert out["confidence"] == pytest.approx(0.95)
+    assert out["dropped_empty_fields"] == ["total_credits", "total_debits"]
+
+
+def test_drop_empty_fields_keeps_the_document_confidence_when_no_field_confidences_remain():
+    result = {"extracted_fields": {"total_credits": None}, "field_confidences": {"total_credits": 0.2}, "confidence": 0.8}
+    out = extract._drop_empty_fields(result, "bank_statement")
+    assert out["extracted_fields"] == {}
+    assert out["confidence"] == 0.8
+
+
+_THREE_MONTH_TEXT = (
+    "Total   36,182.85   70,506.33   Balance Carried Forward   109,129.65\n"
+    "Total   54,836.12   51,736.01\n"
+    "Total   42,639.19   47,306.64"
+)
+
+
+def test_drop_period_totals_removes_a_month_copied_into_the_statement_totals():
+    # AcctStatement_MWS: the LLM put June's totals in total_credits/total_debits.
+    result = {
+        "extracted_fields": {
+            "total_credits": "70,506.33", "total_debits": "36,182.85",
+            "june_total_deposits": "70,506.33", "june_total_withdrawals": "36,182.85",
+        },
+        "field_confidences": {"total_credits": 0.85, "total_debits": 0.85},
+    }
+    out = extract._drop_period_totals(result, _THREE_MONTH_TEXT)
+    assert out["dropped_period_totals"] == ["total_credits", "total_debits"]
+    assert set(out["extracted_fields"]) == {"june_total_deposits", "june_total_withdrawals"}
+    assert out["field_confidences"] == {}
+
+
+def test_drop_period_totals_catches_a_copy_from_the_printed_total_lines_alone():
+    result = {"extracted_fields": {"total_credits": "51,736.01"}, "field_confidences": {}}
+    assert extract._drop_period_totals(result, _THREE_MONTH_TEXT)["extracted_fields"] == {}
+
+
+def test_drop_period_totals_keeps_a_single_whole_statement_total():
+    text = "Total Credits SGD 169,548.98\nTotal Debits SGD 35.00"
+    fields = {"total_credits": "169,548.98", "total_deposits": "169,548.98", "total_debits": "35.00"}
+    out = extract._drop_period_totals({"extracted_fields": dict(fields), "field_confidences": {}}, text)
+    assert out["extracted_fields"] == fields
+    assert out["dropped_period_totals"] == []
+
+
 def test_split_prompt_for_caching_keeps_raw_text_separate_from_the_schema_prefix():
     prefix, text = extract._split_prompt_for_caching("payslip", "Net pay: 5000")
     assert text == "Net pay: 5000"
@@ -344,6 +419,43 @@ def test_decide_after_extract_escalation_past_budget_is_unresolved():
 
     state = {"extraction": {"escalation": True}, "attempts": settings.MAX_RECLASSIFICATION_ATTEMPTS}
     assert _decide_after_extract(state) == "unresolved"
+
+
+def _redacted_ic_state(escalation: dict, *, basis: str = "certain_match") -> dict:
+    # redacted_ic.jpg: a rule trigger made it certainly an NRIC; its number is blacked out.
+    return {
+        "classification": {"document_type": "nric", "basis": basis},
+        "extraction": {"escalation": escalation},
+        "attempts": 0,
+    }
+
+
+def test_escalation_naming_the_same_type_is_not_a_reclassify():
+    from app.langgraph.graph import _decide_after_extract
+
+    escalation = {"reason": "This is a Singapore Identity Card", "suggested_document_type": "nric"}
+    assert _decide_after_extract(_redacted_ic_state(escalation)) == "analyzed"
+
+
+def test_escalation_without_another_type_on_a_certain_classification_is_not_a_reclassify():
+    from app.langgraph.graph import _decide_after_extract
+
+    escalation = {"reason": "NRIC number is absent from the OCR text"}
+    assert _decide_after_extract(_redacted_ic_state(escalation)) == "analyzed"
+
+
+def test_escalation_naming_a_different_type_still_reclassifies():
+    from app.langgraph.graph import _decide_after_extract
+
+    escalation = {"reason": "This is a passport", "suggested_document_type": "passport"}
+    assert _decide_after_extract(_redacted_ic_state(escalation)) == "reclassify"
+
+
+def test_escalation_without_another_type_on_an_uncertain_classification_still_reclassifies():
+    from app.langgraph.graph import _decide_after_extract
+
+    escalation = {"reason": "Doesn't look like an NRIC"}
+    assert _decide_after_extract(_redacted_ic_state(escalation, basis="uncorroborated")) == "reclassify"
 
 
 def test_get_document_graph_builds_once_and_caches():

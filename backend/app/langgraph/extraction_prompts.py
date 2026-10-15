@@ -96,10 +96,14 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # earnings_items through pay_date (not doc_gen-verified — added for
         # fraud_detection.numerical_validation's PAY.* checks): the itemised
         # breakdown behind net_pay, where the payslip shows one.
+        # employer_cpf / date_of_birth / additional_wages: read by PAY.CPF_RATE
+        # (CPF Board's age-band rates). additional_wages is a bonus or other
+        # non-monthly pay, only where the payslip shows one.
         "additional": [
             "company_address", "earnings_items", "deductions_items",
             "total_earnings", "total_deductions", "employee_cpf",
             "ordinary_wages", "basic_pay", "pay_period_end", "pay_date",
+            "employer_cpf", "date_of_birth", "additional_wages",
         ],
     },
     # Split from a single former "id_document" type — passport and NRIC
@@ -238,11 +242,14 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # billing_period_end through contract_end_date (not doc_gen-verified
         # — added for fraud_detection.numerical_validation's POA.* checks):
         # the utility-bill figures a genuine bill itemises.
+        # gst_amount / charges_before_gst: read by POA.GST (IRAS's rate for
+        # the bill date), only where the bill prints a GST line.
         "additional": [
             "individual_name", "individual_address", "company_name", "company_address",
             "billing_period_end", "bill_date", "usage_this_period", "consumption_trend",
             "previous_balance", "payment_received", "outstanding_balance",
             "current_charges", "total_payable", "due_date", "contract_end_date",
+            "gst_amount", "charges_before_gst",
         ],
     },
     "source_of_wealth": {
@@ -663,6 +670,32 @@ def schema_field_names(document_type: str) -> list[str]:
     """
     schema = EXTRACTION_SCHEMAS.get(document_type, {})
     return [*schema.get("required", []), *schema.get("additional", [])]
+
+
+def drop_empty_optional_fields(document_type: str | None, fields: dict) -> list[str]:
+    """
+    Removes, in place, every field whose value is None or a blank string,
+    unless the document type requires it. An optional field the document
+    doesn't print (a statement with per-month totals only has no
+    total_credits) is absent, not a field with nothing in it: stored as an
+    empty row, it shows up in manual review as a field to fill in, and the
+    reviewer can't make it go away.
+
+    A required field stays even when empty, so it still counts as missing
+    (case_service.missing_required_fields). Empty lists and objects are
+    left alone: some checks read [] as "none", which is not the same as
+    "not extracted". Returns the names removed.
+    """
+    schema = EXTRACTION_SCHEMAS.get(document_type or "", {})
+    required = {*schema.get("required", []), *schema.get("required_when_individual", [])}
+    dropped = [
+        name for name, value in fields.items()
+        if name not in required
+        and (value is None or (isinstance(value, str) and not value.strip()))
+    ]
+    for name in dropped:
+        del fields[name]
+    return dropped
 
 
 # The "0.9" below mirrors settings.EXTRACTION_CONFIDENCE_THRESHOLD (the point past which a field

@@ -374,6 +374,10 @@ class DocumentRecord(BaseModel):
     # `classification_confidence` above. Set to 1.0 when a loan officer
     # manually saves corrected fields.
     extraction_confidence: Optional[float] = None
+    # When a loan officer saved the fields of an Other ("unrecognised")
+    # document. Its fields come from no schema, so approving one needs it —
+    # unlike extraction_confidence, which Extraction can also report as 1.0.
+    fields_reviewed_at: Optional[datetime] = None
     escalation_reason: Optional[str] = None
     metadata: Optional[dict] = None
 

@@ -6,6 +6,18 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# exiftool always reports basic file details (FileType, FileSize, MIMEType...)
+# for any file it can read, so an empty result means it didn't run, not that
+# the file has no metadata. A failure is stored under this key instead of as
+# {}, so the metadata check can say it couldn't run rather than reporting a
+# file with nothing in it.
+EXTRACTION_ERROR_KEY = "MetadataExtractionError"
+
+
+def _failure(file_name: str, reason: str) -> dict:
+    logger.error("Metadata extraction failed for %s: %s", file_name, reason)
+    return {EXTRACTION_ERROR_KEY: reason}
+
 
 def extract_metadata(
     file_bytes: bytes,
@@ -40,11 +52,17 @@ def extract_metadata(
         if data:
             return data[0]
 
-        return {}
+        return _failure(file_name, "exiftool returned no output")
 
-    except (FileNotFoundError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
-        logger.warning("Metadata extraction unavailable for %s: %s", file_name, exc)
-        return {}
+    except FileNotFoundError:
+        return _failure(file_name, "exiftool is not installed on the server that processed this document")
+
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or "").strip()[:200] or f"exit code {exc.returncode}"
+        return _failure(file_name, f"exiftool failed ({detail})")
+
+    except json.JSONDecodeError:
+        return _failure(file_name, "exiftool returned output that couldn't be parsed")
 
     finally:
 

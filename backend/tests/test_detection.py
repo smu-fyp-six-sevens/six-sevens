@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.langgraph.detection.binder import BindingResult
@@ -15,6 +16,7 @@ from app.fraud_detection.image_manipulation import (
 from app.fraud_detection.metadata_analysis import MetadataAnalysisResult
 from app.fraud_detection.layout_anomalies import CheckAssessment, LayoutAnomalyResult
 from app.fraud_detection.date_anomalies import DateAnomalyResult
+from app.fraud_detection.sg_reference.holidays import BUNDLED_HOLIDAYS
 from app.fraud_detection.spelling_anomaly import SpellingAnomaly, SpellingAnomalyResult
 from app.main import app
 from app.models import DocumentRecord, DocumentStatus
@@ -490,6 +492,13 @@ def test_image_manipulation_document_missing() -> None:
     assert response.status_code == 404
 
 
+@pytest.fixture(autouse=True)
+def bundled_holidays():
+    """The date-anomalies endpoint fetches MOM's live holiday list for bank statements; tests stay offline."""
+    with patch("app.routers.detection.public_holidays_for", new=AsyncMock(return_value=BUNDLED_HOLIDAYS)) as mock:
+        yield mock
+
+
 def _date_anomaly_result() -> DateAnomalyResult:
     return DateAnomalyResult(
         document_id="doc-1",
@@ -526,6 +535,7 @@ def test_get_date_anomalies_passes_extracted_fields_and_document_type() -> None:
     args = mock_check.call_args[0]
     assert args[1] == fields
     assert args[2] == "bank_statement"
+    assert args[3] is BUNDLED_HOLIDAYS
 
 
 def test_get_date_anomalies_writes_nothing() -> None:
@@ -841,3 +851,45 @@ def test_get_numerical_validation_reports_a_binder_failure_and_still_runs() -> N
     assert body["binding_error"] == "api down"
     # Exact-name matches still run: the balance identity is off by 100.
     assert [f["check_code"] for f in body["findings"]] == ["FS.BALANCES"]
+
+
+# --- detection/ai-generation ---------------------------------------------------
+
+
+def test_ai_generation_happy_path() -> None:
+    from app.fraud_detection.ai_generation import AIGenerationConfig, AIGenerationResult
+
+    result = AIGenerationResult(
+        document_id="doc-1", score=0.12, likelihood="low", images=[],
+        config=AIGenerationConfig(), unable_to_assess=False,
+    )
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch("app.routers.detection.storage_service") as mock_storage,
+        patch("app.routers.detection.check_ai_generation", return_value=result) as mock_check,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
+    ):
+        _mark_detection_already_ran(mock_trace)
+        mock_repo.get_document.return_value = _document()
+        mock_storage.download_file.return_value = b"%PDF-1.4"
+
+        response = client.get("/documents/doc-1/detection/ai-generation")
+
+    assert response.status_code == 200
+    assert response.json()["score"] == 0.12
+    mock_check.assert_called_once_with("doc-1", b"%PDF-1.4")
+
+
+def test_ai_generation_requires_full_detection_first() -> None:
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
+        patch("app.routers.detection.check_ai_generation") as mock_check,
+    ):
+        mock_repo.get_document.return_value = _document()
+        mock_trace.get_persisted.return_value = None
+        mock_trace.get.return_value = None
+        response = client.get("/documents/doc-1/detection/ai-generation")
+
+    assert response.status_code == 409
+    mock_check.assert_not_called()

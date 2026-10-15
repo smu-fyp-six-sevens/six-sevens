@@ -26,8 +26,13 @@ const FIXTURE_DIR = path.resolve(
   '../../../backend/tests/fixtures/regression',
 );
 
+/** Any JSON file in backend/tests/fixtures/regression, as the backend suite wrote it. */
+export function readRegressionFixture<T>(filename: string): T {
+  return JSON.parse(readFileSync(path.join(FIXTURE_DIR, filename), 'utf8')) as T;
+}
+
 export function readFixture(name: FixtureName): Fixture {
-  return JSON.parse(readFileSync(path.join(FIXTURE_DIR, `${name}.json`), 'utf8')) as Fixture;
+  return readRegressionFixture<Fixture>(`${name}.json`);
 }
 
 /** Loads a captured case into the mock backend; returns it for the test to use. */

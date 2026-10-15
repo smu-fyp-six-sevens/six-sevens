@@ -32,6 +32,8 @@ export interface DocumentRecord {
   extracted_fields: Record<string, unknown> | null;
   // Extraction's own confidence in extracted_fields.
   extraction_confidence: number | null;
+  // When an officer saved the fields of an Other document; approving one needs it.
+  fields_reviewed_at?: string | null;
   escalation_reason: string | null;
   metadata: Record<string, unknown> | null;
   // Only present on documents pushed via the case-status websocket.
@@ -153,6 +155,9 @@ export interface DetectionReport {
   }[];
   second_look: { from: string; to: string; question: string; reason: string } | null;
   unable_to_assess: { specialist: string; tool: string | null; reason: string | null }[];
+  // Checks the document had nothing for (no images, no metadata, no dates): a pass, shown for the
+  // record. Absent on reports stored before it existed.
+  nothing_to_check?: { specialist: string; tool: string | null; reason: string | null }[];
   generated_at: string;
 }
 
@@ -162,8 +167,11 @@ export type IndividualCheckId =
   | 'spelling-anomaly'
   | 'numerical-validation'
   | 'date-anomalies'
+  | 'company-name-consistency'
+  | 'registry-verification'
   | 'metadata-anomaly'
-  | 'image-integrity';
+  | 'image-integrity'
+  | 'ai-generation';
 
 export interface BulkActionFailure {
   document_id: string;
