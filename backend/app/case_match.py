@@ -1,6 +1,6 @@
 """
 Case-match check — does each uploaded document actually belong to this
-case's company (and its people), before fraud detection runs on it?
+case's company (and its people), as part of fraud detection after approval?
 
 The certificate of incumbency (ACRA Business Profile) is the reference: it's
 compulsory for every case and is the one document that authoritatively lists
@@ -15,9 +15,10 @@ the company's UEN, name, officers and shareholders. Three steps:
    every other document being flagged against a bad reference.
 2. Compare each document's company against the incumbency — UEN first when
    the document has one, otherwise company name with fuzzy matching (see
-   company_names_match).
+   case_company_names_match).
 3. Compare each individual a document names against the incumbency's
-   officers/shareholders — ID number first, otherwise name.
+   officers/shareholders — ID number first, otherwise name. Mismatches are
+   returned for the fraud detection report; they do not block approval.
 
 Computed live from the documents table on every read, never stored — the same
 reasoning as case_service.py: the result depends on every document in the
@@ -28,6 +29,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from difflib import SequenceMatcher
 from enum import Enum
 from typing import Iterable, NamedTuple, Optional
 
@@ -120,10 +122,11 @@ class CheckOutcome(str, Enum):
 class DocumentMatchStatus(str, Enum):
     # Belongs to this case — can proceed to fraud detection (AC2).
     MATCH = "match"
-    # Needs an officer's eye: the company or an individual doesn't match the
-    # case (DocumentCaseMatch.case_mismatch is set — AC3), the incumbency
-    # itself is in doubt, or the document has no company/individual details
-    # to compare at all.
+    # Identity differs from another case document. It can still proceed to
+    # fraud detection, where the comparison is shown as a finding.
+    MISMATCH = "mismatch"
+    # Needs an officer's eye because the incumbency itself is in doubt or the
+    # document has no company/individual details to compare at all.
     MANUAL_REVIEW = "manual_review"
     # Can't decide yet: not extracted, or the incumbency is missing or not
     # yet corroborated.
@@ -137,6 +140,12 @@ class FieldComparison(BaseModel):
     outcome: CheckOutcome
     document_field: str
     document_value: str
+    # The certificate is the comparison source; include its identity so the
+    # finding can point officers to both documents involved.
+    reference_document_id: Optional[str] = None
+    reference_filename: Optional[str] = None
+    other_document_id: Optional[str] = None
+    other_filename: Optional[str] = None
     # What the incumbency holds for the same thing — for an individual,
     # every officer/shareholder it was compared against.
     case_value: Optional[str] = None
@@ -166,9 +175,8 @@ class DocumentCaseMatch(BaseModel):
     document_type: Optional[str] = None
     status: DocumentMatchStatus
     can_proceed_to_fraud_detection: bool
-    # AC3: the document's company or an individual on it doesn't match the
-    # case. Always paired with status=manual_review, so an officer confirms
-    # it before anything else happens to the document.
+    # The document's company or an individual on it differs from the case.
+    # Mismatches are assessed by fraud detection after approval.
     case_mismatch: bool = False
     reason: str
     comparisons: list[FieldComparison] = Field(default_factory=list)
@@ -230,7 +238,7 @@ def _company_tokens(value: object) -> list[str]:
     return tokens
 
 
-def company_names_match(a: object, b: object) -> bool:
+def case_company_names_match(a: object, b: object) -> bool:
     """
     Fuzzy, but deliberately not typo-tolerant: "ACME Trading Pte Ltd" matches
     "ACME Pte Ltd" (one name is the other plus extra words, same leading
@@ -251,6 +259,18 @@ def individual_names_match(a: object, b: object) -> bool:
     """Same words in any order — "Tan Wei Ming" matches "Wei Ming Tan"."""
     tokens_a, tokens_b = _name_tokens(a), _name_tokens(b)
     return bool(tokens_a) and sorted(tokens_a) == sorted(tokens_b)
+
+
+def _identity_name_similarity(a: object, b: object) -> float:
+    """Similarity used only to link a name-only document to an identified person.
+
+    Exact matching remains the decision rule. A near name can link two records
+    for comparison, but any difference is then sent to manual review.
+    """
+    tokens_a, tokens_b = _name_tokens(a), _name_tokens(b)
+    if not tokens_a or not tokens_b:
+        return 0.0
+    return SequenceMatcher(None, " ".join(sorted(tokens_a)), " ".join(sorted(tokens_b))).ratio()
 
 
 # --- field extraction ---------------------------------------------------------
@@ -537,7 +557,7 @@ def _compare_company(
     company_name = next(iter(_strings(fields.get("company_name"))), None)
     if company_name is None or reference.company_name is None:
         return None
-    matched = company_names_match(company_name, reference.company_name)
+    matched = case_company_names_match(company_name, reference.company_name)
     return FieldComparison(
         check="company_name",
         outcome=CheckOutcome.MATCH if matched else CheckOutcome.MISMATCH,
@@ -553,7 +573,9 @@ def _compare_company(
     )
 
 
-def _compare_person(person: _Person, reference: IncumbencyVerification) -> Optional[FieldComparison]:
+def _compare_person(
+    person: _Person, reference: IncumbencyVerification
+) -> Optional[list[FieldComparison]]:
     reference_ids = {_normalize_id(p.id_number) for p in reference.individuals} - {None}
     id_number = _normalize_id(person.id_number)
     if id_number and reference_ids:
@@ -562,7 +584,7 @@ def _compare_person(person: _Person, reference: IncumbencyVerification) -> Optio
         assert person.id_number is not None
         matched = id_number in reference_ids
         who = f" ({person.name})" if person.name else ""
-        return FieldComparison(
+        comparisons = [FieldComparison(
             check="individual_id",
             outcome=CheckOutcome.MATCH if matched else CheckOutcome.MISMATCH,
             document_field=person.id_field,
@@ -576,12 +598,32 @@ def _compare_person(person: _Person, reference: IncumbencyVerification) -> Optio
                 else f"ID {person.id_number}{who} is not any officer or shareholder on the "
                 "certificate of incumbency"
             ),
-        )
+        )]
+        # An ID match identifies the corresponding officer. Check that
+        # document's name too; otherwise a correct ID could hide a different
+        # name printed on another document.
+        if matched and person.name:
+            matching_people = [
+                p for p in reference.individuals
+                if _normalize_id(p.id_number) == id_number and p.name
+            ]
+            if matching_people and not any(
+                individual_names_match(person.name, p.name) for p in matching_people
+            ):
+                comparisons.append(FieldComparison(
+                    check="individual_name",
+                    outcome=CheckOutcome.MISMATCH,
+                    document_field=person.name_field,
+                    document_value=person.name,
+                    case_value=", ".join(p.name for p in matching_people if p.name),
+                    reason=f"Name {person.name} does not match the name listed for ID {person.id_number} on the certificate of incumbency",
+                ))
+        return comparisons
 
     reference_names = [p.name for p in reference.individuals if p.name]
     if person.name and reference_names:
         matched = any(individual_names_match(person.name, ref) for ref in reference_names)
-        return FieldComparison(
+        return [FieldComparison(
             check="individual_name",
             outcome=CheckOutcome.MATCH if matched else CheckOutcome.MISMATCH,
             document_field=person.name_field,
@@ -593,7 +635,7 @@ def _compare_person(person: _Person, reference: IncumbencyVerification) -> Optio
                 else f"{person.name} is not any officer or shareholder on the certificate of "
                 "incumbency"
             ),
-        )
+        )]
     return None
 
 
@@ -610,7 +652,10 @@ def _match_document(
             filename=doc.filename,
             document_type=doc.document_type,
             status=status,
-            can_proceed_to_fraud_detection=status == DocumentMatchStatus.MATCH,
+            can_proceed_to_fraud_detection=status in {
+                DocumentMatchStatus.MATCH,
+                DocumentMatchStatus.MISMATCH,
+            },
             case_mismatch=case_mismatch,
             reason=reason,
             comparisons=list(comparisons),
@@ -636,8 +681,19 @@ def _match_document(
         comparisons.append(company)
     if doc.document_type not in _COMPANY_ONLY_DOCUMENT_TYPES:
         comparisons.extend(
-            c for c in (_compare_person(p, reference) for p in _people(fields)) if c is not None
+            c
+            for p in _people(fields)
+            for c in (_compare_person(p, reference) or [])
         )
+
+    if incumbency_doc is not None:
+        comparisons = [
+            comparison.model_copy(update={
+                "reference_document_id": incumbency_doc.id,
+                "reference_filename": incumbency_doc.filename,
+            })
+            for comparison in comparisons
+        ]
 
     # Comparisons are still returned while the incumbency is unverified, so
     # an officer can see what they'd show — they just aren't acted on yet.
@@ -659,6 +715,7 @@ def _match_document(
             DocumentMatchStatus.MANUAL_REVIEW,
             "No company or individual details were extracted to compare against the case",
         )
+    # The company or a person isn't the case's: the document looks misfiled, so an officer reviews it.
     mismatches = [c for c in comparisons if c.outcome == CheckOutcome.MISMATCH]
     if mismatches:
         return result(
@@ -668,6 +725,161 @@ def _match_document(
             case_mismatch=True,
         )
     return result(DocumentMatchStatus.MATCH, "Matches the case's company and individuals", comparisons)
+
+
+def _person_link_score(a: _Person, b: _Person) -> float:
+    """Whether two extracted person records could refer to the same person.
+
+    Equal IDs are strongest. Exact names also link records, including when
+    their IDs conflict so the ID difference can be reported. When one side has
+    no ID, a close name can link the records for review; it never makes the
+    values a match.
+    """
+    id_a, id_b = _normalize_id(a.id_number), _normalize_id(b.id_number)
+    if id_a and id_b:
+        if id_a == id_b:
+            return 1.0
+        return 1.0 if individual_names_match(a.name, b.name) else 0.0
+
+    if individual_names_match(a.name, b.name):
+        return 1.0
+    return _identity_name_similarity(a.name, b.name)
+
+
+def _unique_person_pairs(
+    left: list[_Person], right: list[_Person], *, min_score: float = 0.86
+) -> list[tuple[_Person, _Person]]:
+    """Link only reciprocal, unambiguous best candidates across two documents."""
+    scores = [[_person_link_score(a, b) for b in right] for a in left]
+    left_best: dict[int, int] = {}
+    right_best: dict[int, int] = {}
+
+    for i, row in enumerate(scores):
+        best = max(row, default=0.0)
+        if best < min_score or row.count(best) != 1:
+            continue
+        left_best[i] = row.index(best)
+
+    for j in range(len(right)):
+        column = [scores[i][j] for i in range(len(left))]
+        best = max(column, default=0.0)
+        if best < min_score or column.count(best) != 1:
+            continue
+        right_best[j] = column.index(best)
+
+    return [
+        (left[i], right[j])
+        for i, j in left_best.items()
+        if right_best.get(j) == i
+    ]
+
+
+def _pairwise_person_findings(
+    left_doc: DocumentRecord,
+    left_person: _Person,
+    right_doc: DocumentRecord,
+    right_person: _Person,
+) -> list[tuple[str, FieldComparison, str]]:
+    """Return reciprocal comparisons for differences in a linked person pair."""
+    findings: list[tuple[str, FieldComparison, str]] = []
+    left_id, right_id = _normalize_id(left_person.id_number), _normalize_id(right_person.id_number)
+    if left_id and right_id and left_id != right_id:
+        for doc, person, other_doc, other in (
+            (left_doc, left_person, right_doc, right_person),
+            (right_doc, right_person, left_doc, left_person),
+        ):
+            value, other_value = person.id_number or "", other.id_number or ""
+            comparison = FieldComparison(
+                check="individual_id",
+                outcome=CheckOutcome.MISMATCH,
+                document_field=person.id_field,
+                document_value=value,
+                other_document_id=other_doc.id,
+                other_filename=other_doc.filename,
+                case_value=other_value,
+                reason=(
+                    f"ID {value} in {doc.filename} differs from ID {other_value} "
+                    f"in {other_doc.filename}"
+                ),
+            )
+            findings.append((doc.id, comparison, comparison.reason))
+
+    left_name, right_name = left_person.name, right_person.name
+    if left_name and right_name and not individual_names_match(left_name, right_name):
+        for doc, person, name, other_doc, other_name in (
+            (left_doc, left_person, left_name, right_doc, right_name),
+            (right_doc, right_person, right_name, left_doc, left_name),
+        ):
+            comparison = FieldComparison(
+                check="individual_name",
+                outcome=CheckOutcome.MISMATCH,
+                document_field=person.name_field,
+                document_value=name,
+                other_document_id=other_doc.id,
+                other_filename=other_doc.filename,
+                case_value=other_name,
+                reason=(
+                    f'Name "{name}" in {doc.filename} differs from '
+                    f'"{other_name}" in {other_doc.filename}'
+                ),
+            )
+            findings.append((doc.id, comparison, comparison.reason))
+    return findings
+
+
+def _apply_pairwise_person_checks(
+    matches: list[DocumentCaseMatch],
+    documents: list[DocumentRecord],
+    incumbency_doc: Optional[DocumentRecord],
+) -> list[DocumentCaseMatch]:
+    """Add cross-document identity mismatches to both documents in each pair."""
+    docs_with_people = [
+        doc for doc in documents
+        if doc.extracted_fields
+        and doc.id != (incumbency_doc.id if incumbency_doc else None)
+        and doc.document_type not in _COMPANY_ONLY_DOCUMENT_TYPES
+    ]
+    findings_by_id: dict[str, list[tuple[FieldComparison, str]]] = {}
+
+    for index, left_doc in enumerate(docs_with_people):
+        for right_doc in docs_with_people[index + 1:]:
+            for left_person, right_person in _unique_person_pairs(
+                _people(left_doc.extracted_fields or {}),
+                _people(right_doc.extracted_fields or {}),
+            ):
+                for doc_id, comparison, reason in _pairwise_person_findings(
+                    left_doc, left_person, right_doc, right_person
+                ):
+                    findings_by_id.setdefault(doc_id, []).append((comparison, reason))
+
+    updated: list[DocumentCaseMatch] = []
+    for match in matches:
+        additions = findings_by_id.get(match.document_id, [])
+        if not additions:
+            updated.append(match)
+            continue
+        reasons = [reason for _, reason in additions]
+        # A comparison with no other document was made against the case itself: that is the review case.
+        belongs_elsewhere = any(
+            comparison.outcome == CheckOutcome.MISMATCH and comparison.other_document_id is None
+            for comparison in match.comparisons
+        )
+        prior_reason = (
+            match.reason
+            if match.status in {DocumentMatchStatus.MISMATCH, DocumentMatchStatus.MANUAL_REVIEW}
+            else ""
+        )
+        updated.append(match.model_copy(update={
+            "status": (
+                DocumentMatchStatus.MANUAL_REVIEW
+                if belongs_elsewhere else DocumentMatchStatus.MISMATCH
+            ),
+            "can_proceed_to_fraud_detection": not belongs_elsewhere,
+            "case_mismatch": True,
+            "reason": "; ".join(([prior_reason] if prior_reason else []) + reasons),
+            "comparisons": [*match.comparisons, *(comparison for comparison, _ in additions)],
+        }))
+    return updated
 
 
 def _rejected(doc: DocumentRecord) -> DocumentCaseMatch:
@@ -693,6 +905,8 @@ def check_case_match(case: CaseRecord, documents: Iterable[DocumentRecord]) -> C
         else _rejected(doc)
         for doc in documents
     ]
+    if verification.status == IncumbencyStatus.VERIFIED:
+        matches = _apply_pairwise_person_checks(matches, active, incumbency_doc)
     return CaseMatchResult(
         case_id=case.id,
         incumbency=verification,

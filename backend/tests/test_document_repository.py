@@ -72,7 +72,9 @@ def test_sync_case_is_a_noop_for_a_caseless_document() -> None:
     mock_case_service.assert_not_called()
 
 
-def test_update_status_resyncs_the_case_when_the_new_status_is_analyzed() -> None:
+def test_update_status_does_not_resync_the_case_even_for_analyzed() -> None:
+    # Coverage depends on routing, the confirmed type, rejection and the fields; a status
+    # change alone can't move it, and the writes that can already resync.
     with (
         patch("app.document_repository.supabase_client") as mock_client,
         patch("app.case_service.sync_submission_finalized") as mock_case_service,
@@ -81,9 +83,9 @@ def test_update_status_resyncs_the_case_when_the_new_status_is_analyzed() -> Non
             _execute_result([_row(status="analyzed")])
         )
 
-        document_repository.update_status("doc-1", DocumentStatus.ANALYZED)
+        assert document_repository.update_status("doc-1", DocumentStatus.ANALYZED) is True
 
-    mock_case_service.assert_called_once_with("case-1")
+    mock_case_service.assert_not_called()
 
 
 def test_update_status_includes_every_optional_field_when_given() -> None:
@@ -111,7 +113,8 @@ def test_update_status_includes_every_optional_field_when_given() -> None:
         }
 
 
-def test_approve_document_resyncs_the_case() -> None:
+def test_approve_document_returns_the_updated_row_and_does_not_resync_the_case() -> None:
+    # Approving doesn't change checklist coverage (only rejecting does), so there is nothing to resync.
     with (
         patch("app.document_repository.supabase_client") as mock_client,
         patch("app.case_service.sync_submission_finalized") as mock_case_service,
@@ -120,14 +123,15 @@ def test_approve_document_resyncs_the_case() -> None:
             _execute_result([_row(status="approved")])
         )
 
-        document_repository.approve_document("doc-1")
+        approved = document_repository.approve_document("doc-1")
 
     mock_client.table.return_value.update.assert_called_once_with({"status": "approved"})
     mock_client.table.return_value.update.return_value.eq.assert_called_once_with("id", "doc-1")
-    mock_case_service.assert_called_once_with("case-1")
+    assert approved is not None and approved.status == DocumentStatus.APPROVED
+    mock_case_service.assert_not_called()
 
 
-def test_approve_document_skips_resync_when_nothing_was_updated() -> None:
+def test_approve_document_returns_none_when_nothing_was_updated() -> None:
     with (
         patch("app.document_repository.supabase_client") as mock_client,
         patch("app.case_service.sync_submission_finalized") as mock_case_service,
@@ -136,17 +140,28 @@ def test_approve_document_skips_resync_when_nothing_was_updated() -> None:
             _execute_result([])
         )
 
-        document_repository.approve_document("missing")
+        assert document_repository.approve_document("missing") is None
 
     mock_case_service.assert_not_called()
 
 
-def test_reject_document_updates_status_only() -> None:
-    with patch("app.document_repository.supabase_client") as mock_client:
-        document_repository.reject_document("doc-1")
+def test_reject_document_updates_status_resyncs_the_case_and_returns_the_row() -> None:
+    # A rejected document no longer counts towards the checklist, so this is the one status
+    # change that does resync.
+    with (
+        patch("app.document_repository.supabase_client") as mock_client,
+        patch("app.case_service.sync_submission_finalized") as mock_case_service,
+    ):
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+            _execute_result([_row(status="rejected")])
+        )
+
+        rejected = document_repository.reject_document("doc-1")
 
     mock_client.table.return_value.update.assert_called_once_with({"status": "rejected"})
     mock_client.table.return_value.update.return_value.eq.assert_called_once_with("id", "doc-1")
+    mock_case_service.assert_called_once_with("case-1")
+    assert rejected is not None and rejected.status == DocumentStatus.REJECTED
 
 
 def test_get_document_returns_none_when_missing() -> None:
@@ -232,7 +247,13 @@ def test_list_documents_with_no_filters_does_not_call_eq() -> None:
 
 
 def test_update_extracted_fields_sends_extraction_confidence_only() -> None:
-    with patch("app.document_repository.supabase_client") as mock_client:
+    with (
+        patch("app.document_repository.supabase_client") as mock_client,
+        patch("app.case_service.sync_submission_finalized"),
+    ):
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+            _execute_result([_row()])
+        )
         document_repository.update_extracted_fields("doc-1", 0.9)
 
         update_payload = mock_client.table.return_value.update.call_args[0][0]
@@ -245,7 +266,13 @@ def test_update_extracted_fields_sends_extraction_confidence_only() -> None:
 
 
 def test_update_extracted_fields_includes_fulfilled_requirements_when_given() -> None:
-    with patch("app.document_repository.supabase_client") as mock_client:
+    with (
+        patch("app.document_repository.supabase_client") as mock_client,
+        patch("app.case_service.sync_submission_finalized"),
+    ):
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+            _execute_result([_row()])
+        )
         document_repository.update_extracted_fields(
             "doc-1", 0.9, ["id_document", "proof_of_address"]
         )

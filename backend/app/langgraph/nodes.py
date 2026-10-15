@@ -20,6 +20,7 @@ from .. import document_repository, extracted_fields_repository, storage_service
 from ..config import settings
 from .extraction_prompts import schema_field_names
 from ..ingestion.ingestion_service import ingest_document
+from ..cpu_pool import run_cpu
 from ..models import DocumentStatus, RoutingStatus, compute_fulfilled_requirements
 
 logger = logging.getLogger("classifier_pipeline.langgraph.nodes")
@@ -61,12 +62,7 @@ async def persist_extracted_fields(document_id: str, document_type: str, extract
     # this is the point individual_address is actually known — an NRIC only
     # turns out to also fulfil proof_of_address once Extraction has run.
     fulfilled_requirements = compute_fulfilled_requirements(document_type, extracted_fields)
-    await asyncio.to_thread(
-        document_repository.update_extracted_fields,
-        document_id,
-        extraction_confidence,
-        fulfilled_requirements,
-    )
+    # Fields first: the documents update fires a live snapshot, which must already see the new fields.
     await asyncio.to_thread(
         extracted_fields_repository.replace_extracted_fields,
         document_id,
@@ -74,6 +70,12 @@ async def persist_extracted_fields(document_id: str, document_type: str, extract
         field_confidences=field_confidences,
         default_confidence=extraction_confidence,
         required_field_names=set(schema_field_names(document_type)),
+    )
+    await asyncio.to_thread(
+        document_repository.update_extracted_fields,
+        document_id,
+        extraction_confidence,
+        fulfilled_requirements,
     )
 
 
@@ -99,7 +101,7 @@ async def ingest_document_text(document_id: str, document) -> str:
     content_type = _content_type_from_filename(document.filename)
 
     try:
-        ingestion_result = await asyncio.to_thread(
+        ingestion_result = await run_cpu(
             ingest_document, file_bytes, document.filename, content_type
         )
     except Exception as exc:

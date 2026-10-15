@@ -7,13 +7,16 @@ import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage, ToolMessage
 
-from app.fraud_detection.company_identity import (
+from app.case_pipeline.cross_document.company_identity import (
     check_company_name_consistency,
-    company_names_match,
+    cross_document_company_names_match,
     legal_entity_type,
     normalize_company_name,
 )
-from app.langgraph.detection import specialists, tools
+from app.case_pipeline.cross_document.evidence import build_context
+from app.case_pipeline.cross_document.tools.common import ToolKit
+from app.case_pipeline.cross_document.tools.consistency import build_consistency_tools
+from app.langgraph.detection import specialists
 from app.main import app
 from app.models import DocumentRecord, DocumentStatus
 
@@ -85,7 +88,7 @@ def _company(document_type: str, name: str, doc_id: str | None = None, **extra) 
     ],
 )
 def test_company_names_match(a, b, expected) -> None:
-    assert company_names_match(a, b) is expected
+    assert cross_document_company_names_match(a, b) is expected
 
 
 @pytest.mark.parametrize(
@@ -287,40 +290,54 @@ def test_nothing_compared_when_no_other_document_has_a_name() -> None:
     assert "No other document" in (result.skipped_reason or "")
 
 
-# --- detection tool -----------------------------------------------------------
+# --- case-pipeline tool ---------------------------------------------------------
+# The tool moved out of the per-document detection agent: comparing a document
+# with the rest of its case is cross-document work.
+
+
+def _consistency_tool(documents: list[DocumentRecord]):
+    context = build_context("case-1", documents, {})
+    kit = ToolKit(context=context, calls=[])
+    return next(t for t in build_consistency_tools(kit) if t.name == "company_name_consistency_tool")
 
 
 @pytest.mark.asyncio
-async def test_tool_reports_each_discrepancy_as_a_finding() -> None:
+async def test_tool_reports_each_discrepancy() -> None:
     doc = _company("bank_statement", "ACME Trading Pte Ltd", "bs")
     other = _company("certificate_of_incumbency", "ACME Holdings Pte Ltd", "inc")
-    with patch.object(tools, "document_repository") as repo:
-        repo.get_document.return_value = doc
-        repo.list_documents.return_value = [doc, other]
-        output = await tools.company_name_consistency_tool.ainvoke({"document_id": "bs"})
 
-    repo.list_documents.assert_called_once_with(case_id="case-1")
-    assert not output["unable_to_assess"]
-    [finding] = output["findings"]
-    assert finding["id"] == "company_name_consistency_tool-1"
-    assert finding["stated"] == "ACME Trading Pte Ltd"
-    assert finding["conflicting"] == "ACME Holdings Pte Ltd"
-    assert finding["summary"]
+    output = json.loads(await _consistency_tool([doc, other]).ainvoke({"document": "bs"}))
+
+    assert output["available"] and not output["same"]
+    assert output["breach_flags"] == ["NAME_MISMATCH"]
+    [discrepancy] = output["discrepancies"]
+    assert discrepancy["stated"] == "ACME Trading Pte Ltd"
+    assert discrepancy["conflicting"] == "ACME Holdings Pte Ltd"
 
 
 @pytest.mark.asyncio
-async def test_tool_without_case_has_nothing_to_compare() -> None:
-    doc = _company("bank_statement", "ACME Pte Ltd").model_copy(update={"case_id": None})
-    with patch.object(tools, "document_repository") as repo:
-        repo.get_document.return_value = doc
-        output = await tools.company_name_consistency_tool.ainvoke({"document_id": doc.id})
+async def test_tool_says_same_when_names_differ_only_by_legal_suffix() -> None:
+    doc = _company("bank_statement", "ACME Trading Pte Ltd", "bs")
+    other = _company("certificate_of_incumbency", "ACME Trading Pte. Ltd.", "inc")
 
-    assert output["findings"] == [] and not output["unable_to_assess"]
-    repo.list_documents.assert_not_called()
+    output = json.loads(await _consistency_tool([doc, other]).ainvoke({"document": "bs"}))
+
+    assert output["same"] and output["discrepancies"] == []
 
 
-def test_content_validation_specialist_owns_the_tool() -> None:
-    assert tools.company_name_consistency_tool in specialists.SPECIALISTS["content_validation"].tools
+@pytest.mark.asyncio
+async def test_tool_has_nothing_to_compare_when_no_other_document_has_a_name() -> None:
+    doc = _company("bank_statement", "ACME Pte Ltd", "bs")
+
+    output = json.loads(await _consistency_tool([doc]).ainvoke({"document": "bs"}))
+
+    assert output["available"] is False
+
+
+def test_detection_agent_no_longer_owns_the_company_name_tool() -> None:
+    # The case pipeline owns it now; a second copy would report each mismatch twice.
+    owned = {t.name for spec in specialists.SPECIALISTS.values() for t in spec.tools}
+    assert "company_name_consistency_tool" not in owned
 
 
 def _collect(tool_name: str, assessment: dict) -> dict:

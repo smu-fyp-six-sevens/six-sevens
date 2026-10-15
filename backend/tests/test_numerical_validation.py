@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import pytest
 import random
 from types import SimpleNamespace
 
 from app.fraud_detection.field_catalogue import array_rows
 from app.fraud_detection.font_consistency import ExtractedField
 from app.fraud_detection.numerical_validation.runner import Binding, ROW_ROLES, benford_summary, run_numerical_checks
-from app.fraud_detection.numerical_validation.common import REFERENCE_DATA
 from app.fraud_detection.numerical_validation.identity_company import _mrz_check_digit, _nric_expected_letter
 from app.fraud_detection.numerical_validation.statements import BENFORD_MIN_SAMPLE, _benford
 
@@ -29,10 +29,13 @@ def _auto_bindings(fields: list[ExtractedField]) -> list[Binding]:
 
 
 def _run(fields: list[ExtractedField], document_type: str | None = None):
-    outcome = run_numerical_checks(document_type, fields, _auto_bindings(fields))
+    """Both check groups: the numerical tool and the external-validation tool's static reference checks."""
+    bindings = _auto_bindings(fields)
+    outcome = run_numerical_checks(document_type, fields, bindings)
+    external = run_numerical_checks(document_type, fields, bindings, group="external")
     return SimpleNamespace(
-        findings=outcome.findings,
-        skipped_checks=outcome.skipped,
+        findings=[*outcome.findings, *external.findings],
+        skipped_checks=[*outcome.skipped, *external.skipped],
         benford=benford_summary(document_type, outcome),
         benford_excluding_fees=outcome.benford_excluding_fees,
         unable_to_assess=not fields,
@@ -90,21 +93,11 @@ def test_uen_format_accepts_real_shape_and_rejects_garbage() -> None:
     assert len(_codes(result, "ID.UEN_FORMAT")) == 1
 
 
-def test_uen_format_rejects_implausible_year_prefix() -> None:
-    result = _run([_field("uen", "195012345K")])
-    assert len(_codes(result, "ID.UEN_FORMAT")) == 1
-
-
 def test_amount_parse_marks_unparseable_amount_as_needs_review() -> None:
     result = _run([_field("net_pay", "not a number")])
     findings = _codes(result, "GEN.AMOUNT_PARSE")
     assert len(findings) == 1
     assert findings[0].needs_review is True
-
-
-def test_amount_parse_does_not_flag_a_plain_percentage_rate() -> None:
-    result = _run([_field("interest_rate", "6.50% per annum")])
-    assert _codes(result, "GEN.AMOUNT_PARSE") == []
 
 
 def test_amount_parse_does_not_flag_a_reference_rate_formula() -> None:
@@ -172,22 +165,6 @@ def test_bank_identifiers_treat_posb_as_dbs() -> None:
     )
     assert _codes(ok, "BS.BANK_IDENTIFIERS") == []
     assert len(_codes(wrong, "BS.BANK_IDENTIFIERS")) == 1
-
-
-def test_bank_identifiers_accept_an_11_character_bic_with_the_head_office_suffix() -> None:
-    result = _run(
-        [_field("bank_name", "OCBC Bank"), _field("bic_code", "OCBCSGSGXXX")],
-        document_type="bank_statement",
-    )
-    assert _codes(result, "BS.BANK_IDENTIFIERS") == []
-
-
-def test_bank_identifiers_flag_another_banks_bic() -> None:
-    result = _run(
-        [_field("bank_name", "OCBC Bank"), _field("bic_code", "DBSSSGSGXXX")],
-        document_type="bank_statement",
-    )
-    assert len(_codes(result, "BS.BANK_IDENTIFIERS")) == 1
 
 
 def test_bank_identifiers_skip_when_the_statement_prints_no_registration_number() -> None:
@@ -378,22 +355,6 @@ def test_overdraft_limit_flags_balance_below_limit() -> None:
     assert len(_codes(result, "BS.OVERDRAFT_LIMIT")) == 1
 
 
-def test_available_vs_ledger_reconciles() -> None:
-    result = _run(
-        [_field("ledger_balance", "1000"), _field("available_balance", "800"), _field("holds", "200")],
-        document_type="bank_statement",
-    )
-    assert _codes(result, "BS.AVAILABLE_VS_LEDGER") == []
-
-
-def test_available_vs_ledger_flags_mismatch() -> None:
-    result = _run(
-        [_field("ledger_balance", "1000"), _field("available_balance", "900"), _field("holds", "200")],
-        document_type="bank_statement",
-    )
-    assert len(_codes(result, "BS.AVAILABLE_VS_LEDGER")) == 1
-
-
 def test_narrative_amount_flags_description_amount_mismatch() -> None:
     transactions = [{"description": "CARD SGD 500", "amount": -100.0, "balance": 0.0}]
     result = _run([_field("transactions", transactions)], document_type="bank_statement")
@@ -530,73 +491,6 @@ def test_portfolio_sum_reconciles() -> None:
     assert _codes(result, "SOW.PORTFOLIO_SUM") == []
 
 
-def test_nav_flags_mismatch() -> None:
-    result = _run(
-        [_field("cash_balance", "1000"), _field("portfolio_value", "5000"),
-         _field("net_asset_value", "5500")],
-        document_type="source_of_wealth",
-    )
-    assert len(_codes(result, "SOW.NAV")) == 1
-
-
-def test_fs_tax_expense_rate_flags_flat_rate_ignoring_exemption() -> None:
-    result = _run(
-        [_field("income_statement_items", [
-            {"label": "Profit before taxation", "amount": 1000000},
-            {"label": "Tax expense", "amount": 170000},
-        ])],
-        document_type="source_of_wealth",
-    )
-    assert len(_codes(result, "FS.TAX_EXPENSE_RATE")) == 1
-
-
-def test_fs_re_rollforward_flags_broken_roll_forward() -> None:
-    result = _run(
-        [_field("retained_earnings_opening", "100000"), _field("profit_for_the_year", "50000"),
-         _field("dividends_paid", "0"), _field("retained_earnings_closing", "999999")],
-        document_type="source_of_wealth",
-    )
-    assert len(_codes(result, "FS.RE_ROLLFORWARD")) == 1
-
-
-def test_fs_ppe_rollforward_flags_negative_implied_additions() -> None:
-    result = _run(
-        [_field("ppe_opening", "100000"), _field("ppe_closing", "10000"),
-         _field("income_statement_items", [
-             {"label": "Depreciation of property, plant and equipment", "amount": 5000},
-         ])],
-        document_type="source_of_wealth",
-    )
-    assert len(_codes(result, "FS.PPE_ROLLFORWARD")) == 1
-
-
-def test_fs_debt_classification_flags_long_tenure_loan_with_no_non_current_portion() -> None:
-    result = _run(
-        [_field("borrowings_current", "50000"), _field("loan_tenure", "60")],
-        document_type="source_of_wealth",
-    )
-    assert len(_codes(result, "FS.DEBT_CLASSIFICATION")) == 1
-
-
-def test_fs_ratio_bands_flags_finance_costs_outside_band() -> None:
-    result = _run(
-        [_field("income_statement_items", [{"label": "Finance costs", "amount": 100000}]),
-         _field("borrowings_opening", "100000"),
-         _field("borrowings_closing", "100000")],
-        document_type="source_of_wealth",
-    )
-    assert len(_codes(result, "FS.RATIO_BANDS")) == 1
-
-
-def test_fs_ratio_bands_flags_gross_margin_outside_band() -> None:
-    result = _run(
-        [_field("revenue", "100000"),
-         _field("income_statement_items", [{"label": "Cost of sales", "amount": 200000}])],
-        document_type="source_of_wealth",
-    )
-    assert len(_codes(result, "FS.RATIO_BANDS")) == 1
-
-
 def test_fs_note_refs_flags_a_reference_with_no_matching_note() -> None:
     result = _run(
         [_field("notes", [{"note_number": "3", "heading": "Revenue"}]),
@@ -625,14 +519,6 @@ def test_noa_chain_matches_the_real_generator_formula_for_a_round_number() -> No
         document_type="notice_of_assessment",
     )
     assert _codes(result, "NOA.PAYABLE") == []
-
-
-def test_noa_chain_flags_wrong_payable() -> None:
-    result = _run(
-        [_field("eci", "100000"), _field("tax_payable", "99999"), _field("year_of_assessment", "2025")],
-        document_type="notice_of_assessment",
-    )
-    assert len(_codes(result, "NOA.PAYABLE")) == 1
 
 
 def _noa_for(year: str | None, eci: str, payable: str, computation: list[dict] | None = None):
@@ -755,26 +641,6 @@ def test_noa_chain_flags_a_discharge_that_does_not_net_off_the_previous_assessme
 # ---------------------------------------------------------------------------
 
 
-def test_payslip_net_flags_earnings_minus_deductions_mismatch() -> None:
-    result = _run(
-        [_field("net_pay", "5000"), _field("total_earnings", "6000"),
-         _field("total_deductions", "500"), _field("earnings_items", []),
-         _field("deductions_items", [])],
-        document_type="payslip",
-    )
-    assert len(_codes(result, "PAY.NET")) == 1
-
-
-def test_payslip_earnings_sum_flags_mismatch() -> None:
-    result = _run(
-        [_field("net_pay", "5000"),
-         _field("earnings_items", [{"amount": 3000}, {"amount": 2000}]),
-         _field("total_earnings", "4000")],
-        document_type="payslip",
-    )
-    assert len(_codes(result, "PAY.EARNINGS_SUM")) == 1
-
-
 def test_cpf_ceiling_skips_a_pay_date_before_the_reference_table() -> None:
     result = _run(
         [_field("employee_cpf", "5000"), _field("ordinary_wages", "10000"),
@@ -808,64 +674,17 @@ def test_cpf_ceiling_uses_the_ceiling_in_force_on_the_pay_date_within_2023() -> 
 
 def test_cpf_base_flags_contribution_calculated_on_basic_pay_alone() -> None:
     result = _run(
-        [_field("employee_cpf", "200"), _field("basic_pay", "1000"), _field("ordinary_wages", "2000")],
+        [_field("employee_cpf", "200"), _field("basic_pay", "1000"), _field("ordinary_wages", "2000"),
+         _field("pay_date", "2026-03-31")],
         document_type="payslip",
     )
     assert len(_codes(result, "PAY.CPF_BASE")) == 1
+    assert _codes(result, "PAY.CPF_RATE") == []  # reported once, by the check that names the mistake
 
 
 # ---------------------------------------------------------------------------
 # Credit report
 # ---------------------------------------------------------------------------
-
-
-def test_cr_summary_counts_flags_mismatched_account_count() -> None:
-    result = _run(
-        [_field("accounts", [{}, {}]), _field("account_count", "5")],
-        document_type="credit_report",
-    )
-    assert len(_codes(result, "CR.SUMMARY_COUNTS")) == 1
-
-
-def test_cr_default_consistency_flags_zero_defaults_with_overdue_account() -> None:
-    result = _run(
-        [_field("accounts", [{"status": "Overdue"}]), _field("default_count", "0")],
-        document_type="credit_report",
-    )
-    assert len(_codes(result, "CR.DEFAULT_CONSISTENCY")) == 1
-
-
-def test_cr_limit_vs_balance_flags_balance_over_limit() -> None:
-    result = _run(
-        [_field("accounts", [{"current_balance": 6000, "credit_limit": 5000}])],
-        document_type="credit_report",
-    )
-    assert len(_codes(result, "CR.LIMIT_VS_BALANCE")) == 1
-
-
-def test_cr_score_flags_template_placeholder() -> None:
-    result = _run([_field("bureau_score", "Example Score 1500")], document_type="credit_report")
-    assert len(_codes(result, "CR.SCORE")) == 1
-
-
-def test_cr_aggregate_sum_flags_mismatch_with_stated_total() -> None:
-    result = _run(
-        [_field("accounts", [{"current_balance": 1000}, {"current_balance": 2000}]),
-         _field("total_outstanding_balance", "5000")],
-        document_type="credit_report",
-    )
-    assert len(_codes(result, "CR.AGGREGATE_SUM")) == 1
-
-
-def test_cr_amortisation_flags_a_balance_fall_bigger_than_the_instalment() -> None:
-    result = _run(
-        [_field("accounts", [{
-            "monthly_instalment": 100,
-            "balance_history": [{"balance": 1000}, {"balance": 200}],
-        }])],
-        document_type="credit_report",
-    )
-    assert len(_codes(result, "CR.AMORTISATION")) == 1
 
 
 def test_cr_amortisation_reads_a_newest_first_history_in_date_order() -> None:
@@ -881,55 +700,9 @@ def test_cr_amortisation_reads_a_newest_first_history_in_date_order() -> None:
     assert len(_codes(result, "CR.AMORTISATION")) == 1
 
 
-def test_cr_linear_series_flags_a_mechanically_constant_balance_fall() -> None:
-    result = _run(
-        [_field("accounts", [{
-            "balance_history": [
-                {"balance": 1000}, {"balance": 900}, {"balance": 800},
-                {"balance": 700}, {"balance": 600},
-            ],
-        }])],
-        document_type="credit_report",
-    )
-    assert len(_codes(result, "CR.LINEAR_SERIES")) == 1
-
-
 # ---------------------------------------------------------------------------
 # List of loans
 # ---------------------------------------------------------------------------
-
-
-def test_loan_annuity_flags_instalment_mismatch() -> None:
-    result = _run(
-        [_field("loan_amount", "100000"), _field("interest_rate", "5"),
-         _field("loan_tenure", "60"), _field("monthly_instalment", "1")],
-        document_type="list_of_loans",
-    )
-    assert len(_codes(result, "LOAN.ANNUITY")) == 1
-
-
-def test_loan_repayment_count_flags_mismatch() -> None:
-    result = _run(
-        [_field("loan_tenure", "12"), _field("repayment_schedule", [{}] * 6)],
-        document_type="list_of_loans",
-    )
-    assert len(_codes(result, "LOAN.REPAYMENT_COUNT")) == 1
-
-
-def test_loan_fee_flags_mismatch() -> None:
-    result = _run(
-        [_field("loan_amount", "100000"), _field("fee_percentage", "1"), _field("fee_amount", "500")],
-        document_type="list_of_loans",
-    )
-    assert len(_codes(result, "LOAN.FEE")) == 1
-
-
-def test_loan_rate_band_flags_out_of_band_rate() -> None:
-    result = _run(
-        [_field("interest_rate", "50"), _field("facility_type", "term_loan")],
-        document_type="list_of_loans",
-    )
-    assert len(_codes(result, "LOAN.RATE_BAND")) == 1
 
 
 def test_loan_rate_band_runs_against_a_reference_rate_formula() -> None:
@@ -948,29 +721,6 @@ def test_loan_rate_band_runs_against_a_reference_rate_formula() -> None:
 # ---------------------------------------------------------------------------
 # Proof of address
 # ---------------------------------------------------------------------------
-
-
-def test_poa_balance_arithmetic_flags_mismatch() -> None:
-    result = _run(
-        [_field("previous_balance", "100"), _field("payment_received", "50"),
-         _field("outstanding_balance", "40")],
-        document_type="proof_of_address",
-    )
-    assert len(_codes(result, "POA.BALANCE_ARITHMETIC")) == 1
-
-
-def test_poa_usage_match_flags_stated_usage_not_matching_the_trend() -> None:
-    result = _run(
-        [_field("usage_this_period", "500"),
-         _field("consumption_trend", [{"month": "Jan", "usage": 200}])],
-        document_type="proof_of_address",
-    )
-    assert len(_codes(result, "POA.USAGE_MATCH")) == 1
-
-
-def test_amount_parse_ignores_identifier_fields_that_mention_tax() -> None:
-    result = _run([_field("tax_reference_number", "202034564S")], document_type="notice_of_assessment")
-    assert _codes(result, "GEN.AMOUNT_PARSE") == []
 
 
 def test_fee_schedule_ignores_supplier_payments_and_two_fixed_charge_tiers() -> None:
@@ -992,56 +742,9 @@ def test_fee_schedule_flags_a_charge_with_free_form_amounts() -> None:
     assert len(_codes(result, "BS.FEE_SCHEDULE")) == 1
 
 
-def test_poa_usage_match_accepts_a_newest_first_trend() -> None:
-    result = _run(
-        [_field("usage_this_period", "500"),
-         _field("consumption_trend", [
-             {"month": "Mar", "usage": 500}, {"month": "Feb", "usage": 420}, {"month": "Jan", "usage": 380},
-         ])],
-        document_type="proof_of_address",
-    )
-    assert _codes(result, "POA.USAGE_MATCH") == []
-
-
-def test_poa_usage_match_accepts_an_oldest_first_trend() -> None:
-    result = _run(
-        [_field("usage_this_period", "500"),
-         _field("consumption_trend", [
-             {"month": "Jan", "usage": 380}, {"month": "Feb", "usage": 420}, {"month": "Mar", "usage": 500},
-         ])],
-        document_type="proof_of_address",
-    )
-    assert _codes(result, "POA.USAGE_MATCH") == []
-
-
-def test_poa_unit_rate_flags_an_implausible_tariff() -> None:
-    result = _run(
-        [_field("current_charges", "1000"), _field("usage_this_period", "1")],
-        document_type="proof_of_address",
-    )
-    assert len(_codes(result, "POA.UNIT_RATE")) == 1
-
-
 # ---------------------------------------------------------------------------
 # Certificate of incorporation / incumbency / constitution
 # ---------------------------------------------------------------------------
-
-
-def test_acra_share_sum_flags_mismatch() -> None:
-    result = _run(
-        [_field("shareholders", [{"shares": 300000}, {"shares": 100000}]),
-         _field("issued_shares", "500000")],
-        document_type="certificate_of_incumbency",
-    )
-    assert len(_codes(result, "ACRA.SHARE_SUM")) == 1
-
-
-def test_acra_officers_flags_no_director() -> None:
-    result = _run(
-        [_field("officers", [{"role": "Secretary"}]), _field("incorporation_date", "2020-01-01")],
-        document_type="certificate_of_incumbency",
-    )
-    assert len(_codes(result, "ACRA.OFFICERS")) == 1
 
 
 def test_acra_officers_reads_the_role_whatever_its_column_is_called() -> None:
@@ -1057,39 +760,6 @@ def test_acra_officers_reads_the_role_whatever_its_column_is_called() -> None:
     assert _codes(result, "ACRA.OFFICERS") == []
 
 
-def test_acra_capital_per_share_flags_an_implausible_per_share_value() -> None:
-    result = _run(
-        [_field("share_capital", "2000000"), _field("issued_shares", "1")],
-        document_type="certificate_of_incumbency",
-    )
-    assert len(_codes(result, "ACRA.CAPITAL_PER_SHARE")) == 1
-
-
-def test_const_subscriber_sum_flags_mismatch() -> None:
-    result = _run(
-        [_field("subscribers", [{"shares": 300000}, {"shares": 100000}]),
-         _field("issued_shares", "500000")],
-        document_type="company_constitution",
-    )
-    assert len(_codes(result, "CONST.SUBSCRIBER_SUM")) == 1
-
-
-def test_const_quorum_flags_quorum_exceeding_subscribers() -> None:
-    result = _run(
-        [_field("subscribers", [{}, {}]), _field("quorum", "5")],
-        document_type="company_constitution",
-    )
-    assert len(_codes(result, "CONST.QUORUM")) == 1
-
-
-def test_const_capital_per_share_flags_an_implausible_per_share_value() -> None:
-    result = _run(
-        [_field("share_capital", "2000000"), _field("issued_shares", "1")],
-        document_type="company_constitution",
-    )
-    assert len(_codes(result, "CONST.CAPITAL_PER_SHARE")) == 1
-
-
 def _build_mrz(passport_no: str, dob: str, expiry: str) -> str:
     line1 = "P<SGPTAN<<JOVI<<<<<<<<<<<<<<<<<<<<<<<<<<<<<".ljust(44, "<")[:44]
     passport_no = passport_no.ljust(9, "<")[:9]
@@ -1102,11 +772,6 @@ def _build_mrz(passport_no: str, dob: str, expiry: str) -> str:
     composite = _mrz_check_digit(composite_input)
     line2 = f"{passport_no}{p_chk}SGP{dob}{dob_chk}M{expiry}{exp_chk}{personal_no}{pn_chk}{composite}"
     return f"{line1}\n{line2}"
-
-
-def test_mrz_format_requires_two_44_character_lines() -> None:
-    result = _run([_field("mrz", "too short")], document_type="passport")
-    assert len(_codes(result, "ID.MRZ_FORMAT")) == 1
 
 
 def test_mrz_checkdigits_valid_mrz_passes_clean() -> None:
@@ -1197,36 +862,6 @@ def test_mrz_vs_viz_flags_passport_number_mismatch() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_fatca_tin_or_reason_flags_both_present() -> None:
-    result = _run(
-        [_field("tax_residences", [{"tin": "202312345K", "no_tin_reason": ["A"]}])],
-        document_type="fatca_crs_declaration",
-    )
-    assert len(_codes(result, "FATCA.TIN_OR_REASON")) == 1
-
-
-def test_fatca_entity_type_flags_multiple_selected() -> None:
-    result = _run(
-        [_field("entity_type", ["A", "B"])], document_type="fatca_crs_declaration",
-    )
-    assert len(_codes(result, "FATCA.ENTITY_TYPE")) == 1
-
-
-def test_fatca_entity_type_flags_passive_without_controlling_persons() -> None:
-    result = _run(
-        [_field("entity_type", "D")], document_type="fatca_crs_declaration",
-    )
-    assert len(_codes(result, "FATCA.ENTITY_TYPE")) == 1
-
-
-def test_fatca_us_person_flags_no_answer_with_a_us_tin() -> None:
-    result = _run(
-        [_field("specified_us_person", "No"), _field("us_tin", "123-45-6789")],
-        document_type="fatca_crs_declaration",
-    )
-    assert len(_codes(result, "FATCA.US_PERSON")) == 1
-
-
 def test_bank_identifiers_checks_dbs_gst_number() -> None:
     # DBS's GST number is not its UEN: real statements print "GST Registration No: MR-8500180-3".
     genuine = _run([_field("bank_name", "POSB"), _field("bank_gst_no", "MR 8500180 3")], document_type="bank_statement")
@@ -1239,7 +874,9 @@ def test_bank_identifiers_checks_dbs_gst_number() -> None:
 def test_bank_identifiers_skips_a_value_not_shaped_like_the_identifier() -> None:
     # Regression: the binder bound bank_contact to bic_code, and the phone number was reported as a fake BIC.
     fields = [_field("bank_name", "DBS Bank Ltd"), _field("bank_contact", "1800 222 2200 (+65 6222 2200 from overseas)")]
-    outcome = run_numerical_checks("bank_statement", fields, [Binding(role="bic_code", field="bank_contact", row=None)])
+    outcome = run_numerical_checks(
+        "bank_statement", fields, [Binding(role="bic_code", field="bank_contact", row=None)], group="external",
+    )
     assert [f for f in outcome.findings if f.check_code == "BS.BANK_IDENTIFIERS"] == []
     skip = next(s for s in outcome.skipped if s.check_code == "BS.BANK_IDENTIFIERS")
     assert "isn't shaped like a SWIFT BIC" in skip.reason
@@ -1271,3 +908,252 @@ def test_nric_finding_needs_review_only_if_every_copy_was_extracted_with_low_con
 
     assert run(0.75, 1.0).needs_review is False  # the table read it confidently
     assert run(0.75, 0.75).needs_review is True
+
+
+def test_poa_balance_accepts_a_payment_printed_as_a_negative() -> None:
+    # Regression: "-$199.60" was subtracted as a negative, giving an outstanding balance of 399.20.
+    def run(payment: str, outstanding: str, total: str):
+        return _run([_field("previous_balance", "$199.60"), _field("payment_received", payment),
+                     _field("outstanding_balance", outstanding), _field("current_charges", "$202.22"),
+                     _field("total_payable", total)], document_type="proof_of_address")
+    for payment in ("-$199.60", "$199.60"):
+        assert _codes(run(payment, "$0.00", "$202.22"), "POA.BALANCE_ARITHMETIC") == [], payment
+    # Still caught: a total that isn't the outstanding balance plus this month's charges.
+    assert len(_codes(run("-$199.60", "$0.00", "$402.22"), "POA.BALANCE_ARITHMETIC")) == 1
+
+
+# ---------------------------------------------------------------------------
+# Rules with no extra assertions: one row per rule, same checks as the
+# single-purpose tests these rows replaced.
+# ---------------------------------------------------------------------------
+
+
+_FLAGGED_ONCE = [
+    pytest.param(
+        'ID.UEN_FORMAT', None, [_field("uen", "195012345K")],
+        id='uen_format_rejects_implausible_year_prefix',
+    ),
+    pytest.param(
+        'BS.BANK_IDENTIFIERS', "bank_statement", [_field("bank_name", "OCBC Bank"), _field("bic_code", "DBSSSGSGXXX")],
+        id='bank_identifiers_flag_another_banks_bic',
+    ),
+    pytest.param(
+        'BS.AVAILABLE_VS_LEDGER', "bank_statement", [_field("ledger_balance", "1000"), _field("available_balance", "900"), _field("holds", "200")],
+        id='available_vs_ledger_flags_mismatch',
+    ),
+    pytest.param(
+        'SOW.NAV', "source_of_wealth", [_field("cash_balance", "1000"), _field("portfolio_value", "5000"),
+             _field("net_asset_value", "5500")],
+        id='nav_flags_mismatch',
+    ),
+    pytest.param(
+        'FS.TAX_EXPENSE_RATE', "source_of_wealth", [_field("income_statement_items", [
+                {"label": "Profit before taxation", "amount": 1000000},
+                {"label": "Tax expense", "amount": 170000},
+            ])],
+        id='fs_tax_expense_rate_flags_flat_rate_ignoring_exemption',
+    ),
+    pytest.param(
+        'FS.RE_ROLLFORWARD', "source_of_wealth", [_field("retained_earnings_opening", "100000"), _field("profit_for_the_year", "50000"),
+             _field("dividends_paid", "0"), _field("retained_earnings_closing", "999999")],
+        id='fs_re_rollforward_flags_broken_roll_forward',
+    ),
+    pytest.param(
+        'FS.PPE_ROLLFORWARD', "source_of_wealth", [_field("ppe_opening", "100000"), _field("ppe_closing", "10000"),
+             _field("income_statement_items", [
+                 {"label": "Depreciation of property, plant and equipment", "amount": 5000},
+             ])],
+        id='fs_ppe_rollforward_flags_negative_implied_additions',
+    ),
+    pytest.param(
+        'FS.DEBT_CLASSIFICATION', "source_of_wealth", [_field("borrowings_current", "50000"), _field("loan_tenure", "60")],
+        id='fs_debt_classification_flags_long_tenure_loan_with_no_non_current_portion',
+    ),
+    pytest.param(
+        'FS.RATIO_BANDS', "source_of_wealth", [_field("income_statement_items", [{"label": "Finance costs", "amount": 100000}]),
+             _field("borrowings_opening", "100000"),
+             _field("borrowings_closing", "100000")],
+        id='fs_ratio_bands_flags_finance_costs_outside_band',
+    ),
+    pytest.param(
+        'FS.RATIO_BANDS', "source_of_wealth", [_field("revenue", "100000"),
+             _field("income_statement_items", [{"label": "Cost of sales", "amount": 200000}])],
+        id='fs_ratio_bands_flags_gross_margin_outside_band',
+    ),
+    pytest.param(
+        'NOA.PAYABLE', "notice_of_assessment", [_field("eci", "100000"), _field("tax_payable", "99999"), _field("year_of_assessment", "2025")],
+        id='noa_chain_flags_wrong_payable',
+    ),
+    pytest.param(
+        'PAY.NET', "payslip", [_field("net_pay", "5000"), _field("total_earnings", "6000"),
+             _field("total_deductions", "500"), _field("earnings_items", []),
+             _field("deductions_items", [])],
+        id='payslip_net_flags_earnings_minus_deductions_mismatch',
+    ),
+    pytest.param(
+        'PAY.EARNINGS_SUM', "payslip", [_field("net_pay", "5000"),
+             _field("earnings_items", [{"amount": 3000}, {"amount": 2000}]),
+             _field("total_earnings", "4000")],
+        id='payslip_earnings_sum_flags_mismatch',
+    ),
+    pytest.param(
+        'CR.SUMMARY_COUNTS', "credit_report", [_field("accounts", [{}, {}]), _field("account_count", "5")],
+        id='cr_summary_counts_flags_mismatched_account_count',
+    ),
+    pytest.param(
+        'CR.DEFAULT_CONSISTENCY', "credit_report", [_field("accounts", [{"status": "Overdue"}]), _field("default_count", "0")],
+        id='cr_default_consistency_flags_zero_defaults_with_overdue_account',
+    ),
+    pytest.param(
+        'CR.LIMIT_VS_BALANCE', "credit_report", [_field("accounts", [{"current_balance": 6000, "credit_limit": 5000}])],
+        id='cr_limit_vs_balance_flags_balance_over_limit',
+    ),
+    pytest.param(
+        'CR.SCORE', "credit_report", [_field("bureau_score", "Example Score 1500")],
+        id='cr_score_flags_template_placeholder',
+    ),
+    pytest.param(
+        'CR.AGGREGATE_SUM', "credit_report", [_field("accounts", [{"current_balance": 1000}, {"current_balance": 2000}]),
+             _field("total_outstanding_balance", "5000")],
+        id='cr_aggregate_sum_flags_mismatch_with_stated_total',
+    ),
+    pytest.param(
+        'CR.AMORTISATION', "credit_report", [_field("accounts", [{
+                "monthly_instalment": 100,
+                "balance_history": [{"balance": 1000}, {"balance": 200}],
+            }])],
+        id='cr_amortisation_flags_a_balance_fall_bigger_than_the_instalment',
+    ),
+    pytest.param(
+        'CR.LINEAR_SERIES', "credit_report", [_field("accounts", [{
+                "balance_history": [
+                    {"balance": 1000}, {"balance": 900}, {"balance": 800},
+                    {"balance": 700}, {"balance": 600},
+                ],
+            }])],
+        id='cr_linear_series_flags_a_mechanically_constant_balance_fall',
+    ),
+    pytest.param(
+        'LOAN.ANNUITY', "list_of_loans", [_field("loan_amount", "100000"), _field("interest_rate", "5"),
+             _field("loan_tenure", "60"), _field("monthly_instalment", "1")],
+        id='loan_annuity_flags_instalment_mismatch',
+    ),
+    pytest.param(
+        'LOAN.REPAYMENT_COUNT', "list_of_loans", [_field("loan_tenure", "12"), _field("repayment_schedule", [{}] * 6)],
+        id='loan_repayment_count_flags_mismatch',
+    ),
+    pytest.param(
+        'LOAN.FEE', "list_of_loans", [_field("loan_amount", "100000"), _field("fee_percentage", "1"), _field("fee_amount", "500")],
+        id='loan_fee_flags_mismatch',
+    ),
+    pytest.param(
+        'LOAN.RATE_BAND', "list_of_loans", [_field("interest_rate", "50"), _field("facility_type", "term_loan")],
+        id='loan_rate_band_flags_out_of_band_rate',
+    ),
+    pytest.param(
+        'POA.BALANCE_ARITHMETIC', "proof_of_address", [_field("previous_balance", "100"), _field("payment_received", "50"),
+             _field("outstanding_balance", "40")],
+        id='poa_balance_arithmetic_flags_mismatch',
+    ),
+    pytest.param(
+        'POA.USAGE_MATCH', "proof_of_address", [_field("usage_this_period", "500"),
+             _field("consumption_trend", [{"month": "Jan", "usage": 200}])],
+        id='poa_usage_match_flags_stated_usage_not_matching_the_trend',
+    ),
+    pytest.param(
+        'POA.UNIT_RATE', "proof_of_address", [_field("current_charges", "1000"), _field("usage_this_period", "1")],
+        id='poa_unit_rate_flags_an_implausible_tariff',
+    ),
+    pytest.param(
+        'ACRA.SHARE_SUM', "certificate_of_incumbency", [_field("shareholders", [{"shares": 300000}, {"shares": 100000}]),
+             _field("issued_shares", "500000")],
+        id='acra_share_sum_flags_mismatch',
+    ),
+    pytest.param(
+        'ACRA.OFFICERS', "certificate_of_incumbency", [_field("officers", [{"role": "Secretary"}]), _field("incorporation_date", "2020-01-01")],
+        id='acra_officers_flags_no_director',
+    ),
+    pytest.param(
+        'ACRA.CAPITAL_PER_SHARE', "certificate_of_incumbency", [_field("share_capital", "2000000"), _field("issued_shares", "1")],
+        id='acra_capital_per_share_flags_an_implausible_per_share_value',
+    ),
+    pytest.param(
+        'CONST.SUBSCRIBER_SUM', "company_constitution", [_field("subscribers", [{"shares": 300000}, {"shares": 100000}]),
+             _field("issued_shares", "500000")],
+        id='const_subscriber_sum_flags_mismatch',
+    ),
+    pytest.param(
+        'CONST.QUORUM', "company_constitution", [_field("subscribers", [{}, {}]), _field("quorum", "5")],
+        id='const_quorum_flags_quorum_exceeding_subscribers',
+    ),
+    pytest.param(
+        'CONST.CAPITAL_PER_SHARE', "company_constitution", [_field("share_capital", "2000000"), _field("issued_shares", "1")],
+        id='const_capital_per_share_flags_an_implausible_per_share_value',
+    ),
+    pytest.param(
+        'ID.MRZ_FORMAT', "passport", [_field("mrz", "too short")],
+        id='mrz_format_requires_two_44_character_lines',
+    ),
+    pytest.param(
+        'FATCA.TIN_OR_REASON', "fatca_crs_declaration", [_field("tax_residences", [{"tin": "202312345K", "no_tin_reason": ["A"]}])],
+        id='fatca_tin_or_reason_flags_both_present',
+    ),
+    pytest.param(
+        'FATCA.ENTITY_TYPE', "fatca_crs_declaration", [_field("entity_type", ["A", "B"])],
+        id='fatca_entity_type_flags_multiple_selected',
+    ),
+    pytest.param(
+        'FATCA.ENTITY_TYPE', "fatca_crs_declaration", [_field("entity_type", "D")],
+        id='fatca_entity_type_flags_passive_without_controlling_persons',
+    ),
+    pytest.param(
+        'FATCA.US_PERSON', "fatca_crs_declaration", [_field("specified_us_person", "No"), _field("us_tin", "123-45-6789")],
+        id='fatca_us_person_flags_no_answer_with_a_us_tin',
+    ),
+]
+
+
+@pytest.mark.parametrize("check_code, document_type, fields", _FLAGGED_ONCE)
+def test_rule_flags_exactly_one_finding(check_code, document_type, fields) -> None:
+    result = _run(fields, document_type=document_type)
+    assert len(_codes(result, check_code)) == 1
+
+
+_NOT_FLAGGED = [
+    pytest.param(
+        'GEN.AMOUNT_PARSE', None, [_field("interest_rate", "6.50% per annum")],
+        id='amount_parse_does_not_flag_a_plain_percentage_rate',
+    ),
+    pytest.param(
+        'BS.BANK_IDENTIFIERS', "bank_statement", [_field("bank_name", "OCBC Bank"), _field("bic_code", "OCBCSGSGXXX")],
+        id='bank_identifiers_accept_an_11_character_bic_with_the_head_office_suffix',
+    ),
+    pytest.param(
+        'BS.AVAILABLE_VS_LEDGER', "bank_statement", [_field("ledger_balance", "1000"), _field("available_balance", "800"), _field("holds", "200")],
+        id='available_vs_ledger_reconciles',
+    ),
+    pytest.param(
+        'GEN.AMOUNT_PARSE', "notice_of_assessment", [_field("tax_reference_number", "202034564S")],
+        id='amount_parse_ignores_identifier_fields_that_mention_tax',
+    ),
+    pytest.param(
+        'POA.USAGE_MATCH', "proof_of_address", [_field("usage_this_period", "500"),
+             _field("consumption_trend", [
+                 {"month": "Mar", "usage": 500}, {"month": "Feb", "usage": 420}, {"month": "Jan", "usage": 380},
+             ])],
+        id='poa_usage_match_accepts_a_newest_first_trend',
+    ),
+    pytest.param(
+        'POA.USAGE_MATCH', "proof_of_address", [_field("usage_this_period", "500"),
+             _field("consumption_trend", [
+                 {"month": "Jan", "usage": 380}, {"month": "Feb", "usage": 420}, {"month": "Mar", "usage": 500},
+             ])],
+        id='poa_usage_match_accepts_an_oldest_first_trend',
+    ),
+]
+
+
+@pytest.mark.parametrize("check_code, document_type, fields", _NOT_FLAGGED)
+def test_rule_does_not_flag(check_code, document_type, fields) -> None:
+    result = _run(fields, document_type=document_type)
+    assert _codes(result, check_code) == []

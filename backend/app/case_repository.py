@@ -20,7 +20,7 @@ def create_case(company_name: Optional[str] = None) -> CaseRecord:
     now = datetime.now(timezone.utc)
 
     # greenlink_case_id is intentionally omitted — it's assigned by a DB
-    # trigger (see migrations/001_add_greenlink_case_id_generation.sql) and
+    # trigger (`set_greenlink_case_id`, which skips an id already taken) and
     # comes back populated in the inserted row's representation below.
     # dev is driven by which process created it (see settings.DEPLOYMENT_ENV
     # / IS_CLOUD_DEPLOYMENT), never set by the caller or flipped by hand —

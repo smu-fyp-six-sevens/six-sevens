@@ -47,6 +47,10 @@ export interface CaseMatchComparison {
   outcome: 'match' | 'mismatch';
   document_field: string;
   document_value: string;
+  reference_document_id?: string | null;
+  reference_filename?: string | null;
+  other_document_id?: string | null;
+  other_filename?: string | null;
   case_value: string | null;
   reason: string;
 }
@@ -55,7 +59,7 @@ export interface DocumentCaseMatch {
   document_id: string;
   filename: string;
   document_type: string | null;
-  status: 'match' | 'manual_review' | 'pending';
+  status: 'match' | 'mismatch' | 'manual_review' | 'pending';
   can_proceed_to_fraud_detection: boolean;
   // The company or an individual on the document doesn't match the case.
   case_mismatch: boolean;
@@ -79,6 +83,77 @@ export interface CaseMatchResult {
 // A document sitting in APPROVED status is, from an officer's point of view, still doing something.
 export type DocumentDetectionStage = 'scanning' | 'detected' | 'skipped' | 'failed' | null;
 
+// Mirrors CaseRisk in backend/app/models.py (scored in backend/app/case_risk.py).
+export type CaseRiskLevel = 'Low' | 'Medium' | 'High' | 'Critical';
+
+export interface CaseRiskFinding {
+  document_id: string;
+  filename: string;
+  document_type: string | null;
+  finding_id: string;
+  tool: string | null;
+  severity: DetectionSeverity;
+  summary: string;
+  rationale: string;
+  points: number;
+  // The specialist kept the tool's finding without assessing it.
+  unreviewed: boolean;
+  category?: string | null;
+  // "cross_document" for a finding from the case analysis rather than one document's scan.
+  source?: 'document' | 'cross_document';
+}
+
+export interface CaseRisk {
+  // Only 'scored' carries a level; the others say why there isn't one yet.
+  state: 'scored' | 'pending' | 'failed' | 'no_documents';
+  level: CaseRiskLevel | null;
+  // 0-100, anchored to level (see SCORE_BANDS in backend/app/case_risk.py).
+  score: number | null;
+  // The raw points total the level is banded from.
+  points: number | null;
+  contributing_findings: CaseRiskFinding[];
+  unassessed_checks: { document_id: string; filename: string; tool: string | null; reason: string | null }[];
+  reasons: string[];
+  documents_scanned: number;
+  documents_total: number;
+}
+
+// Mirrors SupportingDocumentRecommendation in backend/app/models.py (see backend/app/supporting_documents.py).
+export interface SupportingDocumentRecommendation {
+  document_type:
+    | 'purchase_order'
+    | 'sales_invoice'
+    | 'related_party_repayment_evidence'
+    | 'bank_loan_evidence';
+  // What to ask for, e.g. "Purchase Order".
+  title: string;
+  // Why: what the source document shows.
+  reason: string;
+  // The ask, introducing items, e.g. "Request purchase orders for these transactions:".
+  request: string;
+  source_document_id: string;
+  source_filename: string;
+  // Bank statement transactions, or financial statement lines.
+  items: RecommendationItem[];
+}
+
+// Mirrors RecommendationItem in backend/app/models.py.
+export interface RecommendationItem {
+  date: string | null;
+  // The transaction description or line label, as printed.
+  description: string;
+  // Negative for a payment out, positive for a receipt.
+  amount: number;
+  // A financial statement line's prior-year figure, where it has one.
+  prior_amount: number | null;
+  // The supplier paid or customer paying, when the statement names one.
+  counterparty: string | null;
+  reason: string;
+  // The lines this one totals, e.g. a total's portions — shown as a table of these
+  // lines plus this one as its total row.
+  breakdown: RecommendationItem[];
+}
+
 // Mirrors the subset of CaseSummary in backend/app/models.py this page needs.
 export interface CaseRequirementCoverage {
   fulfilled_requirements: string[];
@@ -87,6 +162,14 @@ export interface CaseRequirementCoverage {
   proof_of_address_coverage: { covered: number; total: number; unmatched_names: string[] };
   // How many of the case's identified individuals (grouped the same way as proof_of_address_coverage.
   id_document_coverage: { covered: number; total: number; missing_side: string | null };
+  // null when the backend couldn't load the case's detection reports.
+  risk: CaseRisk | null;
+  // Empty when nothing in the case needs further evidence.
+  supporting_document_recommendations: SupportingDocumentRecommendation[];
+  // Every approved document has been scanned, so the case analysis can be run.
+  analysis_ready?: boolean;
+  // The latest per-case analysis in brief; null when the case was never analysed.
+  analysis?: CaseAnalysisOverview | null;
 }
 
 // Mirrors UpdateCaseRequest in backend/app/models.py.
@@ -164,7 +247,7 @@ export type IndividualCheckId =
   | 'numerical-validation'
   | 'date-anomalies'
   | 'company-name-consistency'
-  | 'registry-verification'
+  | 'external-validation'
   | 'metadata-anomaly'
   | 'image-integrity'
   | 'ai-generation';
@@ -189,4 +272,71 @@ export interface CaseOption {
   id: string;
   greenlink_case_id: string;
   company_name: string | null;
+}
+
+// Mirrors CaseAnalysisOverview in backend/app/models.py.
+export interface CaseAnalysisOverview {
+  run_id: string;
+  status: 'running' | 'complete' | 'failed' | 'superseded';
+  // The case's documents changed since this run read them.
+  stale: boolean;
+  finished_at: string | null;
+  finding_count: number;
+}
+
+// Mirrors case_pipeline/models.py.
+export interface CrossDocFinding {
+  id: string;
+  hypothesis_id: string;
+  summary: string;
+  rationale: string;
+  severity: 'low' | 'medium' | 'high';
+  category: string;
+  citations: string[];
+  document_ids: string[];
+  probe_summary: string;
+  breach_flags: string[];
+}
+
+export interface OutlookRequest {
+  title: string;
+  what_it_shows: string;
+  addresses: string[];
+  expected_effect: 'full' | 'partial';
+  source: 'agent' | 'rule';
+  score_if_supports: number | null;
+  level_if_supports: string | null;
+  score_if_contradicts: number | null;
+}
+
+export interface RiskOutlook {
+  current_score: number | null;
+  current_level: string | null;
+  requests: OutlookRequest[];
+  best_case_score: number | null;
+  best_case_level: string | null;
+  unreducible_finding_ids: string[];
+}
+
+export interface CaseAnalysis {
+  run_id: string;
+  case_id: string;
+  status: 'running' | 'complete' | 'failed' | 'superseded';
+  started_at: string;
+  finished_at: string | null;
+  error: string | null;
+  findings: CrossDocFinding[];
+  outlook: RiskOutlook | null;
+  summary: string | null;
+  // Tool calls, models and counts of the run.
+  audit?: { tool_calls?: unknown[]; [key: string]: unknown };
+  // Step-by-step log of the run (debug); written as the run goes.
+  trace: CaseAnalysisTraceStep[];
+  stale: boolean;
+}
+
+export interface CaseAnalysisTraceStep {
+  step: string;
+  at: number;
+  [key: string]: unknown;
 }

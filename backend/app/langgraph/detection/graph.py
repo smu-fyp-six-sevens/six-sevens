@@ -36,9 +36,10 @@ from langgraph.types import Send
 from typing_extensions import TypedDict
 
 from . import tools as detection_tools
-from .specialists import SEVERITIES, SPECIALISTS, _parse_json_object, run_specialist
+from ..llm_output import parse_json_object
+from .specialists import SEVERITIES, SPECIALISTS, run_specialist
 from .. import trace
-from ... import document_repository, extracted_fields_repository, telemetry
+from ... import document_repository, extracted_fields_repository, flags_repository, telemetry
 from ...config import settings
 
 logger = logging.getLogger("classifier_pipeline.langgraph.detection")
@@ -66,6 +67,8 @@ class DetectionState(TypedDict, total=False):
     second_look: dict | None
     lead_summary: str
     result: dict
+    # Kept out of `context`, which goes into the lead's prompt.
+    case_id: str | None
 
 
 class SpecialistInput(TypedDict, total=False):
@@ -140,7 +143,7 @@ async def _ask_lead(system_prompt: str, user_payload: dict, *, span_name: str, c
     content = response.content if isinstance(response.content, str) else "".join(
         b.get("text", "") for b in response.content if isinstance(b, dict)
     )
-    return _parse_json_object(content)
+    return parse_json_object(content)
 
 
 # --- nodes ------------------------------------------------------------------
@@ -176,18 +179,21 @@ async def load_context_node(state: DetectionState) -> dict:
         raise DetectionError("Document not found")
     if not document.storage_path:
         raise DetectionError("Document has no stored file")
+    fields_loaded = True
     try:
         fields = await asyncio.to_thread(extracted_fields_repository.get_extracted_fields, document_id)
     except Exception:  # noqa: BLE001 — extraction data is enrichment, not a prerequisite
         logger.exception("Failed to fetch extracted fields for document %s", document_id)
-        fields = []
+        fields, fields_loaded = [], False
+    # The tools read these too; priming means they don't fetch them again.
+    detection_tools.prime(document_id, document=document, fields=fields if fields_loaded else None)
     context = {
         "document_type": document.document_type or "unknown",
         "filename": document.filename,
         "has_extracted_fields": bool(fields),
         "file_extension": os.path.splitext(document.filename or "")[1].lower(),
     }
-    return {"context": context}
+    return {"context": context, "case_id": document.case_id}
 
 
 def _normalise_plan(raw: dict | None) -> dict:
@@ -428,8 +434,99 @@ def merge_reports(state: DetectionState) -> dict:
     }
 
 
+def add_case_match_findings(report: dict, case_match: Any | None) -> dict:
+    """Add verified cross-document identity mismatches to a detection report."""
+    if case_match is None or not case_match.case_mismatch:
+        return report
+
+    findings = list(report["findings"])
+    existing_ids = {finding["id"] for finding in findings}
+    added = 0
+    for comparison in case_match.comparisons:
+        if comparison.outcome != "mismatch":
+            continue
+        counterpart_id = comparison.other_document_id or comparison.reference_document_id
+        counterpart_name = comparison.other_filename or comparison.reference_filename
+        finding_id = ":".join((
+            "case-identity",
+            comparison.check,
+            comparison.document_field,
+            counterpart_id or "reference",
+            comparison.document_value,
+        ))
+        if finding_id in existing_ids:
+            continue
+        citations = [case_match.filename]
+        if counterpart_name:
+            citations.append(counterpart_name)
+        findings.append({
+            "id": finding_id,
+            "tool": "case_identity_match",
+            "summary": f"{comparison.reason} ({'; '.join(citations)})",
+            "severity": "high" if comparison.check in {"individual_id", "company_uen"} else "medium",
+            "rationale": "Extracted identity details differ across case documents; review the cited documents.",
+            "specialists": ["identity_matching"],
+            "via_second_look": False,
+        })
+        existing_ids.add(finding_id)
+        added += 1
+
+    if not added:
+        return report
+
+    identity_brief = "Compare extracted names and identifiers with the other documents in this case."
+    identity_summary = f"Identity matching found {added} cross-document mismatch(es)."
+    updated = {
+        **report,
+        "findings": findings,
+        "verdict": "flagged",
+        "consulted": [
+            *report["consulted"],
+            {
+                "specialist": "identity_matching",
+                "title": "Identity Matching",
+                "brief": identity_brief,
+                "tools_called": ["case_identity_match"],
+                "summary": identity_summary,
+                "uncertain": False,
+                "dismissed": [],
+                "second_look": False,
+            },
+        ],
+    }
+    updated["summary"] = (
+        f"{report['summary']} {identity_summary}"
+        if report["verdict"] == "flagged"
+        else identity_summary
+    )
+    return updated
+
+
 async def synthesize_node(state: DetectionState) -> dict:
     result = merge_reports(state)
+    try:
+        # Imported here to keep case service and detection graph initialization
+        # independent. Identity comparison is deterministic and runs only once
+        # the approved document has completed the normal fraud checks.
+        from ... import case_service
+
+        case_match = await asyncio.to_thread(
+            case_service.get_case_match_for_document, state["document_id"]
+        )
+        result = add_case_match_findings(result, case_match)
+    except Exception as exc:
+        logger.exception("Identity matching failed during detection for %s", state["document_id"])
+        unable = list(result["unable_to_assess"])
+        unable.append({
+            "specialist": "Identity Matching",
+            "tool": "case_identity_match",
+            "reason": f"Could not compare identity fields across case documents: {type(exc).__name__}",
+        })
+        result = {**result, "unable_to_assess": unable}
+        if result["verdict"] == "clean":
+            result["verdict"] = "inconclusive"
+            result["summary"] = "No findings, but identity matching could not be completed."
+    flags_repository.assign_flag_ids(result["findings"])
     logger.info(
         "Document %s: detection done — verdict %s, %d finding(s)",
         state["document_id"], result["verdict"], len(result["findings"]),
@@ -473,6 +570,16 @@ def get_detection_graph():
     return _detection_graph
 
 
+async def _store_flags(document_id: str, case_id: str | None, report: dict) -> None:
+    """The report in the trace is the source of truth, so a failure here is recorded, not raised."""
+    try:
+        count = await asyncio.to_thread(flags_repository.replace_for_document, document_id, case_id, report["findings"])
+        logger.info("Document %s: %d flag(s) stored", document_id, count)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Document %s: failed to store flags", document_id)
+        trace.record(document_id, "flags_error", flags_error=f"{type(exc).__name__}: {exc}")
+
+
 async def run_detection(document_id: str) -> dict:
     """Investigates one document and returns the combined report. Raises DetectionError if it can't be investigated."""
     logger.info("Document %s: detection run starting", document_id)
@@ -503,5 +610,8 @@ async def run_detection(document_id: str) -> dict:
         result = final["result"]
         span.set_attribute("verdict", result["verdict"])
         span.set_attribute("finding_count", len(result["findings"]))
+        # The report must be saved before the status says "detected", or a snapshot can show detected with no report.
+        await asyncio.to_thread(trace.flush, document_id)
+        await _store_flags(document_id, final.get("case_id"), result)
         await asyncio.to_thread(document_repository.mark_detected, document_id)
         return result

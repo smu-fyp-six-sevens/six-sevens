@@ -9,10 +9,11 @@ from pydantic import BaseModel
 from ..langgraph import trace as langgraph_trace
 from ..models import DocumentRecord
 from .. import case_service, document_repository, extracted_fields_repository, storage_service
+from ..cpu_pool import run_cpu
 from . import documents as documents_router
 from ._dependencies import get_document_or_404
 from ..case_match import DocumentCaseMatch
-from ..fraud_detection.company_identity import (
+from ..case_pipeline.cross_document.company_identity import (
     CompanyNameConsistencyResult,
     check_company_name_consistency,
 )
@@ -33,13 +34,13 @@ from ..fraud_detection.metadata_analysis import MetadataAnalysisResult, check_me
 from ..fraud_detection.layout_anomalies import LayoutAnomalyResult, check_layout_anomalies
 from ..fraud_detection.numerical_validation.models import NumericalValidationResult
 from ..fraud_detection.numerical_validation.runner import build_result, run_numerical_checks
-from ..langgraph.detection.binder import bind_numerical_checks
+from ..langgraph.detection.field_checks.binder import bind_checks
 from ..fraud_detection.date_anomalies import (
     DateAnomalyResult,
     check_date_anomalies,
 )
 from ..fraud_detection.spelling_anomaly import SpellingAnomalyResult, check_spelling_anomalies
-from ..fraud_detection.registry_lookups import RegistryResult, public_holidays_for, verify_against_registries
+from ..fraud_detection.external_validation.runner import ExternalValidationResult, run_external_validation
 
 router = APIRouter(prefix="/documents", tags=["detection"])
 cases_router = APIRouter(prefix="/cases", tags=["detection"])
@@ -96,7 +97,7 @@ async def _require_detection_has_run(
     if documents_router.skips_detection(document):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Detection doesn't run on unrecognised documents.",
+            detail="Detection doesn't run on documents with no type.",
         )
     try:
         persisted = await asyncio.to_thread(langgraph_trace.get_persisted, document_id)
@@ -119,7 +120,7 @@ async def get_font_consistency(
 ) -> FontConsistencyResult:
     file_bytes = await _download_document_bytes(document)
     extracted_fields = await _fetch_extracted_fields(document_id)
-    result = await asyncio.to_thread(
+    result = await run_cpu(
         check_font_consistency, document_id, file_bytes, extracted_fields
     )
     await _trace_check(
@@ -146,7 +147,7 @@ async def get_layout_anomalies(
     and nothing crossed a threshold — not that the document is clean.
     """
     file_bytes = await _download_document_bytes(document)
-    result = await asyncio.to_thread(
+    result = await run_cpu(
         check_layout_anomalies,
         document_id,
         file_bytes,
@@ -175,7 +176,7 @@ async def get_image_manipulation(
     tolerance — not that the document is clean.
     """
     file_bytes = await _download_document_bytes(document)
-    return await asyncio.to_thread(check_image_manipulation, document_id, file_bytes)
+    return await run_cpu(check_image_manipulation, document_id, file_bytes)
 
 
 @router.get(
@@ -194,7 +195,7 @@ async def get_image_tampering(
     clean.
     """
     file_bytes = await _download_document_bytes(document)
-    return await asyncio.to_thread(check_image_tampering, document_id, file_bytes)
+    return await run_cpu(check_image_tampering, document_id, file_bytes)
 
 
 @router.get(
@@ -211,7 +212,7 @@ async def get_ai_generation(
     indicator crossed its threshold — not that the image is proven genuine.
     """
     file_bytes = await _download_document_bytes(document)
-    return await asyncio.to_thread(check_ai_generation, document_id, file_bytes)
+    return await run_cpu(check_ai_generation, document_id, file_bytes)
 
 
 class ImageIntegrityResult(BaseModel):
@@ -240,8 +241,8 @@ async def get_image_integrity(
     """
     file_bytes = await _download_document_bytes(document)
     manipulation, tampering = await asyncio.gather(
-        asyncio.to_thread(check_image_manipulation, document_id, file_bytes),
-        asyncio.to_thread(check_image_tampering, document_id, file_bytes),
+        run_cpu(check_image_manipulation, document_id, file_bytes),
+        run_cpu(check_image_tampering, document_id, file_bytes),
     )
     return ImageIntegrityResult(
         report=build_image_integrity_report(manipulation, tampering),
@@ -338,7 +339,7 @@ async def retry_document_detection(
     if documents_router.skips_detection(document):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Detection doesn't run on unrecognised documents.",
+            detail="Detection doesn't run on documents with no type.",
         )
     existing = documents_router._detection_tasks.get(document_id)
     if existing is not None and not existing.done():
@@ -391,7 +392,7 @@ async def get_numerical_validation(
     confirmed value metadata_analysis uses for its own type-scoped rules.
     """
     extracted_fields = await _fetch_extracted_fields(document_id)
-    bound = await bind_numerical_checks(document.document_type, extracted_fields)
+    bound = await bind_checks(document.document_type, extracted_fields)
     outcome = await asyncio.to_thread(
         run_numerical_checks, document.document_type, extracted_fields, bound.bindings,
     )
@@ -424,13 +425,11 @@ async def get_date_anomalies(
     re-ingestion.
     """
     extracted_fields = await _fetch_extracted_fields(document_id)
-    holidays = await public_holidays_for(document.document_type)
     result = await asyncio.to_thread(
         check_date_anomalies,
         document_id,
         extracted_fields,
         document.document_type,
-        holidays,
     )
     await _trace_check(
         document_id, "check_date_anomalies",
@@ -439,21 +438,25 @@ async def get_date_anomalies(
     return result
 
 
-@router.get("/{document_id}/detection/registry-verification", response_model=RegistryResult)
-async def get_registry_verification(
+@router.get("/{document_id}/detection/external-validation", response_model=ExternalValidationResult)
+async def get_external_validation(
     document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
-) -> RegistryResult:
+) -> ExternalValidationResult:
     """
-    The document's extracted facts against Singapore's public registries, live: ACRA
-    (the company exists, under this name, is live, with this incorporation date and
-    registered address), and OneMap and HDB (the address exists and, for a home address,
-    is a residential block). Read-only.
-    A registry that can't be reached is reported as a skipped check, never a finding.
+    The document's extracted facts against outside references, chosen by its document
+    type: live ACRA, OneMap and HDB lookups, and published tables (CPF rates, GST rate,
+    IRAS tax rules, a bank's published identifiers, public holidays for GIRO dates).
+    Read-only. A registry that can't be reached is reported as a skipped check, never a
+    finding. One LLM call binds the static checks' inputs, as numerical-validation does.
     """
     extracted_fields = await _fetch_extracted_fields(document_id)
-    result = await verify_against_registries(document_id, extracted_fields, document.document_type)
+    bound = await bind_checks(document.document_type, extracted_fields, "external")
+    result = await run_external_validation(
+        document_id, document.document_type, extracted_fields, bound.bindings,
+    )
+    result.binding_error = bound.error
     await _trace_check(
-        document_id, "check_registry_verification",
+        document_id, "check_external_validation",
         unable_to_assess=result.unable_to_assess, finding_count=len(result.findings),
     )
     return result
@@ -469,7 +472,7 @@ async def get_company_name_consistency(
     """
     Content Validation Specialist — "Company Identity Consistency". Compares
     this document's company name with every other company document in its
-    case (see fraud_detection/company_identity.py). Read-only, from
+    case (see case_pipeline/cross_document/company_identity.py). Read-only, from
     extracted fields alone.
     """
     case_documents = (
@@ -523,7 +526,7 @@ async def get_case_match(
 ) -> DocumentCaseMatch:
     """
     Whether this document belongs to its case's company and individuals —
-    the gate before fraud detection (see case_match.py). The check needs
+    the identity comparison used by fraud detection (see case_match.py). The check needs
     every document in the case (the certificate of incumbency is only
     trusted once other documents corroborate it), so this runs the whole
     case's check and returns this document's entry. Read-only.

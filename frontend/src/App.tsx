@@ -17,6 +17,7 @@ import NotFoundState from './components/NotFoundState';
 const UploadPage = lazy(() => import('./pages/UploadPage'));
 const DocumentDetailsPage = lazy(() => import('./pages/DocumentDetailsPage'));
 import { authFetch, getToken } from './lib/api';
+import type { CaseRisk, CaseRiskLevel } from './services/uploadService';
 
 export interface CaseRecord {
   id: string;
@@ -26,6 +27,8 @@ export interface CaseRecord {
   status: string;
   caseStatus: string;
   created_at?: string | null;
+  // Only set once the case has been scored (see backend/app/case_risk.py).
+  riskLevel?: CaseRiskLevel | null;
 }
 
 function mapStatus(status: string): string {
@@ -246,6 +249,7 @@ export default function App() {
         status?: string | null;
         documents_status?: string | null;
         created_at?: string | null;
+        risk?: CaseRisk | null;
       }>;
 
       setCases(
@@ -259,6 +263,7 @@ export default function App() {
           ),
           caseStatus: item.status ?? 'open',
           created_at: item.created_at ?? null,
+          riskLevel: item.risk?.state === 'scored' ? item.risk.level : null,
         }))
       );
     } catch (err) {

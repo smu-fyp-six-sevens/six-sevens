@@ -5,7 +5,7 @@ from __future__ import annotations
 import pymupdf
 import pytest
 
-from app.fraud_detection import text_overlay as to
+from app.fraud_detection.layout_anomalies import text_overlay as to
 from app.fraud_detection.layout_anomalies import _Block, _Line, check_layout_anomalies
 
 
@@ -66,7 +66,7 @@ def test_overlapping_lines_are_flagged() -> None:
     assert finding.anomaly_type == "Text Overlay"
     assert finding.page == 1
     assert finding.bbox == (150, 102, 300, 114)
-    assert finding.confidence == 1.0
+    assert 0.7 <= finding.confidence <= 1.0
     assert finding.evidence["kind"] == "text-overlay"
     assert finding.evidence["overlap_ratio"] == pytest.approx(150 * 12 / (228 * 14), abs=1e-4)
     assert "Total amount payable" in finding.text

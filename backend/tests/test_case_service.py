@@ -546,6 +546,24 @@ def test_sync_submission_finalized_true_when_all_requirements_met() -> None:
         mock_case_repo.set_submission_finalized.assert_called_once_with("case-1", finalized=True)
 
 
+def test_sync_submission_finalized_writes_only_when_the_flag_changes() -> None:
+    all_fulfilled = _make_fully_covered_documents()
+
+    with (
+        patch("app.case_service.document_repository") as mock_doc_repo,
+        patch("app.case_service.case_repository") as mock_case_repo,
+    ):
+        mock_doc_repo.list_documents.return_value = all_fulfilled
+
+        sync_submission_finalized("case-1")
+        sync_submission_finalized("case-1")
+        sync_submission_finalized("case-1")
+
+        # Three syncs, one unchanged answer: one write (and one Realtime event), not three.
+        mock_case_repo.set_submission_finalized.assert_called_once_with("case-1", finalized=True)
+        assert mock_doc_repo.list_documents.call_count == 3
+
+
 def test_sync_submission_finalized_false_when_incomplete() -> None:
     documents = [
         _make_document(
