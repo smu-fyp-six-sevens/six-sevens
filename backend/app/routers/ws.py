@@ -32,7 +32,7 @@ async def case_status_socket(websocket: WebSocket, case_id: str, ticket: str = "
     """
     Push-based case status stream: one connection per case, fed by
     realtime_listener.py's Supabase Realtime subscription via
-    case_broadcaster.py rather than polling Supabase itself — see WS.MD.
+    case_broadcaster.py rather than polling Supabase itself.
 
     Auth can't reuse require_auth's Authorization-header check: a browser's
     native WebSocket API has no way to set custom headers on the handshake,
@@ -55,8 +55,7 @@ async def case_status_socket(websocket: WebSocket, case_id: str, ticket: str = "
         # reconnect alike, with no special-casing — because this is the fix
         # for the missed-event race condition, not an optimization to skip:
         # a connection that just (re)opened has missed whatever Realtime
-        # events happened while it was down, and this closes that gap. See
-        # WS.MD's "missed-event race condition" note.
+        # events happened while it was down, and this closes that gap.
         with query_stats.scope("ws connect snapshot"):
             initial = await asyncio.to_thread(case_service.build_case_snapshot, case_id)
         if initial is None:

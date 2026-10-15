@@ -3,10 +3,9 @@ import type { DocumentRecord, DocumentCaseMatch, CaseMatchComparison, DocumentDe
 import {
   CLASSIFICATION_CONFIDENCE_THRESHOLD,
   DOCUMENT_TYPE_OPTIONS,
-  formatDocumentStatusLabel,
+  documentStatusDisplay,
   formatDocumentType,
   formatRoutingOutcome,
-  isDocumentStatusInProgress,
   isDocumentStuckProcessing,
 } from '../../services/uploadService';
 import {
@@ -66,7 +65,12 @@ export function DocumentSummaryCard({
   typeError: string | null;
 }) {
   const tone = statusTone(document, detectionStage);
-  const hasDetectionError = document.has_detection_error ?? false;
+  const statusDisplay = documentStatusDisplay(
+    document.status,
+    hasDetectionReport,
+    document.document_type,
+    document.has_detection_error ?? false,
+  );
 
   return (
         <section className="details-card">
@@ -91,10 +95,8 @@ export function DocumentSummaryCard({
               <span
                 className={`status-dot ${tone ? STATUS_CLASSES[tone].dot : ''}`}
               />
-              {isDocumentStuckProcessing(document)
-                ? `${formatDocumentStatusLabel(document.status, hasDetectionReport, document.document_type, hasDetectionError)} (Stuck)`
-                : formatDocumentStatusLabel(document.status, hasDetectionReport, document.document_type, hasDetectionError)}
-              {isDocumentStatusInProgress(document.status, hasDetectionReport, document.document_type, hasDetectionError) && '…'}
+              {isDocumentStuckProcessing(document) ? `${statusDisplay.label} (Stuck)` : statusDisplay.label}
+              {statusDisplay.inProgress && '…'}
             </div>
           </div>
 

@@ -1035,6 +1035,8 @@
 
 .details-card--review {
   margin-top: 20px;
+  border-color: #edcaca;
+  background: #fffdfd;
 }
 
 .review-message {

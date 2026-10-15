@@ -4,7 +4,7 @@ import concurrent.futures
 import logging
 import threading
 from collections import defaultdict
-from typing import Any, Optional
+from typing import Any
 
 from . import case_repository, document_repository, extracted_fields_repository
 from .case_match import CaseMatchResult, DocumentCaseMatch, check_case_match
@@ -116,15 +116,15 @@ def compute_requirement_coverage(documents: list[DocumentRecord]) -> tuple[list[
     )
 
 
-def get_case(case_id: str) -> Optional[CaseRecord]:
+def get_case(case_id: str) -> CaseRecord | None:
     return case_repository.get_case(case_id)
 
 
-def create_case(company_name: Optional[str] = None) -> CaseRecord:
+def create_case(company_name: str | None = None) -> CaseRecord:
     return case_repository.create_case(company_name)
 
 
-def update_case(case_id: str, company_name: str) -> Optional[CaseRecord]:
+def update_case(case_id: str, company_name: str) -> CaseRecord | None:
     return case_repository.update_case(case_id, company_name)
 
 
@@ -172,7 +172,7 @@ def sync_submission_finalized(case_id: str) -> None:
 DetectionStates = tuple[dict[str, dict[str, Any]], set[str]]
 
 
-def _load_detection_states(documents: list[DocumentRecord]) -> Optional[DetectionStates]:
+def _load_detection_states(documents: list[DocumentRecord]) -> DetectionStates | None:
     """None when the trace table can't be read — the case still loads, without detection states."""
     try:
         return langgraph_trace.get_detection_states([document.id for document in documents])
@@ -202,9 +202,9 @@ def _load_saved_risks(case_ids: list[str]) -> dict[str, CaseRisk]:
 def build_summary(
     case,
     documents: list[DocumentRecord],
-    reports: Optional[dict[str, dict[str, Any]]] = None,
-    analysis: Optional[CaseAnalysis] = None,
-    completed: Optional[CaseAnalysis] = None,
+    reports: dict[str, dict[str, Any]] | None = None,
+    analysis: CaseAnalysis | None = None,
+    completed: CaseAnalysis | None = None,
 ) -> CaseSummary:
     """
     The case's checklist and document rollup, computed from its documents,
@@ -220,7 +220,7 @@ def build_summary(
     id_missing_side = compute_id_document_missing_side(documents)
     data = case.model_dump()
     data["recommended_additional_documents"] = missing
-    overview: Optional[CaseAnalysisOverview] = None
+    overview: CaseAnalysisOverview | None = None
     if analysis is not None:
         if reports is not None:
             analysis = analysis_state.current_view(analysis, documents, reports)
@@ -309,7 +309,7 @@ def missing_required_fields(document_type: str | None, extracted_fields) -> list
 
 
 def _enrich_with_extracted_fields(
-    documents: list[DocumentRecord], fields_by_document: Optional[dict] = None
+    documents: list[DocumentRecord], fields_by_document: dict | None = None
 ) -> list[DocumentRecord]:
     if fields_by_document is None:
         fields_by_document = extracted_fields_repository.get_extracted_fields_for_documents(
@@ -333,7 +333,7 @@ def _enrich_with_extracted_fields(
     return documents
 
 
-def _fetch_case_and_documents(case_id: str) -> tuple[Optional[CaseRecord], list[DocumentRecord]]:
+def _fetch_case_and_documents(case_id: str) -> tuple[CaseRecord | None, list[DocumentRecord]]:
     """
     The "case + its documents" fetch every case-match/snapshot assembly
     needs, in one place — see get_case_match_for_case, build_case_snapshot.
@@ -344,7 +344,7 @@ def _fetch_case_and_documents(case_id: str) -> tuple[Optional[CaseRecord], list[
     return case, document_repository.list_documents(case_id=case_id)
 
 
-def get_case_match_for_case(case_id: str) -> Optional[CaseMatchResult]:
+def get_case_match_for_case(case_id: str) -> CaseMatchResult | None:
     """Whether each of the case's documents belongs to the case's company and individuals."""
     case, documents = _fetch_case_and_documents(case_id)
     if case is None:
@@ -352,7 +352,7 @@ def get_case_match_for_case(case_id: str) -> Optional[CaseMatchResult]:
     return check_case_match(case, documents)
 
 
-def get_case_match_for_document(document_id: str) -> Optional[DocumentCaseMatch]:
+def get_case_match_for_document(document_id: str) -> DocumentCaseMatch | None:
     """
     One document's entry from its case's match check. The document is
     appended to its case's document list if the fetch didn't happen to
@@ -375,14 +375,14 @@ class _SnapshotSlot:
     """A case's build in progress, and the one follow-up build everyone who arrived meanwhile shares."""
 
     def __init__(self) -> None:
-        self.waiting: Optional[concurrent.futures.Future] = None
+        self.waiting: concurrent.futures.Future | None = None
 
 
 _snapshot_slots: dict[str, _SnapshotSlot] = {}
 _snapshot_lock = threading.Lock()
 
 
-def build_case_snapshot(case_id: str) -> Optional[dict]:
+def build_case_snapshot(case_id: str) -> dict | None:
     """
     Assembles the exact payload pushed over the case status WebSocket (see
     routers/ws.py) — both the immediate send on connect/refresh and the
@@ -410,7 +410,7 @@ def build_case_snapshot(case_id: str) -> Optional[dict]:
     first_result, first_error = None, None
     try:
         first_result = _build_case_snapshot(case_id)
-    except Exception as exc:  # noqa: BLE001 - re-raised below, after the waiters are served
+    except Exception as exc:
         first_error = exc
     while True:
         with _snapshot_lock:
@@ -420,14 +420,14 @@ def build_case_snapshot(case_id: str) -> Optional[dict]:
                 break
         try:
             waiting.set_result(_build_case_snapshot(case_id))
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             waiting.set_exception(exc)
     if first_error is not None:
         raise first_error
     return first_result
 
 
-def _build_case_snapshot(case_id: str) -> Optional[dict]:
+def _build_case_snapshot(case_id: str) -> dict | None:
     case = case_repository.get_case(case_id)
     if case is None:
         return None
@@ -468,7 +468,7 @@ def _build_case_snapshot(case_id: str) -> Optional[dict]:
     }
 
 
-def get_case_summary(case_id: str) -> Optional[CaseSummary]:
+def get_case_summary(case_id: str) -> CaseSummary | None:
     case = case_repository.get_case(case_id)
     if case is None:
         return None
@@ -477,7 +477,7 @@ def get_case_summary(case_id: str) -> Optional[CaseSummary]:
 
 
 def _summary_with_analysis(
-    case, documents: list[DocumentRecord], detection_states: Optional[DetectionStates]
+    case, documents: list[DocumentRecord], detection_states: DetectionStates | None
 ) -> CaseSummary:
     analysis = _load_analyses([case.id]).get(case.id)
     completed = None

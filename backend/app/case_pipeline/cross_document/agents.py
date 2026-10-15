@@ -309,7 +309,7 @@ async def gather_evidence(
             tool = tools[check.tool]
             try:
                 output = str(await tool.ainvoke({**check.args, "is_refutation_probe": check.refutation_probe}))
-            except Exception as exc:  # noqa: BLE001 - a bad plan must not end the run
+            except Exception as exc:
                 logger.warning("Check %s failed: %s", check.tool, exc)
                 output = json.dumps({"available": False, "reason": f"Tool error: {exc}"})
                 calls.append({"tool": check.tool, "args": check.args, "document": None,

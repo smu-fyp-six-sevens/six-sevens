@@ -6,7 +6,6 @@ case is cross-document work, not something one document's scan can judge.
 
 from __future__ import annotations
 
-from typing import Optional
 
 from langchain_core.tools import tool
 
@@ -20,7 +19,7 @@ from .common import ToolKit, unavailable
 def build_consistency_tools(kit: ToolKit) -> list:
     context = kit.context
 
-    def _record(view: DocView) -> Optional[DocumentRecord]:
+    def _record(view: DocView) -> DocumentRecord | None:
         return next((r for r in context.records if r.id == view.id), None)
 
     @tool

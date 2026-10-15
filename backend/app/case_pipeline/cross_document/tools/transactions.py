@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Optional
 
 from langchain_core.tools import tool
 
@@ -27,7 +26,7 @@ def build_transaction_tools(kit: ToolKit) -> list:
 
     @tool
     async def transaction_stats(
-        document: str, direction: str = "any", date_from: Optional[str] = None, date_to: Optional[str] = None,
+        document: str, direction: str = "any", date_from: str | None = None, date_to: str | None = None,
         is_refutation_probe: bool = False,
     ) -> str:
         """Count, totals, median, 90th percentile, max and min transaction size for a statement. direction is any, credit or debit."""
@@ -48,9 +47,9 @@ def build_transaction_tools(kit: ToolKit) -> list:
 
     @tool
     async def query_transactions(
-        document: str, direction: str = "any", min_amount: Optional[float] = None, max_amount: Optional[float] = None,
-        description_contains: Optional[str] = None, counterparty: Optional[str] = None,
-        date_from: Optional[str] = None, date_to: Optional[str] = None, limit: int = 10,
+        document: str, direction: str = "any", min_amount: float | None = None, max_amount: float | None = None,
+        description_contains: str | None = None, counterparty: str | None = None,
+        date_from: str | None = None, date_to: str | None = None, limit: int = 10,
         is_refutation_probe: bool = False,
     ) -> str:
         """Find transactions by direction, absolute amount range, description text, counterparty or date. Returns the true match count and the largest matches, each with a ref id."""

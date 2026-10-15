@@ -1470,30 +1470,39 @@ def test_reject_document_write_failure_returns_502() -> None:
 
 def test_langgraph_trace_returns_persisted_result() -> None:
     with patch("app.routers.documents.langgraph_trace") as mock_trace:
-        mock_trace.get_persisted.return_value = {"route": "fast_path"}
+        mock_trace.load.return_value = {"route": "fast_path"}
 
         response = client.get("/documents/doc-1/langgraph-trace")
 
     assert response.status_code == 200
     assert response.json() == {"route": "fast_path"}
-    mock_trace.get.assert_not_called()
+    mock_trace.load.assert_called_once_with("doc-1")
 
 
-def test_langgraph_trace_falls_back_to_in_memory_when_persisted_lookup_fails() -> None:
-    with patch("app.routers.documents.langgraph_trace") as mock_trace:
-        mock_trace.get_persisted.side_effect = RuntimeError("db down")
-        mock_trace.get.return_value = {"route": "sonnet_agent"}
+def test_trace_load_falls_back_to_in_memory_when_persisted_lookup_fails(monkeypatch) -> None:
+    from app.langgraph import trace
 
-        response = client.get("/documents/doc-1/langgraph-trace")
+    def _db_down(document_id):
+        raise RuntimeError("db down")
 
-    assert response.status_code == 200
-    assert response.json() == {"route": "sonnet_agent"}
+    monkeypatch.setattr(trace, "get_persisted", _db_down)
+    monkeypatch.setitem(trace._traces, "doc-1", {"route": "sonnet_agent"})
+
+    assert trace.load("doc-1") == {"route": "sonnet_agent"}
+
+
+def test_trace_load_prefers_the_persisted_trace(monkeypatch) -> None:
+    from app.langgraph import trace
+
+    monkeypatch.setattr(trace, "get_persisted", lambda document_id: {"route": "fast_path"})
+    monkeypatch.setitem(trace._traces, "doc-1", {"route": "stale"})
+
+    assert trace.load("doc-1") == {"route": "fast_path"}
 
 
 def test_langgraph_trace_404_when_nothing_found_anywhere() -> None:
     with patch("app.routers.documents.langgraph_trace") as mock_trace:
-        mock_trace.get_persisted.return_value = None
-        mock_trace.get.return_value = None
+        mock_trace.load.return_value = None
 
         response = client.get("/documents/doc-1/langgraph-trace")
 

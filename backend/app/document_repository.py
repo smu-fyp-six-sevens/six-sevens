@@ -3,20 +3,13 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional, cast
 
 from . import extracted_fields_repository, storage_service
 from .models import DocumentRecord, DocumentStatus
 from .supabase_client import service_supabase_client, supabase_client
+from .supabase_rows import row as _row
 
 logger = logging.getLogger(__name__)
-
-
-def _row(mapping: Any) -> dict:
-    """postgrest types a row as a loose JSON union rather than dict[str, Any]
-    — every row here is one we (or our own migrations) wrote, so this cast
-    just tells the type checker what's already true."""
-    return cast(dict, mapping)
 
 
 # List reads skip the large exiftool `metadata` blob and the retired extracted_fields column; get_document keeps "*".
@@ -27,7 +20,7 @@ _LIST_COLUMNS = (
 )
 
 
-def _sync_case(case_id: Optional[str]) -> None:
+def _sync_case(case_id: str | None) -> None:
     """
     Best-effort refresh of the case-level submission_finalized cache after a
     write that can change a document's routing_status or
@@ -55,7 +48,7 @@ def _sync_case(case_id: Optional[str]) -> None:
 
 
 def create_document(
-    case_id: Optional[str], filename: str, storage_path: str
+    case_id: str | None, filename: str, storage_path: str
 ) -> DocumentRecord:
     now = datetime.now(timezone.utc)
     row = {
@@ -75,12 +68,12 @@ def update_status(
     document_id: str,
     status: DocumentStatus,
     *,
-    queued_at: Optional[datetime] = None,
-    processing_started_at: Optional[datetime] = None,
-    retry_count: Optional[int] = None,
-    failure_reason: Optional[str] = None,
-    document_type: Optional[str] = None,
-    expected_current_statuses: Optional[list[DocumentStatus]] = None,
+    queued_at: datetime | None = None,
+    processing_started_at: datetime | None = None,
+    retry_count: int | None = None,
+    failure_reason: str | None = None,
+    document_type: str | None = None,
+    expected_current_statuses: list[DocumentStatus] | None = None,
 ) -> bool:
     """
     expected_current_statuses turns this into an atomic compare-and-swap:
@@ -117,7 +110,7 @@ def update_status(
     # write those. A status change alone, ANALYZED included, can't move it.
     return bool(result.data)
 
-def approve_document(document_id: str) -> Optional[DocumentRecord]:
+def approve_document(document_id: str) -> DocumentRecord | None:
     """Approving doesn't change checklist coverage (only rejection does), so no case resync."""
     result = (
         supabase_client.table("documents")
@@ -148,7 +141,7 @@ def revert_to_approved(document_id: str) -> None:
     ).eq("id", document_id).execute()
 
 
-def reject_document(document_id: str) -> Optional[DocumentRecord]:
+def reject_document(document_id: str) -> DocumentRecord | None:
     result = (
         supabase_client.table("documents")
         .update({"status": DocumentStatus.REJECTED.value})
@@ -210,11 +203,11 @@ def move_document(document_id: str, case_id: str) -> None:
 def record_classification(
     document_id: str,
     *,
-    document_type: Optional[str],
-    classification_confidence: Optional[float],
+    document_type: str | None,
+    classification_confidence: float | None,
     routing_status: str,
-    evidence: Optional[list[str]] = None,
-    fulfilled_requirements: Optional[list[str]] = None,
+    evidence: list[str] | None = None,
+    fulfilled_requirements: list[str] | None = None,
 ) -> None:
     """
     Persists the classification-stage decision (type, confidence, and
@@ -237,12 +230,12 @@ def record_classification(
 
 def update_extracted_fields(
     document_id: str,
-    extraction_confidence: Optional[float],
-    fulfilled_requirements: Optional[list[str]] = None,
+    extraction_confidence: float | None,
+    fulfilled_requirements: list[str] | None = None,
     *,
-    routing_status: Optional[str] = None,
+    routing_status: str | None = None,
     fields_reviewed: bool = False,
-) -> Optional[DocumentRecord]:
+) -> DocumentRecord | None:
     """
     Returns the updated document row, so a caller that must answer with it needn't read it back.
 
@@ -383,7 +376,7 @@ def _attach_extracted_fields(documents: list[DocumentRecord]) -> list[DocumentRe
     return documents
 
 
-def get_document(document_id: str, *, include_fields: bool = True) -> Optional[DocumentRecord]:
+def get_document(document_id: str, *, include_fields: bool = True) -> DocumentRecord | None:
     """
     include_fields=False skips the extracted_fields table round-trip for
     callers that only need status/document_type/etc. (the langgraph pipeline
@@ -416,8 +409,8 @@ def get_documents_in_status(
 
 
 def list_documents(
-    case_id: Optional[str] = None,
-    status: Optional[DocumentStatus] = None,
+    case_id: str | None = None,
+    status: DocumentStatus | None = None,
     *,
     include_fields: bool = True,
 ) -> list[DocumentRecord]:

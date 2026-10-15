@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from statistics import median
-from typing import Any, Optional
+from typing import Any
 
 from ...fraud_detection.numerical_validation.common import _as_number, _decode, _rows
 from ...models import APPROVED_STATUSES, DocumentRecord
@@ -36,7 +36,7 @@ def mask_identifiers(text: str) -> str:
     return _LONG_NUMBER_RE.sub(_mask, text)
 
 
-def signed_amount(row: dict) -> Optional[float]:
+def signed_amount(row: dict) -> float | None:
     amount = _as_number(row.get("amount"))
     if amount is not None:
         return amount
@@ -73,10 +73,10 @@ class Ledger:
         name: str,
         value: Any,
         *,
-        row: Optional[int] = None,
+        row: int | None = None,
         source: str = "dossier",
-        breach_flag: Optional[str] = None,
-        category: Optional[FindingCategory] = None,
+        breach_flag: str | None = None,
+        category: FindingCategory | None = None,
     ) -> str:
         ref_id = f"ref:{doc_key}:{name}" + (f":{row}" if row is not None else "")
         existing = self.refs.get(ref_id)
@@ -96,7 +96,7 @@ class CaseContext:
     # The approved documents themselves, for the case-wide consistency checks.
     records: list[DocumentRecord] = field(default_factory=list)
     ledger: Ledger = field(default_factory=Ledger)
-    trace: Optional[RunTrace] = None
+    trace: RunTrace | None = None
     # Model calls spent so far in this run; agents.py refuses to go past its budget.
     model_calls: int = 0
 
@@ -105,10 +105,10 @@ class CaseContext:
         if self.trace is not None:
             self.trace.record(step, **fields)
 
-    def by_id(self, document_id: str) -> Optional[DocView]:
+    def by_id(self, document_id: str) -> DocView | None:
         return next((d for d in self.docs.values() if d.id == document_id), None)
 
-    def resolve(self, key_or_id: str) -> Optional[DocView]:
+    def resolve(self, key_or_id: str) -> DocView | None:
         return self.docs.get(key_or_id) or self.by_id(key_or_id)
 
 

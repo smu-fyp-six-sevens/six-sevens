@@ -20,7 +20,7 @@ import threading
 import time
 from collections import Counter
 from contextlib import contextmanager
-from typing import Any, Iterator, Optional
+from typing import Any, Iterator
 
 import httpx
 from langchain_core.callbacks import AsyncCallbackHandler
@@ -77,7 +77,7 @@ class _Scope:
         return not self.calls and not self.llm_calls
 
 
-_current: contextvars.ContextVar[Optional[_Scope]] = contextvars.ContextVar("query_scope", default=None)
+_current: contextvars.ContextVar[_Scope | None] = contextvars.ContextVar("query_scope", default=None)
 # Calls made outside any scope, reported periodically: mostly the trace writer threads, which outlive
 # the job that queued them, so counting them into its scope would lose them.
 _unscoped = _Scope("unscoped")

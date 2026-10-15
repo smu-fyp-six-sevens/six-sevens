@@ -12,14 +12,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import mimetypes
 
 from . import extract, text_cache, trace
 from .state import DocumentGraphState
 from .. import document_repository, extracted_fields_repository, storage_service
 from ..config import settings
 from .extraction_prompts import schema_field_names
-from ..ingestion.ingestion_service import ingest_document
+from ..ingestion.ingestion_service import ingest_document, content_type_from_filename
 from ..cpu_pool import run_cpu
 from ..models import DocumentStatus, RoutingStatus, compute_fulfilled_requirements
 
@@ -79,11 +78,6 @@ async def persist_extracted_fields(document_id: str, document_type: str, extract
     )
 
 
-def _content_type_from_filename(filename: str) -> str:
-    guessed, _ = mimetypes.guess_type(filename)
-    return guessed or "application/octet-stream"
-
-
 async def ingest_document_text(document_id: str, document) -> str:
     """
     Downloads the stored file and runs text extraction (native PDF text, or
@@ -98,7 +92,7 @@ async def ingest_document_text(document_id: str, document) -> str:
     except Exception as exc:
         raise IngestError(f"Failed to download document for extraction: {exc}") from exc
 
-    content_type = _content_type_from_filename(document.filename)
+    content_type = content_type_from_filename(document.filename)
 
     try:
         ingestion_result = await run_cpu(

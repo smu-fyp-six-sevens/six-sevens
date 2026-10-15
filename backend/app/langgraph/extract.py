@@ -25,8 +25,8 @@ def _split_prompt_for_caching(document_type: str, raw_text: str) -> tuple[str, s
     build_extraction_prompt always ends with the schema/instructions
     followed by "Document text:\n{raw_text}". Building the same prompt with
     an empty raw_text gives a byte-stable prefix (same document_type -> same
-    prefix across every document and run) to put cache_control on, per
-    LANGGRAPH_MIGRATION_PLAN.md section 5 ("schema first, raw_text last").
+    prefix across every document and run) to put cache_control on
+    (schema first, raw_text last).
     """
     prefix = build_extraction_prompt(document_type, "")
     return prefix, raw_text

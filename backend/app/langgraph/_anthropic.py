@@ -32,7 +32,7 @@ def warm_up() -> None:
 
 
 def build_chat_anthropic(model: str, max_tokens: int, *, temperature: float = 0) -> "ChatAnthropic":
-    from langchain_anthropic import ChatAnthropic  # local import: optional dep until phase 0 is installed
+    from langchain_anthropic import ChatAnthropic  # local import: keeps the SDK out of module import time
 
     key = (ChatAnthropic, model, max_tokens, temperature)
     if key not in _models:

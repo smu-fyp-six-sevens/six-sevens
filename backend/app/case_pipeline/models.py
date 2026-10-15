@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -50,7 +50,7 @@ class Hypothesis(BaseModel):
     documents: list[str] = Field(default_factory=list)
     proof: str = ""
     # Fixed before any tool runs: where and how the claim would be shown wrong.
-    refutation_document: Optional[str] = None
+    refutation_document: str | None = None
     refutation_test: str = ""
     checks: list[PlannedCheck] = Field(default_factory=list)
 
@@ -80,18 +80,18 @@ class EvidenceRequest(BaseModel):
 
 
 class OutlookRequest(EvidenceRequest):
-    score_if_supports: Optional[int] = None
-    level_if_supports: Optional[str] = None
+    score_if_supports: int | None = None
+    level_if_supports: str | None = None
     # An unhelpful document leaves the score where it is.
-    score_if_contradicts: Optional[int] = None
+    score_if_contradicts: int | None = None
 
 
 class RiskOutlook(BaseModel):
-    current_score: Optional[int] = None
-    current_level: Optional[str] = None
+    current_score: int | None = None
+    current_level: str | None = None
     requests: list[OutlookRequest] = Field(default_factory=list)
-    best_case_score: Optional[int] = None
-    best_case_level: Optional[str] = None
+    best_case_score: int | None = None
+    best_case_level: str | None = None
     # Findings no further evidence can reduce, so the best case never goes below them.
     unreducible_finding_ids: list[str] = Field(default_factory=list)
 
@@ -115,13 +115,13 @@ class CaseAnalysis(BaseModel):
     status: AnalysisStatus
     fingerprint: str
     started_at: datetime
-    finished_at: Optional[datetime] = None
-    error: Optional[str] = None
+    finished_at: datetime | None = None
+    error: str | None = None
     findings: list[CrossDocFinding] = Field(default_factory=list)
-    outlook: Optional[RiskOutlook] = None
-    summary: Optional[str] = None
+    outlook: RiskOutlook | None = None
+    summary: str | None = None
     # The case's risk and evidence requests: produced only here, then read by the case views.
-    risk: Optional[CaseRisk] = None
+    risk: CaseRisk | None = None
     supporting_documents: list[SupportingDocumentRecommendation] = Field(default_factory=list)
     audit: AnalysisAudit = Field(default_factory=AnalysisAudit)
     # Step-by-step log of the run, for debugging. Includes hypotheses that were tried and dropped.

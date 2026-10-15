@@ -1,15 +1,10 @@
 """
-Shared classify-subgraph logic. `validate_agent_output` is a straight port
-of the Classifier chatflow's "Validate Output" code node (see
-backend/app/dify/Classifier (Chatflow) (2).yml) — that contract (allowed
-types, id_document self-fulfilment, never-raises parsing) doesn't depend on
-how the classification was arrived at, so it's unchanged.
+Shared classify-subgraph logic. `validate_agent_output` holds the output
+contract (allowed types, id_document self-fulfilment, never-raises parsing),
+which doesn't depend on how the classification was arrived at.
 
-The agent's system prompt (`AGENT_STATIC_PROMPT`/`agent_prompt_parts`) is
-NOT the Dify port anymore. Dify's Agent 3 was handed two already-computed
-results (rule_result, llm_result) and could only optionally call vision_llm;
-this graph only pre-computes rule_result deterministically (see
-LANGGRAPH_MIGRATION_PLAN.md — "only rule-based runs deterministically") and
+The agent's system prompt (`AGENT_STATIC_PROMPT`/`agent_prompt_parts`): this
+graph only pre-computes rule_result deterministically and
 gives the agent two real tools, `llm_classify_tool` and `vision_llm`, to
 call zero, one, or both of as it judges necessary — including calling
 neither when rule_result already includes a decisive `certain_type` (see
@@ -22,6 +17,8 @@ rule_result alone.
 from __future__ import annotations
 
 import json
+
+from ..models import DocumentType
 
 # Minimum extracted-text length worth classifying from text alone.
 MIN_USABLE_CHARS = 50
@@ -152,8 +149,7 @@ rule_result:
 
 
 #: Byte-stable across every document — the only part worth a cache_control
-#: breakpoint (see agent_prompt_parts below and LANGGRAPH_MIGRATION_PLAN.md
-#: section 5, "Prompt caching").
+#: breakpoint (see agent_prompt_parts below).
 AGENT_STATIC_PROMPT = _INTRO + _SHARED_BODY
 
 
@@ -179,12 +175,7 @@ def build_agent_prompt(rule_result: dict | None, extracted_text) -> str:
     return static + dynamic
 
 
-VALID_TYPES = {
-    "bank_statement", "certificate_of_incorporation", "payslip",
-    "passport", "nric", "fatca_crs_declaration", "certificate_of_incumbency",
-    "company_constitution", "proof_of_address", "source_of_wealth",
-    "credit_report", "list_of_loans", "notice_of_assessment", "unrecognised",
-}
+VALID_TYPES = {t.value for t in DocumentType}
 TYPE_ALIASES = {"other": "unrecognised"}
 REQUIREMENT_FOR_TYPE = {"passport": "id_document", "nric": "id_document"}
 VALID_REQUIREMENTS = (VALID_TYPES - {"unrecognised", "passport", "nric"}) | {"id_document"}

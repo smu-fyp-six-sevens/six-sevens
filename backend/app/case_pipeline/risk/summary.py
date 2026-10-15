@@ -86,7 +86,7 @@ async def write_summary(
             response = await model.ainvoke([HumanMessage(content=prompt)])
             telemetry.record_usage(span, response)
         parsed = parse_json_object(message_text(response.content)) or {}
-    except Exception as exc:  # noqa: BLE001 - the summary is a convenience, never a reason to fail the run
+    except Exception as exc:
         logger.warning("Summary generation failed: %s", exc)
         return fallback
 

@@ -23,7 +23,7 @@ _writer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="case-analysis-tr
 def _save(run_id: str, events: list[dict[str, Any]]) -> None:
     try:
         repository.write_trace(run_id, events)
-    except Exception as exc:  # noqa: BLE001 - a debug aid must never break a run
+    except Exception as exc:
         logger.warning("Failed to save the trace of run %s: %s", run_id, exc)
 
 

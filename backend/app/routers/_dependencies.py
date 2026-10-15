@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Any, Callable, TypeVar
 
 from fastapi import HTTPException, status
 
@@ -19,6 +20,17 @@ from .. import case_service, document_repository
 from ..models import CaseRecord, DocumentRecord
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
+
+
+async def to_thread_or_502(fn: Callable[..., T], *args: Any, detail: str, log: tuple, **kwargs: Any) -> T:
+    """Runs a blocking call off the event loop; on any error logs `log` (format, *args) and raises a 502."""
+    try:
+        return await asyncio.to_thread(fn, *args, **kwargs)
+    except Exception as exc:
+        logger.exception(*log)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail) from exc
 
 
 async def _load_document(document_id: str, include_fields: bool) -> DocumentRecord:

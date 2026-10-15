@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Optional, cast
+from typing import Any
 
 from ..models import CaseRisk, SupportingDocumentRecommendation
 from ..supabase_client import supabase_client
+from ..supabase_rows import row as _row
 from .models import AnalysisAudit, CaseAnalysis, CrossDocFinding, RiskOutlook
 
 _TABLE = "case_analysis_runs"
@@ -16,10 +17,6 @@ _LIST_COLUMNS = (
     "run_id, case_id, status, fingerprint, started_at, finished_at, error, findings:result->findings, "
     "risk:result->risk, supporting_documents:result->supporting_documents"
 )
-
-
-def _row(raw: Any) -> dict:
-    return cast(dict, raw)
 
 
 def _to_analysis(row: dict) -> CaseAnalysis:
@@ -58,7 +55,7 @@ def write_trace(run_id: str, events: list[dict[str, Any]]) -> None:
     supabase_client.table(_TABLE).update({"trace": events}).eq("run_id", run_id).execute()
 
 
-def latest_run_id(case_id: str) -> Optional[str]:
+def latest_run_id(case_id: str) -> str | None:
     rows = (
         supabase_client.table(_TABLE).select("run_id").eq("case_id", case_id)
         .order("started_at", desc=True).limit(1).execute().data
@@ -91,7 +88,7 @@ def finish_run(analysis: CaseAnalysis) -> bool:
     return not superseded
 
 
-def get_latest(case_id: str) -> Optional[CaseAnalysis]:
+def get_latest(case_id: str) -> CaseAnalysis | None:
     rows = (
         supabase_client.table(_TABLE).select("*").eq("case_id", case_id)
         .order("started_at", desc=True).limit(1).execute().data
@@ -99,7 +96,7 @@ def get_latest(case_id: str) -> Optional[CaseAnalysis]:
     return _to_analysis(_row(rows[0])) if rows else None
 
 
-def get_latest_complete(case_id: str) -> Optional[CaseAnalysis]:
+def get_latest_complete(case_id: str) -> CaseAnalysis | None:
     """The newest finished run (findings, risk and evidence requests only), for when a newer one is still going."""
     rows = (
         supabase_client.table(_TABLE).select(_LIST_COLUMNS).eq("case_id", case_id).eq("status", "complete")

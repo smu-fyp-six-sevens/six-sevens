@@ -27,8 +27,7 @@ def _build_client() -> Client:
     # any real network variance — a plain 5s read timeout surfaced as
     # "Failed to store the uploaded file. Check Supabase bucket access."
     # (a misleading message for what was really just httpcore.ReadTimeout,
-    # nothing to do with permissions). Matches dify_client.py's own
-    # timeout=30.0 for the same class of external-call latency.
+    # nothing to do with permissions).
     http_client = httpx.Client(http2=False, timeout=30.0, event_hooks=HTTPX_EVENT_HOOKS)
     return create_client(
         settings.SUPABASE_URL,

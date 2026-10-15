@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from postgrest.exceptions import APIError
@@ -20,9 +19,9 @@ logger = logging.getLogger(__name__)
 class BulkUploadItemResult(BaseModel):
     filename: str
     success: bool
-    document_id: Optional[str] = None
-    status: Optional[DocumentStatus] = None
-    error: Optional[str] = None
+    document_id: str | None = None
+    status: DocumentStatus | None = None
+    error: str | None = None
 
 
 class BulkUploadResponse(BaseModel):

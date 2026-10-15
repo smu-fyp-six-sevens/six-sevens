@@ -101,37 +101,3 @@
 }
 
 /* Tighter, easier-to-scan finding rows everywhere */
-
-.risk-findings li {
-  padding: 9px 0;
-  font-size: 13px;
-}
-
-.risk-finding-summary {
-  font-weight: 600;
-}
-
-.risk-finding-rationale {
-  margin-top: 2px;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.risk-severity--high {
-  background: #b33131;
-  color: #fff;
-}
-
-.risk-severity--medium {
-  background: #f6d9a1;
-  color: #6b4200;
-}
-
-.summary-card {
-  box-shadow: 0 1px 3px rgba(20, 35, 60, 0.05);
-}
-
-.summary-card-header {
-  border-bottom: 1px solid var(--line);
-  margin-bottom: 14px;
-}

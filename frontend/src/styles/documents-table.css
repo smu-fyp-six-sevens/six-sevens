@@ -377,11 +377,6 @@
   }
 }
 
-.document-status--failed {
-  background: #fef2f2;
-  color: #dc2626;
-}
-
 .document-status.document-status--rejected {
   background: #fef2f2;
   color: #dc2626;

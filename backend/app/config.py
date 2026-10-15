@@ -98,9 +98,9 @@ class Settings:
     # Signed URLs need to outlive a slow run, not just one request.
     SIGNED_URL_EXPIRY_SECONDS: int = 1800
 
-    # --- LangGraph experiment (langgraph-test branch, backend/app/langgraph) ---
+    # --- LLM pipeline (backend/app/langgraph) ---
     ANTHROPIC_API_KEY: str = _env("ANTHROPIC_API_KEY")
-    # Two-tier models (LANGGRAPH_MIGRATION_PLAN.md section 5): Sonnet for
+    # Two-tier models: Sonnet for
     # classifier/vision/extraction/detection-lead, Haiku for
     # llm_classify/repair/specialists. Overridable per-tier.
     LANGGRAPH_SONNET_MODEL: str = _env("LANGGRAPH_SONNET_MODEL", "claude-sonnet-4-6")
@@ -110,7 +110,7 @@ class Settings:
     # comfortably covers MAX_RECLASSIFICATION_ATTEMPTS with room to spare.
     LANGGRAPH_RECURSION_LIMIT: int = 60
 
-    # --- Observability (langgraph-test branch, see telemetry.py) ---
+    # --- Observability (see telemetry.py) ---
     # Off by default: importing the SDK is harmless with no cost/behaviour
     # change until this is set.
     OTEL_ENABLED: bool = os.environ.get("OTEL_ENABLED", "false").lower() == "true"

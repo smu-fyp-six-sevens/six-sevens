@@ -182,7 +182,7 @@ async def load_context_node(state: DetectionState) -> dict:
     fields_loaded = True
     try:
         fields = await asyncio.to_thread(extracted_fields_repository.get_extracted_fields, document_id)
-    except Exception:  # noqa: BLE001 — extraction data is enrichment, not a prerequisite
+    except Exception:
         logger.exception("Failed to fetch extracted fields for document %s", document_id)
         fields, fields_loaded = [], False
     # The tools read these too; priming means they don't fetch them again.
@@ -575,7 +575,7 @@ async def _store_flags(document_id: str, case_id: str | None, report: dict) -> N
     try:
         count = await asyncio.to_thread(flags_repository.replace_for_document, document_id, case_id, report["findings"])
         logger.info("Document %s: %d flag(s) stored", document_id, count)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.exception("Document %s: failed to store flags", document_id)
         trace.record(document_id, "flags_error", flags_error=f"{type(exc).__name__}: {exc}")
 

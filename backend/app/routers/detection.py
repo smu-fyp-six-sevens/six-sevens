@@ -11,7 +11,7 @@ from ..models import DocumentRecord
 from .. import case_service, document_repository, extracted_fields_repository, storage_service
 from ..cpu_pool import run_cpu
 from . import documents as documents_router
-from ._dependencies import get_document_or_404
+from ._dependencies import get_document_or_404, to_thread_or_502
 from ..case_match import DocumentCaseMatch
 from ..case_pipeline.cross_document.company_identity import (
     CompanyNameConsistencyResult,
@@ -52,14 +52,11 @@ async def _download_document_bytes(document: DocumentRecord) -> bytes:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Document has no stored file"
         )
-    try:
-        return await asyncio.to_thread(storage_service.download_file, document.storage_path)
-    except Exception as exc:
-        logger.exception("Failed to download document %s from storage", document.id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch the document from storage",
-        ) from exc
+    return await to_thread_or_502(
+        storage_service.download_file, document.storage_path,
+        detail="Failed to fetch the document from storage",
+        log=("Failed to download document %s from storage", document.id,),
+    )
 
 
 async def _fetch_extracted_fields(document_id: str) -> list[ExtractedField]:
@@ -82,6 +79,12 @@ async def _trace_check(document_id: str, step: str, **fields: object) -> None:
     langgraph_trace.record(document_id, step, **fields)
 
 
+async def _record_result(document_id: str, step: str, result, findings: list) -> None:
+    await _trace_check(
+        document_id, step, unable_to_assess=result.unable_to_assess, finding_count=len(findings),
+    )
+
+
 async def _require_detection_has_run(
     document_id: str, document: DocumentRecord = Depends(get_document_or_404)
 ) -> DocumentRecord:
@@ -99,11 +102,7 @@ async def _require_detection_has_run(
             status_code=status.HTTP_409_CONFLICT,
             detail="Detection doesn't run on documents with no type.",
         )
-    try:
-        persisted = await asyncio.to_thread(langgraph_trace.get_persisted, document_id)
-    except Exception:  # noqa: BLE001 — table unreachable: fall back to in-memory
-        persisted = None
-    trace_data = persisted or langgraph_trace.get(document_id)
+    trace_data = await asyncio.to_thread(langgraph_trace.load, document_id)
     if not (trace_data or {}).get("detection_report"):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -123,10 +122,7 @@ async def get_font_consistency(
     result = await run_cpu(
         check_font_consistency, document_id, file_bytes, extracted_fields
     )
-    await _trace_check(
-        document_id, "check_font_consistency",
-        unable_to_assess=result.unable_to_assess, finding_count=len(result.anomalies),
-    )
+    await _record_result(document_id, "check_font_consistency", result, result.anomalies)
     return result
 
 
@@ -154,10 +150,7 @@ async def get_layout_anomalies(
         document.document_type,
         document.classification_confidence,
     )
-    await _trace_check(
-        document_id, "check_layout_anomalies",
-        unable_to_assess=result.unable_to_assess, finding_count=len(result.anomalies),
-    )
+    await _record_result(document_id, "check_layout_anomalies", result, result.anomalies)
     return result
 
 
@@ -271,20 +264,13 @@ async def get_spelling_anomaly(
     result = await check_spelling_anomalies(
         document_id, file_bytes, document.filename, extracted_fields
     )
-    await _trace_check(
-        document_id, "check_spelling_anomaly",
-        unable_to_assess=result.unable_to_assess, finding_count=len(result.anomalies),
-    )
+    await _record_result(document_id, "check_spelling_anomaly", result, result.anomalies)
     return result
 
 
 @router.get("/{document_id}/detection/report")
 async def get_document_detection_report(document_id: str) -> dict:
-    try:
-        trace = await asyncio.to_thread(langgraph_trace.get_persisted, document_id)
-    except Exception:  # noqa: BLE001 — table unreachable: fall back to in-memory
-        trace = None
-    trace = trace or langgraph_trace.get(document_id)
+    trace = await asyncio.to_thread(langgraph_trace.load, document_id)
     report = (trace or {}).get("detection_report")
     if report:
         return report
@@ -347,11 +333,7 @@ async def retry_document_detection(
             status_code=status.HTTP_409_CONFLICT,
             detail="Detection is already running for this document.",
         )
-    try:
-        persisted = await asyncio.to_thread(langgraph_trace.get_persisted, document_id)
-    except Exception:  # noqa: BLE001 — table unreachable: fall back to in-memory
-        persisted = None
-    trace_data = persisted or langgraph_trace.get(document_id)
+    trace_data = await asyncio.to_thread(langgraph_trace.load, document_id)
     has_report = bool((trace_data or {}).get("detection_report"))
     has_error = bool((trace_data or {}).get("detection_error"))
     if has_report or not has_error:
@@ -373,6 +355,8 @@ async def get_case_detection_reports(case_id: str) -> list[dict]:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to load detection reports."
         ) from exc
+
+
 @router.get(
     "/{document_id}/detection/numerical-validation",
     response_model=NumericalValidationResult,
@@ -397,10 +381,7 @@ async def get_numerical_validation(
         run_numerical_checks, document.document_type, extracted_fields, bound.bindings,
     )
     result = build_result(document_id, document.document_type, extracted_fields, outcome, bound.error)
-    await _trace_check(
-        document_id, "check_numerical_validation",
-        unable_to_assess=result.unable_to_assess, finding_count=len(result.findings),
-    )
+    await _record_result(document_id, "check_numerical_validation", result, result.findings)
     return result
 
 
@@ -431,10 +412,7 @@ async def get_date_anomalies(
         extracted_fields,
         document.document_type,
     )
-    await _trace_check(
-        document_id, "check_date_anomalies",
-        unable_to_assess=result.unable_to_assess, finding_count=len(result.findings),
-    )
+    await _record_result(document_id, "check_date_anomalies", result, result.findings)
     return result
 
 
@@ -455,10 +433,7 @@ async def get_external_validation(
         document_id, document.document_type, extracted_fields, bound.bindings,
     )
     result.binding_error = bound.error
-    await _trace_check(
-        document_id, "check_external_validation",
-        unable_to_assess=result.unable_to_assess, finding_count=len(result.findings),
-    )
+    await _record_result(document_id, "check_external_validation", result, result.findings)
     return result
 
 
@@ -513,10 +488,7 @@ async def get_metadata_anomaly(
     an officer confirms classification before anomaly checks are run.
     """
     result = check_metadata_anomalies(document_id, document.metadata, document.document_type)
-    await _trace_check(
-        document_id, "check_metadata_anomaly",
-        unable_to_assess=result.unable_to_assess, finding_count=len(result.anomalies),
-    )
+    await _record_result(document_id, "check_metadata_anomaly", result, result.anomalies)
     return result
 
 

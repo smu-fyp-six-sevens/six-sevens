@@ -34,12 +34,19 @@ export function useDocumentActions({
   const [retryActionError, setRetryActionError] = useState<string | null>(null);
   const [isApprovingSelected, setIsApprovingSelected] = useState(false);
 
-  async function handleApproveDocument(documentId: string) {
-    setApprovingDocumentId(documentId);
-    setApproveError(null);
+  // One shape for the per-row actions: run the call, store the updated document or the error.
+  async function runRowAction(
+    documentId: string,
+    action: (documentId: string) => Promise<DocumentRecord>,
+    setBusyId: (documentId: string | null) => void,
+    setError: (message: string | null) => void,
+    failureMessage: string,
+  ) {
+    setBusyId(documentId);
+    setError(null);
 
     try {
-      const updated = await approveDocument(documentId);
+      const updated = await action(documentId);
 
       if (!isMountedRef.current) {
         return;
@@ -55,79 +62,20 @@ export function useDocumentActions({
         return;
       }
 
-      setApproveError(
-        err instanceof Error
-          ? err.message
-          : 'Failed to approve document.',
-      );
+      setError(err instanceof Error ? err.message : failureMessage);
     } finally {
       if (isMountedRef.current) {
-        setApprovingDocumentId(null);
+        setBusyId(null);
       }
     }
   }
 
-  async function handleCancelDocument(documentId: string) {
-    setCancellingDocumentId(documentId);
-    setCancelActionError(null);
-
-    try {
-      const updated = await cancelDocument(documentId);
-
-      if (!isMountedRef.current) {
-        return;
-      }
-
-      setDocumentDetails((current) => {
-        const next = new Map(current);
-        next.set(documentId, updated);
-        return next;
-      });
-    } catch (err) {
-      if (!isMountedRef.current) {
-        return;
-      }
-
-      setCancelActionError(
-        err instanceof Error ? err.message : 'Failed to cancel document.',
-      );
-    } finally {
-      if (isMountedRef.current) {
-        setCancellingDocumentId(null);
-      }
-    }
-  }
-
-  async function handleRetryDocument(documentId: string) {
-    setRetryingDocumentId(documentId);
-    setRetryActionError(null);
-
-    try {
-      const updated = await retryDocument(documentId);
-
-      if (!isMountedRef.current) {
-        return;
-      }
-
-      setDocumentDetails((current) => {
-        const next = new Map(current);
-        next.set(documentId, updated);
-        return next;
-      });
-    } catch (err) {
-      if (!isMountedRef.current) {
-        return;
-      }
-
-      setRetryActionError(
-        err instanceof Error ? err.message : 'Failed to retry document.',
-      );
-    } finally {
-      if (isMountedRef.current) {
-        setRetryingDocumentId(null);
-      }
-    }
-  }
+  const handleApproveDocument = (documentId: string) =>
+    runRowAction(documentId, approveDocument, setApprovingDocumentId, setApproveError, 'Failed to approve document.');
+  const handleCancelDocument = (documentId: string) =>
+    runRowAction(documentId, cancelDocument, setCancellingDocumentId, setCancelActionError, 'Failed to cancel document.');
+  const handleRetryDocument = (documentId: string) =>
+    runRowAction(documentId, retryDocument, setRetryingDocumentId, setRetryActionError, 'Failed to retry document.');
 
   async function handleApproveSelected() {
     const eligible = extractedDocuments.filter(

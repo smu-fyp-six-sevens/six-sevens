@@ -36,7 +36,7 @@ async def process_document(document_id: str) -> None:
                 {"document_id": document_id, "attempts": 0},
                 config={"recursion_limit": settings.LANGGRAPH_RECURSION_LIMIT},
             )
-        except Exception as exc:  # noqa: BLE001 — last line of defence against a stuck document
+        except Exception as exc:
             logger.exception("Document %s: unhandled error during langgraph orchestration", document_id)
             text_cache.discard(document_id)
             try:
@@ -59,7 +59,7 @@ async def rerun_extraction(document_id: str) -> None:
         span.set_attribute("document_id", document_id)
         try:
             await _rerun_extraction(document_id)
-        except Exception as exc:  # noqa: BLE001 — last line of defence against a stuck document
+        except Exception as exc:
             logger.exception("Document %s: unhandled error during langgraph extraction rerun", document_id)
             text_cache.discard(document_id)
             try:

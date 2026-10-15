@@ -148,7 +148,7 @@ async def _execute(
         )
         analysis.status = "complete"
         trace.record("done", status="complete", findings=len(findings))
-    except Exception as exc:  # noqa: BLE001 - recorded on the run and retryable, never silent
+    except Exception as exc:
         logger.exception("Case analysis failed for case %s", case_id)
         analysis.status = "failed"
         analysis.error = f"{type(exc).__name__}: {exc}"[:500]

@@ -6,7 +6,7 @@ category fit what the evidence is. The model's own account is never trusted.
 
 from __future__ import annotations
 
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 from ..models import (
     MODEL_CHOOSABLE_CATEGORIES, CrossDocFinding, FindingCategory, Hypothesis, Severity,
@@ -52,7 +52,7 @@ def _probe_ran(context: CaseContext, hypothesis: Hypothesis, calls: list[dict[st
 
 def verify_verdict(
     context: CaseContext, hypothesis: Hypothesis, verdict: dict[str, Any], calls: list[dict[str, Any]]
-) -> tuple[Optional[CrossDocFinding], str]:
+) -> tuple[CrossDocFinding | None, str]:
     """(finding, "") when the verdict stands, else (None, why it was discarded)."""
     if verdict.get("conclusive") is not True:
         return None, "not conclusive"

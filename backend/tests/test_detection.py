@@ -41,7 +41,7 @@ def _mark_detection_already_ran(mock_trace) -> None:
     """Satisfies _require_detection_has_run's gate for the individual-check
     endpoints below — a full detection pass must have produced a report
     before an on-demand single check is allowed to run."""
-    mock_trace.get_persisted.return_value = {"detection_report": {"verdict": "clean"}}
+    mock_trace.load.return_value = {"detection_report": {"verdict": "clean"}}
 
 
 def test_font_consistency_uses_extracted_fields() -> None:
@@ -476,8 +476,7 @@ def test_image_manipulation_requires_full_detection_first() -> None:
         patch("app.routers.detection.check_image_manipulation") as mock_check,
     ):
         mock_repo.get_document.return_value = _document()
-        mock_trace.get_persisted.return_value = None
-        mock_trace.get.return_value = None
+        mock_trace.load.return_value = None
         response = client.get("/documents/doc-1/detection/image-manipulation")
 
     assert response.status_code == 409
@@ -608,8 +607,7 @@ def test_image_tampering_requires_full_detection_first() -> None:
         patch("app.routers.detection.check_image_tampering") as mock_check,
     ):
         mock_repo.get_document.return_value = _document()
-        mock_trace.get_persisted.return_value = None
-        mock_trace.get.return_value = None
+        mock_trace.load.return_value = None
         response = client.get("/documents/doc-1/detection/image-tampering")
 
     assert response.status_code == 409
@@ -660,8 +658,7 @@ def test_image_integrity_requires_full_detection_first() -> None:
         patch("app.routers.detection.check_image_tampering") as mock_t,
     ):
         mock_repo.get_document.return_value = _document()
-        mock_trace.get_persisted.return_value = None
-        mock_trace.get.return_value = None
+        mock_trace.load.return_value = None
         response = client.get("/documents/doc-1/detection/image-integrity")
 
     assert response.status_code == 409
@@ -718,7 +715,7 @@ def test_retry_detection_relaunches_after_a_cancelled_run() -> None:
         patch.dict(documents_router._detection_tasks, {}, clear=True),
     ):
         mock_repo.get_document.return_value = _document(status=DocumentStatus.APPROVED)
-        mock_trace.get_persisted.return_value = {"detection_error": "Cancelled by loan officer"}
+        mock_trace.load.return_value = {"detection_error": "Cancelled by loan officer"}
         response = client.post("/documents/doc-1/detection/retry")
 
     assert response.status_code == 200
@@ -752,7 +749,7 @@ def test_retry_detection_rejected_when_a_report_already_exists() -> None:
         patch.dict(documents_router._detection_tasks, {}, clear=True),
     ):
         mock_repo.get_document.return_value = _document(status=DocumentStatus.APPROVED)
-        mock_trace.get_persisted.return_value = {"detection_report": {"verdict": "clean"}}
+        mock_trace.load.return_value = {"detection_report": {"verdict": "clean"}}
         response = client.post("/documents/doc-1/detection/retry")
 
     assert response.status_code == 409
@@ -769,7 +766,7 @@ def test_retry_detection_rejected_when_nothing_ran_yet() -> None:
         patch.dict(documents_router._detection_tasks, {}, clear=True),
     ):
         mock_repo.get_document.return_value = _document(status=DocumentStatus.APPROVED)
-        mock_trace.get_persisted.return_value = None
+        mock_trace.load.return_value = None
         response = client.post("/documents/doc-1/detection/retry")
 
     assert response.status_code == 409
@@ -789,7 +786,7 @@ def test_retry_detection_refused_for_untyped_document() -> None:
         mock_repo.get_document.return_value = _document(
             status=DocumentStatus.APPROVED, document_type=None
         )
-        mock_trace.get_persisted.return_value = {"detection_error": "crashed"}
+        mock_trace.load.return_value = {"detection_error": "crashed"}
         response = client.post("/documents/doc-1/detection/retry")
 
     assert response.status_code == 409
@@ -878,8 +875,7 @@ def test_ai_generation_requires_full_detection_first() -> None:
         patch("app.routers.detection.check_ai_generation") as mock_check,
     ):
         mock_repo.get_document.return_value = _document()
-        mock_trace.get_persisted.return_value = None
-        mock_trace.get.return_value = None
+        mock_trace.load.return_value = None
         response = client.get("/documents/doc-1/detection/ai-generation")
 
     assert response.status_code == 409

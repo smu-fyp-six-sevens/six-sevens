@@ -39,7 +39,6 @@ Works from extracted_fields alone — no file download or re-ingestion.
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -100,7 +99,7 @@ _EXCLUDED_STATUSES: frozenset[DocumentStatus] = frozenset({
 class ComparedDocument(BaseModel):
     document_id: str
     filename: str
-    document_type: Optional[str] = None
+    document_type: str | None = None
     company_name: str
     matches: bool
 
@@ -118,16 +117,16 @@ class CompanyNameDiscrepancy(BaseModel):
 
 class CompanyNameConsistencyResult(BaseModel):
     document_id: str
-    company_name: Optional[str] = None
+    company_name: str | None = None
     compared_documents: list[ComparedDocument] = Field(default_factory=list)
     discrepancies: list[CompanyNameDiscrepancy] = Field(default_factory=list)
     # Why nothing was compared, when nothing was. Not an error: an ID,
     # a proof of address or a document with no company name simply has
     # nothing to check.
-    skipped_reason: Optional[str] = None
+    skipped_reason: str | None = None
 
 
-def normalize_company_name(value: object) -> Optional[str]:
+def normalize_company_name(value: object) -> str | None:
     """
     Ignores letter case, the trailing legal suffix and "&" vs "AND" (plus
     surrounding whitespace). Everything else must match exactly, so
@@ -143,7 +142,7 @@ def _normalize_text(value: str) -> str:
     return " ".join(_AMPERSAND_RE.sub(" & ", value.upper()).split())
 
 
-def legal_entity_type(value: object) -> Optional[str]:
+def legal_entity_type(value: object) -> str | None:
     """The entity type the name's legal suffix states ("Pte Ltd", "LLP", ...), or None without one."""
     if not isinstance(value, str):
         return None
@@ -224,7 +223,7 @@ def _mentions(document: DocumentRecord, company_name: str) -> bool:
     return any(pattern.search(_normalize_text(s)) for s in _strings(document.extracted_fields or {}))
 
 
-def _company_name(fields: Optional[dict]) -> Optional[str]:
+def _company_name(fields: dict | None) -> str | None:
     value = (fields or {}).get("company_name")
     return value.strip() if isinstance(value, str) and value.strip() else None
 
@@ -265,7 +264,7 @@ def check_company_name_consistency(
     if not others:
         result.skipped_reason = "No other document in the case has a company name to compare against"
         return result
-    by_name: dict[tuple[str, Optional[str]], list[DocumentRecord]] = {}
+    by_name: dict[tuple[str, str | None], list[DocumentRecord]] = {}
     for other in others:
         other_name = _company_name(other.extracted_fields)
         assert other_name is not None  # filtered above

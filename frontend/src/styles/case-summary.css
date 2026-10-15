@@ -8,6 +8,7 @@
   border: 1px solid var(--line);
   border-radius: 10px;
   overflow: hidden;
+  box-shadow: 0 1px 3px rgba(20, 35, 60, 0.05);
 }
 
 .summary-card-header {
@@ -15,6 +16,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 14px;
 }
 
 .summary-card-title {
@@ -281,8 +284,8 @@
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 6px 0;
-  font-size: 12px;
+  padding: 9px 0;
+  font-size: 13px;
   line-height: 1.45;
 }
 
@@ -307,13 +310,13 @@
 }
 
 .risk-severity--medium {
-  background: #fdf1de;
-  color: #8a5300;
+  background: #f6d9a1;
+  color: #6b4200;
 }
 
 .risk-severity--high {
-  background: #fbeaea;
-  color: #b33131;
+  background: #b33131;
+  color: #fff;
 }
 
 .risk-finding-text {
@@ -325,11 +328,15 @@
 .risk-finding-summary {
   display: block;
   color: var(--ink);
+  font-weight: 600;
 }
 
 .risk-finding-rationale {
   display: block;
   color: var(--ink-soft);
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .risk-unassessed {

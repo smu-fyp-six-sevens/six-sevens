@@ -136,11 +136,6 @@
   font-weight: 600;
 }
 
-.details-card--review {
-  border-color: #edcaca;
-  background: #fffdfd;
-}
-
 @media (max-width: 760px) {
   .manual-review-table {
     overflow-x: auto;

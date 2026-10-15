@@ -98,7 +98,7 @@ async def _document(document_id: str):
 async def _load_fields(document_id: str) -> list:
     try:
         return await asyncio.to_thread(extracted_fields_repository.get_extracted_fields, document_id)
-    except Exception:  # noqa: BLE001 — enrichment only; checks degrade without it
+    except Exception:
         logger.exception("Failed to fetch extracted fields for document %s", document_id)
         return []
 

@@ -11,7 +11,7 @@ here: they belong to the case analysis.
 from __future__ import annotations
 
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 from .case_pipeline.categories import category_for_finding
 from .case_pipeline.models import FindingCategory
@@ -38,14 +38,14 @@ def assign_flag_ids(findings: list[dict[str, Any]]) -> None:
             finding["flag_id"] = str(uuid.uuid4())
 
 
-def _confidence(finding: dict[str, Any]) -> Optional[float]:
+def _confidence(finding: dict[str, Any]) -> float | None:
     value = finding.get("confidence")
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 1:
         return None
     return round(float(value), 3)
 
 
-def build_rows(document_id: str, case_id: Optional[str], findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def build_rows(document_id: str, case_id: str | None, findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rows = []
     for finding in findings:
         if not finding.get("flag_id"):
@@ -71,7 +71,7 @@ def build_rows(document_id: str, case_id: Optional[str], findings: list[dict[str
     return rows
 
 
-def replace_for_document(document_id: str, case_id: Optional[str], findings: list[dict[str, Any]]) -> int:
+def replace_for_document(document_id: str, case_id: str | None, findings: list[dict[str, Any]]) -> int:
     """
     Replaces this document's open flags with those of a fresh detection run, so
     a retry doesn't stack a second copy. A flag an officer has already moved

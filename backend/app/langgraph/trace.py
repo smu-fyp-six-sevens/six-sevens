@@ -3,7 +3,7 @@ Dev-only, in-memory trace of what the langgraph pipeline actually did with a
 document — which route it took (fast vs agent), what rule/llm/vision each
 said, which model calls fired. Not persisted, not part of graph state
 (nothing here is checkpointed or written to Postgres): purely so a human
-testing the langgraph-test branch can see routing decisions without reading
+testing can see routing decisions without reading
 logs, via GET /documents/{id}/langgraph-trace.
 
 The process-local dict is the write buffer; every start()/record() also
@@ -58,7 +58,7 @@ def resume(document_id: str) -> None:
         return
     try:
         persisted = get_persisted(document_id)
-    except Exception:  # noqa: BLE001 — falls back to a fresh trace
+    except Exception:
         persisted = None
     if persisted:
         with _lock:
@@ -87,6 +87,15 @@ def flush(document_id: str) -> None:
 
 def get(document_id: str) -> dict[str, Any] | None:
     return _traces.get(document_id)
+
+
+def load(document_id: str) -> dict[str, Any] | None:
+    """The persisted trace, else this process's copy (the table may be unreachable). Blocking; use to_thread."""
+    try:
+        persisted = get_persisted(document_id)
+    except Exception:
+        persisted = None
+    return persisted or get(document_id)
 
 
 def _case_trace_rows(case_id: str) -> list[dict[str, Any]]:
@@ -182,5 +191,5 @@ def _write_row(snapshot: dict[str, Any]) -> None:
         updated = table.update({"trace": snapshot}).eq("document_id", document_id).execute()
         if not updated.data:
             table.insert({"document_id": document_id, "trace": snapshot}).execute()
-    except Exception as exc:  # noqa: BLE001 — debug aid must never break the pipeline
+    except Exception as exc:
         logger.warning("Failed to persist langgraph trace for %s: %s", document_id, exc)

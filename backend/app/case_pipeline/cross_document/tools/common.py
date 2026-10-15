@@ -10,7 +10,7 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import date
-from typing import Any, Optional
+from typing import Any
 
 from ....fraud_detection.numerical_validation.common import _decode, _month_number, _parse_field_date
 from ..evidence import CaseContext, DocView, transaction_rows
@@ -50,10 +50,10 @@ def direction_ok(amount: float, direction: str) -> bool:
 _DAY_MONTH_NAME_RE = re.compile(r"^\s*(\d{1,2})[\s\-/]+([A-Za-z]{3,9})\.?\s*$")
 _DAY_MONTH_NUMBER_RE = re.compile(r"^\s*(\d{1,2})/(\d{1,2})\s*$")
 
-Period = tuple[Optional[date], Optional[date]]
+Period = tuple[date | None, date | None]
 
 
-def _year_from_period(month: int, day: int, period: Period) -> Optional[date]:
+def _year_from_period(month: int, day: int, period: Period) -> date | None:
     """The date a year-less day and month fall on, taking the year from the statement's own period."""
     start, end = period
     if start is not None:
@@ -74,7 +74,7 @@ def _year_from_period(month: int, day: int, period: Period) -> Optional[date]:
     return None
 
 
-def row_date(row: dict, period: Period = (None, None)) -> Optional[date]:
+def row_date(row: dict, period: Period = (None, None)) -> date | None:
     """
     A transaction row's date. Statements often print "20 JUN" with no year; that
     year comes from the statement's period, and a date the period can't place
@@ -96,7 +96,7 @@ def row_date(row: dict, period: Period = (None, None)) -> Optional[date]:
     return _year_from_period(month, day, period)
 
 
-def in_range(row: dict, start: Optional[date], end: Optional[date], period: Period = (None, None)) -> bool:
+def in_range(row: dict, start: date | None, end: date | None, period: Period = (None, None)) -> bool:
     if start is None and end is None:
         return True
     day = row_date(row, period)
@@ -105,11 +105,11 @@ def in_range(row: dict, start: Optional[date], end: Optional[date], period: Peri
     return (start is None or day >= start) and (end is None or day <= end)
 
 
-def statement_rows(view: DocView) -> Optional[list[dict]]:
+def statement_rows(view: DocView) -> list[dict] | None:
     return transaction_rows(view.fields) or None
 
 
-def statement_period(view: DocView) -> tuple[Optional[date], Optional[date]]:
+def statement_period(view: DocView) -> tuple[date | None, date | None]:
     return (
         _parse_field_date(_decode(view.fields.get("statement_period_start"))),
         _parse_field_date(_decode(view.fields.get("statement_period_end"))),
@@ -123,7 +123,7 @@ class ToolKit:
     context: CaseContext
     calls: list[dict[str, Any]]
 
-    def doc(self, name: str) -> tuple[Optional[DocView], Optional[dict[str, Any]]]:
+    def doc(self, name: str) -> tuple[DocView | None, dict[str, Any] | None]:
         view = self.context.resolve(name)
         if view is None:
             return None, unavailable(f"Unknown document '{name}'. Use list_documents for the valid names.")
@@ -131,7 +131,7 @@ class ToolKit:
 
     def log(
         self, tool_name: str, args: dict, result: dict, probe: bool,
-        document: Optional[str] = None, refs: Optional[list[str]] = None,
+        document: str | None = None, refs: list[str] | None = None,
     ) -> str:
         self.calls.append({
             "tool": tool_name,

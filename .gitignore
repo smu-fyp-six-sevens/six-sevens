@@ -28,3 +28,5 @@ backend/.langgraph_api/
 # Playwright regression suite output
 frontend/playwright-report/
 frontend/test-results/
+
+.ruff_cache/

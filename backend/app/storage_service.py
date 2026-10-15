@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import uuid
-from typing import Optional
 
 from storage3.types import URLOptions
 
@@ -11,7 +10,7 @@ from .supabase_client import supabase_client
 
 
 def upload_file(
-    case_id: Optional[str], filename: str, file_bytes: bytes, content_type: str
+    case_id: str | None, filename: str, file_bytes: bytes, content_type: str
 ) -> str:
     """Uploads the file and returns its storage path."""
     storage_folder = case_id or "unassigned"
@@ -40,7 +39,7 @@ def delete_files(storage_paths: list[str]) -> None:
 def create_signed_url(
     storage_path: str,
     expires_in: int,
-    download_filename: Optional[str] = None,
+    download_filename: str | None = None,
 ) -> str:
     options: URLOptions = {}
     if download_filename:

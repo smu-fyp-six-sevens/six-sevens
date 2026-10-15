@@ -11,7 +11,7 @@ from .. import case_service, document_repository, extracted_fields_repository, m
 from ..extracted_fields_repository import normalise_field_name
 from ..case_broadcaster import broadcaster
 
-from ._dependencies import get_document_or_404, get_document_with_fields_or_404
+from ._dependencies import get_document_or_404, get_document_with_fields_or_404, to_thread_or_502
 from ..config import settings
 from ..langgraph.extraction_prompts import (
     KNOWN_DOCUMENT_TYPES,
@@ -105,14 +105,11 @@ class DocumentDownloadResponse(BaseModel):
 async def list_documents(
     case_id: str | None = None, doc_status: DocumentStatus | None = None
 ) -> list[DocumentRecord]:
-    try:
-        return await asyncio.to_thread(document_repository.list_documents, case_id, doc_status)
-    except Exception as exc:
-        logger.exception("Failed to list documents")
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to list documents. Check Supabase table access.",
-        ) from exc
+    return await to_thread_or_502(
+        document_repository.list_documents, case_id, doc_status,
+        detail="Failed to list documents. Check Supabase table access.",
+        log=("Failed to list documents",),
+    )
 
 
 def _present(document: DocumentRecord, fields: list) -> DocumentRecord:
@@ -188,14 +185,11 @@ async def delete_document(
             ),
         )
 
-    try:
-        await asyncio.to_thread(document_repository.remove_document, document)
-    except Exception as exc:
-        logger.exception("Failed to delete document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to delete the document. Check Supabase table access.",
-        ) from exc
+    await to_thread_or_502(
+        document_repository.remove_document, document,
+        detail="Failed to delete the document. Check Supabase table access.",
+        log=("Failed to delete document %s", document_id,),
+    )
 
 
 async def _push_case_snapshot(case_id: str) -> None:
@@ -252,14 +246,11 @@ async def move_document(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target case not found")
 
     old_case_id = document.case_id
-    try:
-        await asyncio.to_thread(document_repository.move_document, document_id, body.case_id)
-    except Exception as exc:
-        logger.exception("Failed to move document %s to case %s", document_id, body.case_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to move the document. Check Supabase table access.",
-        ) from exc
+    await to_thread_or_502(
+        document_repository.move_document, document_id, body.case_id,
+        detail="Failed to move the document. Check Supabase table access.",
+        log=("Failed to move document %s to case %s", document_id, body.case_id,),
+    )
 
     # The repository resyncs the new case; the old one never sees an event carrying it.
     if old_case_id is not None:
@@ -319,14 +310,11 @@ async def bulk_move_documents(body: BulkMoveRequest) -> BulkMoveResponse:
                 old_case_ids.add(document.case_id)
 
     if eligible_ids:
-        try:
-            await asyncio.to_thread(document_repository.move_documents, eligible_ids, body.case_id)
-        except Exception as exc:
-            logger.exception("Bulk move failed for documents %s", eligible_ids)
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Failed to move the documents. Check Supabase table access.",
-            ) from exc
+        await to_thread_or_502(
+            document_repository.move_documents, eligible_ids, body.case_id,
+            detail="Failed to move the documents. Check Supabase table access.",
+            log=("Bulk move failed for documents %s", eligible_ids,),
+        )
 
         for case_id in {*old_case_ids, body.case_id}:
             await _resync_case(case_id)
@@ -376,14 +364,11 @@ async def bulk_delete_documents(body: BulkDeleteRequest) -> BulkDeleteResponse:
                 case_ids.add(document.case_id)
 
     if eligible:
-        try:
-            await asyncio.to_thread(document_repository.remove_documents, eligible)
-        except Exception as exc:
-            logger.exception("Bulk delete failed for documents %s", [d.id for d in eligible])
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Failed to delete the documents. Check Supabase table access.",
-            ) from exc
+        await to_thread_or_502(
+            document_repository.remove_documents, eligible,
+            detail="Failed to delete the documents. Check Supabase table access.",
+            log=("Bulk delete failed for documents %s", [d.id for d in eligible],),
+        )
 
         for case_id in case_ids:
             await _resync_case(case_id)
@@ -945,12 +930,7 @@ async def cancel_document(
 @router.get("/{document_id}/langgraph-trace")
 async def get_document_langgraph_trace(document_id: str) -> dict:
     """Dev-only: the pipeline trace for a document, from `langgraph_trace`, else this process's copy."""
-    try:
-        result = await asyncio.to_thread(langgraph_trace.get_persisted, document_id)
-    except Exception:  # noqa: BLE001 — table unreachable: fall back to in-memory
-        result = None
-    if result is None:
-        result = langgraph_trace.get(document_id)
+    result = await asyncio.to_thread(langgraph_trace.load, document_id)
     if result is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

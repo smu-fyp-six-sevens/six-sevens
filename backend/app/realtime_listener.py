@@ -85,7 +85,7 @@ async def start() -> None:
     Called once from main.py's lifespan at startup. One subscription per
     process — not per case, not per connection — is what keeps this cheap
     against Supabase's free-tier Realtime connection cap, and what makes it
-    scale to N replicas unchanged later (see WS.MD): each replica
+    scale to N replicas unchanged later: each replica
     independently runs its own copy of this, and Realtime's fan-out means
     every replica sees every change regardless of how many others exist.
     """

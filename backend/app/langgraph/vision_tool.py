@@ -1,17 +1,11 @@
 """
-vision_llm — Agent 3's one tool. The prompt (Dify's "Code 6" node,
-`PROMPTS["classify"]`) and the parse step (Dify's vision "Parse & Normalise"
-code node, byte-identical to llm_classify's) are ported verbatim, so vision
-returns the same {top_candidates (top 3), notes} shape as rule_result/
-llm_result — Dify's vision tool was never a single-answer classifier, and
-classify_support's agent prompt already assumes "vision" is a third source
-with its own rank-1/agreement/close semantics (see its "Deciding the type +
+vision_llm — the classify agent's vision tool. It parses its answer the same way
+as llm_classify, so vision returns the same {top_candidates (top 3), notes}
+shape as rule_result/llm_result, a third source with its own
+rank-1/agreement/close semantics (see classify_support's "Deciding the type +
 confidence" table).
 
-Only the file-fetch mechanics are redesigned (not a port) per
-LANGGRAPH_MIGRATION_PLAN.md section 2: the Dify version logs into our own
-backend and downloads the file over HTTP; this reads storage directly,
-dropping that round-trip. Parameter-bound via InjectedState so
+The file is read from storage directly. Parameter-bound via InjectedState so
 storage_path/filename never appear in the schema the model sees.
 """
 
@@ -34,8 +28,7 @@ from ..config import settings
 MAX_CANDIDATES = 3
 MAX_EVIDENCE_ITEMS = 6
 
-# Port of Dify's Code 6 node, PROMPTS["classify"] — the only prompt used by
-# vision_classify_v3's LLM call. Byte-identical text to what shipped in Dify.
+# The vision classification prompt.
 VISION_PROMPT = """You are a document classifier for a KYC/onboarding pipeline. Given the document, return the THREE most likely categories it could belong to, ranked from most to least likely.
 
 Judge by both what the document says and what it looks like: layout, letterheads, logos, crests, photos, tables and security features.
@@ -87,7 +80,7 @@ class VisionCandidate(BaseModel):
 
 
 class VisionClassificationResult(BaseModel):
-    """Small, validated shape — never raw provider JSON (see migration plan section 5)."""
+    """Small, validated shape — never raw provider JSON."""
 
     top_candidates: list[VisionCandidate] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
@@ -122,7 +115,7 @@ async def _classify_with_vision(storage_path: str, filename: str) -> VisionClass
 
     try:
         file_bytes = await asyncio.to_thread(storage_service.download_file, storage_path)
-    except Exception as exc:  # noqa: BLE001 — a failed tool call is "treat as absent", not a crash
+    except Exception as exc:
         return VisionClassificationResult(notes=[f"Could not read the document: {exc}"])
 
     model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, 1024)
@@ -143,13 +136,11 @@ async def _classify_with_vision(storage_path: str, filename: str) -> VisionClass
         # Gated like llm_classify/extract: the first vision call in a batch
         # pays for the cache write, later ones wait for it instead of racing it.
         response = await cache_gate.run("vision_llm", lambda: model.ainvoke([message]))
-    except Exception as exc:  # noqa: BLE001 — bounded retries/backoff live in ChatAnthropic; a hard failure is "absent"
+    except Exception as exc:
         return VisionClassificationResult(notes=[f"Vision call failed: {exc}"])
 
     raw = response.content if isinstance(response.content, str) else str(response.content)
-    # Byte-identical parse logic to llm_classify (Dify's vision "Parse &
-    # Normalise" node was the same code as llm_classify's) — same
-    # ALLOWED_TYPES, same top-3/normalise/never-raises behaviour.
+    # Same parse as llm_classify: same ALLOWED_TYPES, top-3/normalise/never-raises behaviour.
     return _capped(parse_llm_classification(raw))
 
 

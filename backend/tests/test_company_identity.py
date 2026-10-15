@@ -390,7 +390,7 @@ def test_endpoint_compares_against_the_case_documents() -> None:
     ):
         dep_repo.get_document.return_value = doc
         repo.list_documents.return_value = [doc, other]
-        trace.get_persisted.return_value = {"detection_report": {"verdict": "clean"}}
+        trace.load.return_value = {"detection_report": {"verdict": "clean"}}
 
         response = client.get("/documents/doc-1/detection/company-name-consistency")
 
@@ -407,8 +407,7 @@ def test_endpoint_requires_full_detection_first() -> None:
         patch("app.routers.detection.langgraph_trace") as trace,
     ):
         dep_repo.get_document.return_value = doc
-        trace.get_persisted.return_value = None
-        trace.get.return_value = None
+        trace.load.return_value = None
 
         response = client.get("/documents/doc-1/detection/company-name-consistency")
 

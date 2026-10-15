@@ -1,3 +1,4 @@
+import mimetypes
 from io import BytesIO
 from typing import Iterable, cast
 
@@ -5,6 +6,11 @@ from PIL import Image
 from .pdf_extractor import extract_pdf, pdf_contains_text
 from .ocr_extractor import extract_image_with_ocr
 from .metadata_extractor import extract_metadata
+
+def content_type_from_filename(filename: str) -> str:
+    guessed, _ = mimetypes.guess_type(filename)
+    return guessed or "application/octet-stream"
+
 
 def _needs_review(extraction_method: str, raw_text: str, pages: list) -> bool:
     if not raw_text.strip():

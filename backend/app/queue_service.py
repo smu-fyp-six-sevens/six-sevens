@@ -90,7 +90,7 @@ class DocumentQueue:
                 logger.info(
                     "Worker %d: processing of document %s was cancelled", worker_id, document_id
                 )
-            except Exception as exc:  # noqa: BLE001 — never let one bad item kill the worker
+            except Exception as exc:
                 logger.exception(
                     "Worker %d: unhandled error processing document %s", worker_id, document_id
                 )

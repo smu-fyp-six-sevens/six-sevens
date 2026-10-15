@@ -1,9 +1,5 @@
 """
-rule_classify — ported verbatim from backend/app/dify/rule_classify_v3.yml's
-Dify Code node (layers 1 + 2). No LLM call — pure regex scoring, so this is a
-straight port with no redesign. Keep this file and that YAML's `code` block
-in sync if either is edited; the YAML is the historical record of what
-shipped in Dify, this module is what LangGraph actually runs.
+rule_classify — filename and text rule layers. No LLM call: pure regex scoring.
 
 v3 behaviour (top-3 candidates):
   1. Scores EVERY document type across filename + text layers instead of
@@ -30,6 +26,8 @@ v3 behaviour (top-3 candidates):
 from __future__ import annotations
 
 import re
+
+from .classification_confidence import normalise_candidates as _normalise
 
 MAX_TEXT_CHARS = 60000
 TEXT_AGREEMENT_BOOST = 0.5
@@ -292,7 +290,7 @@ _COMPILED_ADDRESS_POSITIVE = _compile_flat(_ADDRESS_POSITIVE_RULES)
 _COMPILED_ADDRESS_NEGATIVE = _compile_flat(_ADDRESS_NEGATIVE_RULES)
 
 
-# --- "Certain" tier (langgraph only — no Dify equivalent) ------------------
+# --- "Certain" tier ------------------------------------------------------
 #
 # Deliberately NOT "most likely" signals (that's what _TEXT_RULES above is
 # for) — each pattern here was checked against every generator under
@@ -300,7 +298,7 @@ _COMPILED_ADDRESS_NEGATIVE = _compile_flat(_ADDRESS_NEGATIVE_RULES)
 # evaluated against) and only kept if it appears in exactly one document
 # type's *rendered output* there (source comments/docstrings mentioning a
 # word don't count — they never reach the PDF text a real document produces).
-# See LANGGRAPH_MIGRATION_PLAN.md section 2 for why this exists: a document
+# Why this exists: a document
 # that trips one of these needs neither llm_classify nor the Sonnet agent —
 # rule_classify alone is enough, with a plain-language justification of
 # which decisive phrase matched (see classify_by_rules' "certain_type").
@@ -435,29 +433,6 @@ def _reasoning(f_score, t_score, strength, has_text):
     return f"Text rules only (strength {t_score:.2f}); filename gave no signal for this type."
 
 
-def _normalise(candidates):
-    """Adds rank + confidence (relative share, sums to exactly 1.0)."""
-    if not candidates:
-        return candidates
-    total = sum(c["match_strength"] for c in candidates)
-    if total > 0:
-        shares = [c["match_strength"] / total for c in candidates]
-    else:
-        shares = [1.0 / len(candidates)] * len(candidates)
-    rounded = [round(s, 4) for s in shares]
-    rounded[0] = round(rounded[0] + (1.0 - sum(rounded)), 4)  # absorb rounding drift
-    out = []
-    for i, (c, conf) in enumerate(zip(candidates, rounded)):
-        out.append({
-            "rank": i + 1,
-            "document_type": c["document_type"],
-            "confidence": conf,
-            "match_strength": round(c["match_strength"], 4),
-            "reasoning": c["reasoning"],
-            "evidence": c["evidence"],
-        })
-    return out
-
 
 def classify_by_rules(filename: str, extracted_text: str = "", confidence_threshold: float = 0.6) -> dict:
     """Port of rule_classify_v3's `main`. Pure function, no I/O."""
@@ -500,9 +475,7 @@ def classify_by_rules(filename: str, extracted_text: str = "", confidence_thresh
         "top_candidates": top,
         "needs_manual_review": (not top) or top[0]["match_strength"] < threshold,
         "notes": notes,
-        # Set only when a langgraph-only "certain" pattern fired (see
-        # _CERTAIN_TEXT_RULES) — None for every Dify-equivalent path, so
-        # this key is additive and doesn't change rule_classify_v3 parity.
+        # Set only when a "certain" pattern fired (see _CERTAIN_TEXT_RULES).
         "certain_type": certain_type,
         "certain_evidence": certain_evidence,
     }

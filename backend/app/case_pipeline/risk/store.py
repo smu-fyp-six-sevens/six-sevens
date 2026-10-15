@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 from ...models import CaseRisk, RiskLevel, RiskState
 from ...supabase_client import supabase_client
@@ -26,7 +26,7 @@ _STATE_LABELS = {"pending": "Pending", "failed": "Failed", "no_documents": "No d
 _STATE_BY_LABEL = {label: state for state, label in _STATE_LABELS.items()}
 
 
-def save(case_id: str, risk: Optional[CaseRisk]) -> None:
+def save(case_id: str, risk: CaseRisk | None) -> None:
     """Records an analysis run's score. Never raises: the run's own result is the source of truth."""
     if risk is None:
         return
@@ -40,7 +40,7 @@ def save(case_id: str, risk: Optional[CaseRisk]) -> None:
             "flag_ids": [f.flag_id for f in risk.contributing_findings if f.flag_id],
             "scored_at": datetime.now(timezone.utc).isoformat(),
         }).execute()
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("Failed to save the risk score of case %s", case_id)
 
 

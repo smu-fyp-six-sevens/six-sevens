@@ -31,7 +31,7 @@ import re
 from collections import Counter
 from difflib import SequenceMatcher
 from enum import Enum
-from typing import Iterable, NamedTuple, Optional
+from typing import Iterable, NamedTuple
 
 from pydantic import BaseModel, Field
 
@@ -142,26 +142,26 @@ class FieldComparison(BaseModel):
     document_value: str
     # The certificate is the comparison source; include its identity so the
     # finding can point officers to both documents involved.
-    reference_document_id: Optional[str] = None
-    reference_filename: Optional[str] = None
-    other_document_id: Optional[str] = None
-    other_filename: Optional[str] = None
+    reference_document_id: str | None = None
+    reference_filename: str | None = None
+    other_document_id: str | None = None
+    other_filename: str | None = None
     # What the incumbency holds for the same thing — for an individual,
     # every officer/shareholder it was compared against.
-    case_value: Optional[str] = None
+    case_value: str | None = None
     reason: str
 
 
 class IncumbencyPerson(BaseModel):
-    name: Optional[str] = None
-    id_number: Optional[str] = None
+    name: str | None = None
+    id_number: str | None = None
 
 
 class IncumbencyVerification(BaseModel):
     status: IncumbencyStatus
-    document_id: Optional[str] = None
-    uen: Optional[str] = None
-    company_name: Optional[str] = None
+    document_id: str | None = None
+    uen: str | None = None
+    company_name: str | None = None
     individuals: list[IncumbencyPerson] = Field(default_factory=list)
     corroborating_document_ids: list[str] = Field(default_factory=list)
     conflicting_document_ids: list[str] = Field(default_factory=list)
@@ -172,7 +172,7 @@ class IncumbencyVerification(BaseModel):
 class DocumentCaseMatch(BaseModel):
     document_id: str
     filename: str
-    document_type: Optional[str] = None
+    document_type: str | None = None
     status: DocumentMatchStatus
     can_proceed_to_fraud_detection: bool
     # The document's company or an individual on it differs from the case.
@@ -206,7 +206,7 @@ def _strings(value: object) -> list[str]:
     return []
 
 
-def normalize_uen(value: object) -> Optional[str]:
+def normalize_uen(value: object) -> str | None:
     if not isinstance(value, str):
         return None
     cleaned = re.sub(r"[^A-Z0-9]", "", value.upper())
@@ -216,7 +216,7 @@ def normalize_uen(value: object) -> Optional[str]:
     return found.group(0) if found else cleaned
 
 
-def _normalize_id(value: object) -> Optional[str]:
+def _normalize_id(value: object) -> str | None:
     if not isinstance(value, str):
         return None
     cleaned = re.sub(r"[^A-Z0-9]", "", value.upper())
@@ -277,13 +277,13 @@ def _identity_name_similarity(a: object, b: object) -> float:
 
 
 class _Person(NamedTuple):
-    name: Optional[str]
-    id_number: Optional[str]
+    name: str | None
+    id_number: str | None
     name_field: str
     id_field: str
 
 
-def _document_uen(fields: dict) -> tuple[Optional[str], Optional[str], Optional[str]]:
+def _document_uen(fields: dict) -> tuple[str | None, str | None, str | None]:
     """(field name, raw value, normalised UEN) of the first UEN-bearing field."""
     for field in _UEN_FIELDS:
         for raw in _strings(fields.get(field)):
@@ -414,7 +414,7 @@ def _is_personal_document(doc: DocumentRecord, fields: dict) -> bool:
 # --- step 1: verify the incumbency --------------------------------------------
 
 
-def _pick_incumbency(documents: list[DocumentRecord]) -> Optional[DocumentRecord]:
+def _pick_incumbency(documents: list[DocumentRecord]) -> DocumentRecord | None:
     candidates = [
         doc for doc in documents
         if doc.document_type == DocumentType.CERTIFICATE_OF_INCUMBENCY.value
@@ -432,7 +432,7 @@ def _company_key(comparison: FieldComparison) -> str:
 
 def _verify_incumbency(
     case: CaseRecord, documents: list[DocumentRecord]
-) -> tuple[IncumbencyVerification, Optional[DocumentRecord]]:
+) -> tuple[IncumbencyVerification, DocumentRecord | None]:
     incumbency = _pick_incumbency(documents)
     if incumbency is None:
         uploaded = any(
@@ -532,7 +532,7 @@ def _verify_incumbency(
 
 def _compare_company(
     doc: DocumentRecord, fields: dict, reference: IncumbencyVerification
-) -> Optional[FieldComparison]:
+) -> FieldComparison | None:
     if _is_personal_document(doc, fields):
         return None
 
@@ -575,7 +575,7 @@ def _compare_company(
 
 def _compare_person(
     person: _Person, reference: IncumbencyVerification
-) -> Optional[list[FieldComparison]]:
+) -> list[FieldComparison] | None:
     reference_ids = {_normalize_id(p.id_number) for p in reference.individuals} - {None}
     id_number = _normalize_id(person.id_number)
     if id_number and reference_ids:
@@ -641,7 +641,7 @@ def _compare_person(
 
 def _match_document(
     doc: DocumentRecord,
-    incumbency_doc: Optional[DocumentRecord],
+    incumbency_doc: DocumentRecord | None,
     reference: IncumbencyVerification,
 ) -> DocumentCaseMatch:
     def result(
@@ -830,7 +830,7 @@ def _pairwise_person_findings(
 def _apply_pairwise_person_checks(
     matches: list[DocumentCaseMatch],
     documents: list[DocumentRecord],
-    incumbency_doc: Optional[DocumentRecord],
+    incumbency_doc: DocumentRecord | None,
 ) -> list[DocumentCaseMatch]:
     """Add cross-document identity mismatches to both documents in each pair."""
     docs_with_people = [

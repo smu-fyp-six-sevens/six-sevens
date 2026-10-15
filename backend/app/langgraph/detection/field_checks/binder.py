@@ -82,7 +82,7 @@ async def bind_checks(document_type: str | None, fields: list[Any], group: str =
         with telemetry.get_tracer().start_as_current_span("detection.numerical_binder") as span:
             response = await model.ainvoke(messages)
             telemetry.record_usage(span, response)
-    except Exception as exc:  # noqa: BLE001 — the endpoint degrades to exact-name matching
+    except Exception as exc:
         logger.exception("Numerical binder call failed")
         return BindingResult(error=f"{type(exc).__name__}: {exc}")
     return _parse_bindings(parse_json_object(message_text(getattr(response, "content", ""))))

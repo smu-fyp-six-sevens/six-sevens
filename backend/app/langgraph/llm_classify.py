@@ -1,7 +1,6 @@
 """
-llm_classify — port of backend/app/dify/LLM classification v2.yml's LLM node
-(model switched from DeepSeek to Haiku 4.5, see LANGGRAPH_MIGRATION_PLAN.md
-section 1) plus its "Parse & Normalise" code node, ported verbatim.
+llm_classify — a Haiku classification of the extracted text, plus its
+"Parse & Normalise" step.
 """
 
 from __future__ import annotations
@@ -14,6 +13,7 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
 from ..config import settings
+from .classification_confidence import normalise_candidates as _normalise
 
 TOP_K = 3
 ALLOWED_TYPES = {
@@ -104,28 +104,6 @@ def _as_str_list(value):
     return [str(value)]
 
 
-def _normalise(candidates):
-    if not candidates:
-        return candidates
-    total = sum(c["match_strength"] for c in candidates)
-    if total > 0:
-        shares = [c["match_strength"] / total for c in candidates]
-    else:
-        shares = [1.0 / len(candidates)] * len(candidates)
-    rounded = [round(s, 4) for s in shares]
-    rounded[0] = round(rounded[0] + (1.0 - sum(rounded)), 4)  # absorb rounding drift
-    out = []
-    for i, (c, conf) in enumerate(zip(candidates, rounded)):
-        out.append({
-            "rank": i + 1,
-            "document_type": c["document_type"],
-            "confidence": conf,
-            "match_strength": round(c["match_strength"], 4),
-            "reasoning": c["reasoning"],
-            "evidence": c["evidence"],
-        })
-    return out
-
 
 def parse_llm_classification(llm_text: str) -> dict:
     """Port of the "Parse & Normalise" code node — never raises."""
@@ -134,7 +112,7 @@ def parse_llm_classification(llm_text: str) -> dict:
 
     try:
         data = _extract_json(raw_text)
-    except Exception as exc:  # noqa: BLE001 — parse failure is a valid, reported outcome
+    except Exception as exc:
         return {"top_candidates": [], "notes": [f"LLM output could not be parsed as JSON ({exc})."]}
 
     raw_candidates = data.get("top_candidates") if isinstance(data, dict) else None
@@ -179,7 +157,7 @@ def parse_llm_classification(llm_text: str) -> dict:
 
 async def classify_by_llm(extracted_text: str) -> dict:
     """
-    Haiku node (was DeepSeek in Dify — see migration plan section 1). Static
+    Haiku node. Static
     system prompt first with cache_control so it's a candidate for Anthropic
     prompt caching across documents/runs; the per-document text is the only
     thing that varies. Gated through cache_gate so the first call in a batch

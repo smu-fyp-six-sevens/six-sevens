@@ -1,6 +1,6 @@
 """
 Per-category extraction prompts and expected field lists for the
-Extraction stage. Kept in Python (not Dify) so field lists, prompt
+Extraction stage. Kept in Python so field lists, prompt
 wording, and escalation logic are testable and version-controlled.
 
 Each document type's schema is split into three tiers rather than one flat
@@ -18,6 +18,8 @@ which tier a field belongs to:
   type has always had, just named for clarity instead of being an implicit
   afterthought.
 """
+
+from ..models import DocumentType
 
 EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
     # Tiers below are derived from doc_gen_scripts, not guessed: "required"
@@ -679,19 +681,8 @@ EXTRA_FIELD_GUIDANCE: dict[str, str] = {
 }
 
 
-# Hardcoded on purpose rather than derived from EXTRACTION_SCHEMAS.keys() —
-# this is what gets shown to the model when a document was classified
-# "unrecognised", asking it to suggest a specific canonical type if the
-# content actually looks like one of these. Keep in sync with
-# EXTRACTION_SCHEMAS's keys (minus "unrecognised" itself) by hand; a
-# mismatch here means the model could suggest a type the langgraph pipeline can't
-# actually build an extraction prompt for.
-KNOWN_DOCUMENT_TYPES = [
-    "bank_statement", "certificate_of_incorporation", "payslip", "passport", "nric",
-    "fatca_crs_declaration", "certificate_of_incumbency", "company_constitution",
-    "proof_of_address", "source_of_wealth", "credit_report", "list_of_loans",
-    "notice_of_assessment",
-]
+# The categories offered to the model when a document is "unrecognised": every DocumentType but that one.
+KNOWN_DOCUMENT_TYPES = [t.value for t in DocumentType if t is not DocumentType.UNRECOGNISED]
 
 
 def schema_field_names(document_type: str) -> list[str]:

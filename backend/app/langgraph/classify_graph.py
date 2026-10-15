@@ -9,20 +9,20 @@ not just a prompt suggestion — vision is by far the most expensive tool
 (a full image, not just text), so it never gets to be the agent's first or
 only move. Within that ordering the agent still genuinely decides whether
 to call either tool at all, which is what keeps this agentic rather than a
-hardcoded pipeline with an LLM bolted on. See LANGGRAPH_MIGRATION_PLAN.md.
+hardcoded pipeline with an LLM bolted on.
 
     rule_classify -> agent (turn 1: llm_classify_tool only)
                        -> [tools -> agent (turn 2+: vision_llm only)]* -> validate -> repair
 
-Also holds the reclassify entry point (Phase 4): when Extraction escalates,
+Also holds the reclassify entry point: when Extraction escalates,
 graph.py routes back into this same agent/tools/validate/repair chain via
 prepare_reclassify_node, continuing the same conversation rather than
 re-running rule_classify. Since that conversation already has at least one
 prior agent turn, only vision_llm (if not already used) is offered there —
 llm_classify_tool already had its one shot on the original pass.
 
-No checkpointer here (`compile(checkpointer=False)` in graph.py) — only the
-parent graph persists, per LANGGRAPH_MIGRATION_PLAN.md section 5.
+No checkpointer here (`compile(checkpointer=False)` in graph.py); only the
+parent graph persists.
 """
 
 from __future__ import annotations
@@ -176,14 +176,14 @@ def build_reconsideration_message(escalation: dict, evidence: list[str] | None =
 
 def prepare_reclassify_node(state: DocumentGraphState) -> dict:
     """
-    Phase 4 reclassify entry point (see graph.py's decide_after_extract):
+    Reclassify entry point (see graph.py's decide_after_extract):
     always re-enters at the agent, never re-runs rule_classify — a bare
     regex re-guess has nothing new to react to, whereas the agent can
     actually weigh Extraction's specific objection (and re-call its tools if
     it decides it needs to).
 
-    Always a continuation of the existing `agent_messages` conversation
-    (matching Dify's conversation_id continuation): the agent runs at least
+    Always a continuation of the existing `agent_messages` conversation:
+    the agent runs at least
     once for every document now (there's no code path that finalises
     without it), so agent_messages is guaranteed non-empty by the time
     Extraction — and therefore a possible reclassify — could happen.
@@ -240,7 +240,6 @@ async def repair_node(state: DocumentGraphState) -> dict:
     Deterministic cleanup already happened inside validate_agent_output
     (strips to the {...} span). If that still couldn't produce a
     document_type, one Haiku re-ask; if that also fails, manual review.
-    See LANGGRAPH_MIGRATION_PLAN.md section 5, "Repair node".
     """
     classification = state.get("classification") or {}
     if classification.get("document_type"):
@@ -267,7 +266,7 @@ async def repair_node(state: DocumentGraphState) -> dict:
             HumanMessage(content=bad_output),
         ])
         repaired = validate_agent_output(response.content if isinstance(response.content, str) else str(response.content))
-    except Exception as exc:  # noqa: BLE001 — repair failing is itself a valid outcome, not a crash
+    except Exception as exc:
         logger.warning("Repair re-ask failed: %s", exc)
         repaired = {}
 
