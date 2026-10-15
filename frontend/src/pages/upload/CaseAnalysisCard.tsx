@@ -10,6 +10,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   unsupported_claim: 'Unsupported claim',
 };
 
+const SEVERITY_RANK: Record<string, number> = { high: 3, medium: 2, low: 1 };
+
 // "Run case analysis": cross-document findings, what-if outlook and a plain-language summary.
 export function CaseAnalysisCard({
   caseId,
@@ -60,6 +62,9 @@ export function CaseAnalysisCard({
   }
 
   const outlook = analysis?.outlook ?? null;
+  const findings = [...(analysis?.findings ?? [])].sort(
+    (a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity],
+  );
   const showResult = analysis?.status === 'complete';
 
   return (
@@ -71,7 +76,7 @@ export function CaseAnalysisCard({
           <h2>Case Analysis</h2>
         </div>
         {analysisReady && (
-          <button type="button" disabled={running} onClick={() => void start()}>
+          <button type="button" className="analysis-action" disabled={running} onClick={() => void start()}>
             {running ? 'Analysing…' : overview ? 'Run again' : 'Run case analysis'}
           </button>
         )}
@@ -87,7 +92,11 @@ export function CaseAnalysisCard({
         </div>
       )}
 
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
+      {error && (
+        <p className="analysis-error" role="alert">
+          {error}
+        </p>
+      )}
 
       {overview?.stale && (
         <div className="summary-message summary-message--warning">
@@ -111,9 +120,9 @@ export function CaseAnalysisCard({
 
       {showResult && analysis && (
         <>
-          {analysis.summary && <p>{analysis.summary}</p>}
+          {analysis.summary && <p className="analysis-summary">{analysis.summary}</p>}
 
-          {analysis.findings.length === 0 ? (
+          {findings.length === 0 ? (
             <div className="summary-message summary-message--success">
               <span className="summary-message-icon">✓</span>
               <div>
@@ -123,12 +132,15 @@ export function CaseAnalysisCard({
             </div>
           ) : (
             <ul className="risk-findings">
-              {analysis.findings.map((finding) => (
+              {findings.map((finding) => (
                 <li key={finding.id}>
                   <span className={`risk-severity risk-severity--${finding.severity}`}>{finding.severity}</span>
                   <span className="risk-finding-text">
                     <span className="risk-finding-summary">
-                      {CATEGORY_LABELS[finding.category] ?? finding.category}: {finding.summary}
+                      <span className="analysis-category">
+                        {CATEGORY_LABELS[finding.category] ?? finding.category}
+                      </span>
+                      {finding.summary}
                     </span>
                     <span className="risk-finding-rationale">{finding.rationale}</span>
                   </span>
@@ -139,12 +151,16 @@ export function CaseAnalysisCard({
 
           {outlook && outlook.requests.length > 0 && (
             <>
-              <h3>What would change the score</h3>
+              <h3 className="analysis-heading">What would change the score</h3>
               {outlook.best_case_score != null && outlook.current_score != null && (
-                <p>
-                  Currently <strong>{outlook.current_score}</strong> ({outlook.current_level}). If everything below
-                  supports the client, the best case is <strong>{outlook.best_case_score}</strong> (
-                  {outlook.best_case_level}).
+                <p className="analysis-score-compare">
+                  <span>
+                    Now <strong>{outlook.current_score}</strong> ({outlook.current_level})
+                  </span>
+                  <span className="analysis-score-arrow">→</span>
+                  <span>
+                    Best case <strong>{outlook.best_case_score}</strong> ({outlook.best_case_level})
+                  </span>
                 </p>
               )}
               <ul className="risk-findings">
@@ -161,7 +177,7 @@ export function CaseAnalysisCard({
                   </li>
                 ))}
               </ul>
-              <p className="risk-finding-rationale">
+              <p className="risk-finding-rationale" style={{ margin: '0 20px 16px' }}>
                 An estimate that assumes the evidence supports the client. If it does not, the score stays where it is.
               </p>
             </>
