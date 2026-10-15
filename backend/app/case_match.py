@@ -716,6 +716,17 @@ def _match_document(
             "No company or individual details were extracted to compare against the case",
         )
     mismatches = [c for c in comparisons if c.outcome == CheckOutcome.MISMATCH]
+    company_mismatches = [
+        comparison for comparison in mismatches
+        if comparison.check in {"company_uen", "company_name"}
+    ]
+    if company_mismatches:
+        return result(
+            DocumentMatchStatus.MANUAL_REVIEW,
+            "; ".join(comparison.reason for comparison in company_mismatches),
+            comparisons,
+            case_mismatch=True,
+        )
     if mismatches:
         return result(
             DocumentMatchStatus.MISMATCH,
@@ -862,10 +873,22 @@ def _apply_pairwise_person_checks(
             updated.append(match)
             continue
         reasons = [reason for _, reason in additions]
-        prior_reason = match.reason if match.status == DocumentMatchStatus.MISMATCH else ""
+        company_mismatch = any(
+            comparison.outcome == CheckOutcome.MISMATCH
+            and comparison.check in {"company_uen", "company_name"}
+            for comparison in match.comparisons
+        )
+        prior_reason = (
+            match.reason
+            if match.status in {DocumentMatchStatus.MISMATCH, DocumentMatchStatus.MANUAL_REVIEW}
+            else ""
+        )
         updated.append(match.model_copy(update={
-            "status": DocumentMatchStatus.MISMATCH,
-            "can_proceed_to_fraud_detection": True,
+            "status": (
+                DocumentMatchStatus.MANUAL_REVIEW
+                if company_mismatch else DocumentMatchStatus.MISMATCH
+            ),
+            "can_proceed_to_fraud_detection": not company_mismatch,
             "case_mismatch": True,
             "reason": "; ".join(([prior_reason] if prior_reason else []) + reasons),
             "comparisons": [*match.comparisons, *(comparison for comparison, _ in additions)],

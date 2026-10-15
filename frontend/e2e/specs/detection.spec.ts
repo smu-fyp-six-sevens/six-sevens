@@ -253,16 +253,58 @@ test.describe('Lead detection agent @sprint3 @SCRUM-119', () => {
 });
 
 test.describe('Case match @sprint3 @SCRUM-110', () => {
-  test('DI-045 a case mismatch shows the document\'s value and the case\'s value @DI-045', async ({ page, backend }) => {
+  test('DI-045 an identity mismatch appears in detection after approval @DI-045', async ({ page, backend }) => {
     // GLDB-16's real passport is TEO KAI MING's, who is not on the certificate of incumbency.
     const fixture = loadFixture(backend, 'harbor-light');
     const passport = fixture.document('Passport_5187');
+    passport.status = 'analyzed';
+
+    const caseMatch = backend.caseMatch[fixture.case.id] as {
+      documents: { document_id: string; status: string; can_proceed_to_fraud_detection: boolean }[];
+    };
+    const passportMatch = caseMatch.documents.find((entry) => entry.document_id === passport.id);
+    expect(passportMatch).toBeDefined();
+    passportMatch!.status = 'mismatch';
+    passportMatch!.can_proceed_to_fraud_detection = true;
 
     await page.goto(fixture.documentUrl(passport));
 
-    const warning = page.locator('.review-message--warning', { hasText: 'Case mismatch' });
-    await expect(warning).toContainText('Case mismatch — sent to manual review');
-    await expect(warning).toContainText('TEO KAI MING');
-    await expect(warning).toContainText('(certificate of incumbency:');
+    await expect(page.locator('.review-message--warning', { hasText: 'Case mismatch' })).toHaveCount(0);
+    await approveButton(page).click();
+
+    passport.status = 'detected';
+    backend.detectionReports[passport.id] = {
+      ...C028_REPORT,
+      document_id: passport.id,
+      verdict: 'flagged',
+      summary: 'Identity field mismatch found after approval.',
+      findings: [
+        ...C028_REPORT.findings,
+        {
+          severity: 'high',
+          summary: 'ID S7273147P for TEO KAI MING in Passport_5187.jpeg is not listed among IDs S7634564N, S8081681J, S8001781P in C014_CertIncumbency.pdf.',
+          rationale: 'The extracted individual identifier differs from the certificate of incumbency.',
+          specialists: ['identity_matching'],
+        },
+      ],
+      consulted: [
+        ...C028_REPORT.consulted,
+        {
+          specialist: 'identity_matching',
+          title: 'Identity Matching',
+          brief: 'Compare extracted names and identifiers with the other documents in this case.',
+          tools_called: ['case_identity_match'],
+          second_look: false,
+        },
+      ],
+    };
+    backend.push(fixture.case.id);
+    await page.getByRole('button', { name: 'Refresh detection' }).click();
+
+    const panel = detectionPanel(page);
+    await expect(panel).toContainText('Verdict: FLAGGED');
+    await expect(panel).toContainText('TEO KAI MING');
+    await expect(panel).toContainText('S7634564N');
+    await expect(panel).toContainText('Identity Matching');
   });
 });

@@ -241,6 +241,9 @@ def store(monkeypatch) -> FakeStore:
         monkeypatch.setattr(f"{module}.document_repository", fake)
         monkeypatch.setattr(f"{module}.extracted_fields_repository", fake)
     monkeypatch.setattr("app.langgraph.detection.tools.storage_service", fake)
+    # These fraud-tool regressions test each document in isolation. Identity
+    # matching is covered separately by test_detection_case_match.py.
+    monkeypatch.setattr("app.case_service.get_case_match_for_document", lambda _document_id: None)
 
     async def bundled_holidays(document_type):
         return BUNDLED_HOLIDAYS

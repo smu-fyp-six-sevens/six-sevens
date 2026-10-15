@@ -257,14 +257,14 @@ def test_two_incumbencies_with_different_uens_go_to_manual_review() -> None:
 # --- step 2: company check ----------------------------------------------------
 
 
-def test_document_with_other_uen_is_a_case_mismatch_for_fraud_detection() -> None:
+def test_document_with_other_uen_requires_manual_review() -> None:
     stray = _doc("notice_of_assessment", {"company_name": "ACME Trading", "tax_reference_number": OTHER_UEN})
     result = check_case_match(_case(), [_incumbency(), *_corroborating(3), stray])
 
     match = _by_id(result, stray.id)
-    assert match.status == DocumentMatchStatus.MISMATCH
+    assert match.status == DocumentMatchStatus.MANUAL_REVIEW
     assert match.case_mismatch
-    assert match.can_proceed_to_fraud_detection
+    assert not match.can_proceed_to_fraud_detection
     assert result.mismatched_document_ids == [stray.id]
     # AC4: identifies both the document's value and the case's.
     comparison = match.comparisons[0]
@@ -284,7 +284,7 @@ def test_uen_takes_priority_over_company_name() -> None:
 
 @pytest.mark.parametrize(
     "company_name, expected",
-    [("ACME Pte Ltd", DocumentMatchStatus.MATCH), ("ACNE Pte Ltd", DocumentMatchStatus.MISMATCH)],
+    [("ACME Pte Ltd", DocumentMatchStatus.MATCH), ("ACNE Pte Ltd", DocumentMatchStatus.MANUAL_REVIEW)],
 )
 def test_company_name_fuzzy_match_when_document_has_no_uen(company_name, expected) -> None:
     doc = _doc("bank_statement", {"company_name": company_name, "bank_name": "DBS"})
@@ -292,7 +292,7 @@ def test_company_name_fuzzy_match_when_document_has_no_uen(company_name, expecte
 
     match = _by_id(result, doc.id)
     assert match.status == expected
-    assert match.case_mismatch is (expected == DocumentMatchStatus.MISMATCH)
+    assert match.case_mismatch is (expected == DocumentMatchStatus.MANUAL_REVIEW)
     assert match.comparisons[0].check == "company_name"
 
 
@@ -626,9 +626,9 @@ def test_document_case_match_endpoint_returns_that_documents_entry() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["document_id"] == "stray"
-    assert body["status"] == "mismatch"
+    assert body["status"] == "manual_review"
     assert body["case_mismatch"] is True
-    assert body["can_proceed_to_fraud_detection"] is True
+    assert body["can_proceed_to_fraud_detection"] is False
 
 
 def test_document_case_match_endpoint_404_without_case() -> None:
