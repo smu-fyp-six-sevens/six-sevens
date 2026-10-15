@@ -31,11 +31,12 @@ asyncio_mode = "auto"
 # Puts backend/ on sys.path so tests can import `app` and `scripts` whichever
 # way pytest is launched (plain `pytest` in CI, `python -m pytest`, an IDE).
 pythonpath = ["."]
-# Regression suite tags (SCRUM-206): `pytest -m sprint1`, `pytest -m sprint2`.
+# Regression suite tags (SCRUM-206, SCRUM-246): `pytest -m sprint1`, `-m sprint2`, `-m sprint3`.
 # story(...) records the Jira story and the sprint test sheet's test case ID.
 markers = [
   "sprint1: regression test for a Sprint 1 test case",
   "sprint2: regression test for a Sprint 2 test case",
+  "sprint3: regression test for a Sprint 3 test case",
   "story(jira_id, test_case_id): the Jira story and manual test case ID this test covers",
 ]
 filterwarnings = [
