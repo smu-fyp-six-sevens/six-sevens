@@ -2,16 +2,18 @@ import { useMemo, useState } from 'react';
 import type { CaseStatusSubscription } from '../../services/caseSocket';
 import { uploadDocuments } from '../../services/uploadService';
 import type { BulkUploadItemResult } from '../../services/uploadService';
-import { MAX_BULK_FILES, checkFileCount, recordUploadedHash, validateFiles } from '../../utils/fileValidation';
+import { MAX_BULK_FILES, checkFileCount, recordUploadedDocument, validateFiles } from '../../utils/fileValidation';
 import type { FileIssue } from '../../utils/fileValidation';
 
 interface UploadSelectionParams {
   caseId: string;
   caseSocketRef: { current: CaseStatusSubscription | null };
+  // The case's documents in the live snapshot; null before it has loaded.
+  liveDocumentIds: Set<string> | null;
 }
 
 // Files picked for upload, the submit, and the per-file results.
-export function useUploadSelection({ caseId, caseSocketRef }: UploadSelectionParams) {
+export function useUploadSelection({ caseId, caseSocketRef, liveDocumentIds }: UploadSelectionParams) {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [countError, setCountError] = useState<string | null>(null);
   const [rejections, setRejections] = useState<{ file: File; issue: FileIssue }[]>([]);
@@ -55,7 +57,7 @@ export function useUploadSelection({ caseId, caseSocketRef }: UploadSelectionPar
     setJustSubmitted(true);
 
     try {
-      const { ok, rejected } = await validateFiles(selectedFiles, caseId);
+      const { ok, rejected } = await validateFiles(selectedFiles, caseId, liveDocumentIds);
 
       setRejections(rejected);
 
@@ -69,8 +71,8 @@ export function useUploadSelection({ caseId, caseSocketRef }: UploadSelectionPar
       setResults(response.results);
 
       response.results.forEach((result, index) => {
-        if (result.success) {
-          recordUploadedHash(caseId, ok[index].hash);
+        if (result.success && result.document_id) {
+          recordUploadedDocument(caseId, result.document_id, ok[index].hash);
         }
       });
 

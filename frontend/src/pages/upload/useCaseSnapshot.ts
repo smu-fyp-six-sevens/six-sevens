@@ -39,6 +39,8 @@ export function useCaseSnapshot(caseId: string) {
     SupportingDocumentRecommendation[]
   >([]);
   const [wsConnected, setWsConnected] = useState(false);
+  // Whether documentDetails holds this case's documents yet, not the empty start or the previous case's.
+  const [snapshotLoaded, setSnapshotLoaded] = useState(false);
   // Case-match result per document (see backend/app/case_match.py), pushed with every case snapshot.
   const [caseMatches, setCaseMatches] = useState<Map<string, DocumentCaseMatch>>(new Map());
   // Forces a re-render every so often while any document is PROCESSING, so a "Stuck"/Retry-eligible.
@@ -85,6 +87,7 @@ export function useCaseSnapshot(caseId: string) {
 
   useEffect(() => {
     setWsConnected(false);
+    setSnapshotLoaded(false);
 
     const subscription = subscribeToCaseStatus(
       caseId,
@@ -92,6 +95,7 @@ export function useCaseSnapshot(caseId: string) {
         if (!isMountedRef.current) return;
 
         setDocumentDetails(new Map(documents.map((document) => [document.id, document])));
+        setSnapshotLoaded(true);
         setCaseMatches(
           new Map((caseMatch?.documents ?? []).map((match) => [match.document_id, match])),
         );
@@ -164,6 +168,7 @@ export function useCaseSnapshot(caseId: string) {
     analysisOverview,
     supportingDocumentRecommendations,
     wsConnected,
+    snapshotLoaded,
     caseMatches,
     setCaseMatches,
     isMountedRef,

@@ -79,28 +79,57 @@ export async function hashFile(file: File): Promise<string> {
     .join('');
 }
 
-const dedupStoreKey = (caseId: string) => `uploaded-file-hashes:${caseId}`;
+// documentId -> content hash of each file uploaded to the case. A hash only
+// blocks a re-upload while its document is still in the case's live snapshot,
+// so deleting or moving the document out (from any browser) frees the file.
+const dedupStoreKey = (caseId: string) => `uploaded-documents:${caseId}`;
+// The old format kept bare hashes with no document, so a delete could never
+// release them. Dropped rather than migrated.
+const legacyDedupStoreKey = (caseId: string) => `uploaded-file-hashes:${caseId}`;
 
 // Per-browser only (localStorage) — can't detect the same file uploaded from
 // a different device/browser. A server-side content-hash check would be the
 // real fix; out of scope here since no such backend endpoint exists yet.
-export function getUploadedHashes(caseId: string): Set<string> {
+function getUploadedDocuments(caseId: string): Record<string, string> {
   try {
     const raw = localStorage.getItem(dedupStoreKey(caseId));
-    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+    return raw ? (JSON.parse(raw) as Record<string, string>) : {};
   } catch {
-    return new Set();
+    return {};
   }
 }
 
-export function recordUploadedHash(caseId: string, hash: string): void {
+function setUploadedDocuments(caseId: string, documents: Record<string, string>): void {
   try {
-    const hashes = getUploadedHashes(caseId);
-    hashes.add(hash);
-    localStorage.setItem(dedupStoreKey(caseId), JSON.stringify([...hashes]));
+    localStorage.removeItem(legacyDedupStoreKey(caseId));
+    if (Object.keys(documents).length === 0) {
+      localStorage.removeItem(dedupStoreKey(caseId));
+    } else {
+      localStorage.setItem(dedupStoreKey(caseId), JSON.stringify(documents));
+    }
   } catch {
     // best-effort only — localStorage may be unavailable (private mode, quota)
   }
+}
+
+// Hashes of uploaded files whose documents are still in the case, forgetting the
+// rest. liveDocumentIds is null until the first case snapshot arrives; until then
+// every recorded upload still counts.
+function getLiveUploadedHashes(caseId: string, liveDocumentIds: Set<string> | null): Set<string> {
+  const documents = getUploadedDocuments(caseId);
+  if (liveDocumentIds === null) return new Set(Object.values(documents));
+
+  const live = Object.fromEntries(
+    Object.entries(documents).filter(([documentId]) => liveDocumentIds.has(documentId)),
+  );
+  if (Object.keys(live).length !== Object.keys(documents).length) {
+    setUploadedDocuments(caseId, live);
+  }
+  return new Set(Object.values(live));
+}
+
+export function recordUploadedDocument(caseId: string, documentId: string, hash: string): void {
+  setUploadedDocuments(caseId, { ...getUploadedDocuments(caseId), [documentId]: hash });
 }
 
 export function checkFileCount(files: File[]): string | null {
@@ -110,11 +139,15 @@ export function checkFileCount(files: File[]): string | null {
   return null;
 }
 
-export async function validateFiles(files: File[], caseId: string): Promise<ValidationResult> {
+export async function validateFiles(
+  files: File[],
+  caseId: string,
+  liveDocumentIds: Set<string> | null,
+): Promise<ValidationResult> {
   const ok: ValidatedFile[] = [];
   const rejected: { file: File; issue: FileIssue }[] = [];
 
-  const previouslyUploaded = getUploadedHashes(caseId);
+  const previouslyUploaded = getLiveUploadedHashes(caseId, liveDocumentIds);
   const seenInThisBatch = new Set<string>();
 
   for (const file of files) {
