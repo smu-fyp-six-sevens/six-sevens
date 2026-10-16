@@ -36,15 +36,39 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
 
+      - name: Lint (ruff)
+        run: ruff check app
+
+      - name: Type check (pyright) - fails the build
+        run: pyright app
+
+      - name: Reject type-check suppressions and weakened pyright config
+        run: |
+          fail=0
+          if grep -rnE "#\s*(type:\s*ignore|pyright:)" app --include=*.py; then
+            echo "::error::'# type: ignore' and '# pyright:' comments are not allowed in app/. Fix the type."
+            fail=1
+          fi
+          if [ -f pyrightconfig.json ]; then
+            echo "::error::pyrightconfig.json would override [tool.pyright] in pyproject.toml; remove it."
+            fail=1
+          fi
+          section="$(awk '/^\[tool\.pyright\]/{f=1;next} /^\[/{f=0} f' pyproject.toml)"
+          if echo "$section" | grep -nE '^\s*(report[A-Za-z]+|ignore|exclude|strict)\s*=|enableTypeIgnoreComments\s*=\s*true|typeCheckingMode\s*=\s*"(off|basic)"'; then
+            echo "::error::[tool.pyright] must not disable rules, exclude files, or relax the checking mode."
+            fail=1
+          fi
+          if ! echo "$section" | grep -qE '^\s*include\s*=\s*\["app"\]'; then
+            echo "::error::[tool.pyright] must set include = [\"app\"]."
+            fail=1
+          fi
+          exit $fail
+
       - name: Run backend tests
         run: pytest --cov=app --cov-report=
 
       - name: Show coverage report (sorted by coverage, ascending)
         run: coverage report --show-missing --sort=cover
-
-      - name: Type check (pyright) — warning only, does not fail the build
-        continue-on-error: true
-        run: npx --yes pyright --pythonpath "$(python -c 'import sys; print(sys.executable)')" app
 
   frontend-ci:
     # Includes the SCRUM-206 Playwright regression suite (Sprint 1 & 2 test

@@ -4,12 +4,10 @@ import {
   TERMINAL_DOCUMENT_STATUSES,
   canCancelDocument,
   canRetryDocument,
-  documentDetectionStage,
+  documentStatusDisplay,
   formatDocumentStatus,
-  formatDocumentStatusLabel,
   formatDocumentType,
   formatRoutingOutcome,
-  isDocumentStatusInProgress,
   isDocumentStuckProcessing,
 } from '../../services/uploadService';
 
@@ -404,13 +402,15 @@ export function DocumentListPanel({
                         </div>
 
                         {approvedDocuments.map((document) => {
-                          const hasDetectionReport = document.has_detection_report ?? false;
-                          const hasDetectionError = document.has_detection_error ?? false;
-                          const detectionStage = documentDetectionStage(
+                          const {
+                            stage: detectionStage,
+                            label: statusLabel,
+                            inProgress,
+                          } = documentStatusDisplay(
                             document.status,
-                            hasDetectionReport,
+                            document.has_detection_report ?? false,
                             document.document_type,
-                            hasDetectionError,
+                            document.has_detection_error ?? false,
                           );
 
                           return (
@@ -447,13 +447,8 @@ export function DocumentListPanel({
                                   }`}
                                 />
                                 <span>
-                                  {formatDocumentStatusLabel(document.status, hasDetectionReport, document.document_type, hasDetectionError)}
-                                  {isDocumentStatusInProgress(
-                                    document.status,
-                                    hasDetectionReport,
-                                    document.document_type,
-                                    hasDetectionError,
-                                  ) && '…'}
+                                  {statusLabel}
+                                  {inProgress && '…'}
                                 </span>
                               </span>
 

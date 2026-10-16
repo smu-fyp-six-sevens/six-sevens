@@ -20,8 +20,9 @@ from app.fraud_detection.image_manipulation import (
 )
 from app.fraud_detection.metadata_analysis import MetadataAnalysisResult, MetadataAnomaly
 from app.fraud_detection.spelling_anomaly import SpellingAnomaly, SpellingAnomalyResult
-from app.langgraph.detection import field_tools, tools
-from app.langgraph.detection.binder import BindingResult
+from app.langgraph.detection import tools
+from app.langgraph.detection.field_checks import external, numerical
+from app.langgraph.detection.field_checks.bindings import BindingArg
 
 
 def _document(**attrs):
@@ -253,28 +254,75 @@ def test_layout_rendering_owns_both_image_tools() -> None:
     assert {"image_manipulation_tool", "image_tampering_tool"} <= names
 
 
-def test_with_ids_rejects_finding_missing_summary() -> None:
-    with pytest.raises(AssertionError):
-        tools._with_ids("fake_tool", [{"id": "x"}])
+def test_with_ids_keeps_a_finding_missing_its_summary() -> None:
+    # Dropping it would let a flagged document read as clean.
+    [finding] = tools._with_ids("fake_tool", [{"detail": "x"}])
+    assert finding["id"] == "fake_tool-1"
+    assert finding["detail"] == "x"
+    assert finding["summary"]
+
+
+def _balance_fields() -> list[ExtractedField]:
+    return [
+        ExtractedField(field_name="total_assets", field_type="number", field_value="1000", confidence=0.95),
+        ExtractedField(field_name="total_liabilities", field_type="number", field_value="400", confidence=0.95),
+        ExtractedField(field_name="total_equity", field_type="number", field_value="500", confidence=0.95),
+    ]
 
 
 @pytest.mark.asyncio
 async def test_numerical_checks_tool_surfaces_non_bank_statement_findings() -> None:
     # Regression: the tool used to filter for check_code == "BS.RUNNING_BALANCE"
     # only, silently dropping every other document type's findings (FS.*, CR.*, etc).
-    fields = [
-        ExtractedField(field_name="total_assets", field_type="number", field_value="1000", confidence=0.95),
-        ExtractedField(field_name="total_liabilities", field_type="number", field_value="400", confidence=0.95),
-        ExtractedField(field_name="total_equity", field_type="number", field_value="500", confidence=0.95),
-    ]
-    no_bindings = BindingResult()  # the binder is patched out so no model is called
-    with patch.object(field_tools, "document_fields", AsyncMock(return_value=fields)), \
-            patch("app.langgraph.detection.binder.bind_numerical_checks", AsyncMock(return_value=no_bindings)):
-        output = await field_tools.numerical_checks_tool.coroutine(
+    with patch.object(numerical, "document_fields", AsyncMock(return_value=_balance_fields())):
+        output = await numerical.numerical_checks_tool.coroutine(
             document_id="doc-1", document_type="source_of_wealth",
         )
 
     assert output["findings"][0]["check_code"] == "FS.BALANCES"
+
+
+@pytest.mark.asyncio
+async def test_numerical_checks_tool_uses_the_specialists_bindings_without_a_binder_call() -> None:
+    fields = [
+        ExtractedField(field_name="closing", field_type="number", field_value="1000", confidence=0.95),
+        ExtractedField(field_name="debts", field_type="number", field_value="400", confidence=0.95),
+        ExtractedField(field_name="owners", field_type="number", field_value="500", confidence=0.95),
+    ]
+    bindings = [
+        BindingArg(role="total_assets", field="closing"),
+        BindingArg(role="total_liabilities", field="debts"),
+        BindingArg(role="total_equity", field="owners"),
+    ]
+    with patch.object(numerical, "document_fields", AsyncMock(return_value=fields)),             patch("app.langgraph.detection.field_checks.binder.build_chat_anthropic") as model:
+        output = await numerical.numerical_checks_tool.coroutine(
+            document_id="doc-1", document_type="source_of_wealth", bindings=bindings,
+        )
+
+    model.assert_not_called()  # the specialist filled the bindings, so no second model is asked
+    assert output["findings"][0]["check_code"] == "FS.BALANCES"
+    assert {"role": "total_assets", "field": "closing"} in output["bindings_applied"]
+
+
+def test_field_checks_hide_the_document_type_from_the_agent() -> None:
+    assert list(numerical.numerical_checks_tool.args) == ["bindings"]
+    assert list(external.external_validation_tool.args) == ["bindings"]
+
+
+@pytest.mark.asyncio
+async def test_external_validation_tool_runs_the_static_reference_checks_for_the_type() -> None:
+    fields = [
+        ExtractedField(field_name="gst_amount", field_type="number", field_value="1.00", confidence=0.95),
+        ExtractedField(field_name="charges_before_gst", field_type="number", field_value="100.00", confidence=0.95),
+        ExtractedField(field_name="bill_date", field_type="string", field_value="2026-03-01", confidence=0.95),
+    ]
+    with patch.object(external, "document_fields", AsyncMock(return_value=fields)):
+        output = await external.external_validation_tool.coroutine(
+            document_id="doc-1", document_type="proof_of_address",
+        )
+
+    assert [f["check_code"] for f in output["findings"]] == ["POA.GST"]
+    assert output["findings"][0]["source"] == "IRAS GST rates"
 
 
 # --- ai_generation_tool -------------------------------------------------------

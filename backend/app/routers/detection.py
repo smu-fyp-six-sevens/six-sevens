@@ -7,12 +7,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from ..langgraph import trace as langgraph_trace
+from ..langgraph.detection_report import read_report
 from ..models import DocumentRecord
 from .. import case_service, document_repository, extracted_fields_repository, storage_service
+from ..cpu_pool import run_cpu
 from . import documents as documents_router
-from ._dependencies import get_document_or_404
+from ._dependencies import get_document_or_404, to_thread_or_502
 from ..case_match import DocumentCaseMatch
-from ..fraud_detection.company_identity import (
+from ..case_pipeline.cross_document.company_identity import (
     CompanyNameConsistencyResult,
     check_company_name_consistency,
 )
@@ -33,13 +35,13 @@ from ..fraud_detection.metadata_analysis import MetadataAnalysisResult, check_me
 from ..fraud_detection.layout_anomalies import LayoutAnomalyResult, check_layout_anomalies
 from ..fraud_detection.numerical_validation.models import NumericalValidationResult
 from ..fraud_detection.numerical_validation.runner import build_result, run_numerical_checks
-from ..langgraph.detection.binder import bind_numerical_checks
+from ..langgraph.detection.field_checks.binder import bind_checks
 from ..fraud_detection.date_anomalies import (
     DateAnomalyResult,
     check_date_anomalies,
 )
 from ..fraud_detection.spelling_anomaly import SpellingAnomalyResult, check_spelling_anomalies
-from ..fraud_detection.registry_lookups import RegistryResult, public_holidays_for, verify_against_registries
+from ..fraud_detection.external_validation.runner import ExternalValidationResult, run_external_validation
 
 router = APIRouter(prefix="/documents", tags=["detection"])
 cases_router = APIRouter(prefix="/cases", tags=["detection"])
@@ -51,14 +53,11 @@ async def _download_document_bytes(document: DocumentRecord) -> bytes:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Document has no stored file"
         )
-    try:
-        return await asyncio.to_thread(storage_service.download_file, document.storage_path)
-    except Exception as exc:
-        logger.exception("Failed to download document %s from storage", document.id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch the document from storage",
-        ) from exc
+    return await to_thread_or_502(
+        storage_service.download_file, document.storage_path,
+        detail="Failed to fetch the document from storage",
+        log=("Failed to download document %s from storage", document.id,),
+    )
 
 
 async def _fetch_extracted_fields(document_id: str) -> list[ExtractedField]:
@@ -81,6 +80,12 @@ async def _trace_check(document_id: str, step: str, **fields: object) -> None:
     langgraph_trace.record(document_id, step, **fields)
 
 
+async def _record_result(document_id: str, step: str, result, findings: list) -> None:
+    await _trace_check(
+        document_id, step, unable_to_assess=result.unable_to_assess, finding_count=len(findings),
+    )
+
+
 async def _require_detection_has_run(
     document_id: str, document: DocumentRecord = Depends(get_document_or_404)
 ) -> DocumentRecord:
@@ -96,13 +101,9 @@ async def _require_detection_has_run(
     if documents_router.skips_detection(document):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Detection doesn't run on unrecognised documents.",
+            detail="Detection doesn't run on documents with no type.",
         )
-    try:
-        persisted = await asyncio.to_thread(langgraph_trace.get_persisted, document_id)
-    except Exception:  # noqa: BLE001 — table unreachable: fall back to in-memory
-        persisted = None
-    trace_data = persisted or langgraph_trace.get(document_id)
+    trace_data = await asyncio.to_thread(langgraph_trace.load, document_id)
     if not (trace_data or {}).get("detection_report"):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -119,13 +120,10 @@ async def get_font_consistency(
 ) -> FontConsistencyResult:
     file_bytes = await _download_document_bytes(document)
     extracted_fields = await _fetch_extracted_fields(document_id)
-    result = await asyncio.to_thread(
+    result = await run_cpu(
         check_font_consistency, document_id, file_bytes, extracted_fields
     )
-    await _trace_check(
-        document_id, "check_font_consistency",
-        unable_to_assess=result.unable_to_assess, finding_count=len(result.anomalies),
-    )
+    await _record_result(document_id, "check_font_consistency", result, result.anomalies)
     return result
 
 
@@ -146,17 +144,14 @@ async def get_layout_anomalies(
     and nothing crossed a threshold — not that the document is clean.
     """
     file_bytes = await _download_document_bytes(document)
-    result = await asyncio.to_thread(
+    result = await run_cpu(
         check_layout_anomalies,
         document_id,
         file_bytes,
         document.document_type,
         document.classification_confidence,
     )
-    await _trace_check(
-        document_id, "check_layout_anomalies",
-        unable_to_assess=result.unable_to_assess, finding_count=len(result.anomalies),
-    )
+    await _record_result(document_id, "check_layout_anomalies", result, result.anomalies)
     return result
 
 
@@ -175,7 +170,7 @@ async def get_image_manipulation(
     tolerance — not that the document is clean.
     """
     file_bytes = await _download_document_bytes(document)
-    return await asyncio.to_thread(check_image_manipulation, document_id, file_bytes)
+    return await run_cpu(check_image_manipulation, document_id, file_bytes)
 
 
 @router.get(
@@ -194,7 +189,7 @@ async def get_image_tampering(
     clean.
     """
     file_bytes = await _download_document_bytes(document)
-    return await asyncio.to_thread(check_image_tampering, document_id, file_bytes)
+    return await run_cpu(check_image_tampering, document_id, file_bytes)
 
 
 @router.get(
@@ -211,7 +206,7 @@ async def get_ai_generation(
     indicator crossed its threshold — not that the image is proven genuine.
     """
     file_bytes = await _download_document_bytes(document)
-    return await asyncio.to_thread(check_ai_generation, document_id, file_bytes)
+    return await run_cpu(check_ai_generation, document_id, file_bytes)
 
 
 class ImageIntegrityResult(BaseModel):
@@ -240,8 +235,8 @@ async def get_image_integrity(
     """
     file_bytes = await _download_document_bytes(document)
     manipulation, tampering = await asyncio.gather(
-        asyncio.to_thread(check_image_manipulation, document_id, file_bytes),
-        asyncio.to_thread(check_image_tampering, document_id, file_bytes),
+        run_cpu(check_image_manipulation, document_id, file_bytes),
+        run_cpu(check_image_tampering, document_id, file_bytes),
     )
     return ImageIntegrityResult(
         report=build_image_integrity_report(manipulation, tampering),
@@ -270,21 +265,14 @@ async def get_spelling_anomaly(
     result = await check_spelling_anomalies(
         document_id, file_bytes, document.filename, extracted_fields
     )
-    await _trace_check(
-        document_id, "check_spelling_anomaly",
-        unable_to_assess=result.unable_to_assess, finding_count=len(result.anomalies),
-    )
+    await _record_result(document_id, "check_spelling_anomaly", result, result.anomalies)
     return result
 
 
 @router.get("/{document_id}/detection/report")
 async def get_document_detection_report(document_id: str) -> dict:
-    try:
-        trace = await asyncio.to_thread(langgraph_trace.get_persisted, document_id)
-    except Exception:  # noqa: BLE001 — table unreachable: fall back to in-memory
-        trace = None
-    trace = trace or langgraph_trace.get(document_id)
-    report = (trace or {}).get("detection_report")
+    trace = await asyncio.to_thread(langgraph_trace.load, document_id)
+    report = read_report((trace or {}).get("detection_report"))
     if report:
         return report
     # A report always wins over a stale error from an earlier failed attempt
@@ -338,7 +326,7 @@ async def retry_document_detection(
     if documents_router.skips_detection(document):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Detection doesn't run on unrecognised documents.",
+            detail="Detection doesn't run on documents with no type.",
         )
     existing = documents_router._detection_tasks.get(document_id)
     if existing is not None and not existing.done():
@@ -346,11 +334,7 @@ async def retry_document_detection(
             status_code=status.HTTP_409_CONFLICT,
             detail="Detection is already running for this document.",
         )
-    try:
-        persisted = await asyncio.to_thread(langgraph_trace.get_persisted, document_id)
-    except Exception:  # noqa: BLE001 — table unreachable: fall back to in-memory
-        persisted = None
-    trace_data = persisted or langgraph_trace.get(document_id)
+    trace_data = await asyncio.to_thread(langgraph_trace.load, document_id)
     has_report = bool((trace_data or {}).get("detection_report"))
     has_error = bool((trace_data or {}).get("detection_error"))
     if has_report or not has_error:
@@ -372,6 +356,8 @@ async def get_case_detection_reports(case_id: str) -> list[dict]:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to load detection reports."
         ) from exc
+
+
 @router.get(
     "/{document_id}/detection/numerical-validation",
     response_model=NumericalValidationResult,
@@ -391,15 +377,12 @@ async def get_numerical_validation(
     confirmed value metadata_analysis uses for its own type-scoped rules.
     """
     extracted_fields = await _fetch_extracted_fields(document_id)
-    bound = await bind_numerical_checks(document.document_type, extracted_fields)
+    bound = await bind_checks(document.document_type, extracted_fields)
     outcome = await asyncio.to_thread(
         run_numerical_checks, document.document_type, extracted_fields, bound.bindings,
     )
     result = build_result(document_id, document.document_type, extracted_fields, outcome, bound.error)
-    await _trace_check(
-        document_id, "check_numerical_validation",
-        unable_to_assess=result.unable_to_assess, finding_count=len(result.findings),
-    )
+    await _record_result(document_id, "check_numerical_validation", result, result.findings)
     return result
 
 
@@ -424,38 +407,34 @@ async def get_date_anomalies(
     re-ingestion.
     """
     extracted_fields = await _fetch_extracted_fields(document_id)
-    holidays = await public_holidays_for(document.document_type)
     result = await asyncio.to_thread(
         check_date_anomalies,
         document_id,
         extracted_fields,
         document.document_type,
-        holidays,
     )
-    await _trace_check(
-        document_id, "check_date_anomalies",
-        unable_to_assess=result.unable_to_assess, finding_count=len(result.findings),
-    )
+    await _record_result(document_id, "check_date_anomalies", result, result.findings)
     return result
 
 
-@router.get("/{document_id}/detection/registry-verification", response_model=RegistryResult)
-async def get_registry_verification(
+@router.get("/{document_id}/detection/external-validation", response_model=ExternalValidationResult)
+async def get_external_validation(
     document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
-) -> RegistryResult:
+) -> ExternalValidationResult:
     """
-    The document's extracted facts against Singapore's public registries, live: ACRA
-    (the company exists, under this name, is live, with this incorporation date and
-    registered address), and OneMap and HDB (the address exists and, for a home address,
-    is a residential block). Read-only.
-    A registry that can't be reached is reported as a skipped check, never a finding.
+    The document's extracted facts against outside references, chosen by its document
+    type: live ACRA, OneMap and HDB lookups, and published tables (CPF rates, GST rate,
+    IRAS tax rules, a bank's published identifiers, public holidays for GIRO dates).
+    Read-only. A registry that can't be reached is reported as a skipped check, never a
+    finding. One LLM call binds the static checks' inputs, as numerical-validation does.
     """
     extracted_fields = await _fetch_extracted_fields(document_id)
-    result = await verify_against_registries(document_id, extracted_fields, document.document_type)
-    await _trace_check(
-        document_id, "check_registry_verification",
-        unable_to_assess=result.unable_to_assess, finding_count=len(result.findings),
+    bound = await bind_checks(document.document_type, extracted_fields, "external")
+    result = await run_external_validation(
+        document_id, document.document_type, extracted_fields, bound.bindings,
     )
+    result.binding_error = bound.error
+    await _record_result(document_id, "check_external_validation", result, result.findings)
     return result
 
 
@@ -469,7 +448,7 @@ async def get_company_name_consistency(
     """
     Content Validation Specialist — "Company Identity Consistency". Compares
     this document's company name with every other company document in its
-    case (see fraud_detection/company_identity.py). Read-only, from
+    case (see case_pipeline/cross_document/company_identity.py). Read-only, from
     extracted fields alone.
     """
     case_documents = (
@@ -510,10 +489,7 @@ async def get_metadata_anomaly(
     an officer confirms classification before anomaly checks are run.
     """
     result = check_metadata_anomalies(document_id, document.metadata, document.document_type)
-    await _trace_check(
-        document_id, "check_metadata_anomaly",
-        unable_to_assess=result.unable_to_assess, finding_count=len(result.anomalies),
-    )
+    await _record_result(document_id, "check_metadata_anomaly", result, result.anomalies)
     return result
 
 

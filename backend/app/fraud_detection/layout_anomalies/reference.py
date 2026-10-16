@@ -86,6 +86,11 @@ def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
+def _mask_numbers(text: str | None) -> str:
+    """A label that carries a figure ("discharge of $40,000.00") is still that label on another document."""
+    return re.sub(r"\d[\d,.]*", "#", text or "")
+
+
 def _is_label_text(text: str) -> bool:
     return sum(ch.isalnum() for ch in text) >= _MIN_LABEL_CHARS
 
@@ -158,7 +163,7 @@ def load_references(document_type: str) -> tuple[ReferenceLayout, ...]:
     if not folder.is_dir():
         return ()
     return tuple(
-        ReferenceLayout.model_validate(json.loads(path.read_text()))
+        ReferenceLayout.model_validate(json.loads(path.read_text(encoding="utf-8")))
         for path in sorted(folder.glob("*.json"))
     )
 
@@ -282,7 +287,7 @@ def compare_with_reference(
         if p.line.page in pages and _is_label_text(p.text)
         for index, label in enumerate(reference.labels)
         if label.page == p.line.page
-        and label.text == p.text
+        and _mask_numbers(label.text) == _mask_numbers(p.text)
         and _near(label.x0, ry(label), p.x0, p.y)
     )
     pairs: list[tuple[_Placed, ReferenceLine]] = []

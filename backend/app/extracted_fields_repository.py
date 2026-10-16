@@ -3,17 +3,11 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from datetime import datetime
-from typing import Any, Optional, cast
+from typing import cast
 
 from .supabase_client import service_supabase_client, supabase_client
+from .supabase_rows import row as _row
 from .fraud_detection.font_consistency import ExtractedField
-
-
-def _row(mapping: Any) -> dict:
-    """postgrest types a row as a loose JSON union rather than dict[str, Any]
-    — every row here is one we (or our own migrations) wrote, so this cast
-    just tells the type checker what's already true."""
-    return cast(dict, mapping)
 
 
 _NUMBER_TEXT_RE = re.compile(r"^-?\(?\d[\d,]*(\.\d+)?\)?$")
@@ -60,8 +54,8 @@ def replace_extracted_fields(
     document_id: str,
     fields: dict,
     *,
-    field_confidences: Optional[dict] = None,
-    default_confidence: Optional[float],
+    field_confidences: dict | None = None,
+    default_confidence: float | None,
     required_field_names: set[str],
 ) -> None:
     """

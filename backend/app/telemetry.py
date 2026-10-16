@@ -1,6 +1,5 @@
 """
-OpenTelemetry wiring — traces only for now (see LANGGRAPH_MIGRATION_PLAN.md
-section 6). Off by default (settings.OTEL_ENABLED): setup() then does nothing
+OpenTelemetry wiring — traces only for now. Off by default (settings.OTEL_ENABLED): setup() then does nothing
 and every tracer.start_as_current_span() call elsewhere in the codebase is a
 real no-op (OTel's own default global tracer), so instrumenting a code path
 ahead of time costs nothing until this is turned on.
@@ -98,5 +97,5 @@ def record_usage(span, response) -> None:
         span.set_attribute("llm.input_tokens", usage.get("input_tokens", 0))
         span.set_attribute("llm.output_tokens", usage.get("output_tokens", 0))
         span.set_attribute("llm.total_tokens", usage.get("total_tokens", 0))
-    except Exception:  # noqa: BLE001 — telemetry is best-effort
+    except Exception:
         logger.debug("Failed to record token usage on span", exc_info=True)

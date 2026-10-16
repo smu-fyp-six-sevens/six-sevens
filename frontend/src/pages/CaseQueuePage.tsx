@@ -31,13 +31,15 @@ const PREFS_STORAGE_KEY = 'caseQueue.prefs';
 interface QueuePrefs {
   statuses: string[];
   sortOrder: 'asc' | 'desc';
+  // Highest risk first, with creation date (sortOrder) breaking ties.
+  riskFirst: boolean;
 }
 
 // Per-browser (localStorage), not per-account — enough to stop having to
 // re-apply the same filters and sort on every visit. Wrapped in try/catch
 // since storage can throw (private mode, blocked site data) or hold junk.
 function loadPrefs(): QueuePrefs {
-  const defaults: QueuePrefs = { statuses: [], sortOrder: 'asc' };
+  const defaults: QueuePrefs = { statuses: [], sortOrder: 'asc', riskFirst: false };
 
   try {
     const raw = localStorage.getItem(PREFS_STORAGE_KEY);
@@ -51,6 +53,7 @@ function loadPrefs(): QueuePrefs {
         ? parsed.statuses.filter((item) => typeof item === 'string')
         : [],
       sortOrder: parsed.sortOrder === 'desc' ? 'desc' : 'asc',
+      riskFirst: parsed.riskFirst === true,
     };
   } catch {
     return defaults;
@@ -67,6 +70,13 @@ function savePrefs(prefs: QueuePrefs) {
 
 function displayCaseNumber(caseRecord: CaseRecord): string {
   return caseRecord.caseNumber || caseRecord.id;
+}
+
+// Unscored cases (riskLevel null) rank below Low.
+const RISK_RANK: Record<string, number> = { Critical: 4, High: 3, Medium: 2, Low: 1 };
+
+function riskRank(caseRecord: CaseRecord): number {
+  return caseRecord.riskLevel ? RISK_RANK[caseRecord.riskLevel] : 0;
 }
 
 function creationTime(caseRecord: CaseRecord): number | null {
@@ -98,9 +108,11 @@ export default function CaseQueuePage({
     () => loadPrefs().sortOrder,
   );
 
+  const [riskFirst, setRiskFirst] = useState(() => loadPrefs().riskFirst);
+
   useEffect(() => {
-    savePrefs({ statuses: Array.from(savedStatuses), sortOrder });
-  }, [savedStatuses, sortOrder]);
+    savePrefs({ statuses: Array.from(savedStatuses), sortOrder, riskFirst });
+  }, [savedStatuses, sortOrder, riskFirst]);
 
   const statusOptions = useMemo(() => {
     const statuses = cases
@@ -149,6 +161,10 @@ export default function CaseQueuePage({
     });
 
     return [...filteredCases].sort((a, b) => {
+      if (riskFirst && riskRank(a) !== riskRank(b)) {
+        return riskRank(b) - riskRank(a);
+      }
+
       const timeA = creationTime(a);
       const timeB = creationTime(b);
 
@@ -159,7 +175,7 @@ export default function CaseQueuePage({
 
       return sortOrder === 'asc' ? timeA - timeB : timeB - timeA;
     });
-  }, [cases, search, activeStatuses, sortOrder]);
+  }, [cases, search, activeStatuses, sortOrder, riskFirst]);
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -282,6 +298,15 @@ export default function CaseQueuePage({
               <span className="sort-toggle-arrow" aria-hidden="true">
                 {sortOrder === 'asc' ? '↑' : '↓'}
               </span>
+            </button>
+
+            <button
+              type="button"
+              className={`sort-toggle-btn ${riskFirst ? 'sort-toggle-btn--active' : ''}`}
+              aria-pressed={riskFirst}
+              onClick={() => setRiskFirst((current) => !current)}
+            >
+              Highest risk first
             </button>
           </div>
         </div>

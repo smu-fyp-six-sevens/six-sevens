@@ -76,7 +76,7 @@ def test_list_case_summaries_groups_documents_by_case() -> None:
         by_id = {s.id: s for s in summaries}
         assert by_id["case-1"].documents_status == CaseDocumentsStatus.ANALYZED
         assert by_id["case-2"].documents_status == CaseDocumentsStatus.FAILED
-        mock_doc_repo.list_documents.assert_called_once_with()
+        mock_doc_repo.list_documents.assert_called_once_with(include_fields=False)
 
 
 def test_list_case_summaries_case_with_no_documents_is_no_documents() -> None:

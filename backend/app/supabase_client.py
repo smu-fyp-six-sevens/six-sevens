@@ -5,6 +5,7 @@ import httpx
 from supabase import acreate_client, create_client, AsyncClient, Client, ClientOptions
 
 from .config import settings
+from .query_stats import HTTPX_EVENT_HOOKS
 
 
 def _build_client() -> Client:
@@ -26,9 +27,8 @@ def _build_client() -> Client:
     # any real network variance — a plain 5s read timeout surfaced as
     # "Failed to store the uploaded file. Check Supabase bucket access."
     # (a misleading message for what was really just httpcore.ReadTimeout,
-    # nothing to do with permissions). Matches dify_client.py's own
-    # timeout=30.0 for the same class of external-call latency.
-    http_client = httpx.Client(http2=False, timeout=30.0)
+    # nothing to do with permissions).
+    http_client = httpx.Client(http2=False, timeout=30.0, event_hooks=HTTPX_EVENT_HOOKS)
     return create_client(
         settings.SUPABASE_URL,
         settings.SUPABASE_PUBLISHABLE_KEY,
@@ -57,7 +57,7 @@ def service_supabase_client() -> Client:
     if not settings.SUPABASE_SECRET_KEY:
         raise RuntimeError("SUPABASE_SECRET_KEY is not set")
 
-    http_client = httpx.Client(http2=False, timeout=30.0)
+    http_client = httpx.Client(http2=False, timeout=30.0, event_hooks=HTTPX_EVENT_HOOKS)
     _service_client = create_client(
         settings.SUPABASE_URL,
         settings.SUPABASE_SECRET_KEY,

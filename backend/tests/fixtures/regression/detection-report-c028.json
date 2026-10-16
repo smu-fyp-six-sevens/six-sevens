@@ -42,6 +42,7 @@
   "document_type": "credit_report",
   "findings": [
     {
+      "ai_accepted": true,
       "detected": {
         "bold": false,
         "font": "Courier",
@@ -58,6 +59,7 @@
         "underline": false
       },
       "field_name": null,
+      "flag_id": "flag-1",
       "id": "font_consistency_tool-1",
       "locations": [
         {
@@ -76,7 +78,9 @@
       "via_second_look": false
     },
     {
+      "ai_accepted": true,
       "field": "creator",
+      "flag_id": "flag-2",
       "id": "metadata_tool-2",
       "rationale": "Rated medium.",
       "reason": "Adobe Acrobat can edit existing PDF content, and a credit report should reach us exactly as its issuer generated it",
@@ -91,7 +95,9 @@
       "via_second_look": true
     },
     {
+      "ai_accepted": true,
       "field": "producer",
+      "flag_id": "flag-3",
       "id": "metadata_tool-3",
       "rationale": "Rated medium.",
       "reason": "Adobe Acrobat can edit existing PDF content, and a credit report should reach us exactly as its issuer generated it",
@@ -106,7 +112,9 @@
       "via_second_look": true
     },
     {
+      "ai_accepted": true,
       "field": "author",
+      "flag_id": "flag-4",
       "id": "metadata_tool-1",
       "rationale": "Rated low.",
       "reason": "Author looks like a test/template artefact rather than a real name \u2014 a genuine document's metadata wouldn't carry it",
@@ -129,6 +137,7 @@
       "tool": "image_tampering_tool"
     }
   ],
+  "schema_version": 1,
   "second_look": {
     "from": "layout_rendering",
     "question": "Please examine the PDF metadata for the producing software.",

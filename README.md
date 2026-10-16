@@ -6,15 +6,17 @@ The system automates the forgery-check stage of GLDB's loan origination workflow
 
 ## Structure
 
-- `backend/` FastAPI app. Document pipeline and detection agent run on LangGraph (`app/langgraph/`), with Supabase for data and file storage, and the Claude API for LLM calls.
+- `backend/` FastAPI app. Document pipeline and detection agent run on LangGraph (`app/langgraph/`), the per-case cross-document analysis and risk scoring live in `app/case_pipeline/` (a case's risk score exists only as the output of an analysis run), with Supabase for data and file storage, and the Claude API for LLM calls.
 - `frontend/` React + TypeScript (Vite) app for officers: case upload, document review, and detection results. Live case status comes over a WebSocket.
 - `docs/regression/` regression test report.
 - `docker-compose.yml` local container setup for both services.
 
 Design and status documents at the root:
 
+- `HOW_IT_WORKS.md` the whole system end to end in plain language: pipeline, detection, flags, case analysis, live updates, configuration and cost logs.
 - `CLAUDE.md` project context, decisions, and the planned architecture.
 - `FRAUD_DETECTION_MAP.md` how the fraud checks and the detection agent are wired, plus known detection bugs.
+- `CROSS_DOCUMENT_AND_RISK_PLAN.md` design of the per-case analysis: hypotheses, investigator tools, verification, risk outlook and guardrails.
 - `PENDING_WORK.md` open work only.
 
 ## Prerequisites
@@ -30,6 +32,24 @@ Backend (from `backend/`):
 pip install -e ".[dev]"
 uvicorn app.main:app --reload
 ```
+
+The database is Supabase, and its schema is changed directly there; the repo keeps no SQL migration files. The backend expects these to exist:
+
+| Object | Used for |
+|---|---|
+| `cases`, `documents`, `extracted_fields`, `langgraph_trace` | the document pipeline, fields and per-document traces |
+| `case_analysis_runs` | each case analysis run (its result, risk, supporting documents and trace) |
+| `risk_scores` and the `latest_risk_scores` view (newest row per case) | saved scores and the case list |
+| `flags` | per-document findings a specialist approved |
+| sequence `greenlink_case_id_seq` and trigger `set_greenlink_case_id` on `cases` | readable case ids (`GLDB-<n>`); the trigger skips any id already taken |
+
+The backend role needs `select, insert` on `risk_scores` and `flags` (with row level security policies for insert and read if it is on). Deleting a document's old flags goes through the service key, so no delete policy is required.
+
+Set `CASE_ANALYSIS_ENABLED=false` to switch the case analysis off. `exiftool` should be on the `PATH`; without it the metadata checks report that they could not run.
+
+Optional settings: `QUEUE_WORKER_CONCURRENCY` (documents processed at once, default 4), `DETECTION_CONCURRENCY` (detection runs at once, default 2), `CPU_WORKER_CONCURRENCY` (PDF, OCR and forensic threads, default 1), `DOCUMENT_MAX_MODEL_CALLS` (model calls one document's classify and extract run may make, default 24), `DETECTION_MAX_MODEL_CALLS` (model calls one detection run may make, default 30), `LLM_MAX_RETRIES` (default 1), `LLM_TIMEOUT_SECONDS` (default 300), `TOOL_TIMEOUT_SECONDS` and `SLOW_TOOL_TIMEOUT_SECONDS` (per detection tool, default 60 and 120), `LOG_HTTP_REQUESTS` (log every Supabase call, default off).
+
+The backend logs one `perf` line per request, snapshot and background job (Supabase calls, Claude calls, tokens, cache hits); see `HOW_IT_WORKS.md` §8.
 
 The API runs on `http://localhost:8000`. The interactive docs are at `/docs`.
 

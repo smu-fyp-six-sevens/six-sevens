@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { CaseRecord } from '../App';
 import {
   describeIssue,
@@ -50,7 +50,12 @@ export default function UploadPage({
     fulfilledRequirements,
     proofOfAddressCoverage,
     idDocumentCoverage,
+    risk,
+    analysisReady,
+    analysisOverview,
+    supportingDocumentRecommendations,
     wsConnected,
+    snapshotLoaded,
     caseMatches,
     setCaseMatches,
     isMountedRef,
@@ -63,6 +68,11 @@ export default function UploadPage({
     identityNames,
     caseMatchNeedsReview,
   } = useCaseSnapshot(selectedCase.id);
+
+  const liveDocumentIds = useMemo(
+    () => (snapshotLoaded ? new Set(documents.map((document) => document.id)) : null),
+    [snapshotLoaded, documents],
+  );
 
   const {
     isEditingCase,
@@ -96,7 +106,7 @@ export default function UploadPage({
     handleFiles,
     handleSubmit,
     removeFile,
-  } = useUploadSelection({ caseId: selectedCase.id, caseSocketRef });
+  } = useUploadSelection({ caseId: selectedCase.id, caseSocketRef, liveDocumentIds });
 
   const {
     selectedDocumentIds,
@@ -451,10 +461,15 @@ export default function UploadPage({
 
 
           <UploadSummaryCards
+            analysisOverview={analysisOverview}
+            analysisReady={analysisReady}
+            caseId={selectedCase.id}
             caseMatchNeedsReview={caseMatchNeedsReview}
             caseMatches={caseMatches}
             flaggedDocuments={flaggedDocuments}
             onOpenDocument={onOpenDocument}
+            risk={risk}
+            supportingDocumentRecommendations={supportingDocumentRecommendations}
           />
         </section>
 

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from app.langgraph.detection.binder import BindingResult
+from app.langgraph.detection.field_checks.binder import BindingResult
 from app.fraud_detection.font_consistency import ExtractedField, FontConsistencyResult
 from app.fraud_detection.image_manipulation import (
     ImageManipulationResult,
@@ -16,7 +16,6 @@ from app.fraud_detection.image_manipulation import (
 from app.fraud_detection.metadata_analysis import MetadataAnalysisResult
 from app.fraud_detection.layout_anomalies import CheckAssessment, LayoutAnomalyResult
 from app.fraud_detection.date_anomalies import DateAnomalyResult
-from app.fraud_detection.sg_reference.holidays import BUNDLED_HOLIDAYS
 from app.fraud_detection.spelling_anomaly import SpellingAnomaly, SpellingAnomalyResult
 from app.main import app
 from app.models import DocumentRecord, DocumentStatus
@@ -42,7 +41,7 @@ def _mark_detection_already_ran(mock_trace) -> None:
     """Satisfies _require_detection_has_run's gate for the individual-check
     endpoints below — a full detection pass must have produced a report
     before an on-demand single check is allowed to run."""
-    mock_trace.get_persisted.return_value = {"detection_report": {"verdict": "clean"}}
+    mock_trace.load.return_value = {"detection_report": {"verdict": "clean"}}
 
 
 def test_font_consistency_uses_extracted_fields() -> None:
@@ -354,7 +353,7 @@ def test_get_numerical_validation_passes_extracted_fields_and_document_type() ->
         patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.extracted_fields_repository") as mock_fields,
         patch(
-            "app.routers.detection.bind_numerical_checks",
+            "app.routers.detection.bind_checks",
             new=AsyncMock(return_value=BindingResult()),
         ) as mock_check,
         patch("app.routers.detection.langgraph_trace") as mock_trace,
@@ -378,7 +377,7 @@ def test_get_numerical_validation_degrades_when_fields_fetch_fails() -> None:
         patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.extracted_fields_repository") as mock_fields,
         patch(
-            "app.routers.detection.bind_numerical_checks",
+            "app.routers.detection.bind_checks",
             new=AsyncMock(return_value=BindingResult()),
         ) as mock_check,
         patch("app.routers.detection.langgraph_trace") as mock_trace,
@@ -399,7 +398,7 @@ def test_get_numerical_validation_writes_nothing() -> None:
         patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.extracted_fields_repository") as mock_fields,
         patch(
-            "app.routers.detection.bind_numerical_checks",
+            "app.routers.detection.bind_checks",
             new=AsyncMock(return_value=BindingResult()),
         ),
         patch("app.routers.detection.langgraph_trace") as mock_trace,
@@ -418,7 +417,7 @@ def test_get_numerical_validation_writes_nothing() -> None:
 def test_get_numerical_validation_fetch_and_not_found_errors() -> None:
     with (
         patch("app.routers._dependencies.document_repository") as mock_repo,
-        patch("app.routers.detection.bind_numerical_checks", new=AsyncMock(return_value=BindingResult())) as mock_check,
+        patch("app.routers.detection.bind_checks", new=AsyncMock(return_value=BindingResult())) as mock_check,
     ):
         mock_repo.get_document.side_effect = RuntimeError("db down")
         assert (
@@ -428,7 +427,7 @@ def test_get_numerical_validation_fetch_and_not_found_errors() -> None:
 
     with (
         patch("app.routers._dependencies.document_repository") as mock_repo,
-        patch("app.routers.detection.bind_numerical_checks", new=AsyncMock(return_value=BindingResult())) as mock_check,
+        patch("app.routers.detection.bind_checks", new=AsyncMock(return_value=BindingResult())) as mock_check,
     ):
         mock_repo.get_document.return_value = None
         assert (
@@ -477,8 +476,7 @@ def test_image_manipulation_requires_full_detection_first() -> None:
         patch("app.routers.detection.check_image_manipulation") as mock_check,
     ):
         mock_repo.get_document.return_value = _document()
-        mock_trace.get_persisted.return_value = None
-        mock_trace.get.return_value = None
+        mock_trace.load.return_value = None
         response = client.get("/documents/doc-1/detection/image-manipulation")
 
     assert response.status_code == 409
@@ -490,13 +488,6 @@ def test_image_manipulation_document_missing() -> None:
         mock_repo.get_document.return_value = None
         response = client.get("/documents/doc-1/detection/image-manipulation")
     assert response.status_code == 404
-
-
-@pytest.fixture(autouse=True)
-def bundled_holidays():
-    """The date-anomalies endpoint fetches MOM's live holiday list for bank statements; tests stay offline."""
-    with patch("app.routers.detection.public_holidays_for", new=AsyncMock(return_value=BUNDLED_HOLIDAYS)) as mock:
-        yield mock
 
 
 def _date_anomaly_result() -> DateAnomalyResult:
@@ -535,7 +526,6 @@ def test_get_date_anomalies_passes_extracted_fields_and_document_type() -> None:
     args = mock_check.call_args[0]
     assert args[1] == fields
     assert args[2] == "bank_statement"
-    assert args[3] is BUNDLED_HOLIDAYS
 
 
 def test_get_date_anomalies_writes_nothing() -> None:
@@ -617,8 +607,7 @@ def test_image_tampering_requires_full_detection_first() -> None:
         patch("app.routers.detection.check_image_tampering") as mock_check,
     ):
         mock_repo.get_document.return_value = _document()
-        mock_trace.get_persisted.return_value = None
-        mock_trace.get.return_value = None
+        mock_trace.load.return_value = None
         response = client.get("/documents/doc-1/detection/image-tampering")
 
     assert response.status_code == 409
@@ -669,8 +658,7 @@ def test_image_integrity_requires_full_detection_first() -> None:
         patch("app.routers.detection.check_image_tampering") as mock_t,
     ):
         mock_repo.get_document.return_value = _document()
-        mock_trace.get_persisted.return_value = None
-        mock_trace.get.return_value = None
+        mock_trace.load.return_value = None
         response = client.get("/documents/doc-1/detection/image-integrity")
 
     assert response.status_code == 409
@@ -727,7 +715,7 @@ def test_retry_detection_relaunches_after_a_cancelled_run() -> None:
         patch.dict(documents_router._detection_tasks, {}, clear=True),
     ):
         mock_repo.get_document.return_value = _document(status=DocumentStatus.APPROVED)
-        mock_trace.get_persisted.return_value = {"detection_error": "Cancelled by loan officer"}
+        mock_trace.load.return_value = {"detection_error": "Cancelled by loan officer"}
         response = client.post("/documents/doc-1/detection/retry")
 
     assert response.status_code == 200
@@ -761,7 +749,7 @@ def test_retry_detection_rejected_when_a_report_already_exists() -> None:
         patch.dict(documents_router._detection_tasks, {}, clear=True),
     ):
         mock_repo.get_document.return_value = _document(status=DocumentStatus.APPROVED)
-        mock_trace.get_persisted.return_value = {"detection_report": {"verdict": "clean"}}
+        mock_trace.load.return_value = {"detection_report": {"verdict": "clean"}}
         response = client.post("/documents/doc-1/detection/retry")
 
     assert response.status_code == 409
@@ -778,7 +766,7 @@ def test_retry_detection_rejected_when_nothing_ran_yet() -> None:
         patch.dict(documents_router._detection_tasks, {}, clear=True),
     ):
         mock_repo.get_document.return_value = _document(status=DocumentStatus.APPROVED)
-        mock_trace.get_persisted.return_value = None
+        mock_trace.load.return_value = None
         response = client.post("/documents/doc-1/detection/retry")
 
     assert response.status_code == 409
@@ -786,7 +774,7 @@ def test_retry_detection_rejected_when_nothing_ran_yet() -> None:
 
 
 
-def test_retry_detection_refused_for_unrecognised_document() -> None:
+def test_retry_detection_refused_for_untyped_document() -> None:
     from app.routers import documents as documents_router
 
     with (
@@ -796,17 +784,17 @@ def test_retry_detection_refused_for_unrecognised_document() -> None:
         patch.dict(documents_router._detection_tasks, {}, clear=True),
     ):
         mock_repo.get_document.return_value = _document(
-            status=DocumentStatus.APPROVED, document_type="unrecognised"
+            status=DocumentStatus.APPROVED, document_type=None
         )
-        mock_trace.get_persisted.return_value = {"detection_error": "crashed"}
+        mock_trace.load.return_value = {"detection_error": "crashed"}
         response = client.post("/documents/doc-1/detection/retry")
 
     assert response.status_code == 409
-    assert response.json()["detail"] == "Detection doesn't run on unrecognised documents."
+    assert response.json()["detail"] == "Detection doesn't run on documents with no type."
     mock_launch.assert_not_called()
 
 
-def test_individual_checks_refused_for_unrecognised_document() -> None:
+def test_individual_checks_refused_for_untyped_document() -> None:
     with (
         patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.langgraph_trace") as mock_trace,
@@ -814,13 +802,13 @@ def test_individual_checks_refused_for_unrecognised_document() -> None:
         patch("app.routers.detection.check_image_tampering") as mock_t,
     ):
         mock_repo.get_document.return_value = _document(
-            status=DocumentStatus.APPROVED, document_type="unrecognised"
+            status=DocumentStatus.APPROVED, document_type=None
         )
         _mark_detection_already_ran(mock_trace)
         response = client.get("/documents/doc-1/detection/image-integrity")
 
     assert response.status_code == 409
-    assert response.json()["detail"] == "Detection doesn't run on unrecognised documents."
+    assert response.json()["detail"] == "Detection doesn't run on documents with no type."
     mock_m.assert_not_called()
     mock_t.assert_not_called()
 
@@ -835,7 +823,7 @@ def test_get_numerical_validation_reports_a_binder_failure_and_still_runs() -> N
         patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.extracted_fields_repository") as mock_fields,
         patch(
-            "app.routers.detection.bind_numerical_checks",
+            "app.routers.detection.bind_checks",
             new=AsyncMock(return_value=BindingResult(error="api down")),
         ),
         patch("app.routers.detection.langgraph_trace") as mock_trace,
@@ -887,8 +875,7 @@ def test_ai_generation_requires_full_detection_first() -> None:
         patch("app.routers.detection.check_ai_generation") as mock_check,
     ):
         mock_repo.get_document.return_value = _document()
-        mock_trace.get_persisted.return_value = None
-        mock_trace.get.return_value = None
+        mock_trace.load.return_value = None
         response = client.get("/documents/doc-1/detection/ai-generation")
 
     assert response.status_code == 409

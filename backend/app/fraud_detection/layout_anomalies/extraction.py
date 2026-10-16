@@ -13,6 +13,7 @@ from .common import (
     ParagraphType, _SIGNATURE_RE, _SIGNATURE_ZONE_RATIO, _TITLE_PAGE_SHORT_FRACTION,
     _TITLE_PAGE_SHORT_RATIO, _union_bbox,
 )
+from ..pdf_pages import page as _page, pages as _pages
 
 
 def _open_document(file_bytes: bytes) -> pymupdf.Document:
@@ -29,23 +30,6 @@ def _open_document(file_bytes: bytes) -> pymupdf.Document:
         filetype = "pdf"
     return pymupdf.open(stream=file_bytes, filetype=filetype)
 
-
-def _page(doc: pymupdf.Document, index: int) -> pymupdf.Page:
-    """
-    pymupdf.Document.__getitem__ is declared via inline @typing.overload in
-    its own source (no separate .pyi), with a default value on the int
-    overload and the slice/tuple overloads gated behind a sys.version_info
-    check — pyright can't cleanly resolve this for either direct indexing or
-    the old-style __getitem__-based iteration protocol (no __iter__ is
-    declared), and infers the element type as the whole overload-return
-    union instead of narrowing to Page. One cast, used everywhere a page is
-    pulled out of a Document, instead of re-deriving this at each call site.
-    """
-    return cast(pymupdf.Page, doc[index])
-
-
-def _pages(doc: pymupdf.Document) -> list[pymupdf.Page]:
-    return [_page(doc, i) for i in range(len(doc))]
 
 
 def _needs_ocr(doc: pymupdf.Document, file_bytes: bytes) -> bool:

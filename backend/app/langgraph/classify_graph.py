@@ -9,20 +9,20 @@ not just a prompt suggestion — vision is by far the most expensive tool
 (a full image, not just text), so it never gets to be the agent's first or
 only move. Within that ordering the agent still genuinely decides whether
 to call either tool at all, which is what keeps this agentic rather than a
-hardcoded pipeline with an LLM bolted on. See LANGGRAPH_MIGRATION_PLAN.md.
+hardcoded pipeline with an LLM bolted on.
 
     rule_classify -> agent (turn 1: llm_classify_tool only)
                        -> [tools -> agent (turn 2+: vision_llm only)]* -> validate -> repair
 
-Also holds the reclassify entry point (Phase 4): when Extraction escalates,
+Also holds the reclassify entry point: when Extraction escalates,
 graph.py routes back into this same agent/tools/validate/repair chain via
 prepare_reclassify_node, continuing the same conversation rather than
 re-running rule_classify. Since that conversation already has at least one
 prior agent turn, only vision_llm (if not already used) is offered there —
 llm_classify_tool already had its one shot on the original pass.
 
-No checkpointer here (`compile(checkpointer=False)` in graph.py) — only the
-parent graph persists, per LANGGRAPH_MIGRATION_PLAN.md section 5.
+No checkpointer here (`compile(checkpointer=False)` in graph.py); only the
+parent graph persists.
 """
 
 from __future__ import annotations
@@ -44,6 +44,8 @@ from .rule_classify import classify_by_rules
 from .state import DocumentGraphState
 from .vision_tool import vision_llm
 from ..config import settings
+from ..llm_io import message_text
+from ..run_context import spend_model_call
 
 logger = logging.getLogger("classifier_pipeline.langgraph.classify")
 
@@ -95,6 +97,7 @@ async def agent_node(state: DocumentGraphState) -> dict:
     from ._anthropic import build_chat_anthropic
 
     existing = state.get("agent_messages") or []
+    spend_model_call("classify agent")
     available_tools = _available_tools(existing)
     model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, 1024)
     if available_tools:
@@ -176,14 +179,14 @@ def build_reconsideration_message(escalation: dict, evidence: list[str] | None =
 
 def prepare_reclassify_node(state: DocumentGraphState) -> dict:
     """
-    Phase 4 reclassify entry point (see graph.py's decide_after_extract):
+    Reclassify entry point (see graph.py's decide_after_extract):
     always re-enters at the agent, never re-runs rule_classify — a bare
     regex re-guess has nothing new to react to, whereas the agent can
     actually weigh Extraction's specific objection (and re-call its tools if
     it decides it needs to).
 
-    Always a continuation of the existing `agent_messages` conversation
-    (matching Dify's conversation_id continuation): the agent runs at least
+    Always a continuation of the existing `agent_messages` conversation:
+    the agent runs at least
     once for every document now (there's no code path that finalises
     without it), so agent_messages is guaranteed non-empty by the time
     Extraction — and therefore a possible reclassify — could happen.
@@ -227,9 +230,12 @@ def _apply_computed_confidence(state: DocumentGraphState, classification: dict) 
 
 def validate_node(state: DocumentGraphState) -> dict:
     last = (state.get("agent_messages") or [])[-1]
-    content = last.content if isinstance(last.content, str) else str(last.content)
+    content = message_text(last.content)
     classification = validate_agent_output(content)
-    trace.record(state["document_id"], "validate", document_type=classification.get("document_type"))
+    trace.record(
+        state["document_id"], "validate",
+        document_type=classification.get("document_type"), output_status=classification.get("output_status"),
+    )
     if classification.get("document_type"):
         classification = _apply_computed_confidence(state, classification)
     return {"classification": classification}
@@ -240,7 +246,6 @@ async def repair_node(state: DocumentGraphState) -> dict:
     Deterministic cleanup already happened inside validate_agent_output
     (strips to the {...} span). If that still couldn't produce a
     document_type, one Haiku re-ask; if that also fails, manual review.
-    See LANGGRAPH_MIGRATION_PLAN.md section 5, "Repair node".
     """
     classification = state.get("classification") or {}
     if classification.get("document_type"):
@@ -249,9 +254,10 @@ async def repair_node(state: DocumentGraphState) -> dict:
     from ._anthropic import build_chat_anthropic
 
     last = (state.get("agent_messages") or [])[-1]
-    bad_output = last.content if isinstance(last.content, str) else str(last.content)
+    bad_output = message_text(last.content)
     repair_model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 512)
     try:
+        spend_model_call("classify repair")
         response = await repair_model.ainvoke([
             SystemMessage(content=[
                 {
@@ -266,8 +272,8 @@ async def repair_node(state: DocumentGraphState) -> dict:
             ]),
             HumanMessage(content=bad_output),
         ])
-        repaired = validate_agent_output(response.content if isinstance(response.content, str) else str(response.content))
-    except Exception as exc:  # noqa: BLE001 — repair failing is itself a valid outcome, not a crash
+        repaired = validate_agent_output(message_text(response.content))
+    except Exception as exc:
         logger.warning("Repair re-ask failed: %s", exc)
         repaired = {}
 

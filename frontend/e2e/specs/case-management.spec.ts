@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../support/test';
-import { makeCase, makeDocument, type MockBackend } from '../support/mockBackend';
+import { makeCase, makeDocument, makeRisk, type MockBackend } from '../support/mockBackend';
+import type { CaseRiskFinding } from '../../src/services/uploadService/types';
 
 /**
  * Case Management (Sprint 2) — "Test Cases - Sprint 2.xlsx", Case Management
@@ -162,8 +163,101 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
 
     const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
     await expect(section).toBeVisible();
-    // Risk analysis isn't built yet — the section shows its placeholder.
-    await expect(section).toContainText('Risk summary not available yet.');
+    // Nothing uploaded yet, so there's nothing to score.
+    await expect(section).toContainText('No documents to score yet.');
+  });
+
+  test('CM-007 a case still being scanned shows how many documents are done @CM-007', async ({ page, backend }) => {
+    const harbor = makeCase({
+      greenlink_case_id: 'GLDB-2001',
+      risk: makeRisk({ state: 'pending', documents_scanned: 2, documents_total: 3 }),
+    });
+    backend.cases.push(harbor);
+    await page.goto(`/cases/${harbor.greenlink_case_id}`);
+
+    const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
+    await expect(section).toContainText('2 of 3 documents scanned.');
+    await expect(section.locator('.risk-badge')).toHaveCount(0);
+  });
+
+  test('CM-007 a scored case shows its risk level and contributing findings @CM-007', async ({ page, backend }) => {
+    const finding = (overrides: Partial<CaseRiskFinding>): CaseRiskFinding => ({
+      document_id: 'doc-payslip',
+      filename: 'C011_Payslip.pdf',
+      document_type: 'payslip',
+      finding_id: 'font_consistency_tool-1',
+      tool: 'font_consistency_tool',
+      severity: 'high',
+      summary: 'Net pay is in a different font from the rest of the payslip.',
+      rationale: 'Only the figure that matters differs.',
+      points: 8,
+      unreviewed: false,
+      ...overrides,
+    });
+    const harbor = makeCase({
+      greenlink_case_id: 'GLDB-2002',
+      risk: makeRisk({
+        state: 'scored',
+        level: 'High',
+        score: 57,
+        points: 14,
+        documents_scanned: 2,
+        documents_total: 2,
+        reasons: ['Rated High from the combined severity of 4 finding(s).'],
+        contributing_findings: [
+          finding({}),
+          ...[1, 2, 3].map((n) =>
+            finding({
+              finding_id: `layout_anomalies_tool-${n}`,
+              tool: 'layout_anomalies_tool',
+              severity: 'medium',
+              summary: 'This label and amount on the same row are vertically offset by 20 pt.',
+              points: n === 1 ? 3 : 0.75,
+            }),
+          ),
+          finding({
+            document_id: 'doc-statement',
+            filename: 'C011_BankStatement.pdf',
+            document_type: 'bank_statement',
+            finding_id: 'spelling_tool-1',
+            tool: 'spelling_tool',
+            severity: 'low',
+            summary: 'Possible misspelling "Statment".',
+            points: 1,
+          }),
+        ],
+        unassessed_checks: [
+          { document_id: 'doc-statement', filename: 'C011_BankStatement.pdf', tool: 'metadata_tool', reason: 'No metadata' },
+        ],
+      }),
+    });
+    backend.cases.push(harbor);
+    await page.goto(`/cases/${harbor.greenlink_case_id}`);
+
+    const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
+    await expect(section.locator('.risk-badge')).toHaveText('High risk');
+    await expect(section).toContainText('Score 57/100');
+    await expect(section).toContainText('1 high · 3 medium · 1 low');
+
+    // Documents start collapsed; the low-only bank statement is hidden behind "Show more".
+    const documents = section.locator('.risk-document');
+    await expect(documents).toHaveCount(1);
+    await expect(documents.first()).toContainText('C011_Payslip.pdf');
+    await expect(section.locator('.risk-findings')).toHaveCount(0);
+
+    // Expanding merges the three identical layout findings into one ×3 row.
+    await documents.first().getByRole('button').click();
+    const rows = section.locator('.risk-findings li');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(1)).toContainText('×3');
+
+    await section.getByRole('button', { name: 'Show 1 low-severity finding' }).click();
+    await expect(documents).toHaveCount(2);
+    await expect(documents.nth(1)).toContainText('C011_BankStatement.pdf');
+    await expect(section.getByRole('button', { name: 'Show less' })).toBeVisible();
+
+    await section.getByText("Couldn't verify (1)").click();
+    await expect(section).toContainText('C011_BankStatement.pdf — Metadata: No metadata');
   });
 
   test('CM-008 flagged anomalies are accessible from case details @CM-008', async ({ page, backend }) => {
@@ -209,6 +303,102 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     await expect(section).toBeVisible();
     // Audit events aren't recorded yet — the section shows its placeholder.
     await expect(section).toContainText('No audit events available yet.');
+  });
+
+  test('a case with nothing needing further evidence recommends no documents', async ({ page, backend }) => {
+    const { harbor } = seedQueue(backend);
+    await page.goto(`/cases/${harbor.greenlink_case_id}`);
+
+    const section = page.locator('.summary-card', {
+      has: page.getByRole('heading', { name: 'Recommended Supporting Documents' }),
+    });
+    await expect(section).toContainText('No additional documents needed.');
+  });
+
+  test('recommended documents show why and what to request', async ({ page, backend }) => {
+    const harbor = makeCase({
+      greenlink_case_id: 'GLDB-2003',
+      supporting_document_recommendations: [
+        {
+          document_type: 'purchase_order',
+          title: 'Purchase Order',
+          reason: 'C001_BankStatement.pdf shows 1 large supplier payment (of at least 20,000.00).',
+          request: 'Request a purchase order for this transaction:',
+          source_document_id: 'doc-statement',
+          source_filename: 'C001_BankStatement.pdf',
+          items: [
+            {
+              date: '11-Jun-26',
+              description: 'REMITTANCE TRANSFER OF FUNDS RTF UNITED PAPER SUPPLY PTE. LTD. SGD 22,506',
+              amount: -22506.48,
+              prior_amount: null,
+              counterparty: 'UNITED PAPER SUPPLY PTE. LTD.',
+              reason: 'Payment of 22,506.48 on 11-Jun-26 to UNITED PAPER SUPPLY PTE. LTD.',
+              breakdown: [],
+            },
+          ],
+        },
+        {
+          document_type: 'bank_loan_evidence',
+          title: 'Bank Loan Statements or Bank Loan Repayment Schedules',
+          reason:
+            'C001_Financials.pdf shows a 43.3% increase in total bank borrowings compared with the prior year, exceeding the 40% threshold.',
+          request: 'Request bank loan statements or bank loan repayment schedules for this amount:',
+          source_document_id: 'doc-financials',
+          source_filename: 'C001_Financials.pdf',
+          items: [
+            {
+              date: null,
+              description: 'Total bank borrowings',
+              amount: 1850790,
+              prior_amount: 1291530,
+              counterparty: null,
+              reason: 'Total bank borrowings: 1,850,790.00 (prior year: 1,291,530.00).',
+              breakdown: [
+                {
+                  date: null,
+                  description: 'Bank borrowings, current portion',
+                  amount: 516090,
+                  prior_amount: 343330,
+                  counterparty: null,
+                  reason: 'Bank borrowings, current portion: 516,090.00 (prior year: 343,330.00).',
+                  breakdown: [],
+                },
+                {
+                  date: null,
+                  description: 'Bank borrowings, non-current portion',
+                  amount: 1334700,
+                  prior_amount: 948200,
+                  counterparty: null,
+                  reason: 'Bank borrowings, non-current portion: 1,334,700.00 (prior year: 948,200.00).',
+                  breakdown: [],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    backend.cases.push(harbor);
+    await page.goto(`/cases/${harbor.greenlink_case_id}`);
+
+    const section = page.locator('.summary-card', {
+      has: page.getByRole('heading', { name: 'Recommended Supporting Documents' }),
+    });
+    await expect(section).toContainText('2 requests');
+    await expect(section).toContainText('Purchase Order');
+    await expect(section).toContainText('shows 1 large supplier payment');
+    await expect(section).toContainText('Request a purchase order for this transaction:');
+    await expect(section).toContainText('Payment of 22,506.48 on 11-Jun-26 to UNITED PAPER SUPPLY PTE. LTD.');
+    await expect(section).toContainText('Bank Loan Statements or Bank Loan Repayment Schedules');
+    await expect(section).toContainText('Total bank borrowings: 1,850,790.00 (prior year: 1,291,530.00).');
+    // The portions are tabled with the total they make up as the last row.
+    await expect(section.locator('.supporting-document-breakdown tbody tr')).toHaveText([
+      /current portion\s*343,330\.00\s*516,090\.00\s*\+172,760\.00 \(\+50\.3%\)/,
+      /non-current portion\s*948,200\.00\s*1,334,700\.00\s*\+386,500\.00 \(\+40\.8%\)/,
+      /Total bank borrowings\s*1,291,530\.00\s*1,850,790\.00\s*\+559,260\.00 \(\+43\.3%\)/,
+    ]);
+    await expect(section.getByRole('button', { name: 'View' })).toHaveCount(0);
   });
 });
 
@@ -499,7 +689,7 @@ test.describe('Delete case and documents @sprint3 @SCRUM-117', () => {
     await expect(page.getByText(/Document not found/)).toBeVisible();
   });
 
-  test('CM-025 a case is deleted after confirming, and its link then shows "Case not found" @CM-025', async ({ page, backend }) => {
+  test('CM-025 a case is deleted after confirming, and its link then shows the case not-found page @CM-025', async ({ page, backend }) => {
     const { theCase } = seedScrum117(backend);
     seedQueue(backend);
     await page.goto(`/cases/${theCase.greenlink_case_id}`);
@@ -514,7 +704,25 @@ test.describe('Delete case and documents @sprint3 @SCRUM-117', () => {
     await expect(caseCards(page).filter({ hasText: 'scrum-117 test' })).toHaveCount(0);
     expect(backend.requestsTo('DELETE', `/cases/${theCase.id}`)).toHaveLength(1);
     await page.goto(`/cases/${theCase.greenlink_case_id}`);
-    await expect(page.getByText('Case not found.')).toBeVisible();
+    await expect(page.getByRole('heading', { name: "We couldn't find that case" })).toBeVisible();
+    await page.getByRole('button', { name: 'Go to case queue' }).click();
+    await expect(page).toHaveURL('/cases');
+  });
+
+  test('CM-029 a document link into a deleted case shows the not-found page @CM-029', async ({ page, backend }) => {
+    const { theCase, documentUrl } = seedScrum117(backend);
+    seedQueue(backend);
+    await page.goto(`/cases/${theCase.greenlink_case_id}`);
+
+    await page.getByRole('button', { name: 'Case actions' }).click();
+    await page.getByRole('menuitem', { name: 'Delete case' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+    await expect(page).toHaveURL('/cases');
+
+    await page.goto(documentUrl);
+    await expect(page.getByRole('heading', { name: "We couldn't find that document" })).toBeVisible();
+    await page.getByRole('button', { name: 'Go to case queue' }).click();
+    await expect(page).toHaveURL('/cases');
   });
 
   test('CM-026 deleting the document that fulfilled a requirement reverts the checklist @CM-026', async ({ page, backend }) => {

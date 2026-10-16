@@ -6,7 +6,7 @@ import time
 from collections import deque
 from datetime import datetime, timezone
 
-from . import document_repository
+from . import document_repository, query_stats
 from .config import settings
 from .langgraph import pipeline as langgraph_pipeline
 from .models import DocumentStatus, ProcessingErrorEntry
@@ -79,7 +79,7 @@ class DocumentQueue:
         while True:
             document_id = await self._queue.get()
             dequeued_at = time.monotonic()
-            task = asyncio.ensure_future(self._process_document(document_id, dequeued_at))
+            task = asyncio.ensure_future(self._process_document_scoped(document_id, dequeued_at))
             self._active_tasks[document_id] = task
             try:
                 await task
@@ -90,7 +90,7 @@ class DocumentQueue:
                 logger.info(
                     "Worker %d: processing of document %s was cancelled", worker_id, document_id
                 )
-            except Exception as exc:  # noqa: BLE001 — never let one bad item kill the worker
+            except Exception as exc:
                 logger.exception(
                     "Worker %d: unhandled error processing document %s", worker_id, document_id
                 )
@@ -135,6 +135,10 @@ class DocumentQueue:
         task = self._active_tasks.get(document_id)
         if task is not None and not task.done():
             task.cancel()
+
+    async def _process_document_scoped(self, document_id: str, dequeued_at: float) -> None:
+        with query_stats.scope(f"pipeline doc={document_id[:8]}"):
+            await self._process_document(document_id, dequeued_at)
 
     async def _process_document(self, document_id: str, dequeued_at: float) -> None:
         document = await asyncio.to_thread(

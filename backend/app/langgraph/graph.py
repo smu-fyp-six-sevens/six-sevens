@@ -1,5 +1,5 @@
 """
-Document graph (Phases 1-4): ingest -> classify -> finalise_classification ->
+Document graph: ingest -> classify -> finalise_classification ->
 extract -> ANALYZED/FAILED, with a bounded classify<->extract reclassify loop
 (settings.MAX_RECLASSIFICATION_ATTEMPTS) when Extraction judges the
 classified type wrong. The reclassify branch re-enters at the Sonnet agent
@@ -7,8 +7,7 @@ directly (see classify_graph.prepare_reclassify_node), not the whole classify
 subgraph: a bare rule re-guess has nothing new to react to, whereas the agent
 can actually weigh Extraction's objection — the conversation just continues.
 
-No checkpointer yet — that's the rest of Phase 4 (Postgres checkpointer with
-pruning, rerun_extraction), see LANGGRAPH_MIGRATION_PLAN.md section 6.
+No checkpointer yet (see PENDING_WORK.md).
 """
 
 from __future__ import annotations
@@ -50,6 +49,8 @@ def _escalation_disputes_type(state: DocumentGraphState) -> bool:
 
 
 def _decide_after_extract(state: DocumentGraphState) -> str:
+    if (state.get("extraction") or {}).get("output_error"):
+        return "failed"
     if not _escalation_disputes_type(state):
         return "analyzed"
     if state.get("attempts", 0) < settings.MAX_RECLASSIFICATION_ATTEMPTS:
@@ -68,7 +69,7 @@ def build_document_graph():
     graph.add_node("mark_unresolved_escalation", nodes.mark_unresolved_escalation_node)
     graph.add_node("fail", nodes.fail_node)
 
-    # --- Reclassify loop (Phase 4) ---
+    # --- Reclassify loop ---
     # Own nodes, not the "classify" subgraph reused wholesale: this always
     # goes straight to the agent (see prepare_reclassify_node's docstring),
     # skipping rule_classify, which only makes sense on a document's first pass.
@@ -92,7 +93,10 @@ def build_document_graph():
     graph.add_conditional_edges(
         "extract",
         _decide_after_extract,
-        {"analyzed": "mark_analyzed", "reclassify": "record_escalation", "unresolved": "mark_unresolved_escalation"},
+        {
+            "analyzed": "mark_analyzed", "reclassify": "record_escalation",
+            "unresolved": "mark_unresolved_escalation", "failed": "fail",
+        },
     )
     graph.add_edge("mark_analyzed", END)
     graph.add_edge("mark_unresolved_escalation", "fail")

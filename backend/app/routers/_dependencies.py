@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Any, Callable, TypeVar
 
 from fastapi import HTTPException, status
 
@@ -20,10 +21,23 @@ from ..models import CaseRecord, DocumentRecord
 
 logger = logging.getLogger(__name__)
 
+T = TypeVar("T")
 
-async def get_document_or_404(document_id: str) -> DocumentRecord:
+
+async def to_thread_or_502(fn: Callable[..., T], *args: Any, detail: str, log: tuple, **kwargs: Any) -> T:
+    """Runs a blocking call off the event loop; on any error logs `log` (format, *args) and raises a 502."""
     try:
-        document = await asyncio.to_thread(document_repository.get_document, document_id)
+        return await asyncio.to_thread(fn, *args, **kwargs)
+    except Exception as exc:
+        logger.exception(*log)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail) from exc
+
+
+async def _load_document(document_id: str, include_fields: bool) -> DocumentRecord:
+    try:
+        document = await asyncio.to_thread(
+            document_repository.get_document, document_id, include_fields=include_fields
+        )
     except Exception as exc:
         logger.exception("Failed to fetch document %s", document_id)
         raise HTTPException(
@@ -34,6 +48,19 @@ async def get_document_or_404(document_id: str) -> DocumentRecord:
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
     return document
+
+
+async def get_document_or_404(document_id: str) -> DocumentRecord:
+    """
+    The document row only: most handlers read the fields themselves, in the shape they need
+    (with ids and confidences), so loading them here too was a second, unused read.
+    """
+    return await _load_document(document_id, include_fields=False)
+
+
+async def get_document_with_fields_or_404(document_id: str) -> DocumentRecord:
+    """For the handlers that read document.extracted_fields (a plain {name: value} dict)."""
+    return await _load_document(document_id, include_fields=True)
 
 
 async def get_case_or_404(case_id: str) -> CaseRecord:

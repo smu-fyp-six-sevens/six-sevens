@@ -1,7 +1,6 @@
 """
-Cache breakpoint coordinator (LANGGRAPH_MIGRATION_PLAN.md section 5, "Prompt
-caching"): "Parallel identical requests can all miss, so consider running a
-batch's first document alone."
+Cache breakpoint coordinator: parallel identical requests can all miss the
+prompt cache, so one caller per distinct prompt goes first.
 
 Anthropic's prompt cache is written by a request as it completes; a second
 request that started concurrently with the first (before that write lands)

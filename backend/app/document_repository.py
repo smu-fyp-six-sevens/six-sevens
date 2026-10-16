@@ -3,23 +3,24 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional, cast
 
 from . import extracted_fields_repository, storage_service
 from .models import DocumentRecord, DocumentStatus
 from .supabase_client import service_supabase_client, supabase_client
+from .supabase_rows import row as _row
 
 logger = logging.getLogger(__name__)
 
 
-def _row(mapping: Any) -> dict:
-    """postgrest types a row as a loose JSON union rather than dict[str, Any]
-    — every row here is one we (or our own migrations) wrote, so this cast
-    just tells the type checker what's already true."""
-    return cast(dict, mapping)
+# List reads skip the large exiftool `metadata` blob and the retired extracted_fields column; get_document keeps "*".
+_LIST_COLUMNS = (
+    "id, case_id, filename, document_type, classification_confidence, routing_status, storage_path, status, "
+    "retry_count, uploaded_at, queued_at, processing_started_at, failure_reason, evidence, "
+    "fulfilled_requirements, extraction_confidence, fields_reviewed_at, escalation_reason"
+)
 
 
-def _sync_case(case_id: Optional[str]) -> None:
+def _sync_case(case_id: str | None) -> None:
     """
     Best-effort refresh of the case-level submission_finalized cache after a
     write that can change a document's routing_status or
@@ -47,7 +48,7 @@ def _sync_case(case_id: Optional[str]) -> None:
 
 
 def create_document(
-    case_id: Optional[str], filename: str, storage_path: str
+    case_id: str | None, filename: str, storage_path: str
 ) -> DocumentRecord:
     now = datetime.now(timezone.utc)
     row = {
@@ -67,12 +68,12 @@ def update_status(
     document_id: str,
     status: DocumentStatus,
     *,
-    queued_at: Optional[datetime] = None,
-    processing_started_at: Optional[datetime] = None,
-    retry_count: Optional[int] = None,
-    failure_reason: Optional[str] = None,
-    document_type: Optional[str] = None,
-    expected_current_statuses: Optional[list[DocumentStatus]] = None,
+    queued_at: datetime | None = None,
+    processing_started_at: datetime | None = None,
+    retry_count: int | None = None,
+    failure_reason: str | None = None,
+    document_type: str | None = None,
+    expected_current_statuses: list[DocumentStatus] | None = None,
 ) -> bool:
     """
     expected_current_statuses turns this into an atomic compare-and-swap:
@@ -103,25 +104,21 @@ def update_status(
     if expected_current_statuses is not None:
         query = query.in_("status", [s.value for s in expected_current_statuses])
     result = query.execute()
-    # Only the ANALYZED transition can change requirement coverage (a
-    # document's routing_status/fulfilled_requirements are set
-    # earlier, by record_classification/update_extracted_fields) — every
-    # other status this function sets (queued/processing/extracting/failed)
-    # never did resync before either, so this deliberately doesn't sync on
-    # those to avoid extra writes with no coverage-affecting reason.
-    if status == DocumentStatus.ANALYZED and result.data:
-        _sync_case(_row(result.data[0]).get("case_id"))
+    # No case resync here. Coverage depends on routing_status, the confirmed type,
+    # rejection and the fields (see models.counts_towards_checklist), and
+    # record_classification / update_extracted_fields already resync when they
+    # write those. A status change alone, ANALYZED included, can't move it.
     return bool(result.data)
 
-def approve_document(document_id: str) -> None:
+def approve_document(document_id: str) -> DocumentRecord | None:
+    """Approving doesn't change checklist coverage (only rejection does), so no case resync."""
     result = (
         supabase_client.table("documents")
         .update({"status": DocumentStatus.APPROVED.value})
         .eq("id", document_id)
         .execute()
     )
-    if result.data:
-        _sync_case(_row(result.data[0]).get("case_id"))
+    return DocumentRecord(**_row(result.data[0])) if result.data else None
 
 def mark_detecting(document_id: str) -> None:
     """The Detection Agent has started — shown live as "Scanning" (see langgraph/detection/graph.py)."""
@@ -144,7 +141,7 @@ def revert_to_approved(document_id: str) -> None:
     ).eq("id", document_id).execute()
 
 
-def reject_document(document_id: str) -> None:
+def reject_document(document_id: str) -> DocumentRecord | None:
     result = (
         supabase_client.table("documents")
         .update({"status": DocumentStatus.REJECTED.value})
@@ -154,8 +151,10 @@ def reject_document(document_id: str) -> None:
     # A rejected document no longer fulfils the checklist (see
     # case_service.compute_requirement_coverage), so the case's
     # submission_finalized flag can change here too.
-    if result.data:
-        _sync_case(_row(result.data[0]).get("case_id"))
+    if not result.data:
+        return None
+    _sync_case(_row(result.data[0]).get("case_id"))
+    return DocumentRecord(**_row(result.data[0]))
 
 
 def get_documents_by_ids(
@@ -204,11 +203,11 @@ def move_document(document_id: str, case_id: str) -> None:
 def record_classification(
     document_id: str,
     *,
-    document_type: Optional[str],
-    classification_confidence: Optional[float],
+    document_type: str | None,
+    classification_confidence: float | None,
     routing_status: str,
-    evidence: Optional[list[str]] = None,
-    fulfilled_requirements: Optional[list[str]] = None,
+    evidence: list[str] | None = None,
+    fulfilled_requirements: list[str] | None = None,
 ) -> None:
     """
     Persists the classification-stage decision (type, confidence, and
@@ -231,13 +230,15 @@ def record_classification(
 
 def update_extracted_fields(
     document_id: str,
-    extraction_confidence: Optional[float],
-    fulfilled_requirements: Optional[list[str]] = None,
+    extraction_confidence: float | None,
+    fulfilled_requirements: list[str] | None = None,
     *,
-    routing_status: Optional[str] = None,
+    routing_status: str | None = None,
     fields_reviewed: bool = False,
-) -> None:
+) -> DocumentRecord | None:
     """
+    Returns the updated document row, so a caller that must answer with it needn't read it back.
+
     Persists the Extraction-stage confidence into its own extraction_confidence
     column — kept separate from record_classification's confidence (the
     Classifier's confidence in document_type) so neither stage's number
@@ -273,8 +274,10 @@ def update_extracted_fields(
     if fields_reviewed:
         update["fields_reviewed_at"] = datetime.now(timezone.utc).isoformat()
     result = supabase_client.table("documents").update(update).eq("id", document_id).execute()
-    if result.data:
-        _sync_case(_row(result.data[0]).get("case_id"))
+    if not result.data:
+        return None
+    _sync_case(_row(result.data[0]).get("case_id"))
+    return DocumentRecord(**_row(result.data[0]))
 
 
 def clear_fields_review(document_id: str) -> None:
@@ -373,7 +376,7 @@ def _attach_extracted_fields(documents: list[DocumentRecord]) -> list[DocumentRe
     return documents
 
 
-def get_document(document_id: str, *, include_fields: bool = True) -> Optional[DocumentRecord]:
+def get_document(document_id: str, *, include_fields: bool = True) -> DocumentRecord | None:
     """
     include_fields=False skips the extracted_fields table round-trip for
     callers that only need status/document_type/etc. (the langgraph pipeline
@@ -397,7 +400,7 @@ def get_documents_in_status(
 ) -> list[DocumentRecord]:
     result = (
         supabase_client.table("documents")
-        .select("*")
+        .select(_LIST_COLUMNS)
         .in_("status", [s.value for s in statuses])
         .execute()
     )
@@ -406,12 +409,12 @@ def get_documents_in_status(
 
 
 def list_documents(
-    case_id: Optional[str] = None,
-    status: Optional[DocumentStatus] = None,
+    case_id: str | None = None,
+    status: DocumentStatus | None = None,
     *,
     include_fields: bool = True,
 ) -> list[DocumentRecord]:
-    query = supabase_client.table("documents").select("*")
+    query = supabase_client.table("documents").select(_LIST_COLUMNS)
     if case_id is not None:
         query = query.eq("case_id", case_id)
     if status is not None:
