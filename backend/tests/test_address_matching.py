@@ -88,3 +88,44 @@ def test_company_addresses_with_same_identity_are_compared() -> None:
     }, document_type="bank_statement")
 
     assert len(find_address_mismatches([first, second])) == 1
+
+
+def test_a_document_with_a_uen_and_one_with_only_the_company_name_are_compared() -> None:
+    # A corporate bank statement prints the account holder's name but not its UEN.
+    incumbency = _document("incumbency", {
+        "company_name": "HARBOURLINE PRECISION ENGINEERING PTE. LTD.",
+        "uen": "201914237K",
+        "company_address": "8 Tuas Avenue 10, #01-05, Singapore 639137",
+    }, document_type="certificate_of_incumbency")
+    statement = _document("statement", {
+        "company_name": "Harbourline Precision Engineering Pte Ltd",
+        "company_address": "13 Tuas Avenue 10, Singapore 639137",
+    }, document_type="bank_statement")
+
+    assert len(find_address_mismatches([incumbency, statement])) == 1
+
+
+def test_two_different_uens_are_two_companies_even_with_the_same_name() -> None:
+    first = _document("first", {
+        "company_name": "Acme Pte Ltd", "uen": "201912345K",
+        "company_address": "10 Bedok North, Singapore 460022",
+    }, document_type="certificate_of_incumbency")
+    second = _document("second", {
+        "company_name": "Acme Pte Ltd", "uen": "201998765M",
+        "company_address": "20 Bedok North, Singapore 460023",
+    }, document_type="notice_of_assessment")
+
+    assert find_address_mismatches([first, second]) == []
+
+
+def test_a_uen_document_and_a_differently_named_one_are_not_compared() -> None:
+    incumbency = _document("incumbency", {
+        "company_name": "Acme Pte Ltd", "uen": "201912345K",
+        "company_address": "10 Bedok North, Singapore 460022",
+    }, document_type="certificate_of_incumbency")
+    supplier_statement = _document("statement", {
+        "company_name": "Other Trading Pte Ltd",
+        "company_address": "20 Bedok North, Singapore 460023",
+    }, document_type="bank_statement")
+
+    assert find_address_mismatches([incumbency, supplier_statement]) == []

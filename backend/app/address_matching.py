@@ -69,7 +69,8 @@ class AddressRecord:
     value: str
     scope: str
     identity_keys: frozenset[str] = frozenset()
-    company_key: str | None = None
+    # The company the address belongs to: "id:<UEN>" and/or "name:<name without Pte Ltd etc.>".
+    company_keys: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -96,7 +97,7 @@ def normalize_address(value: object) -> str:
             token = token[1:]
         if token == "SINGAPORE":
             continue
-        token = _ADDRESS_ABBREVIATIONS.get(token, token)
+        token = _ADDRESS_ABBREVIATIONS.get(token) or token
         # In a Singapore address, "Blk/Block 22" and "22" identify the same
         # block; other uses of "block" (for example "Block A") are retained.
         if token == "BLOCK" and index + 1 < len(tokens) and tokens[index + 1].isdigit():
@@ -143,20 +144,25 @@ def _identity_keys(name: object, id_number: object) -> frozenset[str]:
     return frozenset(keys)
 
 
-def _company_key(fields: dict) -> str | None:
+def _company_keys(fields: dict) -> frozenset[str]:
+    """The document's company, by UEN and by name: either can be missing (a bank statement prints the
+    account holder's name but not its UEN)."""
+    keys: set[str] = set()
     for field in ("uen", "tax_reference_number", "tin"):
         values = _strings(fields.get(field))
         if values:
             normalized_id = re.sub(r"[^A-Z0-9]", "", values[0].upper())
             if normalized_id:
-                return f"id:{normalized_id}"
+                keys.add(f"id:{normalized_id}")
+                break
     names = _strings(fields.get("company_name"))
-    if not names:
-        return None
-    tokens = re.findall(r"[A-Z0-9]+", names[0].upper())
-    while tokens and tokens[-1] in _COMPANY_SUFFIXES:
-        tokens.pop()
-    return f"name:{' '.join(tokens)}" if tokens else None
+    if names:
+        tokens = re.findall(r"[A-Z0-9]+", names[0].upper())
+        while tokens and tokens[-1] in _COMPANY_SUFFIXES:
+            tokens.pop()
+        if tokens:
+            keys.add(f"name:{' '.join(tokens)}")
+    return frozenset(keys)
 
 
 def _first(fields: dict, keys: Iterable[str]) -> str | None:
@@ -175,7 +181,7 @@ def _add_record(
     scope: str,
     *,
     identity_keys: frozenset[str] = frozenset(),
-    company_key: str | None = None,
+    company_keys: frozenset[str] = frozenset(),
 ) -> None:
     for address in _strings(value):
         if not normalize_address(address):
@@ -187,7 +193,7 @@ def _add_record(
             value=address,
             scope=scope,
             identity_keys=identity_keys,
-            company_key=company_key,
+            company_keys=company_keys,
         )
         if record not in records:
             records.append(record)
@@ -200,7 +206,7 @@ def extract_addresses(doc: DocumentRecord) -> list[AddressRecord]:
         return []
 
     records: list[AddressRecord] = []
-    company_key = _company_key(fields)
+    company_keys = _company_keys(fields)
     personal_doc = (
         doc.document_type in _PERSONAL_DOCUMENT_TYPES
         or is_personal_bank_statement(doc.document_type, fields)
@@ -252,7 +258,7 @@ def extract_addresses(doc: DocumentRecord) -> list[AddressRecord]:
         for field_name in _COMPANY_ADDRESS_FIELDS:
             _add_record(
                 records, doc, field_name, fields.get(field_name), "company",
-                company_key=company_key,
+                company_keys=company_keys,
             )
 
     generic_addresses = fields.get("address")
@@ -262,10 +268,10 @@ def extract_addresses(doc: DocumentRecord) -> list[AddressRecord]:
                 records, doc, "address", generic_addresses, "personal",
                 identity_keys=identity_keys,
             )
-        elif company_key and not personal_doc:
+        elif company_keys and not personal_doc:
             _add_record(
                 records, doc, "address", generic_addresses, "company",
-                company_key=company_key,
+                company_keys=company_keys,
             )
     return records
 
@@ -278,7 +284,16 @@ def _same_entity(first: AddressRecord, second: AddressRecord) -> bool:
     # If extraction did not identify a company, its address could belong to a
     # supplier, customer, or other third party. Do not compare it as though it
     # belonged to the case company.
-    return bool(first.company_key and first.company_key == second.company_key)
+    if not first.company_keys or not second.company_keys:
+        return False
+    # The UEN decides when both documents have one: two different UENs are two companies, whatever
+    # their names. When only one has it (a bank statement doesn't print the account holder's UEN),
+    # the company name decides.
+    first_ids = {k for k in first.company_keys if k.startswith("id:")}
+    second_ids = {k for k in second.company_keys if k.startswith("id:")}
+    if first_ids and second_ids:
+        return bool(first_ids & second_ids)
+    return bool(first.company_keys & second.company_keys)
 
 
 def find_address_mismatches(documents: Iterable[DocumentRecord]) -> list[AddressMismatch]:
