@@ -254,9 +254,12 @@ def test_layout_rendering_owns_both_image_tools() -> None:
     assert {"image_manipulation_tool", "image_tampering_tool"} <= names
 
 
-def test_with_ids_rejects_finding_missing_summary() -> None:
-    with pytest.raises(AssertionError):
-        tools._with_ids("fake_tool", [{"id": "x"}])
+def test_with_ids_keeps_a_finding_missing_its_summary() -> None:
+    # Dropping it would let a flagged document read as clean.
+    [finding] = tools._with_ids("fake_tool", [{"detail": "x"}])
+    assert finding["id"] == "fake_tool-1"
+    assert finding["detail"] == "x"
+    assert finding["summary"]
 
 
 def _balance_fields() -> list[ExtractedField]:

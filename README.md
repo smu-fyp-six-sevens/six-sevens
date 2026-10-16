@@ -47,7 +47,7 @@ The backend role needs `select, insert` on `risk_scores` and `flags` (with row l
 
 Set `CASE_ANALYSIS_ENABLED=false` to switch the case analysis off. `exiftool` should be on the `PATH`; without it the metadata checks report that they could not run.
 
-Optional settings: `QUEUE_WORKER_CONCURRENCY` (documents processed at once, default 4), `DETECTION_CONCURRENCY` (detection runs at once, default 2), `CPU_WORKER_CONCURRENCY` (PDF, OCR and forensic threads, default 1), `LOG_HTTP_REQUESTS` (log every Supabase call, default off).
+Optional settings: `QUEUE_WORKER_CONCURRENCY` (documents processed at once, default 4), `DETECTION_CONCURRENCY` (detection runs at once, default 2), `CPU_WORKER_CONCURRENCY` (PDF, OCR and forensic threads, default 1), `DOCUMENT_MAX_MODEL_CALLS` (model calls one document's classify and extract run may make, default 24), `DETECTION_MAX_MODEL_CALLS` (model calls one detection run may make, default 30), `LLM_MAX_RETRIES` (default 1), `LLM_TIMEOUT_SECONDS` (default 300), `TOOL_TIMEOUT_SECONDS` and `SLOW_TOOL_TIMEOUT_SECONDS` (per detection tool, default 60 and 120), `LOG_HTTP_REQUESTS` (log every Supabase call, default off).
 
 The backend logs one `perf` line per request, snapshot and background job (Supabase calls, Claude calls, tokens, cache hits); see `HOW_IT_WORKS.md` §8.
 

@@ -161,6 +161,10 @@ Optional, with defaults:
 | `QUEUE_WORKER_CONCURRENCY` | 4 | documents processed at once |
 | `DETECTION_CONCURRENCY` | 2 | detection runs at once |
 | `CPU_WORKER_CONCURRENCY` | 1 | threads for PDF, OCR and forensic work; PyMuPDF is not thread-safe |
+| `DOCUMENT_MAX_MODEL_CALLS` | 24 | model calls one document's classify and extract run may make |
+| `DETECTION_MAX_MODEL_CALLS` | 30 | model calls one detection run may make; past it the verdict can't be clean |
+| `LLM_MAX_RETRIES`, `LLM_TIMEOUT_SECONDS` | 1, 300 | the Anthropic client's own retries (each is billed) and one request's time limit |
+| `TOOL_TIMEOUT_SECONDS`, `SLOW_TOOL_TIMEOUT_SECONDS` | 60, 120 | time limit per detection tool, including its wait for the CPU worker; the slow ones call a model or a registry |
 | `CASE_ANALYSIS_ENABLED` | true | kill switch for the case analysis |
 | `LOG_HTTP_REQUESTS` | false | httpx's one line per Supabase call (the `perf` summaries replace it) |
 | `LANGGRAPH_SONNET_MODEL`, `LANGGRAPH_HAIKU_MODEL` | `claude-sonnet-4-6`, `claude-haiku-4-5-20251001` | model overrides |

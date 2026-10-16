@@ -24,6 +24,8 @@ from . import trace
 from .llm_classify import parse_llm_classification
 from .. import storage_service
 from ..config import settings
+from ..llm_io import message_text
+from ..run_context import spend_model_call
 
 MAX_CANDIDATES = 3
 MAX_EVIDENCE_ITEMS = 6
@@ -133,13 +135,14 @@ async def _classify_with_vision(storage_path: str, filename: str) -> VisionClass
         ],
     }
     try:
+        spend_model_call("vision classifier")
         # Gated like llm_classify/extract: the first vision call in a batch
         # pays for the cache write, later ones wait for it instead of racing it.
         response = await cache_gate.run("vision_llm", lambda: model.ainvoke([message]))
     except Exception as exc:
         return VisionClassificationResult(notes=[f"Vision call failed: {exc}"])
 
-    raw = response.content if isinstance(response.content, str) else str(response.content)
+    raw = message_text(response.content)
     # Same parse as llm_classify: same ALLOWED_TYPES, top-3/normalise/never-raises behaviour.
     return _capped(parse_llm_classification(raw))
 

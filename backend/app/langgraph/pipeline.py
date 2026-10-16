@@ -11,13 +11,24 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from . import extract, nodes, text_cache
+from . import extract, nodes, text_cache, trace
 from .graph import get_document_graph
 from ..config import settings
+from ..run_context import RunContext, run_context
 from .. import document_repository, query_stats, telemetry
 from ..models import DocumentStatus
 
 logger = logging.getLogger("classifier_pipeline.langgraph.pipeline")
+
+
+async def _record_run_audit(document_id: str, run: RunContext) -> None:
+    """What the run spent, and every model output that was repaired: the raw reply next to what was used."""
+    # A rerun starts with no trace in memory, and recording into a fresh one would overwrite the saved row.
+    await asyncio.to_thread(trace.resume, document_id)
+    trace.record(
+        document_id, "run_audit",
+        model_calls=run.calls, call_ceiling=run.max_model_calls, output_repairs=run.repairs,
+    )
 
 
 async def process_document(document_id: str) -> None:
@@ -32,10 +43,14 @@ async def process_document(document_id: str) -> None:
     with span as current_span:
         current_span.set_attribute("document_id", document_id)
         try:
-            await graph.ainvoke(
-                {"document_id": document_id, "attempts": 0},
-                config={"recursion_limit": settings.LANGGRAPH_RECURSION_LIMIT},
-            )
+            with run_context(settings.DOCUMENT_MAX_MODEL_CALLS) as run:
+                try:
+                    await graph.ainvoke(
+                        {"document_id": document_id, "attempts": 0},
+                        config={"recursion_limit": settings.LANGGRAPH_RECURSION_LIMIT},
+                    )
+                finally:
+                    await _record_run_audit(document_id, run)
         except Exception as exc:
             logger.exception("Document %s: unhandled error during langgraph orchestration", document_id)
             text_cache.discard(document_id)
@@ -58,7 +73,11 @@ async def rerun_extraction(document_id: str) -> None:
     with query_stats.scope(f"rerun extraction doc={document_id[:8]}"),             telemetry.get_tracer().start_as_current_span("langgraph.rerun_extraction") as span:
         span.set_attribute("document_id", document_id)
         try:
-            await _rerun_extraction(document_id)
+            with run_context(settings.DOCUMENT_MAX_MODEL_CALLS) as run:
+                try:
+                    await _rerun_extraction(document_id)
+                finally:
+                    await _record_run_audit(document_id, run)
         except Exception as exc:
             logger.exception("Document %s: unhandled error during langgraph extraction rerun", document_id)
             text_cache.discard(document_id)
@@ -98,6 +117,13 @@ async def _rerun_extraction(document_id: str) -> None:
     # Persisted regardless of escalation, same as the main graph's extract
     # node — whatever fields Extraction found are real data worth keeping.
     await nodes.persist_extracted_fields(document_id, document_type, extraction)
+
+    if extraction.get("output_error"):
+        await nodes.fail_document(
+            document_id, f"Extraction output could not be used: {extraction['output_error']}",
+            document_type=document_type,
+        )
+        return
 
     # Only an officer's type change reaches this rerun, so "unrecognised"
     # here means they explicitly picked "Other". The general prompt can still

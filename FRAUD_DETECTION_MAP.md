@@ -88,7 +88,7 @@ decisions: `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
 | `risk/supporting_documents.py` | Rule-based supporting-document recommendations (bank statement trades, related-party balances, borrowing growth). Run only inside an analysis and stored on the run |
 
 API: `POST /cases/{id}/analysis/run` (409 unless ready or already running), `GET /cases/{id}/analysis`. A case's snapshot carries the risk and supporting documents of its latest complete run; a case never analysed has none.
-Shared helpers: `langgraph/llm_output.py` reads a model reply (text and JSON) for detection, the binder and this package.
+Shared helpers: `llm_io.py` reads a model reply (text and JSON) and checks it against a contract in `llm_contracts.py`, for every model call.
 
 ## 2. Detection Agent — files
 
@@ -262,9 +262,9 @@ Shape: `agent → (tool calls ? tools : collect)`, `tools → agent`, `collect �
 - The system prompt is one `SystemMessage` with `cache_control: ephemeral`. The user message is
   `json.dumps(payload, default=str)`.
 - Cache key: `detection_lead_plan` for the plan call, `detection_lead_review` for the review call.
-- Parsing: `parse_json_object` (`langgraph/llm_output.py`) strips code fences, takes the text from the first
-  `{` to the last `}`, and returns `None` on any failure.
-- **Failure behaviour:** `None` from `lead_plan` silently gives every specialist the generic brief. All
+- Parsing: `parse_json_object` (`llm_io.py`) strips `<think>` blocks and code fences, takes the text from the first
+  `{` to the last `}`, and returns `None` on any failure. `validate` then checks it against `LeadPlan` / `LeadReview`.
+- **Failure behaviour:** a failed call or unusable reply from `lead_plan` gives every specialist the generic brief; from `lead_review`, no summary and no second look. All
   three still run (see §2A.10).
   `None` from `lead_review` silently means "no summary and no second look".
 

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from ..langgraph import trace as langgraph_trace
+from ..langgraph.detection_report import read_report
 from ..models import DocumentRecord
 from .. import case_service, document_repository, extracted_fields_repository, storage_service
 from ..cpu_pool import run_cpu
@@ -271,7 +272,7 @@ async def get_spelling_anomaly(
 @router.get("/{document_id}/detection/report")
 async def get_document_detection_report(document_id: str) -> dict:
     trace = await asyncio.to_thread(langgraph_trace.load, document_id)
-    report = (trace or {}).get("detection_report")
+    report = read_report((trace or {}).get("detection_report"))
     if report:
         return report
     # A report always wins over a stale error from an earlier failed attempt

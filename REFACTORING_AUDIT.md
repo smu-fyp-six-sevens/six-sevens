@@ -1,21 +1,21 @@
 # Refactoring audit
 
 Code smells in `backend/app` and `frontend/src`. Tests are ignored.
-Effort: S (minutes), M (an hour or two), L (a day or more). Last reviewed 2026-10-15, after everything was merged to main.
+Effort: S (minutes), M (an hour or two), L (a day or more). Last reviewed 2026-10-16, after the duplicated-code and style cleanups were committed to main.
 
 ## Where we are
 
 | | |
 |---|---|
-| Backend | 39,400 lines in `app/`, 47 endpoints, 12 document types plus "Other" |
+| Backend | 39,300 lines in `app/`, 47 endpoints, 12 document types plus "Other" |
 | Detection | Lead + 3 specialists over 8 tools and 4 field checks; 59 numerical and 4 external check codes |
 | Case analysis | Cross-document agent, deterministic risk score, supporting-document recommendations |
-| Frontend | 9,000 lines of TS/TSX, 4,300 lines of CSS in 11 modules |
+| Frontend | 8,900 lines of TS/TSX, 4,300 lines of CSS in 11 modules |
 | Tests | 1,544 backend test functions in 71 files, 101 Playwright tests in 5 specs (not run as part of this audit) |
 | CI gates | ruff clean, pyright 0 errors, 0 type-ignore comments, guard step against suppressions |
 | Frontend gates | `tsc` clean, lint 0 errors / 6 warnings, build passes |
 
-**Done since the first audit:** ruff and blocking pyright in CI; unused imports and the unused `match_by_id` removed; `routers/documents.py` comments trimmed; CSS split into modules; not-found pages; layout reference matching fixed; incumbency and NOA extraction fixes.
+**Done since the first audit:** ruff and blocking pyright in CI; unused imports and the unused `match_by_id` removed; `routers/documents.py` comments trimmed; CSS split into modules; not-found pages; layout reference matching fixed; incumbency and NOA extraction fixes; duplicated-code cleanup (section 2) and `Optional` / dead `noqa` cleanup (section 4), committed.
 
 **Needs attention first (from the URA address work, not yet fixed):**
 
@@ -53,7 +53,7 @@ Where the only user is a test, delete the test with it.
 
 ## 2. Duplicated code
 
-Cleaned up 2026-10-15 (tests updated, not run):
+Cleaned up 2026-10-15 and committed (tests updated, not run):
 
 - Trace read: `langgraph/trace.load()` replaces five copies; routers call it.
 - `_normalise`: one `normalise_candidates` in `classification_confidence.py`.
@@ -106,7 +106,7 @@ Still open:
 
 ## 4. Style and hygiene
 
-Done 2026-10-16, as one-off ruff autofixes (the CI ruff rules are unchanged); ruff, pyright and `import app.main` pass, and no tests were run.
+Done and committed 2026-10-16, as one-off ruff autofixes (the CI ruff rules are unchanged); ruff, pyright and `import app.main` pass, and no tests were run.
 
 | # | What | Result |
 |---|---|---|

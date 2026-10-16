@@ -44,6 +44,8 @@ from .rule_classify import classify_by_rules
 from .state import DocumentGraphState
 from .vision_tool import vision_llm
 from ..config import settings
+from ..llm_io import message_text
+from ..run_context import spend_model_call
 
 logger = logging.getLogger("classifier_pipeline.langgraph.classify")
 
@@ -95,6 +97,7 @@ async def agent_node(state: DocumentGraphState) -> dict:
     from ._anthropic import build_chat_anthropic
 
     existing = state.get("agent_messages") or []
+    spend_model_call("classify agent")
     available_tools = _available_tools(existing)
     model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, 1024)
     if available_tools:
@@ -227,9 +230,12 @@ def _apply_computed_confidence(state: DocumentGraphState, classification: dict) 
 
 def validate_node(state: DocumentGraphState) -> dict:
     last = (state.get("agent_messages") or [])[-1]
-    content = last.content if isinstance(last.content, str) else str(last.content)
+    content = message_text(last.content)
     classification = validate_agent_output(content)
-    trace.record(state["document_id"], "validate", document_type=classification.get("document_type"))
+    trace.record(
+        state["document_id"], "validate",
+        document_type=classification.get("document_type"), output_status=classification.get("output_status"),
+    )
     if classification.get("document_type"):
         classification = _apply_computed_confidence(state, classification)
     return {"classification": classification}
@@ -248,9 +254,10 @@ async def repair_node(state: DocumentGraphState) -> dict:
     from ._anthropic import build_chat_anthropic
 
     last = (state.get("agent_messages") or [])[-1]
-    bad_output = last.content if isinstance(last.content, str) else str(last.content)
+    bad_output = message_text(last.content)
     repair_model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 512)
     try:
+        spend_model_call("classify repair")
         response = await repair_model.ainvoke([
             SystemMessage(content=[
                 {
@@ -265,7 +272,7 @@ async def repair_node(state: DocumentGraphState) -> dict:
             ]),
             HumanMessage(content=bad_output),
         ])
-        repaired = validate_agent_output(response.content if isinstance(response.content, str) else str(response.content))
+        repaired = validate_agent_output(message_text(response.content))
     except Exception as exc:
         logger.warning("Repair re-ask failed: %s", exc)
         repaired = {}

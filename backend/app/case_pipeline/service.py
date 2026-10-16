@@ -16,6 +16,7 @@ from .. import document_repository, query_stats
 from ..config import settings
 from ..langgraph import trace as langgraph_trace
 from ..models import DocumentRecord
+from ..run_context import end_run, start_run
 from . import repository, state
 from .cross_document.evidence import build_context
 from .cross_document.agents import PROMPT_VERSION
@@ -30,6 +31,9 @@ from .risk.summary import write_summary
 from .risk.supporting_documents import recommend_supporting_documents
 
 logger = logging.getLogger("classifier_pipeline.case_pipeline.service")
+
+# Plan and judge (Sonnet), evidence requests and summary (Haiku), with two to spare.
+_MAX_MODEL_CALLS = 6
 
 
 class AnalysisDisabled(Exception):
@@ -104,6 +108,7 @@ async def _execute(
 ) -> None:
     case_id = analysis.case_id
     trace = RunTrace(analysis.run_id)
+    run, run_token = start_run(_MAX_MODEL_CALLS)
     trace.record(
         "run_start", case_id=case_id, fingerprint=analysis.fingerprint,
         documents=[{"id": d.id, "filename": d.filename, "type": d.document_type, "status": d.status.value} for d in documents],
@@ -154,6 +159,8 @@ async def _execute(
         analysis.error = f"{type(exc).__name__}: {exc}"[:500]
         trace.record("error", error=analysis.error)
     finally:
+        trace.record("run_audit", model_calls=run.calls, call_ceiling=run.max_model_calls, output_repairs=run.repairs)
+        end_run(run_token)
         trace.save()
         try:
             published = await asyncio.to_thread(repository.finish_run, analysis)

@@ -46,8 +46,8 @@ Open work only. The product roadmap (automatic case analysis, the 5-service Pub/
   other long-standing one: a finding a specialist never assessed is kept at `medium` (it is no longer stored
   as a flag, but still counts towards the case risk as "unreviewed").
 - **Per-provider rate limiting** — no shared Anthropic limiter across the 4 queue workers. Detection runs
-  are capped at `DETECTION_CONCURRENCY` (2) and the case analysis at 2 model calls per run, but nothing
-  bounds the total across the queue, detection and an analysis at once.
+  are capped at `DETECTION_CONCURRENCY` (2), a detection run at `DETECTION_MAX_MODEL_CALLS` (30) and the
+  case analysis at 6, but nothing bounds the total across the queue, detection and an analysis at once.
 - **Prometheus metrics** — token and cache counts are now logged per unit of work (`query_stats.py`,
   `perf` log lines) but not exported. Blocked on the `/metrics` endpoint below.
 - **Guardrails/evals/CI** — golden-set nightly evals (classification accuracy, per-field

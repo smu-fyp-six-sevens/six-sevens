@@ -137,6 +137,7 @@
       "tool": "image_tampering_tool"
     }
   ],
+  "schema_version": 1,
   "second_look": {
     "from": "layout_rendering",
     "question": "Please examine the PDF metadata for the producing software.",

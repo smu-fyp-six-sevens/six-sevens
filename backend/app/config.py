@@ -77,6 +77,20 @@ class Settings:
     CPU_WORKER_CONCURRENCY: int = int(os.environ.get("CPU_WORKER_CONCURRENCY", "1"))
     # Detection runs (lead + 3 specialists each) allowed at once; the rest wait their turn.
     DETECTION_CONCURRENCY: int = int(os.environ.get("DETECTION_CONCURRENCY", "2"))
+    # Most model calls one detection run may make (lead, specialists, reviews, binders). Past it the run
+    # stops asking, reports what it has, and the verdict cannot be "clean".
+    DETECTION_MAX_MODEL_CALLS: int = int(os.environ.get("DETECTION_MAX_MODEL_CALLS", "30"))
+    # Most model calls one document's classify and extract run may make (agent turns, the two classifier
+    # tools, a repair, extraction and its one retry, and one reclassification).
+    DOCUMENT_MAX_MODEL_CALLS: int = int(os.environ.get("DOCUMENT_MAX_MODEL_CALLS", "24"))
+    # Retries the Anthropic client makes by itself on a rate limit or 5xx; each one is billed again.
+    LLM_MAX_RETRIES: int = int(os.environ.get("LLM_MAX_RETRIES", "1"))
+    # One model request. Extraction can write 16k tokens, so this is generous.
+    LLM_TIMEOUT_SECONDS: float = float(os.environ.get("LLM_TIMEOUT_SECONDS", "300"))
+    # One detection tool. This includes waiting for the single CPU worker, so it is not the check's own
+    # run time. The slow ones call a model or an outside registry.
+    TOOL_TIMEOUT_SECONDS: float = float(os.environ.get("TOOL_TIMEOUT_SECONDS", "60"))
+    SLOW_TOOL_TIMEOUT_SECONDS: float = float(os.environ.get("SLOW_TOOL_TIMEOUT_SECONDS", "120"))
 
     # Below this, classification is routed to manual review regardless of
     # the guessed document_type (see langgraph/nodes._is_below_threshold).

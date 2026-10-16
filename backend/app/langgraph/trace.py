@@ -22,6 +22,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, cast
 
 from ..supabase_client import supabase_client
+from .detection_report import read_report
 
 logger = logging.getLogger("classifier_pipeline.langgraph.trace")
 
@@ -117,12 +118,12 @@ def get_case_detection_reports(case_id: str) -> list[dict[str, Any]]:
     reports = []
     for row in _case_trace_rows(case_id):
         row_trace = cast(dict, row.get("trace")) or {}
-        if not row_trace.get("detection_report"):
+        if not read_report(row_trace.get("detection_report")):
             continue
         reports.append({
             "document_id": row["document_id"],
             "filename": row_trace.get("filename"),
-            "report": row_trace["detection_report"],
+            "report": read_report(row_trace["detection_report"]),
         })
     return reports
 
@@ -151,8 +152,9 @@ def get_detection_states(document_ids: list[str]) -> tuple[dict[str, dict[str, A
         )
         for raw_row in rows:
             row = cast(dict, raw_row)
-            if row.get("report"):
-                reports[row["document_id"]] = row["report"]
+            report = read_report(row.get("report"))
+            if report:
+                reports[row["document_id"]] = report
             elif row.get("error"):
                 failed.add(row["document_id"])
     return reports, failed

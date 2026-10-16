@@ -27,7 +27,8 @@ from ... import telemetry
 from ...config import settings
 from ...langgraph._anthropic import build_chat_anthropic
 from ...langgraph.cache_gate import cache_gate
-from ...langgraph.llm_output import message_text, parse_json_object, salvage_list
+from ...run_context import spend_model_call
+from ...llm_io import forced_args, message_text, parse_json_object, salvage_list
 from ..models import Hypothesis, PlannedCheck
 from .bias import has_protected_text
 from .evidence import CaseContext, render_dossier
@@ -182,14 +183,7 @@ def _spend_model_call(context: CaseContext) -> None:
     if context.model_calls >= MAX_MODEL_CALLS_PER_RUN:
         raise ModelCallBudgetExceeded(f"A case analysis may make at most {MAX_MODEL_CALLS_PER_RUN} model calls.")
     context.model_calls += 1
-
-
-def _forced_args(response: Any, tool_name: str) -> dict | None:
-    """The arguments of the tool the model was made to call, or None when it didn't."""
-    for call in getattr(response, "tool_calls", None) or []:
-        if call.get("name") == tool_name and isinstance(call.get("args"), dict):
-            return call["args"]
-    return None
+    spend_model_call("case analysis")
 
 
 def _usage(response: Any) -> dict:
@@ -237,7 +231,7 @@ async def hypothesise(context: CaseContext) -> list[Hypothesis]:
         response = await cache_gate.run("case_analysis", lambda: model.ainvoke(messages))
         telemetry.record_usage(span, response)
 
-    args = _forced_args(response, _PLAN_TOOL["name"])
+    args = forced_args(response, _PLAN_TOOL["name"])
     via = "tool"
     if args is not None:
         items = args.get("hypotheses") or []
@@ -308,10 +302,14 @@ async def gather_evidence(
         for check in hypothesis.checks:
             tool = tools[check.tool]
             try:
-                output = str(await tool.ainvoke({**check.args, "is_refutation_probe": check.refutation_probe}))
+                output = str(await asyncio.wait_for(
+                    tool.ainvoke({**check.args, "is_refutation_probe": check.refutation_probe}),
+                    timeout=settings.TOOL_TIMEOUT_SECONDS,
+                ))
             except Exception as exc:
-                logger.warning("Check %s failed: %s", check.tool, exc)
-                output = json.dumps({"available": False, "reason": f"Tool error: {exc}"})
+                reason = f"no result within {settings.TOOL_TIMEOUT_SECONDS:g} seconds" if isinstance(exc, TimeoutError) else str(exc)
+                logger.warning("Check %s failed: %s", check.tool, reason)
+                output = json.dumps({"available": False, "reason": f"Tool error: {reason}"})
                 calls.append({"tool": check.tool, "args": check.args, "document": None,
                               "probe": check.refutation_probe, "available": False, "refs": [], "breach_flags": []})
             evidence.append({"tool": check.tool, "args": check.args, "probe": check.refutation_probe,
@@ -350,7 +348,7 @@ async def adjudicate(
         response = await model.ainvoke(messages)
         telemetry.record_usage(span, response)
 
-    args = _forced_args(response, _VERDICT_TOOL["name"])
+    args = forced_args(response, _VERDICT_TOOL["name"])
     via, reply = "tool", None
     if args is not None:
         items = args.get("verdicts") or []

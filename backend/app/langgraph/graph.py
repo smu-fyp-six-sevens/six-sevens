@@ -49,6 +49,8 @@ def _escalation_disputes_type(state: DocumentGraphState) -> bool:
 
 
 def _decide_after_extract(state: DocumentGraphState) -> str:
+    if (state.get("extraction") or {}).get("output_error"):
+        return "failed"
     if not _escalation_disputes_type(state):
         return "analyzed"
     if state.get("attempts", 0) < settings.MAX_RECLASSIFICATION_ATTEMPTS:
@@ -91,7 +93,10 @@ def build_document_graph():
     graph.add_conditional_edges(
         "extract",
         _decide_after_extract,
-        {"analyzed": "mark_analyzed", "reclassify": "record_escalation", "unresolved": "mark_unresolved_escalation"},
+        {
+            "analyzed": "mark_analyzed", "reclassify": "record_escalation",
+            "unresolved": "mark_unresolved_escalation", "failed": "fail",
+        },
     )
     graph.add_edge("mark_analyzed", END)
     graph.add_edge("mark_unresolved_escalation", "fail")

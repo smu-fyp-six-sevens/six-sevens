@@ -160,12 +160,16 @@ def _result(tool_name: str, findings: list[dict], *, unable: str | None = None) 
 
 
 def _with_ids(tool_name: str, findings: list[dict]) -> list[dict]:
-    # "summary" is part of every tool's contract (module docstring) — the lead's
-    # review prompt and the frontend both index findings by it unconditionally,
-    # so a tool that forgets it crashes detection downstream instead of here.
+    # "summary" is part of every tool's contract (module docstring): the lead's review prompt and the
+    # frontend both read it. A finding without one is still reported, with a placeholder, because
+    # dropping it would let a flagged document read as clean.
+    checked = []
     for finding in findings:
-        assert "summary" in finding, f"{tool_name} finding missing required 'summary' key: {finding}"
-    return [{"id": f"{tool_name}-{i + 1}", **finding} for i, finding in enumerate(findings)]
+        if not str(finding.get("summary") or "").strip():
+            logger.error("%s returned a finding without a summary: %s", tool_name, finding)
+            finding = {**finding, "summary": f"{tool_name} reported a finding without a description."}
+        checked.append(finding)
+    return [{"id": f"{tool_name}-{i + 1}", **finding} for i, finding in enumerate(checked)]
 
 
 def _short(text: Any) -> str:

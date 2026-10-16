@@ -1,6 +1,6 @@
 # Plan: cross-document validation and risk outlook
 
-Status: implemented on branch `agentic-experiments` and run end to end on generated cases (updated 2026-10-15). Code is under `backend/app/case_pipeline/`. The automatic trigger (Step 0), evals and a dismissal flow are not built, and the repo has no unit tests yet for the hypothesiser, the tools, `verify.py`, `outlook.py` or `summary.py`.
+Status: implemented and merged to `main`, and run end to end on generated cases (updated 2026-10-16). Code is under `backend/app/case_pipeline/`. The automatic trigger (Step 0), evals and a dismissal flow are not built. Test coverage is thin: readiness (`test_case_analysis.py`), the risk score (`test_case_risk.py`), supporting documents, company identity and address matching are tested; the hypothesiser, the tools, `verify.py`, `outlook.py` and `summary.py` have no unit tests yet.
 
 Changes from the plan below:
 - **Officer-triggered first.** A "Run case analysis" button (shown when every approved document is scanned) starts a run. The automatic gate, supersede and debounce (Step 0) are deferred. A newer run replaces an older one.

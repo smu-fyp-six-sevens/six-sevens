@@ -54,6 +54,8 @@ async def persist_extracted_fields(document_id: str, document_type: str, extract
     querying individual fields). Shared by the analyzed and failed paths,
     since a failed escalation shouldn't discard whatever Extraction found.
     """
+    if extraction.get("output_error") and not extraction.get("extracted_fields"):
+        return  # nothing usable came back; keep whatever was stored before rather than wiping it
     extracted_fields = extraction.get("extracted_fields", {})
     field_confidences = extraction.get("field_confidences", {})
     extraction_confidence = extraction.get("confidence", 0.0)
@@ -251,7 +253,12 @@ async def extract_node(state: DocumentGraphState) -> dict:
         if _is_below_threshold(classification.get("confidence")) or classification.get("needs_manual_review")
         else document_type
     )
-    extraction = await extract.run_extraction(schema_type, raw_text)
+    # Extracted with the generic schema because the classifier wasn't sure: say what it guessed, so extraction
+    # can object. Only on the first pass: after a reclassification the classifier has already been asked again.
+    guess = document_type if schema_type == "unrecognised" and document_type != "unrecognised" else None
+    extraction = await extract.run_extraction(
+        schema_type, raw_text, classified_as=guess if state.get("attempts", 0) == 0 else None
+    )
 
     # Persisted regardless of escalation — whatever fields Extraction
     # actually found are real data, worth keeping even if the document ends
@@ -265,11 +272,21 @@ async def extract_node(state: DocumentGraphState) -> dict:
         "dropped_empty_fields": extraction.get("dropped_empty_fields", []),
         "dropped_period_totals": extraction.get("dropped_period_totals", []),
         "escalation": extraction.get("escalation"),
+        "output_error": extraction.get("output_error"),
+        "output_status": extraction.get("output_status"),
+        "retried": extraction.get("retried", False),
         # The agent's own reasoning for each field it wasn't confident in — not persisted to the
         # extracted_fields table, visible here in the trace only (see extract.py's field_reasons).
         "low_confidence_reasons": extraction.get("field_reasons") or {},
     }
     trace.record(document_id, "extraction", document_type=document_type, schema=schema_type, **summary)
+    if extraction.get("output_error"):
+        # The reply was unusable: that says nothing about the document's type, so it is not reclassified.
+        return {
+            "extraction": summary,
+            "status": "failed",
+            "failure_reason": f"Extraction output could not be used: {extraction['output_error']}",
+        }
     # Whether an escalation here triggers a reclassify or a final FAILED is
     # graph.py's call (it also knows `attempts` vs MAX_RECLASSIFICATION_ATTEMPTS) —
     # this node only ever reports what Extraction found.

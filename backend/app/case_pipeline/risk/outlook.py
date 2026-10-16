@@ -8,6 +8,7 @@ seen a type for is scored like any other.
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -16,7 +17,9 @@ from langchain_core.messages import HumanMessage
 from ... import telemetry
 from ...config import settings
 from ...langgraph._anthropic import build_chat_anthropic
-from ...langgraph.llm_output import message_text, parse_json_object
+from ...llm_contracts import EvidenceRequests
+from ...run_context import spend_model_call
+from ...llm_io import forced_args, message_text, parse_json_object, salvage_list, validate
 from ...models import CaseRisk, ContributingFinding
 from ..models import REDUCIBLE_CATEGORIES, EvidenceRequest, FindingCategory, OutlookRequest, RiskOutlook
 from .case_risk import rate_findings
@@ -40,6 +43,32 @@ Findings:
 {findings}"""
 
 
+_REQUESTS_TOOL: dict[str, Any] = {
+    "name": "submit_requests",
+    "description": "Submit the additional evidence to ask the client for. Submit an empty list when none would help.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "requests": {
+                "type": "array",
+                "maxItems": MAX_REQUESTS,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string", "description": "Short name of the document."},
+                        "what_it_shows": {"type": "string", "description": "What it would establish, one sentence."},
+                        "addresses": {"type": "array", "items": {"type": "string"}, "description": "Finding ids."},
+                        "expected_effect": {"type": "string", "enum": ["full", "partial"]},
+                    },
+                    "required": ["title", "addresses"],
+                },
+            },
+        },
+        "required": ["requests"],
+    },
+}
+
+
 def _reducible(finding: ContributingFinding) -> bool:
     try:
         return FindingCategory(finding.category) in REDUCIBLE_CATEGORIES
@@ -48,6 +77,7 @@ def _reducible(finding: ContributingFinding) -> bool:
 
 
 async def propose_requests(risk: CaseRisk) -> list[EvidenceRequest]:
+    """The model's evidence requests. Any failure gives no requests: the case is still scored and explained."""
     findings = [f for f in risk.contributing_findings if f.points > 0]
     if not any(_reducible(f) for f in findings):
         return []
@@ -56,21 +86,37 @@ async def propose_requests(risk: CaseRisk) -> list[EvidenceRequest]:
         f"{f.filename}: {f.summary[:240]}"
         for f in findings
     )
-    model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 900)
-    with telemetry.get_tracer().start_as_current_span("case_pipeline.evidence_requests") as span:
-        response = await model.ainvoke([HumanMessage(content=_PROMPT.format(limit=MAX_REQUESTS, findings=listing))])
-        telemetry.record_usage(span, response)
-    parsed = parse_json_object(message_text(response.content)) or {}
-    requests = []
-    for item in parsed.get("requests") or []:
-        if isinstance(item, dict) and str(item.get("title") or "").strip():
-            requests.append(EvidenceRequest(
-                title=str(item["title"])[:160],
-                what_it_shows=str(item.get("what_it_shows") or "")[:300],
-                addresses=[a for a in item.get("addresses") or [] if isinstance(a, str)],
-                expected_effect="partial" if item.get("expected_effect") == "partial" else "full",
-            ))
-    return requests[:MAX_REQUESTS]
+    model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 900).bind_tools(
+        [_REQUESTS_TOOL], tool_choice=_REQUESTS_TOOL["name"]
+    )
+    try:
+        spend_model_call("evidence requests")
+        with telemetry.get_tracer().start_as_current_span("case_pipeline.evidence_requests") as span:
+            response = await model.ainvoke([HumanMessage(content=_PROMPT.format(limit=MAX_REQUESTS, findings=listing))])
+            telemetry.record_usage(span, response)
+    except Exception as exc:
+        logger.warning("Evidence request generation failed: %s", exc)
+        return []
+
+    reply = forced_args(response, _REQUESTS_TOOL["name"])
+    if reply is not None:
+        text = json.dumps(reply, default=str)
+    else:  # answered in text despite the forced tool, or was cut off
+        text = message_text(response.content)
+        reply = parse_json_object(text) or {"requests": salvage_list(text, "requests")}
+    checked = validate(EvidenceRequests, reply, site="evidence requests", raw=text)
+    if checked.value is None:
+        return []
+    return [
+        EvidenceRequest(
+            title=item.title[:160],
+            what_it_shows=item.what_it_shows[:300],
+            addresses=item.addresses,
+            expected_effect="partial" if item.expected_effect == "partial" else "full",
+        )
+        for item in checked.value.requests
+        if item.title
+    ][:MAX_REQUESTS]
 
 
 def outlook_trace(risk: CaseRisk, requests: list[EvidenceRequest], outlook: RiskOutlook) -> dict[str, Any]:

@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import json
 
+from ..llm_contracts import ClassifierReply
+from ..llm_io import parse_json_object, validate
 from ..models import DocumentType
 
 # Minimum extracted-text length worth classifying from text alone.
@@ -182,43 +184,38 @@ VALID_REQUIREMENTS = (VALID_TYPES - {"unrecognised", "passport", "nric"}) | {"id
 
 
 def validate_agent_output(agent_output: str) -> dict:
-    """Port of the "Validate Output" code node — never raises."""
-    doc_type, confidence, evidence, reasoning = "", 0.0, [], ""
-    fulfilled_requirements: list[str] = []
-    flagged = True
+    """
+    The agent's closing answer as a classification — never raises. A field that can't be read falls back to
+    the safe value (no confidence, manual review), so one bad field doesn't lose the others.
+    `output_status` says how the reply read: "ok", "degraded" (a field was ignored) or "failed".
+    """
+    checked = validate(ClassifierReply, parse_json_object(agent_output or ""), site="classifier agent", raw=agent_output)
+    reasoning_prefix = ""
+    reply = checked.value
+    if reply is None:
+        reply = ClassifierReply()
+        reasoning_prefix = "Could not parse agent output as JSON."
 
-    try:
-        raw = agent_output or ""
-        parsed = json.loads(raw[raw.find("{") : raw.rfind("}") + 1])
-        candidate = (parsed.get("document_type") or "").strip().lower()
-        candidate = TYPE_ALIASES.get(candidate, candidate)
-        doc_type = candidate if candidate in VALID_TYPES else ""
-        confidence = max(0.0, min(1.0, float(parsed.get("confidence", 0.0))))
-        evidence = [str(item) for item in parsed.get("evidence", [])]
-        reasoning = str(parsed.get("reasoning", ""))
-        flagged = bool(parsed.get("needs_manual_review", True))
+    candidate = TYPE_ALIASES.get(reply.document_type.lower(), reply.document_type.lower())
+    doc_type = candidate if candidate in VALID_TYPES else ""
+    reasoning = reply.reasoning
+    flagged = reply.needs_manual_review
+    fulfilled_requirements = [item for item in reply.fulfilled_requirements if item in VALID_REQUIREMENTS]
 
-        raw_requirements = parsed.get("fulfilled_requirements", [])
-        if isinstance(raw_requirements, list):
-            fulfilled_requirements = [
-                str(item) for item in raw_requirements if str(item) in VALID_REQUIREMENTS
-            ]
+    own_requirement = REQUIREMENT_FOR_TYPE.get(doc_type, doc_type)
+    if not fulfilled_requirements and own_requirement in VALID_REQUIREMENTS:
+        fulfilled_requirements = [own_requirement]
 
-        own_requirement = REQUIREMENT_FOR_TYPE.get(doc_type, doc_type)
-        if not fulfilled_requirements and own_requirement in VALID_REQUIREMENTS:
-            fulfilled_requirements = [own_requirement]
-
-        if candidate and not doc_type:
-            reasoning = f"Agent returned unknown type '{candidate}'. {reasoning}"
-            flagged = True
-    except (ValueError, TypeError, AttributeError):
-        reasoning = "Could not parse agent output as JSON."
+    if candidate and not doc_type:
+        reasoning = f"Agent returned unknown type '{candidate}'. {reasoning}"
+        flagged = True
 
     return {
         "document_type": doc_type or None,
-        "confidence": round(confidence, 4),
-        "evidence": evidence,
+        "confidence": round(reply.confidence, 4),
+        "evidence": reply.evidence,
         "fulfilled_requirements": fulfilled_requirements,
         "needs_manual_review": flagged or not doc_type,
-        "reasoning": reasoning,
+        "reasoning": reasoning_prefix or reasoning,
+        "output_status": checked.status,
     }

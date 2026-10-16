@@ -20,7 +20,8 @@ from ....config import settings
 from ....fraud_detection.field_catalogue import render_field_catalogue
 from ....fraud_detection.numerical_validation.runner import Binding, render_check_roles
 from ..._anthropic import build_chat_anthropic
-from ...llm_output import message_text, parse_json_object
+from ....llm_io import message_text, parse_json_object
+from ....run_context import spend_model_call
 
 logger = logging.getLogger("classifier_pipeline.langgraph.detection.binder")
 
@@ -79,6 +80,7 @@ async def bind_checks(document_type: str | None, fields: list[Any], group: str =
         HumanMessage(content=user),
     ]
     try:
+        spend_model_call("numerical binder")
         with telemetry.get_tracer().start_as_current_span("detection.numerical_binder") as span:
             response = await model.ainvoke(messages)
             telemetry.record_usage(span, response)

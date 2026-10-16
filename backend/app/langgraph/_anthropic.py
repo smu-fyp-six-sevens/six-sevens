@@ -38,13 +38,14 @@ def build_chat_anthropic(model: str, max_tokens: int, *, temperature: float = 0)
     if key not in _models:
         # Pydantic alias names: pyright's plugin only accepts these, and they are
         # always valid at runtime. timeout/stop are required by that view of the
-        # signature; None is the library default.
+        # signature.
         _models[key] = ChatAnthropic(
             model_name=model,
             api_key=SecretStr(settings.ANTHROPIC_API_KEY),
             temperature=temperature,
             max_tokens_to_sample=max_tokens,
-            timeout=None,
+            timeout=settings.LLM_TIMEOUT_SECONDS,
+            max_retries=settings.LLM_MAX_RETRIES,
             stop=None,
             callbacks=[llm_callback],  # counts calls and tokens per unit of work (query_stats.py)
         )

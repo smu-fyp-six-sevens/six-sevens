@@ -44,7 +44,7 @@ Validity caveats:
   largest gap), `fraud_detection/layout_anomalies/line_shifts.py` (637), `query_stats.py`,
   `langgraph/vision_tool.py`, `numerical_validation/payslip_inputs.py`,
   `case_pipeline/risk/outlook.py`, `telemetry.py`, `sg_reference/banks.py`,
-  `external_validation/giro.py`, `langgraph/llm_output.py`, `cross_document/bias.py`,
+  `external_validation/giro.py`, `llm_io.py`, `cross_document/bias.py`,
   `case_pipeline/categories.py`, `cpu_pool.py`.
 - **Slowest file:** `test_ai_generation.py` (~16-25s of a ~42-50s suite): 29 detector runs
   (~0.27s each) plus the test's own 768x768 `_scene()` fixture rebuilt ~20 times with identical

@@ -15,7 +15,9 @@ from langchain_core.messages import HumanMessage
 from ... import telemetry
 from ...config import settings
 from ...langgraph._anthropic import build_chat_anthropic
-from ...langgraph.llm_output import message_text, parse_json_object
+from ...llm_contracts import SummaryReply
+from ...run_context import spend_model_call
+from ...llm_io import message_text, parse_json_object, validate
 from ...models import CaseRisk
 from ..models import RiskOutlook
 
@@ -81,17 +83,20 @@ async def write_summary(
         requests=requests, best=best,
     )
     try:
+        spend_model_call("summary")
         model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 600)
         with telemetry.get_tracer().start_as_current_span("case_pipeline.summary") as span:
             response = await model.ainvoke([HumanMessage(content=prompt)])
             telemetry.record_usage(span, response)
-        parsed = parse_json_object(message_text(response.content)) or {}
     except Exception as exc:
         logger.warning("Summary generation failed: %s", exc)
         return fallback
 
-    text = str(parsed.get("summary") or "").strip()
-    cites = [c for c in parsed.get("cites") or [] if isinstance(c, str)]
+    text = message_text(response.content)
+    reply = validate(SummaryReply, parse_json_object(text), site="summary", raw=text).value
+    if reply is None:
+        return fallback
+    text, cites = reply.summary, reply.cites
     allowed_levels = {risk.level, outlook.current_level, outlook.best_case_level} | {
         r.level_if_supports for r in outlook.requests
     }

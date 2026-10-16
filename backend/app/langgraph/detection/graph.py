@@ -28,19 +28,26 @@ import logging
 import operator
 import os
 from datetime import datetime, timezone
-from typing import Annotated, Any, Required
+from typing import Annotated, Any, Required, TypeVar
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.types import Send
+from pydantic import BaseModel
 from typing_extensions import TypedDict
 
 from . import tools as detection_tools
-from ..llm_output import parse_json_object
+from ...llm_contracts import LeadPlan, LeadReview
+from ... import run_context
+from ...llm_io import message_text, parse_json_object, validate
+from ...run_context import spend_model_call
+from ..detection_report import SCHEMA_VERSION
 from .specialists import SEVERITIES, SPECIALISTS, run_specialist
 from .. import trace
 from ... import document_repository, extracted_fields_repository, flags_repository, telemetry
 from ...config import settings
+
+T = TypeVar("T", bound=BaseModel)
 
 logger = logging.getLogger("classifier_pipeline.langgraph.detection")
 
@@ -126,7 +133,13 @@ _PLAN_SYSTEM_PROMPT = _PLAN_PROMPT.format(catalogue=_catalogue())
 _REVIEW_SYSTEM_PROMPT = _REVIEW_PROMPT.format(catalogue=_catalogue())
 
 
-async def _ask_lead(system_prompt: str, user_payload: dict, *, span_name: str, cache_key: str) -> dict | None:
+async def _ask_lead(
+    system_prompt: str, user_payload: dict, contract: type[T], *, span_name: str, cache_key: str
+) -> T | None:
+    """
+    The lead's reply as `contract`, or None when the call fails or the reply is unusable. The lead only
+    plans and summarises, so the run carries on without it rather than failing.
+    """
     import json
 
     from .._anthropic import build_chat_anthropic
@@ -137,13 +150,16 @@ async def _ask_lead(system_prompt: str, user_payload: dict, *, span_name: str, c
         SystemMessage(content=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}]),
         HumanMessage(content=json.dumps(user_payload, default=str)),
     ]
-    with telemetry.get_tracer().start_as_current_span(span_name) as span:
-        response = await cache_gate.run(cache_key, lambda: model.ainvoke(messages))
-        telemetry.record_usage(span, response)
-    content = response.content if isinstance(response.content, str) else "".join(
-        b.get("text", "") for b in response.content if isinstance(b, dict)
-    )
-    return parse_json_object(content)
+    try:
+        spend_model_call(span_name)
+        with telemetry.get_tracer().start_as_current_span(span_name) as span:
+            response = await cache_gate.run(cache_key, lambda: model.ainvoke(messages))
+            telemetry.record_usage(span, response)
+    except Exception as exc:
+        logger.warning("%s call failed: %s", span_name, exc)
+        return None
+    text = message_text(response.content)
+    return validate(contract, parse_json_object(text), site=span_name, raw=text).value
 
 
 # --- nodes ------------------------------------------------------------------
@@ -196,20 +212,15 @@ async def load_context_node(state: DetectionState) -> dict:
     return {"context": context, "case_id": document.case_id}
 
 
-def _normalise_plan(raw: dict | None) -> dict:
+def _normalise_plan(raw: LeadPlan | None) -> dict:
     """Every specialist gets a brief; a missing or blank one falls back to the generic brief."""
-    given = (raw or {}).get("briefs")
-    given = given if isinstance(given, dict) else {}
-    briefs = {}
-    for name in SPECIALISTS:
-        value = given.get(name)
-        briefs[name] = value.strip() if isinstance(value, str) and value.strip() else _DEFAULT_BRIEF
-    return {"briefs": briefs}
+    given = raw.briefs if raw is not None else {}
+    return {"briefs": {name: given.get(name) or _DEFAULT_BRIEF for name in SPECIALISTS}}
 
 
 async def lead_plan_node(state: DetectionState) -> dict:
     plan = _normalise_plan(await _ask_lead(
-        _PLAN_SYSTEM_PROMPT, {"document": _context(state)},
+        _PLAN_SYSTEM_PROMPT, {"document": _context(state)}, LeadPlan,
         span_name="detection.lead_plan", cache_key="detection_lead_plan",
     ))
     logger.info("Document %s: lead plan — briefs written for all specialists", state["document_id"])
@@ -246,6 +257,7 @@ async def specialist_node(state: SpecialistInput) -> dict:
         state["document_id"], "detection_specialist",
         specialist=state["name"], tools_called=report["tools_called"],
         finding_count=len(report["findings"]), dismissed=report["dismissed"], uncertain=report["uncertain"],
+        output_status=report.get("output_status"),
         tool_calls=report["tool_calls"],
     )
     return {"reports": [report]}
@@ -302,13 +314,13 @@ def _validated_second_look(raw: Any, reports: list[dict]) -> dict | None:
 
 async def lead_review_node(state: DetectionState) -> dict:
     used = bool(state.get("second_look_used"))
-    raw = await _ask_lead(_REVIEW_SYSTEM_PROMPT, {
+    review = await _ask_lead(_REVIEW_SYSTEM_PROMPT, {
         "document": _context(state),
         "reports": _compact_reports(state["reports"]),
         "second_look_already_used": used,
-    }, span_name="detection.lead_review", cache_key="detection_lead_review")
-    summary = (raw or {}).get("summary") or ""
-    request = None if used else _validated_second_look((raw or {}).get("second_look"), state["reports"])
+    }, LeadReview, span_name="detection.lead_review", cache_key="detection_lead_review")
+    summary = review.summary if review is not None else ""
+    request = None if used or review is None else _validated_second_look(review.second_look, state["reports"])
     logger.info(
         "Document %s: lead review done%s",
         state["document_id"],
@@ -502,6 +514,16 @@ def add_case_match_findings(report: dict, case_match: Any | None) -> dict:
     return updated
 
 
+def _record_run_audit(document_id: str) -> None:
+    """What the run spent, and every model output that was repaired: the raw reply next to what was used."""
+    run = run_context.current()
+    if run is not None:
+        trace.record(
+            document_id, "run_audit",
+            model_calls=run.calls, call_ceiling=run.max_model_calls, output_repairs=run.repairs,
+        )
+
+
 async def synthesize_node(state: DetectionState) -> dict:
     result = merge_reports(state)
     try:
@@ -526,6 +548,19 @@ async def synthesize_node(state: DetectionState) -> dict:
         if result["verdict"] == "clean":
             result["verdict"] = "inconclusive"
             result["summary"] = "No findings, but identity matching could not be completed."
+    run = run_context.current()
+    if run is not None and run.exhausted:
+        unable = [*result["unable_to_assess"], {
+            "specialist": "Run limit",
+            "tool": None,
+            "reason": f"The run reached its limit of {run.max_model_calls} model calls, so some checks or reviews did not finish.",
+        }]
+        result = {**result, "unable_to_assess": unable}
+        if result["verdict"] == "clean":
+            result["verdict"] = "inconclusive"
+            result["summary"] = "No findings, but the run hit its model call limit before every check finished."
+    result = {**result, "schema_version": SCHEMA_VERSION}
+    _record_run_audit(state["document_id"])
     flags_repository.assign_flag_ids(result["findings"])
     logger.info(
         "Document %s: detection done — verdict %s, %d finding(s)",
@@ -582,6 +617,11 @@ async def _store_flags(document_id: str, case_id: str | None, report: dict) -> N
 
 async def run_detection(document_id: str) -> dict:
     """Investigates one document and returns the combined report. Raises DetectionError if it can't be investigated."""
+    with run_context.run_context(settings.DETECTION_MAX_MODEL_CALLS):
+        return await _run_detection(document_id)
+
+
+async def _run_detection(document_id: str) -> dict:
     logger.info("Document %s: detection run starting", document_id)
     await asyncio.to_thread(trace.resume, document_id)
     # Clears an error left by an earlier failed attempt, so a retry doesn't read as failed while running.
@@ -605,6 +645,7 @@ async def run_detection(document_id: str) -> dict:
             # silent 404 forever — see routers/detection.py.
             logger.exception("Detection graph run failed for document %s", document_id)
             trace.record(document_id, "detection_error", error=f"{type(exc).__name__}: {exc}")
+            _record_run_audit(document_id)
             await asyncio.to_thread(document_repository.revert_to_approved, document_id)
             raise
         result = final["result"]
