@@ -233,8 +233,14 @@ def build_content(record: dict[str, Any]) -> dict[str, Any]:
     audit_name, audit_uen = AUDIT_FIRMS[rng.randrange(len(AUDIT_FIRMS))]
 
     fye_month, fye_day = rng.choice([(12, 31), (3, 31), (6, 30), (9, 30)])
-    last_agm = date(profile_date.year - 1, fye_month, fye_day) + timedelta(days=rng.randint(90, 150))
-    last_ar = last_agm + timedelta(days=rng.randint(7, 45))
+    agm_after_fye, ar_after_agm = rng.randint(90, 150), rng.randint(7, 45)
+    # The last AGM and annual return on record are ones already held by the profile date: step back a
+    # financial year until they are.
+    fye_date = date(profile_date.year - 1, fye_month, fye_day)
+    while fye_date + timedelta(days=agm_after_fye + ar_after_agm) >= profile_date:
+        fye_date = date(fye_date.year - 1, fye_month, fye_day)
+    last_agm = fye_date + timedelta(days=agm_after_fye)
+    last_ar = last_agm + timedelta(days=ar_after_agm)
 
     # Same seed key, draw order and 0.4 threshold as coi_generator.py's
     # generate_certificate_of_incorporation(), so this case's COI and Business
@@ -263,7 +269,7 @@ def build_content(record: dict[str, Any]) -> dict[str, Any]:
         "status_date": facts["incorporation_date"],
         "activity_code": code,
         "activity": activity,
-        "fye": f"{fye_day:02d}/{fye_month:02d}",
+        "fye": _d(fye_date),
         "last_agm": last_agm,
         "last_ar": last_ar,
         "share_capital": facts["share_capital"],

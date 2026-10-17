@@ -151,7 +151,8 @@ CARD_MERCHANT_DESCS = [
 # --------------------------------------------------------------------------
 
 def personal_month_transactions(month: date, opening: float, rng: random.Random,
-                                 known_salary: float | None = None) -> list[Txn]:
+                                 known_salary: float | None = None,
+                                 usual_salary: float | None = None) -> list[Txn]:
     last_day = (date(month.year + (month.month == 12), (month.month % 12) + 1, 1)
                 - timedelta(days=1)).day
 
@@ -170,6 +171,8 @@ def personal_month_transactions(month: date, opening: float, rng: random.Random,
     payroll_amount = round(rng.uniform(2500, 9000), 2)
     if known_salary is not None:
         payroll_amount = known_salary
+    elif usual_salary is not None:
+        payroll_amount = usual_salary  # the same salary every month
     events.append((rng.randint(15, 25), "payroll", {"amount": payroll_amount}))
     if rng.random() < 0.7:
         events.append((rng.randint(1, last_day), "transfer",
@@ -227,10 +230,12 @@ def build_personal_blocks(ctx: dict[str, Any], opening: float | None = None,
     seed_base = _holder_seed_key(ctx)
     rng_open = seeded_rng(seed_base + "|personal-opening")
     balance = opening if opening is not None else round(rng_open.uniform(1_500, 8_000), 2)
+    usual_salary = round(seeded_rng(seed_base + "|personal-salary").uniform(2500, 9000), 2)
 
     for month in ctx["months"]:
         rng = seeded_rng(f"{seed_base}|personal|{month:%Y-%m}")
-        txns = personal_month_transactions(month, balance, rng, known_salary=known_salary)
+        txns = personal_month_transactions(month, balance, rng, known_salary=known_salary,
+                                           usual_salary=usual_salary)
         blocks.append(Block(
             month=month, opening=balance, txns=txns,
             closing=txns[-1].balance if txns else balance,
