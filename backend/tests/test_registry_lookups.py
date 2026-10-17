@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
@@ -359,14 +360,14 @@ async def test_a_deployment_never_builds_the_land_use_index_itself(monkeypatch) 
     built = []
     monkeypatch.setattr(settings, "LAND_USE_RUNTIME_REBUILD", False)
     monkeypatch.setattr(land_use, "_build_in_background", lambda published: built.append(published))
-    monkeypatch.setattr(land_use, "_state", {"index": None, "loaded": False, "building": False, "checked_at": 0.0})
+    monkeypatch.setattr(land_use, "_state", {"index": None, "loaded": False, "building": False, "checked_at": None})
 
     monkeypatch.setattr(land_use, "load_index", lambda: None)
     with pytest.raises(LookupUnavailable, match="isn't included in this deployment"):
         await _real_current_index()
 
     shipped = land_use.build_index({"features": []}, "2025-12-26")
-    monkeypatch.setattr(land_use, "_state", {"index": None, "loaded": False, "building": False, "checked_at": 0.0})
+    monkeypatch.setattr(land_use, "_state", {"index": None, "loaded": False, "building": False, "checked_at": None})
     monkeypatch.setattr(land_use, "load_index", lambda: shipped)
     assert await _real_current_index() is shipped
     assert built == []  # no download or build was started either time
@@ -460,3 +461,99 @@ async def test_hdb_units_are_checked_against_the_blocks_storeys_and_need_a_unit(
     too_high = _codes(await run("Blk 22 Bedok South Avenue 1 #15-11 Singapore 460022"), "REG.UNIT_STOREY")
     assert [f.severity for f in too_high] == ["impossible"] and "14 storeys" in too_high[0].summary
     assert len(_codes(await run("Blk 22 Bedok South Avenue 1 Singapore 460022"), "REG.UNIT_MISSING")) == 1
+
+
+# --- URA approved use x zone: each zone class, with and without a unit -------------------------------------------
+
+_CONDO = _onemap("2", "MARINA BOULEVARD", "018987", "THE SAIL @ MARINA BAY")
+
+
+async def _home(text: str, zone: str | None, approved: bool, doc_type: str = "nric"):
+    with patch("app.fraud_detection.external_validation.registry_lookups.onemap.addresses_at_postal_code", _CONDO), \
+            _zone(zone), _ura(approved):
+        return await verify_against_registries("d", [_field("individual_address", text)], doc_type)
+
+
+@pytest.mark.parametrize("zone, severity", [
+    ("WHITE", "implausible"), ("COMMERCIAL", "implausible"), ("HOTEL", "implausible"),
+    ("COMMERCIAL & RESIDENTIAL", "implausible"), ("BUSINESS PARK", "implausible"),
+    ("RESIDENTIAL", "signal"), ("RESIDENTIAL / INSTITUTION", "signal"),
+    (None, "signal"),
+])
+async def test_a_unit_ura_does_not_approve_is_rated_by_its_zone(ura_key, zone, severity) -> None:
+    result = await _home("2 Marina Boulevard #70-01 Singapore 018987", zone, approved=False)
+    finding = _codes(result, "REG.RESIDENTIAL_ADDRESS")[0]
+    assert finding.severity == severity, zone
+
+
+async def test_an_unknown_zone_never_reads_as_a_non_home_unit(ura_key) -> None:
+    # Regression: with no zone (no index, or the point is in no polygon), "implausible" was reported.
+    result = await _home("2 Marina Boulevard #70-01 Singapore 018987", None, approved=False)
+    finding = _codes(result, "REG.RESIDENTIAL_ADDRESS")[0]
+    assert finding.severity == "signal" and "zoning wasn't available" in finding.summary
+
+
+async def test_a_missing_land_use_index_gives_a_signal_and_a_skip_not_an_implausible_finding(ura_key) -> None:
+    # No zone patch: conftest makes the land-use index unavailable, as on a deployment built without it.
+    with patch("app.fraud_detection.external_validation.registry_lookups.onemap.addresses_at_postal_code", _CONDO), _ura(False):
+        result = await verify_against_registries(
+            "d", [_field("individual_address", "2 Marina Boulevard #70-01 Singapore 018987")], "nric")
+    assert [f.severity for f in _codes(result, "REG.RESIDENTIAL_ADDRESS")] == ["signal"]
+    assert any(s.check_code == "REG.BUILDING_USE" for s in result.skipped_checks)
+
+
+@pytest.mark.parametrize("zone", ["RESIDENTIAL WITH COMMERCIAL AT 1ST STOREY"])
+async def test_a_shophouse_zone_is_exempt_with_or_without_a_unit(ura_key, zone) -> None:
+    for text in ("2 Marina Boulevard #02-01 Singapore 018987", "2 Marina Boulevard Singapore 018987"):
+        assert (await _home(text, zone, approved=False)).findings == [], text
+
+
+async def test_a_home_address_in_an_industrial_zone_is_inconsistent_whatever_ura_says(ura_key) -> None:
+    for approved in (True, False):
+        result = await _home("2 Marina Boulevard #02-01 Singapore 018987", "BUSINESS 2", approved=approved)
+        assert [f.severity for f in _codes(result, "REG.RESIDENTIAL_ADDRESS")] == ["inconsistent"], approved
+
+
+@pytest.mark.parametrize("zone", [None, "RESIDENTIAL", "WHITE", "COMMERCIAL"])
+async def test_a_home_with_no_unit_at_a_building_ura_does_not_approve_is_a_unit_missing_signal(ura_key, zone) -> None:
+    result = await _home("2 Marina Boulevard Singapore 018987", zone, approved=False)
+    assert [f.severity for f in _codes(result, "REG.UNIT_MISSING")] == ["signal"], zone
+    assert _codes(result, "REG.RESIDENTIAL_ADDRESS") == []
+
+
+async def test_an_approved_home_is_never_flagged_in_any_zone(ura_key) -> None:
+    for zone in (None, "RESIDENTIAL", "WHITE", "COMMERCIAL", "HOTEL"):
+        result = await _home("2 Marina Boulevard #40-01 Singapore 018987", zone, approved=True)
+        assert result.findings == [], zone
+
+
+# --- a company address: URA's answer outranks zoning ------------------------------------------------------------
+
+async def _company(zone: str | None, approved: bool | None):
+    """approved=None: URA gives no answer (no access key configured), so only zoning can speak."""
+    with ExitStack() as stack:
+        stack.enter_context(patch("app.fraud_detection.external_validation.registry_lookups.onemap.addresses_at_postal_code", _CONDO))
+        stack.enter_context(_zone(zone))
+        if approved is not None:
+            stack.enter_context(_ura(approved))
+        return await verify_against_registries(
+            "d", [_field("company_address", "2 Marina Boulevard #40-01 Singapore 018987")], "certificate_of_incumbency")
+
+
+async def test_a_company_address_ura_answers_na_is_not_flagged_by_zoning(ura_key) -> None:
+    # Regression: a Residential zone flagged the company even though URA said "not approved / no record".
+    assert (await _company("RESIDENTIAL", approved=False)).findings == []
+
+
+async def test_a_company_address_is_flagged_by_zoning_only_when_ura_gave_no_answer() -> None:
+    # No ura_key fixture: URA is unconfigured, so zoning alone speaks.
+    finding = _codes(await _company("RESIDENTIAL", approved=None), "REG.COMPANY_ADDRESS_RESIDENTIAL")[0]
+    assert finding.severity == "signal" and finding.source == "URA Master Plan land use (data.gov.sg)"
+    for zone in ("WHITE", "COMMERCIAL", None):
+        assert (await _company(zone, approved=None)).findings == [], zone
+
+
+async def test_a_company_at_an_approved_home_is_a_signal_in_any_zone(ura_key) -> None:
+    for zone in (None, "RESIDENTIAL", "WHITE", "COMMERCIAL"):
+        result = await _company(zone, approved=True)
+        assert [f.severity for f in _codes(result, "REG.COMPANY_ADDRESS_RESIDENTIAL")] == ["signal"], zone

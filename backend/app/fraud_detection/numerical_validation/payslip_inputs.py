@@ -16,6 +16,9 @@ Extraction labels each earnings line with its "cpf_wage_type" (extraction_prompt
 line it didn't label is classified from its description. A line that can't be classified
 either way ("Benefits", "Commission": its frequency decides) is uncertain, and the checks
 accept any reading of it rather than guess.
+
+A line with a negative amount (an adjustment such as unpaid leave) is always uncertain, and
+keeps its sign: it never adds to wages, and may reduce either kind, so the checks try both.
 """
 
 from __future__ import annotations
@@ -33,20 +36,28 @@ _CPF_LINE_RE = re.compile(r"\bcpf\b|provident fund|\b(?:employee'?s?|ee)\s+(?:sh
 # deducted) and the self-help group contributions.
 _NOT_EMPLOYEE_CPF_RE = re.compile(r"employer|company|\ber\b|cdac|sinda|mbmf|\becf\b|self[- ]help|\bshg\b", re.IGNORECASE)
 
-# Earnings classified from their description when extraction didn't label them.
+# Earnings classified from their description when extraction didn't label them, tried in this order:
+# not wages, then pay that is plainly additional, then ordinary pay, then the weaker additional phrases.
+# A bare "performance" or "variable" says nothing ("Performance allowance" is ordinary), so those only
+# count with the word that makes them a payment; and ordinary is tried before them.
 _NOT_WAGES_RE = re.compile(
     r"reimburs|\bclaims?\b|expense|benefits? in kind|\bbik\b|termination|retrenchment|severance|"
     r"ex[- ]gratia.*(?:retrench|termination)", re.IGNORECASE,
 )
 _ADDITIONAL_RE = re.compile(
-    r"bonus|\baws\b|13th|variable|performance|incentive|leave (?:pay|encash)|back ?pay|arrears|"
-    r"ex[- ]gratia|long service|gratuity", re.IGNORECASE,
+    r"bonus|\baws\b|13th|incentive|leave (?:pay|encash)|back ?pay|arrears|ex[- ]gratia|long service|gratuity",
+    re.IGNORECASE,
 )
 _ORDINARY_RE = re.compile(
     r"basic|salary|\bwages?\b|base pay|allowance|overtime|\bot\b|shift|transport|meal|housing|"
     r"on[- ]call|standby", re.IGNORECASE,
 )
+_WEAK_ADDITIONAL_RE = re.compile(
+    r"performance (?:bonus|pay|incentive)|variable (?:pay|bonus|component)", re.IGNORECASE,
+)
 WAGE_TYPES = ("ordinary", "additional", "not_wages", "uncertain")
+# The basic pay line(s) among the earnings ("Basic Salary", "Basic Pay", "Base Pay").
+_BASIC_RE = re.compile(r"\bbasic\b|\bbase (?:pay|salary)\b", re.IGNORECASE)
 
 
 def _label(row: dict) -> str:
@@ -65,6 +76,8 @@ def wage_type(row: dict) -> str:
         return "additional"
     if _ORDINARY_RE.search(label):
         return "ordinary"
+    if _WEAK_ADDITIONAL_RE.search(label):
+        return "additional"
     return "uncertain"
 
 
@@ -73,7 +86,7 @@ class WageSplit:
     """The payslip's earnings by CPF treatment, and which lines went where."""
     ordinary: float
     additional: float
-    uncertain: float
+    uncertain: float  # signed: a negative adjustment line subtracts
     lines: dict[str, list[str]]
 
     def describe(self) -> str:
@@ -92,9 +105,16 @@ def split_earnings(earnings_items: Any) -> WageSplit | None:
         amount = _as_number(row.get("amount"))
         if amount is None:
             return None
-        kind = wage_type(row)
-        totals[kind] += abs(amount)
-        lines[kind].append(_label(row).strip() or "(unlabelled line)")
+        label = _label(row).strip() or "(unlabelled line)"
+        if amount < 0:
+            # An adjustment (unpaid leave, a correction): it never adds to wages, and which kind it reduces
+            # isn't known, so it's uncertain and keeps its sign.
+            kind = "uncertain"
+            label = f"{label} ({amount:,.2f})"
+        else:
+            kind = wage_type(row)
+        totals[kind] += amount
+        lines[kind].append(label)
     return WageSplit(
         ordinary=round(totals["ordinary"], 2), additional=round(totals["additional"], 2),
         uncertain=round(totals["uncertain"], 2), lines=lines,
@@ -126,11 +146,26 @@ def wage_scenarios(
         extra = additional_wages if ordinary_wages is None and additional_wages else 0.0
         scenarios.append(WageScenario(split.ordinary, split.additional + extra, "the earnings lines"))
         if split.uncertain:
-            scenarios.append(WageScenario(split.ordinary + split.uncertain, split.additional + extra,
+            # Wages can't go below nothing, whatever the adjustments.
+            scenarios.append(WageScenario(max(0.0, split.ordinary + split.uncertain), split.additional + extra,
                                           "the earnings lines, uncertain ones as ordinary wages"))
-            scenarios.append(WageScenario(split.ordinary, split.additional + split.uncertain + extra,
+            scenarios.append(WageScenario(split.ordinary, max(0.0, split.additional + split.uncertain + extra),
                                           "the earnings lines, uncertain ones as additional wages"))
     return scenarios
+
+
+def basic_pay_from_earnings(earnings_items: Any) -> float | None:
+    """Basic pay from the earnings lines labelled as basic pay, or None if there is no such line."""
+    amounts = [
+        amount for row in _rows(earnings_items)
+        if _BASIC_RE.search(_label(row)) and (amount := _as_number(row.get("amount"))) is not None and amount > 0
+    ]
+    return round(sum(amounts), 2) if amounts else None
+
+
+def basic_pay_input(basic_pay: float | None, earnings_items: Any) -> float | None:
+    """Basic pay as stated, else from the earnings lines."""
+    return basic_pay if basic_pay is not None else basic_pay_from_earnings(earnings_items)
 
 
 def employee_cpf_from_deductions(deductions_items: Any) -> float | None:

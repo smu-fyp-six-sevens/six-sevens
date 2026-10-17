@@ -144,7 +144,7 @@ class Settings:
     # Use". Optional: without it that lookup is skipped and zoning alone is used.
     URA_API_KEY: str = _env("URA_API_KEY")
     # URA zoning index (registry_lookups/land_use.py): whether a running server may download
-    # and build it itself (minutes, ~700 MB) when it's missing or URA has updated the map.
+    # and build it itself (~35 s, ~200 MB peak, measured) when it's missing or URA has updated the map.
     # The Docker image builds it in and sets this to false; local runs keep it on.
     LAND_USE_RUNTIME_REBUILD: bool = os.environ.get("LAND_USE_RUNTIME_REBUILD", "true").lower() == "true"
 

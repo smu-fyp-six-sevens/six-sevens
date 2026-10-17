@@ -49,9 +49,27 @@ Comparing a document with the rest of its case is not done here: that is the per
 | `metadata_analysis.py` | File-embedded metadata (author/producer/create-modify dates) tamper signals | 54 |
 | `date_anomalies.py` | Date extraction/labeling and logical date consistency (future dates, end-before-start) | 38 |
 | `spelling_anomaly.py` | Misspellings via SymSpell, filtered against `domain_terms.py` allow-list | 24 |
-| `external_validation/` | The document's facts against outside references, chosen by document type. `runner.py` is the entry point; `registry_lookups/` holds the live ACRA, OneMap, HDB and MOM holiday lookups; `sg_reference/` holds the published tables (CPF rates and ceilings, GST rate, IRAS tax rules, bank identifiers, public holidays); `reference_checks/` holds the checks that read those tables (`PAY.CPF_RATE`, `PAY.CPF_CEILING`, `POA.GST`, `NOA.PAYABLE`, `BS.BANK_IDENTIFIERS`, `BS.ACCOUNT_NUMBER_FORMAT`), registered as `group="external"`; `giro.py` is the GIRO closed-day check. Run by `external_validation_tool` and the `external-validation` endpoint | — |
+| `external_validation/` | The document's facts against outside references, chosen by document type. `runner.py` is the entry point; `registry_lookups/` holds the live ACRA, OneMap, HDB, URA (approved residential use and the Master Plan zoning index) and MOM holiday lookups; `sg_reference/` holds the published tables (CPF rates and ceilings, GST rate, IRAS tax rules, bank identifiers, public holidays); `reference_checks/` holds the checks that read those tables (`PAY.CPF_RATE`, `PAY.CPF_CEILING`, `PAY.CPF_BASE`, `POA.GST`, `NOA.PAYABLE`, `BS.BANK_IDENTIFIERS`, `BS.ACCOUNT_NUMBER_FORMAT`), registered as `group="external"`; `giro.py` is the GIRO closed-day check. Run by `external_validation_tool` and the `external-validation` endpoint | — |
 | `font_consistency.py` | Font family/size/emphasis (bold/italic/underline) inconsistency | 16 |
 | `domain_terms.py` | Not a check — allow-list of legal/financial jargon feeding `spelling_anomaly.py` | — |
+
+The three `PAY.CPF_*` checks (`reference_checks/cpf.py`) share one assessment, so a wrong contribution is reportedonce: `CPF_CEILING` (ceiling not applied, impossible), `CPF_BASE` (rate applied to basic pay only, inconsistent),
+`CPF_RATE` (anything else). Earnings are split into ordinary, additional (bonus) and non-wages; a line that can't be
+classified, or a negative adjustment, is uncertain and any reading of it is accepted.
+
+Address findings (`registry_lookups/addresses.py`; each address is checked once wherever it is printed). HDB blocks use HDB's register; private buildings use URA's approved-use answer, then Master Plan
+zoning (Commercial and White zones allow homes and offices, so zoning alone can't decide there).
+
+| Code | Meaning | Severity |
+| `REG.POSTAL_CODE_EXISTS` | postal code not in OneMap | impossible |
+| `REG.ADDRESS_MATCH` | block and street not at that postal code | inconsistent |
+| `REG.RESIDENTIAL_ADDRESS` | a home that can't be lived in: no flats, industrial zone, or a unit URA doesn't approve | inconsistent / implausible / signal |
+| `REG.COMPANY_ADDRESS_RESIDENTIAL` | company registered at a home (Home Office Schemes allow it) | signal |
+| `REG.UNIT_STOREY` | HDB unit above the block's top storey | impossible |
+| `REG.UNIT_MISSING` | home in flats or a condo with no unit number | signal |
+
+Zoning comes from a local index (`land_use.py`, about 12 MB) built from a 175 MB data.gov.sg file when the Docker
+image is built. If it is missing, zoning is skipped and the startup log says so.
 
 `image_manipulation.py` (SCRUM-64) covers resolution and compression mismatches between a file's
 images (embedded PDF images or a standalone PNG/JPEG). The same module's `check_image_tampering` (SCRUM-65) covers
@@ -97,8 +115,7 @@ Shared helpers: `llm_io.py` reads a model reply (text and JSON) and checks it ag
   Findings are capped at 15 per tool. A check's own severity is passed through as `severity_hint`,
   kept separate from the specialist's own `info/low/medium/high` scale.
   The field-driven checks live in `langgraph/detection/field_checks/`: `numerical_checks_tool` (calculations on the
-  document's own figures) and `external_validation_tool` (the document's facts against outside references: live
-  ACRA, OneMap and HDB lookups, and static tables for CPF, GST, IRAS tax, bank identifiers and GIRO holidays).
+  document's own figures) and `external_validation_tool` (the document's facts against outside references: live ACRA, OneMap, HDB and URA lookups, and static tables for CPF, GST, IRAS tax, bank identifiers and GIRO holidays).
   Both take a `bindings` argument that the specialist fills from the field list and check menus, and a document
   type injected from the run state that the agent never sees; the type alone decides which checks run. A check with
   unbound roles is skipped with the reason. The rule for which group a check is in: a lookup in a static table or

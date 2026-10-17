@@ -1,32 +1,22 @@
-"""Addresses on a document against OneMap, HDB's block register and URA's planning data.
+"""Addresses on a document against OneMap, HDB's register and URA's planning data.
 
-* REG.POSTAL_CODE_EXISTS          the postal code is a real Singapore postal code
-* REG.ADDRESS_MATCH               the block and street match what's at that postal code
-* REG.RESIDENTIAL_ADDRESS         a home address is somewhere a person can live
-* REG.COMPANY_ADDRESS_RESIDENTIAL a company address is a home. Only a signal: HDB's and URA's Home
-                                  Office Schemes let a small business register at home
-* REG.UNIT_STOREY                 the unit's storey exists: an HDB unit no higher than the block's top
-                                  storey (HDB's max_floor_lvl)
-* REG.UNIT_MISSING                a home address in a block of flats or a condominium gives a unit number
+REG.POSTAL_CODE_EXISTS; REG.ADDRESS_MATCH (block and street are at that postal code); REG.RESIDENTIAL_ADDRESS (a home
+can be lived in); REG.COMPANY_ADDRESS_RESIDENTIAL (company at a home, only a signal: the Home Office Schemes allow it);
+REG.UNIT_STOREY (an HDB unit is no higher than its block); REG.UNIT_MISSING (a home in flats or a condo has a unit number).
 
-What a building is used for, best source first:
-* HDB block: HDB's register says whether it has flats and shops (exact).
-* Private building, URA's Approved Residential Use (ura.py), per address and unit: "Y" is an
-  approved private home; "NA" for a given unit is not a home or a unit URA has no record of.
-* Private building, URA's zoning (land_use.py): Business 1/2 (industry) allows no homes; Residential
-  with Commercial at 1st Storey is where shophouses are, whose homes URA's approved-use data leaves out;
-  Commercial, White and the mixed zones allow both offices and homes, so zoning alone can't decide there.
+Best source first: an HDB block by HDB's register; a private building by URA's approved-use answer for the unit ("Y" is
+an approved home, "NA" a non-home or a unit URA has no record of), then by zoning (Business 1/2 allows no homes;
+Residential with Commercial at 1st Storey is shophouse land, which URA's data leaves out; Commercial, White and the
+mixed zones allow homes and offices, so zoning alone can't decide there).
 
 Home address, private building:
-* zoned Business 1/2                           inconsistent (URA's Master Plan allows no homes)
-* approved for residential use                 fine
-* unit not approved, zoned shophouse-type      fine (shophouse homes aren't in URA's data)
-* unit not approved, zoned Residential         signal (a unit URA has no record of)
-* unit not approved, any other zone            implausible (an office, shop or hotel unit)
-* no unit given and not approved               signal (REG.UNIT_MISSING): a condominium home has a unit
-                                               number, and without one URA can't tell a condo from an office
-Company address: an HDB block of flats only, a private address URA approves for residential use, or
-(without that answer) a site zoned purely Residential: signal.
+* zoned Business 1/2                                 inconsistent
+* approved for residential use                       fine
+* unit not approved, shophouse zone                  fine
+* unit not approved, Residential zone or no zone     signal
+* unit not approved, any other zone                  implausible
+* no unit given, not approved                        signal (REG.UNIT_MISSING)
+Company address: HDB flats only, a unit URA approves, or (only if URA gave no answer) a purely Residential zone: signal.
 """
 
 from __future__ import annotations
@@ -265,14 +255,20 @@ async def _building_use(address: _Address, results: list[dict]) -> Outcome:
                 severity_note="URA's approved-use data leaves out shophouse homes and developments without TOP",
             ))
         elif approved is False and unit and zone not in SHOPHOUSE_ZONES:
-            in_home_zone = zone in HOME_ZONES
+            # "implausible" needs a KNOWN zone that is neither meant for homes nor shophouse land: with no zone
+            # (no index, or the point is in no polygon) nothing says it isn't a home, so it's only a signal.
+            if zone is None:
+                severity, what = "signal", ("zoning wasn't available for this site, so it can't be told whether the "
+                                            "unit is a non-home unit or one URA has no record of")
+            elif zone in HOME_ZONES:
+                severity, what = "signal", "the unit may not exist"
+            else:
+                severity, what = "implausible", ("it is an office, shop or other non-home unit, or a unit that "
+                                                 "doesn't exist")
             findings.append(_finding(
-                "REG.RESIDENTIAL_ADDRESS", "signal" if in_home_zone else "implausible",
+                "REG.RESIDENTIAL_ADDRESS", severity,
                 f"URA has no approval for residential use for {where}{building_name}{zoned}, the unit "
-                f"{address.label} gives: "
-                + ("the unit may not exist" if in_home_zone
-                   else "it is an office, shop or other non-home unit, or a unit that doesn't exist")
-                + address.also,
+                f"{address.label} gives: {what}{address.also}",
                 ura.SOURCE, address, expected="a unit approved for residential use",
                 severity_note="URA's approved-use data leaves out shophouse homes and developments without TOP, "
                               "and \"no approval\" also covers a unit it has no record of",
@@ -288,7 +284,8 @@ async def _building_use(address: _Address, results: list[dict]) -> Outcome:
                 severity_note="Allowed under URA's Home Office Scheme for small businesses; worth confirming against "
                               "the company's size and activity",
             ))
-        elif zone == HOMES_ONLY_ZONE:
+        elif approved is None and zone == HOMES_ONLY_ZONE:
+            # Only without URA's answer: "NA" (not approved, or no record) is the weaker signal and outweighs the zone.
             findings.append(_finding(
                 "REG.COMPANY_ADDRESS_RESIDENTIAL", "signal",
                 f"{address.label} is on a site URA zones purely Residential (a private home: house or "

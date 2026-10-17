@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from datetime import date
 from types import SimpleNamespace
 
@@ -255,3 +257,83 @@ def test_extraction_labels_override_the_description() -> None:
     result = _run([_field("earnings_items", earnings), _field("deductions_items", deductions),
                    _field("pay_date", "2026-03-31")], "payslip")
     assert [f for f in result.findings if f.check_code.startswith("PAY.CPF")] == []  # 20% of 6,000
+
+
+# --- earnings classification and the shared CPF assessment ---------------------------------------------------------
+
+
+@pytest.mark.parametrize("label, expected", [
+    ("Basic salary", "ordinary"), ("Allowances", "ordinary"), ("Overtime", "ordinary"), ("Shift allowance", "ordinary"),
+    # A bare "performance" or "variable" is not a payment: only with the word that makes it one.
+    ("Performance allowance", "ordinary"), ("Variable allowance", "ordinary"),
+    ("Performance bonus", "additional"), ("Performance pay", "additional"), ("Performance incentive", "additional"),
+    ("Variable pay", "additional"), ("Variable bonus", "additional"), ("Variable component", "additional"),
+    ("Annual bonus", "additional"), ("AWS", "additional"), ("13th month salary", "additional"),
+    ("Salary arrears", "additional"), ("Leave pay", "additional"),
+    ("Travel claims", "not_wages"), ("Medical reimbursement", "not_wages"),
+    ("Benefits", "uncertain"), ("Commission", "uncertain"), ("Performance review", "uncertain"),
+])
+def test_an_earnings_label_is_classified_the_way_cpf_treats_it(label: str, expected: str) -> None:
+    from app.fraud_detection.numerical_validation.payslip_inputs import wage_type
+
+    assert wage_type({"description": label, "amount": "100"}) == expected
+
+
+def test_a_negative_earnings_line_never_adds_to_wages() -> None:
+    from app.fraud_detection.numerical_validation.payslip_inputs import split_earnings, wage_scenarios
+
+    earnings = [{"description": "Basic salary", "amount": "5,000.00"}, {"description": "Unpaid leave", "amount": "-300.00"},
+                {"description": "Overtime correction", "amount": "-50"}]
+    split = split_earnings(earnings)
+    assert split is not None
+    assert (split.ordinary, split.additional, split.uncertain) == (5000.0, 0.0, -350.0)  # not +350
+    assert "Unpaid leave (-300.00)" in split.describe()
+    # Read as not wages, or as reducing ordinary or additional wages (which can't go below nothing).
+    assert [(s.ordinary, s.additional) for s in wage_scenarios(None, None, earnings)] == [
+        (5000.0, 0.0), (4650.0, 0.0), (5000.0, 0.0)]
+
+
+def test_cpf_on_wages_net_of_a_negative_adjustment_is_accepted_but_not_a_wrong_amount() -> None:
+    earnings = [{"description": "Basic salary", "amount": "5000.00"}, {"description": "Unpaid leave", "amount": "-300.00"}]
+
+    def run(cpf: str):
+        return _run([_field("earnings_items", earnings), _field("pay_date", "2026-03-31"),
+                     _field("deductions_items", [{"description": "CPF", "amount": cpf}])], "payslip")
+    for cpf in ("940", "1000"):  # 20% of 4,700 (leave deducted) or of 5,000 (adjustment ignored)
+        assert [f for f in run(cpf).findings if f.check_code.startswith("PAY.CPF")] == [], cpf
+    assert len(_codes(run("1100"), "PAY.CPF_CEILING") + _codes(run("1100"), "PAY.CPF_RATE")) == 1
+
+
+def test_the_three_cpf_checks_share_one_assessment_per_payslip() -> None:
+    from app.fraud_detection.external_validation.reference_checks.cpf import assess_cpf
+
+    assess_cpf.cache_clear()
+    fields = [_field("earnings_items", [{"description": "Basic salary", "amount": "5200"}, {"description": "Allowances", "amount": "650"}]),
+              _field("deductions_items", [{"description": "CPF", "amount": "-1040"}]),
+              _field("basic_pay", "5200"), _field("pay_date", "2026-09-30")]
+    result = _run(fields, "payslip")
+    info = assess_cpf.cache_info()
+    assert (info.misses, info.hits) == (1, 2)  # assessed once, reused by the other two checks
+    assert [f.check_code for f in result.findings if f.check_code.startswith("PAY.CPF")] == ["PAY.CPF_BASE"]
+
+    # A different payslip is a different assessment: the cache never answers for another one.
+    other = [_field("earnings_items", [{"description": "Basic salary", "amount": "5200"}, {"description": "Allowances", "amount": "650"}]),
+             _field("deductions_items", [{"description": "CPF", "amount": "-1170"}]),
+             _field("basic_pay", "5200"), _field("pay_date", "2026-09-30")]
+    assert [f for f in _run(other, "payslip").findings if f.check_code.startswith("PAY.CPF")] == []
+    assert assess_cpf.cache_info().misses == 2
+
+
+def test_cpf_on_basic_pay_alone_is_caught_from_the_earnings_lines_without_a_basic_pay_field() -> None:
+    def run(cpf: str):
+        return _run([
+            _field("earnings_items", [{"description": "Basic Salary", "amount": "5200"},
+                                      {"description": "Transport Allowance", "amount": "650"}]),
+            _field("deductions_items", [{"description": "Employee CPF", "amount": "-" + cpf}]),
+            _field("pay_date", "2026-09-30"),
+        ], "payslip")
+    base = run("1040")  # 20% of the basic salary line, not of 5,850
+    assert [f.check_code for f in base.findings if f.check_code.startswith("PAY.CPF")] == ["PAY.CPF_BASE"]
+    assert "basic pay (5,200.00) alone" in base.findings[0].summary
+    assert not any(s.check_code == "PAY.CPF_BASE" for s in base.skipped)
+    assert [f for f in run("1170").findings if f.check_code.startswith("PAY.CPF")] == []  # 20% of 5,850

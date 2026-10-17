@@ -26,12 +26,16 @@ COPY backend/app ./app
 RUN mkdir -p ./document_templates ./documents_generated
 RUN pip install --no-cache-dir --retries 10 --timeout 120 -e .
 
-# URA land-use zoning for the address checks (app/fraud_detection/registry_lookups/land_use.py):
-# downloaded from data.gov.sg and built into the image (~12 MB, a couple of minutes), so a
-# running server never has to. If data.gov.sg can't be reached the image still builds, without
-# it: zoning is then skipped, with the reason, until the next deploy.
-RUN python -c "from app.fraud_detection.registry_lookups.land_use import download_and_build; download_and_build()" \
-    || echo "WARNING: URA land-use index not built; address zoning checks will be skipped"
+ARG ALLOW_MISSING_LAND_USE=false
+RUN --mount=type=secret,id=data_gov_sg_api_key \
+    if [ -r /run/secrets/data_gov_sg_api_key ]; then export DATA_GOV_SG_API_KEY="$(cat /run/secrets/data_gov_sg_api_key)"; fi; \
+    if python -c "from app.fraud_detection.external_validation.registry_lookups.land_use import cli; cli([])"; then :; \
+    elif [ "$ALLOW_MISSING_LAND_USE" = "true" ]; then \
+        echo "WARNING: URA land-use index not built (ALLOW_MISSING_LAND_USE=true); zoning checks will be skipped"; \
+    else \
+        echo "ERROR: could not build the URA land-use index; fix the cause or build with --build-arg ALLOW_MISSING_LAND_USE=true" >&2; \
+        exit 1; \
+    fi
 ENV LAND_USE_RUNTIME_REBUILD=false
 
 EXPOSE 8000

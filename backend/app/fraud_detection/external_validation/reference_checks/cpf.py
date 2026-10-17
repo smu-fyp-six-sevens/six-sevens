@@ -17,14 +17,18 @@ ceiling and over-the-rate cases are still caught, the others are skipped.
 
 from __future__ import annotations
 
+import functools
+import json
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
 from ...numerical_validation.common import CheckResult, _finding, _money, _parse_field_date, skipped
 from ...numerical_validation.models import SkippedCheck
-from ...numerical_validation.payslip_inputs import WageScenario, employee_cpf_input, split_earnings, wage_scenarios
+from ...numerical_validation.payslip_inputs import (
+    WageScenario, basic_pay_input, employee_cpf_input, split_earnings, wage_scenarios,
+)
 from ...numerical_validation.registry import Num, check
 from ..sg_reference.cpf import CpfBand, band_for_age, bands_in_force, ceiling_on, contribution
 
@@ -34,6 +38,37 @@ _DOLLAR_TOLERANCE = 1.0
 # For a date before the configured rate tables: the 55-and-below band, the highest rates in every
 # table (employee 20%, total 37%), bounds what any employee can pay.
 _HIGHEST_RATE_BAND = CpfBand("of any age", None, 0.37, 0.20, 0.17, 0.6)
+
+
+@dataclass(frozen=True)
+class PayslipCpfInputs:
+    """Everything the CPF assessment reads from a payslip, passed explicitly. Its identity (equality and
+    hash) is `key`, a canonical form of all of them, so one payslip's assessment is worked out once and
+    shared by the three checks; the inputs themselves (which include lists) stay out of the hash."""
+    key: str
+    employee_cpf: float | None = field(compare=False)
+    deductions_items: Any = field(compare=False, repr=False)
+    ordinary_wages: float | None = field(compare=False)
+    additional_wages: float | None = field(compare=False)
+    earnings_items: Any = field(compare=False, repr=False)
+    pay_date: Any = field(compare=False)
+    pay_period_end: Any = field(compare=False)
+    employer_cpf: float | None = field(compare=False)
+    date_of_birth: Any = field(compare=False)
+    basic_pay: float | None = field(compare=False)
+
+    @classmethod
+    def of(
+        cls, *, employee_cpf: float | None, deductions_items: Any, ordinary_wages: float | None,
+        additional_wages: float | None, earnings_items: Any, pay_date: Any, pay_period_end: Any,
+        employer_cpf: float | None, date_of_birth: Any, basic_pay: float | None,
+    ) -> "PayslipCpfInputs":
+        values = dict(
+            employee_cpf=employee_cpf, deductions_items=deductions_items, ordinary_wages=ordinary_wages,
+            additional_wages=additional_wages, earnings_items=earnings_items, pay_date=pay_date,
+            pay_period_end=pay_period_end, employer_cpf=employer_cpf, date_of_birth=date_of_birth, basic_pay=basic_pay,
+        )
+        return cls(key=json.dumps(values, sort_keys=True, default=str), **values)
 
 
 @dataclass(frozen=True)
@@ -69,11 +104,15 @@ def _basic_only_band(employee_cpf: float, basic_pay: float | None, bands: tuple[
     return next((b for b in bands if abs(b.employee_pct * basic_pay - employee_cpf) <= _DOLLAR_TOLERANCE), None)
 
 
-def assess_cpf(
-    *, employee_cpf: float | None, deductions_items: Any, ordinary_wages: float | None,
-    additional_wages: float | None, earnings_items: Any, pay_date: Any, pay_period_end: Any,
-    employer_cpf: float | None, date_of_birth: Any, basic_pay: float | None,
-) -> CpfAssessment | SkippedCheck:
+@functools.lru_cache(maxsize=64)
+def assess_cpf(inputs: PayslipCpfInputs) -> CpfAssessment | SkippedCheck:
+    """The CPF assessment of one payslip. Cached on the inputs: the three checks each ask for it, and it is
+    worked out once. (A SkippedCheck is shared too; the runner copies it before stamping its check code.)"""
+    employee_cpf, deductions_items = inputs.employee_cpf, inputs.deductions_items
+    ordinary_wages, additional_wages, earnings_items = inputs.ordinary_wages, inputs.additional_wages, inputs.earnings_items
+    pay_date, pay_period_end = inputs.pay_date, inputs.pay_period_end
+    employer_cpf, date_of_birth = inputs.employer_cpf, inputs.date_of_birth
+    basic_pay = basic_pay_input(inputs.basic_pay, earnings_items)
     stated, source_field = employee_cpf_input(employee_cpf, deductions_items)
     if stated is None:
         return skipped(reason="Required field(s) not extracted: employee_cpf (or a CPF line in deductions_items)")
@@ -137,7 +176,11 @@ def _check_cpf_ceiling(
     basic_pay: Num | None = None,
 ) -> CheckResult:
     """The employee's CPF is due on ordinary wages only up to the OW ceiling for the pay date."""
-    result = assess_cpf(**locals())
+    result = assess_cpf(PayslipCpfInputs.of(
+        employee_cpf=employee_cpf, deductions_items=deductions_items, ordinary_wages=ordinary_wages,
+        additional_wages=additional_wages, earnings_items=earnings_items, pay_date=pay_date,
+        pay_period_end=pay_period_end, employer_cpf=employer_cpf, date_of_birth=date_of_birth, basic_pay=basic_pay,
+    ))
     if isinstance(result, SkippedCheck):
         return [], result
     if result.outcome != "over_ceiling":
@@ -153,13 +196,19 @@ def _check_cpf_ceiling(
 
 @check(code="PAY.CPF_BASE", applies=("payslip",), group="external", source="CPF Board contribution rate tables")
 def _check_cpf_base(
-    *, basic_pay: Num, ordinary_wages: Num | None = None, earnings_items: Any = None,
+    *, ordinary_wages: Num | None = None, earnings_items: Any = None,
     employee_cpf: Num | None = None, deductions_items: Any = None,
     pay_date: Any = None, pay_period_end: Any = None,
     employer_cpf: Num | None = None, date_of_birth: Any = None, additional_wages: Num | None = None,
+    basic_pay: Num | None = None,
 ) -> CheckResult:
-    """CPF is due on all ordinary wages (basic pay plus allowances and overtime), not basic pay alone."""
-    result = assess_cpf(**locals())
+    """CPF is due on all ordinary wages (basic pay plus allowances and overtime), not basic pay alone.
+    Basic pay is the stated field, else the earnings lines labelled as basic pay."""
+    result = assess_cpf(PayslipCpfInputs.of(
+        employee_cpf=employee_cpf, deductions_items=deductions_items, ordinary_wages=ordinary_wages,
+        additional_wages=additional_wages, earnings_items=earnings_items, pay_date=pay_date,
+        pay_period_end=pay_period_end, employer_cpf=employer_cpf, date_of_birth=date_of_birth, basic_pay=basic_pay,
+    ))
     if isinstance(result, SkippedCheck):
         return [], result
     if result.outcome == "rates_unknown":
@@ -169,8 +218,8 @@ def _check_cpf_base(
         return [], None
     return [_finding(
         "PAY.CPF_BASE", "inconsistent",
-        f"Employee CPF {_money(result.employee_cpf)} is calculated on basic pay ({_money(basic_pay)}) alone, "
-        f"not on {_wages_text(result.main)}.{result.basic_note}{result.lines_note}",
+        f"Employee CPF {_money(result.employee_cpf)} is not calculated on {_wages_text(result.main)}."
+        f"{result.basic_note}{result.lines_note}",
         field=result.source_field, stated=_money(result.employee_cpf),
     )], None
 
@@ -185,7 +234,11 @@ def _check_cpf_rate(
 ) -> CheckResult:
     """Employee (and employer) CPF must match CPF Board's rate for the month's wages and the age band on the
     pay date, under some reading of the wages the payslip allows."""
-    result = assess_cpf(**locals())
+    result = assess_cpf(PayslipCpfInputs.of(
+        employee_cpf=employee_cpf, deductions_items=deductions_items, ordinary_wages=ordinary_wages,
+        additional_wages=additional_wages, earnings_items=earnings_items, pay_date=pay_date,
+        pay_period_end=pay_period_end, employer_cpf=employer_cpf, date_of_birth=date_of_birth, basic_pay=basic_pay,
+    ))
     if isinstance(result, SkippedCheck):
         return [], result
     if result.outcome == "rates_unknown":

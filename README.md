@@ -49,6 +49,8 @@ Set `CASE_ANALYSIS_ENABLED=false` to switch the case analysis off. `exiftool` sh
 
 Optional settings: `QUEUE_WORKER_CONCURRENCY` (documents processed at once, default 4), `DETECTION_CONCURRENCY` (detection runs at once, default 2), `CPU_WORKER_CONCURRENCY` (PDF, OCR and forensic threads, default 1), `DOCUMENT_MAX_MODEL_CALLS` (model calls one document's classify and extract run may make, default 24), `DETECTION_MAX_MODEL_CALLS` (model calls one detection run may make, default 30), `LLM_MAX_RETRIES` (default 1), `LLM_TIMEOUT_SECONDS` (default 300), `TOOL_TIMEOUT_SECONDS` and `SLOW_TOOL_TIMEOUT_SECONDS` (per detection tool, default 60 and 120), `LOG_HTTP_REQUESTS` (log every Supabase call, default off).
 
+Optional keys for the public-registry checks (a check that can't run is skipped, never a finding): `DATA_GOV_SG_API_KEY`, `URA_API_KEY` and `LAND_USE_RUNTIME_REBUILD` (see `HOW_IT_WORKS.md` §7). `python -m scripts.build_land_use_index` builds the URA zoning index ahead of time.
+
 The backend logs one `perf` line per request, snapshot and background job (Supabase calls, Claude calls, tokens, cache hits); see `HOW_IT_WORKS.md` §8.
 
 The API runs on `http://localhost:8000`. The interactive docs are at `/docs`.
@@ -69,6 +71,8 @@ docker compose up
 ```
 
 The frontend is served on `http://localhost:5173` and the backend on `http://localhost:8000`.
+
+Building the backend image downloads URA's land-use map and builds the zoning index into it (about a minute, needs internet, fails if it can't). To build without it, run `docker compose build --build-arg ALLOW_MISSING_LAND_USE=true`. Export `DATA_GOV_SG_API_KEY` first to pass it as a build secret.
 
 ## Tests
 
@@ -97,4 +101,4 @@ The Playwright suite runs against a mocked backend (`frontend/e2e/support/mockBa
 Defined in `.github/workflows/`:
 
 - `ci-cd.yml` runs on pushes to `main` and on pull requests. It runs the backend tests with coverage, a pyright type check (warning only), frontend lint, build and the Playwright suite. On a manual run it also publishes the backend and frontend images to GitHub Container Registry.
-- `deploy.yml` deploys both services to Cloud Run. It is manual only (`workflow_dispatch`), so pushes do not deploy.
+- `deploy.yml` deploys both services to Cloud Run. It is manual only (`workflow_dispatch`), so pushes do not deploy. It needs the repository secrets `DATA_GOV_SG_API_KEY` and `URA_API_KEY`, alongside the Supabase, Anthropic and auth ones.
