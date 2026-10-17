@@ -139,10 +139,6 @@ def field_value_text(text: str) -> str:
     return value
 
 
-def is_label_only(text: str) -> bool:
-    return not field_value_text(text).strip()
-
-
 def replace_value(text: str, new_value: str) -> str:
     """Keep a leading label prefix and substitute the value.
 
@@ -152,11 +148,3 @@ def replace_value(text: str, new_value: str) -> str:
     if not value.strip():
         return new_value
     return label + new_value
-
-
-def require_value(field_name: str, text: str) -> str:
-    """Return the value portion, or the full text for a header-only field."""
-    value = field_value_text(text)
-    if value.strip():
-        return value
-    return text

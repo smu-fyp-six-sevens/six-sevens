@@ -8,7 +8,6 @@ import pytest
 from app.injection import store
 from app.injection.store import (
     get_document,
-    get_document_file_path,
     get_template_document,
     list_documents,
     reset_sample_documents,
@@ -117,26 +116,6 @@ def test_stage_generated_document_requires_a_template_file(
     monkeypatch.setattr(store, "find_template_path", lambda *_: None)
     with pytest.raises(FileNotFoundError, match="not found"):
         stage_generated_document(document, "spelling")
-
-
-def test_get_document_file_path_fallbacks(
-    isolated_injection_templates: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    reset_sample_documents()
-    assert get_document_file_path("no_such_doc") is None
-
-    template_path = get_document_file_path(PDF_ID)
-    assert template_path is not None
-    assert Path(template_path).name.startswith(PDF_ID)
-
-    stored = store.DOCUMENTS[PDF_ID]
-    stored.inject_path = "/tmp/does-not-exist.pdf"
-    again = get_document_file_path(PDF_ID)
-    assert again == template_path
-
-    monkeypatch.setattr(store, "find_template_path", lambda *_: None)
-    stored.inject_path = None
-    assert get_document_file_path(PDF_ID) is None
 
 
 def test_save_document_roundtrip(isolated_injection_templates: Path) -> None:

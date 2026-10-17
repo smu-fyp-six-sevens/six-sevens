@@ -134,22 +134,22 @@ def _body_under_watermark(page: int) -> _Line:
 
 def test_centred_text_repeated_on_two_pages_is_an_expected_watermark() -> None:
     lines = [_watermark(0), _watermark(1)]
-    assert to._is_expected_overlay(lines[0], lines) is True
+    assert (id(lines[0]) in to._expected_overlay_ids(lines)) is True
 
 
 def test_centred_text_on_one_page_is_not_a_watermark() -> None:
     line = _watermark(0)
-    assert to._is_expected_overlay(line, [line]) is False
+    assert (id(line) in to._expected_overlay_ids([line])) is False
 
 
 def test_repeated_text_off_centre_is_not_a_watermark() -> None:
     corner = [_line((20, 20, 120, 34), text="CONFIDENTIAL", page=p) for p in (0, 1)]
-    assert to._is_expected_overlay(corner[0], corner) is False
+    assert (id(corner[0]) in to._expected_overlay_ids(corner)) is False
 
 
 def test_watermark_comparison_ignores_case_and_spacing() -> None:
     lines = [_watermark(0), _line((206, 380, 406, 412), text="confidential  ", page=1)]
-    assert to._is_expected_overlay(lines[0], lines) is True
+    assert (id(lines[0]) in to._expected_overlay_ids(lines)) is True
 
 
 def test_text_under_a_watermark_is_not_flagged() -> None:

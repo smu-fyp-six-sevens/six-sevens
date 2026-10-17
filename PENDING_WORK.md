@@ -135,9 +135,6 @@ Not started, no urgency until the Cloud Native award work picks up:
 - **Group card props** — `DocumentDetailsPage.tsx` and `UploadPage.tsx` now use hooks, but the cards still
   take many props (`ExtractedInformationCard`, `DocumentListPanel`). Group them or read from hooks. Verify with
   `tsc`, `npm run build`, and the `document-review`, `upload`, `case-management` and `checklist` specs.
-- **Dead code in `UploadPage.tsx`**: `isExtractionNotConfiguredFailure`, `structuredFieldEntries`,
-  `REQUIREMENT_LABELS`, `formatFieldValue`, plus `savingFields`, `saveFieldErrors`, `setFieldDraftValue`,
-  `saveFieldDraft`, `isApproving`. Remove next.
 
 ## Small known gaps
 

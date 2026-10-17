@@ -77,3 +77,13 @@ async def test_a_malformed_entry_is_dropped_and_the_rest_kept() -> None:
 
     assert [(b.role, b.field, b.row) for b in result.bindings] == [("revenue", "turnover", None)]
     assert "malformed" in result.error
+
+
+@pytest.mark.asyncio
+async def test_a_role_left_with_a_null_field_is_left_out_not_an_error() -> None:
+    reply = '{"bindings": [{"role": "date_of_birth", "field": null, "row": null}, {"role": "revenue", "field": "turnover"}]}'
+    with patch("app.langgraph.detection.field_checks.binder.build_chat_anthropic", return_value=_model(reply)):
+        result = await bind_checks("source_of_wealth", FIELDS)
+
+    assert [(b.role, b.field) for b in result.bindings] == [("revenue", "turnover")]
+    assert result.error is None

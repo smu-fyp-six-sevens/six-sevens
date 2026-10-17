@@ -43,9 +43,14 @@ jobs:
                  --description="Fraud detection app images"
 
       - name: Build and push backend image
+        env:
+          DOCKER_BUILDKIT: "1"
+          # A build secret, so the key stays out of the image layers.
+          DATA_GOV_SG_API_KEY: ${{ secrets.DATA_GOV_SG_API_KEY }}
         run: |
           IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/backend:${GITHUB_SHA}"
-          docker build -f backend/Dockerfile --target base -t "$IMAGE" .
+          docker build -f backend/Dockerfile --target base \
+            --secret id=data_gov_sg_api_key,env=DATA_GOV_SG_API_KEY -t "$IMAGE" .
           docker push "$IMAGE"
           echo "BACKEND_IMAGE=$IMAGE" >> "$GITHUB_ENV"
 

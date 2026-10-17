@@ -155,6 +155,9 @@ jobs:
           # GHCR often fails BuildKit attestation blobs with "unknown blob".
           provenance: false
           sbom: false
+          # Build secret for the backend image's zoning index (the frontend ignores it).
+          secrets: |
+            data_gov_sg_api_key=${{ secrets.DATA_GOV_SG_API_KEY }}
           tags: |
             ${{ steps.set-image-repo.outputs.image_repo }}:latest
             ${{ steps.set-image-repo.outputs.image_repo }}:${{ github.sha }}
