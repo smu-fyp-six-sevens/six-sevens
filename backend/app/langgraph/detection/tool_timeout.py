@@ -13,7 +13,7 @@ import asyncio
 import functools
 import logging
 
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, StructuredTool
 
 from ...config import settings
 from .tools import _result
@@ -31,7 +31,10 @@ def timeout_for(tool_name: str) -> float:
 
 def guard_tool(tool: BaseTool) -> BaseTool:
     """The same tool, now limited in time. Safe to call twice on one tool."""
-    original = getattr(tool, "coroutine", None)
+    # Every detection tool is a StructuredTool (@tool); a BaseTool has no coroutine to wrap.
+    if not isinstance(tool, StructuredTool):
+        return tool
+    original = tool.coroutine
     if original is None or id(tool) in _guarded:
         return tool
     seconds = timeout_for(tool.name)

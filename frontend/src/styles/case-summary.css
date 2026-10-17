@@ -144,24 +144,115 @@
   font-size: 12px;
 }
 
+/* One hue, light to dark, so no level reads as "safe". Badges also go from tint to solid as the level rises. */
 .risk-badge--low {
-  background: #e8f5ee;
-  color: #1f7a4d;
+  background: #fdf0e8;
+  color: #a0502e;
 }
 
 .risk-badge--medium {
-  background: #fdf1de;
-  color: #8a5300;
+  background: #f9d2bd;
+  color: #85310f;
 }
 
 .risk-badge--high {
-  background: #fbeaea;
-  color: #b33131;
+  background: #c4442a;
+  color: #fff;
 }
 
 .risk-badge--critical {
-  background: #b33131;
+  background: #7f1414;
   color: #fff;
+}
+
+.risk-score {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  margin: 0 20px 14px;
+}
+
+.risk-score-figure {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+.risk-score-value {
+  font-size: 44px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.risk-score-scale {
+  font-size: 15px;
+  color: var(--ink-soft);
+}
+
+.risk-score-detail {
+  flex: 1;
+  min-width: 200px;
+}
+
+.risk-score-level {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.risk-score-level--low { color: #a0502e; }
+.risk-score-level--medium { color: #9a3a14; }
+.risk-score-level--high { color: #b3361c; }
+.risk-score-level--critical { color: #7f1414; }
+
+.risk-gauge {
+  position: relative;
+  display: flex;
+  gap: 2px;
+  height: 10px;
+}
+
+.risk-gauge-band {
+  flex-basis: 0;
+  border-radius: 2px;
+  opacity: 0.35;
+}
+
+.risk-gauge-band--current {
+  opacity: 1;
+}
+
+.risk-gauge-band--low { background: #f6c9b0; }
+.risk-gauge-band--medium { background: #ec9673; }
+.risk-gauge-band--high { background: #d0543a; }
+.risk-gauge-band--critical { background: #7f1414; }
+
+.risk-gauge-marker {
+  position: absolute;
+  top: -4px;
+  width: 3px;
+  height: 18px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: var(--ink);
+  box-shadow: 0 0 0 2px #fff;
+}
+
+.risk-gauge-labels {
+  display: flex;
+  gap: 2px;
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--ink-soft);
+}
+
+.risk-gauge-labels span {
+  flex-basis: 0;
+  text-align: center;
 }
 
 .risk-overview {
@@ -305,17 +396,18 @@
 }
 
 .risk-severity--low {
-  background: #f2f4f7;
-  color: #667085;
+  background: #fbe3d5;
+  color: #8a3f20;
 }
 
 .risk-severity--medium {
-  background: #f6d9a1;
-  color: #6b4200;
+  background: #f2a888;
+  color: #4d1a07;
 }
 
+/* Darker than the gauge's band so the white label stays readable. */
 .risk-severity--high {
-  background: #b33131;
+  background: #b83c22;
   color: #fff;
 }
 
@@ -323,6 +415,16 @@
   flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.risk-finding-check {
+  display: block;
+  margin-bottom: 1px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
 }
 
 .risk-finding-summary {
