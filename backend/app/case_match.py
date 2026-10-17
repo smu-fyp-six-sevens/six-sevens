@@ -36,6 +36,7 @@ from typing import Iterable, NamedTuple
 from pydantic import BaseModel, Field
 
 from .models import (
+    APPROVED_STATUSES,
     CaseRecord,
     DocumentRecord,
     DocumentStatus,
@@ -842,12 +843,25 @@ def _apply_pairwise_person_checks(
     matches: list[DocumentCaseMatch],
     documents: list[DocumentRecord],
     incumbency_doc: DocumentRecord | None,
+    *,
+    include_unverified_incumbency: bool = False,
 ) -> list[DocumentCaseMatch]:
-    """Add cross-document identity mismatches to both documents in each pair."""
+    """Add cross-document identity mismatches to both documents in each pair.
+
+    An incumbency that has not yet been corroborated is not authoritative
+    enough for direct case comparisons. It can still help link an individual
+    across documents: only a linked pair with differing identity fields is
+    surfaced, as a mismatch for review. A certificate already marked for
+    manual review is never included here.
+    """
     docs_with_people = [
         doc for doc in documents
-        if doc.extracted_fields
-        and doc.id != (incumbency_doc.id if incumbency_doc else None)
+        if doc.status in APPROVED_STATUSES
+        and doc.extracted_fields
+        and (
+            include_unverified_incumbency
+            or doc.id != (incumbency_doc.id if incumbency_doc else None)
+        )
         and doc.document_type not in _COMPANY_ONLY_DOCUMENT_TYPES
     ]
     findings_by_id: dict[str, list[tuple[FieldComparison, str]]] = {}
@@ -880,6 +894,24 @@ def _apply_pairwise_person_checks(
             if match.status in {DocumentMatchStatus.MISMATCH, DocumentMatchStatus.MANUAL_REVIEW}
             else ""
         )
+        # _match_document may already have returned the same pending comparison
+        # against an unverified incumbency. Keep that richer reference-linked
+        # comparison and use the pairwise result to establish that it is safe
+        # to surface as a mismatch.
+        existing_comparisons = {
+            (c.check, c.document_field, c.document_value, c.other_document_id)
+            for c in match.comparisons
+        }
+        new_comparisons = [
+            comparison for comparison, _ in additions
+            if (
+                comparison.check,
+                comparison.document_field,
+                comparison.document_value,
+                comparison.other_document_id,
+            )
+            not in existing_comparisons
+        ]
         updated.append(match.model_copy(update={
             "status": (
                 DocumentMatchStatus.MANUAL_REVIEW
@@ -888,7 +920,7 @@ def _apply_pairwise_person_checks(
             "can_proceed_to_fraud_detection": not belongs_elsewhere,
             "case_mismatch": True,
             "reason": "; ".join(([prior_reason] if prior_reason else []) + reasons),
-            "comparisons": [*match.comparisons, *(comparison for comparison, _ in additions)],
+            "comparisons": [*match.comparisons, *new_comparisons],
         }))
     return updated
 
@@ -904,7 +936,12 @@ def _rejected(doc: DocumentRecord) -> DocumentCaseMatch:
     )
 
 
-def check_case_match(case: CaseRecord, documents: Iterable[DocumentRecord]) -> CaseMatchResult:
+def check_case_match(
+    case: CaseRecord,
+    documents: Iterable[DocumentRecord],
+    *,
+    include_identity_mismatches: bool = False,
+) -> CaseMatchResult:
     documents = list(documents)
     # A document a loan officer rejected is out of the case: it can't be the
     # reference incumbency, and it can't corroborate or contradict one.
@@ -916,12 +953,19 @@ def check_case_match(case: CaseRecord, documents: Iterable[DocumentRecord]) -> C
         else _rejected(doc)
         for doc in documents
     ]
-    # Cross-document person comparisons do not depend on trusting the
-    # certificate of incumbency. They compare the identity details extracted
-    # directly from each pair of documents (for example, an NRIC and a
-    # personal bank statement), so run them even when the case has no
-    # incumbency document or it has not yet been corroborated.
-    matches = _apply_pairwise_person_checks(matches, active, incumbency_doc)
+    # Cross-document identity mismatches are a detection finding, not a
+    # pre-approval routing decision. Only the detection pipeline opts in;
+    # live case snapshots and the case-match endpoint stay free of these
+    # findings until an approved document is scanned.
+    if include_identity_mismatches:
+        matches = _apply_pairwise_person_checks(
+            matches,
+            active,
+            incumbency_doc,
+            include_unverified_incumbency=(
+                verification.status == IncumbencyStatus.INSUFFICIENT_EVIDENCE
+            ),
+        )
     return CaseMatchResult(
         case_id=case.id,
         incumbency=verification,

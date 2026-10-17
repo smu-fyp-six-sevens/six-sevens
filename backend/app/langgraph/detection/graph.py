@@ -533,7 +533,9 @@ async def synthesize_node(state: DetectionState) -> dict:
         from ... import case_service
 
         case_match = await asyncio.to_thread(
-            case_service.get_case_match_for_document, state["document_id"]
+            case_service.get_case_match_for_document,
+            state["document_id"],
+            include_identity_mismatches=True,
         )
         result = add_case_match_findings(result, case_match)
     except Exception as exc:
