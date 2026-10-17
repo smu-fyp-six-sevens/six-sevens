@@ -3,17 +3,8 @@ import { authFetch } from '../../lib/api';
 import type {
   CaseAnalysis,
   CaseOption,
-  CaseRequirementCoverage,
   UpdatedCase,
 } from './types';
-
-export async function getCaseRequirementCoverage(caseId: string): Promise<CaseRequirementCoverage> {
-  const response = await authFetch(`/cases/${caseId}`);
-
-  await assertOk(response, 'Failed to fetch case');
-
-  return (await response.json()) as CaseRequirementCoverage;
-}
 
 export async function deleteCase(caseId: string): Promise<void> {
   const response = await authFetch(`/cases/${caseId}`, { method: 'DELETE' });

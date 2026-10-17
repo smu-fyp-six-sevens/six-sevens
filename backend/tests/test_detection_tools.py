@@ -305,8 +305,9 @@ async def test_numerical_checks_tool_uses_the_specialists_bindings_without_a_bin
 
 
 def test_field_checks_hide_the_document_type_from_the_agent() -> None:
-    assert list(numerical.numerical_checks_tool.args) == ["bindings"]
-    assert list(external.external_validation_tool.args) == ["bindings"]
+    # What the model is sent. `.args` also lists the injected arguments, which the model never sees.
+    for tool in (numerical.numerical_checks_tool, external.external_validation_tool):
+        assert list(tool.tool_call_schema.model_json_schema()["properties"]) == ["bindings"]
 
 
 @pytest.mark.asyncio

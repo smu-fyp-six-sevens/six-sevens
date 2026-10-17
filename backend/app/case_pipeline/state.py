@@ -12,7 +12,7 @@ import json
 from typing import Any
 
 from ..models import APPROVED_STATUSES, DocumentRecord
-from .models import CaseAnalysis, CrossDocFinding
+from .models import CaseAnalysis
 
 # The one in-flight analysis task per case, in this process.
 running_tasks: dict[str, asyncio.Task] = {}
@@ -41,10 +41,3 @@ def current_view(
         view.status = "failed"
         view.error = "The analysis was interrupted before it finished. Run it again."
     return view
-
-
-def usable_findings(analysis: CaseAnalysis | None) -> list[CrossDocFinding]:
-    """Only a finished analysis over the documents as they are now counts towards the score."""
-    if analysis is None or analysis.status != "complete" or analysis.stale:
-        return []
-    return analysis.findings

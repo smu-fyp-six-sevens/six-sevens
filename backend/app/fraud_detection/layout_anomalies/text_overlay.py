@@ -81,10 +81,6 @@ def _expected_overlay_ids(lines: list[_Line]) -> set[int]:
     }
 
 
-def _is_expected_overlay(line: _Line, lines: list[_Line]) -> bool:
-    return id(line) in _expected_overlay_ids(lines)
-
-
 def _confidence(ratio: float) -> float:
     """Scales with how much of the smaller box is covered, never below the reporting floor."""
     share = min(1.0, ratio / _FULL_CONFIDENCE_RATIO)

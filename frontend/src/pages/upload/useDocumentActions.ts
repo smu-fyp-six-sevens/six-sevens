@@ -26,7 +26,6 @@ export function useDocumentActions({
   extractedDocuments,
   caseMatches,
 }: DocumentActionsParams) {
-  const [approvingDocumentId, setApprovingDocumentId] = useState<string | null>(null);
   const [approveError, setApproveError] = useState<string | null>(null);
   const [cancellingDocumentId, setCancellingDocumentId] = useState<string | null>(null);
   const [cancelActionError, setCancelActionError] = useState<string | null>(null);
@@ -70,8 +69,6 @@ export function useDocumentActions({
     }
   }
 
-  const handleApproveDocument = (documentId: string) =>
-    runRowAction(documentId, approveDocument, setApprovingDocumentId, setApproveError, 'Failed to approve document.');
   const handleCancelDocument = (documentId: string) =>
     runRowAction(documentId, cancelDocument, setCancellingDocumentId, setCancelActionError, 'Failed to cancel document.');
   const handleRetryDocument = (documentId: string) =>
@@ -111,7 +108,6 @@ export function useDocumentActions({
   }
 
   return {
-    approvingDocumentId,
     approveError,
     setApproveError,
     cancellingDocumentId,
@@ -119,7 +115,6 @@ export function useDocumentActions({
     retryingDocumentId,
     retryActionError,
     isApprovingSelected,
-    handleApproveDocument,
     handleCancelDocument,
     handleRetryDocument,
     handleApproveSelected,

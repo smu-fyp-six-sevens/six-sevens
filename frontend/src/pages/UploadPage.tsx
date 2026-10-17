@@ -1,8 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import type { CaseRecord } from '../App';
 import {
   describeIssue,
-  fieldsToDraft,
 } from './upload/uploadHelpers';
 import { useCaseSettings } from './upload/useCaseSettings';
 import { useCaseSnapshot } from './upload/useCaseSnapshot';
@@ -18,9 +17,6 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import DropZone from '../components/DropZone';
 import FileRow from '../components/FileRow';
 import KebabMenu from '../components/KebabMenu';
-import {
-  updateExtractedFields,
-} from '../services/uploadService';
 import type {
 } from '../services/uploadService';
 import {
@@ -145,7 +141,6 @@ export default function UploadPage({
   });
 
   const {
-    approvingDocumentId,
     approveError,
     cancellingDocumentId,
     cancelActionError,
@@ -163,91 +158,6 @@ export default function UploadPage({
     extractedDocuments,
     caseMatches,
   });
-
-  // Unused field-draft state, kept until the dead code is removed (see PENDING_WORK.md).
-  const [fieldDrafts, setFieldDrafts] = useState<Map<string, Record<string, string>>>(new Map());
-  const [savingFields, setSavingFields] = useState<Set<string>>(new Set());
-  const [saveFieldErrors, setSaveFieldErrors] = useState<Map<string, string>>(new Map());
-
-  function getFieldDraft(
-    documentId: string,
-    extractedFields: Record<string, unknown>,
-  ): Record<string, string> {
-    return fieldDrafts.get(documentId) ?? fieldsToDraft(extractedFields);
-  }
-
-  function setFieldDraftValue(
-    documentId: string,
-    extractedFields: Record<string, unknown>,
-    key: string,
-    value: string,
-  ) {
-    setFieldDrafts((current) => {
-      const next = new Map(current);
-      const draft = {
-        ...getFieldDraft(documentId, extractedFields),
-        [key]: value,
-      };
-      next.set(documentId, draft);
-      return next;
-    });
-  }
-
-  async function saveFieldDraft(
-    documentId: string,
-    originalFields: Record<string, unknown>,
-  ) {
-    const draft = fieldDrafts.get(documentId);
-    if (!draft) return;
-
-    setSavingFields((current) => new Set(current).add(documentId));
-
-    setSaveFieldErrors((current) => {
-      const next = new Map(current);
-      next.delete(documentId);
-      return next;
-    });
-
-    // Start from the original fields so non-displayed ones (e.g.
-    const payload: Record<string, unknown> = { ...originalFields };
-
-    for (const [key, value] of Object.entries(draft)) {
-      payload[key] = value.trim() === '' ? null : value;
-    }
-
-    try {
-      const updated = await updateExtractedFields(documentId, payload);
-
-      if (!isMountedRef.current) return;
-
-      setDocumentDetails(
-        (current) => new Map(current).set(documentId, updated),
-      );
-
-      setFieldDrafts((current) => {
-        const next = new Map(current);
-        next.delete(documentId);
-        return next;
-      });
-    } catch (err) {
-      if (!isMountedRef.current) return;
-
-      setSaveFieldErrors((current) =>
-        new Map(current).set(
-          documentId,
-          err instanceof Error ? err.message : 'Failed to save fields.',
-        ),
-      );
-    } finally {
-      if (isMountedRef.current) {
-        setSavingFields((current) => {
-          const next = new Set(current);
-          next.delete(documentId);
-          return next;
-        });
-      }
-    }
-  }
 
   return (
     <main className="shell shell--upload">
@@ -433,7 +343,6 @@ export default function UploadPage({
               allExtractedSelected={allExtractedSelected}
               approveError={approveError}
               approvedDocuments={approvedDocuments}
-              approvingDocumentId={approvingDocumentId}
               cancelActionError={cancelActionError}
               cancellingDocumentId={cancellingDocumentId}
               caseMatches={caseMatches}

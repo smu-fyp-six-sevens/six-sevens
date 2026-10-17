@@ -103,13 +103,6 @@ IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 _JPEG_SUFFIXES = {".jpg", ".jpeg"}
 _JPEG_SAVE_KWARGS = {"quality": 95, "subsampling": 0, "optimize": True}
 
-_MEDIA_TYPES = {
-    ".pdf": "application/pdf",
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-}
-
 _ocr_engine = None
 _ocr_cache: dict[tuple[str, float, int], dict[str, FieldValue]] = {}
 
@@ -117,10 +110,6 @@ _ocr_cache: dict[tuple[str, float, int], dict[str, FieldValue]] = {}
 def ensure_data_dirs() -> None:
     TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
     DOCUMENTS_GENERATED_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def media_type_for(path: Path) -> str:
-    return _MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream")
 
 
 def is_image_template(path: Path) -> bool:
@@ -296,11 +285,6 @@ def set_document_metadata(file_path: Path, metadata: dict[str, str]) -> None:
         _save_pdf(doc, file_path)
         return
     _set_image_metadata(file_path, metadata)
-
-
-# Backwards-compatible alias
-def read_pdf_metadata(pdf_path: Path) -> dict[str, str]:
-    return read_document_metadata(pdf_path)
 
 
 def resolve_font_file(font_name: str | None) -> str | None:
@@ -1976,15 +1960,6 @@ def _apply_emphasis_on_image(image_path: Path, field: FieldValue, style: str) ->
         draw.line([(line_x0, y_line), (line_x1, y_line)], fill=ink, width=max(1, int(size * 0.08)))
 
     _save_raster_image(image, image_path)
-
-
-def extract_pdf_text(pdf_path: Path) -> str:
-    doc = pymupdf.open(pdf_path)
-    # get_text()'s return type is a union over every "mode" it supports;
-    # the default mode ("text") always returns a plain string.
-    text = "\n".join(cast(str, page.get_text()) for page in doc)
-    doc.close()
-    return text
 
 
 def _slugify_field_name(text: str) -> str:

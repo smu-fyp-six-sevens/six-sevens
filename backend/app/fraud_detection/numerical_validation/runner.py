@@ -22,9 +22,6 @@ from .models import NumericalFinding, NumericalValidationResult, SkippedCheck
 from .registry import Check, checks_for
 from .statements import _benford_unavailable, _run_benford_pair
 
-SCAN_ALL = "scan_all"  # reads every field of the document, so it needs no bindings
-
-
 @dataclass(frozen=True)
 class Binding:
     role: str
