@@ -179,9 +179,12 @@ def test_delete_case_deletes_the_row() -> None:
 
         case_repository.delete_case("case-1")
 
-    mock_client.table.assert_called_with("cases")
-    mock_client.table.return_value.delete.return_value.eq.assert_called_once_with("id", "case-1")
-    mock_client.table.return_value.delete.return_value.eq.return_value.execute.assert_called_once()
+    # The risk history first (its foreign key blocks the case delete), then the case itself.
+    assert [c.args for c in mock_client.table.call_args_list] == [("risk_scores",), ("cases",)]
+    assert [c.args for c in mock_client.table.return_value.delete.return_value.eq.call_args_list] == [
+        ("case_id", "case-1"), ("id", "case-1"),
+    ]
+    assert mock_client.table.return_value.delete.return_value.eq.return_value.execute.call_count == 2
 
 
 def test_delete_case_raises_when_no_row_was_removed() -> None:

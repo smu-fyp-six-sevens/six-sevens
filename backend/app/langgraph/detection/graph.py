@@ -27,6 +27,7 @@ import asyncio
 import logging
 import operator
 import os
+from collections.abc import Hashable
 from datetime import datetime, timezone
 from typing import Annotated, Any, Required, TypeVar
 
@@ -228,7 +229,7 @@ async def lead_plan_node(state: DetectionState) -> dict:
     return {"plan": plan}
 
 
-def _dispatch(state: DetectionState):
+def _dispatch(state: DetectionState) -> list[Hashable]:
     document_type = _context(state)["document_type"]
     return [
         Send("specialist", {
