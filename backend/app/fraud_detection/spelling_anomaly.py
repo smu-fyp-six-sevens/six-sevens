@@ -4,13 +4,13 @@ from __future__ import annotations
 import asyncio
 import importlib.resources
 import logging
-import mimetypes
 import re
 
 from pydantic import BaseModel
 from symspellpy import SymSpell, Verbosity
 
-from ..ingestion.ingestion_service import ingest_document
+from ..cpu_pool import run_cpu
+from ..ingestion.ingestion_service import content_type_from_filename, ingest_document
 from .domain_terms import DOMAIN_TERMS
 from .field_values import text_values
 from .font_consistency import ExtractedField
@@ -112,11 +112,6 @@ def _empty_result(document_id: str, reason: str) -> SpellingAnomalyResult:
         unable_to_assess=True,
         unable_to_assess_reason=reason,
     )
-
-
-def _content_type_from_filename(filename: str) -> str:
-    guessed, _ = mimetypes.guess_type(filename)
-    return guessed or "application/octet-stream"
 
 
 def _is_recognized_word(word: str, known_terms: set[str]) -> bool:
@@ -347,10 +342,10 @@ async def check_spelling_anomalies(
     need an LLM call). Unable to Assess (AC6) if no text comes back at all,
     e.g. an image-only PDF that OCR also fails to read.
     """
-    content_type = _content_type_from_filename(filename)
+    content_type = content_type_from_filename(filename)
 
     try:
-        ingestion_result = await asyncio.to_thread(ingest_document, file_bytes, filename, content_type)
+        ingestion_result = await run_cpu(ingest_document, file_bytes, filename, content_type)
     except Exception as exc:
         reason = f"Text extraction failed: {type(exc).__name__}: {exc}"
         logger.warning("Document %s: %s", document_id, reason, exc_info=True)

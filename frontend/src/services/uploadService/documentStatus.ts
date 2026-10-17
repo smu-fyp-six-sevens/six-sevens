@@ -165,7 +165,7 @@ export function formatDocumentStatus(status: string): string {
 }
 
 export function skipsDetection(documentType: string | null | undefined): boolean {
-  return !documentType || documentType === 'unrecognised';
+  return !documentType;
 }
 
 export function documentDetectionStage(
@@ -220,6 +220,20 @@ export function isDocumentStatusInProgress(
     return false;
   }
   return !TERMINAL_DOCUMENT_STATUSES.has(status);
+}
+
+// The stage, label and "still working" flag for one document, from one set of inputs.
+export function documentStatusDisplay(
+  status: string,
+  hasDetectionReport: boolean,
+  documentType?: string | null,
+  hasDetectionError = false,
+): { stage: DocumentDetectionStage; label: string; inProgress: boolean } {
+  return {
+    stage: documentDetectionStage(status, hasDetectionReport, documentType, hasDetectionError),
+    label: formatDocumentStatusLabel(status, hasDetectionReport, documentType, hasDetectionError),
+    inProgress: isDocumentStatusInProgress(status, hasDetectionReport, documentType, hasDetectionError),
+  };
 }
 
 // Mirrors settings.CLASSIFICATION_CONFIDENCE_THRESHOLD in backend/app/config.py.

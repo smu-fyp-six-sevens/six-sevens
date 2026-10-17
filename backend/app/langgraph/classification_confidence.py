@@ -143,3 +143,27 @@ def compute_classification_confidence(
 
     cap = CERTAIN_CAP if any(pick[2] for pick in agreeing) else AGREEMENT_CAP
     return result(min(support, cap), False, "sources_agree")
+
+
+def normalise_candidates(candidates: list[dict]) -> list[dict]:
+    """Ranks candidates by match strength and gives each a confidence: its share of the total (sums to exactly 1.0)."""
+    if not candidates:
+        return candidates
+    total = sum(c["match_strength"] for c in candidates)
+    if total > 0:
+        shares = [c["match_strength"] / total for c in candidates]
+    else:
+        shares = [1.0 / len(candidates)] * len(candidates)
+    rounded = [round(s, 4) for s in shares]
+    rounded[0] = round(rounded[0] + (1.0 - sum(rounded)), 4)  # absorb rounding drift
+    return [
+        {
+            "rank": i + 1,
+            "document_type": c["document_type"],
+            "confidence": conf,
+            "match_strength": round(c["match_strength"], 4),
+            "reasoning": c["reasoning"],
+            "evidence": c["evidence"],
+        }
+        for i, (c, conf) in enumerate(zip(candidates, rounded))
+    ]

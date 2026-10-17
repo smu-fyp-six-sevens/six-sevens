@@ -195,10 +195,11 @@ def test_parse_extraction_output_unwrapped_field_has_unknown_confidence():
     assert result["confidence"] == 0.0
 
 
-def test_parse_extraction_output_malformed_json_escalates_with_model_text():
+def test_parse_extraction_output_malformed_json_fails_with_model_text_and_does_not_escalate():
     result = extract.parse_extraction_output("This is not a payslip at all.")
     assert result["extracted_fields"] == {}
-    assert "This is not a payslip at all." in result["escalation"]["reason"]
+    assert "This is not a payslip at all." in result["output_error"]
+    assert result["escalation"] is None
 
 
 def test_drop_unprinted_numbers_removes_a_figure_the_llm_calculated():

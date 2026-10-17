@@ -7,7 +7,7 @@ from realtime._async.channel import AsyncRealtimeChannel
 from realtime.types import PostgresChangesPayload, RealtimePostgresChangesListenEvent
 from supabase import AsyncClient
 
-from . import case_service
+from . import case_service, query_stats
 from .case_broadcaster import broadcaster
 from .supabase_client import build_async_supabase_client
 
@@ -22,7 +22,7 @@ logger = logging.getLogger("classifier_pipeline.realtime_listener")
 # short per-case_id delay on every event and only actually building+
 # publishing once it elapses collapses that into one query, one push — at
 # the cost of up to this much added latency on any single status update.
-DEBOUNCE_SECONDS = 0.1
+DEBOUNCE_SECONDS = 0.5
 
 _client: AsyncClient | None = None
 _channel: AsyncRealtimeChannel | None = None
@@ -39,7 +39,8 @@ async def _debounced_publish(case_id: str) -> None:
         return
 
     try:
-        snapshot = await asyncio.to_thread(case_service.build_case_snapshot, case_id)
+        with query_stats.scope("realtime snapshot"):
+            snapshot = await asyncio.to_thread(case_service.build_case_snapshot, case_id)
     except Exception:
         logger.exception("Failed to build case snapshot for case %s", case_id)
         return
@@ -62,15 +63,20 @@ def _on_change(payload: PostgresChangesPayload) -> None:
     record = (payload.get("data") or {}).get("record") or (payload.get("data") or {}).get(
         "old_record"
     )
+    query_stats.count_event("realtime.event")
     if not record:
         return
     case_id = record.get("case_id")
     if not case_id:
         return
+    if not broadcaster.has_subscribers(case_id):
+        query_stats.count_event("realtime.no_viewer")
+        return  # nobody has this case open
 
     existing = _pending.get(case_id)
     if existing is not None and not existing.done():
         existing.cancel()
+        query_stats.count_event("realtime.coalesced")
     _pending[case_id] = asyncio.create_task(_debounced_publish(case_id))
 
 
@@ -79,7 +85,7 @@ async def start() -> None:
     Called once from main.py's lifespan at startup. One subscription per
     process — not per case, not per connection — is what keeps this cheap
     against Supabase's free-tier Realtime connection cap, and what makes it
-    scale to N replicas unchanged later (see WS.MD): each replica
+    scale to N replicas unchanged later: each replica
     independently runs its own copy of this, and Realtime's fan-out means
     every replica sees every change regardless of how many others exist.
     """

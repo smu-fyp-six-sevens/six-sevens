@@ -10,6 +10,7 @@ import {
   lowestFieldConfidence,
 } from '../../services/uploadService';
 import type {
+  CaseAnalysisOverview,
   CaseRisk,
   DocumentCaseMatch,
   DocumentRecord,
@@ -32,10 +33,14 @@ export function useCaseSnapshot(caseId: string) {
     missing_side: string | null;
   }>({ covered: 0, total: 0, missing_side: null });
   const [risk, setRisk] = useState<CaseRisk | null>(null);
+  const [analysisReady, setAnalysisReady] = useState(false);
+  const [analysisOverview, setAnalysisOverview] = useState<CaseAnalysisOverview | null>(null);
   const [supportingDocumentRecommendations, setSupportingDocumentRecommendations] = useState<
     SupportingDocumentRecommendation[]
   >([]);
   const [wsConnected, setWsConnected] = useState(false);
+  // Whether documentDetails holds this case's documents yet, not the empty start or the previous case's.
+  const [snapshotLoaded, setSnapshotLoaded] = useState(false);
   // Case-match result per document (see backend/app/case_match.py), pushed with every case snapshot.
   const [caseMatches, setCaseMatches] = useState<Map<string, DocumentCaseMatch>>(new Map());
   // Forces a re-render every so often while any document is PROCESSING, so a "Stuck"/Retry-eligible.
@@ -45,7 +50,8 @@ export function useCaseSnapshot(caseId: string) {
   // One WebSocket per case (see caseSocket.ts / backend routers/ws.py) replaces the old per-document.
   const caseSocketRef = useRef<CaseStatusSubscription | null>(null);
 
-  // A case-match flag needs manual review until an officer approves the document.
+  // A document the case match sent to manual review (wrong company or person) is flagged
+  // for the officer, who can still approve it; detection then reports the mismatch.
   const caseMatchNeedsReview = useCallback(
     (document: DocumentRecord) =>
       !hasBeenApproved(document.status) &&
@@ -81,6 +87,7 @@ export function useCaseSnapshot(caseId: string) {
 
   useEffect(() => {
     setWsConnected(false);
+    setSnapshotLoaded(false);
 
     const subscription = subscribeToCaseStatus(
       caseId,
@@ -88,6 +95,7 @@ export function useCaseSnapshot(caseId: string) {
         if (!isMountedRef.current) return;
 
         setDocumentDetails(new Map(documents.map((document) => [document.id, document])));
+        setSnapshotLoaded(true);
         setCaseMatches(
           new Map((caseMatch?.documents ?? []).map((match) => [match.document_id, match])),
         );
@@ -95,6 +103,8 @@ export function useCaseSnapshot(caseId: string) {
         setProofOfAddressCoverage(caseSummary.proof_of_address_coverage);
         setIdDocumentCoverage(caseSummary.id_document_coverage);
         setRisk(caseSummary.risk ?? null);
+        setAnalysisReady(caseSummary.analysis_ready ?? false);
+        setAnalysisOverview(caseSummary.analysis ?? null);
         setSupportingDocumentRecommendations(caseSummary.supporting_document_recommendations ?? []);
       },
       (connected) => {
@@ -154,8 +164,11 @@ export function useCaseSnapshot(caseId: string) {
     proofOfAddressCoverage,
     idDocumentCoverage,
     risk,
+    analysisReady,
+    analysisOverview,
     supportingDocumentRecommendations,
     wsConnected,
+    snapshotLoaded,
     caseMatches,
     setCaseMatches,
     isMountedRef,

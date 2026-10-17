@@ -47,6 +47,10 @@ export interface CaseMatchComparison {
   outcome: 'match' | 'mismatch';
   document_field: string;
   document_value: string;
+  reference_document_id?: string | null;
+  reference_filename?: string | null;
+  other_document_id?: string | null;
+  other_filename?: string | null;
   case_value: string | null;
   reason: string;
 }
@@ -55,7 +59,7 @@ export interface DocumentCaseMatch {
   document_id: string;
   filename: string;
   document_type: string | null;
-  status: 'match' | 'manual_review' | 'pending';
+  status: 'match' | 'mismatch' | 'manual_review' | 'pending';
   can_proceed_to_fraud_detection: boolean;
   // The company or an individual on the document doesn't match the case.
   case_mismatch: boolean;
@@ -94,6 +98,9 @@ export interface CaseRiskFinding {
   points: number;
   // The specialist kept the tool's finding without assessing it.
   unreviewed: boolean;
+  category?: string | null;
+  // "cross_document" for a finding from the case analysis rather than one document's scan.
+  source?: 'document' | 'cross_document';
 }
 
 export interface CaseRisk {
@@ -159,6 +166,10 @@ export interface CaseRequirementCoverage {
   risk: CaseRisk | null;
   // Empty when nothing in the case needs further evidence.
   supporting_document_recommendations: SupportingDocumentRecommendation[];
+  // Every approved document has been scanned, so the case analysis can be run.
+  analysis_ready?: boolean;
+  // The latest per-case analysis in brief; null when the case was never analysed.
+  analysis?: CaseAnalysisOverview | null;
 }
 
 // Mirrors UpdateCaseRequest in backend/app/models.py.
@@ -236,7 +247,7 @@ export type IndividualCheckId =
   | 'numerical-validation'
   | 'date-anomalies'
   | 'company-name-consistency'
-  | 'registry-verification'
+  | 'external-validation'
   | 'metadata-anomaly'
   | 'image-integrity'
   | 'ai-generation';
@@ -261,4 +272,71 @@ export interface CaseOption {
   id: string;
   greenlink_case_id: string;
   company_name: string | null;
+}
+
+// Mirrors CaseAnalysisOverview in backend/app/models.py.
+export interface CaseAnalysisOverview {
+  run_id: string;
+  status: 'running' | 'complete' | 'failed' | 'superseded';
+  // The case's documents changed since this run read them.
+  stale: boolean;
+  finished_at: string | null;
+  finding_count: number;
+}
+
+// Mirrors case_pipeline/models.py.
+export interface CrossDocFinding {
+  id: string;
+  hypothesis_id: string;
+  summary: string;
+  rationale: string;
+  severity: 'low' | 'medium' | 'high';
+  category: string;
+  citations: string[];
+  document_ids: string[];
+  probe_summary: string;
+  breach_flags: string[];
+}
+
+export interface OutlookRequest {
+  title: string;
+  what_it_shows: string;
+  addresses: string[];
+  expected_effect: 'full' | 'partial';
+  source: 'agent' | 'rule';
+  score_if_supports: number | null;
+  level_if_supports: string | null;
+  score_if_contradicts: number | null;
+}
+
+export interface RiskOutlook {
+  current_score: number | null;
+  current_level: string | null;
+  requests: OutlookRequest[];
+  best_case_score: number | null;
+  best_case_level: string | null;
+  unreducible_finding_ids: string[];
+}
+
+export interface CaseAnalysis {
+  run_id: string;
+  case_id: string;
+  status: 'running' | 'complete' | 'failed' | 'superseded';
+  started_at: string;
+  finished_at: string | null;
+  error: string | null;
+  findings: CrossDocFinding[];
+  outlook: RiskOutlook | null;
+  summary: string | null;
+  // Tool calls, models and counts of the run.
+  audit?: { tool_calls?: unknown[]; [key: string]: unknown };
+  // Step-by-step log of the run (debug); written as the run goes.
+  trace: CaseAnalysisTraceStep[];
+  stale: boolean;
+}
+
+export interface CaseAnalysisTraceStep {
+  step: string;
+  at: number;
+  [key: string]: unknown;
 }

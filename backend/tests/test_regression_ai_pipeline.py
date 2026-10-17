@@ -38,6 +38,7 @@ from langchain_core.messages import AIMessage
 
 from app.config import settings
 from app.langgraph import nodes, pipeline, text_cache, trace
+from app.langgraph.extract import _EXTRACTION_MAX_TOKENS
 from app.langgraph.extraction_prompts import EXTRACTION_SCHEMAS
 from app.models import DocumentRecord, DocumentStatus
 from app.queue_service import DocumentQueue
@@ -91,7 +92,7 @@ def _step_for(model: str, max_tokens: int) -> str:
         (settings.LANGGRAPH_SONNET_MODEL, 1024): "classify_agent",
         (settings.LANGGRAPH_HAIKU_MODEL, 1024): "llm_classify",
         (settings.LANGGRAPH_HAIKU_MODEL, 512): "repair",
-        (settings.LANGGRAPH_SONNET_MODEL, 4096): "extract",
+        (settings.LANGGRAPH_SONNET_MODEL, _EXTRACTION_MAX_TOKENS): "extract",
     }[(model, max_tokens)]
 
 

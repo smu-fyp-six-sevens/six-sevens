@@ -4,12 +4,10 @@ import {
   TERMINAL_DOCUMENT_STATUSES,
   canCancelDocument,
   canRetryDocument,
-  documentDetectionStage,
+  documentStatusDisplay,
   formatDocumentStatus,
-  formatDocumentStatusLabel,
   formatDocumentType,
   formatRoutingOutcome,
-  isDocumentStatusInProgress,
   isDocumentStuckProcessing,
 } from '../../services/uploadService';
 
@@ -19,7 +17,6 @@ export function DocumentListPanel({
   allExtractedSelected,
   approveError,
   approvedDocuments,
-  approvingDocumentId,
   cancelActionError,
   cancellingDocumentId,
   caseMatches,
@@ -48,7 +45,6 @@ export function DocumentListPanel({
   allExtractedSelected: boolean;
   approveError: string | null;
   approvedDocuments: DocumentRecord[];
-  approvingDocumentId: string | null;
   cancelActionError: string | null;
   cancellingDocumentId: string | null;
   caseMatches: Map<string, DocumentCaseMatch>;
@@ -212,7 +208,6 @@ export function DocumentListPanel({
                         {extractedDocuments.map((document) => {
                           const status = document.status;
                           const isTerminal = TERMINAL_DOCUMENT_STATUSES.has(status);
-                          const isApproving = approvingDocumentId === document.id;
                           const isStuck = isDocumentStuckProcessing(document);
                           const isCancellingRow = cancellingDocumentId === document.id;
                           const isRetryingRow = retryingDocumentId === document.id;
@@ -404,13 +399,15 @@ export function DocumentListPanel({
                         </div>
 
                         {approvedDocuments.map((document) => {
-                          const hasDetectionReport = document.has_detection_report ?? false;
-                          const hasDetectionError = document.has_detection_error ?? false;
-                          const detectionStage = documentDetectionStage(
+                          const {
+                            stage: detectionStage,
+                            label: statusLabel,
+                            inProgress,
+                          } = documentStatusDisplay(
                             document.status,
-                            hasDetectionReport,
+                            document.has_detection_report ?? false,
                             document.document_type,
-                            hasDetectionError,
+                            document.has_detection_error ?? false,
                           );
 
                           return (
@@ -447,13 +444,8 @@ export function DocumentListPanel({
                                   }`}
                                 />
                                 <span>
-                                  {formatDocumentStatusLabel(document.status, hasDetectionReport, document.document_type, hasDetectionError)}
-                                  {isDocumentStatusInProgress(
-                                    document.status,
-                                    hasDetectionReport,
-                                    document.document_type,
-                                    hasDetectionError,
-                                  ) && '…'}
+                                  {statusLabel}
+                                  {inProgress && '…'}
                                 </span>
                               </span>
 

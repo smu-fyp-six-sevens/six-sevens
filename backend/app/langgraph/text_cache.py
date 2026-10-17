@@ -2,7 +2,7 @@
 Run-scoped cache for a document's ingested raw text.
 
 Graph state never carries raw_text (PII, and too big for a free-tier
-checkpoint row — see LANGGRAPH_MIGRATION_PLAN.md section 5 and 7). Instead
+checkpoint row). Instead
 `ingest` fills this in-memory cache, later nodes in the same process read
 from it, and `text_hash` in state lets a node detect a cache miss (e.g. after
 a process restart) and re-ingest from the stored file — RapidOCR is

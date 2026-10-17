@@ -16,9 +16,8 @@ class CaseBroadcaster:
     `await` inside them — there's no I/O in touching an in-memory dict/set,
     and keeping them that way is what makes them atomic with respect to
     each other under asyncio's cooperative single-threaded scheduling.
-    Nothing here needs a lock; see WS.MD for the full reasoning (confirmed
-    against this app's actual dependency, realtime-py, which shares
-    FastAPI's own event loop rather than running its own thread).
+    Nothing here needs a lock: realtime-py shares FastAPI's own event loop
+    rather than running its own thread.
     """
 
     def __init__(self) -> None:
@@ -36,6 +35,9 @@ class CaseBroadcaster:
         subscribers.discard(queue)
         if not subscribers:
             del self._subscribers[case_id]
+
+    def has_subscribers(self, case_id: str) -> bool:
+        return bool(self._subscribers.get(case_id))
 
     def publish(self, case_id: str, snapshot: dict) -> None:
         # Iterate a copy, not the live set — forecloses "RuntimeError: Set

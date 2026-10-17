@@ -60,6 +60,9 @@ def _approve(document: DocumentRecord, fields: list[ExtractedField]):
     ):
         lookup.get_document.return_value = document
         documents.get_document.return_value = document
+        documents.approve_document.return_value = document.model_copy(
+            update={"status": DocumentStatus.APPROVED}
+        )
         extracted.get_extracted_fields.return_value = fields
         response = client.post(f"/documents/{document.id}/approve")
         return response, documents.approve_document

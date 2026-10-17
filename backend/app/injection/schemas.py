@@ -15,15 +15,6 @@ class DefectType(str, Enum):
     IMAGE_MANIPULATION = "image_manipulation"
 
 
-class ManipulationIndicator(str, Enum):
-    RESOLUTION_MISMATCH = "resolution_mismatch"
-    COMPRESSION_MISMATCH = "compression_mismatch"
-    VISIBLE_BOUNDARY = "visible_boundary"
-    SCALING_ANOMALY = "scaling_anomaly"
-    IMAGE_OVERLAY = "image_overlay"
-    QUALITY_MISMATCH = "quality_mismatch"
-
-
 class FieldValue(BaseModel):
     text: str
     font: str = "helv"

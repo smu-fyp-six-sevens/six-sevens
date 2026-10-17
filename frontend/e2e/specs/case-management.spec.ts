@@ -489,3 +489,284 @@ test.describe('Create case @sprint2 @SCRUM-96', () => {
     await expect(caseCards(page)).toContainText('Ironclad Security Services Pte Ltd');
   });
 });
+
+/**
+ * Case Management (Sprint 3) — "Test Cases - Sprint 3.xlsx", Case Management
+ * sheet: Update Case (SCRUM-116) CM-014–023, Delete Case/Documents
+ * (SCRUM-117) CM-024–028.
+ */
+
+function seedIronclad(backend: MockBackend) {
+  const ironclad = makeCase({
+    id: 'case-ironclad',
+    greenlink_case_id: 'GLDB-01',
+    company_name: 'IRONCLAD SECURITY',
+    documents_status: 'analyzed',
+  });
+  backend.cases.push(ironclad);
+  return ironclad;
+}
+
+const NEW_NAME = 'IRONCLAD SECURITY SERVICES PTE LTD';
+const caseHeader = (page: Page) => page.locator('.eyebrow');
+const companyNameInput = (page: Page) => page.locator('#case-company-name');
+const saveCase = (page: Page) => page.getByRole('button', { name: 'Save', exact: true }).click();
+
+async function openEditMode(page: Page, caseId: string) {
+  await page.goto(`/cases/${caseId}`);
+  await page.getByRole('button', { name: 'Case actions' }).click();
+  await page.getByRole('menuitem', { name: 'Edit case details' }).click();
+}
+
+async function renameCase(page: Page, caseId: string, name: string) {
+  await openEditMode(page, caseId);
+  await companyNameInput(page).fill(name);
+  await saveCase(page);
+}
+
+test.describe('Update case @sprint3 @SCRUM-116', () => {
+  test('CM-014 a case opens in edit mode with the company name editable @CM-014', async ({ page, backend }) => {
+    const ironclad = seedIronclad(backend);
+
+    await openEditMode(page, ironclad.greenlink_case_id);
+
+    await expect(companyNameInput(page)).toHaveValue('IRONCLAD SECURITY');
+    await expect(companyNameInput(page)).toBeEditable();
+  });
+
+  test('CM-015 an edited company name is saved @CM-015', async ({ page, backend }) => {
+    const ironclad = seedIronclad(backend);
+
+    await renameCase(page, ironclad.greenlink_case_id, NEW_NAME);
+
+    await expect(caseHeader(page)).toContainText(NEW_NAME);
+    const saved = backend.requestsTo('PATCH', `/cases/${ironclad.id}`);
+    expect(saved).toHaveLength(1);
+    expect(saved[0].body).toEqual({ company_name: NEW_NAME });
+  });
+
+  test('CM-016 cancelling an edit discards the change @CM-016', async ({ page, backend }) => {
+    const ironclad = seedIronclad(backend);
+    ironclad.company_name = NEW_NAME;
+
+    await openEditMode(page, ironclad.greenlink_case_id);
+    await companyNameInput(page).fill('IRONCLAD SECURITY');
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+
+    await expect(caseHeader(page)).toContainText(NEW_NAME);
+    expect(backend.requestsTo('PATCH', `/cases/${ironclad.id}`)).toHaveLength(0);
+  });
+
+  test('CM-017 the updated name shows on the case queue @CM-017', async ({ page, backend }) => {
+    const ironclad = seedIronclad(backend);
+
+    await renameCase(page, ironclad.greenlink_case_id, NEW_NAME);
+    await expect(caseHeader(page)).toContainText(NEW_NAME);
+    await page.getByRole('button', { name: '← Back to case queue' }).click();
+
+    await expect(caseCards(page).filter({ hasText: 'GLDB-01' })).toContainText(NEW_NAME);
+  });
+
+  test('CM-018 the updated name shows when the case is opened again @CM-018', async ({ page, backend }) => {
+    const ironclad = seedIronclad(backend);
+
+    await renameCase(page, ironclad.greenlink_case_id, NEW_NAME);
+    await expect(caseHeader(page)).toContainText(NEW_NAME);
+    await page.getByRole('button', { name: '← Back to case queue' }).click();
+    await page.getByRole('button', { name: `Open case GLDB-01, ${NEW_NAME}` }).click();
+
+    await expect(caseHeader(page)).toContainText(NEW_NAME);
+  });
+
+  test.describe('signed out and back in', () => {
+    test.use({ loggedIn: false });
+
+    test('CM-019 the updated name persists after signing out and in @CM-019', async ({ page, backend }) => {
+      const ironclad = seedIronclad(backend);
+      const signIn = async () => {
+        await page.goto('/login');
+        await page.getByLabel('Username').fill(backend.credentials.username);
+        await page.getByLabel('Password').fill(backend.credentials.password);
+        await page.getByRole('button', { name: /Sign in/ }).click();
+        await expect(page).toHaveURL('/cases');
+      };
+
+      await signIn();
+      await renameCase(page, ironclad.greenlink_case_id, NEW_NAME);
+      await expect(caseHeader(page)).toContainText(NEW_NAME);
+      await page.getByRole('button', { name: 'Sign out' }).click();
+      await expect(page).toHaveURL(/\/login/);
+      await signIn();
+      await page.goto(`/cases/${ironclad.greenlink_case_id}`);
+
+      await expect(caseHeader(page)).toContainText(NEW_NAME);
+    });
+  });
+
+  for (const [id, value] of [['CM-020', ''], ['CM-021', '   ']] as const) {
+    test(`${id} a ${value ? 'blank' : 'empty'} company name is not saved @${id}`, async ({ page, backend }) => {
+      const ironclad = seedIronclad(backend);
+
+      await renameCase(page, ironclad.greenlink_case_id, value);
+
+      await expect(page.getByRole('alert')).toHaveText('Company name is required.');
+      expect(backend.requestsTo('PATCH', `/cases/${ironclad.id}`)).toHaveLength(0);
+    });
+  }
+
+  test('CM-022 the company name stops at 100 characters @CM-022', async ({ page, backend }) => {
+    const ironclad = seedIronclad(backend);
+
+    await openEditMode(page, ironclad.greenlink_case_id);
+    await companyNameInput(page).fill('');
+    await companyNameInput(page).pressSequentially('A'.repeat(110));
+    await expect(companyNameInput(page)).toHaveValue('A'.repeat(100));
+    await saveCase(page);
+
+    const saved = backend.requestsTo('PATCH', `/cases/${ironclad.id}`);
+    expect(saved).toHaveLength(1);
+    expect(saved[0].body).toEqual({ company_name: 'A'.repeat(100) });
+  });
+
+  test('CM-023 correcting an invalid name clears the error and saves @CM-023', async ({ page, backend }) => {
+    const ironclad = seedIronclad(backend);
+
+    await renameCase(page, ironclad.greenlink_case_id, '');
+    await expect(page.getByRole('alert')).toHaveText('Company name is required.');
+    await companyNameInput(page).fill(NEW_NAME);
+    await saveCase(page);
+
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    await expect(caseHeader(page)).toContainText(NEW_NAME);
+  });
+});
+
+test.describe('Delete case and documents @sprint3 @SCRUM-117', () => {
+  function seedScrum117(backend: MockBackend, noaStatus = 'analyzed') {
+    const theCase = makeCase({
+      id: 'case-117',
+      greenlink_case_id: 'GLDB-117',
+      company_name: 'scrum-117 test',
+      documents_status: 'analyzed',
+      fulfilled_requirements: ['notice_of_assessment'],
+    });
+    const noa = makeDocument({
+      id: 'doc-noa',
+      case_id: theCase.id,
+      filename: 'C035_NOA.pdf',
+      status: noaStatus,
+      document_type: 'notice_of_assessment',
+      classification_confidence: 0.97,
+      routing_status: 'accepted',
+      fulfilled_requirements: ['notice_of_assessment'],
+      extracted_fields: { company_name: { id: 'field-1', value: 'scrum-117 test', confidence: 0.98 } },
+    });
+    backend.cases.push(theCase);
+    backend.documents.push(noa);
+    return { theCase, noa, documentUrl: `/cases/${theCase.greenlink_case_id}/documents/${noa.id}` };
+  }
+
+  async function deleteDocument(page: Page) {
+    await page.getByRole('button', { name: 'Document actions' }).click();
+    await page.getByRole('menuitem', { name: 'Delete document' }).click();
+  }
+
+  test('CM-024 a document is deleted after confirming, and its link then shows "Document not found" @CM-024', async ({ page, backend }) => {
+    const { theCase, noa, documentUrl } = seedScrum117(backend);
+    await page.goto(documentUrl);
+
+    await deleteDocument(page);
+    const dialog = page.getByRole('alertdialog');
+    await expect(dialog).toContainText('Delete this document?');
+    await expect(dialog).toContainText('C035_NOA.pdf');
+    await dialog.getByRole('button', { name: 'Delete' }).click();
+
+    await expect(page).toHaveURL(`/cases/${theCase.greenlink_case_id}`);
+    expect(backend.requestsTo('DELETE', `/documents/${noa.id}`)).toHaveLength(1);
+    await expect(page.getByText('C035_NOA.pdf')).toHaveCount(0);
+    await page.goto(documentUrl);
+    // The page shows the API's error verbatim: "Failed to fetch document (404): {"detail":"Document not found"}".
+    await expect(page.getByText(/Document not found/)).toBeVisible();
+  });
+
+  test('CM-025 a case is deleted after confirming, and its link then shows the case not-found page @CM-025', async ({ page, backend }) => {
+    const { theCase } = seedScrum117(backend);
+    seedQueue(backend);
+    await page.goto(`/cases/${theCase.greenlink_case_id}`);
+
+    await page.getByRole('button', { name: 'Case actions' }).click();
+    await page.getByRole('menuitem', { name: 'Delete case' }).click();
+    const dialog = page.getByRole('alertdialog');
+    await expect(dialog).toContainText('Delete this case?');
+    await dialog.getByRole('button', { name: 'Delete' }).click();
+
+    await expect(page).toHaveURL('/cases');
+    await expect(caseCards(page).filter({ hasText: 'scrum-117 test' })).toHaveCount(0);
+    expect(backend.requestsTo('DELETE', `/cases/${theCase.id}`)).toHaveLength(1);
+    await page.goto(`/cases/${theCase.greenlink_case_id}`);
+    await expect(page.getByRole('heading', { name: "We couldn't find that case" })).toBeVisible();
+    await page.getByRole('button', { name: 'Go to case queue' }).click();
+    await expect(page).toHaveURL('/cases');
+  });
+
+  test('CM-029 a document link into a deleted case shows the not-found page @CM-029', async ({ page, backend }) => {
+    const { theCase, documentUrl } = seedScrum117(backend);
+    seedQueue(backend);
+    await page.goto(`/cases/${theCase.greenlink_case_id}`);
+
+    await page.getByRole('button', { name: 'Case actions' }).click();
+    await page.getByRole('menuitem', { name: 'Delete case' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+    await expect(page).toHaveURL('/cases');
+
+    await page.goto(documentUrl);
+    await expect(page.getByRole('heading', { name: "We couldn't find that document" })).toBeVisible();
+    await page.getByRole('button', { name: 'Go to case queue' }).click();
+    await expect(page).toHaveURL('/cases');
+  });
+
+  test('CM-026 deleting the document that fulfilled a requirement reverts the checklist @CM-026', async ({ page, backend }) => {
+    const { theCase, documentUrl } = seedScrum117(backend);
+    await page.goto(`/cases/${theCase.greenlink_case_id}`);
+    const noaRequirement = page.locator('.requirement-row').filter({ hasText: /^NOA/ });
+    await expect(noaRequirement).toHaveClass(/fulfilled/);
+
+    await page.goto(documentUrl);
+    // What the real backend's checklist recomputation returns once the NOA is gone.
+    theCase.fulfilled_requirements = [];
+    await deleteDocument(page);
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+
+    await expect(page).toHaveURL(`/cases/${theCase.greenlink_case_id}`);
+    await expect(noaRequirement).not.toHaveClass(/fulfilled/);
+  });
+
+  test('CM-027 a document still processing cannot be deleted @CM-027', async ({ page, backend }) => {
+    const { documentUrl } = seedScrum117(backend, 'processing');
+    await page.goto(documentUrl);
+
+    await page.getByRole('button', { name: 'Document actions' }).click();
+
+    await expect(page.getByRole('menuitem', { name: 'Delete document' })).toHaveCount(0);
+    expect(backend.requestsTo('DELETE', /\/documents\//)).toHaveLength(0);
+  });
+
+  test('CM-028 cancelling the confirmation keeps the document and the case @CM-028', async ({ page, backend }) => {
+    const { theCase, documentUrl } = seedScrum117(backend);
+    await page.goto(documentUrl);
+
+    await deleteDocument(page);
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.getByRole('alertdialog')).toHaveCount(0);
+    await expect(page).toHaveURL(documentUrl);
+
+    await page.goto(`/cases/${theCase.greenlink_case_id}`);
+    await page.getByRole('button', { name: 'Case actions' }).click();
+    await page.getByRole('menuitem', { name: 'Delete case' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.getByRole('alertdialog')).toHaveCount(0);
+
+    expect(backend.requestsTo('DELETE', /./)).toHaveLength(0);
+    await expect(page.locator('.documents-table').getByText('C035_NOA.pdf')).toBeVisible();
+  });
+});

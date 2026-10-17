@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      secrets:
+        - data_gov_sg_api_key
     ports:
       - "8000:8000"
     env_file:
@@ -29,3 +31,7 @@ services:
       - "5173:80"
     depends_on:
       - backend
+
+secrets:
+  data_gov_sg_api_key:
+    environment: DATA_GOV_SG_API_KEY

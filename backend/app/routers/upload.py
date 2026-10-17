@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from postgrest.exceptions import APIError
@@ -20,20 +19,23 @@ logger = logging.getLogger(__name__)
 class BulkUploadItemResult(BaseModel):
     filename: str
     success: bool
-    document_id: Optional[str] = None
-    status: Optional[DocumentStatus] = None
-    error: Optional[str] = None
+    document_id: str | None = None
+    status: DocumentStatus | None = None
+    error: str | None = None
 
 
 class BulkUploadResponse(BaseModel):
     results: list[BulkUploadItemResult]
 
 
-async def _ingest_one(case_id: str | None, file: UploadFile) -> DocumentRecord:
+async def _ingest_one(
+    case_id: str | None, file: UploadFile, *, case_verified: bool = False
+) -> DocumentRecord:
     """
     Validate -> store -> queue -> (async) hand off to the Classifier Agent
     for one file, called once per file by upload_documents_batch. Raises
-    HTTPException on any validation or storage/queue failure.
+    HTTPException on any validation or storage/queue failure. case_verified
+    means the batch already confirmed the case exists, so each file needn't.
     """
     if file.content_type not in settings.ALLOWED_CONTENT_TYPES:
         raise HTTPException(
@@ -56,7 +58,7 @@ async def _ingest_one(case_id: str | None, file: UploadFile) -> DocumentRecord:
             detail=f"File exceeds {settings.MAX_FILE_SIZE_BYTES} byte limit",
         )
 
-    if case_id is not None:
+    if case_id is not None and not case_verified:
         case = await asyncio.to_thread(case_service.get_case, case_id)
         if case is None:
             raise HTTPException(
@@ -154,10 +156,20 @@ async def upload_documents_batch(
             detail=f"Batch exceeds {settings.MAX_BULK_FILES} file limit",
         )
 
+    # Once for the whole batch rather than once per file. A missing case fails every file the same
+    # way it did before, each with its own result.
+    case_exists = True
+    if case_id is not None:
+        case_exists = await asyncio.to_thread(case_service.get_case, case_id) is not None
+
     async def _handle(file: UploadFile) -> BulkUploadItemResult:
         filename = file.filename or ""
+        if not case_exists:
+            return BulkUploadItemResult(
+                filename=filename, success=False, error=f"case_id '{case_id}' does not exist"
+            )
         try:
-            document = await _ingest_one(case_id, file)
+            document = await _ingest_one(case_id, file, case_verified=True)
             return BulkUploadItemResult(
                 filename=filename,
                 success=True,

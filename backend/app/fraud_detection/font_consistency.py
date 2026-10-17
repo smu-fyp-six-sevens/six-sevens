@@ -20,17 +20,10 @@ from typing import Any, Hashable, Literal, cast
 
 import pymupdf
 from pydantic import BaseModel
+from .pdf_pages import page as _page, pages as _pages
 
 logger = logging.getLogger("fraud_detection.font_consistency")
 
-
-def _page(doc: pymupdf.Document, index: int) -> pymupdf.Page:
-    """pyright can't resolve Document.__getitem__'s overloads to Page, so cast once here."""
-    return cast(pymupdf.Page, doc[index])
-
-
-def _pages(doc: pymupdf.Document) -> list[pymupdf.Page]:
-    return [_page(doc, i) for i in range(len(doc))]
 
 
 # A size difference this small or smaller is rendering noise, not a tamper signal.

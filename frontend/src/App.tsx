@@ -11,6 +11,7 @@ import {
 import CaseQueuePage from './pages/CaseQueuePage';
 import CreateCasePage from './pages/CreateCasePage';
 import LoginPage from './pages/LoginPage';
+import NotFoundState from './components/NotFoundState';
 
 // Loaded on first visit to keep the initial bundle small.
 const UploadPage = lazy(() => import('./pages/UploadPage'));
@@ -100,12 +101,15 @@ function CaseDetailsRoute({
 
   if (!selectedCase) {
     return (
-      <div className="shell">
-        <p>Case not found.</p>
-        <button onClick={() => navigate('/cases')}>
-          Back to case queue
-        </button>
-      </div>
+      <NotFoundState
+        title="We couldn't find that case"
+        description={"The case you're looking for doesn't exist or may have been\u00a0deleted."}
+        hints={[
+          'Check that the case number in the URL is correct.',
+          'The case may have been deleted.',
+          'Search for it from the case queue instead.',
+        ]}
+      />
     );
   }
 
@@ -143,12 +147,15 @@ function DocumentDetailsRoute({
 
   if (!selectedCase || !documentId) {
     return (
-      <div className="shell">
-        <p>Document not found.</p>
-        <button onClick={() => navigate('/cases')}>
-          Back to case queue
-        </button>
-      </div>
+      <NotFoundState
+        title="We couldn't find that document"
+        description="The document you're looking for doesn't exist or may have been deleted."
+        hints={[
+          'Check that the link you followed is complete and correct.',
+          'The document or its case may have been deleted.',
+          'Open the case from the case queue and select the document from its list.',
+        ]}
+      />
     );
   }
 

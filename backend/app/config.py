@@ -73,6 +73,25 @@ class Settings:
     # (queue_service.py) — bounded by Anthropic rate limits, not local resources.
     QUEUE_WORKER_CONCURRENCY: int = int(os.environ.get("QUEUE_WORKER_CONCURRENCY", "4"))
 
+    # Threads for PDF/OCR/forensic work (cpu_pool.py). 1 = PyMuPDF only ever runs on one thread.
+    CPU_WORKER_CONCURRENCY: int = int(os.environ.get("CPU_WORKER_CONCURRENCY", "1"))
+    # Detection runs (lead + 3 specialists each) allowed at once; the rest wait their turn.
+    DETECTION_CONCURRENCY: int = int(os.environ.get("DETECTION_CONCURRENCY", "2"))
+    # Most model calls one detection run may make (lead, specialists, reviews, binders). Past it the run
+    # stops asking, reports what it has, and the verdict cannot be "clean".
+    DETECTION_MAX_MODEL_CALLS: int = int(os.environ.get("DETECTION_MAX_MODEL_CALLS", "30"))
+    # Most model calls one document's classify and extract run may make (agent turns, the two classifier
+    # tools, a repair, extraction and its one retry, and one reclassification).
+    DOCUMENT_MAX_MODEL_CALLS: int = int(os.environ.get("DOCUMENT_MAX_MODEL_CALLS", "24"))
+    # Retries the Anthropic client makes by itself on a rate limit or 5xx; each one is billed again.
+    LLM_MAX_RETRIES: int = int(os.environ.get("LLM_MAX_RETRIES", "1"))
+    # One model request. Extraction can write 16k tokens, so this is generous.
+    LLM_TIMEOUT_SECONDS: float = float(os.environ.get("LLM_TIMEOUT_SECONDS", "300"))
+    # One detection tool. This includes waiting for the single CPU worker, so it is not the check's own
+    # run time. The slow ones call a model or an outside registry.
+    TOOL_TIMEOUT_SECONDS: float = float(os.environ.get("TOOL_TIMEOUT_SECONDS", "60"))
+    SLOW_TOOL_TIMEOUT_SECONDS: float = float(os.environ.get("SLOW_TOOL_TIMEOUT_SECONDS", "120"))
+
     # Below this, classification is routed to manual review regardless of
     # the guessed document_type (see langgraph/nodes._is_below_threshold).
     CLASSIFICATION_CONFIDENCE_THRESHOLD: float = 0.85
@@ -93,9 +112,9 @@ class Settings:
     # Signed URLs need to outlive a slow run, not just one request.
     SIGNED_URL_EXPIRY_SECONDS: int = 1800
 
-    # --- LangGraph experiment (langgraph-test branch, backend/app/langgraph) ---
+    # --- LLM pipeline (backend/app/langgraph) ---
     ANTHROPIC_API_KEY: str = _env("ANTHROPIC_API_KEY")
-    # Two-tier models (LANGGRAPH_MIGRATION_PLAN.md section 5): Sonnet for
+    # Two-tier models: Sonnet for
     # classifier/vision/extraction/detection-lead, Haiku for
     # llm_classify/repair/specialists. Overridable per-tier.
     LANGGRAPH_SONNET_MODEL: str = _env("LANGGRAPH_SONNET_MODEL", "claude-sonnet-4-6")
@@ -105,20 +124,33 @@ class Settings:
     # comfortably covers MAX_RECLASSIFICATION_ATTEMPTS with room to spare.
     LANGGRAPH_RECURSION_LIMIT: int = 60
 
-    # --- Observability (langgraph-test branch, see telemetry.py) ---
+    # --- Observability (see telemetry.py) ---
     # Off by default: importing the SDK is harmless with no cost/behaviour
     # change until this is set.
     OTEL_ENABLED: bool = os.environ.get("OTEL_ENABLED", "false").lower() == "true"
+    # httpx's own INFO line per Supabase call. Off by default: query_stats.py logs one summary per unit of work.
+    LOG_HTTP_REQUESTS: bool = os.environ.get("LOG_HTTP_REQUESTS", "false").lower() == "true"
     # Required for the Cloud Trace exporter; left unset -> traces print to
     # the console instead.
     GOOGLE_CLOUD_PROJECT: str = _env("GOOGLE_CLOUD_PROJECT", "")
     OTEL_SERVICE_NAME: str = _env("OTEL_SERVICE_NAME", "six-sevens-backend")
 
-    # --- Public registry lookups (fraud_detection/registry_lookups) ---
+    # --- Public registry lookups (fraud_detection/external_validation/registry_lookups) ---
     # Both optional: without them the anonymous limits apply, and a lookup
     # that hits its rate limit is reported as unable to assess.
     DATA_GOV_SG_API_KEY: str = _env("DATA_GOV_SG_API_KEY")
     ONEMAP_API_TOKEN: str = _env("ONEMAP_API_TOKEN")
+    # URA Data Service access key (eservice.ura.gov.sg/maps/api): for "Approved Residential
+    # Use". Optional: without it that lookup is skipped and zoning alone is used.
+    URA_API_KEY: str = _env("URA_API_KEY")
+    # URA zoning index (registry_lookups/land_use.py): whether a running server may download
+    # and build it itself (~35 s, ~200 MB peak, measured) when it's missing or URA has updated the map.
+    # The Docker image builds it in and sets this to false; local runs keep it on.
+    LAND_USE_RUNTIME_REBUILD: bool = os.environ.get("LAND_USE_RUNTIME_REBUILD", "true").lower() == "true"
+
+    # --- Per-case analysis (case_pipeline/) ---
+    # Kill switch: off falls back to document-level detection and scoring only.
+    CASE_ANALYSIS_ENABLED: bool = os.environ.get("CASE_ANALYSIS_ENABLED", "true").lower() == "true"
 
 
 settings = Settings()

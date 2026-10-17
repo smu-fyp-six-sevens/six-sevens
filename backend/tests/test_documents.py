@@ -287,7 +287,7 @@ def test_update_extracted_fields_success() -> None:
             }
         )
         mock_dep_repo.get_document.return_value = original
-        mock_repo.get_document.return_value = updated
+        mock_repo.update_extracted_fields.return_value = mock_repo.get_document.return_value = updated
         # First call is the handler's own existing-fields lookup (used to
         # decide which fields were "editable"/human-verified); the field is
         # new here (empty existing set), so it's treated as verified with
@@ -364,7 +364,7 @@ def test_update_extracted_fields_removes_optional_fields_saved_empty() -> None:
             uploaded_at=_TIMESTAMP,
         )
         mock_dep_repo.get_document.return_value = original
-        mock_repo.get_document.return_value = original
+        mock_repo.update_extracted_fields.return_value = mock_repo.get_document.return_value = original
         mock_fields_repo.get_extracted_fields.return_value = []
 
         response = client.patch(
@@ -402,7 +402,7 @@ def test_update_extracted_fields_preserves_confidence_for_already_reviewed_field
             uploaded_at=_TIMESTAMP,
         )
         mock_dep_repo.get_document.return_value = original
-        mock_repo.get_document.return_value = original
+        mock_repo.update_extracted_fields.return_value = mock_repo.get_document.return_value = original
         mock_fields_repo.get_extracted_fields.side_effect = [
             [
                 ExtractedField(
@@ -449,7 +449,7 @@ def test_update_extracted_fields_bumps_confidence_for_low_confidence_existing_fi
             uploaded_at=_TIMESTAMP,
         )
         mock_dep_repo.get_document.return_value = original
-        mock_repo.get_document.return_value = original
+        mock_repo.update_extracted_fields.return_value = mock_repo.get_document.return_value = original
         mock_fields_repo.get_extracted_fields.side_effect = [
             [
                 ExtractedField(
@@ -496,7 +496,7 @@ def test_update_extracted_fields_treats_blank_existing_value_as_editable() -> No
             uploaded_at=_TIMESTAMP,
         )
         mock_dep_repo.get_document.return_value = original
-        mock_repo.get_document.return_value = original
+        mock_repo.update_extracted_fields.return_value = mock_repo.get_document.return_value = original
         mock_fields_repo.get_extracted_fields.side_effect = [
             [
                 ExtractedField(
@@ -861,7 +861,7 @@ def test_add_extracted_field_inserts_and_returns_refetched_document() -> None:
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
         mock_dep_repo.get_document.return_value = _payslip_document()
-        mock_repo.get_document.return_value = _payslip_document()
+        mock_repo.update_extracted_fields.return_value = mock_repo.get_document.return_value = _payslip_document()
         # 1st call: the duplicate-name check (no fields yet). 2nd: the
         # re-read that rebuilds documents.extracted_fields. 3rd: the
         # get_document() refetch that builds the response body.
@@ -905,7 +905,7 @@ def test_add_extracted_field_trims_whitespace_from_name() -> None:
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
         mock_dep_repo.get_document.return_value = _payslip_document()
-        mock_repo.get_document.return_value = _payslip_document()
+        mock_repo.update_extracted_fields.return_value = mock_repo.get_document.return_value = _payslip_document()
         mock_fields_repo.get_extracted_fields.side_effect = [[], [], []]
 
         response = client.post(
@@ -983,7 +983,7 @@ def test_add_extracted_field_skips_case_sync_for_caseless_document() -> None:
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
         mock_dep_repo.get_document.return_value = document
-        mock_repo.get_document.return_value = document
+        mock_repo.update_extracted_fields.return_value = mock_repo.get_document.return_value = document
         mock_fields_repo.get_extracted_fields.side_effect = [[], [], []]
 
         response = client.post(
@@ -1032,7 +1032,7 @@ def test_delete_extracted_field_removes_and_recomputes_requirements() -> None:
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
         mock_dep_repo.get_document.return_value = _payslip_document()
-        mock_repo.get_document.return_value = _payslip_document()
+        mock_repo.update_extracted_fields.return_value = mock_repo.get_document.return_value = _payslip_document()
         mock_fields_repo.get_extracted_fields.side_effect = [
             [doomed, kept],  # lookup that resolves field_id
             [kept],          # re-read after the delete
@@ -1099,7 +1099,7 @@ def test_delete_extracted_field_skips_case_sync_for_caseless_document() -> None:
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
         mock_dep_repo.get_document.return_value = document
-        mock_repo.get_document.return_value = document
+        mock_repo.update_extracted_fields.return_value = mock_repo.get_document.return_value = document
         mock_fields_repo.get_extracted_fields.side_effect = [[doomed], [], []]
 
         response = client.delete("/documents/doc-1/extracted-fields/field-1")
@@ -1341,7 +1341,7 @@ def test_approve_document_success() -> None:
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
         mock_dep_repo.get_document.return_value = document
-        mock_repo.get_document.return_value = document.model_copy(
+        mock_repo.approve_document.return_value = mock_repo.get_document.return_value = document.model_copy(
             update={"status": DocumentStatus.APPROVED}
         )
         mock_fields_repo.get_extracted_fields.return_value = [
@@ -1423,7 +1423,7 @@ def test_reject_document_success() -> None:
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
         mock_dep_repo.get_document.return_value = document
-        mock_repo.get_document.return_value = document.model_copy(
+        mock_repo.reject_document.return_value = mock_repo.get_document.return_value = document.model_copy(
             update={"status": DocumentStatus.REJECTED}
         )
         mock_fields_repo.get_extracted_fields.return_value = []
@@ -1470,30 +1470,39 @@ def test_reject_document_write_failure_returns_502() -> None:
 
 def test_langgraph_trace_returns_persisted_result() -> None:
     with patch("app.routers.documents.langgraph_trace") as mock_trace:
-        mock_trace.get_persisted.return_value = {"route": "fast_path"}
+        mock_trace.load.return_value = {"route": "fast_path"}
 
         response = client.get("/documents/doc-1/langgraph-trace")
 
     assert response.status_code == 200
     assert response.json() == {"route": "fast_path"}
-    mock_trace.get.assert_not_called()
+    mock_trace.load.assert_called_once_with("doc-1")
 
 
-def test_langgraph_trace_falls_back_to_in_memory_when_persisted_lookup_fails() -> None:
-    with patch("app.routers.documents.langgraph_trace") as mock_trace:
-        mock_trace.get_persisted.side_effect = RuntimeError("db down")
-        mock_trace.get.return_value = {"route": "sonnet_agent"}
+def test_trace_load_falls_back_to_in_memory_when_persisted_lookup_fails(monkeypatch) -> None:
+    from app.langgraph import trace
 
-        response = client.get("/documents/doc-1/langgraph-trace")
+    def _db_down(document_id):
+        raise RuntimeError("db down")
 
-    assert response.status_code == 200
-    assert response.json() == {"route": "sonnet_agent"}
+    monkeypatch.setattr(trace, "get_persisted", _db_down)
+    monkeypatch.setitem(trace._traces, "doc-1", {"route": "sonnet_agent"})
+
+    assert trace.load("doc-1") == {"route": "sonnet_agent"}
+
+
+def test_trace_load_prefers_the_persisted_trace(monkeypatch) -> None:
+    from app.langgraph import trace
+
+    monkeypatch.setattr(trace, "get_persisted", lambda document_id: {"route": "fast_path"})
+    monkeypatch.setitem(trace._traces, "doc-1", {"route": "stale"})
+
+    assert trace.load("doc-1") == {"route": "fast_path"}
 
 
 def test_langgraph_trace_404_when_nothing_found_anywhere() -> None:
     with patch("app.routers.documents.langgraph_trace") as mock_trace:
-        mock_trace.get_persisted.return_value = None
-        mock_trace.get.return_value = None
+        mock_trace.load.return_value = None
 
         response = client.get("/documents/doc-1/langgraph-trace")
 
@@ -1676,7 +1685,7 @@ def test_approve_document_allows_officer_confirmed_unrecognised() -> None:
         patch("app.routers.documents._launch_detection") as mock_launch,
     ):
         mock_dep_repo.get_document.return_value = document
-        mock_repo.get_document.return_value = document
+        mock_repo.approve_document.return_value = mock_repo.get_document.return_value = document
         mock_fields_repo.get_extracted_fields.return_value = [
             ExtractedField(field_name="summary", field_type="string", field_value="x", confidence=0.99),
         ]
@@ -1685,8 +1694,8 @@ def test_approve_document_allows_officer_confirmed_unrecognised() -> None:
 
     assert response.status_code == 200
     mock_repo.approve_document.assert_called_once_with("doc-1")
-    # Approved as Other, but never scanned.
-    mock_launch.assert_not_called()
+    # Approved as Other, and scanned like any other document.
+    mock_launch.assert_called_once()
 
 
 def test_approve_document_requires_an_other_documents_fields_to_be_saved() -> None:
@@ -1723,7 +1732,7 @@ def test_approve_document_does_not_require_saved_fields_for_a_known_type() -> No
         patch("app.routers.documents._launch_detection"),
     ):
         mock_dep_repo.get_document.return_value = document
-        mock_repo.get_document.return_value = document
+        mock_repo.approve_document.return_value = mock_repo.get_document.return_value = document
         mock_fields_repo.get_extracted_fields.return_value = [
             ExtractedField(field_name=name, field_type="string", field_value="x", confidence=1.0)
             for name in ("individual_name", "company_name", "net_pay")
@@ -1744,7 +1753,7 @@ def test_saving_an_other_documents_fields_records_the_review() -> None:
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
     ):
         mock_dep_repo.get_document.return_value = document
-        mock_repo.get_document.return_value = document
+        mock_repo.update_extracted_fields.return_value = mock_repo.get_document.return_value = document
         mock_fields_repo.get_extracted_fields.return_value = [
             ExtractedField(field_name="summary", field_type="string", field_value="x", confidence=1.0),
         ]

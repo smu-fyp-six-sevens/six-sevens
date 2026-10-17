@@ -27,11 +27,9 @@
       "incorporation_date",
       "company_type",
       "company_address",
-      "shareholder_name",
-      "shareholder_address",
-      "nric_number",
       "share_capital",
-      "share_class"
+      "share_class",
+      "shareholders"
     ],
     "allow_empty": [],
     "required_when_individual": []

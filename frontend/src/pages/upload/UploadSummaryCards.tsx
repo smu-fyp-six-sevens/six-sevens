@@ -1,4 +1,5 @@
 import type {
+  CaseAnalysisOverview,
   CaseRisk,
   DocumentRecord,
   DocumentCaseMatch,
@@ -13,10 +14,14 @@ import {
   lowestFieldConfidence,
 } from '../../services/uploadService';
 import { humanizeFieldKey } from '../../utils/fieldLabels';
+import { CaseAnalysisCard } from './CaseAnalysisCard';
 import { CaseRiskCard } from './CaseRiskCard';
 import { SupportingDocumentsCard } from './SupportingDocumentsCard';
 
 export function UploadSummaryCards({
+  analysisOverview,
+  analysisReady,
+  caseId,
   caseMatchNeedsReview,
   caseMatches,
   flaggedDocuments,
@@ -24,6 +29,9 @@ export function UploadSummaryCards({
   risk,
   supportingDocumentRecommendations,
 }: {
+  analysisOverview: CaseAnalysisOverview | null;
+  analysisReady: boolean;
+  caseId: string;
   caseMatchNeedsReview: (document: DocumentRecord) => boolean;
   caseMatches: Map<string, DocumentCaseMatch>;
   flaggedDocuments: DocumentRecord[];
@@ -150,7 +158,10 @@ export function UploadSummaryCards({
 
             <CaseRiskCard risk={risk} />
 
-            <SupportingDocumentsCard recommendations={supportingDocumentRecommendations} />
+            <CaseAnalysisCard caseId={caseId} analysisReady={analysisReady} overview={analysisOverview} />
+
+            {/* Both come from the latest complete case analysis, so risk is set exactly when one exists. */}
+            <SupportingDocumentsCard recommendations={supportingDocumentRecommendations} analysed={risk !== null} />
 
             <section className="summary-card">
               <div className="summary-card-header">

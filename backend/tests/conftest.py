@@ -24,6 +24,16 @@ collect_ignore = [
 
 
 @pytest.fixture(autouse=True)
+def _reset_case_sync_memo():
+    """case_service remembers the last submission_finalized it wrote per case; tests reuse case ids."""
+    from app import case_service
+
+    case_service._synced_finalized.clear()
+    yield
+    case_service._synced_finalized.clear()
+
+
+@pytest.fixture(autouse=True)
 def _bypass_auth():
     """
     Every route except /health and /auth/login requires require_auth (see
@@ -130,6 +140,28 @@ def _block_real_supabase_network(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(supabase_module, "acreate_client", _refuse_real_realtime)
 
 
+@pytest.fixture(autouse=True)
+def _no_land_use_index(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    URA zoning (registry_lookups/land_use.py) reads an index built on disk and,
+    when there is none, downloads ~175 MB from data.gov.sg in a background
+    thread. Tests get neither: zone lookups report "unavailable" unless a test
+    patches land_use.zone_at with the zone it needs.
+    """
+    from app.fraud_detection.external_validation.registry_lookups import land_use
+    from app.fraud_detection.external_validation.registry_lookups.http import LookupUnavailable
+
+    async def _no_index():
+        raise LookupUnavailable("no land-use index in tests")
+
+    monkeypatch.setattr(land_use, "current_index", _no_index)
+    # Same for URA's Approved Residential Use (registry_lookups/ura.py): no access key, so it's
+    # never called; a test sets one and patches ura.approved_residential_use.
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "URA_API_KEY", "")
+
+
 async def _refuse_real_realtime(*args, **kwargs):
     raise RuntimeError(
         "Test attempted a real Supabase Realtime connection via acreate_client(...). "
@@ -232,10 +264,10 @@ def isolated_injection_templates(
     return _injection_template_files
 
 
-# --- Regression suite tags (SCRUM-206) ----------------------------------------
+# --- Regression suite tags (SCRUM-206, SCRUM-246) ---------------------------
 # Existing tests that also serve as regression tests for a sprint's manual test
 # cases, tagged here centrally (rather than editing each file) so that
-# `pytest -m sprint1` / `pytest -m sprint2` run each sprint's full set. The
+# `pytest -m sprint1` / `-m sprint2` / `-m sprint3` run each sprint's full set. The
 # regression-specific test files tag themselves with @pytest.mark.sprintN.
 # Keys are a test file, or file::test_name for a single test.
 _EXISTING_REGRESSION_TESTS: dict[str, list[tuple[str, str, str]]] = {
@@ -259,6 +291,39 @@ _EXISTING_REGRESSION_TESTS: dict[str, list[tuple[str, str, str]]] = {
     "test_ingestion.py::test_ingest_image": [("sprint2", "SCRUM-115", "DT-029")],
     # SCRUM-114 / SCRUM-118 checklist mapping
     "test_mapper.py": [("sprint2", "SCRUM-118", "DI-035 – DI-038")],
+    # --- Sprint 3 (SCRUM-246) ---
+    # SCRUM-116 Update case (CM-014 – CM-023)
+    "test_cases.py::test_update_case_saves_company_name_and_returns_fresh_summary": [
+        ("sprint3", "SCRUM-116", "CM-015"),
+    ],
+    "test_cases.py::test_update_case_trims_surrounding_whitespace": [("sprint3", "SCRUM-116", "CM-021")],
+    "test_cases.py::test_update_case_rejects_blank_company_name": [("sprint3", "SCRUM-116", "CM-020 / CM-021")],
+    # SCRUM-117 Delete case / documents (CM-024 – CM-028)
+    "test_cases.py::test_delete_case_calls_case_service_delete_case": [("sprint3", "SCRUM-117", "CM-025")],
+    "test_cases.py::test_delete_case_rejects_when_a_document_is_in_flight": [("sprint3", "SCRUM-117", "CM-027")],
+    "test_documents.py::test_delete_document_removes_it_and_resyncs_the_case": [("sprint3", "SCRUM-117", "CM-024")],
+    # SCRUM-26 Trigger detection (MA-005 – MA-012)
+    "test_documents.py::test_delete_document_rejects_an_approved_document": [("sprint3", "SCRUM-26", "MA-007")],
+    "test_documents.py::test_locked_document_cannot_be_changed": [("sprint3", "SCRUM-26", "MA-007 / MA-010")],
+    "test_documents.py::test_approve_document_rejects_unreviewed_low_confidence_field": [
+        ("sprint3", "SCRUM-26", "MA-008"),
+    ],
+    "test_documents.py::test_reject_document_success": [("sprint3", "SCRUM-26", "MA-011")],
+    # SCRUM-110 Case match (DI-039 – DI-047)
+    "test_case_match.py": [("sprint3", "SCRUM-110", "DI-039 – DI-047")],
+    # SCRUM-119 Lead Detection Agent verdict (FD-017 – FD-019)
+    "test_detection_verdict.py": [("sprint3", "SCRUM-119", "FD-017 – FD-019")],
+    # Fraud detection checks (FD-001 – FD-026), the deterministic layer under each tool
+    "test_image_tampering.py": [("sprint3", "SCRUM-65", "FD-001 / FD-002")],
+    "test_text_overlay_anomalies.py": [("sprint3", "SCRUM-63", "FD-003 / FD-004")],
+    "test_layout_anomalies.py": [("sprint3", "SCRUM-62", "FD-005 / FD-006")],
+    "test_metadata_analysis.py": [("sprint3", "SCRUM-66", "FD-007 / FD-008")],
+    "test_numerical_validation.py": [("sprint3", "SCRUM-68", "FD-009 / FD-010")],
+    "test_date_anomalies.py": [("sprint3", "SCRUM-69", "FD-011 / FD-012")],
+    "test_image_manipulation.py": [("sprint3", "SCRUM-64", "FD-013 / FD-014")],
+    "test_font_consistency.py": [("sprint3", "SCRUM-61", "FD-021 – FD-024")],
+    "test_spelling_anomaly.py": [("sprint3", "SCRUM-70", "FD-025 / FD-026")],
+    "test_company_identity.py": [("sprint3", "SCRUM-70", "FD-025")],
 }
 
 

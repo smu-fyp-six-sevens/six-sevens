@@ -159,19 +159,3 @@ def save_document(document: InjectableDocument) -> InjectableDocument:
     return deepcopy(document)
 
 
-def get_document_file_path(document_id: str) -> str | None:
-    _ensure_loaded()
-    normalized = slugify_document_id(_normalize_document_id(document_id))
-    document = DOCUMENTS.get(normalized)
-    if document is None:
-        document = get_document(normalized)
-        if document is None:
-            return None
-    if document.inject_path:
-        path = Path(document.inject_path)
-        if path.exists():
-            return str(path)
-    template = find_template_path(document.id) or find_template_path(document.filename)
-    if template is not None and template.exists():
-        return str(template)
-    return None

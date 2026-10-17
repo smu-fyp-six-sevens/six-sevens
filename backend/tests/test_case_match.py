@@ -13,7 +13,7 @@ from app.case_match import (
     DocumentMatchStatus,
     IncumbencyStatus,
     check_case_match,
-    company_names_match,
+    case_company_names_match,
     individual_names_match,
     normalize_uen,
 )
@@ -134,7 +134,7 @@ def _by_id(result, doc_id: str):
     ],
 )
 def test_company_names_match(a: str, b: str, expected: bool) -> None:
-    assert company_names_match(a, b) is expected
+    assert case_company_names_match(a, b) is expected
 
 
 def test_individual_names_match_ignores_order_and_case() -> None:
@@ -210,6 +210,7 @@ def test_foreign_passport_goes_to_manual_review_once_incumbency_verified() -> No
     match = _by_id(result, passport.id)
     assert match.status == DocumentMatchStatus.MANUAL_REVIEW
     assert match.case_mismatch
+    assert not match.can_proceed_to_fraud_detection
     assert "S7273147P" in match.reason
 
 
@@ -256,7 +257,7 @@ def test_two_incumbencies_with_different_uens_go_to_manual_review() -> None:
 # --- step 2: company check ----------------------------------------------------
 
 
-def test_document_with_other_uen_is_a_case_mismatch_sent_to_manual_review() -> None:
+def test_document_with_other_uen_requires_manual_review() -> None:
     stray = _doc("notice_of_assessment", {"company_name": "ACME Trading", "tax_reference_number": OTHER_UEN})
     result = check_case_match(_case(), [_incumbency(), *_corroborating(3), stray])
 
@@ -314,6 +315,87 @@ def test_nric_matched_by_id_number() -> None:
     match = _by_id(result, nric.id)
     assert match.status == DocumentMatchStatus.MATCH
     assert match.comparisons[0].check == "individual_id"
+
+
+def test_matching_id_still_flags_name_mismatch_and_cites_reference_document() -> None:
+    nric = _doc(
+        "nric",
+        {"nric_number": "S1234567A", "individual_name": "TAN WEI JUN"},
+        "director-nric",
+    )
+    incumbency = _incumbency(doc_id="director-incumbency")
+    result = check_case_match(_case(), [incumbency, *_corroborating(3), nric])
+
+    match = _by_id(result, nric.id)
+    name_finding = next(c for c in match.comparisons if c.check == "individual_name")
+    assert match.status == DocumentMatchStatus.MANUAL_REVIEW
+    assert name_finding.outcome == CheckOutcome.MISMATCH
+    assert name_finding.document_value == "TAN WEI JUN"
+    assert name_finding.reference_document_id == incumbency.id
+    assert name_finding.reference_filename == incumbency.filename
+
+
+@pytest.mark.story("SCRUM-253", "identity mismatch cites both documents")
+def test_pairwise_name_mismatch_flags_and_cites_nric_and_personal_bank_statement() -> None:
+    incumbency_fields = dict(INCUMBENCY_FIELDS)
+    incumbency_fields.update({
+        "individual_name": "Goh Ka Yee",
+        "director_name": "Goh Ka Yee",
+        "shareholder_1_name": "Goh Ka Yee",
+    })
+    nric = _doc(
+        "nric",
+        {"nric_number": "S1234567A", "individual_name": "Goh Ka Yee"},
+        "director-nric",
+    )
+    bank_statement = _doc(
+        "bank_statement",
+        {"account_holder_name": "Goh Ka Yeo"},
+        "personal-bank-statement",
+    )
+    result = check_case_match(
+        _case(), [_incumbency(incumbency_fields), *_corroborating(3), nric, bank_statement]
+    )
+
+    nric_match = _by_id(result, nric.id)
+    statement_match = _by_id(result, bank_statement.id)
+    nric_finding = next(
+        c for c in nric_match.comparisons
+        if c.check == "individual_name" and c.other_document_id == bank_statement.id
+    )
+    statement_finding = next(
+        c for c in statement_match.comparisons
+        if c.check == "individual_name" and c.other_document_id == nric.id
+    )
+
+    assert nric_match.case_mismatch and statement_match.case_mismatch
+    # The NRIC is the case's director, so it only disagrees with another document: a signal for detection.
+    assert nric_match.status == DocumentMatchStatus.MISMATCH
+    assert nric_match.can_proceed_to_fraud_detection
+    # The statement's name is not on the incumbency at all: it also goes to an officer.
+    assert statement_match.status == DocumentMatchStatus.MANUAL_REVIEW
+    assert not statement_match.can_proceed_to_fraud_detection
+    assert nric_finding.other_filename == bank_statement.filename
+    assert statement_finding.other_filename == nric.filename
+    assert nric_finding.document_value == "Goh Ka Yee"
+    assert nric_finding.case_value == "Goh Ka Yeo"
+
+
+def test_pairwise_name_comparison_treats_case_and_order_as_equal() -> None:
+    nric = _doc(
+        "nric",
+        {"nric_number": "S1234567A", "individual_name": "Tan Wei Ming"},
+    )
+    bank_statement = _doc(
+        "bank_statement",
+        {"account_holder_name": "WEI MING TAN"},
+    )
+    result = check_case_match(
+        _case(), [_incumbency(), *_corroborating(3), nric, bank_statement]
+    )
+
+    assert _by_id(result, nric.id).status == DocumentMatchStatus.MATCH
+    assert _by_id(result, bank_statement.id).status == DocumentMatchStatus.MATCH
 
 
 def test_id_decides_even_when_name_matches() -> None:
@@ -604,16 +686,29 @@ def test_case_snapshot_includes_case_match_computed_from_plain_fields() -> None:
 
     passport = _doc("passport", {"individual_name": "TEO KAI MING", "nric_number": "S7273147P"}, "pp")
     docs = [_incumbency(), *_corroborating(3), passport]
-    with patch("app.case_service.case_repository") as case_repo, patch(
-        "app.case_service.document_repository"
-    ) as doc_repo, patch("app.case_service.extracted_fields_repository") as fields_repo:
+    # The snapshot lists documents without their fields and fills them from one
+    # batch query, so the fake store must hold every document's fields.
+    stored = {
+        doc.id: [
+            ExtractedField(field_name=name, field_type="string", field_value=value, confidence=0.9)
+            for name, value in (doc.extracted_fields or {}).items()
+        ]
+        for doc in docs
+    }
+    with (
+        patch("app.case_service.case_repository") as case_repo,
+        patch("app.case_service.document_repository") as doc_repo,
+        patch("app.case_service.extracted_fields_repository") as fields_repo,
+        patch("app.case_service.langgraph_trace") as trace,
+        patch("app.case_service.analysis_repository") as analyses,
+    ):
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = docs
+        trace.get_detection_states.return_value = ({}, set())
+        analyses.get_latest_many.return_value = {}
         # Enrichment rewrites extracted_fields into {value, confidence}
         # wrappers — the case match must not see that shape.
-        fields_repo.get_extracted_fields_for_documents.return_value = {
-            "pp": [ExtractedField(field_name="nric_number", field_type="string", field_value="S7273147P", confidence=0.9)]
-        }
+        fields_repo.get_extracted_fields_for_documents.return_value = stored
         snapshot = case_service.build_case_snapshot("case-1")
 
     assert snapshot["case_match"]["incumbency"]["status"] == "verified"

@@ -27,16 +27,15 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from typing import Annotated, Any
+from typing import Annotated, Any, Awaitable, Callable
 
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
 from ... import document_repository, extracted_fields_repository, storage_service
+from ...cpu_pool import run_cpu
 from ...fraud_detection.ai_generation import AIImageAssessment, AIIndicator, check_ai_generation
-from ...fraud_detection.company_identity import check_company_name_consistency
 from ...fraud_detection.date_anomalies import check_date_anomalies
-from ...fraud_detection.registry_lookups import public_holidays_for, verify_against_registries
 from ...fraud_detection.font_consistency import check_font_consistency
 from ...fraud_detection.image_manipulation import check_image_manipulation, check_image_tampering
 from ...fraud_detection.layout_anomalies import check_layout_anomalies
@@ -48,8 +47,10 @@ logger = logging.getLogger("classifier_pipeline.langgraph.detection.tools")
 MAX_FINDINGS = 15
 _MAX_TEXT = 80
 
-# Per-run cache so several specialists calling tools on the same document
-# don't each re-download the file or re-read the row. Cleared by
+# Per-run cache so the specialists, which start together and call these tools
+# at the same moment, don't each re-download the file or re-read the row. It
+# holds the fetch itself (a future) rather than its result: a plain "is it
+# cached yet" check lets every specialist miss at once. Cleared by
 # graph.run_detection when the run ends.
 _context: dict[str, dict[str, Any]] = {}
 
@@ -58,26 +59,52 @@ def clear_context(document_id: str) -> None:
     _context.pop(document_id, None)
 
 
-async def _document(document_id: str):
+async def _once(document_id: str, key: str, load: Callable[[], Awaitable[Any]]) -> Any:
+    """The first caller runs `load`; concurrent and later callers share its result.
+    A load that fails is dropped, so the next caller retries it."""
     entry = _context.setdefault(document_id, {})
-    if "document" not in entry:
-        entry["document"] = await asyncio.to_thread(
-            document_repository.get_document, document_id, include_fields=False
-        )
-    return entry["document"]
+    future = entry.get(key)
+    if future is None:
+        future = entry[key] = asyncio.ensure_future(load())
+
+        def _forget_failure(done: asyncio.Future) -> None:
+            if done.cancelled() or done.exception() is not None:
+                if entry.get(key) is done:
+                    entry.pop(key, None)
+
+        future.add_done_callback(_forget_failure)
+    # Shielded so one cancelled caller can't cancel the fetch the others are waiting on.
+    return await asyncio.shield(future)
+
+
+def prime(document_id: str, *, document: Any = None, fields: list | None = None) -> None:
+    """Seeds the cache with what the run's first step already fetched."""
+    entry = _context.setdefault(document_id, {})
+    loop = asyncio.get_running_loop()
+    for key, value in (("document", document), ("fields", fields)):
+        if value is not None and key not in entry:
+            future = loop.create_future()
+            future.set_result(value)
+            entry[key] = future
+
+
+async def _document(document_id: str):
+    return await _once(
+        document_id, "document",
+        lambda: asyncio.to_thread(document_repository.get_document, document_id, include_fields=False),
+    )
+
+
+async def _load_fields(document_id: str) -> list:
+    try:
+        return await asyncio.to_thread(extracted_fields_repository.get_extracted_fields, document_id)
+    except Exception:
+        logger.exception("Failed to fetch extracted fields for document %s", document_id)
+        return []
 
 
 async def _extracted_fields(document_id: str) -> list:
-    entry = _context.setdefault(document_id, {})
-    if "fields" not in entry:
-        try:
-            entry["fields"] = await asyncio.to_thread(
-                extracted_fields_repository.get_extracted_fields, document_id
-            )
-        except Exception:  # noqa: BLE001 — enrichment only; checks degrade without it
-            logger.exception("Failed to fetch extracted fields for document %s", document_id)
-            entry["fields"] = []
-    return entry["fields"]
+    return await _once(document_id, "fields", lambda: _load_fields(document_id))
 
 
 async def document_fields(document_id: str) -> list:
@@ -85,15 +112,15 @@ async def document_fields(document_id: str) -> list:
     return await _extracted_fields(document_id)
 
 
+async def _load_bytes(document_id: str) -> bytes | None:
+    document = await _document(document_id)
+    if document is None or not document.storage_path:
+        return None
+    return await asyncio.to_thread(storage_service.download_file, document.storage_path)
+
+
 async def _file_bytes(document_id: str) -> bytes | None:
-    entry = _context.setdefault(document_id, {})
-    if "bytes" not in entry:
-        document = await _document(document_id)
-        if document is None or not document.storage_path:
-            entry["bytes"] = None
-        else:
-            entry["bytes"] = await asyncio.to_thread(storage_service.download_file, document.storage_path)
-    return entry["bytes"]
+    return await _once(document_id, "bytes", lambda: _load_bytes(document_id))
 
 
 # Reasons a check gives when the document simply has nothing it applies to:
@@ -132,12 +159,16 @@ def _result(tool_name: str, findings: list[dict], *, unable: str | None = None) 
 
 
 def _with_ids(tool_name: str, findings: list[dict]) -> list[dict]:
-    # "summary" is part of every tool's contract (module docstring) — the lead's
-    # review prompt and the frontend both index findings by it unconditionally,
-    # so a tool that forgets it crashes detection downstream instead of here.
+    # "summary" is part of every tool's contract (module docstring): the lead's review prompt and the
+    # frontend both read it. A finding without one is still reported, with a placeholder, because
+    # dropping it would let a flagged document read as clean.
+    checked = []
     for finding in findings:
-        assert "summary" in finding, f"{tool_name} finding missing required 'summary' key: {finding}"
-    return [{"id": f"{tool_name}-{i + 1}", **finding} for i, finding in enumerate(findings)]
+        if not str(finding.get("summary") or "").strip():
+            logger.error("%s returned a finding without a summary: %s", tool_name, finding)
+            finding = {**finding, "summary": f"{tool_name} reported a finding without a description."}
+        checked.append(finding)
+    return [{"id": f"{tool_name}-{i + 1}", **finding} for i, finding in enumerate(checked)]
 
 
 def _short(text: Any) -> str:
@@ -173,7 +204,7 @@ async def font_consistency_tool(document_id: Annotated[str, InjectedState("docum
         return _result("font_consistency_tool", [], unable="Document file is not available in storage")
 
     fields = await _extracted_fields(document_id)
-    result = await asyncio.to_thread(check_font_consistency, document_id, file_bytes, fields)
+    result = await run_cpu(check_font_consistency, document_id, file_bytes, fields)
     if result.unable_to_assess:
         return _result(
             "font_consistency_tool", [], unable=result.unable_to_assess_reason or "Unable to assess"
@@ -208,7 +239,7 @@ async def layout_anomalies_tool(document_id: Annotated[str, InjectedState("docum
 
     # The type selects a layout profile; an unknown document gets the generic checks.
     document = await _document(document_id)
-    result = await asyncio.to_thread(
+    result = await run_cpu(
         check_layout_anomalies,
         document_id,
         file_bytes,
@@ -267,9 +298,8 @@ async def date_consistency_tool(document_id: Annotated[str, InjectedState("docum
         return _result("date_consistency_tool", [], unable="Document not found")
 
     fields = await _extracted_fields(document_id)
-    holidays = await public_holidays_for(document.document_type)
     result = await asyncio.to_thread(
-        check_date_anomalies, document_id, fields, document.document_type, holidays
+        check_date_anomalies, document_id, fields, document.document_type
     )
     if result.unable_to_assess:
         return _result(
@@ -289,62 +319,6 @@ async def date_consistency_tool(document_id: Annotated[str, InjectedState("docum
         for finding in result.findings
     ]
     return _result("date_consistency_tool", _with_ids("date_consistency_tool", findings))
-
-
-@tool
-async def company_name_consistency_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
-    """Compares this document's company name with the company name on every other document in the same case (certificate of incumbency, incorporation, constitution, corporate bank statements, FATCA/CRS, loan letters, payslips, ...). Names that differ only by legal suffix ("Pte Ltd" vs "Pte. Ltd."), letter case or "&"/"AND" match; any other difference is a finding. A document with no company name has nothing to compare. Run it on every document that has a company name."""
-    tool_name = "company_name_consistency_tool"
-    document = await asyncio.to_thread(document_repository.get_document, document_id)
-    if document is None:
-        return _result(tool_name, [], unable="Document not found")
-    case_documents = (
-        await asyncio.to_thread(document_repository.list_documents, case_id=document.case_id)
-        if document.case_id is not None
-        else []
-    )
-    result = check_company_name_consistency(document, case_documents)
-
-    findings = [
-        {
-            "field": "company_name",
-            "stated": discrepancy.stated,
-            "conflicting": discrepancy.conflicting,
-            "filenames": discrepancy.filenames,
-            "severity_hint": discrepancy.severity,
-            "summary": discrepancy.summary,
-        }
-        for discrepancy in result.discrepancies
-    ]
-    return _result(tool_name, _with_ids(tool_name, findings))
-
-
-@tool
-async def registry_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
-    """Checks the document's facts against Singapore's public registries, live: ACRA (the UEN exists, the company name matches, the company is live, the incorporation date and registered address match), OneMap and HDB (an address's postal code exists and matches its street; a home address is a residential block). Use it on any document with a UEN, a company or an address."""
-    document = await _document(document_id)
-    if document is None:
-        return _result("registry_tool", [], unable="Document not found")
-
-    fields = await _extracted_fields(document_id)
-    result = await verify_against_registries(document_id, fields, document.document_type)
-    if result.unable_to_assess:
-        return _result("registry_tool", [], unable=result.unable_to_assess_reason or "Unable to assess")
-
-    findings = [
-        {
-            "check_code": finding.check_code,
-            "severity_hint": finding.severity,
-            "source": finding.source,
-            "field": finding.field,
-            "stated": finding.stated,
-            "expected": finding.expected,
-            "needs_review": finding.needs_review,
-            "summary": finding.summary,
-        }
-        for finding in result.findings
-    ]
-    return _result("registry_tool", _with_ids("registry_tool", findings))
 
 
 # --- Digital Authenticity ---------------------------------------------------
@@ -388,7 +362,7 @@ async def image_manipulation_tool(document_id: Annotated[str, InjectedState("doc
     if file_bytes is None:
         return _result("image_manipulation_tool", [], unable="Document file is not available in storage")
 
-    result = await asyncio.to_thread(check_image_manipulation, document_id, file_bytes)
+    result = await run_cpu(check_image_manipulation, document_id, file_bytes)
     if result.unable_to_assess:
         return _result(
             "image_manipulation_tool", [], unable=result.unable_to_assess_reason or "Unable to assess"
@@ -420,7 +394,7 @@ async def image_tampering_tool(document_id: Annotated[str, InjectedState("docume
     if file_bytes is None:
         return _result("image_tampering_tool", [], unable="Document file is not available in storage")
 
-    result = await asyncio.to_thread(check_image_tampering, document_id, file_bytes)
+    result = await run_cpu(check_image_tampering, document_id, file_bytes)
     if result.unable_to_assess:
         return _result(
             "image_tampering_tool", [], unable=result.unable_to_assess_reason or "Unable to assess"
@@ -467,7 +441,7 @@ async def ai_generation_tool(document_id: Annotated[str, InjectedState("document
     if file_bytes is None:
         return _result("ai_generation_tool", [], unable="Document file is not available in storage")
 
-    result = await asyncio.to_thread(check_ai_generation, document_id, file_bytes)
+    result = await run_cpu(check_ai_generation, document_id, file_bytes)
     if result.unable_to_assess:
         return _result("ai_generation_tool", [], unable=result.unable_to_assess_reason or "Unable to assess")
 

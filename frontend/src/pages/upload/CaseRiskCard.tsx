@@ -77,8 +77,9 @@ function hiddenLabel(lowCount: number, unreviewedCount: number): string {
 }
 
 function NotScoredMessage({ risk }: { risk: CaseRisk | null }) {
+  // The score only comes from a case analysis run, never computed on its own.
   const [title, body, tone] = !risk
-    ? ['Risk summary unavailable.', 'Detection results could not be loaded. Refresh to try again.', 'info']
+    ? ['Not scored yet.', 'Run the case analysis once every approved document has been scanned.', 'info']
     : risk.state === 'no_documents'
       ? ['No documents to score yet.', 'A risk level appears once documents are uploaded, approved and scanned.', 'info']
       : risk.state === 'failed'
