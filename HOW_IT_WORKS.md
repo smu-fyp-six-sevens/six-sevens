@@ -64,7 +64,7 @@ Approval starts detection in the background, **two runs at a time** (`DETECTION_
 | Specialist | Tools (plain code) | Looks for |
 |---|---|---|
 | **Layout & Rendering** | font consistency, layout anomalies, image manipulation, image tampering | odd fonts and sizes, misalignment, text pasted over text, spliced or edited images |
-| **Content Validation** | spelling, date consistency, numerical checks, external validation | typos, impossible dates, sums and balances that don't add up, broken NRIC/UEN/MRZ checksums, a company missing from ACRA, a postal code missing from OneMap, wrong CPF/GST rates |
+| **Content Validation** | spelling, date consistency, numerical checks, external validation | typos, impossible dates, sums and balances that don't add up, broken NRIC/UEN/MRZ checksums, a company missing from ACRA, a postal code missing from OneMap, a home address at an office or industrial unit, wrong CPF/GST rates |
 | **Digital Authenticity** | metadata, AI generation | editing software in the file metadata, modified-after-created dates, AI-generated images |
 
    A tool returns *candidate* findings. The specialist gives each a severity or dismisses it as a false positive; it cannot invent findings or change a tool's facts.
@@ -169,7 +169,13 @@ Optional, with defaults:
 | `LOG_HTTP_REQUESTS` | false | httpx's one line per Supabase call (the `perf` summaries replace it) |
 | `LANGGRAPH_SONNET_MODEL`, `LANGGRAPH_HAIKU_MODEL` | `claude-sonnet-4-6`, `claude-haiku-4-5-20251001` | model overrides |
 | `SUPABASE_STORAGE_BUCKET` | `documents` | bucket name |
-| `DATA_GOV_SG_API_KEY`, `ONEMAP_API_TOKEN` | — | registry lookups (anonymous limits apply without) |
+| `DATA_GOV_SG_API_KEY` | — | data.gov.sg lookups and the zoning download (anonymous limits without) |
+| `URA_API_KEY` | — | URA approved residential use; skipped without it |
+| `LAND_USE_RUNTIME_REBUILD` | true | whether a server may build the URA zoning index itself; the Docker image sets false |
+
+The backend image builds the zoning index and fails if it can't. Pass `DATA_GOV_SG_API_KEY` as a BuildKit secret
+(`docker build --secret id=data_gov_sg_api_key,env=DATA_GOV_SG_API_KEY -f backend/Dockerfile --target base .`);
+`--build-arg ALLOW_MISSING_LAND_USE=true` builds without the index, and zoning is then skipped.
 
 ---
 

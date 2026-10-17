@@ -27,10 +27,6 @@ class LookupUnavailable(Exception):
     """The registry couldn't answer: unreachable, an error status, or rate limited."""
 
 
-def clear_cache() -> None:
-    _cache.clear()
-
-
 async def get(url: str, *, params: dict | None = None, headers: dict | None = None, as_json: bool = True,
               rate_limit_hint: str = "", cache_ttl: float = _CACHE_TTL_SECONDS) -> Any:
     key = f"{url}?{json.dumps(params or {}, sort_keys=True)}"

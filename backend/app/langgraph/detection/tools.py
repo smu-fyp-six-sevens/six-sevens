@@ -136,7 +136,6 @@ _NOTHING_TO_CHECK_REASONS = tuple(re.compile(pattern) for pattern in (
     r"^None of the supported metadata fields",
     r"^No dates could be reliably extracted",
     r"^Not enough comparable text to assess layout",
-    r"^Nothing to check:",
     # AI generation says so itself; its real failures start "Could not run:".
     r"^Nothing to check:",
 ))

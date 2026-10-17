@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from . import auth, health, query_stats, realtime_listener, telemetry
 from .config import settings
+from .fraud_detection.external_validation.registry_lookups import land_use
 from .health import check_db_connection
 from .langgraph._anthropic import warm_up
 from .queue_service import document_queue
@@ -48,6 +49,11 @@ async def lifespan(app: FastAPI):
         # snapshot on connect" rather than taking the whole app down, e.g.
         # if SUPABASE_SECRET_KEY isn't configured in a given environment yet.
         logger.exception("Realtime listener failed to start — continuing anyway")
+
+    try:
+        await asyncio.to_thread(land_use.log_startup_status)
+    except Exception:
+        logger.exception("Could not read the land-use index status — continuing anyway")
 
     try:
         await asyncio.to_thread(warm_up)

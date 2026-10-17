@@ -36,7 +36,9 @@ _UNIT_RE = re.compile(r"#\s*([A-Z]?\d{1,3})\s*-\s*(\d{1,5}[A-Z]?)", re.IGNORECAS
 
 _token: dict[str, str] = {}
 # Answers by address, kept until the next process start (URA updates quarterly). Only real
-# answers are kept: a rejected-token reply must not be remembered as one.
+# answers are kept: a rejected-token reply must not be remembered as one. Bounded: the oldest
+# answer goes when it's full, so a long-running server can't grow it without limit.
+_MAX_ANSWERS = 5000
 _answers: dict[tuple[str, str, tuple[str, str] | None], bool] = {}
 
 
@@ -82,6 +84,8 @@ async def approved_residential_use(block: str, street: str, unit: tuple[str, str
                          headers={"AccessKey": settings.URA_API_KEY, "Token": token})
         answer = body.get("isResiUse") if isinstance(body, dict) else None
         if answer in ("Y", "NA"):
+            if len(_answers) >= _MAX_ANSWERS:
+                _answers.pop(next(iter(_answers)))
             _answers[key] = answer == "Y"
             return _answers[key]
         # Anything else (an expired or rejected token) gets one retry with a fresh token.

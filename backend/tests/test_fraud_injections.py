@@ -7,12 +7,12 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from app.injection.field_text import is_label_only
+from app.injection.field_text import field_value_text
 from app.injection.injectors import INJECTORS
 from app.injection.pdf import MANIPULATION_INDICATORS, _save_raster_image
 from app.injection.schemas import DefectType
 from app.injection.service import CHANGED_KEYS
-from app.injection.store import get_document, get_document_file_path, reset_sample_documents
+from app.injection.store import get_document, reset_sample_documents
 from app.main import app
 
 client = TestClient(app)
@@ -60,7 +60,7 @@ def _pick_fields(document) -> tuple[str, str, str]:
             for name, field in document.fields.items()
             if field.kind != "image"
             and field.text.strip()
-            and not is_label_only(field.text)
+            and field_value_text(field.text).strip()
             and not any(ch.isdigit() for ch in field.text)
         ),
         None,
@@ -70,7 +70,7 @@ def _pick_fields(document) -> tuple[str, str, str]:
             name
             for name, field in document.fields.items()
             if field.kind != "image"
-            and not is_label_only(field.text)
+            and field_value_text(field.text).strip()
             and any(ch.isdigit() for ch in field.text)
         ),
         None,
@@ -159,7 +159,9 @@ def test_all_defect_types_inject_on_each_format(
         assert payload["filename"].endswith(suffix)
         assert payload["generated_filename"].endswith(suffix)
         assert payload["description"]
-        path = Path(get_document_file_path(document_id) or "")
+        injected = get_document(document_id)
+        assert injected is not None and injected.inject_path
+        path = Path(injected.inject_path)
         assert path.exists()
         assert path.read_bytes()[: len(_MAGIC[suffix])] == _MAGIC[suffix]
         _assert_changed_keys(document_id, field_name, defect_type, before)
@@ -276,7 +278,7 @@ def test_image_manipulation_rejects_text_fields_on_pdf_and_png() -> None:
 def test_header_fields_can_be_injected() -> None:
     document = get_document(PDF_ID)
     assert document is not None
-    label = next(name for name, field in document.fields.items() if is_label_only(field.text))
+    label = next(name for name, field in document.fields.items() if not field_value_text(field.text).strip())
     for defect_type, extra in (
         (DefectType.SPELLING, {"new_text": "Changed Header"}),
         (DefectType.FONT, {"font": "cour"}),
@@ -291,7 +293,7 @@ def test_header_fields_can_be_injected() -> None:
 def test_numerical_on_a_header_still_needs_digits() -> None:
     document = get_document(PDF_ID)
     assert document is not None
-    label = next(name for name, field in document.fields.items() if is_label_only(field.text))
+    label = next(name for name, field in document.fields.items() if not field_value_text(field.text).strip())
     response = _inject(PDF_ID, label, DefectType.NUMERICAL, new_text="1")
     assert response.status_code == 400
     assert "numeric" in response.json()["detail"].lower()

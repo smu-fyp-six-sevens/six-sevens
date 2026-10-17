@@ -2,9 +2,7 @@ from app.injection.field_text import (
     _is_label_phrase,
     _looks_like_label,
     field_value_text,
-    is_label_only,
     replace_value,
-    require_value,
     split_label_and_value,
 )
 
@@ -46,7 +44,6 @@ def test_label_only_headers_are_not_values() -> None:
         "Total Withdrawals",
         "Total Withdrawals / Deposits",
     ):
-        assert is_label_only(text), text
         assert field_value_text(text) == ""
 
 
@@ -65,7 +62,6 @@ def test_value_only_fields_keep_full_text() -> None:
         "Revenue",
     ):
         assert split_label_and_value(text) == ("", text), text
-        assert not is_label_only(text)
 
 
 def test_replace_value_preserves_label() -> None:
@@ -96,14 +92,6 @@ def test_looks_like_label_false_when_only_stopwords() -> None:
     # Every token is a stopword ("to", "the") — no actual content word to
     # judge as a label term, so this shouldn't be treated as a label.
     assert _looks_like_label("to the") is False
-
-
-def test_require_value_returns_value_portion_when_present() -> None:
-    assert require_value("account_no", "Account No. XXXX-0472") == "XXXX-0472"
-
-
-def test_require_value_falls_back_to_full_text_for_header_only_field() -> None:
-    assert require_value("opening_balance", "Opening Balance") == "Opening Balance"
 
 
 def test_split_label_and_value_absorbs_extra_whitespace_after_separator() -> None:

@@ -48,14 +48,6 @@ export function previewKindForFilename(filename: string): PreviewKind {
   return 'unsupported';
 }
 
-export async function listDocuments(caseId: string): Promise<DocumentRecord[]> {
-  const response = await authFetch(`/documents?case_id=${encodeURIComponent(caseId)}`);
-
-  await assertOk(response, 'Failed to fetch documents');
-
-  return (await response.json()) as DocumentRecord[];
-}
-
 // Mirrors UpdateExtractedFieldsRequest in backend/app/models.py.
 export async function updateExtractedFields(
   documentId: string,
@@ -166,18 +158,6 @@ export async function updateDocumentType(
   });
 
   await assertOk(response, 'Failed to update document type');
-
-  return (await response.json()) as DocumentRecord;
-}
-
-export async function moveDocument(documentId: string, caseId: string): Promise<DocumentRecord> {
-  const response = await authFetch(`/documents/${documentId}/move`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ case_id: caseId }),
-  });
-
-  await assertOk(response, 'Failed to move document');
 
   return (await response.json()) as DocumentRecord;
 }

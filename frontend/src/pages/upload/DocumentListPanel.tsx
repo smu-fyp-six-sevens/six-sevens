@@ -17,7 +17,6 @@ export function DocumentListPanel({
   allExtractedSelected,
   approveError,
   approvedDocuments,
-  approvingDocumentId,
   cancelActionError,
   cancellingDocumentId,
   caseMatches,
@@ -46,7 +45,6 @@ export function DocumentListPanel({
   allExtractedSelected: boolean;
   approveError: string | null;
   approvedDocuments: DocumentRecord[];
-  approvingDocumentId: string | null;
   cancelActionError: string | null;
   cancellingDocumentId: string | null;
   caseMatches: Map<string, DocumentCaseMatch>;
@@ -210,7 +208,6 @@ export function DocumentListPanel({
                         {extractedDocuments.map((document) => {
                           const status = document.status;
                           const isTerminal = TERMINAL_DOCUMENT_STATUSES.has(status);
-                          const isApproving = approvingDocumentId === document.id;
                           const isStuck = isDocumentStuckProcessing(document);
                           const isCancellingRow = cancellingDocumentId === document.id;
                           const isRetryingRow = retryingDocumentId === document.id;

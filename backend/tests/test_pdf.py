@@ -17,14 +17,11 @@ from app.injection.pdf import (
     discover_fields_from_image,
     discover_fields_from_pdf,
     ensure_data_dirs,
-    extract_pdf_text,
     find_template_path,
     is_image_template,
     manipulate_field_region,
-    media_type_for,
     overlay_field_text,
     read_document_metadata,
-    read_pdf_metadata,
     replace_field_text,
     resolve_emphasis_font_file,
     resolve_family_font_file,
@@ -33,6 +30,11 @@ from app.injection.pdf import (
 )
 from app.injection import pdf as pdf_mod
 from app.injection.schemas import FieldValue
+
+
+def extract_pdf_text(pdf_path: Path) -> str:
+    with pymupdf.open(pdf_path) as doc:
+        return "\n".join(str(page.get_text()) for page in doc)
 
 
 def _field(**kwargs) -> FieldValue:
@@ -98,9 +100,7 @@ def test_dir_from_env_uses_override(monkeypatch, tmp_path: Path) -> None:
     assert pdf_mod._dir_from_env("INJECTION_DOCUMENTS_DIR", "document_templates") == tmp_path
 
 
-def test_media_type_and_image_suffix_helpers() -> None:
-    assert media_type_for(Path("note.bin")) == "application/octet-stream"
-    assert media_type_for(Path("a.PDF")) == "application/pdf"
+def test_image_suffix_helper() -> None:
     assert is_image_template(Path("scan.JPEG"))
     assert not is_image_template(Path("scan.pdf"))
 
@@ -210,9 +210,9 @@ def test_set_image_metadata_rejects_unknown_suffix(tmp_path: Path) -> None:
         pdf_mod._set_image_metadata(path, {"title": "x"})
 
 
-def test_pdf_metadata_alias(tmp_path: Path) -> None:
+def test_pdf_metadata_roundtrip(tmp_path: Path) -> None:
     path = _tiny_pdf(tmp_path / "meta.pdf")
-    meta = read_pdf_metadata(path)
+    meta = read_document_metadata(path)
     assert meta["title"] == "Fixture"
     set_document_metadata(path, {"title": "Updated", "author": "QA"})
     assert read_document_metadata(path)["title"] == "Updated"
