@@ -1,15 +1,10 @@
 """
-Shared classify-subgraph logic. `validate_agent_output` is a straight port
-of the Classifier chatflow's "Validate Output" code node (see
-backend/app/dify/Classifier (Chatflow) (2).yml) — that contract (allowed
-types, id_document self-fulfilment, never-raises parsing) doesn't depend on
-how the classification was arrived at, so it's unchanged.
+Shared classify-subgraph logic. `validate_agent_output` holds the output
+contract (allowed types, id_document self-fulfilment, never-raises parsing),
+which doesn't depend on how the classification was arrived at.
 
-The agent's system prompt (`AGENT_STATIC_PROMPT`/`agent_prompt_parts`) is
-NOT the Dify port anymore. Dify's Agent 3 was handed two already-computed
-results (rule_result, llm_result) and could only optionally call vision_llm;
-this graph only pre-computes rule_result deterministically (see
-LANGGRAPH_MIGRATION_PLAN.md — "only rule-based runs deterministically") and
+The agent's system prompt (`AGENT_STATIC_PROMPT`/`agent_prompt_parts`): this
+graph only pre-computes rule_result deterministically and
 gives the agent two real tools, `llm_classify_tool` and `vision_llm`, to
 call zero, one, or both of as it judges necessary — including calling
 neither when rule_result already includes a decisive `certain_type` (see
@@ -22,6 +17,10 @@ rule_result alone.
 from __future__ import annotations
 
 import json
+
+from ..llm_contracts import ClassifierReply
+from ..llm_io import parse_json_object, validate
+from ..models import DocumentType
 
 # Minimum extracted-text length worth classifying from text alone.
 MIN_USABLE_CHARS = 50
@@ -152,8 +151,7 @@ rule_result:
 
 
 #: Byte-stable across every document — the only part worth a cache_control
-#: breakpoint (see agent_prompt_parts below and LANGGRAPH_MIGRATION_PLAN.md
-#: section 5, "Prompt caching").
+#: breakpoint (see agent_prompt_parts below).
 AGENT_STATIC_PROMPT = _INTRO + _SHARED_BODY
 
 
@@ -179,55 +177,45 @@ def build_agent_prompt(rule_result: dict | None, extracted_text) -> str:
     return static + dynamic
 
 
-VALID_TYPES = {
-    "bank_statement", "certificate_of_incorporation", "payslip",
-    "passport", "nric", "fatca_crs_declaration", "certificate_of_incumbency",
-    "company_constitution", "proof_of_address", "source_of_wealth",
-    "credit_report", "list_of_loans", "notice_of_assessment", "unrecognised",
-}
+VALID_TYPES = {t.value for t in DocumentType}
 TYPE_ALIASES = {"other": "unrecognised"}
 REQUIREMENT_FOR_TYPE = {"passport": "id_document", "nric": "id_document"}
 VALID_REQUIREMENTS = (VALID_TYPES - {"unrecognised", "passport", "nric"}) | {"id_document"}
 
 
 def validate_agent_output(agent_output: str) -> dict:
-    """Port of the "Validate Output" code node — never raises."""
-    doc_type, confidence, evidence, reasoning = "", 0.0, [], ""
-    fulfilled_requirements: list[str] = []
-    flagged = True
+    """
+    The agent's closing answer as a classification — never raises. A field that can't be read falls back to
+    the safe value (no confidence, manual review), so one bad field doesn't lose the others.
+    `output_status` says how the reply read: "ok", "degraded" (a field was ignored) or "failed".
+    """
+    checked = validate(ClassifierReply, parse_json_object(agent_output or ""), site="classifier agent", raw=agent_output)
+    reasoning_prefix = ""
+    reply = checked.value
+    if reply is None:
+        reply = ClassifierReply()
+        reasoning_prefix = "Could not parse agent output as JSON."
 
-    try:
-        raw = agent_output or ""
-        parsed = json.loads(raw[raw.find("{") : raw.rfind("}") + 1])
-        candidate = (parsed.get("document_type") or "").strip().lower()
-        candidate = TYPE_ALIASES.get(candidate, candidate)
-        doc_type = candidate if candidate in VALID_TYPES else ""
-        confidence = max(0.0, min(1.0, float(parsed.get("confidence", 0.0))))
-        evidence = [str(item) for item in parsed.get("evidence", [])]
-        reasoning = str(parsed.get("reasoning", ""))
-        flagged = bool(parsed.get("needs_manual_review", True))
+    candidate = TYPE_ALIASES.get(reply.document_type.lower(), reply.document_type.lower())
+    doc_type = candidate if candidate in VALID_TYPES else ""
+    reasoning = reply.reasoning
+    flagged = reply.needs_manual_review
+    fulfilled_requirements = [item for item in reply.fulfilled_requirements if item in VALID_REQUIREMENTS]
 
-        raw_requirements = parsed.get("fulfilled_requirements", [])
-        if isinstance(raw_requirements, list):
-            fulfilled_requirements = [
-                str(item) for item in raw_requirements if str(item) in VALID_REQUIREMENTS
-            ]
+    own_requirement = REQUIREMENT_FOR_TYPE.get(doc_type, doc_type)
+    if not fulfilled_requirements and own_requirement in VALID_REQUIREMENTS:
+        fulfilled_requirements = [own_requirement]
 
-        own_requirement = REQUIREMENT_FOR_TYPE.get(doc_type, doc_type)
-        if not fulfilled_requirements and own_requirement in VALID_REQUIREMENTS:
-            fulfilled_requirements = [own_requirement]
-
-        if candidate and not doc_type:
-            reasoning = f"Agent returned unknown type '{candidate}'. {reasoning}"
-            flagged = True
-    except (ValueError, TypeError, AttributeError):
-        reasoning = "Could not parse agent output as JSON."
+    if candidate and not doc_type:
+        reasoning = f"Agent returned unknown type '{candidate}'. {reasoning}"
+        flagged = True
 
     return {
         "document_type": doc_type or None,
-        "confidence": round(confidence, 4),
-        "evidence": evidence,
+        "confidence": round(reply.confidence, 4),
+        "evidence": reply.evidence,
         "fulfilled_requirements": fulfilled_requirements,
         "needs_manual_review": flagged or not doc_type,
-        "reasoning": reasoning,
+        "reasoning": reasoning_prefix or reasoning,
+        "output_status": checked.status,
     }

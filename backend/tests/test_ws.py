@@ -130,7 +130,7 @@ def test_pushes_snapshot_on_connect() -> None:
     assert payload["case"]["documents_status"] == "in_progress"
     assert [doc["id"] for doc in payload["documents"]] == ["doc-1"]
     mock_case_repo.get_case.assert_called_with("case-1")
-    mock_doc_repo.list_documents.assert_called_with(case_id="case-1")
+    mock_doc_repo.list_documents.assert_called_with(case_id="case-1", include_fields=False)
 
 
 def test_closes_with_error_when_case_not_found() -> None:

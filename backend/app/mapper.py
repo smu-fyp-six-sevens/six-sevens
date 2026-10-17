@@ -6,7 +6,7 @@ individual_name to figure out who still needs an address on file.
 """
 from __future__ import annotations
 
-from typing import NamedTuple, Optional
+from typing import NamedTuple
 
 from .models import (
     DocumentRecord,
@@ -16,7 +16,7 @@ from .models import (
 )
 
 
-def _normalize_name(name: object) -> Optional[str]:
+def _normalize_name(name: object) -> str | None:
     # extracted_fields is LLM output, not a validated schema — individual_name
     # usually comes back as a single string, but a document naming several
     # people (e.g. a company constitution listing multiple directors) can
@@ -28,7 +28,7 @@ def _normalize_name(name: object) -> Optional[str]:
     return " ".join(name.strip().upper().split())
 
 
-def _normalize_id_number(id_number: object) -> Optional[str]:
+def _normalize_id_number(id_number: object) -> str | None:
     if not isinstance(id_number, str) or not id_number:
         return None
     return "".join(id_number.strip().upper().split())
@@ -257,7 +257,7 @@ def compute_id_document_identity_coverage(documents: list[DocumentRecord]) -> bo
     return total > 0 and covered == total
 
 
-def compute_id_document_missing_side(documents: list[DocumentRecord]) -> Optional[str]:
+def compute_id_document_missing_side(documents: list[DocumentRecord]) -> str | None:
     """
     "front" or "back" — whichever is missing — for the frontend's
     human-readable hint ("Back photo present, front missing."). Only

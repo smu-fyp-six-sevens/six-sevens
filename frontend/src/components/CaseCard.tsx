@@ -164,6 +164,13 @@ export default function CaseCard({
 
           <span className="case-sub">
             {caseRecord.type} · {caseRecord.status}
+            {caseRecord.riskLevel && (
+              <span
+                className={`risk-badge risk-badge--${caseRecord.riskLevel.toLowerCase()}`}
+              >
+                {caseRecord.riskLevel} risk
+              </span>
+            )}
           </span>
 
           <span className="case-created">

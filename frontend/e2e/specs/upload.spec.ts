@@ -265,6 +265,49 @@ test.describe('Upload documents @sprint1 @SCRUM-6', () => {
     expect(backend.requestsTo('POST', '/documents/upload-batch')).toHaveLength(1);
   });
 
+  test('DI-others-03b a file can be uploaded again once its document is deleted from the case @DI-others', async ({ page, backend }) => {
+    const theCase = await openCase(page, backend);
+
+    await browseFiles(page, [pdf('payslip.pdf')]);
+    await uploadButton(page).click();
+    await expect(fileRow(page, 'payslip.pdf').locator('.badge')).toHaveText('Uploaded');
+
+    const [uploaded] = backend.documents;
+    uploaded.status = 'analyzed';
+    await page.goto(`/cases/${theCase.greenlink_case_id}/documents/${uploaded.id}`);
+    await page.getByRole('button', { name: 'Document actions' }).click();
+    await page.getByRole('menuitem', { name: 'Delete document' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+    await expect(page).toHaveURL(`/cases/${theCase.greenlink_case_id}`);
+
+    await browseFiles(page, [pdf('payslip.pdf')]);
+    await uploadButton(page).click();
+
+    await expect(fileRow(page, 'payslip.pdf').locator('.badge')).toHaveText('Uploaded');
+    expect(backend.requestsTo('POST', '/documents/upload-batch')).toHaveLength(2);
+  });
+
+  test('DI-others-03c a file can be uploaded again once its document is deleted from another browser @DI-others', async ({ page, backend }) => {
+    const theCase = await openCase(page, backend);
+
+    await browseFiles(page, [pdf('payslip.pdf')]);
+    await uploadButton(page).click();
+    await expect(fileRow(page, 'payslip.pdf').locator('.badge')).toHaveText('Uploaded');
+    const table = page.locator('.documents-table');
+    await expect(table.getByText('payslip.pdf')).toBeVisible();
+
+    // Deleted elsewhere: this page only hears about it through the next snapshot.
+    backend.documents = [];
+    backend.push(theCase.id);
+    await expect(table.getByText('payslip.pdf')).toHaveCount(0);
+
+    await browseFiles(page, [pdf('payslip.pdf')]);
+    await uploadButton(page).click();
+
+    await expect(table.getByText('payslip.pdf')).toBeVisible();
+    expect(backend.requestsTo('POST', '/documents/upload-batch')).toHaveLength(2);
+  });
+
   test('DI-others-04 more than 20 files at once is refused and only the first 20 are kept @DI-others', async ({ page, backend }) => {
     await openCase(page, backend);
 

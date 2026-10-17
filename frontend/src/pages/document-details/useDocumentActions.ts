@@ -33,93 +33,37 @@ export function useDocumentActions({ document, setDocument, onDocumentDeleted }:
   const [deleteDocumentError, setDeleteDocumentError] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
-  async function handleApproveDocument() {
+  // One shape for approve, reject, cancel and retry: run the call, store the updated document or the error.
+  async function runDocumentAction(
+    action: (documentId: string) => Promise<DocumentRecord>,
+    setBusy: (busy: boolean) => void,
+    setError: (message: string | null) => void,
+    failureMessage: string,
+  ) {
     if (!document) {
       return;
     }
 
-    setIsApproving(true);
-    setApproveError(null);
+    setBusy(true);
+    setError(null);
 
     try {
-      const updated = await approveDocument(document.id);
-      setDocument(updated);
+      setDocument(await action(document.id));
     } catch (error) {
-      setApproveError(
-        error instanceof Error
-          ? error.message
-          : 'Failed to approve document.',
-      );
+      setError(error instanceof Error ? error.message : failureMessage);
     } finally {
-      setIsApproving(false);
+      setBusy(false);
     }
   }
 
-  async function handleRejectDocument() {
-    if (!document) {
-      return;
-    }
-
-    setIsRejecting(true);
-    setRejectError(null);
-
-    try {
-      const updated = await rejectDocument(document.id);
-      setDocument(updated);
-    } catch (error) {
-      setRejectError(
-        error instanceof Error
-          ? error.message
-          : 'Failed to reject document.',
-      );
-    } finally {
-      setIsRejecting(false);
-    }
-  }
-
-  async function handleCancelDocument() {
-    if (!document) {
-      return;
-    }
-
-    setIsCancelling(true);
-    setCancelError(null);
-
-    try {
-      const updated = await cancelDocument(document.id);
-      setDocument(updated);
-    } catch (error) {
-      setCancelError(
-        error instanceof Error
-          ? error.message
-          : 'Failed to cancel document.',
-      );
-    } finally {
-      setIsCancelling(false);
-    }
-  }
-
-  async function handleRetryDocument() {
-    if (!document) {
-      return;
-    }
-
-    setIsRetrying(true);
-    setRetryError(null);
-
-    try {
-      const updated = await retryDocument(document.id);
-      setDocument(updated);
-    } catch (error) {
-      setRetryError(
-        error instanceof Error
-          ? error.message
-          : 'Failed to retry document.',
-      );
-    } finally {
-      setIsRetrying(false);
-    }
-  }
+  const handleApproveDocument = () =>
+    runDocumentAction(approveDocument, setIsApproving, setApproveError, 'Failed to approve document.');
+  const handleRejectDocument = () =>
+    runDocumentAction(rejectDocument, setIsRejecting, setRejectError, 'Failed to reject document.');
+  const handleCancelDocument = () =>
+    runDocumentAction(cancelDocument, setIsCancelling, setCancelError, 'Failed to cancel document.');
+  const handleRetryDocument = () =>
+    runDocumentAction(retryDocument, setIsRetrying, setRetryError, 'Failed to retry document.');
 
   async function confirmDeleteDocument() {
     if (!document) return;

@@ -2,25 +2,18 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional, cast
 
 from .config import settings
 from .models import CaseRecord
 from .supabase_client import service_supabase_client, supabase_client
+from .supabase_rows import row as _row
 
 
-def _row(mapping: Any) -> dict:
-    """postgrest types a row as a loose JSON union rather than dict[str, Any]
-    — every row here is one we (or our own migrations) wrote, so this cast
-    just tells the type checker what's already true."""
-    return cast(dict, mapping)
-
-
-def create_case(company_name: Optional[str] = None) -> CaseRecord:
+def create_case(company_name: str | None = None) -> CaseRecord:
     now = datetime.now(timezone.utc)
 
     # greenlink_case_id is intentionally omitted — it's assigned by a DB
-    # trigger (see migrations/001_add_greenlink_case_id_generation.sql) and
+    # trigger (`set_greenlink_case_id`, which skips an id already taken) and
     # comes back populated in the inserted row's representation below.
     # dev is driven by which process created it (see settings.DEPLOYMENT_ENV
     # / IS_CLOUD_DEPLOYMENT), never set by the caller or flipped by hand —
@@ -43,7 +36,7 @@ def create_case(company_name: Optional[str] = None) -> CaseRecord:
     return CaseRecord(**_row(result.data[0]))
 
 
-def get_case(case_id: str) -> Optional[CaseRecord]:
+def get_case(case_id: str) -> CaseRecord | None:
     result = supabase_client.table("cases").select("*").eq("id", case_id).execute()
     if not result.data:
         return None
@@ -58,7 +51,7 @@ def list_cases(*, include_dev: bool = True) -> list[CaseRecord]:
     return [CaseRecord(**_row(row)) for row in result.data]
 
 
-def update_case(case_id: str, company_name: str) -> Optional[CaseRecord]:
+def update_case(case_id: str, company_name: str) -> CaseRecord | None:
     """A loan officer editing the case's own details (currently just company_name)."""
     update = {
         "company_name": company_name,

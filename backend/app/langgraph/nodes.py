@@ -12,14 +12,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import mimetypes
 
 from . import extract, text_cache, trace
 from .state import DocumentGraphState
 from .. import document_repository, extracted_fields_repository, storage_service
 from ..config import settings
 from .extraction_prompts import schema_field_names
-from ..ingestion.ingestion_service import ingest_document
+from ..ingestion.ingestion_service import ingest_document, content_type_from_filename
+from ..cpu_pool import run_cpu
 from ..models import DocumentStatus, RoutingStatus, compute_fulfilled_requirements
 
 logger = logging.getLogger("classifier_pipeline.langgraph.nodes")
@@ -54,6 +54,8 @@ async def persist_extracted_fields(document_id: str, document_type: str, extract
     querying individual fields). Shared by the analyzed and failed paths,
     since a failed escalation shouldn't discard whatever Extraction found.
     """
+    if extraction.get("output_error") and not extraction.get("extracted_fields"):
+        return  # nothing usable came back; keep whatever was stored before rather than wiping it
     extracted_fields = extraction.get("extracted_fields", {})
     field_confidences = extraction.get("field_confidences", {})
     extraction_confidence = extraction.get("confidence", 0.0)
@@ -61,12 +63,7 @@ async def persist_extracted_fields(document_id: str, document_type: str, extract
     # this is the point individual_address is actually known — an NRIC only
     # turns out to also fulfil proof_of_address once Extraction has run.
     fulfilled_requirements = compute_fulfilled_requirements(document_type, extracted_fields)
-    await asyncio.to_thread(
-        document_repository.update_extracted_fields,
-        document_id,
-        extraction_confidence,
-        fulfilled_requirements,
-    )
+    # Fields first: the documents update fires a live snapshot, which must already see the new fields.
     await asyncio.to_thread(
         extracted_fields_repository.replace_extracted_fields,
         document_id,
@@ -75,11 +72,12 @@ async def persist_extracted_fields(document_id: str, document_type: str, extract
         default_confidence=extraction_confidence,
         required_field_names=set(schema_field_names(document_type)),
     )
-
-
-def _content_type_from_filename(filename: str) -> str:
-    guessed, _ = mimetypes.guess_type(filename)
-    return guessed or "application/octet-stream"
+    await asyncio.to_thread(
+        document_repository.update_extracted_fields,
+        document_id,
+        extraction_confidence,
+        fulfilled_requirements,
+    )
 
 
 async def ingest_document_text(document_id: str, document) -> str:
@@ -96,10 +94,10 @@ async def ingest_document_text(document_id: str, document) -> str:
     except Exception as exc:
         raise IngestError(f"Failed to download document for extraction: {exc}") from exc
 
-    content_type = _content_type_from_filename(document.filename)
+    content_type = content_type_from_filename(document.filename)
 
     try:
-        ingestion_result = await asyncio.to_thread(
+        ingestion_result = await run_cpu(
             ingest_document, file_bytes, document.filename, content_type
         )
     except Exception as exc:
@@ -255,7 +253,12 @@ async def extract_node(state: DocumentGraphState) -> dict:
         if _is_below_threshold(classification.get("confidence")) or classification.get("needs_manual_review")
         else document_type
     )
-    extraction = await extract.run_extraction(schema_type, raw_text)
+    # Extracted with the generic schema because the classifier wasn't sure: say what it guessed, so extraction
+    # can object. Only on the first pass: after a reclassification the classifier has already been asked again.
+    guess = document_type if schema_type == "unrecognised" and document_type != "unrecognised" else None
+    extraction = await extract.run_extraction(
+        schema_type, raw_text, classified_as=guess if state.get("attempts", 0) == 0 else None
+    )
 
     # Persisted regardless of escalation — whatever fields Extraction
     # actually found are real data, worth keeping even if the document ends
@@ -269,11 +272,21 @@ async def extract_node(state: DocumentGraphState) -> dict:
         "dropped_empty_fields": extraction.get("dropped_empty_fields", []),
         "dropped_period_totals": extraction.get("dropped_period_totals", []),
         "escalation": extraction.get("escalation"),
+        "output_error": extraction.get("output_error"),
+        "output_status": extraction.get("output_status"),
+        "retried": extraction.get("retried", False),
         # The agent's own reasoning for each field it wasn't confident in — not persisted to the
         # extracted_fields table, visible here in the trace only (see extract.py's field_reasons).
         "low_confidence_reasons": extraction.get("field_reasons") or {},
     }
     trace.record(document_id, "extraction", document_type=document_type, schema=schema_type, **summary)
+    if extraction.get("output_error"):
+        # The reply was unusable: that says nothing about the document's type, so it is not reclassified.
+        return {
+            "extraction": summary,
+            "status": "failed",
+            "failure_reason": f"Extraction output could not be used: {extraction['output_error']}",
+        }
     # Whether an escalation here triggers a reclassify or a final FAILED is
     # graph.py's call (it also knows `attempts` vs MAX_RECLASSIFICATION_ATTEMPTS) —
     # this node only ever reports what Extraction found.

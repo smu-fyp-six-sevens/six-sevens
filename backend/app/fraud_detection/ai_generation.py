@@ -823,7 +823,7 @@ def _assess_image(
     try:
         image = Image.open(io.BytesIO(data))
         image.load()
-    except Exception as exc:  # noqa: BLE001 — an undecodable image is skipped, not fatal
+    except Exception as exc:
         logger.debug("document %s: could not decode image (xref %s): %s", document_id, xref, exc)
         return None
 
@@ -892,7 +892,7 @@ def _embedded_images(doc: pymupdf.Document, config: AIGenerationConfig) -> list[
                 continue
             try:
                 extracted = doc.extract_image(xref)
-            except Exception:  # noqa: BLE001 — skip a stream PyMuPDF can't extract
+            except Exception:
                 continue
             if not extracted or min(extracted.get("width", 0), extracted.get("height", 0)) < config.min_image_side:
                 continue
@@ -953,7 +953,7 @@ def check_ai_generation(
 
     try:
         doc = pymupdf.open(stream=file_bytes, filetype="pdf")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         reason = f"Could not run: the file could not be opened as a PDF ({type(exc).__name__}: {exc})."
         logger.warning("Document %s: %s", document_id, reason)
         return _unable(document_id, reason, config)

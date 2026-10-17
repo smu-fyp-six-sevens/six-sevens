@@ -1,12 +1,16 @@
+"""GIRO payments dated on days no bank processes GIRO, run by external validation."""
+
 from __future__ import annotations
 
-from app.fraud_detection.date_anomalies import check_date_anomalies
+import asyncio
+
+from app.fraud_detection.external_validation.runner import run_external_validation
 from app.fraud_detection.font_consistency import ExtractedField
 
 
 def _run(transactions: list[dict]):
     fields = [ExtractedField(field_name="transactions", field_type="array", field_value=transactions, confidence=0.99)]
-    result = check_date_anomalies("doc-1", fields, "bank_statement")
+    result = asyncio.run(run_external_validation("doc-1", "bank_statement", fields, []))
     return [f for f in result.findings if f.check_code == "BS.GIRO_BUSINESS_DAY"]
 
 

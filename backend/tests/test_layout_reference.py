@@ -180,7 +180,7 @@ def test_unsure_type_or_no_type_skips_the_reference() -> None:
 def test_committed_references_load_and_have_no_value_text() -> None:
     ref.load_references.cache_clear()
     for path in ref.REFERENCES_DIR.rglob("*.json"):
-        loaded = ref.ReferenceLayout.model_validate(json.loads(path.read_text()))
+        loaded = ref.ReferenceLayout.model_validate(json.loads(path.read_text(encoding="utf-8")))
         assert loaded.document_type == path.parent.name
         assert loaded.labels
         assert all(slot.text is None for slot in loaded.slots)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -34,6 +34,9 @@ IN_FLIGHT_STATUSES = frozenset({
     DocumentStatus.PROCESSING,
     DocumentStatus.EXTRACTING,
 })
+
+# An officer has approved the document: from approval through detection (locked against edits).
+APPROVED_STATUSES = frozenset({DocumentStatus.APPROVED, DocumentStatus.DETECTING, DocumentStatus.DETECTED})
 
 
 class RoutingStatus(str, Enum):
@@ -98,7 +101,7 @@ ADDRESS_PROOF_DOCUMENT_TYPES: set[str] = {
 }
 
 
-def is_personal_bank_statement(document_type: str | None, fields: Optional[dict]) -> bool:
+def is_personal_bank_statement(document_type: str | None, fields: dict | None) -> bool:
     """
     A bank_statement held by an individual rather than a company. The signal
     is who the extracted account holder is: an individual_name with no
@@ -116,7 +119,7 @@ def is_personal_bank_statement(document_type: str | None, fields: Optional[dict]
     )
 
 
-def counts_as_address_proof(document_type: str | None, fields: Optional[dict]) -> bool:
+def counts_as_address_proof(document_type: str | None, fields: dict | None) -> bool:
     """
     Whether an individual_address on this document counts as personal proof
     of address — see ADDRESS_PROOF_DOCUMENT_TYPES. A bank statement only
@@ -170,7 +173,7 @@ REQUIRED_DOCUMENT_TYPES: list[str] = [
 
 
 def compute_fulfilled_requirements(
-    document_type: str | None, extracted_fields: Optional[dict]
+    document_type: str | None, extracted_fields: dict | None
 ) -> list[str]:
     """
     Deterministic replacement for what the Classifier used to self-report
@@ -233,10 +236,10 @@ def compute_fulfilled_requirements(
 class CaseRecord(BaseModel):
     id: str
     greenlink_case_id: str
-    company_name: Optional[str] = None
+    company_name: str | None = None
     status: str = "open"
     submission_finalized: bool = False
-    finalized_at: Optional[datetime] = None
+    finalized_at: datetime | None = None
     recommended_additional_documents: list = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
@@ -298,7 +301,114 @@ class IdDocumentCoverage(BaseModel):
     # when there's exactly one identity in the case; with more than one, a
     # single hint can't describe each person's own gap. See
     # mapper.compute_id_document_missing_side.
-    missing_side: Optional[str] = None
+    missing_side: str | None = None
+
+
+RiskState = Literal["scored", "pending", "failed", "no_documents"]
+RiskLevel = Literal["Low", "Medium", "High", "Critical"]
+
+
+class ContributingFinding(BaseModel):
+    document_id: str
+    filename: str
+    document_type: str | None = None
+    finding_id: str
+    tool: str | None = None
+    severity: str
+    summary: str
+    rationale: str
+    # Points this finding added after the document's noise cap.
+    points: float
+    # The specialist kept the tool's finding without ever assessing it.
+    unreviewed: bool = False
+    # The finding's row in the flags table, set only when a specialist approved it as genuine.
+    flag_id: str | None = None
+    # See case_pipeline.models.FindingCategory: decides whether more evidence can reduce it.
+    category: str | None = None
+    # "cross_document" for a finding from the case analysis rather than one document's scan.
+    source: Literal["document", "cross_document"] = "document"
+
+
+class UnassessedCheck(BaseModel):
+    document_id: str
+    filename: str
+    tool: str | None = None
+    reason: str | None = None
+
+
+class CaseRisk(BaseModel):
+    """
+    The case's risk level, rolled up from its documents' detection
+    findings — see case_risk.compute_case_risk for how it's scored. Only
+    "scored" carries a level; the other states say why there isn't one yet.
+    """
+
+    state: RiskState
+    level: RiskLevel | None = None
+    # 0-100, anchored to level (see case_risk.SCORE_BANDS) — what officers see.
+    score: int | None = None
+    # The raw points total the level is banded from.
+    points: float | None = None
+    contributing_findings: list[ContributingFinding] = Field(default_factory=list)
+    # Checks that couldn't run — listed, never scored: not being able to
+    # check something isn't evidence of fraud.
+    unassessed_checks: list[UnassessedCheck] = Field(default_factory=list)
+    # Why the case got its level, e.g. which Critical rule fired.
+    reasons: list[str] = Field(default_factory=list)
+    documents_scanned: int = 0
+    documents_total: int = 0
+
+
+class RecommendationItem(BaseModel):
+    """
+    One thing a supporting document is requested for: a bank statement
+    transaction, or a line of a financial statement.
+    """
+
+    date: str | None = None
+    # The transaction description or line label, as printed.
+    description: str
+    # Signed as extracted: negative for a payment out, positive for a receipt.
+    amount: float
+    # A financial statement line's prior-year figure, where it has one.
+    prior_amount: float | None = None
+    # The supplier paid or customer paying, when the statement names one.
+    counterparty: str | None = None
+    reason: str
+    # The lines this one totals, e.g. a total's portions — shown as a table
+    # of these lines plus this one as its total row.
+    breakdown: list["RecommendationItem"] = Field(default_factory=list)
+
+
+class SupportingDocumentRecommendation(BaseModel):
+    """
+    A document the officer should request from the client, and why — see
+    supporting_documents.recommend_supporting_documents.
+    """
+
+    document_type: Literal[
+        "purchase_order", "sales_invoice", "related_party_repayment_evidence", "bank_loan_evidence"
+    ]
+    # What to ask for, e.g. "Purchase Order".
+    title: str
+    # Why: what the source document shows.
+    reason: str
+    # The ask, introducing items, e.g. "Request purchase orders for these transactions:".
+    request: str
+    source_document_id: str
+    source_filename: str
+    items: list[RecommendationItem] = Field(default_factory=list)
+
+
+class CaseAnalysisOverview(BaseModel):
+    """The latest per-case analysis in brief; the full result is GET /cases/{id}/analysis."""
+
+    run_id: str
+    status: Literal["running", "complete", "failed", "superseded"]
+    # The case's documents changed since this run read them.
+    stale: bool = False
+    finished_at: datetime | None = None
+    finding_count: int = 0
 
 
 class CaseSummary(CaseRecord):
@@ -320,6 +430,26 @@ class CaseSummary(CaseRecord):
     id_document_coverage: IdDocumentCoverage = Field(
         default_factory=lambda: IdDocumentCoverage(covered=0, total=0)
     )
+    # None when the documents' detection reports couldn't be loaded.
+    risk: CaseRisk | None = None
+    # Further evidence to request from the client; empty when nothing in the
+    # case needs any. Unlike recommended_additional_documents (missing
+    # checklist items), these come from what the documents themselves show.
+    supporting_document_recommendations: list[SupportingDocumentRecommendation] = Field(
+        default_factory=list
+    )
+    # Every approved document has been scanned, so the case analysis can be run.
+    analysis_ready: bool = False
+    # None when the case has never been analysed.
+    analysis: CaseAnalysisOverview | None = None
+
+
+class CaseListItem(CaseRecord):
+    """One row of the case queue: only what the list shows, so it needs no extracted fields."""
+
+    documents_status: CaseDocumentsStatus
+    # None when the documents' detection reports couldn't be loaded.
+    risk: CaseRisk | None = None
 
 
 class UpdateCaseRequest(BaseModel):
@@ -344,21 +474,21 @@ class UpdateCaseRequest(BaseModel):
 
 class DocumentRecord(BaseModel):
     id: str
-    case_id: Optional[str] = None
+    case_id: str | None = None
     filename: str
-    document_type: Optional[str] = None
+    document_type: str | None = None
     # The Classifier's confidence in document_type — set once at classification
     # and never overwritten by Extraction. See extraction_confidence below for
     # the separate, later stage's own confidence in the field values it found.
-    classification_confidence: Optional[float] = None
-    routing_status: Optional[RoutingStatus] = None
-    storage_path: Optional[str] = None
+    classification_confidence: float | None = None
+    routing_status: RoutingStatus | None = None
+    storage_path: str | None = None
     status: DocumentStatus
     retry_count: int = 0
     uploaded_at: datetime
-    queued_at: Optional[datetime] = None
-    processing_started_at: Optional[datetime] = None
-    failure_reason: Optional[str] = None
+    queued_at: datetime | None = None
+    processing_started_at: datetime | None = None
+    failure_reason: str | None = None
     evidence: list[str] = Field(default_factory=list)
     fulfilled_requirements: list[str] = Field(default_factory=list)
     # Not a documents-table column — document_repository.get_document/
@@ -367,19 +497,19 @@ class DocumentRecord(BaseModel):
     # {field_name: value}; routers/documents.py's GET and case_service's
     # case-list enrichment separately rewrap it as {value, confidence} for
     # the API response.
-    extracted_fields: Optional[dict] = None
+    extracted_fields: dict | None = None
     missing_required_fields: list[str] = Field(default_factory=list)
     # Extraction's own confidence in the values it pulled into extracted_fields
     # — distinct from (and no longer overwrites) the classifier's
     # `classification_confidence` above. Set to 1.0 when a loan officer
     # manually saves corrected fields.
-    extraction_confidence: Optional[float] = None
+    extraction_confidence: float | None = None
     # When a loan officer saved the fields of an Other ("unrecognised")
     # document. Its fields come from no schema, so approving one needs it —
     # unlike extraction_confidence, which Extraction can also report as 1.0.
-    fields_reviewed_at: Optional[datetime] = None
-    escalation_reason: Optional[str] = None
-    metadata: Optional[dict] = None
+    fields_reviewed_at: datetime | None = None
+    escalation_reason: str | None = None
+    metadata: dict | None = None
 
 
 class UpdateExtractedFieldsRequest(BaseModel):
@@ -437,7 +567,7 @@ class BulkDeleteResponse(BaseModel):
 
 class StuckDocument(BaseModel):
     id: str
-    case_id: Optional[str] = None
+    case_id: str | None = None
     status: DocumentStatus
     seconds_in_current_status: float = Field(
         ..., description="How long the document has sat in its current status"
@@ -466,6 +596,13 @@ def is_classification_confirmed(document: DocumentRecord) -> bool:
     if document.document_type in (None, "", "unrecognised"):
         return confidence >= 1.0
     return confidence >= settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
+
+
+def skips_detection(document: DocumentRecord) -> bool:
+    """Detection doesn't run on a document with no type at all. An approved
+    Other ("unrecognised") document is scanned: only the checks that need no
+    type run on it, the rest report nothing to check."""
+    return document.document_type in (None, "")
 
 
 def counts_towards_checklist(document: DocumentRecord) -> bool:

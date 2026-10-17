@@ -3,8 +3,6 @@ import type {
   DocumentRecord,
 } from '../../services/uploadService';
 import {
-  ADDITIONAL_DOCUMENT_TYPES,
-  REQUIRED_DOCUMENT_TYPES,
   formatRoutingOutcome,
 } from '../../services/uploadService';
 import type {
@@ -13,20 +11,8 @@ import type {
 import {
   MAX_FILE_SIZE_BYTES,
 } from '../../utils/fileValidation';
-import { humanizeFieldKey } from '../../utils/fieldLabels';
 
 const MAX_FILE_SIZE_MB = Math.floor(MAX_FILE_SIZE_BYTES / (1024 * 1024));
-
-export const REQUIREMENT_LABELS = new Map(
-  [...REQUIRED_DOCUMENT_TYPES, ...ADDITIONAL_DOCUMENT_TYPES].map((requirement) => [
-    requirement.value,
-    requirement.label,
-  ]),
-);
-
-export function isExtractionNotConfiguredFailure(reason: string | null | undefined): boolean {
-  return Boolean(reason?.startsWith('Extraction invocation failed'));
-}
 
 // Fields that carry structured data (arrays/objects) rather than a single display-able value.
 export const NON_DISPLAYED_FIELD_KEYS = new Set(['transactions']);
@@ -38,34 +24,6 @@ export function displayableFieldEntries(fields: Record<string, unknown>): [strin
 // True for a value the LLM returned as an array or nested object rather than a single scalar.
 export function isStructuredValue(value: unknown): boolean {
   return Array.isArray(value) || (typeof value === 'object' && value !== null);
-}
-
-// Renders any field value.
-export function formatFieldValue(value: unknown): string {
-  if (value === null || value === undefined) return '—';
-  if (Array.isArray(value)) {
-    return value.map((item) => formatFieldValue(item)).join('; ');
-  }
-  if (typeof value === 'object') {
-    return Object.entries(value as Record<string, unknown>)
-      .map(([key, nested]) => `${humanizeFieldKey(key)}: ${formatFieldValue(nested)}`)
-      .join(', ');
-  }
-  return String(value);
-}
-
-// Displayable fields whose value is structured (array/object).
-export function structuredFieldEntries(fields: Record<string, unknown>): [string, unknown][] {
-  return displayableFieldEntries(fields).filter(([, value]) => isStructuredValue(value));
-}
-
-export function fieldsToDraft(fields: Record<string, unknown>): Record<string, string> {
-  const draft: Record<string, string> = {};
-  for (const [key, value] of displayableFieldEntries(fields)) {
-    if (isStructuredValue(value)) continue;
-    draft[key] = value === null || value === undefined ? '' : String(value);
-  }
-  return draft;
 }
 
 // The case snapshot wraps each extracted field as {value, confidence}.

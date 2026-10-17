@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.address_matching import find_address_mismatches, normalize_address
+from app.case_pipeline.cross_document.address_matching import find_address_mismatches, normalize_address
 from app.models import DocumentRecord, DocumentStatus
 
 
@@ -88,8 +88,6 @@ def test_company_addresses_with_same_identity_are_compared() -> None:
     }, document_type="bank_statement")
 
     assert len(find_address_mismatches([first, second])) == 1
-
-
 def test_a_document_with_a_uen_and_one_with_only_the_company_name_are_compared() -> None:
     # A corporate bank statement prints the account holder's name but not its UEN.
     incumbency = _document("incumbency", {

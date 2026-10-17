@@ -1,0 +1,150 @@
+{
+  "consulted": [
+    {
+      "brief": "Credit report with printed figures: check fonts and layout.",
+      "dismissed": [],
+      "second_look": false,
+      "specialist": "layout_rendering",
+      "summary": "Reviewed within my expertise.",
+      "title": "Layout & Rendering Analyst",
+      "tools_called": [
+        "font_consistency_tool",
+        "image_tampering_tool"
+      ],
+      "uncertain": false
+    },
+    {
+      "brief": "Check the dates and the credit report's internal consistency.",
+      "dismissed": [],
+      "second_look": false,
+      "specialist": "content_validation",
+      "summary": "Reviewed within my expertise.",
+      "title": "Content Validation Analyst",
+      "tools_called": [
+        "spelling_tool"
+      ],
+      "uncertain": false
+    },
+    {
+      "brief": "Check the producing software and authorship metadata.",
+      "dismissed": [],
+      "second_look": true,
+      "specialist": "digital_authenticity",
+      "summary": "Reviewed within my expertise. | Second look: Reviewed within my expertise.",
+      "title": "Digital Authenticity Analyst",
+      "tools_called": [
+        "metadata_tool"
+      ],
+      "uncertain": true
+    }
+  ],
+  "document_id": "doc-1",
+  "document_type": "credit_report",
+  "findings": [
+    {
+      "ai_accepted": true,
+      "detected": {
+        "bold": false,
+        "font": "Courier",
+        "italic": false,
+        "size": 9.0,
+        "underline": false
+      },
+      "deviation_type": "font",
+      "expected": {
+        "bold": false,
+        "font": "Helvetica",
+        "italic": false,
+        "size": 9.0,
+        "underline": false
+      },
+      "field_name": null,
+      "flag_id": "flag-1",
+      "id": "font_consistency_tool-1",
+      "locations": [
+        {
+          "page": 1,
+          "text": "Transport allowance"
+        }
+      ],
+      "occurrence_count": 1,
+      "rationale": "Rated medium.",
+      "severity": "medium",
+      "specialists": [
+        "layout_rendering"
+      ],
+      "summary": "Font deviation on text: font 'Courier' vs. expected 'Helvetica' (1 occurrence).",
+      "tool": "font_consistency_tool",
+      "via_second_look": false
+    },
+    {
+      "ai_accepted": true,
+      "field": "creator",
+      "flag_id": "flag-2",
+      "id": "metadata_tool-2",
+      "rationale": "Rated medium.",
+      "reason": "Adobe Acrobat can edit existing PDF content, and a credit report should reach us exactly as its issuer generated it",
+      "severity": "medium",
+      "severity_hint": "medium",
+      "specialists": [
+        "digital_authenticity"
+      ],
+      "summary": "creator: Adobe Acrobat can edit existing PDF content, and a credit report should reach us exactly as its issuer generated it",
+      "tool": "metadata_tool",
+      "value": "Adobe Acrobat Pro (64-bit) 24.1",
+      "via_second_look": true
+    },
+    {
+      "ai_accepted": true,
+      "field": "producer",
+      "flag_id": "flag-3",
+      "id": "metadata_tool-3",
+      "rationale": "Rated medium.",
+      "reason": "Adobe Acrobat can edit existing PDF content, and a credit report should reach us exactly as its issuer generated it",
+      "severity": "medium",
+      "severity_hint": "medium",
+      "specialists": [
+        "digital_authenticity"
+      ],
+      "summary": "producer: Adobe Acrobat can edit existing PDF content, and a credit report should reach us exactly as its issuer generated it",
+      "tool": "metadata_tool",
+      "value": "Adobe Acrobat Pro (64-bit) 24.1",
+      "via_second_look": true
+    },
+    {
+      "ai_accepted": true,
+      "field": "author",
+      "flag_id": "flag-4",
+      "id": "metadata_tool-1",
+      "rationale": "Rated low.",
+      "reason": "Author looks like a test/template artefact rather than a real name \u2014 a genuine document's metadata wouldn't carry it",
+      "severity": "low",
+      "severity_hint": "low",
+      "specialists": [
+        "digital_authenticity"
+      ],
+      "summary": "author: Author looks like a test/template artefact rather than a real name \u2014 a genuine document's metadata wouldn't carry it",
+      "tool": "metadata_tool",
+      "value": "FraudTests",
+      "via_second_look": true
+    }
+  ],
+  "generated_at": "2026-10-14T00:00:00+00:00",
+  "nothing_to_check": [
+    {
+      "reason": "No embedded images found across 1 page(s), so there are no image regions to examine.",
+      "specialist": "layout_rendering",
+      "tool": "image_tampering_tool"
+    }
+  ],
+  "schema_version": 1,
+  "second_look": {
+    "from": "layout_rendering",
+    "question": "Please examine the PDF metadata for the producing software.",
+    "reason": "A restyled field alone could be a template quirk.",
+    "to": "digital_authenticity"
+  },
+  "summary": "One field is set in a different typeface, and the file was last saved in Adobe Acrobat by \"FraudTests\". Together these suggest the report was edited after it was issued.",
+  "unable_to_assess": [],
+  "verdict": "flagged"
+}

@@ -6,15 +6,22 @@ model's JSON into extracted fields/confidences lives here.
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 
 from ..config import settings
+from langchain_core.messages import AIMessage, HumanMessage
+
+from ..llm_contracts import ExtractionReply
+from ..llm_io import message_text, parse_json_object, salvage_entries, validate, was_cut_off
+from ..run_context import spend_model_call
 from .extraction_prompts import build_extraction_prompt, drop_empty_optional_fields
 from .. import telemetry
 
 logger = logging.getLogger("classifier_pipeline.langgraph.extract")
+
+# Bank statements list every transaction with a per-field confidence wrapper; 4096 truncated the JSON.
+_EXTRACTION_MAX_TOKENS = 16000
 
 
 def _split_prompt_for_caching(document_type: str, raw_text: str) -> tuple[str, str]:
@@ -22,23 +29,41 @@ def _split_prompt_for_caching(document_type: str, raw_text: str) -> tuple[str, s
     build_extraction_prompt always ends with the schema/instructions
     followed by "Document text:\n{raw_text}". Building the same prompt with
     an empty raw_text gives a byte-stable prefix (same document_type -> same
-    prefix across every document and run) to put cache_control on, per
-    LANGGRAPH_MIGRATION_PLAN.md section 5 ("schema first, raw_text last").
+    prefix across every document and run) to put cache_control on
+    (schema first, raw_text last).
     """
     prefix = build_extraction_prompt(document_type, "")
     return prefix, raw_text
 
 
-async def run_extraction(document_type: str, raw_text: str) -> dict:
+def _classifier_guess_hint(classified_as: str) -> str:
+    """
+    The generic schema doesn't name a type, so on its own it can only suggest a known category; it can't say
+    "this is not what the classifier guessed". This tells it the guess, so it can send the document back.
+    """
+    return (
+        f"The classifier guessed \"{classified_as}\" for this document but was not confident. "
+        f"Judge that yourself from the text. If the document clearly is not a {classified_as}, answer with the "
+        'escalation form: a "reason" describing what it actually appears to be (its heading, who it is from or '
+        'to, visible dates or reference numbers), an "evidence" list of lines copied verbatim from the text, and '
+        '"suggested_document_type" only if you are confident it is one of the known categories above (otherwise '
+        f'omit it). If it plausibly is a {classified_as}, leave escalation null.'
+    )
+
+
+async def run_extraction(document_type: str, raw_text: str, *, classified_as: str | None = None) -> dict:
     from ._anthropic import build_chat_anthropic
     from .cache_gate import cache_gate
 
     prefix, text = _split_prompt_for_caching(document_type, raw_text)
-    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, 4096)
+    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, _EXTRACTION_MAX_TOKENS)
+    # The hint is its own block after the cached prefix, so the prefix stays the same for every document.
+    hint = [{"type": "text", "text": _classifier_guess_hint(classified_as)}] if classified_as else []
     message = {
         "role": "user",
         "content": [
             {"type": "text", "text": prefix, "cache_control": {"type": "ephemeral"}},
+            *hint,
             {"type": "text", "text": text},
         ],
     }
@@ -48,50 +73,73 @@ async def run_extraction(document_type: str, raw_text: str) -> dict:
         # _split_prompt_for_caching): the first document of a given type in a
         # batch pays for the cache write, the rest of that type wait for it
         # rather than racing it. Different types never block each other.
+        spend_model_call("extraction")
         response = await cache_gate.run(f"extract:{document_type}", lambda: model.ainvoke([message]))
         telemetry.record_usage(span, response)
-        llm_output = response.content if isinstance(response.content, str) else str(response.content)
-        result = _drop_unprinted_numbers(parse_extraction_output(llm_output), raw_text)
+        reply, cut_off = message_text(response.content), was_cut_off(response)
+        result = parse_extraction_output(reply, cut_off=cut_off)
+        if result.get("output_error") and not cut_off:
+            # One retry: the model sees its own unreadable reply and is told to answer with the JSON only.
+            # Not for a cut-off reply, which would only be cut off again.
+            spend_model_call("extraction retry")
+            retry = await model.ainvoke([
+                HumanMessage(content=message["content"]),
+                AIMessage(content=reply.strip() or "(no reply)"),
+                HumanMessage(content="Your reply was not the JSON object described above. Reply again with ONLY that JSON object."),
+            ])
+            telemetry.record_usage(span, retry)
+            retried = parse_extraction_output(message_text(retry.content), cut_off=was_cut_off(retry))
+            result = {**retried, "retried": True}
+        result = _drop_unprinted_numbers(result, raw_text)
         result = _drop_empty_fields(result, document_type)
         result = _drop_period_totals(result, raw_text)
         span.set_attribute("dropped_unprinted_fields", len(result.get("dropped_unprinted_fields", [])))
         return result
 
 
-def parse_extraction_output(llm_output: str) -> dict:
-    cleaned = llm_output.strip()
+def _failed_extraction(reason: str, *, salvaged: dict | None = None) -> dict:
+    """
+    An extraction whose reply could not be used. This is not the model objecting to the document's type:
+    `output_error` is what stops the document, `escalation` stays empty so nothing is reclassified.
+    `salvaged` holds the complete fields of a reply that was cut off, kept so the officer can see them.
+    """
+    values, confidences, reasons = _split_field_confidences(salvaged or {})
+    return {
+        "extracted_fields": values,
+        "field_confidences": confidences,
+        "field_reasons": reasons,
+        "confidence": _average_field_confidence(confidences),
+        "escalation": None,
+        "output_error": reason,
+        "output_status": "failed",
+    }
 
-    # Strip reasoning-model <think>...</think> blocks (some models prepend
-    # chain-of-thought before the actual JSON answer)
-    cleaned = re.sub(r"<think>.*?</think>", "", cleaned, flags=re.DOTALL).strip()
 
-    if cleaned.startswith("```"):
-        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.IGNORECASE).strip()
+def parse_extraction_output(llm_output: str, *, cut_off: bool = False) -> dict:
+    """
+    The model's reply as an extraction, never raising. A reply that isn't an object with `extracted_fields`
+    comes back with `output_error` set and no fields (or only the complete ones from a cut-off reply).
+    """
+    parsed = parse_json_object(llm_output)
+    checked = validate(ExtractionReply, parsed, site="extraction", raw=llm_output)
+    reply = checked.value
+    # Valid JSON with neither fields nor an objection says nothing. An objection alone is the model
+    # sending the document back to the classifier, which is the point of an escalation.
+    if reply is None or (reply.extracted_fields is None and reply.escalation is None):
+        logger.error("Extraction reply unusable (cut off: %s): %r", cut_off, (llm_output or "")[:500])
+        if cut_off:
+            salvaged = salvage_entries(llm_output or "", "extracted_fields")
+            return _failed_extraction(
+                f"Extraction output was cut off at the token limit; {len(salvaged)} complete field(s) were kept "
+                "and the rest are missing.",
+                salvaged=salvaged,
+            )
+        # The model's prose often still holds the real finding (e.g. "no individual_name present on this
+        # document"), so an excerpt goes into the reason.
+        excerpt = re.sub(r"<think>.*?</think>", "", llm_output or "", flags=re.DOTALL).strip()[:500]
+        return _failed_extraction(f"Extraction did not return valid JSON. Its response was: {excerpt}")
 
-    try:
-        parsed = json.loads(cleaned)
-    except json.JSONDecodeError:
-        logger.error("Extraction LLM returned non-JSON output: %r", llm_output[:500])
-        # The model's prose often still contains the real finding (e.g. "no
-        # individual_name present on this document") even though it failed
-        # to wrap that in the required JSON — surfacing an excerpt here
-        # (rather than a fixed, contentless message) is what actually
-        # reaches the reclassify pass and the eventual FAILED reason.
-        excerpt = (cleaned or llm_output).strip()[:500]
-        return {
-            "extracted_fields": {},
-            "field_confidences": {},
-            "field_reasons": {},
-            "confidence": 0.0,
-            "escalation": {
-                "reason": f"Extraction did not return valid JSON. Its response was: {excerpt}"
-            },
-        }
-
-    raw_fields = parsed.get("extracted_fields", {})
-    extracted_fields, field_confidences, field_reasons = _split_field_confidences(
-        raw_fields if isinstance(raw_fields, dict) else {}
-    )
+    extracted_fields, field_confidences, field_reasons = _split_field_confidences(reply.extracted_fields or {})
 
     return {
         "extracted_fields": extracted_fields,
@@ -99,14 +147,11 @@ def parse_extraction_output(llm_output: str) -> dict:
         # Only for fields the agent itself scored low — see _FIELD_WRAPPER_INSTRUCTIONS.
         # Not persisted anywhere; surfaced only in this run's langgraph trace (nodes.py's extract_node).
         "field_reasons": field_reasons,
-        # The document-level confidence is derived from the individual
-        # fields' own confidences (averaged), not the LLM's separate
-        # top-level self-report — a single overall number is easy for the
-        # model to phone in without actually reasoning about each field,
-        # whereas averaging the per-field numbers it already committed to
-        # ties the document score to the same judgements it made per field.
+        # The document-level confidence is derived from the individual fields' own confidences (averaged),
+        # not the model's separate top-level self-report, which is easy to phone in.
         "confidence": _average_field_confidence(field_confidences),
-        "escalation": parsed.get("escalation"),
+        "escalation": reply.escalation,
+        "output_status": checked.status,
     }
 
 
@@ -267,7 +312,9 @@ def _split_field_confidences(raw_fields: dict) -> tuple[dict, dict, dict]:
         if isinstance(entry, dict) and "value" in entry:
             values[name] = entry["value"]
             confidence = entry.get("confidence")
-            confidences[name] = float(confidence) if isinstance(confidence, (int, float)) else None
+            # A number from 0 to 1; anything else (text, a boolean, NaN) is "unknown", never a made-up score.
+            number = confidence if isinstance(confidence, (int, float)) and not isinstance(confidence, bool) else None
+            confidences[name] = max(0.0, min(1.0, float(number))) if number is not None and number == number else None
             reason = entry.get("low_confidence_reason")
             if isinstance(reason, str) and reason.strip():
                 reasons[name] = reason.strip()

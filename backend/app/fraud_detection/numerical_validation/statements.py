@@ -14,20 +14,17 @@ from .common import (
     _field_number,
     _CURRENCY_SYMBOLS,
     _CURRENCY_WORDS,
-    REFERENCE_DATA,
     _MONEY_TOLERANCE,
     CheckResult,
     _as_number,
-    _bank_reference,
     _finding,
     _materiality_note,
     _money,
     _parse_field_date,
     _rows,
-    _skip_reference,
     row_amount,
 )
-from ..sg_reference.corporate_tax import TAX_RATE, Exemption, Rebate, exemptions_for, rebates_for
+from ..external_validation.sg_reference.corporate_tax import TAX_RATE
 from .models import BenfordAnalysis, BenfordDigit, NumericalFinding
 from .registry import Num, check
 
@@ -319,84 +316,6 @@ def _check_fee_schedule(*, transactions: Any) -> CheckResult:
     return findings, None
 
 
-# What each identifier looks like, after dropping spaces and punctuation. A value of another shape (a phone
-# number, an address) is a field bound to the wrong role, not evidence about the bank, so it's skipped.
-_UEN_SHAPE = r"\d{8,9}[A-Z]|[TSR]\d{2}[A-Z]{2}\d{4}[A-Z]"
-_IDENTIFIER_SHAPES = {
-    # UEN: business (8 digits + letter), local company (9 digits + letter), other entities (T08LL0001A).
-    "registration_no": re.compile(rf"^(?:{_UEN_SHAPE})$"),
-    # IRAS's pre-UEN GST number (MR-8500180-3, M2-0012345-6), or the UEN for newer registrants.
-    "gst_no": re.compile(rf"^(?:M[A-Z0-9]\d{{7}}[A-Z0-9]|{_UEN_SHAPE})$"),
-    # SWIFT BIC: 4-letter bank code, 2-letter country, 2-character location, optional 3-character branch.
-    "bic": re.compile(r"^[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?$"),
-}
-
-
-# A label printed in front of the identifier, e.g. "Co. Reg. No.", "GST Registration No", "SWIFT Code", "UEN".
-_IDENTIFIER_LABEL_RE = re.compile(
-    r"^\s*(?:co\.?\s*reg(?:istration)?|company\s+reg(?:istration)?|gst\s*reg(?:istration)?|swift|bic|uen)"
-    r"(?:[\s.]*(?:no|number|code))?[\s.:]*",
-    re.IGNORECASE,
-)
-
-
-def _identifier_in(stated: Any, shape: re.Pattern[str]) -> str | None:
-    """The identifier in a printed value, spaces and punctuation dropped: the whole value ("MR 8500180 3"),
-    the part after a colon, or the value without its label ("Co. Reg. No. 196800306E"). Never a single word
-    picked out of other text: an ordinary word such as "OVERSEAS" has the shape of a BIC."""
-    text = str(stated)
-    candidates = [text, text.rsplit(":", 1)[-1], _IDENTIFIER_LABEL_RE.sub("", text, count=1)]
-    for candidate in candidates:
-        normalised = re.sub(r"[^A-Z0-9]", "", candidate.upper())
-        if shape.match(normalised):
-            return normalised
-    return None
-
-
-@check(code="BS.BANK_IDENTIFIERS", applies=("bank_statement",))
-def _check_bank_identifiers(
-    *, bank_name: Any, bank_registration_no: Any = None, bank_gst_no: Any = None, bic_code: Any = None,
-) -> CheckResult:
-    """The bank's registration number, GST number and SWIFT BIC printed on the statement must match the
-    reference table for the named bank. A mismatch is a fabricated or mistyped identifier."""
-    reference = _bank_reference(bank_name)
-    if reference is None:
-        return [], _skip_reference("BS.BANK_IDENTIFIERS", f"bank_identifiers[{bank_name!r}]")
-    findings = []
-    ran_any = False
-    wrong_shape = []
-    for field_name, stated, key, label, length in (
-        ("bank_registration_no", bank_registration_no, "registration_no", "registration number", None),
-        ("bank_gst_no", bank_gst_no, "gst_no", "GST registration number", None),
-        # BIC: compare bank + country + location only; the optional 3-letter branch suffix doesn't change the institution.
-        ("bic_code", bic_code, "bic", "SWIFT BIC", 8),
-    ):
-        expected = reference.get(key)
-        if not stated or not expected:
-            continue
-        stated_full = _identifier_in(stated, _IDENTIFIER_SHAPES[key])
-        if stated_full is None:
-            wrong_shape.append(f"{field_name} ({str(stated)[:40]!r} isn't shaped like a {label})")
-            continue
-        ran_any = True
-        stated_norm = stated_full[:length]
-        expected_norm = re.sub(r"[^A-Z0-9]", "", str(expected).upper())[:length]
-        if stated_norm != expected_norm:
-            findings.append(_finding(
-                "BS.BANK_IDENTIFIERS", "impossible",
-                f"The statement prints {bank_name}'s {label} as {stated}, but the bank's actual {label} is {expected}",
-                field=field_name, stated=str(stated), expected=str(expected),
-            ))
-    if not ran_any:
-        reason = "no printed identifier has a reference value to compare against"
-        if wrong_shape:
-            reason = "not compared: " + "; ".join(wrong_shape)
-        return [], skipped(reason=reason)
-    return findings, None
-
-
-# Verified against real extracted transaction descriptions (e.g. "4933-XXXX-XXXX-6411"): 4 digits, two masked
-# groups, 4 digits. The second alternative covers a straight run of mask characters ending in the last 4 digits.
 _CARD_RE = re.compile(r"\b\d{4}-[Xx*]{4}-[Xx*]{4}-\d{4}\b|\b[Xx*]{4,}\d{4}\b")
 
 
@@ -821,139 +740,3 @@ def _magnitude(row: Any) -> float | None:
     """An expense line's size, whichever sign it was printed with."""
     amount = row_amount(row)
     return abs(amount) if amount is not None else None
-
-
-def _compute_noa(eci: float, exemption: Exemption, rebate: Rebate | None) -> dict[str, float]:
-    first = min(eci, exemption.first_cap)
-    nxt = min(max(eci - exemption.first_cap, 0), exemption.next_cap)
-    exempt_first = round(first * exemption.first_pct)
-    exempt_next = round(nxt * exemption.next_pct)
-    after = eci - exempt_first - exempt_next
-    tax = round(after * TAX_RATE, 2)
-    rebate_amount = round(min(tax * rebate.pct, rebate.cap), 2) if rebate else 0.0
-    # A company that received the CIT Rebate Cash Grant has the rebate printed net of it (nothing if
-    # the rebate is no more than the grant), so both readings are genuine.
-    grant = rebate.cash_grant if rebate else 0
-    rebate_net = round(rebate_amount - grant, 2) if rebate_amount > grant else 0.0
-    return {"exempt_first": exempt_first, "exempt_next": exempt_next, "after": after,
-            "tax": tax, "rebate": rebate_amount, "payable": round(tax - rebate_amount, 2),
-            "rebate_net": rebate_net, "payable_net": round(tax - rebate_net, 2)}
-
-
-def _noa_year(year_of_assessment: Any) -> int | None:
-    match = re.search(r"\d{4}", str(year_of_assessment or ""))
-    return int(match.group(0)) if match else None
-
-
-def _noa_findings(
-    eci: float, tax_payable: float, year: int, lines: list[tuple[str, float | None]],
-    exemption: Exemption, rebate: Rebate | None,
-) -> list[NumericalFinding]:
-    """The chain checked under one exemption scheme and one rebate version."""
-    computed = _compute_noa(eci, exemption, rebate)
-    findings = []
-
-    def _find_line(pattern: str) -> float | None:
-        regex = re.compile(pattern)
-        return next((amount for label, amount in lines if regex.search(label)), None)
-
-    for code_label, pattern, expected in (
-        ("first", r"^first\b", computed["exempt_first"]),
-        ("next", r"^next\b", computed["exempt_next"]),
-    ):
-        stated_tier = _find_line(pattern)
-        if stated_tier is not None and abs(stated_tier - expected) > _MONEY_TOLERANCE:
-            findings.append(_finding(
-                "NOA.EXEMPTION_TIERS", "impossible",
-                f"The \"{code_label}\" exemption tier should be {_money(expected)} for ECI {_money(eci)} under the "
-                f"YA {year} {exemption.name}, but the computation shows {_money(stated_tier)}",
-                field="tax_computation", stated=_money(stated_tier), expected=_money(expected),
-            ))
-
-    stated_after = _find_line(r"chargeable income after")
-    if stated_after is not None and abs(stated_after - computed["after"]) > _MONEY_TOLERANCE:
-        findings.append(_finding(
-            "NOA.CHARGEABLE_AFTER_EXEMPTION", "impossible",
-            f"Chargeable income after exemption should be {_money(computed['after'])} for ECI {_money(eci)}, but the "
-            f"computation shows {_money(stated_after)}",
-            field="tax_computation", stated=_money(stated_after), expected=_money(computed["after"]),
-        ))
-
-    stated_tax = _find_line(r"^tax on\b") or _find_line(r"^tax assessed\b")
-    if stated_tax is not None and abs(stated_tax - computed["tax"]) > _MONEY_TOLERANCE:
-        findings.append(_finding(
-            "NOA.TAX_AT_RATE", "impossible",
-            f"Tax at {TAX_RATE:.0%} should be {_money(computed['tax'])}, but the computation shows "
-            f"{_money(stated_tax)}",
-            field="tax_computation", stated=_money(stated_tax), expected=_money(computed["tax"]),
-        ))
-
-    def _matches_either(stated: float, *expected: float) -> bool:
-        return any(abs(stated - e) <= _MONEY_TOLERANCE for e in expected)
-
-    stated_rebate = _find_line(r"\brebate\b")
-    if stated_rebate is not None and not _matches_either(abs(stated_rebate), computed["rebate"], computed["rebate_net"]):
-        if rebate is None:
-            terms = f"YA {year} has no CIT Rebate"
-        else:
-            net_note = (f" or {_money(computed['rebate_net'])} net of the {_money(rebate.cash_grant)} cash grant"
-                        if rebate.cash_grant else "")
-            terms = (f"Tax rebate should be {_money(computed['rebate'])}{net_note} ({rebate.pct:.0%}, capped at "
-                     f"{_money(rebate.cap)} for YA {year})")
-        findings.append(_finding(
-            "NOA.REBATE", "impossible",
-            f"{terms}, but the computation shows {_money(stated_rebate)}",
-            field="tax_computation", stated=_money(stated_rebate), expected=_money(computed["rebate"]),
-        ))
-
-    if not _matches_either(tax_payable, computed["payable"], computed["payable_net"]):
-        findings.append(_finding(
-            "NOA.PAYABLE", "impossible",
-            f"Tax payable should be {_money(computed['payable'])} for ECI {_money(eci)} under the YA {year} "
-            f"{exemption.name}" + (" and CIT Rebate" if rebate else "") + f", but the notice states {_money(tax_payable)}",
-            field="tax_payable", stated=_money(tax_payable), expected=_money(computed["payable"]),
-        ))
-
-    # An amended assessment nets the new figure against the previous one:
-    # payable - previous = additional tax due (positive) or discharged (negative).
-    previous = _find_line(r"previous assessment")
-    settled = _find_line(r"discharged")
-    additional = _find_line(r"additional tax|balance payable")
-    if previous is not None and (settled is not None or additional is not None):
-        difference = tax_payable - abs(previous)
-        stated_diff = -abs(settled) if settled is not None else abs(additional or 0.0)
-        if abs(difference - stated_diff) > _MONEY_TOLERANCE:
-            findings.append(_finding(
-                "NOA.AMENDMENT", "impossible",
-                f"Tax payable {_money(tax_payable)} less the previous assessment {_money(abs(previous))} is "
-                f"{_money(difference)}, but the notice states "
-                f"{'a discharge of ' + _money(abs(stated_diff)) if settled is not None else 'additional tax of ' + _money(stated_diff)}",
-                field="tax_computation", stated=_money(abs(stated_diff)), expected=_money(abs(difference)),
-            ))
-    return findings
-
-
-@check(code="NOA.PAYABLE", applies=("notice_of_assessment",))
-def _check_noa_chain(
-    *, eci: Num, tax_payable: Num, year_of_assessment: Any, tax_computation: Any = None,
-) -> CheckResult:
-    """The tax computation runs as one chain from ECI to payable tax: exemption tiers, chargeable income after
-    exemption, tax at the rate, rebate, payable, and any amendment, under IRAS's rules for the year of
-    assessment (sg_reference/corporate_tax.py).
-
-    A company can be on the partial or the start-up tax exemption, and YA 2026 has two genuine rebate
-    versions: the notice passes if any combination fits, and otherwise is reported against the one that fits
-    best."""
-    year = _noa_year(year_of_assessment)
-    rebates = rebates_for(year) if year is not None else None
-    if year is None or rebates is None:
-        return [], _skip_reference("NOA.PAYABLE", f"corporate tax rules for YA {year_of_assessment}")
-
-    lines = [(str(r.get("line", "")).strip().lower(), _field_number(r, "amount")) for r in _rows(tax_computation)]
-    candidates = [
-        _noa_findings(eci, tax_payable, year, lines, exemption, rebate)
-        for exemption in exemptions_for(year)
-        for rebate in (rebates or (None,))
-    ]
-    # min() keeps the first of equals: the partial exemption and the current rebate win ties.
-    return min(candidates, key=len), None
