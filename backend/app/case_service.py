@@ -352,7 +352,9 @@ def get_case_match_for_case(case_id: str) -> CaseMatchResult | None:
     return check_case_match(case, documents)
 
 
-def get_case_match_for_document(document_id: str) -> DocumentCaseMatch | None:
+def get_case_match_for_document(
+    document_id: str, *, include_identity_mismatches: bool = False
+) -> DocumentCaseMatch | None:
     """
     One document's entry from its case's match check. The document is
     appended to its case's document list if the fetch didn't happen to
@@ -367,7 +369,9 @@ def get_case_match_for_document(document_id: str) -> DocumentCaseMatch | None:
         return None
     if all(d.id != document.id for d in documents):
         documents.append(document)
-    result = check_case_match(case, documents)
+    result = check_case_match(
+        case, documents, include_identity_mismatches=include_identity_mismatches
+    )
     return next((match for match in result.documents if match.document_id == document_id), None)
 
 

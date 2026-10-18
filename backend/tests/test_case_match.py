@@ -353,8 +353,12 @@ def test_pairwise_name_mismatch_flags_and_cites_nric_and_personal_bank_statement
         {"account_holder_name": "Goh Ka Yeo"},
         "personal-bank-statement",
     )
+    nric = nric.model_copy(update={"status": DocumentStatus.DETECTED})
+    bank_statement = bank_statement.model_copy(update={"status": DocumentStatus.DETECTED})
     result = check_case_match(
-        _case(), [_incumbency(incumbency_fields), *_corroborating(3), nric, bank_statement]
+        _case(),
+        [_incumbency(incumbency_fields), *_corroborating(3), nric, bank_statement],
+        include_identity_mismatches=True,
     )
 
     nric_match = _by_id(result, nric.id)
@@ -379,6 +383,60 @@ def test_pairwise_name_mismatch_flags_and_cites_nric_and_personal_bank_statement
     assert statement_finding.other_filename == nric.filename
     assert nric_finding.document_value == "Goh Ka Yee"
     assert nric_finding.case_value == "Goh Ka Yeo"
+
+
+@pytest.mark.story("SCRUM-253", "pairwise identity matching without an incumbency")
+def test_pairwise_name_mismatch_runs_without_an_incumbency() -> None:
+    nric = _doc(
+        "nric",
+        {"nric_number": "S1234567A", "individual_name": "Goh Ka Yee"},
+        "director-nric",
+    )
+    bank_statement = _doc(
+        "bank_statement",
+        {"account_holder_name": "Goh Ka Yeo"},
+        "personal-bank-statement",
+    )
+    nric = nric.model_copy(update={"status": DocumentStatus.APPROVED})
+    bank_statement = bank_statement.model_copy(update={"status": DocumentStatus.DETECTING})
+
+    result = check_case_match(
+        _case(), [nric, bank_statement], include_identity_mismatches=True
+    )
+
+    assert result.incumbency.status == IncumbencyStatus.MISSING
+    nric_match = _by_id(result, nric.id)
+    statement_match = _by_id(result, bank_statement.id)
+    assert nric_match.case_mismatch
+    assert statement_match.case_mismatch
+    assert any(
+        comparison.check == "individual_name"
+        and comparison.other_document_id == bank_statement.id
+        for comparison in nric_match.comparisons
+    )
+    assert any(
+        comparison.check == "individual_name"
+        and comparison.other_document_id == nric.id
+        for comparison in statement_match.comparisons
+    )
+
+
+def test_pairwise_identity_mismatches_are_not_in_live_case_match() -> None:
+    nric = _doc(
+        "nric",
+        {"nric_number": "S1234567A", "individual_name": "Goh Ka Yee"},
+        "director-nric",
+    )
+    bank_statement = _doc(
+        "bank_statement",
+        {"account_holder_name": "Goh Ka Yeo"},
+        "personal-bank-statement",
+    )
+
+    result = check_case_match(_case(), [nric, bank_statement])
+
+    assert not _by_id(result, nric.id).case_mismatch
+    assert not _by_id(result, bank_statement.id).case_mismatch
 
 
 def test_pairwise_name_comparison_treats_case_and_order_as_equal() -> None:
