@@ -444,7 +444,7 @@ def test_digital_authenticity_owns_the_ai_generation_tool() -> None:
 
 
 def _side_field(value: str) -> ExtractedField:
-    return ExtractedField(field_name="document_side", field_value=value, confidence=0.95, page_number=None, bbox=None)
+    return ExtractedField(field_name="document_side", field_type="string", field_value=value, confidence=0.95)
 
 
 @pytest.mark.parametrize("raw, expected", [('"front"', "front"), ("back", "back"), ("single", None), (None, None)])
