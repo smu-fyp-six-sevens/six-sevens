@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 from .config import settings
+from .holder import holder_kind
 
 
 class DocumentStatus(str, Enum):
@@ -104,19 +105,13 @@ ADDRESS_PROOF_DOCUMENT_TYPES: set[str] = {
 def is_personal_bank_statement(document_type: str | None, fields: dict | None) -> bool:
     """
     A bank_statement held by an individual rather than a company. The signal
-    is who the extracted account holder is: an individual_name with no
-    company_name (see extraction_prompts.EXTRACTION_SCHEMAS's
-    "bank_statement" entry and its guidance). Before extraction has run —
+    is the stored entity_type, or for statements stored before it existed an
+    individual_name with no company_name (see holder.holder_kind). Before extraction has run —
     no fields yet — it stays the corporate default, matching how a
     proof_of_address/source_of_wealth document is treated until its fields
     are known.
     """
-    fields = fields or {}
-    return (
-        document_type == DocumentType.BANK_STATEMENT.value
-        and bool(fields.get("individual_name"))
-        and not fields.get("company_name")
-    )
+    return document_type == DocumentType.BANK_STATEMENT.value and holder_kind(document_type, fields) == "individual"
 
 
 def counts_as_address_proof(document_type: str | None, fields: dict | None) -> bool:

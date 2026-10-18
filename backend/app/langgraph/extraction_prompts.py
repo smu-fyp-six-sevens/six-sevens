@@ -33,14 +33,13 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # unconditionally there, and transactions are always generated —
         # true across the DBS/UOB and OCBC templates alike.
         #
-        # company_name is the account holder only on a CORPORATE statement
-        # (doc_gen_scripts/corporate_bank_statement). A PERSONAL statement
-        # (personal_proof_of_residence/docgen_bankstatement_ocbc_personal.py)
-        # names an individual account holder and their residential address
-        # instead, with no company at all — so company_name moved out of
-        # required, and individual_name/individual_address are here, since
-        # models.compute_fulfilled_requirements uses exactly this
-        # company-vs-individual split to tell the two apart.
+        # The account holder is a company on a CORPORATE statement
+        # (doc_gen_scripts/corporate_bank_statement) and a person on a
+        # PERSONAL one (personal_proof_of_residence/docgen_bankstatement_ocbc_personal.py).
+        # Extraction reads it as entity_name/entity_address/entity_type, and
+        # extract._apply_entity_fields stores it as company_name/company_address
+        # (corporate) or individual_name/individual_address (individual), plus
+        # entity_type — models.compute_fulfilled_requirements uses that split.
         "required": ["bank_name", "account_number", "transactions"],
         # statement_period_* through holds (not doc_gen-verified — added for
         # fraud_detection.numerical_validation's BS.* checks, e.g.
@@ -67,7 +66,7 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # statement (header or footer) — not the account holder's. Read by
         # BS.BANK_IDENTIFIERS.
         "additional": [
-            "company_name", "individual_name", "individual_address",
+            "entity_name", "entity_address", "entity_type",
             "statement_period_start", "statement_period_end", "overdraft_limit",
             "opening_balance", "ledger_balance", "available_balance", "holds",
             "total_credits", "total_debits", "bank_registration_no", "bank_gst_no",
@@ -235,7 +234,7 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # gst_amount / charges_before_gst: read by POA.GST (IRAS's rate for
         # the bill date), only where the bill prints a GST line.
         "additional": [
-            "individual_name", "individual_address", "company_name", "company_address",
+            "entity_name", "entity_address", "entity_type",
             "billing_period_end", "bill_date", "usage_this_period", "consumption_trend",
             "previous_balance", "payment_received", "outstanding_balance",
             "current_charges", "total_payable", "due_date", "contract_end_date",
@@ -427,7 +426,17 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
 # list of line items in the source document, not a single scalar. Each entry
 # spells out the exact per-item keys for that field, grounded in what the
 # matching doc_gen_scripts generator actually renders.
+# Who holds an account or is billed: said once, stored as company_*/individual_* by extract._apply_entity_fields.
+_ENTITY_GUIDANCE = (
+    'Say who holds the account (or is billed) with three fields. "entity_type" is "corporate" when a '
+    'company holds it and "individual" when a named person does. "entity_name" is that holder, never the '
+    "bank's or the utility's own name. \"entity_address\" is the holder's address as printed in the customer "
+    "block, never the bank's or utility's own address (letterhead or footer). A name ending in PTE LTD, LTD, "
+    "LLP, BHD or INC is a company."
+)
+
 EXTRA_FIELD_GUIDANCE: dict[str, str] = {
+    "proof_of_address": _ENTITY_GUIDANCE,
     "company_constitution": (
         'For "subscribers", its "value" should be an array of objects — '
         "one per subscriber/shareholder/director named in the "
@@ -551,16 +560,7 @@ EXTRA_FIELD_GUIDANCE: dict[str, str] = {
         "every transaction you can find in the text — do not summarise, truncate, "
         "or only include a sample. Its \"confidence\" should reflect your overall "
         "confidence in the transaction list as a whole.\n\n"
-        "Bank statements come in two kinds, told apart by who holds the account. "
-        'For a CORPORATE statement (account held by a company), set "company_name" '
-        "to the account-holding company and leave \"individual_name\" and "
-        '"individual_address" null. For a PERSONAL statement (account held by a '
-        'named individual), set "individual_name" to the account holder and '
-        '"individual_address" to their address as printed in the statement\'s '
-        'customer block, and leave "company_name" null. "company_name" is never '
-        'the bank\'s own name — that belongs in "bank_name" — and the address '
-        "of the bank itself (e.g. in the letterhead or footer) is never the "
-        "account holder's \"individual_address\"."
+        + _ENTITY_GUIDANCE
     ),
     "credit_report": (
         'For "accounts", its "value" should be an array of objects — one per '

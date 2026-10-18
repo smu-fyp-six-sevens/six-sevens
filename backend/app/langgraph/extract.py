@@ -10,6 +10,7 @@ import logging
 import re
 
 from ..config import settings
+from ..holder import ENTITY_DOCUMENT_TYPES, ENTITY_TYPES, looks_corporate
 from langchain_core.messages import AIMessage, HumanMessage
 
 from ..llm_contracts import ExtractionReply
@@ -90,6 +91,7 @@ async def run_extraction(document_type: str, raw_text: str, *, classified_as: st
             telemetry.record_usage(span, retry)
             retried = parse_extraction_output(message_text(retry.content), cut_off=was_cut_off(retry))
             result = {**retried, "retried": True}
+        result = _apply_entity_fields(result, document_type)
         result = _drop_unprinted_numbers(result, raw_text)
         result = _drop_empty_fields(result, document_type)
         result = _drop_period_totals(result, raw_text)
@@ -213,6 +215,53 @@ def _drop_unprinted_numbers(result: dict, raw_text: str) -> dict:
         logger.info("Dropped extracted fields not printed in the document: %s", dropped)
         result["confidence"] = _average_field_confidence(result.get("field_confidences", {}))
     result["dropped_unprinted_fields"] = dropped
+    return result
+
+
+_ENTITY_FIELDS = ("entity_name", "entity_address", "entity_type")
+
+
+def _apply_entity_fields(result: dict, document_type: str) -> dict:
+    """
+    Stores the holder read as entity_name / entity_address / entity_type under the names the app reads:
+    company_name and company_address for a corporate, individual_name and individual_address for an
+    individual, plus entity_type. A type that contradicts the name (an "individual" called "X PTE LTD") is
+    resolved to corporate and left at low confidence, so the officer reviews it.
+    """
+    if document_type not in ENTITY_DOCUMENT_TYPES:
+        return result
+    fields = result.get("extracted_fields") or {}
+    confidences = result.setdefault("field_confidences", {})
+    reasons = result.setdefault("field_reasons", {})
+    taken = {name: fields.pop(name, None) for name in _ENTITY_FIELDS}
+    entity_confidence = {name: confidences.pop(name, None) for name in _ENTITY_FIELDS}
+    for name in _ENTITY_FIELDS:
+        reasons.pop(name, None)
+    name, address, raw_type = taken["entity_name"], taken["entity_address"], taken["entity_type"]
+    if name in (None, "") and address in (None, ""):
+        return result
+
+    stated = str(raw_type or "").strip().lower()
+    stated = stated if stated in ENTITY_TYPES else None
+    corporate_name = looks_corporate(name)
+    if stated == "individual" and corporate_name:
+        kind, type_confidence, reason = "corporate", 0.5, "The holder was read as an individual but its name is a company's."
+    elif stated is None:
+        kind, type_confidence = ("corporate" if corporate_name else "individual"), 0.6
+        reason = "The kind of holder was not stated; it was taken from the name."
+    else:
+        kind, type_confidence, reason = stated, entity_confidence["entity_type"], None
+
+    prefix = "company" if kind == "corporate" else "individual"
+    for source, target in (("entity_name", f"{prefix}_name"), ("entity_address", f"{prefix}_address")):
+        if taken[source] not in (None, ""):
+            fields[target] = taken[source]
+            confidences[target] = entity_confidence[source]
+    fields["entity_type"] = kind
+    confidences["entity_type"] = type_confidence
+    if reason:
+        reasons["entity_type"] = reason
+    result["confidence"] = _average_field_confidence(confidences)
     return result
 
 

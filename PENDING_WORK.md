@@ -10,7 +10,7 @@ Open work only. The product roadmap (automatic case analysis, the 5-service Pub/
   `cases.recommended_additional_documents`. Today that column is always empty and the API reports the
   missing checklist types under the same name; resolve the naming when this is built.
 - **Case-level flags.** Cross-document and identity findings (a name or address that differs between
-  documents, `case_identity_match`, case-analysis findings) are deliberately not in the per-document
+  documents, case-analysis findings) are deliberately not in the per-document
   `flags` table. They need their own module.
 - **Automatic case analysis.** The officer clicks it. The gate on every document completion, supersede with
   a run-id fence, debounce and re-run cap (`CROSS_DOCUMENT_AND_RISK_PLAN.md` Step 0) are not built.

@@ -29,8 +29,8 @@ findings it dismisses.
 **Flags.** After the report is saved, plain code writes each finding a specialist assessed and did not
 dismiss to the `flags` table (`app/flags_repository.py`), one row per finding, before the document becomes
 `detected`. The model never writes it. A finding nobody assessed stays in the report (and counts towards
-the case risk as "unreviewed") but is not a flag, and case-level findings (`case_identity_match`, and any
-cross-document tool) are never flags. Each flag's UUID is stamped on the finding as `flag_id`, so the
+the case risk as "unreviewed") but is not a flag, and case-level findings (cross-document analysis, including the identity
+comparisons) are never flags. Each flag's UUID is stamped on the finding as `flag_id`, so the
 report, the `flags` row and `risk_scores.flag_ids` agree. A retry replaces the document's open flags; the
 delete goes through the service client because the backend role may only read and insert (RLS). A failed
 write is recorded on the trace as `flags_error` and does not fail the run.
@@ -80,8 +80,10 @@ AI-generated and lists each indicator's value and contribution.
 
 `case_match.py` — the upload check: verifies each case document's company/individuals against the
 certificate of incumbency (UEN/name/ID fuzzy matching), so a document that belongs to another case is
-caught. It is not a fraud signal and is not part of the per-case analysis. A mismatch it finds is still
-added to that document's detection report as a `case_identity_match` finding.
+caught. It is not a fraud signal. A mismatch it finds sends the document to manual review and is not
+added to the detection report. Comparing one person across documents (the old pairwise check) now runs in
+the per-case analysis, in `cross_document/deterministic.py`. Reports stored before that change may still
+carry `case_identity_match` findings; they still display and score.
 
 ## 1B. Case pipeline — `backend/app/case_pipeline/`
 
@@ -97,11 +99,13 @@ decisions: `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
 | `cross_document/evidence.py` | The case as the analysis sees it: dossier (protected fields removed, capped at 24,000 characters), masked identifiers, the ledger of every ref id issued in a run, and the run's model-call counter |
 | `cross_document/bias.py` | What the analysis may never reason from: protected field names and the text patterns for them and their proxies. Used by the dossier, the tools, the hypothesis screen and the verifier |
 | `cross_document/agents.py`, `graph.py`, `verify.py` | Plan (at most 3 hypotheses, each with the checks to run), run the checks (code, no model), judge all hypotheses in one call, then verify each verdict in code. Two Sonnet calls in total, a hard budget (`MAX_MODEL_CALLS_PER_RUN`). Both answer through a forced tool call and share one cached system prompt (rules, bias policy, tool catalogue). A hypothesis is dropped before any check runs if it touches a protected attribute or is about one document with nothing computed behind it. `verify.py` keeps a verdict only if its citations are tool-issued, its refutation probe looked at something the claim doesn't rest on, it cites at least two documents or a computed fact, and its text is clear of protected attributes |
-| `cross_document/tools/` | The read-only evidence tools: `reading.py`, `transactions.py`, `comparisons.py`, `consistency.py` (company name and address consistency) |
+| `cross_document/tools/` | The read-only evidence tools: `reading.py`, `transactions.py` (including repeated payments, card usage, recurring payments), `comparisons.py` (including `compare_linked_people`), `consistency.py` (company name and address consistency) |
 | `cross_document/company_identity.py`, `address_matching.py` | The company-name and address matching behind the consistency tools |
-| `risk/case_risk.py` | Deterministic score, level and findings. Called only by an analysis run. Each contributing finding's id is `<document id prefix>:<tool>-<n>`, and carries the `flag_id` of its flag when it has one |
+| `risk/case_risk.py` | Deterministic score, level and findings. Called only by an analysis run. A finding with a check code and stated value that appears on several documents scores once (the copies score 0, `repeat_of` / `also_on`); Critical counts only documents whose high finding scores. Each contributing finding's id is `<document id prefix>:<tool>-<n>`, and carries the `flag_id` of its flag when it has one |
 | `risk/store.py` | Writes one `risk_scores` row per completed run (with the flags' UUIDs in `flag_ids`) and reads the latest per case through the `latest_risk_scores` view. The case list reads that; nothing else computes a score |
-| `risk/outlook.py` | The agent's evidence requests and the deterministic what-if re-scoring |
+| `cross_document/deterministic.py`, `identity_pairs.py` | The comparisons that always run first: company name, address, UEN, a person's ID and name across documents. One finding per difference, also given to the agent grouped by value |
+| `risk/outlook.py` | The agent's evidence requests (finding ids may be a unique prefix) and the deterministic what-if re-scoring |
+| `risk/additional_documents.py` | Merges the checklist rules and the agent's requests into one `additional_documents` list, marks each as score-changing or not, and records why a list is empty |
 | `risk/summary.py` | Grounded plain-language summary, with a deterministic fallback |
 | `risk/supporting_documents.py` | Rule-based supporting-document recommendations (bank statement trades, related-party balances, borrowing growth). Run only inside an analysis and stored on the run |
 
