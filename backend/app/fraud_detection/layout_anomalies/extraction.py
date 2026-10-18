@@ -13,7 +13,7 @@ from .common import (
     ParagraphType, _SIGNATURE_RE, _SIGNATURE_ZONE_RATIO, _TITLE_PAGE_SHORT_FRACTION,
     _TITLE_PAGE_SHORT_RATIO, _union_bbox,
 )
-from ..pdf_pages import page as _page, pages as _pages
+from ..shared.pdf_pages import page as _page, pages as _pages
 
 
 def _open_document(file_bytes: bytes) -> pymupdf.Document:

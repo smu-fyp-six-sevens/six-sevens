@@ -10,6 +10,7 @@ import {
   lowestFieldConfidence,
 } from '../../services/uploadService';
 import type {
+  AdditionalDocuments,
   CaseAnalysisOverview,
   CaseRisk,
   DocumentCaseMatch,
@@ -38,6 +39,7 @@ export function useCaseSnapshot(caseId: string) {
   const [supportingDocumentRecommendations, setSupportingDocumentRecommendations] = useState<
     SupportingDocumentRecommendation[]
   >([]);
+  const [additionalDocuments, setAdditionalDocuments] = useState<AdditionalDocuments | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
   // Whether documentDetails holds this case's documents yet, not the empty start or the previous case's.
   const [snapshotLoaded, setSnapshotLoaded] = useState(false);
@@ -106,6 +108,7 @@ export function useCaseSnapshot(caseId: string) {
         setAnalysisReady(caseSummary.analysis_ready ?? false);
         setAnalysisOverview(caseSummary.analysis ?? null);
         setSupportingDocumentRecommendations(caseSummary.supporting_document_recommendations ?? []);
+        setAdditionalDocuments(caseSummary.additional_documents ?? null);
       },
       (connected) => {
         if (isMountedRef.current) setWsConnected(connected);
@@ -167,6 +170,7 @@ export function useCaseSnapshot(caseId: string) {
     analysisReady,
     analysisOverview,
     supportingDocumentRecommendations,
+    additionalDocuments,
     wsConnected,
     snapshotLoaded,
     caseMatches,

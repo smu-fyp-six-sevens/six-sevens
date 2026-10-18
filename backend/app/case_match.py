@@ -717,6 +717,17 @@ def _match_document(
         )
     # The company or a person isn't the case's: the document looks misfiled, so an officer reviews it.
     mismatches = [c for c in comparisons if c.outcome == CheckOutcome.MISMATCH]
+    company_mismatches = [
+        comparison for comparison in mismatches
+        if comparison.check in {"company_uen", "company_name"}
+    ]
+    if company_mismatches:
+        return result(
+            DocumentMatchStatus.MANUAL_REVIEW,
+            "; ".join(comparison.reason for comparison in company_mismatches),
+            comparisons,
+            case_mismatch=True,
+        )
     if mismatches:
         return result(
             DocumentMatchStatus.MANUAL_REVIEW,
@@ -774,112 +785,15 @@ def _unique_person_pairs(
     ]
 
 
-def _pairwise_person_findings(
-    left_doc: DocumentRecord,
-    left_person: _Person,
-    right_doc: DocumentRecord,
-    right_person: _Person,
-) -> list[tuple[str, FieldComparison, str]]:
-    """Return reciprocal comparisons for differences in a linked person pair."""
-    findings: list[tuple[str, FieldComparison, str]] = []
-    left_id, right_id = _normalize_id(left_person.id_number), _normalize_id(right_person.id_number)
-    if left_id and right_id and left_id != right_id:
-        for doc, person, other_doc, other in (
-            (left_doc, left_person, right_doc, right_person),
-            (right_doc, right_person, left_doc, left_person),
-        ):
-            value, other_value = person.id_number or "", other.id_number or ""
-            comparison = FieldComparison(
-                check="individual_id",
-                outcome=CheckOutcome.MISMATCH,
-                document_field=person.id_field,
-                document_value=value,
-                other_document_id=other_doc.id,
-                other_filename=other_doc.filename,
-                case_value=other_value,
-                reason=(
-                    f"ID {value} in {doc.filename} differs from ID {other_value} "
-                    f"in {other_doc.filename}"
-                ),
-            )
-            findings.append((doc.id, comparison, comparison.reason))
-
-    left_name, right_name = left_person.name, right_person.name
-    if left_name and right_name and not individual_names_match(left_name, right_name):
-        for doc, person, name, other_doc, other_name in (
-            (left_doc, left_person, left_name, right_doc, right_name),
-            (right_doc, right_person, right_name, left_doc, left_name),
-        ):
-            comparison = FieldComparison(
-                check="individual_name",
-                outcome=CheckOutcome.MISMATCH,
-                document_field=person.name_field,
-                document_value=name,
-                other_document_id=other_doc.id,
-                other_filename=other_doc.filename,
-                case_value=other_name,
-                reason=(
-                    f'Name "{name}" in {doc.filename} differs from '
-                    f'"{other_name}" in {other_doc.filename}'
-                ),
-            )
-            findings.append((doc.id, comparison, comparison.reason))
-    return findings
+# Used by the cross-document agent (case_pipeline/cross_document/identity_pairs.py) to link one person across documents.
+Person = _Person
+COMPANY_ONLY_DOCUMENT_TYPES = _COMPANY_ONLY_DOCUMENT_TYPES
+normalize_id = _normalize_id
 
 
-def _apply_pairwise_person_checks(
-    matches: list[DocumentCaseMatch],
-    documents: list[DocumentRecord],
-    incumbency_doc: DocumentRecord | None,
-) -> list[DocumentCaseMatch]:
-    """Add cross-document identity mismatches to both documents in each pair."""
-    docs_with_people = [
-        doc for doc in documents
-        if doc.extracted_fields
-        and doc.id != (incumbency_doc.id if incumbency_doc else None)
-        and doc.document_type not in _COMPANY_ONLY_DOCUMENT_TYPES
-    ]
-    findings_by_id: dict[str, list[tuple[FieldComparison, str]]] = {}
-
-    for index, left_doc in enumerate(docs_with_people):
-        for right_doc in docs_with_people[index + 1:]:
-            for left_person, right_person in _unique_person_pairs(
-                _people(left_doc.extracted_fields or {}),
-                _people(right_doc.extracted_fields or {}),
-            ):
-                for doc_id, comparison, reason in _pairwise_person_findings(
-                    left_doc, left_person, right_doc, right_person
-                ):
-                    findings_by_id.setdefault(doc_id, []).append((comparison, reason))
-
-    updated: list[DocumentCaseMatch] = []
-    for match in matches:
-        additions = findings_by_id.get(match.document_id, [])
-        if not additions:
-            updated.append(match)
-            continue
-        reasons = [reason for _, reason in additions]
-        # A comparison with no other document was made against the case itself: that is the review case.
-        belongs_elsewhere = any(
-            comparison.outcome == CheckOutcome.MISMATCH and comparison.other_document_id is None
-            for comparison in match.comparisons
-        )
-        prior_reason = (
-            match.reason
-            if match.status in {DocumentMatchStatus.MISMATCH, DocumentMatchStatus.MANUAL_REVIEW}
-            else ""
-        )
-        updated.append(match.model_copy(update={
-            "status": (
-                DocumentMatchStatus.MANUAL_REVIEW
-                if belongs_elsewhere else DocumentMatchStatus.MISMATCH
-            ),
-            "can_proceed_to_fraud_detection": not belongs_elsewhere,
-            "case_mismatch": True,
-            "reason": "; ".join(([prior_reason] if prior_reason else []) + reasons),
-            "comparisons": [*match.comparisons, *(comparison for comparison, _ in additions)],
-        }))
-    return updated
+def linked_people(left_fields: dict, right_fields: dict) -> list[tuple[Person, Person]]:
+    """The people two documents both name, linked only when each is the other's single best match."""
+    return _unique_person_pairs(_people(left_fields), _people(right_fields))
 
 
 def _rejected(doc: DocumentRecord) -> DocumentCaseMatch:
@@ -905,8 +819,6 @@ def check_case_match(case: CaseRecord, documents: Iterable[DocumentRecord]) -> C
         else _rejected(doc)
         for doc in documents
     ]
-    if verification.status == IncumbencyStatus.VERIFIED:
-        matches = _apply_pairwise_person_checks(matches, active, incumbency_doc)
     return CaseMatchResult(
         case_id=case.id,
         incumbency=verification,

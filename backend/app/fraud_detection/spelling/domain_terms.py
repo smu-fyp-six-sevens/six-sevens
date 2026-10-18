@@ -41,6 +41,10 @@ _RAW_DOMAIN_TERMS: set[str] = {
     # Bank statement shorthand ("Txn Charges", "Funds Trf", "Inward Cr")
     "txn", "txns", "trf", "xfer", "cr", "chq", "acct", "accts", "amt",
     "bal", "ibg", "giro", "atm", "atms", "pmt",
+    # Singapore address shorthand (cross_document/address_matching.py's _ADDRESS_ABBREVIATIONS, plus
+    # the common Malay street words), and the MSF ComLink+ scheme named on credit reports
+    "blk", "bldg", "ave", "av", "cres", "ctrl", "cwealth", "jln", "ln", "lwr", "nth", "sth", "upp",
+    "ter", "rd", "pk", "lor", "bt", "kg", "tg", "comlink",
     # Finance/legal words missing from SymSpell's general dictionary
     "nonfinancial", "drawdown", "drawdowns", "undrawn", "annum", "payables",
     "receivables", "lodgment", "lodgments", "unformatted", "chargee",

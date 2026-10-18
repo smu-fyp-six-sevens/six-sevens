@@ -45,6 +45,12 @@ async def verify_against_registries(
     skipped = [s for _, skips in outcomes for s in skips]
     # A lookup ran if it produced a finding or wasn't skipped.
     nothing_ran = not any(found or not skips for found, skips in outcomes)
+    if nothing_ran and not findings and document_type == "nric" and fields.get("document_side") == "front":
+        return RegistryResult(
+            document_id=document_id, document_type=document_type, findings=[], skipped_checks=[],
+            unable_to_assess=True,
+            unable_to_assess_reason="Nothing to check: the front of an NRIC has no address; it is printed on the back",
+        )
     return RegistryResult(
         document_id=document_id,
         document_type=document_type,

@@ -142,7 +142,7 @@ uploaded → queued → processing → extracting → analyzed ──approve─�
 | `extracted_fields` | one row per field per document |
 | `langgraph_trace` | one JSON trace per document: pipeline steps and the **full detection report** |
 | `flags` | the per-document findings a specialist approved, one row each, with severity, check, description and evidence |
-| `case_analysis_runs` | each run: findings, outlook, summary, **risk**, **supporting documents**, audit, step trace |
+| `case_analysis_runs` | each run: findings (including `xd-det-N` ones from code), `consistent_checks`, outlook, summary, **risk**, **supporting documents**, merged **additional documents**, audit, step trace |
 | `risk_scores` (+ `latest_risk_scores` view) | one row per completed run: score, level, reasoning, and `flag_ids` (real `flags` UUIDs) |
 | Storage bucket `documents` | the uploaded files |
 

@@ -101,6 +101,10 @@ export interface CaseRiskFinding {
   category?: string | null;
   // "cross_document" for a finding from the case analysis rather than one document's scan.
   source?: 'document' | 'cross_document';
+  // The same finding on other documents is scored once. On the copy that scores: how many other documents carry it.
+  also_on?: number;
+  // On a copy that scores 0: the finding_id of the one that scored.
+  repeat_of?: string | null;
 }
 
 export interface CaseRisk {
@@ -166,6 +170,8 @@ export interface CaseRequirementCoverage {
   risk: CaseRisk | null;
   // Empty when nothing in the case needs further evidence.
   supporting_document_recommendations: SupportingDocumentRecommendation[];
+  // The same requests merged with the agent's; null for a run from before it existed.
+  additional_documents?: AdditionalDocuments | null;
   // Every approved document has been scanned, so the case analysis can be run.
   analysis_ready?: boolean;
   // The latest per-case analysis in brief; null when the case was never analysed.
@@ -274,6 +280,30 @@ export interface CaseOption {
   company_name: string | null;
 }
 
+// Mirrors AdditionalDocument in backend/app/models.py.
+export interface AdditionalDocument {
+  title: string;
+  why: string;
+  source: 'checklist' | 'finding';
+  addresses: string[];
+  // False when more evidence cannot change the score.
+  affects_score: boolean;
+  score_if_supports: number | null;
+  level_if_supports: string | null;
+  // The checklist rule's detail, for checklist items.
+  recommendation: SupportingDocumentRecommendation | null;
+}
+
+// Mirrors AdditionalDocuments in backend/app/models.py.
+export interface AdditionalDocuments {
+  items: AdditionalDocument[];
+  reason: 'none_needed' | 'no_reducible_findings' | 'model_failed' | 'budget' | null;
+  current_score: number | null;
+  current_level: string | null;
+  best_case_score: number | null;
+  best_case_level: string | null;
+}
+
 // Mirrors CaseAnalysisOverview in backend/app/models.py.
 export interface CaseAnalysisOverview {
   run_id: string;
@@ -328,6 +358,8 @@ export interface CaseAnalysis {
   findings: CrossDocFinding[];
   outlook: RiskOutlook | null;
   summary: string | null;
+  // Comparisons that found the documents agree, e.g. "uen is the same on a.pdf, b.pdf".
+  consistent_checks?: string[];
   // Tool calls, models and counts of the run.
   audit?: { tool_calls?: unknown[]; [key: string]: unknown };
   // Step-by-step log of the run (debug); written as the run goes.

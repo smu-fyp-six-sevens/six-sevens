@@ -29,8 +29,8 @@ findings it dismisses.
 **Flags.** After the report is saved, plain code writes each finding a specialist assessed and did not
 dismiss to the `flags` table (`app/flags_repository.py`), one row per finding, before the document becomes
 `detected`. The model never writes it. A finding nobody assessed stays in the report (and counts towards
-the case risk as "unreviewed") but is not a flag, and case-level findings (`case_identity_match`, and any
-cross-document tool) are never flags. Each flag's UUID is stamped on the finding as `flag_id`, so the
+the case risk as "unreviewed") but is not a flag, and case-level findings (cross-document analysis, including the identity
+comparisons) are never flags. Each flag's UUID is stamped on the finding as `flag_id`, so the
 report, the `flags` row and `risk_scores.flag_ids` agree. A retry replaces the document's open flags; the
 delete goes through the service client because the backend role may only read and insert (RLS). A failed
 write is recorded on the trace as `flags_error` and does not fail the run.
@@ -46,12 +46,13 @@ Comparing a document with the rest of its case is not done here: that is the per
 | `layout_anomalies/` | Indentation/alignment/margin/spacing deviations. Package: `common.py` (thresholds, result models, finding helpers), `extraction.py` (text layer/OCR into blocks), `structure.py` (roles, comparable groups, columns), `indentation.py`, `line_shifts.py`, `anchors.py`, `alignment.py`, `spacing.py`, `margins.py`, `signals.py` (filtering and merging), `profiles.py` (per-document-type rules, applied only when classification confidence meets `CLASSIFICATION_CONFIDENCE_THRESHOLD`; currently `nric`), `reference.py` (compares a standard form with a curated reference layout in `references/<document_type>/`, built with `scripts/build_layout_reference.py` from two or more genuine copies; steps aside when the reference does not fit; references exist for FATCA, NOA, certificates of incumbency and incorporation, credit report, constitution, NRIC and passport, built from the generated templates and specimens; photos and scans are compared after OCR, scaled to the reference); `__init__.py` runs `check_layout_anomalies` | 147 + 20 (`test_layout_profiles.py`) + 22 (`test_layout_reference.py`) |
 | `layout_anomalies/text_overlay.py` | Overlapping text boxes (watermarks repeated on several pages are skipped; long tall-and-narrow boxes are taken as vertical text and skipped; confidence scales with the overlap). Linear per page, so a 3,000-line statement takes milliseconds. Run by `check_layout_anomalies`; its `Text Overlay` findings appear in the layout result | 22 |
 | `numerical_validation/` | Deterministic arithmetic/identity checks over extracted fields. Package: `registry.py` (the `@check` decorator; each check's inputs come from its signature), `identity_company.py`, `statements.py`, `records.py`, `casts.py` (statement arithmetic), `common.py`, `models.py`, `runner.py` (applies bindings and builds the result) | — |
-| `metadata_analysis.py` | File-embedded metadata (author/producer/create-modify dates) tamper signals | 54 |
-| `date_anomalies.py` | Date extraction/labeling and logical date consistency (future dates, end-before-start) | 38 |
-| `spelling_anomaly.py` | Misspellings via SymSpell, filtered against `domain_terms.py` allow-list | 24 |
+| `authenticity/` | `metadata_analysis.py`: file-embedded metadata (author/producer/create-modify dates) tamper signals; `ai_generation.py`: traces of AI generation | 54 + — |
+| `dates/` | `date_anomalies.py`: date extraction/labelling and logical date consistency (future dates, end-before-start); `date_parsing.py`: reads a date in any printed form (ordinals, two-digit years, month names, no year), shared by every check that reads dates | 38 + 62 |
+| `spelling/` | `spelling_anomaly.py`: misspellings via SymSpell, one finding per distinct word; `domain_terms.py`: the allow-list of legal/financial jargon and address shorthand it skips | 24 |
+| `images/` | `image_manipulation.py` and `image_integrity.py` (see below) | — |
+| `shared/` | Not checks: `field_values.py`, `field_catalogue.py` (what specialists see of the extracted fields), `pdf_pages.py` | — |
 | `external_validation/` | The document's facts against outside references, chosen by document type. `runner.py` is the entry point; `registry_lookups/` holds the live ACRA, OneMap, HDB, URA (approved residential use and the Master Plan zoning index) and MOM holiday lookups; `sg_reference/` holds the published tables (CPF rates and ceilings, GST rate, IRAS tax rules, bank identifiers, public holidays); `reference_checks/` holds the checks that read those tables (`PAY.CPF_RATE`, `PAY.CPF_CEILING`, `PAY.CPF_BASE`, `POA.GST`, `NOA.PAYABLE`, `BS.BANK_IDENTIFIERS`, `BS.ACCOUNT_NUMBER_FORMAT`), registered as `group="external"`; `giro.py` is the GIRO closed-day check. Run by `external_validation_tool` and the `external-validation` endpoint | — |
 | `font_consistency.py` | Font family/size/emphasis (bold/italic/underline) inconsistency | 16 |
-| `domain_terms.py` | Not a check — allow-list of legal/financial jargon feeding `spelling_anomaly.py` | — |
 
 The three `PAY.CPF_*` checks (`reference_checks/cpf.py`) share one assessment, so a wrong contribution is reportedonce: `CPF_CEILING` (ceiling not applied, impossible), `CPF_BASE` (rate applied to basic pay only, inconsistent),
 `CPF_RATE` (anything else). Earnings are split into ordinary, additional (bonus) and non-wages; a line that can't be
@@ -71,17 +72,19 @@ zoning (Commercial and White zones allow homes and offices, so zoning alone can'
 Zoning comes from a local index (`land_use.py`, about 12 MB) built from a 175 MB data.gov.sg file when the Docker
 image is built. If it is missing, zoning is skipped and the startup log says so.
 
-`image_manipulation.py` (SCRUM-64) covers resolution and compression mismatches between a file's
+`images/image_manipulation.py` (SCRUM-64) covers resolution and compression mismatches between a file's
 images (embedded PDF images or a standalone PNG/JPEG). The same module's `check_image_tampering` (SCRUM-65) covers
 images edited in after the fact: painted over and replaced (Image Overlay), stretched or rotated
 (Scaling Anomaly), pasted with a seam or halo (Visible Boundary), or with altered brightness,
-colour, sharpness or noise (Quality Mismatch). `ai_generation.py` (SCRUM-67) scores how likely a file is
+colour, sharpness or noise (Quality Mismatch). `authenticity/ai_generation.py` (SCRUM-67) scores how likely a file is
 AI-generated and lists each indicator's value and contribution.
 
 `case_match.py` — the upload check: verifies each case document's company/individuals against the
 certificate of incumbency (UEN/name/ID fuzzy matching), so a document that belongs to another case is
-caught. It is not a fraud signal and is not part of the per-case analysis. A mismatch it finds is still
-added to that document's detection report as a `case_identity_match` finding.
+caught. It is not a fraud signal. A mismatch it finds sends the document to manual review and is not
+added to the detection report. Comparing one person across documents (the old pairwise check) now runs in
+the per-case analysis, in `cross_document/deterministic.py`. Reports stored before that change may still
+carry `case_identity_match` findings; they still display and score.
 
 ## 1B. Case pipeline — `backend/app/case_pipeline/`
 
@@ -97,11 +100,13 @@ decisions: `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
 | `cross_document/evidence.py` | The case as the analysis sees it: dossier (protected fields removed, capped at 24,000 characters), masked identifiers, the ledger of every ref id issued in a run, and the run's model-call counter |
 | `cross_document/bias.py` | What the analysis may never reason from: protected field names and the text patterns for them and their proxies. Used by the dossier, the tools, the hypothesis screen and the verifier |
 | `cross_document/agents.py`, `graph.py`, `verify.py` | Plan (at most 3 hypotheses, each with the checks to run), run the checks (code, no model), judge all hypotheses in one call, then verify each verdict in code. Two Sonnet calls in total, a hard budget (`MAX_MODEL_CALLS_PER_RUN`). Both answer through a forced tool call and share one cached system prompt (rules, bias policy, tool catalogue). A hypothesis is dropped before any check runs if it touches a protected attribute or is about one document with nothing computed behind it. `verify.py` keeps a verdict only if its citations are tool-issued, its refutation probe looked at something the claim doesn't rest on, it cites at least two documents or a computed fact, and its text is clear of protected attributes |
-| `cross_document/tools/` | The read-only evidence tools: `reading.py`, `transactions.py`, `comparisons.py`, `consistency.py` (company name and address consistency) |
+| `cross_document/tools/` | The read-only evidence tools: `reading.py`, `transactions.py` (including repeated payments, card usage, recurring payments), `comparisons.py` (including `compare_linked_people`), `consistency.py` (company name and address consistency) |
 | `cross_document/company_identity.py`, `address_matching.py` | The company-name and address matching behind the consistency tools |
-| `risk/case_risk.py` | Deterministic score, level and findings. Called only by an analysis run. Each contributing finding's id is `<document id prefix>:<tool>-<n>`, and carries the `flag_id` of its flag when it has one |
+| `risk/case_risk.py` | Deterministic score, level and findings. Called only by an analysis run. A finding with a check code and stated value that appears on several documents scores once (the copies score 0, `repeat_of` / `also_on`); Critical counts only documents whose high finding scores. Each contributing finding's id is `<document id prefix>:<tool>-<n>`, and carries the `flag_id` of its flag when it has one |
 | `risk/store.py` | Writes one `risk_scores` row per completed run (with the flags' UUIDs in `flag_ids`) and reads the latest per case through the `latest_risk_scores` view. The case list reads that; nothing else computes a score |
-| `risk/outlook.py` | The agent's evidence requests and the deterministic what-if re-scoring |
+| `cross_document/deterministic.py`, `identity_pairs.py` | The comparisons that always run first: company name, address, UEN, a person's ID and name across documents. One finding per difference, also given to the agent grouped by value |
+| `risk/outlook.py` | The agent's evidence requests (finding ids may be a unique prefix) and the deterministic what-if re-scoring |
+| `risk/additional_documents.py` | Merges the checklist rules and the agent's requests into one `additional_documents` list, marks each as score-changing or not, and records why a list is empty |
 | `risk/summary.py` | Grounded plain-language summary, with a deterministic fallback |
 | `risk/supporting_documents.py` | Rule-based supporting-document recommendations (bank statement trades, related-party balances, borrowing growth). Run only inside an analysis and stored on the run |
 

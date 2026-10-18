@@ -242,6 +242,7 @@ def build_summary(
         ),
         risk=completed.risk if completed else None,
         supporting_document_recommendations=completed.supporting_documents if completed else [],
+        additional_documents=completed.additional_documents if completed else None,
         analysis_ready=is_ready_for_analysis(documents),
         analysis=overview,
     )

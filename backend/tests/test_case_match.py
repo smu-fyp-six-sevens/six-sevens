@@ -114,6 +114,10 @@ def _corroborating(n: int = 3, uen: str = UEN) -> list[DocumentRecord]:
     return [_doc(types[i % len(types)], {"company_name": "ACME Trading Pte Ltd", "uen": uen}) for i in range(n)]
 
 
+def _approved(*docs: DocumentRecord) -> list[DocumentRecord]:
+    return [d.model_copy(update={"status": DocumentStatus.DETECTED}) for d in docs]
+
+
 def _by_id(result, doc_id: str):
     return next(d for d in result.documents if d.document_id == doc_id)
 
@@ -336,13 +340,50 @@ def test_matching_id_still_flags_name_mismatch_and_cites_reference_document() ->
 
 
 @pytest.mark.story("SCRUM-253", "identity mismatch cites both documents")
-def test_pairwise_name_mismatch_flags_and_cites_nric_and_personal_bank_statement() -> None:
-    incumbency_fields = dict(INCUMBENCY_FIELDS)
-    incumbency_fields.update({
-        "individual_name": "Goh Ka Yee",
-        "director_name": "Goh Ka Yee",
-        "shareholder_1_name": "Goh Ka Yee",
-    })
+def test_pairwise_name_mismatch_is_one_finding_citing_both_documents() -> None:
+    from app.case_pipeline.cross_document.evidence import build_context
+    from app.case_pipeline.cross_document.identity_pairs import candidate_pairs, compare_pair
+
+    nric = _doc("nric", {"nric_number": "S1234567A", "individual_name": "Goh Ka Yee"}, "director-nric")
+    bank_statement = _doc("bank_statement", {"account_holder_name": "Goh Ka Yeo"}, "personal-bank-statement")
+    context = build_context("case-1", _approved(nric, bank_statement), {})
+    nric_key, statement_key = next(iter(candidate_pairs(context)))
+
+    comparison = compare_pair(context.docs[nric_key], context.docs[statement_key])
+
+    assert [m.check for m in comparison.mismatches] == ["individual_name"]
+    assert {comparison.mismatches[0].left_value, comparison.mismatches[0].right_value} == {"Goh Ka Yee", "Goh Ka Yeo"}
+
+
+@pytest.mark.story("SCRUM-253", "pairwise identity matching without an incumbency")
+def test_pairwise_id_mismatch_is_found_without_an_incumbency() -> None:
+    from app.case_pipeline.cross_document.evidence import build_context
+    from app.case_pipeline.cross_document.identity_pairs import candidate_pairs, compare_pair
+
+    nric = _doc("nric", {"nric_number": "S1234567A", "individual_name": "Goh Ka Yee"}, "director-nric")
+    payslip = _doc("payslip", {"nric_number": "S7654321B", "individual_name": "Goh Ka Yee"}, "payslip")
+    context = build_context("case-1", _approved(nric, payslip), {})
+    pair = candidate_pairs(context)
+
+    assert len(pair) == 1
+    comparison = compare_pair(context.docs[pair[0][0]], context.docs[pair[0][1]])
+    assert [m.check for m in comparison.mismatches] == ["individual_id"]
+    assert comparison.ids_compared == 1 and comparison.names_compared == 1
+
+
+def test_matching_people_give_no_mismatch() -> None:
+    from app.case_pipeline.cross_document.evidence import build_context
+    from app.case_pipeline.cross_document.identity_pairs import candidate_pairs, compare_pair
+
+    nric = _doc("nric", {"nric_number": "S1234567A", "individual_name": "Tan Wei Ming"})
+    statement = _doc("bank_statement", {"account_holder_name": "WEI MING TAN"})
+    context = build_context("case-1", _approved(nric, statement), {})
+    first, second = candidate_pairs(context)[0]
+
+    assert compare_pair(context.docs[first], context.docs[second]).mismatches == []
+
+
+def test_pairwise_identity_mismatches_are_not_in_live_case_match() -> None:
     nric = _doc(
         "nric",
         {"nric_number": "S1234567A", "individual_name": "Goh Ka Yee"},
@@ -353,32 +394,11 @@ def test_pairwise_name_mismatch_flags_and_cites_nric_and_personal_bank_statement
         {"account_holder_name": "Goh Ka Yeo"},
         "personal-bank-statement",
     )
-    result = check_case_match(
-        _case(), [_incumbency(incumbency_fields), *_corroborating(3), nric, bank_statement]
-    )
 
-    nric_match = _by_id(result, nric.id)
-    statement_match = _by_id(result, bank_statement.id)
-    nric_finding = next(
-        c for c in nric_match.comparisons
-        if c.check == "individual_name" and c.other_document_id == bank_statement.id
-    )
-    statement_finding = next(
-        c for c in statement_match.comparisons
-        if c.check == "individual_name" and c.other_document_id == nric.id
-    )
+    result = check_case_match(_case(), [nric, bank_statement])
 
-    assert nric_match.case_mismatch and statement_match.case_mismatch
-    # The NRIC is the case's director, so it only disagrees with another document: a signal for detection.
-    assert nric_match.status == DocumentMatchStatus.MISMATCH
-    assert nric_match.can_proceed_to_fraud_detection
-    # The statement's name is not on the incumbency at all: it also goes to an officer.
-    assert statement_match.status == DocumentMatchStatus.MANUAL_REVIEW
-    assert not statement_match.can_proceed_to_fraud_detection
-    assert nric_finding.other_filename == bank_statement.filename
-    assert statement_finding.other_filename == nric.filename
-    assert nric_finding.document_value == "Goh Ka Yee"
-    assert nric_finding.case_value == "Goh Ka Yeo"
+    assert not _by_id(result, nric.id).case_mismatch
+    assert not _by_id(result, bank_statement.id).case_mismatch
 
 
 def test_pairwise_name_comparison_treats_case_and_order_as_equal() -> None:

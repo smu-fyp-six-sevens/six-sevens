@@ -15,7 +15,7 @@ from datetime import date
 from typing import Any
 
 from ...config import settings
-from ..field_catalogue import array_rows, row_label
+from ..shared.field_catalogue import array_rows, row_label
 from .casts import CastLine, identity_finding, profit_cast_finding, section_total_finding
 from .common import _apply_needs_review, _as_number
 from .models import NumericalFinding, NumericalValidationResult, SkippedCheck

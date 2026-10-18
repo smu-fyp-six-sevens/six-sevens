@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from ..models import CaseRisk, SupportingDocumentRecommendation
+from ..models import AdditionalDocuments, CaseRisk, SupportingDocumentRecommendation
 
 
 class FindingCategory(str, Enum):
@@ -123,6 +123,9 @@ class CaseAnalysis(BaseModel):
     # The case's risk and evidence requests: produced only here, then read by the case views.
     risk: CaseRisk | None = None
     supporting_documents: list[SupportingDocumentRecommendation] = Field(default_factory=list)
+    additional_documents: AdditionalDocuments | None = None
+    # Comparisons that ran and found the documents agree, so an empty result is not read as "not checked".
+    consistent_checks: list[str] = Field(default_factory=list)
     audit: AnalysisAudit = Field(default_factory=AnalysisAudit)
     # Step-by-step log of the run, for debugging. Includes hypotheses that were tried and dropped.
     trace: list[dict[str, Any]] = Field(default_factory=list)

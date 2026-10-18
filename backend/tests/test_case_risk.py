@@ -492,3 +492,72 @@ def test_case_list_reads_saved_scores_and_never_detection_reports() -> None:
 
     assert [(i.id, i.risk.level if i.risk else None) for i in items] == [("case-1", "High"), ("case-2", None)]
     trace.get_detection_states.assert_not_called()
+
+
+# --- the same fact on several documents ----------------------------------------
+
+
+def _uen_finding(severity: str = "high", n: int = 1, stated: str = "201298459R") -> dict:
+    return {
+        **_finding(severity, "external_validation_tool", n),
+        "check_code": "REG.UEN_EXISTS",
+        "stated": stated,
+        "summary": f"UEN {stated} is not in ACRA's register",
+    }
+
+
+def test_the_same_unregistered_uen_on_three_documents_scores_once() -> None:
+    documents = [_document(d) for d in ("a", "b", "c")]
+    reports = {d.id: _report(_uen_finding()) for d in documents}
+
+    risk = compute_case_risk(documents, reports, set())
+    deduped = {f.document_id: f for f in risk.contributing_findings}
+
+    assert risk.points == 8
+    assert sum(1 for f in risk.contributing_findings if f.points > 0) == 1
+    scoring = next(f for f in risk.contributing_findings if f.points > 0)
+    assert scoring.also_on == 2
+    assert all(f.repeat_of == f"{scoring.document_id[:8]}:{scoring.finding_id.split(':', 1)[1]}"
+               for f in deduped.values() if f.points == 0)
+    assert len(risk.contributing_findings) == 3  # the copies still show
+    assert risk.level == "High"  # one fact is not corroborated tampering
+
+
+def test_a_different_stated_value_is_a_different_fact() -> None:
+    documents = [_document("a"), _document("b")]
+    reports = {"a": _report(_uen_finding(stated="201298459R")), "b": _report(_uen_finding(stated="202054321M"))}
+
+    risk = compute_case_risk(documents, reports, set())
+
+    assert risk.points == 16
+
+
+def test_findings_without_a_stated_value_are_never_merged() -> None:
+    documents = [_document(d) for d in ("a", "b", "c")]
+    reports = {d.id: _report(_finding("high", "font_consistency_tool")) for d in documents}
+
+    risk = compute_case_risk(documents, reports, set())
+
+    assert risk.level == "Critical" and risk.points == 24
+
+
+def test_repeats_can_be_turned_off_for_comparison() -> None:
+    documents = [_document(d) for d in ("a", "b", "c")]
+    reports = {d.id: _report(_uen_finding()) for d in documents}
+
+    assert compute_case_risk(documents, reports, set(), dedupe=False).points == 24
+    assert compute_case_risk(documents, reports, set()).points == 8
+
+
+def test_a_repeat_does_not_use_up_the_documents_noise_cap() -> None:
+    documents = [_document("a"), _document("b")]
+    own = [_finding("medium", f"check_{i}_tool") for i in range(2)]
+    reports = {
+        "a": _report(_uen_finding("medium")),
+        "b": _report(_uen_finding("medium"), *own),
+    }
+
+    risk = compute_case_risk(documents, reports, set())
+
+    # a scores the shared UEN (3); b scores its own two mediums in full (6), not scaled down by the repeat.
+    assert risk.points == 9

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from . import text_overlay
 from .profiles import confident_type, profile_for
-from .reference import best_reference
+from .reference import fitting_references
 from .common import (  # noqa: F401
     _abs_pt_phrase, _ADDRESS_HINT_RE, ALIGN_EDGE_TOLERANCE_PT, Alignment, _ALIGNMENT_LABEL,
     _anomaly, AnomalyType, _as_bbox, _assessed, BBox, _bbox_area, _Block, _block_for_line,
@@ -133,10 +133,11 @@ def check_layout_anomalies(
     6. Merge signals that land on the same region into one finding,
        including a line box inside its paragraph.
 
-    When the classifier is confident in `document_type`, a curated reference
-    layout of that form (reference.py) is used if one fits: fields that moved
-    from their reference position are reported, and generic findings on
-    lines the reference shows in place are dropped. That type's profile
+    When the classifier is confident in `document_type`, the curated reference
+    layouts of that form (reference.py) that fit are used, one per version of
+    the form: a field is reported as moved only if no fitting version places
+    it there, and generic findings on lines any fitting version shows in place
+    are dropped. That type's profile
     (profiles.py) then drops signals the type explains by design, before
     step 5.
     Without a type, or below the confidence threshold, every document gets
@@ -226,14 +227,22 @@ def check_layout_anomalies(
             + unanchored_anomalies
         )
         known_type = confident_type(document_type, classification_confidence)
-        reference = best_reference(blocks, known_type) if known_type else None
-        if reference is not None:
-            # A generic finding on lines that sit where the reference has them is
-            # the form's design. Text overlay is judged on its own.
+        references = fitting_references(blocks, known_type) if known_type else []
+        if references:
+            # A line another fitting version prints is that version's design, not an
+            # edit. The other versions vouch only with their fixed labels: a moved
+            # value can land on one of their value slots by chance.
+            best, others = references[0], references[1:]
+
+            def by_design(anomaly: LayoutAnomaly) -> bool:
+                return any(r.explains(anomaly, labels_only=True) for r in others)
+
+            # Text overlay is judged on its own.
             anomalies = [
-                a for a in anomalies if a.anomaly_type == "Text Overlay" or not reference.explains(a)
+                a for a in anomalies
+                if a.anomaly_type == "Text Overlay" or not (best.explains(a) or by_design(a))
             ]
-            anomalies += reference.findings
+            anomalies += [f for f in best.findings if not by_design(f)]
         signals = [_layout_signal(item) for item in anomalies]
         profile = profile_for(document_type, classification_confidence)
         if profile is not None:

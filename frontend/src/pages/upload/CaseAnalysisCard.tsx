@@ -12,7 +12,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const SEVERITY_RANK: Record<string, number> = { high: 3, medium: 2, low: 1 };
 
-// "Run case analysis": cross-document findings, what-if outlook and a plain-language summary.
+// "Run case analysis": cross-document findings, and a plain-language summary.
 export function CaseAnalysisCard({
   caseId,
   analysisReady,
@@ -61,7 +61,6 @@ export function CaseAnalysisCard({
     }
   }
 
-  const outlook = analysis?.outlook ?? null;
   const findings = [...(analysis?.findings ?? [])].sort(
     (a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity],
   );
@@ -149,37 +148,18 @@ export function CaseAnalysisCard({
             </ul>
           )}
 
-          {outlook && outlook.requests.length > 0 && (
+          {(analysis.consistent_checks ?? []).length > 0 && (
             <>
-              <h3 className="analysis-heading">What would change the score</h3>
-              {outlook.best_case_score != null && outlook.current_score != null && (
-                <p className="analysis-score-compare">
-                  <span>
-                    Now <strong>{outlook.current_score}</strong> ({outlook.current_level})
-                  </span>
-                  <span className="analysis-score-arrow">→</span>
-                  <span>
-                    Best case <strong>{outlook.best_case_score}</strong> ({outlook.best_case_level})
-                  </span>
-                </p>
-              )}
+              <h3 className="analysis-heading">Checked and consistent</h3>
               <ul className="risk-findings">
-                {outlook.requests.map((request) => (
-                  <li key={request.title}>
+                {(analysis.consistent_checks ?? []).map((line) => (
+                  <li key={line}>
                     <span className="risk-finding-text">
-                      <span className="risk-finding-summary">
-                        {request.title}
-                        {request.score_if_supports != null && ` — would become ${request.score_if_supports}`}
-                        {request.level_if_supports ? ` (${request.level_if_supports})` : ''}
-                      </span>
-                      <span className="risk-finding-rationale">{request.what_it_shows}</span>
+                      <span className="risk-finding-rationale">{line}</span>
                     </span>
                   </li>
                 ))}
               </ul>
-              <p className="risk-finding-rationale" style={{ margin: '0 20px 16px' }}>
-                An estimate that assumes the evidence supports the client. If it does not, the score stays where it is.
-              </p>
             </>
           )}
         </>

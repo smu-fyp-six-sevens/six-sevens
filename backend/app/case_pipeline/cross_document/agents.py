@@ -36,7 +36,7 @@ from .tools import COMPUTED_TOOLS, CROSS_DOCUMENT_TOOLS, build_tools
 
 logger = logging.getLogger("classifier_pipeline.case_pipeline.agents")
 
-PROMPT_VERSION = "cross-doc-v4"
+PROMPT_VERSION = "cross-doc-v6"
 MAX_HYPOTHESES = 3
 MAX_CHECKS_PER_HYPOTHESIS = 4
 # One call to plan and one to judge. Nothing here loops or retries a call; this is the ceiling that
@@ -46,6 +46,10 @@ _PLAN_MAX_TOKENS = 3000
 _JUDGE_MAX_TOKENS = 2500
 _RESULT_CHARS = 900
 _TRACE_RESULT_CHARS = 700
+# Hard bounds on what each model call reads (about 4 characters a token), on top of the output caps above.
+MAX_PLAN_INPUT_CHARS = 30_000
+MAX_ESTABLISHED_CHARS = 5_000
+MAX_JUDGE_EVIDENCE_CHARS = 12_000
 
 
 class ModelCallBudgetExceeded(RuntimeError):
@@ -74,7 +78,9 @@ Tools you may plan checks with (use these document names exactly):
 
 _PLAN_INSTRUCTIONS = """Propose AT MOST {limit} hypotheses, and only strong ones: a specific, checkable way these documents may be inconsistent or implausible together (for example: what the company says it does against how its money moves; stated scale against capital or how long the company has existed; dates that cannot all be true; money going round in a circle; an address or identity that changes between documents; a source of wealth the evidence does not support). Propose fewer, or none, when nothing looks off.
 Every hypothesis must be about how documents relate to each other: it has to involve at least two documents, or rest on a computed measure over one (transaction totals, monthly flow, counterparties). A single document's own figures merely looking unusual is not a hypothesis here.
-Never restate a per-document detection finding listed below, even in other words (for example an identifier missing from a register). Also skip anything that needs documents we do not have, weak or generic worries, and anything that touches rule 1.
+Never restate a per-document detection finding listed below, or a difference listed under "Checks already run by code", even in other words (for example an identifier missing from a register, or a company name that differs). You may use those facts to reason about something else. Also skip anything that needs documents we do not have, weak or generic worries, and anything that touches rule 1.
+
+Payment patterns (the same payee and amount repeated, a different card on almost every card payment, a recurring amount that moves) are hypotheses to test with find_repeated_transactions, card_usage_tool and recurring_payment_amounts, never findings by themselves: a repeated payment may be a standing order. Test them against the rest of the case (a lease, a loan schedule, another statement).
 
 Be terse: a claim is one sentence. For each hypothesis list the checks to run, at most {max_checks}, using only the tools above. Run everything you need up front: you will not see results before judging. Include at least one check that could show the claim is wrong (refutation_probe true), and it must look at something the claim does not already rest on: a different document or a different field. Reading back the same fields again is not a test.
 
@@ -215,7 +221,10 @@ async def hypothesise(context: CaseContext) -> list[Hypothesis]:
     """One call: at most three hypotheses, each with the checks to run."""
     if not context.docs:
         return []
-    dossier = render_dossier(context)
+    established = context.established[:MAX_ESTABLISHED_CHARS]
+    dossier = render_dossier(context, max_chars=MAX_PLAN_INPUT_CHARS - len(established))
+    if established:
+        dossier += "\n\nChecks already run by code (facts; never restate them as hypotheses):\n" + established
     messages = [
         _system_message(context),
         HumanMessage(content=_PLAN_INSTRUCTIONS.format(
@@ -322,17 +331,32 @@ async def gather_evidence(
     return {hid: ev for hid, _, ev in results}, {hid: calls for hid, calls, _ in results}
 
 
+def fit_evidence(
+    evidence: dict[str, list[dict[str, Any]]], limit: int = MAX_JUDGE_EVIDENCE_CHARS
+) -> dict[str, list[dict[str, Any]]]:
+    """Every tool result shortened to the same share when together they would pass the judge's input limit."""
+    results = [e for items in evidence.values() for e in items]
+    total = sum(len(str(e.get("result") or "")) for e in results)
+    if total <= limit or not results:
+        return evidence
+    share = max(80, limit // len(results))
+    return {
+        hid: [{**e, "result": str(e.get("result") or "")[:share]} for e in items] for hid, items in evidence.items()
+    }
+
+
 async def adjudicate(
     context: CaseContext, hypotheses: list[Hypothesis], evidence: dict[str, list[dict[str, Any]]]
 ) -> dict[str, dict[str, Any]]:
     """One call judging every hypothesis from its evidence. A missing verdict means not conclusive."""
     if not hypotheses:
         return {}
+    bounded = fit_evidence(evidence)
     listing = [
         {
             "id": h.id, "claim": h.claim, "what_would_prove_it": h.proof,
             "refutation_check": {"document": h.refutation_document, "test": h.refutation_test},
-            "evidence": evidence.get(h.id, []),
+            "evidence": bounded.get(h.id, []),
         }
         for h in hypotheses
     ]

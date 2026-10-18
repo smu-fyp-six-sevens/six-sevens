@@ -206,6 +206,14 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
         reasons: ['Rated High from the combined severity of 4 finding(s).'],
         contributing_findings: [
           finding({}),
+          // A repeated high scores a quarter (2 points), less than the first medium, but still lists above it.
+          finding({
+            finding_id: 'date_consistency_tool-2',
+            tool: 'date_consistency_tool',
+            summary: 'Account 5 was opened at age 18.8, below the minimum of 21.',
+            rationale: 'Account 5 was opened at age 18.8, below the minimum of 21. This is impossible for this product.',
+            points: 2,
+          }),
           ...[1, 2, 3].map((n) =>
             finding({
               finding_id: `layout_anomalies_tool-${n}`,
@@ -236,8 +244,10 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
 
     const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
     await expect(section.locator('.risk-badge')).toHaveText('High risk');
-    await expect(section).toContainText('Score 57/100');
-    await expect(section).toContainText('1 high · 3 medium · 1 low');
+    await expect(section.locator('.risk-score-value')).toHaveText('57');
+    await expect(section.locator('.risk-score-level')).toHaveText('High risk · 50–79');
+    await expect(section.locator('.risk-gauge')).toHaveAttribute('aria-label', 'Score 57 out of 100, High risk');
+    await expect(section).toContainText('2 high · 3 medium · 1 low');
 
     // Documents start collapsed; the low-only bank statement is hidden behind "Show more".
     const documents = section.locator('.risk-document');
@@ -245,11 +255,15 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     await expect(documents.first()).toContainText('C011_Payslip.pdf');
     await expect(section.locator('.risk-findings')).toHaveCount(0);
 
-    // Expanding merges the three identical layout findings into one ×3 row.
+    // Expanding lists highs before mediums, and merges the three identical layout findings into one ×3 row.
     await documents.first().getByRole('button').click();
     const rows = section.locator('.risk-findings li');
-    await expect(rows).toHaveCount(2);
-    await expect(rows.nth(1)).toContainText('×3');
+    await expect(rows).toHaveCount(3);
+    await expect(rows.locator('.risk-severity')).toHaveText(['high', 'high', 'medium']);
+    await expect(rows.nth(2)).toContainText('×3');
+    // The check is a label of its own, and the explanation keeps only what the title doesn't already say.
+    await expect(rows.nth(1).locator('.risk-finding-check')).toHaveText('Date consistency');
+    await expect(rows.nth(1).locator('.risk-finding-rationale')).toHaveText('This is impossible for this product.');
 
     await section.getByRole('button', { name: 'Show 1 low-severity finding' }).click();
     await expect(documents).toHaveCount(2);
@@ -310,9 +324,44 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     await page.goto(`/cases/${harbor.greenlink_case_id}`);
 
     const section = page.locator('.summary-card', {
-      has: page.getByRole('heading', { name: 'Recommended Supporting Documents' }),
+      has: page.getByRole('heading', { name: 'Additional Documents' }),
     });
     await expect(section).toContainText('No additional documents needed.');
+  });
+
+  test('the additional documents card says when no document can change the score', async ({ page, backend }) => {
+    const harbor = makeCase({
+      greenlink_case_id: 'GLDB-2004',
+      additional_documents: {
+        items: [
+          {
+            title: 'UEN Registration Confirmation Letter',
+            why: 'Confirms the UEN printed on the incorporation certificate.',
+            source: 'finding',
+            addresses: ['60172ada:external_validation_tool-1'],
+            affects_score: false,
+            score_if_supports: null,
+            level_if_supports: null,
+            recommendation: null,
+          },
+        ],
+        reason: 'no_reducible_findings',
+        current_score: 65,
+        current_level: 'High',
+        best_case_score: 65,
+        best_case_level: 'High',
+      },
+    });
+    backend.cases.push(harbor);
+    await page.goto(`/cases/${harbor.greenlink_case_id}`);
+
+    const section = page.locator('.summary-card', {
+      has: page.getByRole('heading', { name: 'Additional Documents' }),
+    });
+    await expect(section).toContainText('No document can change this score.');
+    await expect(section).toContainText('UEN Registration Confirmation Letter');
+    await expect(section).toContainText('No effect on score');
+    await expect(section).not.toContainText('Best case');
   });
 
   test('recommended documents show why and what to request', async ({ page, backend }) => {
@@ -383,7 +432,7 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     await page.goto(`/cases/${harbor.greenlink_case_id}`);
 
     const section = page.locator('.summary-card', {
-      has: page.getByRole('heading', { name: 'Recommended Supporting Documents' }),
+      has: page.getByRole('heading', { name: 'Additional Documents' }),
     });
     await expect(section).toContainText('2 requests');
     await expect(section).toContainText('Purchase Order');

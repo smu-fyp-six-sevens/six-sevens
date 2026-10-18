@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from app.fraud_detection.font_consistency import ExtractedField
-from app.fraud_detection.spelling_anomaly import (
+from app.fraud_detection.spelling.spelling_anomaly import (
     _dehyphenate_spans,
     _filter_candidates,
     _find_candidates,
@@ -137,7 +137,7 @@ def test_domain_terms_are_all_lowercase() -> None:
     # just sit there doing nothing. DOMAIN_TERMS must stay fully lowercase
     # for the domain-terms.py module's own "checked case-insensitively"
     # claim to actually hold.
-    from app.fraud_detection.domain_terms import DOMAIN_TERMS
+    from app.fraud_detection.spelling.domain_terms import DOMAIN_TERMS
 
     assert all(term == term.lower() for term in DOMAIN_TERMS)
 
@@ -278,7 +278,7 @@ def _stub_ingestion(mock_ingest, raw_text: str = "Helllo there") -> None:
 
 @pytest.mark.asyncio
 async def test_check_spelling_anomalies_unable_to_assess_on_extraction_failure() -> None:
-    with patch("app.fraud_detection.spelling_anomaly.ingest_document") as mock_ingest:
+    with patch("app.fraud_detection.spelling.spelling_anomaly.ingest_document") as mock_ingest:
         mock_ingest.side_effect = RuntimeError("corrupt file")
 
         result = await check_spelling_anomalies("doc-1", b"bytes", "statement.pdf")
@@ -290,7 +290,7 @@ async def test_check_spelling_anomalies_unable_to_assess_on_extraction_failure()
 
 @pytest.mark.asyncio
 async def test_check_spelling_anomalies_unable_to_assess_on_empty_text() -> None:
-    with patch("app.fraud_detection.spelling_anomaly.ingest_document") as mock_ingest:
+    with patch("app.fraud_detection.spelling.spelling_anomaly.ingest_document") as mock_ingest:
         mock_ingest.return_value = {"raw_text": "   ", "pages": []}
 
         result = await check_spelling_anomalies("doc-1", b"bytes", "statement.pdf")
@@ -301,7 +301,7 @@ async def test_check_spelling_anomalies_unable_to_assess_on_empty_text() -> None
 
 @pytest.mark.asyncio
 async def test_check_spelling_anomalies_no_candidates_returns_empty_not_unable() -> None:
-    with patch("app.fraud_detection.spelling_anomaly.ingest_document") as mock_ingest:
+    with patch("app.fraud_detection.spelling.spelling_anomaly.ingest_document") as mock_ingest:
         _stub_ingestion(mock_ingest, raw_text="Please review the escrow schedule.")
 
         result = await check_spelling_anomalies("doc-1", b"bytes", "statement.pdf")
@@ -312,7 +312,7 @@ async def test_check_spelling_anomalies_no_candidates_returns_empty_not_unable()
 
 @pytest.mark.asyncio
 async def test_check_spelling_anomalies_flags_typo_and_suppresses_proper_noun() -> None:
-    with patch("app.fraud_detection.spelling_anomaly.ingest_document") as mock_ingest:
+    with patch("app.fraud_detection.spelling.spelling_anomaly.ingest_document") as mock_ingest:
         _stub_ingestion(mock_ingest, raw_text="Helllo Mr Kowalski")
 
         result = await check_spelling_anomalies("doc-1", b"bytes", "statement.pdf")
@@ -323,7 +323,7 @@ async def test_check_spelling_anomalies_flags_typo_and_suppresses_proper_noun() 
 
 @pytest.mark.asyncio
 async def test_check_spelling_anomalies_skips_word_matching_extracted_field() -> None:
-    with patch("app.fraud_detection.spelling_anomaly.ingest_document") as mock_ingest:
+    with patch("app.fraud_detection.spelling.spelling_anomaly.ingest_document") as mock_ingest:
         # "Kowalski" would normally be a (suppressed) proper-noun candidate
         # anyway — use a lowercase, no-suggestion word instead so the only
         # thing keeping it out of the result is the known-terms match, not
@@ -339,3 +339,31 @@ async def test_check_spelling_anomalies_skips_word_matching_extracted_field() ->
         result = await check_spelling_anomalies("doc-1", b"bytes", "statement.pdf", fields)
 
     assert result.anomalies == []
+
+
+@pytest.mark.asyncio
+async def test_check_spelling_anomalies_reports_a_repeated_word_once_with_its_count() -> None:
+    # The same unrecognised word in four places (a letterhead line repeated on each page, and in
+    # lower case once) is one anomaly with occurrences=4, not four.
+    pages = [
+        {"page_number": n, "elements": [{"text": "Shentn Holdings letterhead"}, {"text": "the shentn branch"}]}
+        for n in (1, 2)
+    ]
+    with patch("app.fraud_detection.spelling.spelling_anomaly.ingest_document") as mock_ingest:
+        mock_ingest.return_value = {"raw_text": "x", "pages": pages}
+
+        result = await check_spelling_anomalies("doc-1", b"bytes", "statement.pdf")
+
+    assert [(a.word, a.occurrences) for a in result.anomalies] == [("Shentn", 4)]
+    anomaly = result.anomalies[0]
+    assert anomaly.surrounding_text == "Shentn Holdings letterhead"
+    # The other distinct places it appears, not the same line again.
+    assert anomaly.other_contexts == ["the shentn branch"]
+
+
+
+def test_find_candidates_flags_street_names_in_an_address_line_for_the_agent_to_judge() -> None:
+    # An address street name missing from the dictionary is flagged like any other word; the specialist
+    # decides whether it's a real place. (Skipping address lines would also hide a misspelt one.)
+    pages = [{"page_number": 1, "elements": [{"text": "2 Shenton Way #20-02 SGX Centre 1 Singapore 068804"}]}]
+    assert [c.word for c in _filter_candidates(_find_candidates(pages, set()))] == ["Shenton"]

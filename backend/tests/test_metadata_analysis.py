@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from app.fraud_detection.metadata_analysis import (
+from app.fraud_detection.authenticity.metadata_analysis import (
     SUPPORTED_METADATA_FIELDS,
     check_metadata_anomalies,
     extract_supported_metadata,

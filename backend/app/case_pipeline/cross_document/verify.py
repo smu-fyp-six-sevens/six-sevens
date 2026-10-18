@@ -63,7 +63,11 @@ def verify_verdict(
     unknown = [c for c in citations if c not in context.ledger.refs]
     if unknown:
         return None, f"citation not issued by a tool: {unknown[0]}"
-    if not _probe_ran(context, hypothesis, calls):
+    entries = [context.ledger.refs[c] for c in citations]
+    flags = sorted({e["breach_flag"] for e in entries if e.get("breach_flag") in BREACH_FLAGS})
+    # A comparison tool's own mismatch flag is the proof; there is nothing further to refute.
+    flagged_mismatch = any(f in IDENTITY_FLAGS or f in VARIANCE_FLAGS for f in flags)
+    if not flagged_mismatch and not _probe_ran(context, hypothesis, calls):
         return None, "refutation probe did not run"
 
     # The whole account is screened, not just the headline: any mention is grounds to discard it.
@@ -71,17 +75,17 @@ def verify_verdict(
     if has_protected_text(f"{hypothesis.claim} {text}"):
         return None, "rests on a protected attribute"
 
-    entries = [context.ledger.refs[c] for c in citations]
     # This module relates documents to each other. One document's own figures looking odd is the
     # per-document scan's business, unless the evidence is something computed over the data.
     computed = any(e.get("source") in COMPUTED_TOOLS or e.get("field") == "transaction_summary" for e in entries)
     if len({e["doc_key"] for e in entries}) < 2 and not computed:
         return None, "cites a single document and no computed fact"
-    flags = sorted({e["breach_flag"] for e in entries if e.get("breach_flag") in BREACH_FLAGS})
     registry_backed = any(e.get("category") == FindingCategory.REGISTRY_DISCREPANCY.value for e in entries)
 
     severity = verdict.get("severity") if verdict.get("severity") in _SEVERITIES else "medium"
-    if severity == "high" and not (flags or registry_backed):
+    # A different identifier or a hard timeline breach may be high; names, addresses and people stop at medium.
+    hard = [f for f in flags if f not in VARIANCE_FLAGS]
+    if severity == "high" and not (hard or registry_backed):
         severity = "medium"
 
     if any(f in IDENTITY_FLAGS for f in flags):

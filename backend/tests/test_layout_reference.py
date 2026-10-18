@@ -36,7 +36,7 @@ def _form(
     name: str,
     income: str,
     *,
-    move: str | None = None,
+    move: str | tuple[str, ...] | None = None,
     dx: float = 0.0,
     dy: float = 0.0,
     page_dx: float = 0.0,
@@ -50,7 +50,8 @@ def _form(
     page = doc.new_page(width=612, height=792)
 
     def put(x: float, y: float, text: str) -> None:
-        shift = (dx, dy) if text == move else (0.0, 0.0)
+        moved = text == move if isinstance(move, str) else text in (move or ())
+        shift = (dx, dy) if moved else (0.0, 0.0)
         # A longer table above pushes everything below it down together.
         pushed = push if push_below is not None and y >= push_below else 0.0
         page.insert_text((x + page_dx + shift[0], y + page_dy + pushed + shift[1]), text, fontsize=11)
@@ -139,7 +140,7 @@ def test_another_form_does_not_fit(noa_reference, tmp_path, monkeypatch) -> None
 
 def _store(reference: ref.ReferenceLayout, tmp_path, monkeypatch) -> None:
     folder = tmp_path / reference.document_type
-    folder.mkdir(parents=True)
+    folder.mkdir(parents=True, exist_ok=True)
     (folder / f"{reference.name}.json").write_text(reference.model_dump_json())
     monkeypatch.setattr(ref, "REFERENCES_DIR", tmp_path)
     ref.load_references.cache_clear()
@@ -175,6 +176,38 @@ def test_unsure_type_or_no_type_skips_the_reference() -> None:
     unsure = settings.CLASSIFICATION_CONFIDENCE_THRESHOLD - 0.01
     assert _reference_findings(check_layout_anomalies("doc-1", data, "notice_of_assessment", unsure)) == []
     assert _reference_findings(check_layout_anomalies("doc-1", data)) == []
+
+
+@pytest.fixture
+def two_versions(noa_reference, tmp_path, monkeypatch):
+    """A second version of the form that prints two labels 12 pt further right."""
+    later = [
+        _blocks(_form(name, income, move=("Tax payable", "Chargeable income"), dx=12))
+        for name, income in [("TAN WEI MING", "481,600.00"), ("LIM HUI LING", "92,300.00")]
+    ]
+    _store(noa_reference, tmp_path, monkeypatch)
+    _store(ref.build_reference("test_noa_v2", "notice_of_assessment", later), tmp_path, monkeypatch)
+    yield
+    ref.load_references.cache_clear()
+
+
+@pytest.mark.usefixtures("two_versions")
+def test_a_line_where_another_fitting_version_has_it_is_not_reported() -> None:
+    # Fits both versions at 11/12: each has one of the two labels in its own place.
+    data = _form("NG SIEW LAN", "7,250.00", move="Tax payable", dx=12)
+    result = check_layout_anomalies(
+        "doc-1", data, "notice_of_assessment", settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
+    )
+    assert _reference_findings(result) == []
+
+
+@pytest.mark.usefixtures("two_versions")
+def test_a_line_out_of_place_in_every_fitting_version_is_reported() -> None:
+    data = _form("NG SIEW LAN", "7,250.00", move="Balance payable", dx=12)
+    result = check_layout_anomalies(
+        "doc-1", data, "notice_of_assessment", settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
+    )
+    assert [a.text for a in _reference_findings(result)] == ["Balance payable"]
 
 
 def test_committed_references_load_and_have_no_value_text() -> None:
@@ -325,3 +358,24 @@ def test_reference_findings_are_not_page_margin_findings() -> None:
 )
 def test_passport_machine_readable_lines_are_not_compared(text, machine_readable) -> None:
     assert ref._is_machine_readable(text) is machine_readable
+
+
+@pytest.mark.parametrize(
+    ("text", "placeholder"),
+    [
+        ("PHOTO", True),
+        ("PLACEHOLDER", True),
+        ("FINGERPRINT", True),
+        ("Photo Placeholder", True),
+        ("SIGNATURE PLACEHOLDER", True),
+        ("PHOTO ID REQUIRED", False),
+        ("Fingerprint scanned on 02-06-2021", False),
+    ],
+)
+def test_placeholder_captions_are_not_compared(text, placeholder) -> None:
+    assert ref._is_placeholder(text) is placeholder
+
+
+def test_placeholder_caption_is_not_a_moved_value(noa_reference) -> None:
+    data = _form("NG SIEW LAN", "7,250.00", extra=[((150, 200), "PHOTO"), ((140, 212), "PLACEHOLDER")])
+    assert _compare(noa_reference, data).findings == []

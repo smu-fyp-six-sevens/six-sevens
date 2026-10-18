@@ -157,5 +157,3 @@ def stage_generated_document(document: InjectableDocument, defect_type: str) -> 
 def save_document(document: InjectableDocument) -> InjectableDocument:
     DOCUMENTS[document.id] = deepcopy(document)
     return deepcopy(document)
-
-

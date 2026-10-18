@@ -1,0 +1,1376 @@
+{
+ "name": "constitution_v2",
+ "document_type": "company_constitution",
+ "labels": [
+  {
+   "page": 0,
+   "x0": 225.20834350585938,
+   "x1": 370.0673522949219,
+   "baseline": 119.3621826171875,
+   "bottom": 122.73918151855469,
+   "text": "the companies act 1967"
+  },
+  {
+   "page": 0,
+   "x0": 233.1778564453125,
+   "x1": 362.0978698730469,
+   "baseline": 138.3621826171875,
+   "bottom": 141.35218811035156,
+   "text": "republic of singapore"
+  },
+  {
+   "page": 0,
+   "x0": 256.3878479003906,
+   "x1": 338.8878173828125,
+   "baseline": 226.3621826171875,
+   "bottom": 229.7391815185547,
+   "text": "constitution"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 115.39814758300781,
+   "baseline": 77.8621826171875,
+   "bottom": 80.7786865234375,
+   "text": "1. name"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 186.66714477539062,
+   "baseline": 121.8621826171875,
+   "bottom": 124.7786865234375,
+   "text": "2. registered office"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 199.8531494140625,
+   "baseline": 179.8621826171875,
+   "bottom": 182.7786865234375,
+   "text": "3. liability of members"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 518.4096069335938,
+   "baseline": 197.8621826171875,
+   "bottom": 200.7026824951172,
+   "text": "the liability of the members is limited to the amount, if any, unpaid on the shares respectively held by"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 100.62564849853516,
+   "baseline": 211.8621826171875,
+   "bottom": 214.7026824951172,
+   "text": "them."
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 179.7986602783203,
+   "baseline": 237.8621826171875,
+   "bottom": 240.7786865234375,
+   "text": "4. private company"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 300.7336120605469,
+   "baseline": 255.8621826171875,
+   "bottom": 258.70269775390625,
+   "text": "the company is a private company, and accordingly:"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 518.4095458984375,
+   "baseline": 275.8621826171875,
+   "bottom": 278.70269775390625,
+   "text": "(a) the number of members of the company (not including persons who are in the employment of the"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 212.5546417236328,
+   "baseline": 289.8621826171875,
+   "bottom": 292.70269775390625,
+   "text": "company) shall be limited to 50;"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 499.8158264160156,
+   "baseline": 309.8621826171875,
+   "bottom": 312.70269775390625,
+   "text": "(b) the right to transfer the shares of the company is restricted in the manner set out in clause 6; and"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 518.4096069335938,
+   "baseline": 329.8621826171875,
+   "bottom": 332.70269775390625,
+   "text": "(c) the company shall not make any invitation to the public to subscribe for any shares or debentures of"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 376.78118896484375,
+   "baseline": 343.8621826171875,
+   "bottom": 346.70269775390625,
+   "text": "the company, nor invite the public to deposit money with the company."
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 296.962158203125,
+   "baseline": 369.8621826171875,
+   "bottom": 372.7786865234375,
+   "text": "5. share capital and variation of rights"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 518.4096069335938,
+   "baseline": 387.8621826171875,
+   "bottom": 390.70269775390625,
+   "text": "5.1 the issued share capital of the company at the date of adoption of this constitution is sgd"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 518.40966796875,
+   "baseline": 421.8621826171875,
+   "bottom": 424.70269775390625,
+   "text": "5.2 subject to the act and to this constitution, the directors may allot, issue, grant options over or"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 518.4096069335938,
+   "baseline": 435.8621826171875,
+   "bottom": 438.70269775390625,
+   "text": "otherwise dispose of shares to such persons, on such terms and at such times as the directors may"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 518.4097900390625,
+   "baseline": 449.8621826171875,
+   "bottom": 452.70269775390625,
+   "text": "determine, provided that no shares shall be issued without the prior approval of the company in general"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 113.29864501953125,
+   "baseline": 463.8621826171875,
+   "bottom": 466.70269775390625,
+   "text": "meeting."
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 518.4096069335938,
+   "baseline": 483.8621826171875,
+   "bottom": 486.70269775390625,
+   "text": "5.3 if at any time the share capital is divided into different classes of shares, the rights attached to any"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 518.4097290039062,
+   "baseline": 497.8621826171875,
+   "bottom": 500.70269775390625,
+   "text": "class may be varied only with the consent in writing of the holders of three-quarters of the issued shares"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 518.40966796875,
+   "baseline": 511.8621826171875,
+   "bottom": 514.7026977539062,
+   "text": "of that class, or with the sanction of a special resolution passed at a separate general meeting of the"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 221.55113220214844,
+   "baseline": 525.8621826171875,
+   "bottom": 528.7026977539062,
+   "text": "holders of the shares of that class."
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 197.212158203125,
+   "baseline": 551.8621826171875,
+   "bottom": 554.7786865234375,
+   "text": "6. transfer of shares"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 518.4097290039062,
+   "baseline": 569.8621826171875,
+   "bottom": 572.7026977539062,
+   "text": "6.1 no share shall be transferred to a person who is not a member of the company unless the shares"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 518.4096069335938,
+   "baseline": 583.8621826171875,
+   "bottom": 586.7026977539062,
+   "text": "have first been offered to the existing members in proportion to their existing holdings, at a price"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 254.2786407470703,
+   "baseline": 597.8621826171875,
+   "bottom": 600.7026977539062,
+   "text": "determined in accordance with clause 6.2."
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 518.4096069335938,
+   "baseline": 617.8621826171875,
+   "bottom": 620.7026977539062,
+   "text": "6.2 the transfer price shall be the price agreed between the transferor and the directors or, failing"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 518.4096069335938,
+   "baseline": 631.8621826171875,
+   "bottom": 634.7026977539062,
+   "text": "agreement, the fair value certified by the auditors of the company acting as experts and not as"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 122.26663970947266,
+   "baseline": 645.8621826171875,
+   "bottom": 648.7026977539062,
+   "text": "arbitrators."
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 518.40966796875,
+   "baseline": 665.8621826171875,
+   "bottom": 668.7026977539062,
+   "text": "6.3 the directors may, in their absolute discretion and without assigning any reason, decline to register"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 339.8261413574219,
+   "baseline": 679.8621826171875,
+   "bottom": 682.7026977539062,
+   "text": "the transfer of any share, whether or not it is a fully paid share."
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 518.4096069335938,
+   "baseline": 699.8621826171875,
+   "bottom": 702.7026977539062,
+   "text": "6.4 every instrument of transfer shall be left at the registered office of the company for registration,"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 518.4097290039062,
+   "baseline": 713.8621826171875,
+   "bottom": 716.7026977539062,
+   "text": "accompanied by the certificate of the shares to be transferred and such other evidence as the directors"
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 178.7631378173828,
+   "baseline": 727.8621826171875,
+   "bottom": 730.7026977539062,
+   "text": "may reasonably require."
+  },
+  {
+   "page": 1,
+   "x0": 486.0469055175781,
+   "x1": 524.4094848632812,
+   "baseline": 802.2047119140625,
+   "bottom": 804.4472045898438,
+   "text": "page 2 of 6"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 218.3306427001953,
+   "baseline": 77.8621826171875,
+   "bottom": 80.7786865234375,
+   "text": "7. transmission of shares"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 518.4097290039062,
+   "baseline": 95.8621826171875,
+   "bottom": 98.70268249511719,
+   "text": "7.1 in the case of the death of a member, the survivors where the deceased was a joint holder, and the"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 518.4097290039062,
+   "baseline": 109.8621826171875,
+   "bottom": 112.70268249511719,
+   "text": "legal personal representatives of the deceased where he was a sole holder, shall be the only persons"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 392.627197265625,
+   "baseline": 123.8621826171875,
+   "bottom": 126.70268249511719,
+   "text": "recognised by the company as having any title to his interest in the shares."
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 518.40966796875,
+   "baseline": 143.8621826171875,
+   "bottom": 146.7026824951172,
+   "text": "7.2 any person becoming entitled to a share in consequence of the death or bankruptcy of a member"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 518.4097290039062,
+   "baseline": 157.8621826171875,
+   "bottom": 160.7026824951172,
+   "text": "may, upon such evidence being produced as the directors require, elect either to be registered as the"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 457.5787658691406,
+   "baseline": 171.8621826171875,
+   "bottom": 174.7026824951172,
+   "text": "holder of the share or to have some person nominated by him registered as the transferee."
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 186.13514709472656,
+   "baseline": 197.8621826171875,
+   "bottom": 200.7786865234375,
+   "text": "8. general meetings"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 518.409423828125,
+   "baseline": 215.8621826171875,
+   "bottom": 218.7026824951172,
+   "text": "8.1 an annual general meeting shall be held in accordance with the act, unless the company is exempt"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 518.4097900390625,
+   "baseline": 229.8621826171875,
+   "bottom": 232.7026824951172,
+   "text": "from holding such meeting by virtue of the act or has dispensed with the holding of annual general"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 321.3391418457031,
+   "baseline": 243.8621826171875,
+   "bottom": 246.7026824951172,
+   "text": "meetings by resolution passed in accordance with the act."
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 518.40966796875,
+   "baseline": 263.8621826171875,
+   "bottom": 266.70269775390625,
+   "text": "8.2 a general meeting shall be called by not less than 21 days' notice in writing, exclusive of the day on"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 518.4097290039062,
+   "baseline": 277.8621826171875,
+   "bottom": 280.70269775390625,
+   "text": "which the notice is served and of the day for which it is given, save that a meeting may be called by"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 465.99578857421875,
+   "baseline": 291.8621826171875,
+   "bottom": 294.70269775390625,
+   "text": "shorter notice with the agreement of the requisite majority of members prescribed by the act."
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 518.4096069335938,
+   "baseline": 311.8621826171875,
+   "bottom": 314.70269775390625,
+   "text": "8.3 the accidental omission to give notice of a meeting to, or the non-receipt of notice by, any person"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 398.45068359375,
+   "baseline": 325.8621826171875,
+   "bottom": 328.70269775390625,
+   "text": "entitled to receive notice shall not invalidate the proceedings at that meeting."
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 274.28564453125,
+   "baseline": 351.8621826171875,
+   "bottom": 354.7786865234375,
+   "text": "9. proceedings at general meetings"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 518.4095458984375,
+   "baseline": 369.8621826171875,
+   "bottom": 372.70269775390625,
+   "text": "9.1 no business shall be transacted at any general meeting unless a quorum is present at the time when"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 518.4097290039062,
+   "baseline": 403.8621826171875,
+   "bottom": 406.70269775390625,
+   "text": "9.2 the chairman of the board of directors shall preside as chairman at every general meeting. if there is"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 518.4096069335938,
+   "baseline": 417.8621826171875,
+   "bottom": 420.70269775390625,
+   "text": "no such chairman, or if he is not present within fifteen minutes after the time appointed for the meeting,"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 427.4732971191406,
+   "baseline": 431.8621826171875,
+   "bottom": 434.70269775390625,
+   "text": "the members present shall elect one of their number to be chairman of the meeting."
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 518.4097900390625,
+   "baseline": 451.8621826171875,
+   "bottom": 454.70269775390625,
+   "text": "9.3 at any general meeting a resolution put to the vote of the meeting shall be decided on a show of"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 331.3806457519531,
+   "baseline": 465.8621826171875,
+   "bottom": 468.70269775390625,
+   "text": "hands unless a poll is demanded in accordance with the act."
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 518.4095458984375,
+   "baseline": 485.8621826171875,
+   "bottom": 488.70269775390625,
+   "text": "9.4 subject to any rights or restrictions attached to any class of shares, on a show of hands every"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 518.4096069335938,
+   "baseline": 499.8621826171875,
+   "bottom": 502.70269775390625,
+   "text": "member present in person shall have one vote, and on a poll every member shall have one vote for each"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 154.4811553955078,
+   "baseline": 513.8621826171875,
+   "bottom": 516.7026977539062,
+   "text": "share held by him."
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 148.65765380859375,
+   "baseline": 539.8621826171875,
+   "bottom": 542.7786865234375,
+   "text": "10. directors"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 518.40966796875,
+   "baseline": 557.8621826171875,
+   "bottom": 560.7026977539062,
+   "text": "10.1 the number of directors shall not be less than one, and at least one director shall be ordinarily"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 264.32012939453125,
+   "baseline": 571.8621826171875,
+   "bottom": 574.7026977539062,
+   "text": "resident in singapore as required by the act."
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 518.4097290039062,
+   "baseline": 591.8621826171875,
+   "bottom": 594.7026977539062,
+   "text": "10.2 the company may by ordinary resolution appoint any person to be a director, and may by ordinary"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 518.40966796875,
+   "baseline": 605.8621826171875,
+   "bottom": 608.7026977539062,
+   "text": "resolution remove any director before the expiration of his period of office notwithstanding anything in this"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 385.7681884765625,
+   "baseline": 619.8621826171875,
+   "bottom": 622.7026977539062,
+   "text": "constitution or in any agreement between the company and that director."
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 518.4096069335938,
+   "baseline": 639.8621826171875,
+   "bottom": 642.7026977539062,
+   "text": "10.3 the office of a director shall become vacant if the director becomes bankrupt, becomes disqualified"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 518.4096069335938,
+   "baseline": 653.8621826171875,
+   "bottom": 656.7026977539062,
+   "text": "from acting as a director under the act, resigns by notice in writing to the company, or becomes of"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 139.17665100097656,
+   "baseline": 667.8621826171875,
+   "bottom": 670.7026977539062,
+   "text": "unsound mind."
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 489.7837829589844,
+   "baseline": 687.8621826171875,
+   "bottom": 690.7026977539062,
+   "text": "10.4 the directors shall not be required to hold any shares in the company by way of qualification."
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 270.0581359863281,
+   "baseline": 713.8621826171875,
+   "bottom": 716.7786865234375,
+   "text": "11. powers and duties of directors"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 518.4096069335938,
+   "baseline": 731.8621826171875,
+   "bottom": 734.7026977539062,
+   "text": "11.1 the business of the company shall be managed by the directors, who may exercise all such powers"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 518.40966796875,
+   "baseline": 745.8621826171875,
+   "bottom": 748.7026977539062,
+   "text": "of the company as are not, by the act or by this constitution, required to be exercised by the company in"
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 147.6221466064453,
+   "baseline": 759.8621826171875,
+   "bottom": 762.7026977539062,
+   "text": "general meeting."
+  },
+  {
+   "page": 2,
+   "x0": 486.0469055175781,
+   "x1": 524.4094848632812,
+   "baseline": 802.2047119140625,
+   "bottom": 804.4472045898438,
+   "text": "page 3 of 6"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 518.4097290039062,
+   "baseline": 77.8621826171875,
+   "bottom": 80.70268249511719,
+   "text": "11.2 the directors may exercise all the powers of the company to borrow money, to mortgage or charge"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 518.4096069335938,
+   "baseline": 91.8621826171875,
+   "bottom": 94.70268249511719,
+   "text": "its undertaking, property and uncalled capital, and to issue debentures or give any other security for any"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 340.3486328125,
+   "baseline": 105.8621826171875,
+   "bottom": 108.70268249511719,
+   "text": "debt, liability or obligation of the company or of any third party."
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 518.4094848632812,
+   "baseline": 125.8621826171875,
+   "bottom": 128.7026824951172,
+   "text": "11.3 the directors may from time to time appoint one or more of their number to the office of managing"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 374.14013671875,
+   "baseline": 139.8621826171875,
+   "bottom": 142.7026824951172,
+   "text": "director, and may delegate to him such of their powers as they think fit."
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 237.3401641845703,
+   "baseline": 165.8621826171875,
+   "bottom": 168.7786865234375,
+   "text": "12. proceedings of directors"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 518.4097900390625,
+   "baseline": 183.8621826171875,
+   "bottom": 186.7026824951172,
+   "text": "12.1 the directors may meet together for the despatch of business, adjourn and otherwise regulate their"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 518.4094848632812,
+   "baseline": 197.8621826171875,
+   "bottom": 200.7026824951172,
+   "text": "meetings as they think fit. questions arising at any meeting shall be decided by a majority of votes, and in"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 419.0467224121094,
+   "baseline": 211.8621826171875,
+   "bottom": 214.7026824951172,
+   "text": "the case of an equality of votes the chairman shall have a second or casting vote."
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 518.4097290039062,
+   "baseline": 231.8621826171875,
+   "bottom": 234.7026824951172,
+   "text": "12.2 a resolution in writing signed by all the directors for the time being entitled to receive notice of a"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 518.4097290039062,
+   "baseline": 245.8621826171875,
+   "bottom": 248.7026824951172,
+   "text": "meeting of the directors shall be as valid and effectual as if it had been passed at a meeting duly"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 159.7821502685547,
+   "baseline": 259.8621826171875,
+   "bottom": 262.70269775390625,
+   "text": "convened and held."
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 518.4097900390625,
+   "baseline": 279.8621826171875,
+   "bottom": 282.70269775390625,
+   "text": "12.3 a director may participate in a meeting of directors by means of a telephone conference or any other"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 518.4096069335938,
+   "baseline": 293.8621826171875,
+   "bottom": 296.70269775390625,
+   "text": "form of communication by which all persons participating in the meeting are able to hear and be heard by"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 164.51315307617188,
+   "baseline": 307.8621826171875,
+   "bottom": 310.70269775390625,
+   "text": "all other participants."
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 151.2986602783203,
+   "baseline": 333.8621826171875,
+   "bottom": 336.7786865234375,
+   "text": "13. secretary"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 518.4096069335938,
+   "baseline": 351.8621826171875,
+   "bottom": 354.70269775390625,
+   "text": "the secretary shall be appointed by the directors for such term, at such remuneration and upon such"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 518.4096069335938,
+   "baseline": 365.8621826171875,
+   "bottom": 368.70269775390625,
+   "text": "conditions as they may think fit, and any secretary so appointed may be removed by them, subject"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 235.80113220214844,
+   "baseline": 379.8621826171875,
+   "bottom": 382.70269775390625,
+   "text": "always to the requirements of the act."
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 201.420654296875,
+   "baseline": 405.8621826171875,
+   "bottom": 408.7786865234375,
+   "text": "14. accounts and audit"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 518.40966796875,
+   "baseline": 423.8621826171875,
+   "bottom": 426.70269775390625,
+   "text": "14.1 the directors shall cause proper accounting and other records to be kept, and shall distribute copies"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 269.07012939453125,
+   "baseline": 437.8621826171875,
+   "bottom": 440.70269775390625,
+   "text": "of financial statements as required by the act."
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 518.409423828125,
+   "baseline": 457.8621826171875,
+   "bottom": 460.70269775390625,
+   "text": "14.2 auditors shall be appointed and their duties regulated in accordance with the act, unless the"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 325.5476379394531,
+   "baseline": 471.8621826171875,
+   "bottom": 474.70269775390625,
+   "text": "company is exempt from audit requirements under the act."
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 222.03565979003906,
+   "baseline": 497.8621826171875,
+   "bottom": 500.7786865234375,
+   "text": "15. dividends and reserves"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 518.4096069335938,
+   "baseline": 515.8621826171875,
+   "bottom": 518.7026977539062,
+   "text": "15.1 the company may by ordinary resolution declare dividends, but no dividend shall exceed the"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 242.1281280517578,
+   "baseline": 529.8621826171875,
+   "bottom": 532.7026977539062,
+   "text": "amount recommended by the directors."
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 518.40966796875,
+   "baseline": 549.8621826171875,
+   "bottom": 552.7026977539062,
+   "text": "15.2 no dividend shall be paid otherwise than out of profits available for distribution in accordance with"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 109.08064270019531,
+   "baseline": 563.8621826171875,
+   "bottom": 566.7026977539062,
+   "text": "the act."
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 518.409423828125,
+   "baseline": 583.8621826171875,
+   "bottom": 586.7026977539062,
+   "text": "15.3 the directors may, before recommending any dividend, set aside out of the profits of the company"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 265.88763427734375,
+   "baseline": 597.8621826171875,
+   "bottom": 600.7026977539062,
+   "text": "such sums as they think proper as a reserve."
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 134.9396514892578,
+   "baseline": 623.8621826171875,
+   "bottom": 626.7786865234375,
+   "text": "16. notices"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 518.40966796875,
+   "baseline": 641.8621826171875,
+   "bottom": 644.7026977539062,
+   "text": "16.1 a notice may be given by the company to any member either personally, by sending it by post to his"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 518.40966796875,
+   "baseline": 655.8621826171875,
+   "bottom": 658.7026977539062,
+   "text": "registered address, or by electronic communication to the electronic address supplied by him for that"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 113.83065032958984,
+   "baseline": 669.8621826171875,
+   "bottom": 672.7026977539062,
+   "text": "purpose."
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 518.4097290039062,
+   "baseline": 689.8621826171875,
+   "bottom": 692.7026977539062,
+   "text": "16.2 a notice sent by post shall be deemed to have been served on the day following that on which it was"
+  },
+  {
+   "page": 3,
+   "x0": 76.86614227294922,
+   "x1": 108.0261459350586,
+   "baseline": 703.8621826171875,
+   "bottom": 706.7026977539062,
+   "text": "posted."
+  },
+  {
+   "page": 3,
+   "x0": 486.0469055175781,
+   "x1": 524.4094848632812,
+   "baseline": 802.2047119140625,
+   "bottom": 804.4472045898438,
+   "text": "page 4 of 6"
+  },
+  {
+   "page": 4,
+   "x0": 76.86614227294922,
+   "x1": 150.7666473388672,
+   "baseline": 77.8621826171875,
+   "bottom": 80.7786865234375,
+   "text": "17. winding up"
+  },
+  {
+   "page": 4,
+   "x0": 76.86614227294922,
+   "x1": 518.4096069335938,
+   "baseline": 95.8621826171875,
+   "bottom": 98.70268249511719,
+   "text": "if the company is wound up, the liquidator may, with the sanction of a special resolution and any other"
+  },
+  {
+   "page": 4,
+   "x0": 76.86614227294922,
+   "x1": 518.4096069335938,
+   "baseline": 109.8621826171875,
+   "bottom": 112.70268249511719,
+   "text": "sanction required by the act, divide amongst the members in specie the whole or any part of the assets of"
+  },
+  {
+   "page": 4,
+   "x0": 76.86614227294922,
+   "x1": 136.003662109375,
+   "baseline": 123.8621826171875,
+   "bottom": 126.70268249511719,
+   "text": "the company."
+  },
+  {
+   "page": 4,
+   "x0": 76.86614227294922,
+   "x1": 144.962158203125,
+   "baseline": 149.8621826171875,
+   "bottom": 152.7786865234375,
+   "text": "18. indemnity"
+  },
+  {
+   "page": 4,
+   "x0": 76.86614227294922,
+   "x1": 518.4096069335938,
+   "baseline": 167.8621826171875,
+   "bottom": 170.7026824951172,
+   "text": "subject to the act, every director, auditor, secretary or other officer of the company shall be entitled to be"
+  },
+  {
+   "page": 4,
+   "x0": 76.86614227294922,
+   "x1": 518.4097900390625,
+   "baseline": 181.8621826171875,
+   "bottom": 184.7026824951172,
+   "text": "indemnified out of the assets of the company against any liability incurred by him in defending any"
+  },
+  {
+   "page": 4,
+   "x0": 76.86614227294922,
+   "x1": 517.1912841796875,
+   "baseline": 195.8621826171875,
+   "bottom": 198.7026824951172,
+   "text": "proceedings, whether civil or criminal, in which judgment is given in his favour or in which he is acquitted."
+  },
+  {
+   "page": 4,
+   "x0": 486.0469055175781,
+   "x1": 524.4094848632812,
+   "baseline": 802.2047119140625,
+   "bottom": 804.4472045898438,
+   "text": "page 5 of 6"
+  },
+  {
+   "page": 5,
+   "x0": 76.86614227294922,
+   "x1": 132.2891387939453,
+   "baseline": 77.8621826171875,
+   "bottom": 80.7786865234375,
+   "text": "execution"
+  },
+  {
+   "page": 5,
+   "x0": 76.86614227294922,
+   "x1": 518.4097290039062,
+   "baseline": 95.8621826171875,
+   "bottom": 98.70268249511719,
+   "text": "we, the several persons whose names, addresses and descriptions are subscribed below, are desirous"
+  },
+  {
+   "page": 5,
+   "x0": 76.86614227294922,
+   "x1": 518.4095458984375,
+   "baseline": 109.8621826171875,
+   "bottom": 112.70268249511719,
+   "text": "of being formed into a company in pursuance of this constitution, and we respectively agree to take the"
+  },
+  {
+   "page": 5,
+   "x0": 76.86614227294922,
+   "x1": 426.4187927246094,
+   "baseline": 123.8621826171875,
+   "bottom": 126.70268249511719,
+   "text": "number of shares in the capital of the company set opposite our respective names."
+  },
+  {
+   "page": 5,
+   "x0": 81.86614227294922,
+   "x1": 267.49761962890625,
+   "baseline": 155.8621826171875,
+   "bottom": 158.4716796875,
+   "text": "name, address and description of subscriber"
+  },
+  {
+   "page": 5,
+   "x0": 317.7086486816406,
+   "x1": 386.6606750488281,
+   "baseline": 155.8621826171875,
+   "bottom": 158.4716796875,
+   "text": "identification no."
+  },
+  {
+   "page": 5,
+   "x0": 426.5590515136719,
+   "x1": 499.7695617675781,
+   "baseline": 155.8621826171875,
+   "bottom": 158.4716796875,
+   "text": "number of shares"
+  },
+  {
+   "page": 5,
+   "x0": 426.5590515136719,
+   "x1": 451.1240539550781,
+   "baseline": 166.8621826171875,
+   "bottom": 169.4716796875,
+   "text": "taken"
+  },
+  {
+   "page": 5,
+   "x0": 81.86614227294922,
+   "x1": 156.50465393066406,
+   "baseline": 273.8621826171875,
+   "bottom": 276.4716796875,
+   "text": "total shares taken"
+  },
+  {
+   "page": 5,
+   "x0": 76.86614227294922,
+   "x1": 214.68263244628906,
+   "baseline": 342.8621826171875,
+   "bottom": 345.70269775390625,
+   "text": "witness to the above signatures:"
+  },
+  {
+   "page": 5,
+   "x0": 486.0469055175781,
+   "x1": 524.4094848632812,
+   "baseline": 802.2047119140625,
+   "bottom": 804.4472045898438,
+   "text": "page 6 of 6"
+  }
+ ],
+ "slots": [
+  {
+   "page": 0,
+   "x0": 196.48733520507812,
+   "x1": 398.7883605957031,
+   "baseline": 176.3621826171875,
+   "bottom": 179.7391815185547,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 290.6928405761719,
+   "x1": 304.58282470703125,
+   "baseline": 245.3621826171875,
+   "bottom": 248.35218811035156,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 138.50979614257812,
+   "x1": 456.7657775878906,
+   "baseline": 280.3621826171875,
+   "bottom": 285.274169921875,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 253.1778564453125,
+   "x1": 342.0978088378906,
+   "baseline": 302.3621826171875,
+   "bottom": 305.3521728515625,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 223.98284912109375,
+   "x1": 371.29278564453125,
+   "baseline": 345.3621826171875,
+   "bottom": 348.3521728515625,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 233.4278564453125,
+   "x1": 361.8478088378906,
+   "baseline": 364.3621826171875,
+   "bottom": 367.3521728515625,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 206.75784301757812,
+   "x1": 388.5177917480469,
+   "baseline": 473.3621826171875,
+   "bottom": 476.3521728515625,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 167.5677947998047,
+   "x1": 427.7077331542969,
+   "baseline": 492.3621826171875,
+   "bottom": 495.3521728515625,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 357.73370361328125,
+   "baseline": 95.8621826171875,
+   "bottom": 98.7786865234375,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 518.4097290039062,
+   "baseline": 139.8621826171875,
+   "bottom": 142.7026824951172,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 499.2648010253906,
+   "baseline": 153.8621826171875,
+   "bottom": 156.7026824951172,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 76.86614227294922,
+   "x1": 290.7395935058594,
+   "baseline": 401.8621826171875,
+   "bottom": 404.70269775390625,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 70.86614227294922,
+   "x1": 234.7036590576172,
+   "baseline": 802.2047119140625,
+   "bottom": 804.4472045898438,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 76.86614227294922,
+   "x1": 508.2518615722656,
+   "baseline": 383.8621826171875,
+   "bottom": 386.70269775390625,
+   "text": null
+  },
+  {
+   "page": 2,
+   "x0": 70.86614227294922,
+   "x1": 234.7036590576172,
+   "baseline": 802.2047119140625,
+   "bottom": 804.4472045898438,
+   "text": null
+  },
+  {
+   "page": 3,
+   "x0": 70.86614227294922,
+   "x1": 234.7036590576172,
+   "baseline": 802.2047119140625,
+   "bottom": 804.4472045898438,
+   "text": null
+  },
+  {
+   "page": 4,
+   "x0": 70.86614227294922,
+   "x1": 234.7036590576172,
+   "baseline": 802.2047119140625,
+   "bottom": 804.4472045898438,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 317.7086486816406,
+   "x1": 362.129638671875,
+   "baseline": 187.8621826171875,
+   "bottom": 190.4036865234375,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 426.5590515136719,
+   "x1": 457.278076171875,
+   "baseline": 187.8621826171875,
+   "bottom": 190.4036865234375,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 81.86614227294922,
+   "x1": 133.34214782714844,
+   "baseline": 187.8621826171875,
+   "bottom": 190.4716796875,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 81.86614227294922,
+   "x1": 271.7901306152344,
+   "baseline": 198.8621826171875,
+   "bottom": 201.4036865234375,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 81.86614227294922,
+   "x1": 184.3561248779297,
+   "baseline": 209.8621826171875,
+   "bottom": 214.3621826171875,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 317.7086486816406,
+   "x1": 362.129638671875,
+   "baseline": 230.8621826171875,
+   "bottom": 233.4036865234375,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 426.5590515136719,
+   "x1": 452.55206298828125,
+   "baseline": 230.8621826171875,
+   "bottom": 233.4036865234375,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 81.86614227294922,
+   "x1": 145.14013671875,
+   "baseline": 230.8621826171875,
+   "bottom": 233.4716796875,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 81.86614227294922,
+   "x1": 260.9271545410156,
+   "baseline": 241.8621826171875,
+   "bottom": 244.4036865234375,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 81.86614227294922,
+   "x1": 195.59112548828125,
+   "baseline": 252.8621826171875,
+   "bottom": 257.3621826171875,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 426.5590515136719,
+   "x1": 457.278076171875,
+   "baseline": 273.8621826171875,
+   "bottom": 276.4716796875,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 76.86614227294922,
+   "x1": 224.20164489746094,
+   "baseline": 306.8621826171875,
+   "bottom": 309.70269775390625,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 76.86614227294922,
+   "x1": 149.2021484375,
+   "baseline": 377.3621826171875,
+   "bottom": 381.8421936035156,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 76.86614227294922,
+   "x1": 272.30010986328125,
+   "baseline": 389.2621765136719,
+   "bottom": 392.1026611328125,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 76.86614227294922,
+   "x1": 130.712158203125,
+   "baseline": 403.2621765136719,
+   "bottom": 406.1786804199219,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 76.86614227294922,
+   "x1": 334.0406494140625,
+   "baseline": 417.2621765136719,
+   "bottom": 420.1026611328125,
+   "text": null
+  },
+  {
+   "page": 5,
+   "x0": 70.86614227294922,
+   "x1": 234.7036590576172,
+   "baseline": 802.2047119140625,
+   "bottom": 804.4472045898438,
+   "text": null
+  }
+ ]
+}
