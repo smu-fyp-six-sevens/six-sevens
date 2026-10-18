@@ -69,9 +69,10 @@ SPECIALISTS: dict[str, Specialist] = {
             "or compression doesn't match the rest of the document (a spliced-in photo, signature "
             "or figure, or one enlarged from a smaller source), or that were edited in after the "
             "fact (painted over and replaced, stretched or rotated, pasted with a visible seam or "
-            "halo, or with altered brightness, colour, sharpness or noise). The font check needs a PDF with native text; the layout check also reads PNG/JPEG "
-            "uploads and scans by OCR (an ID card's fields against its standard layout), and the "
-            "two image checks work on both. Most useful on "
+            "halo, or with altered brightness, colour, sharpness or noise). The font check needs a "
+            "PDF with native text; the layout check also reads PNG/JPEG uploads and scans by OCR "
+            "(an ID card's fields against its standard layout), and the two image checks work on "
+            "both. Most useful on "
             "documents with printed figures, names or photos that someone might have edited "
             "(statements, payslips, certificates, IDs)."
         ),
