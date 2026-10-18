@@ -7,16 +7,16 @@ from fastapi.testclient import TestClient
 
 from app.langgraph.detection.field_checks.binder import BindingResult
 from app.fraud_detection.font_consistency import ExtractedField, FontConsistencyResult
-from app.fraud_detection.image_manipulation import (
+from app.fraud_detection.images.image_manipulation import (
     ImageManipulationResult,
     ImageTamperingResult,
     TamperingTolerances,
     Tolerances,
 )
-from app.fraud_detection.metadata_analysis import MetadataAnalysisResult
+from app.fraud_detection.authenticity.metadata_analysis import MetadataAnalysisResult
 from app.fraud_detection.layout_anomalies import CheckAssessment, LayoutAnomalyResult
-from app.fraud_detection.date_anomalies import DateAnomalyResult
-from app.fraud_detection.spelling_anomaly import SpellingAnomaly, SpellingAnomalyResult
+from app.fraud_detection.dates.date_anomalies import DateAnomalyResult
+from app.fraud_detection.spelling.spelling_anomaly import SpellingAnomaly, SpellingAnomalyResult
 from app.main import app
 from app.models import DocumentRecord, DocumentStatus
 
@@ -845,7 +845,7 @@ def test_get_numerical_validation_reports_a_binder_failure_and_still_runs() -> N
 
 
 def test_ai_generation_happy_path() -> None:
-    from app.fraud_detection.ai_generation import AIGenerationConfig, AIGenerationResult
+    from app.fraud_detection.authenticity.ai_generation import AIGenerationConfig, AIGenerationResult
 
     result = AIGenerationResult(
         document_id="doc-1", score=0.12, likelihood="low", images=[],

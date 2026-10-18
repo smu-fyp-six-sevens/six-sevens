@@ -24,7 +24,7 @@ from .tool_timeout import guard_tool
 from .field_checks import external_validation_tool, numerical_checks_tool
 from ...config import settings
 from ... import telemetry
-from ...fraud_detection.field_catalogue import render_field_catalogue
+from ...fraud_detection.shared.field_catalogue import render_field_catalogue
 from ...fraud_detection.numerical_validation.runner import render_check_roles
 from ...llm_contracts import SpecialistAssessment, ToolResult
 from ... import run_context
@@ -53,7 +53,7 @@ class Specialist:
     title: str
     expertise: str
     tools: tuple
-    # Gets the document's field list in its prompt (see fraud_detection/field_catalogue.py).
+    # Gets the document's field list in its prompt (see fraud_detection/shared/field_catalogue.py).
     uses_field_catalogue: bool = False
 
 

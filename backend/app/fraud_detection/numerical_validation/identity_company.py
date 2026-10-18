@@ -18,7 +18,7 @@ from .common import (
     _parse_field_date,
     _rows,
 )
-from ..field_values import also_printed_in, describe_path, text_values
+from ..shared.field_values import also_printed_in, describe_path, text_values
 from .models import NumericalFinding
 from .registry import Num, check
 
