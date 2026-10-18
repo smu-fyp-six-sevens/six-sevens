@@ -1,4 +1,5 @@
 import type {
+  AdditionalDocuments,
   CaseAnalysisOverview,
   CaseRisk,
   DocumentRecord,
@@ -16,9 +17,10 @@ import {
 import { humanizeFieldKey } from '../../utils/fieldLabels';
 import { CaseAnalysisCard } from './CaseAnalysisCard';
 import { CaseRiskCard } from './CaseRiskCard';
-import { SupportingDocumentsCard } from './SupportingDocumentsCard';
+import { AdditionalDocumentsCard } from './AdditionalDocumentsCard';
 
 export function UploadSummaryCards({
+  additionalDocuments,
   analysisOverview,
   analysisReady,
   caseId,
@@ -29,6 +31,7 @@ export function UploadSummaryCards({
   risk,
   supportingDocumentRecommendations,
 }: {
+  additionalDocuments: AdditionalDocuments | null;
   analysisOverview: CaseAnalysisOverview | null;
   analysisReady: boolean;
   caseId: string;
@@ -161,7 +164,11 @@ export function UploadSummaryCards({
             <CaseAnalysisCard caseId={caseId} analysisReady={analysisReady} overview={analysisOverview} />
 
             {/* Both come from the latest complete case analysis, so risk is set exactly when one exists. */}
-            <SupportingDocumentsCard recommendations={supportingDocumentRecommendations} analysed={risk !== null} />
+            <AdditionalDocumentsCard
+              additionalDocuments={additionalDocuments}
+              legacyRecommendations={supportingDocumentRecommendations}
+              analysed={risk !== null}
+            />
 
             <section className="summary-card">
               <div className="summary-card-header">

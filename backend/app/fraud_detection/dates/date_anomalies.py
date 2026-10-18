@@ -50,11 +50,12 @@ from typing import Any, Callable
 
 from pydantic import BaseModel
 
-from .font_consistency import ExtractedField
-from .numerical_validation.common import officer_appointed, officer_role, _apply_needs_review, _as_number, _confidence_by_name, _fields_by_name, _parse_field_date, _rows, _skip_missing
-from .numerical_validation.identity_company import _UEN_RE, _is_forward_looking_date_field, _looks_like_date_field
-from .numerical_validation.models import Severity, SkippedCheck
-from .external_validation.reference_checks.tax import _noa_year
+from .date_parsing import date_in_period, parse_date_parts
+from ..font_consistency import ExtractedField
+from ..numerical_validation.common import officer_appointed, officer_role, _apply_needs_review, _as_number, _confidence_by_name, _fields_by_name, _parse_field_date, _rows, _skip_missing
+from ..numerical_validation.identity_company import _UEN_RE, _is_forward_looking_date_field, _looks_like_date_field
+from ..numerical_validation.models import Severity, SkippedCheck
+from ..external_validation.reference_checks.tax import _noa_year
 
 
 class _Ctx(BaseModel):
@@ -218,6 +219,7 @@ def extract_labeled_dates(ctx: _Ctx, confidences: dict[str, float]) -> list[Extr
             confidence=confidences.get(name),
         ))
 
+    period = _statement_period(ctx)
     for row_field, subfields in _ROW_DATE_LABELS.items():
         rows = _rows(ctx.fields.get(row_field))
         for i, row in enumerate(rows):
@@ -228,7 +230,7 @@ def extract_labeled_dates(ctx: _Ctx, confidences: dict[str, float]) -> list[Extr
                     raw = officer_appointed(row)
                 if not isinstance(raw, str):
                     continue
-                parsed = _parse_field_date(raw)
+                parsed = date_in_period(raw, *period) if row_field == "transactions" else _parse_field_date(raw)
                 if parsed is None:
                     continue
                 extracted.append(ExtractedDate(
@@ -238,6 +240,11 @@ def extract_labeled_dates(ctx: _Ctx, confidences: dict[str, float]) -> list[Extr
                 ))
 
     return extracted
+
+
+def _statement_period(ctx: _Ctx) -> tuple[date | None, date | None]:
+    """The statement period, which gives a transaction's year when the row prints only "23 AUG"."""
+    return _parse_field_date(ctx.fields.get("statement_period_start")), _parse_field_date(ctx.fields.get("statement_period_end"))
 
 
 def _has_any_date_like_field(ctx: _Ctx) -> bool:
@@ -277,10 +284,13 @@ def _check_date_valid(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck | None
     for name, raw in date_fields.items():
         parsed = _parse_field_date(raw)
         if parsed is None:
-            findings.append(_finding(
-                "GEN.DATE_VALID", "impossible", f"{name} ({raw!r}) does not parse as a date",
-                field=name, stated=str(raw),
-            ))
+            # A date printed without a year or a day ("31/03", "September 2026") is real, just not
+            # complete enough to check against today.
+            if parse_date_parts(raw) is None:
+                findings.append(_finding(
+                    "GEN.DATE_VALID", "impossible", f"{name} ({raw!r}) does not parse as a date",
+                    field=name, stated=str(raw),
+                ))
         elif parsed > ctx.today and not _is_forward_looking_date_field(name):
             findings.append(_finding(
                 "GEN.DATE_VALID", "impossible",
@@ -372,7 +382,10 @@ def _check_period_bounds(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck | N
     findings = []
     dates: list[date] = []
     for i, row in enumerate(_rows(rows)):
-        txn_date = _parse_field_date(row.get("date"))
+        raw = row.get("date")
+        # "23 AUG" takes its year from the period; one no year of the period can place is outside it, and
+        # is reported against the period's closing year.
+        txn_date = date_in_period(raw, start, end) or _parse_field_date(raw, default_year=end.year)
         if txn_date is None:
             continue
         dates.append(txn_date)

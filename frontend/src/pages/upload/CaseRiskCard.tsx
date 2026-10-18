@@ -305,6 +305,17 @@ export function CaseRiskCard({ risk }: { risk: CaseRisk | null }) {
                                   {count > 1 && <span className="risk-repeat">×{count}</span>}
                                 </span>
                                 {detail && <span className="risk-finding-rationale">{detail}</span>}
+                                {finding.repeat_of && (
+                                  <span className="risk-finding-rationale">
+                                    Also found on another document; counted once there, not again here.
+                                  </span>
+                                )}
+                                {(finding.also_on ?? 0) > 0 && (
+                                  <span className="risk-finding-rationale">
+                                    Also found on {finding.also_on} other{' '}
+                                    {finding.also_on === 1 ? 'document' : 'documents'}; counted once.
+                                  </span>
+                                )}
                               </span>
                             </li>
                           );

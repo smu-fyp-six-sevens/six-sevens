@@ -50,6 +50,7 @@ export default function UploadPage({
     analysisReady,
     analysisOverview,
     supportingDocumentRecommendations,
+    additionalDocuments,
     wsConnected,
     snapshotLoaded,
     caseMatches,
@@ -378,6 +379,7 @@ export default function UploadPage({
             flaggedDocuments={flaggedDocuments}
             onOpenDocument={onOpenDocument}
             risk={risk}
+            additionalDocuments={additionalDocuments}
             supportingDocumentRecommendations={supportingDocumentRecommendations}
           />
         </section>

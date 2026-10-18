@@ -271,6 +271,7 @@ async def extract_node(state: DocumentGraphState) -> dict:
         "dropped_unprinted_fields": extraction.get("dropped_unprinted_fields", []),
         "dropped_empty_fields": extraction.get("dropped_empty_fields", []),
         "dropped_period_totals": extraction.get("dropped_period_totals", []),
+        "dropped_example_values": extraction.get("dropped_example_values", []),
         "escalation": extraction.get("escalation"),
         "output_error": extraction.get("output_error"),
         "output_status": extraction.get("output_status"),

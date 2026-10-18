@@ -74,8 +74,9 @@ Weak or oversold:
   re-renders, not that the backend recomputes.
 - `DI-045` forces a passport's case-match `status` to `mismatch` in the mock. The real backend
   now returns `manual_review` for a person not on the incumbency, so this models a state that
-  document no longer reaches. A true pairwise `mismatch` scenario, or a triage assertion,
-  would be more faithful.
+  document no longer reaches. The pairwise person comparison moved to the case analysis
+  (`cross_document/identity_pairs.py`), so a case-match `mismatch` now only comes from the incumbency
+  check; a triage assertion would be more faithful.
 - `FD-015`, `FD-017`, `FD-020` contain `expect(C028_REPORT...)` assertions on the JSON fixture,
   which test the fixture, not the UI (the backend test already keeps it honest).
 

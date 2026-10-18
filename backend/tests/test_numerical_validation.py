@@ -4,7 +4,7 @@ import pytest
 import random
 from types import SimpleNamespace
 
-from app.fraud_detection.field_catalogue import array_rows
+from app.fraud_detection.shared.field_catalogue import array_rows
 from app.fraud_detection.font_consistency import ExtractedField
 from app.fraud_detection.numerical_validation.runner import Binding, ROW_ROLES, benford_summary, run_numerical_checks
 from app.fraud_detection.numerical_validation.identity_company import _mrz_check_digit, _nric_expected_letter
@@ -371,32 +371,43 @@ def test_fee_schedule_flags_widely_varying_recurring_fee() -> None:
     assert len(_codes(result, "BS.FEE_SCHEDULE")) == 1
 
 
-def test_card_diversity_flags_one_card_per_transaction() -> None:
+def test_payment_patterns_are_no_longer_per_document_checks() -> None:
+    """Duplicates, card diversity and recurring variance are cross-document hypotheses now."""
     transactions = [
-        {"description": f"CARD 1234-XXXX-XXXX-{i:04d}", "amount": -1.0, "balance": 0.0}
-        for i in range(6)
-    ]
-    result = _run([_field("transactions", transactions)], document_type="bank_statement")
-    assert len(_codes(result, "BS.CARD_DIVERSITY")) == 1
-
-
-def test_recurring_variance_flags_rent_that_moves_a_lot() -> None:
-    transactions = [
+        *[{"description": f"CARD 1234-XXXX-XXXX-{i:04d}", "amount": -1.0, "balance": 0.0} for i in range(6)],
+        *[{"description": "NETFLIX", "amount": -15.0, "balance": 0.0}] * 2,
         {"description": "RENT PAYMENT", "amount": -1000.0, "balance": 0.0},
         {"description": "RENT PAYMENT", "amount": -1000.0, "balance": 0.0},
         {"description": "RENT PAYMENT", "amount": -1500.0, "balance": 0.0},
     ]
     result = _run([_field("transactions", transactions)], document_type="bank_statement")
-    assert len(_codes(result, "BS.RECURRING_VARIANCE")) == 1
+    for code in ("BS.CARD_DIVERSITY", "BS.RECURRING_VARIANCE", "STAT.DUPLICATES"):
+        assert _codes(result, code) == []
 
 
-def test_duplicates_flags_same_payee_and_amount_repeated() -> None:
-    transactions = [
-        {"description": "NETFLIX", "amount": -15.0, "balance": 0.0},
-        {"description": "NETFLIX", "amount": -15.0, "balance": 0.0},
-    ]
-    result = _run([_field("transactions", transactions)], document_type="bank_statement")
-    assert len(_codes(result, "STAT.DUPLICATES")) == 1
+def test_repeated_payments_groups_every_repeat_once() -> None:
+    from app.fraud_detection.numerical_validation.statements import repeated_payments
+
+    rows = [{"description": "NETFLIX", "amount": -15.0}, {"description": "OTHER", "amount": -1.0}] + [
+        {"description": "NETFLIX", "amount": -15.0}
+    ] * 2
+    assert repeated_payments(rows) == [("netflix", -15.0, [0, 2, 3])]
+
+
+def test_card_usage_counts_distinct_cards() -> None:
+    from app.fraud_detection.numerical_validation.statements import card_usage
+
+    rows = [{"description": f"CARD 1234-XXXX-XXXX-{i % 2:04d}"} for i in range(6)]
+    transactions, cards = card_usage(rows)
+    assert (transactions, len(cards)) == (6, 2)
+
+
+def test_recurring_payments_leave_out_fees_and_one_offs() -> None:
+    from app.fraud_detection.numerical_validation.statements import recurring_payments
+
+    rows = [{"description": "RENT 1", "amount": -1000.0}] * 2 + [{"description": "RENT 2", "amount": -1500.0}]
+    rows += [{"description": "SERVICE CHARGE", "amount": -5.0}] * 3 + [{"description": "ONE OFF", "amount": -9.0}]
+    assert recurring_payments(rows) == {"rent #": [1000.0, 1000.0, 1500.0]}
 
 
 def test_real_statements_from_production_reconcile() -> None:

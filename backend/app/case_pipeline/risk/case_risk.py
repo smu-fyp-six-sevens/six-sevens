@@ -19,6 +19,8 @@ Scoring:
   scores REPEAT_WEIGHT of its points. A check reporting one edit as several
   findings (e.g. the same offset on four rows) is one pattern, not four
   pieces of evidence — two different checks both firing still count in full.
+- The same finding on several documents (same check, same stated value; see _repeat_key) scores once, on the
+  document where it is strongest. The copies on other documents score 0 and are labelled; they still show.
 - Low/medium points are capped per document (NOISE_CAP_PER_DOCUMENT) so a
   long document full of minor hits (e.g. spelling) can't push a case to
   High on its own. High findings are never capped.
@@ -106,13 +108,61 @@ def _score_out_of_100(level: RiskLevel, points: float) -> int:
     return round(low_score + position * (high_score - low_score))
 
 
-def _score_document(document: DocumentRecord, report: dict[str, Any]) -> list[ContributingFinding]:
+def _repeat_key(finding: dict[str, Any]) -> tuple | None:
+    """
+    What makes two findings one fact: the same check on the same stated value (a UEN a registry has no record of).
+    A finding without both is evidence about its own document (a font, a metadata field) and is never merged:
+    the same wording on three documents is three pieces of evidence.
+    """
+    stated = str(finding.get("stated") or "").strip().lower()
+    if finding.get("check_code") and stated:
+        return (finding.get("tool"), finding["check_code"], stated)
+    return None
+
+
+class _Repeats:
+    """Findings that also appear on another document: which ones score 0, and how often the scoring one recurs."""
+
+    def __init__(self) -> None:
+        self.zero: dict[str, set[str]] = {}  # document id -> report finding ids
+        self.primary: dict[tuple[str, str], int] = {}  # (document id, report finding id) -> other documents carrying it
+        self.repeat_of: dict[tuple[str, str], str] = {}  # (document id, report finding id) -> primary finding_id
+
+
+def _plan_repeats(documents: list[DocumentRecord], reports: dict[str, dict[str, Any]]) -> _Repeats:
+    seen: dict[tuple, list[tuple[str, str, float]]] = {}
+    for document in documents:
+        for finding in reports[document.id].get("findings") or []:
+            points, key = SEVERITY_POINTS.get(finding.get("severity"), 0), _repeat_key(finding)
+            if points > 0 and key is not None:
+                seen.setdefault(key, []).append((document.id, finding["id"], points))
+    plan = _Repeats()
+    for occurrences in seen.values():
+        document_ids = {d for d, _, _ in occurrences}
+        if len(document_ids) < 2:
+            continue
+        keep = max(occurrences, key=lambda o: o[2])  # strongest, the first of equals
+        plan.primary[(keep[0], keep[1])] = len(document_ids) - 1
+        for document_id, finding_id, _ in occurrences:
+            if document_id != keep[0]:
+                plan.zero.setdefault(document_id, set()).add(finding_id)
+                plan.repeat_of[(document_id, finding_id)] = f"{keep[0][:8]}:{keep[1]}"
+    return plan
+
+
+def _score_document(
+    document: DocumentRecord, report: dict[str, Any], repeats: _Repeats | None = None,
+) -> list[ContributingFinding]:
     findings = [f for f in report.get("findings") or [] if SEVERITY_POINTS.get(f.get("severity"), 0) > 0]
     # Most severe first, so each check's first finding here is its strongest.
     findings.sort(key=lambda f: -SEVERITY_POINTS[f["severity"]])
+    zero = repeats.zero.get(document.id, set()) if repeats else set()
     base_points: list[float] = []
     checks_seen: set[str | None] = set()
     for finding in findings:
+        if finding["id"] in zero:
+            base_points.append(0.0)  # scored on another document; it must not use up this document's noise cap
+            continue
         weight = REPEAT_WEIGHT if finding.get("tool") in checks_seen else 1.0
         checks_seen.add(finding.get("tool"))
         base_points.append(SEVERITY_POINTS[finding["severity"]] * weight)
@@ -136,6 +186,8 @@ def _score_document(document: DocumentRecord, report: dict[str, Any]) -> list[Co
             unreviewed=finding.get("rationale") == _UNASSESSED_RATIONALE,
             flag_id=finding.get("flag_id"),
             category=category_for_finding(finding).value,
+            also_on=repeats.primary.get((document.id, finding["id"]), 0) if repeats else 0,
+            repeat_of=repeats.repeat_of.get((document.id, finding["id"])) if repeats else None,
         )
         for finding, points in zip(findings, base_points)
     ]
@@ -175,7 +227,7 @@ def rate_findings(findings: list[ContributingFinding]) -> tuple[RiskLevel, int, 
         if findings
         else "Rated Low: detection found nothing worth flagging."
     )
-    high_documents = {f.document_id for f in findings if f.severity == "high"}
+    high_documents = {f.document_id for f in findings if f.severity == "high" and f.points > 0}
     if len(high_documents) >= CRITICAL_MIN_HIGH_DOCUMENTS:
         level = "Critical"
         reason = f"Rated Critical: high-severity findings on {len(high_documents)} documents."
@@ -201,6 +253,7 @@ def scoring_breakdown(risk: CaseRisk) -> dict[str, Any]:
             {
                 "finding_id": f.finding_id, "document": f.filename, "tool": f.tool, "severity": f.severity,
                 "points": f.points, "category": f.category, "source": f.source, "unreviewed": f.unreviewed,
+                "also_on": f.also_on, "repeat_of": f.repeat_of,
             }
             for f in risk.contributing_findings
         ],
@@ -215,6 +268,8 @@ def compute_case_risk(
     reports: dict[str, dict[str, Any]],
     failed_ids: set[str],
     cross_findings: list[CrossDocFinding] | None = None,
+    *,
+    dedupe: bool = True,
 ) -> CaseRisk:
     """
     reports: document_id -> its stored detection report.
@@ -236,9 +291,10 @@ def compute_case_risk(
 
     findings: list[ContributingFinding] = []
     unassessed: list[UnassessedCheck] = []
+    repeats = _plan_repeats(scanned, reports) if dedupe else None
     for document in scanned:
         report = reports[document.id]
-        findings.extend(_score_document(document, report))
+        findings.extend(_score_document(document, report, repeats))
         unassessed.extend(
             UnassessedCheck(
                 document_id=document.id,

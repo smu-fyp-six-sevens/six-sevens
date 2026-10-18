@@ -33,7 +33,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from app.fraud_detection.image_manipulation import (
+from app.fraud_detection.images.image_manipulation import (
     ImageManipulationResult,
     Tolerances,
     check_image_manipulation,

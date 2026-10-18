@@ -20,7 +20,7 @@ from typing import Any, Hashable, Literal, cast
 
 import pymupdf
 from pydantic import BaseModel
-from .pdf_pages import page as _page, pages as _pages
+from .shared.pdf_pages import page as _page, pages as _pages
 
 logger = logging.getLogger("fraud_detection.font_consistency")
 

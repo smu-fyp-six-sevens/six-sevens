@@ -9,16 +9,17 @@ import re
 from pydantic import BaseModel
 from symspellpy import SymSpell, Verbosity
 
-from ..cpu_pool import run_cpu
-from ..ingestion.ingestion_service import content_type_from_filename, ingest_document
+from ...cpu_pool import run_cpu
+from ...ingestion.ingestion_service import content_type_from_filename, ingest_document
 from .domain_terms import DOMAIN_TERMS
-from .field_values import text_values
-from .font_consistency import ExtractedField
+from ..shared.field_values import text_values
+from ..font_consistency import ExtractedField
 
 logger = logging.getLogger("fraud_detection.spelling_anomaly")
 
 MAX_EDIT_DISTANCE = 2
 MIN_WORD_LENGTH = 2  # drops single-letter tokens (initials, OCR artifacts)
+MAX_OTHER_CONTEXTS = 2
 
 # Loaded once at module import — same "shared instance" pattern as
 # ocr_extractor.py's module-level `reader = RapidOCR()` — SymSpell's
@@ -75,9 +76,14 @@ _LEADING_NON_SPACE_RE = re.compile(r"^\S+")
 
 
 class SpellingAnomaly(BaseModel):
+    """One distinct unrecognised word: reported once however often it appears (a letterhead word
+    repeated on every page is one question, not one per page)."""
     word: str
     surrounding_text: str
     suggested_correction: str | None = None
+    occurrences: int = 1
+    # Up to MAX_OTHER_CONTEXTS further places it appears, after surrounding_text.
+    other_contexts: list[str] = []
 
 
 class SpellingAnomalyResult(BaseModel):
@@ -326,6 +332,26 @@ def _filter_candidates(candidates: list[_Candidate]) -> list[_Candidate]:
     return [c for c in candidates if not _looks_like_probable_proper_noun(c)]
 
 
+def _group_by_word(candidates: list[_Candidate]) -> list[SpellingAnomaly]:
+    """One anomaly per distinct word (case-insensitive), in order of first appearance, with how many
+    places it appears and a few of their contexts."""
+    groups: dict[str, list[_Candidate]] = {}
+    for candidate in candidates:
+        groups.setdefault(candidate.word.lower(), []).append(candidate)
+    anomalies = []
+    for group in groups.values():
+        first = group[0]
+        contexts = list(dict.fromkeys(c.surrounding_text for c in group[1:] if c.surrounding_text != first.surrounding_text))
+        anomalies.append(SpellingAnomaly(
+            word=first.word,
+            surrounding_text=first.surrounding_text,
+            suggested_correction=first.suggested_correction,
+            occurrences=len(group),
+            other_contexts=contexts[:MAX_OTHER_CONTEXTS],
+        ))
+    return anomalies
+
+
 async def check_spelling_anomalies(
     document_id: str,
     file_bytes: bytes,
@@ -362,13 +388,6 @@ async def check_spelling_anomalies(
 
     return SpellingAnomalyResult(
         document_id=document_id,
-        anomalies=[
-            SpellingAnomaly(
-                word=c.word,
-                surrounding_text=c.surrounding_text,
-                suggested_correction=c.suggested_correction,
-            )
-            for c in confirmed
-        ],
+        anomalies=_group_by_word(confirmed),
         unable_to_assess=False,
     )
