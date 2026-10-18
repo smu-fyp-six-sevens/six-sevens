@@ -81,6 +81,8 @@ export interface CaseRow {
   risk: CaseRisk | null;
   // Computed by backend/app/supporting_documents.py on every case read.
   supporting_document_recommendations: unknown[];
+  // Computed by backend/app/case_pipeline/risk/additional_documents.py when a case analysis runs.
+  additional_documents?: unknown;
 }
 
 export interface DocumentRow {

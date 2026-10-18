@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 from .config import settings
+from .holder import holder_kind
 
 
 class DocumentStatus(str, Enum):
@@ -104,19 +105,13 @@ ADDRESS_PROOF_DOCUMENT_TYPES: set[str] = {
 def is_personal_bank_statement(document_type: str | None, fields: dict | None) -> bool:
     """
     A bank_statement held by an individual rather than a company. The signal
-    is who the extracted account holder is: an individual_name with no
-    company_name (see extraction_prompts.EXTRACTION_SCHEMAS's
-    "bank_statement" entry and its guidance). Before extraction has run —
+    is the stored entity_type, or for statements stored before it existed an
+    individual_name with no company_name (see holder.holder_kind). Before extraction has run —
     no fields yet — it stays the corporate default, matching how a
     proof_of_address/source_of_wealth document is treated until its fields
     are known.
     """
-    fields = fields or {}
-    return (
-        document_type == DocumentType.BANK_STATEMENT.value
-        and bool(fields.get("individual_name"))
-        and not fields.get("company_name")
-    )
+    return document_type == DocumentType.BANK_STATEMENT.value and holder_kind(document_type, fields) == "individual"
 
 
 def counts_as_address_proof(document_type: str | None, fields: dict | None) -> bool:
@@ -327,6 +322,10 @@ class ContributingFinding(BaseModel):
     category: str | None = None
     # "cross_document" for a finding from the case analysis rather than one document's scan.
     source: Literal["document", "cross_document"] = "document"
+    # The same finding on other documents is scored once. On the copy that scores it: how many other documents
+    # carry it. On the copies that score 0: the finding_id of the one that scored.
+    also_on: int = 0
+    repeat_of: str | None = None
 
 
 class UnassessedCheck(BaseModel):
@@ -400,6 +399,35 @@ class SupportingDocumentRecommendation(BaseModel):
     items: list[RecommendationItem] = Field(default_factory=list)
 
 
+class AdditionalDocument(BaseModel):
+    """One document to ask the client for, from the checklist rules or from the findings."""
+
+    title: str
+    why: str
+    source: Literal["checklist", "finding"]
+    # Finding ids the request bears on (after matching; may be empty).
+    addresses: list[str] = Field(default_factory=list)
+    # False when more evidence cannot change the score (tampering, registry results, checklist items).
+    affects_score: bool = False
+    score_if_supports: int | None = None
+    level_if_supports: str | None = None
+    # The checklist rule's detail (items, breakdown tables), for checklist items.
+    recommendation: SupportingDocumentRecommendation | None = None
+
+
+class AdditionalDocuments(BaseModel):
+    """What to ask the client for, in one list, with why the list is empty or cannot move the score."""
+
+    items: list[AdditionalDocument] = Field(default_factory=list)
+    # no_reducible_findings: no finding can be answered by more evidence. model_failed / budget: the
+    # model's requests are missing. none_needed: the case has nothing that evidence would address.
+    reason: Literal["none_needed", "no_reducible_findings", "model_failed", "budget"] | None = None
+    current_score: int | None = None
+    current_level: str | None = None
+    best_case_score: int | None = None
+    best_case_level: str | None = None
+
+
 class CaseAnalysisOverview(BaseModel):
     """The latest per-case analysis in brief; the full result is GET /cases/{id}/analysis."""
 
@@ -438,6 +466,8 @@ class CaseSummary(CaseRecord):
     supporting_document_recommendations: list[SupportingDocumentRecommendation] = Field(
         default_factory=list
     )
+    # The same requests merged with the agent's, in one list; None for runs from before it existed.
+    additional_documents: AdditionalDocuments | None = None
     # Every approved document has been scanned, so the case analysis can be run.
     analysis_ready: bool = False
     # None when the case has never been analysed.

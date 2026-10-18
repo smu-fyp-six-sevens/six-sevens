@@ -12,6 +12,7 @@ from ....case_match import individual_names_match, normalize_uen
 from ....fraud_detection.numerical_validation.common import _as_number, _decode
 from ..bias import is_protected_field
 from ..evidence import mask_identifiers
+from ..identity_pairs import compare_pair
 from .common import ToolKit, statement_period, unavailable
 
 _MAX_ITEMS = 8
@@ -121,4 +122,42 @@ def build_comparison_tools(kit: ToolKit) -> list:
         """Whether an individual's name on several documents is the same person. items: [{document, field}]."""
         return _compare("compare_people", items, individual_names_match, "PERSON_MISMATCH", is_refutation_probe)
 
-    return [compare_periods, compare_identifiers, compare_people]
+    @tool
+    async def compare_linked_people(
+        document_a: str, document_b: str, check: str = "id", is_refutation_probe: bool = False,
+    ) -> str:
+        """For two documents that name the same individual (see 'Documents naming the same individual'), report whether that person's ID number (check "id") or name (check "name") differs between them. Use one call per check."""
+        a, err_a = kit.doc(document_a)
+        b, err_b = kit.doc(document_b)
+        wanted = "individual_name" if check == "name" else "individual_id"
+        args = {"document_a": document_a, "document_b": document_b, "check": "name" if check == "name" else "id"}
+        if a is None or b is None:
+            return kit.log("compare_linked_people", args, err_a or err_b or {}, is_refutation_probe)
+        comparison = compare_pair(a, b)
+        compared = comparison.names_compared if wanted == "individual_name" else comparison.ids_compared
+        if not comparison.linked or not compared:
+            return kit.log("compare_linked_people", args, unavailable(
+                "No individual is named on both documents." if not comparison.linked
+                else f"Both documents do not give the linked individual's {'name' if check == 'name' else 'ID number'}."
+            ), is_refutation_probe)
+        linked = comparison.linked
+        found = [m for m in comparison.mismatches if m.check == wanted]
+        mismatches, refs, flags = [], [], set()
+        for item in found:
+            flag = "IDENTIFIER_CONFLICT" if item.check == "individual_id" else "PERSON_MISMATCH"
+            flags.add(flag)
+            pair_refs = [
+                context.ledger.issue(a.key, item.left_field, item.left_value, source="compare_linked_people", breach_flag=flag),
+                context.ledger.issue(b.key, item.right_field, item.right_value, source="compare_linked_people", breach_flag=flag),
+            ]
+            refs += pair_refs
+            mismatches.append({
+                "check": item.check, "refs": pair_refs,
+                "values": [mask_identifiers(item.left_value)[:160], mask_identifiers(item.right_value)[:160]],
+            })
+        return kit.log("compare_linked_people", args, {
+            "available": True, "linked_people": linked, "same": not mismatches, "mismatches": mismatches,
+            "breach_flags": sorted(flags), "refs": refs,
+        }, is_refutation_probe, refs=refs)
+
+    return [compare_periods, compare_identifiers, compare_people, compare_linked_people]

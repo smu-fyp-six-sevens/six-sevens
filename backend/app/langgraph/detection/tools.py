@@ -39,7 +39,7 @@ from ...fraud_detection.dates.date_anomalies import check_date_anomalies
 from ...fraud_detection.font_consistency import check_font_consistency
 from ...fraud_detection.images.image_manipulation import check_image_manipulation, check_image_tampering
 from ...fraud_detection.layout_anomalies import check_layout_anomalies
-from ...fraud_detection.authenticity.metadata_analysis import check_metadata_anomalies
+from ...fraud_detection.authenticity.metadata_analysis import SUPPORTED_METADATA_FIELDS, check_metadata_anomalies
 from ...fraud_detection.spelling.spelling_anomaly import check_spelling_anomalies
 
 logger = logging.getLogger("classifier_pipeline.langgraph.detection.tools")
@@ -328,6 +328,21 @@ async def date_consistency_tool(document_id: Annotated[str, InjectedState("docum
 # --- Digital Authenticity ---------------------------------------------------
 
 
+def _observed_metadata(extracted: dict) -> dict:
+    """What the file's metadata holds, so "no anomalies" is never read as "no metadata"."""
+    present = {k: v for k, v in extracted.items() if v and k in SUPPORTED_METADATA_FIELDS}
+    absent = [k for k in SUPPORTED_METADATA_FIELDS if k not in present]
+    created, modified = present.get("creation_date"), present.get("modification_date")
+    parts = [f"{k.replace('_', ' ')} {_short(v)}" for k, v in present.items()]
+    if created and modified:
+        parts.append("created equals modified" if created == modified else "modified after created")
+    return {
+        "present": present,
+        "absent": absent,
+        "note": ("Metadata present: " + ", ".join(parts)) if parts else "No supported metadata fields present",
+    }
+
+
 @tool
 async def metadata_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
     """Inspects the file's embedded metadata (author, creation/modification dates, producing software) for signs of editing: consumer editing software in the producer chain, or a modification date well after creation."""
@@ -349,7 +364,10 @@ async def metadata_tool(document_id: Annotated[str, InjectedState("document_id")
         }
         for anomaly in result.anomalies
     ]
-    return _result("metadata_tool", _with_ids("metadata_tool", findings))
+    return {
+        **_result("metadata_tool", _with_ids("metadata_tool", findings)),
+        "observed_metadata": _observed_metadata(result.extracted_metadata),
+    }
 
 
 def _with_indicator(indicator: str, summary: str) -> str:

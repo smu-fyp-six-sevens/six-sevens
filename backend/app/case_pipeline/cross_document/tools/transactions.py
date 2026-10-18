@@ -7,6 +7,7 @@ from collections import defaultdict
 from langchain_core.tools import tool
 
 from ....fraud_detection.numerical_validation.common import _parse_field_date
+from ....fraud_detection.numerical_validation.statements import card_usage, recurring_payments, repeated_payments
 from ..evidence import mask_identifiers, signed_amount, transaction_summary
 from ...risk.supporting_documents import _counterparty_from_description
 from .common import (
@@ -152,4 +153,67 @@ def build_transaction_tools(kit: ToolKit) -> list:
             result["note"] = "Rows print no year and the statement has no period, so they could not be dated."
         return kit.log("monthly_flow", args, result, is_refutation_probe, view.key, [ref])
 
-    return [transaction_stats, query_transactions, top_counterparties, monthly_flow]
+    @tool
+    async def find_repeated_transactions(document: str, is_refutation_probe: bool = False) -> str:
+        """Payees paid or received the same amount more than once in a statement: one group per payee and amount, with every transaction number and the count. A repeat may be a real standing order."""
+        view, error = kit.doc(document)
+        args = {"document": document}
+        if view is None:
+            return kit.log("find_repeated_transactions", args, error or {}, is_refutation_probe)
+        rows = statement_rows(view)
+        if rows is None:
+            return kit.log("find_repeated_transactions", args, unavailable(_NO_TRANSACTIONS), is_refutation_probe, view.key)
+        groups, refs = [], []
+        for description, amount, indexes in repeated_payments(rows)[:MAX_ROWS]:
+            ref = context.ledger.issue(view.key, "repeated_transactions", {"description": description, "amount": amount},
+                                       row=indexes[0], source="find_repeated_transactions")
+            refs.append(ref)
+            groups.append({"ref": ref, "payee": mask_identifiers(description)[:120], "amount": amount,
+                           "count": len(indexes), "transactions": [i + 1 for i in indexes]})
+        return kit.log("find_repeated_transactions", args, {"available": True, "groups": groups,
+                       "rows_scanned": len(rows)}, is_refutation_probe, view.key, refs)
+
+    @tool
+    async def card_usage_tool(document: str, is_refutation_probe: bool = False) -> str:
+        """How many card transactions a statement has and how many distinct masked card numbers they use. A different card on almost every transaction is unusual."""
+        view, error = kit.doc(document)
+        args = {"document": document}
+        if view is None:
+            return kit.log("card_usage_tool", args, error or {}, is_refutation_probe)
+        rows = statement_rows(view)
+        if rows is None:
+            return kit.log("card_usage_tool", args, unavailable(_NO_TRANSACTIONS), is_refutation_probe, view.key)
+        card_transactions, cards = card_usage(rows)
+        usage = {"card_transactions": card_transactions, "distinct_cards": len(cards),
+                 "cards_per_transaction": round(len(cards) / card_transactions, 2) if card_transactions else None}
+        ref = context.ledger.issue(view.key, "card_usage", usage, source="card_usage_tool")
+        return kit.log("card_usage_tool", args, {"available": True, **usage, "ref": ref},
+                       is_refutation_probe, view.key, [ref])
+
+    @tool
+    async def recurring_payment_amounts(document: str, is_refutation_probe: bool = False) -> str:
+        """Payees paid three or more times in a statement, with each amount and the largest deviation from their mean (fees and charges excluded)."""
+        view, error = kit.doc(document)
+        args = {"document": document}
+        if view is None:
+            return kit.log("recurring_payment_amounts", args, error or {}, is_refutation_probe)
+        rows = statement_rows(view)
+        if rows is None:
+            return kit.log("recurring_payment_amounts", args, unavailable(_NO_TRANSACTIONS), is_refutation_probe, view.key)
+        payees, refs = [], []
+        for payee, amounts in list(recurring_payments(rows).items())[:MAX_ROWS]:
+            mean = sum(amounts) / len(amounts)
+            spread = max(abs(a - mean) for a in amounts) / mean if mean else None
+            entry = {"payee": mask_identifiers(payee)[:120], "count": len(amounts), "amounts": amounts,
+                     "largest_deviation_from_mean": round(spread, 3) if spread is not None else None}
+            entry["ref"] = context.ledger.issue(view.key, "recurring_payments", entry, row=len(refs),
+                                                source="recurring_payment_amounts")
+            refs.append(entry["ref"])
+            payees.append(entry)
+        return kit.log("recurring_payment_amounts", args, {"available": True, "payees": payees},
+                       is_refutation_probe, view.key, refs)
+
+    return [
+        transaction_stats, query_transactions, top_counterparties, monthly_flow,
+        find_repeated_transactions, card_usage_tool, recurring_payment_amounts,
+    ]

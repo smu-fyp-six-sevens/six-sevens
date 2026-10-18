@@ -27,6 +27,7 @@ from typing import Any
 
 from ...shared.field_values import also_printed_in, describe_path, text_values
 from ...numerical_validation.models import SkippedCheck
+from ....holder import holder_kind
 from . import hdb, land_use, onemap, ura
 from .http import LookupUnavailable
 from .models import RegistryFinding
@@ -137,9 +138,12 @@ def _same_address(a: str, b: str) -> bool:
 def _addresses(fields: dict[str, Any], document_type: str | None) -> list[_Address]:
     """Every distinct Singapore address in the document, nested ones included, top-level fields first."""
     found: list[_Address] = []
+    # Statements stored before entity_type existed put a company's address under individual_address.
+    corporate_holder = holder_kind(document_type, fields) == "corporate"
     for value in text_values(fields):
         if not value.key.lower().endswith("address"):
             continue
+        company_held = corporate_holder and value.key.lower() == "individual_address"
         postal = onemap.POSTAL_CODE_RE.search(value.text)
         if not postal:
             continue
@@ -149,8 +153,8 @@ def _addresses(fields: dict[str, Any], document_type: str | None) -> list[_Addre
             found.append(address)
         if value.path not in address.paths:
             address.paths.append(value.path)
-        address.residential |= _is_residential(value.key, value.top_level, document_type)
-        address.company |= value.key.lower() in COMPANY_FIELDS
+        address.residential |= _is_residential(value.key, value.top_level, document_type) and not company_held
+        address.company |= value.key.lower() in COMPANY_FIELDS or company_held
     return found
 
 

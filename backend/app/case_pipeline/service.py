@@ -26,7 +26,8 @@ from .risk import store as risk_store
 from .trace import RunTrace
 from .readiness import is_ready_for_analysis
 from .risk.case_risk import compute_case_risk, scoring_breakdown
-from .risk.outlook import build_outlook, outlook_trace, propose_requests
+from .risk.additional_documents import build_additional_documents
+from .risk.outlook import build_outlook, outlook_trace, propose_requests_with_status
 from .risk.summary import write_summary
 from .risk.supporting_documents import recommend_supporting_documents
 
@@ -124,17 +125,22 @@ async def _execute(
 
         risk = compute_case_risk(documents, reports, failed_ids, findings)
         document_only = compute_case_risk(documents, reports, failed_ids)
+        without_dedupe = compute_case_risk(documents, reports, failed_ids, findings, dedupe=False)
         trace.record(
             "scoring", **scoring_breakdown(risk),
             cross_document_findings=len(findings),
             score_without_cross_document=document_only.score, level_without_cross_document=document_only.level,
+            score_without_dedupe=without_dedupe.score, level_without_dedupe=without_dedupe.level,
         )
-        requests = await propose_requests(risk)
+        requests, request_status = await propose_requests_with_status(risk)
         supporting_documents = recommend_supporting_documents(documents)
         trace.record("evidence_requests", proposed=[r.model_dump() for r in requests],
                      supporting_documents=[s.title for s in supporting_documents])
         outlook = build_outlook(risk, requests)
         trace.record("outlook", **outlook_trace(risk, requests, outlook))
+        additional = build_additional_documents(risk, requests, outlook, supporting_documents, request_status)
+        trace.record("additional_documents", reason=additional.reason, request_status=request_status,
+                     items=[{"title": i.title, "source": i.source, "affects_score": i.affects_score} for i in additional.items])
         clean_checks, unrun_checks = _check_outcomes(reports)
         summary = await write_summary(risk, outlook, clean_checks, unrun_checks)
         trace.record("summary", text=summary)
@@ -144,6 +150,8 @@ async def _execute(
         analysis.summary = summary
         analysis.risk = risk
         analysis.supporting_documents = supporting_documents
+        analysis.additional_documents = additional
+        analysis.consistent_checks = result.get("consistent_checks") or []
         analysis.audit = AnalysisAudit(
             models={"analysis": settings.LANGGRAPH_SONNET_MODEL},
             prompt_version=PROMPT_VERSION,

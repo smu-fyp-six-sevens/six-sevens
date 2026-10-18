@@ -319,53 +319,27 @@ def _check_fee_schedule(*, transactions: Any) -> CheckResult:
 _CARD_RE = re.compile(r"\b\d{4}-[Xx*]{4}-[Xx*]{4}-\d{4}\b|\b[Xx*]{4,}\d{4}\b")
 
 
-@check(code="BS.CARD_DIVERSITY", applies=("bank_statement",))
-def _check_card_diversity(*, transactions: Any) -> CheckResult:
-    """A near one-to-one ratio of distinct masked card numbers to card transactions is a signal."""
+def card_usage(rows: list[dict]) -> tuple[int, set[str]]:
+    """(card transactions, the distinct masked card numbers on them). Used by the cross-document card_usage tool."""
     card_txns = 0
     cards: set[str] = set()
-    for row in _rows(transactions):
+    for row in rows:
         match = _CARD_RE.search(str(row.get("description") or ""))
         if match:
             card_txns += 1
             cards.add(match.group(0))
-    if card_txns < 5:
-        return [], skipped(reason="fewer than 5 card transactions")
-    if len(cards) / card_txns > 0.8:
-        return [_finding(
-            "BS.CARD_DIVERSITY", "signal",
-            f"{len(cards)} distinct masked card numbers across only {card_txns} card transactions — unusually "
-            "little reuse of the same card",
-            field="transactions",
-        )], None
-    return [], None
+    return card_txns, cards
 
 
-@check(code="BS.RECURRING_VARIANCE", applies=("bank_statement",))
-def _check_recurring_variance(*, transactions: Any) -> CheckResult:
-    """A recurring payee (rent, subscriptions) whose amount varies beyond 15%."""
+def recurring_payments(rows: list[dict]) -> dict[str, list[float]]:
+    """Amounts per recurring payee (three or more payments, fees and charges left out). Digits are masked in the payee."""
     by_payee: dict[str, list[float]] = {}
-    for row in _rows(transactions):
+    for row in rows:
         description = str(row.get("description") or "").strip().lower()
         amount = _field_number(row, "amount")
         if description and amount is not None:
             by_payee.setdefault(re.sub(r"\d+", "#", description), []).append(abs(amount))
-
-    findings = []
-    for payee, amounts in by_payee.items():
-        if len(amounts) < 3 or _FEE_KEYWORDS.search(payee):
-            continue
-        mean = sum(amounts) / len(amounts)
-        if mean == 0:
-            continue
-        if any(abs(a - mean) / mean > 0.15 for a in amounts):
-            findings.append(_finding(
-                "BS.RECURRING_VARIANCE", "signal",
-                f"Recurring payment \"{payee}\" varies by more than 15% across the statement "
-                f"({', '.join(_money(a) for a in amounts)})",
-                field="transactions",
-            ))
-    return findings, None
+    return {p: a for p, a in by_payee.items() if len(a) >= 3 and not _FEE_KEYWORDS.search(p)}
 
 
 # --- Statistical checks (bank statement transactions) ----------------------
@@ -427,25 +401,15 @@ def _benford(amounts: list[float], code: str) -> tuple[BenfordAnalysis, list[Num
     )]
 
 
-@check(code="STAT.DUPLICATES", applies=("bank_statement",))
-def _check_duplicates(*, transactions: Any) -> CheckResult:
-    """Repeated amounts to the same payee."""
-    seen: dict[tuple[str, float], int] = {}
-    findings = []
-    for i, row in enumerate(_rows(transactions)):
+def repeated_payments(rows: list[dict]) -> list[tuple[str, float, list[int]]]:
+    """(payee, amount, transaction indexes) for each payee and amount that appears more than once."""
+    groups: dict[tuple[str, float], list[int]] = {}
+    for i, row in enumerate(rows):
         description = str(row.get("description") or "").strip().lower()
         amount = _field_number(row, "amount")
-        if amount is None or not description:
-            continue
-        key = (description, amount)
-        if key in seen:
-            findings.append(_finding(
-                "STAT.DUPLICATES", "signal",
-                f"Transaction {i + 1} repeats the same payee and amount as transaction {seen[key] + 1}",
-                field="transactions",
-            ))
-        seen[key] = i
-    return findings, None
+        if amount is not None and description:
+            groups.setdefault((description, amount), []).append(i)
+    return [(d, a, idx) for (d, a), idx in groups.items() if len(idx) > 1]
 
 
 @check(code="STAT.ROUND_NUMBERS", applies=("bank_statement",))

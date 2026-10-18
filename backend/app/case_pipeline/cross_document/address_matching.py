@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from itertools import combinations
 from typing import Iterable
 
+from ...holder import holder_kind
 from ...models import DocumentRecord, is_personal_bank_statement
 
 _PERSONAL_DOCUMENT_TYPES = {
@@ -207,7 +208,8 @@ def extract_addresses(doc: DocumentRecord) -> list[AddressRecord]:
 
     records: list[AddressRecord] = []
     company_keys = _company_keys(fields)
-    personal_doc = (
+    corporate_holder = holder_kind(doc.document_type, fields) == "corporate"
+    personal_doc = not corporate_holder and (
         doc.document_type in _PERSONAL_DOCUMENT_TYPES
         or is_personal_bank_statement(doc.document_type, fields)
         or (
@@ -221,6 +223,8 @@ def extract_addresses(doc: DocumentRecord) -> list[AddressRecord]:
     id_number = _first(fields, _ID_FIELDS)
     identity_keys = _identity_keys(name, id_number)
     for field_name in _PERSON_ADDRESS_FIELDS:
+        if corporate_holder and field_name == "individual_address":
+            continue  # a company's address stored under the older field name; read as the company's below
         _add_record(
             records, doc, field_name, fields.get(field_name), "personal",
             identity_keys=identity_keys,
@@ -255,7 +259,7 @@ def extract_addresses(doc: DocumentRecord) -> list[AddressRecord]:
             )
 
     if not personal_doc:
-        for field_name in _COMPANY_ADDRESS_FIELDS:
+        for field_name in (*_COMPANY_ADDRESS_FIELDS, *(("individual_address",) if corporate_holder else ())):
             _add_record(
                 records, doc, field_name, fields.get(field_name), "company",
                 company_keys=company_keys,
