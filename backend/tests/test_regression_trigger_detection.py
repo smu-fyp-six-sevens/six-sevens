@@ -236,4 +236,3 @@ def test_once_low_confidence_fields_are_saved_the_document_can_be_approved():
     assert response.status_code == 200
     assert response.json()["status"] == "approved"
     launch.assert_called_once()
-

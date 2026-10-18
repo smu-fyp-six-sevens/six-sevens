@@ -94,4 +94,3 @@ class ToolResult(BaseModel):
     findings: Annotated[list[ToolFinding], BeforeValidator(keep_valid(ToolFinding))] = []
     truncated: int = 0
     dropped_findings: int = 0  # set by the reader: findings in the raw result that did not validate
-

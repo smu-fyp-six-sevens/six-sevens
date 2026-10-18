@@ -58,4 +58,3 @@ async def public_holidays() -> PublicHolidays:
     live_years = frozenset(d.year for d in live)
     days = {d: n for d, n in BUNDLED_HOLIDAYS.days.items() if d.year not in live_years} | live
     return PublicHolidays(days=days, years=live_years | BUNDLED_HOLIDAYS.years, source=SOURCE)
-
