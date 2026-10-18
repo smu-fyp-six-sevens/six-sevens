@@ -40,13 +40,19 @@ _RULE_TEXT_RE = re.compile(r"^[\s_\-–—.·•=~]+$")
 # direction, so a long, tall-and-narrow box is taken as vertical.
 _VERTICAL_ASPECT = 2.0
 _VERTICAL_MIN_CHARS = 4
+# Share of an OCR box's height the detector adds above and below the letters.
+_OCR_BOX_PADDING = 0.10
 
 
 def _ink_box(line: _Line) -> BBox:
     """The band the line's letters occupy, from its baseline and font size.
 
-    OCR lines have no baseline; their boxes already hug the letters.
+    OCR lines have no baseline. The detector pads each box, so a large total set
+    tight under a line reaches into it; the padding is trimmed off.
     """
+    if line.ocr:
+        pad = _OCR_BOX_PADDING * (line.bbox[3] - line.bbox[1])
+        return (line.bbox[0], line.bbox[1] + pad, line.bbox[2], line.bbox[3] - pad)
     if line.baseline is None or not line.size:
         return line.bbox
     return (

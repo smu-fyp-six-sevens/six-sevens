@@ -230,12 +230,12 @@ def check_layout_anomalies(
         references = fitting_references(blocks, known_type) if known_type else []
         if references:
             # A line another fitting version prints is that version's design, not an
-            # edit. The other versions vouch only with their fixed labels: a moved
-            # value can land on one of their value slots by chance.
+            # edit, labels and values alike: one version's copies may not have had a
+            # value as long as this one (a name with bin or s/o), another's did.
             best, others = references[0], references[1:]
 
             def by_design(anomaly: LayoutAnomaly) -> bool:
-                return any(r.explains(anomaly, labels_only=True) for r in others)
+                return any(r.explains(anomaly) for r in others)
 
             # Text overlay is judged on its own.
             anomalies = [

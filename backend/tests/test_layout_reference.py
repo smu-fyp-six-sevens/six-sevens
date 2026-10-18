@@ -89,6 +89,18 @@ def test_shared_text_becomes_labels_and_values_keep_no_text(noa_reference) -> No
     assert all(slot.text is None for slot in noa_reference.slots)
 
 
+def test_a_value_position_from_any_copy_is_a_slot() -> None:
+    # The second copy's name sits lower (as a wrapped name would); a third document doing the same fits.
+    copies = [
+        _blocks(_form("TAN WEI MING", "481,600.00")),
+        _blocks(_form("MUHAMMAD FAIZAL BIN RAHMAN", "92,300.00", move="MUHAMMAD FAIZAL BIN RAHMAN", dy=10)),
+    ]
+    built = ref.build_reference("test_noa", "notice_of_assessment", copies)
+    assert len(built.slots) == 3
+    lower = _form("AHMAD SYAFIQ BIN OSMAN", "7,250.00", move="AHMAD SYAFIQ BIN OSMAN", dy=10)
+    assert _compare(built, lower).findings == []
+
+
 def test_a_reference_needs_two_copies() -> None:
     with pytest.raises(ValueError):
         ref.build_reference("x", "notice_of_assessment", [_blocks(_form("A", "1.00"))])
@@ -106,23 +118,24 @@ def test_whole_page_offset_is_not_a_finding(noa_reference) -> None:
     assert comparison.findings == []
 
 
-def test_moved_label_is_reported(noa_reference) -> None:
+def test_a_moved_label_is_not_reported(noa_reference) -> None:
+    # Labels place the document on the reference; a label in another spot is not a finding.
     comparison = _compare(noa_reference, _form("NG SIEW LAN", "7,250.00", move="Tax payable", dx=12))
-    assert len(comparison.findings) == 1
-    finding = comparison.findings[0]
-    assert finding.text == "Tax payable"
-    assert finding.anomaly_type == "Indentation"
-    assert finding.evidence["kind"] == "reference-position"
-    assert finding.evidence["element"] == "label"
-    assert finding.evidence["dx_pt"] == pytest.approx(12, abs=0.5)
-    assert "test_noa" in finding.summary
+    assert comparison.fit == pytest.approx(11 / 12)
+    assert comparison.findings == []
 
 
 def test_moved_value_is_reported(noa_reference) -> None:
     comparison = _compare(noa_reference, _form("NG SIEW LAN", "7,250.00", move="NG SIEW LAN", dy=10))
     assert [f.text for f in comparison.findings] == ["NG SIEW LAN"]
-    assert comparison.findings[0].anomaly_type == "Spacing"
-    assert comparison.findings[0].evidence["element"] == "value"
+    finding = comparison.findings[0]
+    assert finding.anomaly_type == "Spacing"
+    assert finding.evidence["kind"] == "reference-position"
+    assert finding.evidence["element"] == "value"
+    assert finding.evidence["dy_pt"] == pytest.approx(10, abs=0.5)
+    # Named by document type for the officer, never by the reference file's internal name.
+    assert "standard notice of assessment layout" in finding.summary
+    assert "test_noa" not in finding.summary and "test_noa" not in str(finding.evidence)
 
 
 def test_another_form_does_not_fit(noa_reference, tmp_path, monkeypatch) -> None:
@@ -163,16 +176,16 @@ def _reference_findings(result) -> list:
 
 @pytest.mark.usefixtures("stored")
 def test_confident_type_uses_the_stored_reference() -> None:
-    data = _form("NG SIEW LAN", "7,250.00", move="Tax payable", dx=12)
+    data = _form("NG SIEW LAN", "7,250.00", move="NG SIEW LAN", dy=10)
     result = check_layout_anomalies(
         "doc-1", data, "notice_of_assessment", settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
     )
-    assert [a.text for a in _reference_findings(result)] == ["Tax payable"]
+    assert [a.text for a in _reference_findings(result)] == ["NG SIEW LAN"]
 
 
 @pytest.mark.usefixtures("stored")
 def test_unsure_type_or_no_type_skips_the_reference() -> None:
-    data = _form("NG SIEW LAN", "7,250.00", move="Tax payable", dx=12)
+    data = _form("NG SIEW LAN", "7,250.00", move="NG SIEW LAN", dy=10)
     unsure = settings.CLASSIFICATION_CONFIDENCE_THRESHOLD - 0.01
     assert _reference_findings(check_layout_anomalies("doc-1", data, "notice_of_assessment", unsure)) == []
     assert _reference_findings(check_layout_anomalies("doc-1", data)) == []
@@ -201,13 +214,33 @@ def test_a_line_where_another_fitting_version_has_it_is_not_reported() -> None:
     assert _reference_findings(result) == []
 
 
-@pytest.mark.usefixtures("two_versions")
-def test_a_line_out_of_place_in_every_fitting_version_is_reported() -> None:
-    data = _form("NG SIEW LAN", "7,250.00", move="Balance payable", dx=12)
+def test_a_value_where_a_less_fitting_version_has_it_is_not_reported(noa_reference, tmp_path, monkeypatch) -> None:
+    # A second version whose copies had the name a line lower (a name long enough to wrap) and one
+    # label moved, so the document fits the first version best but only the second knows its name.
+    lower = [
+        _blocks(_form(name, income, move=(name, "Tax payable"), dy=10))
+        for name, income in [("MUHAMMAD FAIZAL BIN RAHMAN", "481,600.00"), ("PRIYA D/O SUBRAMANIAM", "92,300.00")]
+    ]
+    _store(noa_reference, tmp_path, monkeypatch)
+    _store(ref.build_reference("test_noa_long_names", "notice_of_assessment", lower), tmp_path, monkeypatch)
+    data = _form("AHMAD SYAFIQ BIN OSMAN", "7,250.00", move="AHMAD SYAFIQ BIN OSMAN", dy=10)
+    fitting = ref.fitting_references(_blocks(data), "notice_of_assessment")
+    assert [c.reference.name for c in fitting] == ["test_noa", "test_noa_long_names"]
     result = check_layout_anomalies(
         "doc-1", data, "notice_of_assessment", settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
     )
-    assert [a.text for a in _reference_findings(result)] == ["Balance payable"]
+    assert _reference_findings(result) == []
+    ref.load_references.cache_clear()
+
+
+@pytest.mark.usefixtures("two_versions")
+def test_a_value_out_of_place_in_every_fitting_version_is_reported() -> None:
+    # Labels are never reported against a reference (only values that moved on their own).
+    data = _form("NG SIEW LAN", "7,250.00", move="NG SIEW LAN", dy=10)
+    result = check_layout_anomalies(
+        "doc-1", data, "notice_of_assessment", settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
+    )
+    assert [a.text for a in _reference_findings(result)] == ["NG SIEW LAN"]
 
 
 def test_committed_references_load_and_have_no_value_text() -> None:
@@ -227,13 +260,13 @@ def test_section_pushed_down_by_a_longer_table_is_not_a_finding(noa_reference) -
     assert comparison.findings == []
 
 
-def test_a_field_moved_inside_a_pushed_section_is_still_reported(noa_reference) -> None:
+def test_a_value_moved_on_its_own_is_reported_when_another_section_was_pushed(noa_reference) -> None:
     data = _form(
-        "NG SIEW LAN", "7,250.00", push_below=SECTION_TWO, push=20, move="Balance payable", dx=12
+        "NG SIEW LAN", "7,250.00", push_below=SECTION_TWO, push=20, move="NG SIEW LAN", dy=10
     )
     comparison = _compare(noa_reference, data)
-    assert comparison.fit >= 11 / 12
-    assert [f.text for f in comparison.findings] == ["Balance payable"]
+    assert comparison.fit == 1.0
+    assert [f.text for f in comparison.findings] == ["NG SIEW LAN"]
 
 
 def test_text_repeated_on_a_page_is_a_value_slot_not_a_label() -> None:
@@ -287,10 +320,11 @@ def test_photo_of_a_genuine_copy_fits_with_no_findings(noa_reference) -> None:
 
 
 def test_moved_field_on_a_photo_is_reported_in_reference_points(noa_reference) -> None:
-    photo = _as_photo(_blocks(_form("NG SIEW LAN", "7,250.00", move="Tax payable", dx=12)))
+    photo = _as_photo(_blocks(_form("NG SIEW LAN", "7,250.00", move="NG SIEW LAN", dy=10)))
     comparison = ref.compare_with_reference(photo, noa_reference)
-    assert [f.text for f in comparison.findings] == ["Tax payable"]
-    assert comparison.findings[0].evidence["dx_pt"] == pytest.approx(12, abs=1)
+    assert [f.text for f in comparison.findings] == ["NG SIEW LAN"]
+    # The photo is at 2x zoom; the shift is reported in the reference's points.
+    assert comparison.findings[0].evidence["dy_pt"] == pytest.approx(10, abs=1)
 
 
 def test_ocr_drops_lines_it_is_unsure_of(monkeypatch) -> None:
@@ -337,6 +371,22 @@ def test_one_moved_field_among_unrelated_offsets_is_still_an_edit() -> None:
     moved = (_placed(400), 12.0, 0.0, "label")
     others = [(_placed(100), 0.0, -14.0, "value"), (_placed(600), 0.0, 9.0, "value")]
     assert not ref._moved_together(moved[0], moved[1], moved[2], [moved, *others], 2.0)
+
+
+def test_a_value_whose_neighbours_sit_in_place_stands_alone() -> None:
+    value = _placed(400)
+    assert ref._stands_alone(value, [(value, False), (_placed(380), True), (_placed(420), True)])
+
+
+def test_a_value_moved_with_a_neighbour_is_a_reflow_whatever_the_amounts() -> None:
+    # A long name wraps: the next line drops 14 pt, the one after it 28 pt. Neither is an edit.
+    value = _placed(400)
+    assert not ref._stands_alone(value, [(value, False), (_placed(380), True), (_placed(414), False)])
+
+
+def test_a_value_with_no_compared_neighbours_is_not_reported() -> None:
+    value = _placed(400)
+    assert not ref._stands_alone(value, [(value, False), (_placed(500), True)])
 
 
 def test_reference_findings_are_not_page_margin_findings() -> None:

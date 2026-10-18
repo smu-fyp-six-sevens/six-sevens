@@ -21,7 +21,7 @@ from .structure import (
     _is_list_marker_text, _matches_structural_pattern, repeated_structural_patterns,
 )
 from .anchors import (
-    _ANCHOR_TOLERANCE_PT, _ANCHOR_WINDOW_PT, _ROW_MAX_SHIFT_PT, _shares_an_edge,
+    _ANCHOR_TOLERANCE_PT, _anchor_window, _ROW_MAX_SHIFT_PT, _shares_an_edge,
 )
 
 
@@ -232,7 +232,7 @@ def _anchored_lines(
                 other
                 for owner, other in entries
                 if owner is not block
-                and 2 < abs(other.bbox[1] - line.bbox[1]) <= _ANCHOR_WINDOW_PT
+                and 2 < abs(other.bbox[1] - line.bbox[1]) <= _anchor_window(line)
             ]
             result[page].append(
                 (
