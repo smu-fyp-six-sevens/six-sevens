@@ -584,7 +584,12 @@ EXTRA_FIELD_GUIDANCE: dict[str, str] = {
         'status phrase like "Bankruptcy Order" instead of an actual date, '
         "which is normal for this report, not a sign of misreading. An empty "
         "array is correct if the section shows no rows — most applicants have "
-        "none, so that's the normal case, not a sign anything was missed."
+        "none, so that's the normal case, not a sign anything was missed.\n\n"
+        'Return "bureau_score", "risk_grade" and "probability_of_default" only '
+        "when the report prints them for the applicant. The Bureau Score "
+        'section often shows only labelled "Example 1" / "Example 2" blocks '
+        "explaining the scale; those are not the applicant's, so leave the "
+        "three fields out."
     ),
     "source_of_wealth": (
         'For "income_statement_items", its "value" should be an array of '
@@ -756,7 +761,10 @@ _FIELD_WRAPPER_INSTRUCTIONS = (
     "something you would have to work out (e.g. a whole-statement total when "
     "the statement only prints per-month totals, a fee amount when only a "
     "percentage is printed), omit it. Any numeric value that does not appear "
-    "in the document text is discarded automatically."
+    "in the document text is discarded automatically.\n\n"
+    "Sample, example, specimen or template values (such as a block headed "
+    '"Example 1:") illustrate the format and are not this document\'s data; '
+    "never extract them as a field."
 )
 
 

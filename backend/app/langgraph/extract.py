@@ -93,6 +93,7 @@ async def run_extraction(document_type: str, raw_text: str, *, classified_as: st
         result = _drop_unprinted_numbers(result, raw_text)
         result = _drop_empty_fields(result, document_type)
         result = _drop_period_totals(result, raw_text)
+        result = _drop_example_values(result, raw_text)
         span.set_attribute("dropped_unprinted_fields", len(result.get("dropped_unprinted_fields", [])))
         return result
 
@@ -212,6 +213,52 @@ def _drop_unprinted_numbers(result: dict, raw_text: str) -> dict:
         logger.info("Dropped extracted fields not printed in the document: %s", dropped)
         result["confidence"] = _average_field_confidence(result.get("field_confidences", {}))
     result["dropped_unprinted_fields"] = dropped
+    return result
+
+
+_EXAMPLE_START_RE = re.compile(r"\s*example\s+\d+\s*:", re.IGNORECASE)
+_EXAMPLE_END_RE = re.compile(r"\s*(for more details|explanation of)", re.IGNORECASE)
+_GRADE_RE = re.compile(r"\b[A-Z]{2}\b")
+
+
+def _split_example_blocks(raw_text: str) -> tuple[str, str]:
+    """(text inside "Example N:" blocks, the rest). A block ends at "For more details" or "Explanation of"."""
+    inside, outside, in_block = [], [], False
+    for line in (raw_text or "").splitlines():
+        if _EXAMPLE_START_RE.match(line):
+            in_block = True
+        elif in_block and _EXAMPLE_END_RE.match(line):
+            in_block = False
+        (inside if in_block else outside).append(line)
+    return "\n".join(inside), "\n".join(outside)
+
+
+def _drop_example_values(result: dict, raw_text: str) -> dict:
+    """
+    A report can print sample values in "Example N:" blocks (a credit report's Bureau Score section does).
+    A top-level scalar whose value appears only inside those blocks is the sample, not this document's data.
+    """
+    inside, outside = _split_example_blocks(raw_text)
+    figures = {float(t.replace(",", "")) for t in _TEXT_NUMBER_RE.findall(inside)}
+    figures -= {float(t.replace(",", "")) for t in _TEXT_NUMBER_RE.findall(outside)}
+    grades = set(_GRADE_RE.findall(inside)) - set(_GRADE_RE.findall(outside))
+    fields = result.get("extracted_fields") or {}
+    dropped = []
+    for name, value in list(fields.items()):
+        figure = _as_figure(value)
+        is_example = (
+            any(abs(figure - f) < 0.005 for f in figures) if figure is not None
+            else isinstance(value, str) and value.strip().upper() in grades
+        )
+        if is_example:
+            dropped.append(name)
+            del fields[name]
+            result.get("field_confidences", {}).pop(name, None)
+            result.get("field_reasons", {}).pop(name, None)
+    if dropped:
+        logger.info("Dropped extracted fields that only appear in example blocks: %s", dropped)
+        result["confidence"] = _average_field_confidence(result.get("field_confidences", {}))
+    result["dropped_example_values"] = dropped
     return result
 
 

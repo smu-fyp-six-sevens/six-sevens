@@ -260,3 +260,53 @@ def test_an_objection_with_no_suggested_type_sends_the_document_back() -> None:
     result = extract.parse_extraction_output(json.dumps(body))
     state = {"extraction": result, "classification": {"document_type": "list_of_loans"}, "attempts": 0}
     assert document_graph._decide_after_extract(state) == "reclassify"  # type: ignore[arg-type]
+
+
+_EXAMPLE_REPORT = """Bureau Score
+Example 1: Scored >>
+Score......................... 1420
+Risk Grade ....................GG
+Probability of Default 5.14%
+Example 2: Non-Scored >>
+Score......................... Not Applicable
+Risk Grade ....................HX
+For more details on the risk grades, see below.
+Account balance 1,420.50 at BB Bank
+"""
+
+
+def _extraction(**fields) -> dict:
+    return {
+        "extracted_fields": dict(fields),
+        "field_confidences": {name: 0.9 for name in fields},
+        "field_reasons": {},
+    }
+
+
+def test_example_block_values_are_dropped() -> None:
+    from app.langgraph.extract import _drop_example_values
+
+    result = _drop_example_values(
+        _extraction(bureau_score=1420, risk_grade="GG", probability_of_default="5.14%", accounts=[]), _EXAMPLE_REPORT,
+    )
+
+    assert sorted(result["dropped_example_values"]) == ["bureau_score", "probability_of_default", "risk_grade"]
+    assert list(result["extracted_fields"]) == ["accounts"]
+
+
+def test_value_also_printed_outside_an_example_block_is_kept() -> None:
+    from app.langgraph.extract import _drop_example_values
+
+    text = _EXAMPLE_REPORT + "Bureau Score 1420 for the applicant\nRisk Grade BB\n"
+    result = _drop_example_values(_extraction(bureau_score=1420, risk_grade="BB"), text)
+
+    assert result["dropped_example_values"] == []
+
+
+def test_text_without_example_blocks_is_untouched() -> None:
+    from app.langgraph.extract import _drop_example_values
+
+    result = _drop_example_values(_extraction(bureau_score=1500), "Bureau Score 1500")
+
+    assert result["dropped_example_values"] == []
+    assert result["extracted_fields"] == {"bureau_score": 1500}

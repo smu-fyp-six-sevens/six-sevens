@@ -189,6 +189,8 @@ In 121 the score cannot change by design but the UI never says so. In 122 the mo
 3. Code guard `_drop_example_values` in `extract.py`: an Example block runs from a line "Example N:" until "For more details" or "Explanation of". Collect tokens (figures, two-letter grades) printed only inside Example blocks, and drop a top-level scalar whose value is one of them. Record `dropped_example_values` in the trace (`nodes.py`).
 4. Tests on the C001 text; one live extraction call to confirm.
 
+**Status: implemented, untested by pytest.** Live call on C001: with the new prompt the model returned none of the three fields, so the guard had nothing to drop (it is the backstop; verified on the real C001 text). Files: `extract.py` (`_drop_example_values`), `extraction_prompts.py`, `nodes.py` trace, tests in `test_classifier_extractor_output.py`.
+
 ---
 
 ## 9. Transaction-pattern checks belong in the cross-document agent
