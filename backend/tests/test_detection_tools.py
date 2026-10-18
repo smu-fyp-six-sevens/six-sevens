@@ -441,3 +441,32 @@ def test_digital_authenticity_owns_the_ai_generation_tool() -> None:
 
     names = {t.name for t in SPECIALISTS["digital_authenticity"].tools}
     assert {"metadata_tool", "ai_generation_tool"} <= names
+
+
+def _side_field(value: str) -> ExtractedField:
+    return ExtractedField(field_name="document_side", field_value=value, confidence=0.95, page_number=None, bbox=None)
+
+
+@pytest.mark.parametrize("raw, expected", [('"front"', "front"), ("back", "back"), ("single", None), (None, None)])
+def test_document_side_reads_the_extracted_side(raw, expected) -> None:
+    from app.langgraph.detection.specialists import document_side
+
+    assert document_side([_side_field(raw)] if raw else []) == expected
+
+
+async def test_registry_check_on_nric_front_is_nothing_to_check() -> None:
+    from app.fraud_detection.external_validation.registry_lookups.runner import verify_against_registries
+
+    result = await verify_against_registries("doc-1", [_side_field("front")], "nric")
+
+    assert result.unable_to_assess_reason.startswith("Nothing to check:")
+    assert tools._is_nothing_to_check(result.unable_to_assess_reason)
+
+
+async def test_registry_check_on_nric_back_without_address_stays_unable() -> None:
+    from app.fraud_detection.external_validation.registry_lookups.runner import verify_against_registries
+
+    result = await verify_against_registries("doc-1", [_side_field("back")], "nric")
+
+    assert result.unable_to_assess
+    assert not tools._is_nothing_to_check(result.unable_to_assess_reason)

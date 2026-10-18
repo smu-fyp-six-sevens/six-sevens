@@ -135,6 +135,10 @@ Not started, no urgency until the Cloud Native award work picks up:
 - **Group card props** — `DocumentDetailsPage.tsx` and `UploadPage.tsx` now use hooks, but the cards still
   take many props (`ExtractedInformationCard`, `DocumentListPanel`). Group them or read from hooks. Verify with
   `tsc`, `npm run build`, and the `document-review`, `upload`, `case-management` and `checklist` specs.
+- **Loading pages (not urgent)** — three pages in `App.tsx` are a bare line of text with no header: the
+  `Suspense` fallback (`Loading…`, line 298), `Loading case...` (338) and `Loading document...` (365). Give them
+  the same design as the document-not-found page. The case and document routes also wait for the whole case
+  list before they start loading their own data; letting them load independently would remove that delay.
 
 ## Small known gaps
 

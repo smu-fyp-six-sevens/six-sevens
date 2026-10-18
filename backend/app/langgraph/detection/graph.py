@@ -43,7 +43,7 @@ from ... import run_context
 from ...llm_io import message_text, parse_json_object, validate
 from ...run_context import spend_model_call
 from ..detection_report import SCHEMA_VERSION
-from .specialists import SEVERITIES, SPECIALISTS, run_specialist
+from .specialists import SEVERITIES, SPECIALISTS, document_side, run_specialist
 from .. import trace
 from ... import document_repository, extracted_fields_repository, flags_repository, telemetry
 from ...config import settings
@@ -105,7 +105,7 @@ Specialists:
 {catalogue}
 
 Rules:
-- Specialists choose their own tools and drop false positives themselves. Do not tell a specialist to skip a check; write what matters for this document type.
+- Specialists choose their own tools and drop false positives themselves. You may say which checks do not apply to this document, for example an NRIC front ("document_side": "front") has no address to look up; write what matters for this document type.
 - Layout & Rendering's font and layout checks need a native-text PDF, but its two image checks (image manipulation and image tampering) also work on image files. If "file_extension" is an image type, the brief should say to run the image checks only.
 - A filename is only an upload label, never evidence of fraud or a mismatch. Base conclusions on document contents and verified cross-document field comparisons.
 - Keep each brief to one sentence.
@@ -210,6 +210,9 @@ async def load_context_node(state: DetectionState) -> dict:
         "has_extracted_fields": bool(fields),
         "file_extension": os.path.splitext(document.filename or "")[1].lower(),
     }
+    side = document_side(fields)
+    if side:
+        context["document_side"] = side
     return {"context": context, "case_id": document.case_id}
 
 
