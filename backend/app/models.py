@@ -327,6 +327,10 @@ class ContributingFinding(BaseModel):
     category: str | None = None
     # "cross_document" for a finding from the case analysis rather than one document's scan.
     source: Literal["document", "cross_document"] = "document"
+    # The same finding on other documents is scored once. On the copy that scores it: how many other documents
+    # carry it. On the copies that score 0: the finding_id of the one that scored.
+    also_on: int = 0
+    repeat_of: str | None = None
 
 
 class UnassessedCheck(BaseModel):

@@ -125,10 +125,12 @@ async def _execute(
 
         risk = compute_case_risk(documents, reports, failed_ids, findings)
         document_only = compute_case_risk(documents, reports, failed_ids)
+        without_dedupe = compute_case_risk(documents, reports, failed_ids, findings, dedupe=False)
         trace.record(
             "scoring", **scoring_breakdown(risk),
             cross_document_findings=len(findings),
             score_without_cross_document=document_only.score, level_without_cross_document=document_only.level,
+            score_without_dedupe=without_dedupe.score, level_without_dedupe=without_dedupe.level,
         )
         requests, request_status = await propose_requests_with_status(risk)
         supporting_documents = recommend_supporting_documents(documents)

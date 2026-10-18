@@ -45,6 +45,8 @@ Status: plan only, nothing implemented (2026-10-18). Decisions are recorded unde
 - Not covered: one fact reported by two tools (registry and identity). Item 6 removes the per-document identity findings.
 - Roll out in shadow mode (old and new scores in the trace).
 
+**Status: implemented, untested by pytest. Changed from the plan:** only findings with a check code and a stated value are merged; the summary-text fallback was dropped, because identical wording on three documents (a font or metadata finding) is three pieces of evidence and must keep counting towards Critical. A repeat is zeroed before the document's noise cap is applied. `ContributingFinding` gained `also_on` and `repeat_of`. The trace holds `score_without_dedupe` beside the new score. On GLDB-122: 96.24 to 72.24 points, score 94 to 91, still Critical; GLDB-121 unchanged.
+
 **Files:** `case_risk.py`, `CaseRiskCard.tsx`, `test_case_risk.py` (UEN on 3 documents counts once; Critical not reached by one repeated fact).
 
 ---

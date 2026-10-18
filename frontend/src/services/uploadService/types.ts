@@ -101,6 +101,10 @@ export interface CaseRiskFinding {
   category?: string | null;
   // "cross_document" for a finding from the case analysis rather than one document's scan.
   source?: 'document' | 'cross_document';
+  // The same finding on other documents is scored once. On the copy that scores: how many other documents carry it.
+  also_on?: number;
+  // On a copy that scores 0: the finding_id of the one that scored.
+  repeat_of?: string | null;
 }
 
 export interface CaseRisk {
