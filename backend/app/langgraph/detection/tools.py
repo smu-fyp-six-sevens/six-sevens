@@ -34,13 +34,13 @@ from langgraph.prebuilt import InjectedState
 
 from ... import document_repository, extracted_fields_repository, storage_service
 from ...cpu_pool import run_cpu
-from ...fraud_detection.ai_generation import AIImageAssessment, AIIndicator, check_ai_generation
-from ...fraud_detection.date_anomalies import check_date_anomalies
+from ...fraud_detection.authenticity.ai_generation import AIImageAssessment, AIIndicator, check_ai_generation
+from ...fraud_detection.dates.date_anomalies import check_date_anomalies
 from ...fraud_detection.font_consistency import check_font_consistency
-from ...fraud_detection.image_manipulation import check_image_manipulation, check_image_tampering
+from ...fraud_detection.images.image_manipulation import check_image_manipulation, check_image_tampering
 from ...fraud_detection.layout_anomalies import check_layout_anomalies
-from ...fraud_detection.metadata_analysis import SUPPORTED_METADATA_FIELDS, check_metadata_anomalies
-from ...fraud_detection.spelling_anomaly import check_spelling_anomalies
+from ...fraud_detection.authenticity.metadata_analysis import SUPPORTED_METADATA_FIELDS, check_metadata_anomalies
+from ...fraud_detection.spelling.spelling_anomaly import check_spelling_anomalies
 
 logger = logging.getLogger("classifier_pipeline.langgraph.detection.tools")
 
@@ -279,9 +279,13 @@ async def spelling_tool(document_id: Annotated[str, InjectedState("document_id")
             "word": anomaly.word,
             "context": _short(anomaly.surrounding_text),
             "suggested_correction": anomaly.suggested_correction,
+            # One finding per distinct word; how often it appears is for the specialist to weigh.
+            "occurrences": anomaly.occurrences,
+            "other_contexts": [_short(text) for text in anomaly.other_contexts],
             "summary": (
                 f'Possible misspelling "{anomaly.word}"'
                 + (f' (suggested: "{anomaly.suggested_correction}")' if anomaly.suggested_correction else "")
+                + (f", appears {anomaly.occurrences} times" if anomaly.occurrences > 1 else "")
                 + "."
             ),
         }

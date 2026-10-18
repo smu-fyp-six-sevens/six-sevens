@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import calendar
 import re
 from typing import Any, Protocol, Self, TypeVar
 from datetime import date
 from ...config import settings
+from ..dates.date_parsing import parse_date
 from ..font_consistency import ExtractedField
 from .models import NumericalFinding, Severity, SkippedCheck
 
@@ -149,64 +149,10 @@ def _materiality_note(diff: float, base: float) -> str | None:
     return None
 
 
-_MONTHS = ["jan", "feb", "mar", "apr", "may", "jun",
-           "jul", "aug", "sep", "oct", "nov", "dec"]
-
-_DATE_FIELD_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"^(\d{4})-(\d{1,2})-(\d{1,2})$"), "ymd"),
-    # dd/mm/yyyy or dd-mm-yyyy — the day-first numeric shape shows up with
-    # either separator depending on the document/locale; the ymd pattern
-    # above already claims any dash-separated string starting with a
-    # 4-digit year, so there's no ambiguity in also accepting a dash here.
-    (re.compile(r"^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$"), "dmy"),
-    (re.compile(r"^(\d{1,2})[- ]([A-Za-z]{3,9})[- ](\d{4})$"), "dMy"),
-    (re.compile(r"^([A-Za-z]{3,9})[- ](\d{1,2}),?\s*(\d{4})$"), "Mdy"),
-]
-
-
-def _month_number(name: str) -> int:
-    lowered = name.lower()[:3]
-    return _MONTHS.index(lowered) + 1 if lowered in _MONTHS else 0
-
-
-_TRAILING_TIME_RE = re.compile(r"\s+\d{1,2}:\d{2}(:\d{2})?(\s*[AaPp][Mm])?$")
-
-
-def _parse_field_date(value: Any) -> date | None:
-    """
-    Parses a date out of an extracted field's own value (not free-form
-    prose — see numerical checks' text-parsing sibling for that). Accepts
-    ISO, dd/mm/yyyy, "15 March 2026" / "15-Mar-2026", and "March 15, 2026" —
-    the shapes this pipeline's own doc_gen_scripts templates actually
-    render dates in. A trailing time-of-day ("05 Sep 2026 08:12:17", as a
-    document's own "printed on"/"generated at" timestamp is often rendered)
-    is stripped first — only the date portion is validated.
-    """
-    if not isinstance(value, str):
-        return None
-    text = _TRAILING_TIME_RE.sub("", value.strip())
-    for pattern, order in _DATE_FIELD_PATTERNS:
-        match = pattern.match(text)
-        if not match:
-            continue
-        groups = match.groups()
-        try:
-            if order == "ymd":
-                year, month, day = int(groups[0]), int(groups[1]), int(groups[2])
-            elif order == "dmy":
-                day, month, year = int(groups[0]), int(groups[1]), int(groups[2])
-            elif order == "dMy":
-                day, month, year = int(groups[0]), _month_number(groups[1]), int(groups[2])
-            else:
-                month, day, year = _month_number(groups[0]), int(groups[1]), int(groups[2])
-            if not 1 <= month <= 12:
-                return None
-            if not 1 <= day <= calendar.monthrange(year, month)[1]:
-                return None
-            return date(year, month, day)
-        except (ValueError, IndexError):
-            return None
-    return None
+def _parse_field_date(value: Any, default_year: int | None = None) -> date | None:
+    """A complete date from an extracted field's own value, in any form a document prints it (see
+    fraud_detection/dates/date_parsing.py). A printed date with no year takes default_year if given."""
+    return parse_date(value, default_year)
 
 
 

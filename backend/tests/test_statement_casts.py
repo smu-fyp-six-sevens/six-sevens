@@ -4,7 +4,7 @@ and parity with the reference path."""
 from __future__ import annotations
 
 
-from app.fraud_detection.field_catalogue import render_field_catalogue
+from app.fraud_detection.shared.field_catalogue import render_field_catalogue
 from app.fraud_detection.font_consistency import ExtractedField
 from app.fraud_detection.numerical_validation.runner import Binding, render_check_roles, run_numerical_checks
 from app.fraud_detection.numerical_validation.casts import CastLine, profit_cast_finding

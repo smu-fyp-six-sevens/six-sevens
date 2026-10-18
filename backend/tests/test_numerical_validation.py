@@ -4,7 +4,7 @@ import pytest
 import random
 from types import SimpleNamespace
 
-from app.fraud_detection.field_catalogue import array_rows
+from app.fraud_detection.shared.field_catalogue import array_rows
 from app.fraud_detection.font_consistency import ExtractedField
 from app.fraud_detection.numerical_validation.runner import Binding, ROW_ROLES, benford_summary, run_numerical_checks
 from app.fraud_detection.numerical_validation.identity_company import _mrz_check_digit, _nric_expected_letter

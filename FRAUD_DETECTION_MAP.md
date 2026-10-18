@@ -46,12 +46,13 @@ Comparing a document with the rest of its case is not done here: that is the per
 | `layout_anomalies/` | Indentation/alignment/margin/spacing deviations. Package: `common.py` (thresholds, result models, finding helpers), `extraction.py` (text layer/OCR into blocks), `structure.py` (roles, comparable groups, columns), `indentation.py`, `line_shifts.py`, `anchors.py`, `alignment.py`, `spacing.py`, `margins.py`, `signals.py` (filtering and merging), `profiles.py` (per-document-type rules, applied only when classification confidence meets `CLASSIFICATION_CONFIDENCE_THRESHOLD`; currently `nric`), `reference.py` (compares a standard form with a curated reference layout in `references/<document_type>/`, built with `scripts/build_layout_reference.py` from two or more genuine copies; steps aside when the reference does not fit; references exist for FATCA, NOA, certificates of incumbency and incorporation, credit report, constitution, NRIC and passport, built from the generated templates and specimens; photos and scans are compared after OCR, scaled to the reference); `__init__.py` runs `check_layout_anomalies` | 147 + 20 (`test_layout_profiles.py`) + 22 (`test_layout_reference.py`) |
 | `layout_anomalies/text_overlay.py` | Overlapping text boxes (watermarks repeated on several pages are skipped; long tall-and-narrow boxes are taken as vertical text and skipped; confidence scales with the overlap). Linear per page, so a 3,000-line statement takes milliseconds. Run by `check_layout_anomalies`; its `Text Overlay` findings appear in the layout result | 22 |
 | `numerical_validation/` | Deterministic arithmetic/identity checks over extracted fields. Package: `registry.py` (the `@check` decorator; each check's inputs come from its signature), `identity_company.py`, `statements.py`, `records.py`, `casts.py` (statement arithmetic), `common.py`, `models.py`, `runner.py` (applies bindings and builds the result) | — |
-| `metadata_analysis.py` | File-embedded metadata (author/producer/create-modify dates) tamper signals | 54 |
-| `date_anomalies.py` | Date extraction/labeling and logical date consistency (future dates, end-before-start) | 38 |
-| `spelling_anomaly.py` | Misspellings via SymSpell, filtered against `domain_terms.py` allow-list | 24 |
+| `authenticity/` | `metadata_analysis.py`: file-embedded metadata (author/producer/create-modify dates) tamper signals; `ai_generation.py`: traces of AI generation | 54 + — |
+| `dates/` | `date_anomalies.py`: date extraction/labelling and logical date consistency (future dates, end-before-start); `date_parsing.py`: reads a date in any printed form (ordinals, two-digit years, month names, no year), shared by every check that reads dates | 38 + 62 |
+| `spelling/` | `spelling_anomaly.py`: misspellings via SymSpell, one finding per distinct word; `domain_terms.py`: the allow-list of legal/financial jargon and address shorthand it skips | 24 |
+| `images/` | `image_manipulation.py` and `image_integrity.py` (see below) | — |
+| `shared/` | Not checks: `field_values.py`, `field_catalogue.py` (what specialists see of the extracted fields), `pdf_pages.py` | — |
 | `external_validation/` | The document's facts against outside references, chosen by document type. `runner.py` is the entry point; `registry_lookups/` holds the live ACRA, OneMap, HDB, URA (approved residential use and the Master Plan zoning index) and MOM holiday lookups; `sg_reference/` holds the published tables (CPF rates and ceilings, GST rate, IRAS tax rules, bank identifiers, public holidays); `reference_checks/` holds the checks that read those tables (`PAY.CPF_RATE`, `PAY.CPF_CEILING`, `PAY.CPF_BASE`, `POA.GST`, `NOA.PAYABLE`, `BS.BANK_IDENTIFIERS`, `BS.ACCOUNT_NUMBER_FORMAT`), registered as `group="external"`; `giro.py` is the GIRO closed-day check. Run by `external_validation_tool` and the `external-validation` endpoint | — |
 | `font_consistency.py` | Font family/size/emphasis (bold/italic/underline) inconsistency | 16 |
-| `domain_terms.py` | Not a check — allow-list of legal/financial jargon feeding `spelling_anomaly.py` | — |
 
 The three `PAY.CPF_*` checks (`reference_checks/cpf.py`) share one assessment, so a wrong contribution is reportedonce: `CPF_CEILING` (ceiling not applied, impossible), `CPF_BASE` (rate applied to basic pay only, inconsistent),
 `CPF_RATE` (anything else). Earnings are split into ordinary, additional (bonus) and non-wages; a line that can't be
@@ -71,11 +72,11 @@ zoning (Commercial and White zones allow homes and offices, so zoning alone can'
 Zoning comes from a local index (`land_use.py`, about 12 MB) built from a 175 MB data.gov.sg file when the Docker
 image is built. If it is missing, zoning is skipped and the startup log says so.
 
-`image_manipulation.py` (SCRUM-64) covers resolution and compression mismatches between a file's
+`images/image_manipulation.py` (SCRUM-64) covers resolution and compression mismatches between a file's
 images (embedded PDF images or a standalone PNG/JPEG). The same module's `check_image_tampering` (SCRUM-65) covers
 images edited in after the fact: painted over and replaced (Image Overlay), stretched or rotated
 (Scaling Anomaly), pasted with a seam or halo (Visible Boundary), or with altered brightness,
-colour, sharpness or noise (Quality Mismatch). `ai_generation.py` (SCRUM-67) scores how likely a file is
+colour, sharpness or noise (Quality Mismatch). `authenticity/ai_generation.py` (SCRUM-67) scores how likely a file is
 AI-generated and lists each indicator's value and contribution.
 
 `case_match.py` — the upload check: verifies each case document's company/individuals against the

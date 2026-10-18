@@ -17,7 +17,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from .... import telemetry
 from ....config import settings
-from ....fraud_detection.field_catalogue import render_field_catalogue
+from ....fraud_detection.shared.field_catalogue import render_field_catalogue
 from ....fraud_detection.numerical_validation.runner import Binding, render_check_roles
 from ..._anthropic import build_chat_anthropic
 from ....llm_io import message_text, parse_json_object

@@ -7,12 +7,12 @@ the model never sees or supplies a case id.
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
-from ....fraud_detection.numerical_validation.common import _decode, _month_number, _parse_field_date
+from ....fraud_detection.dates.date_parsing import date_in_period
+from ....fraud_detection.numerical_validation.common import _decode, _parse_field_date
 from ..evidence import CaseContext, DocView, transaction_rows
 
 # The only flags a tool may emit; verify.py lets a finding reach High only on one of these.
@@ -47,32 +47,7 @@ def direction_ok(amount: float, direction: str) -> bool:
     return direction == "any" or (direction == "credit" and amount > 0) or (direction == "debit" and amount < 0)
 
 
-# "20 JUN", "20-Jun", "20 June" and "20/06": the day and month a statement prints on each row.
-_DAY_MONTH_NAME_RE = re.compile(r"^\s*(\d{1,2})[\s\-/]+([A-Za-z]{3,9})\.?\s*$")
-_DAY_MONTH_NUMBER_RE = re.compile(r"^\s*(\d{1,2})/(\d{1,2})\s*$")
-
 Period = tuple[date | None, date | None]
-
-
-def _year_from_period(month: int, day: int, period: Period) -> date | None:
-    """The date a year-less day and month fall on, taking the year from the statement's own period."""
-    start, end = period
-    if start is not None:
-        first_year = start.year
-        last_year = end.year if end is not None else start.year + 1
-    elif end is not None:
-        first_year = end.year - 1
-        last_year = end.year
-    else:
-        return None
-    for year in range(first_year, last_year + 1):
-        try:
-            candidate = date(year, month, day)
-        except ValueError:
-            continue
-        if (start is None or candidate >= start) and (end is None or candidate <= end):
-            return candidate
-    return None
 
 
 def row_date(row: dict, period: Period = (None, None)) -> date | None:
@@ -81,20 +56,7 @@ def row_date(row: dict, period: Period = (None, None)) -> date | None:
     year comes from the statement's period, and a date the period can't place
     stays undated rather than guessed.
     """
-    value = row.get("date")
-    full = _parse_field_date(value)
-    if full is not None or not isinstance(value, str):
-        return full
-    named, numbered = _DAY_MONTH_NAME_RE.match(value), _DAY_MONTH_NUMBER_RE.match(value)
-    if named:
-        day, month = int(named.group(1)), _month_number(named.group(2))
-    elif numbered:
-        day, month = int(numbered.group(1)), int(numbered.group(2))
-    else:
-        return None
-    if not 1 <= month <= 12 or not 1 <= day <= 31:
-        return None
-    return _year_from_period(month, day, period)
+    return date_in_period(row.get("date"), *period)
 
 
 def in_range(row: dict, start: date | None, end: date | None, period: Period = (None, None)) -> bool:

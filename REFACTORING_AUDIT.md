@@ -60,7 +60,7 @@ Cleaned up 2026-10-15 and committed (tests updated, not run):
 - `_row`: one `supabase_rows.row` for the four repositories.
 - Document types: `VALID_TYPES` and `KNOWN_DOCUMENT_TYPES` are derived from `DocumentType`.
 - Routers: `to_thread_or_502` in `_dependencies.py` replaces 13 try/except-502 blocks; `detection.py` records check results through one `_record_result`.
-- Shared helpers: `fraud_detection/pdf_pages.py` (`page`, `pages`) and `ingestion_service.content_type_from_filename`.
+- Shared helpers: `fraud_detection/shared/pdf_pages.py` (`page`, `pages`) and `ingestion_service.content_type_from_filename`.
 - Frontend: `documentStatusDisplay` replaces the repeated stage/label/in-progress calls; the approve/reject/cancel/retry handlers in both `useDocumentActions` hooks share one runner each; duplicate and aliased CSS rules merged (`case-analysis.css` into `case-summary.css`, `.case-id--*` aliases grouped).
 
 Still open:

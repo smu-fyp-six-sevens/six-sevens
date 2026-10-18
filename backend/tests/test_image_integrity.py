@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.fraud_detection.image_integrity import build_image_integrity_report
-from app.fraud_detection.image_manipulation import (
+from app.fraud_detection.images.image_integrity import build_image_integrity_report
+from app.fraud_detection.images.image_manipulation import (
     ImageManipulationResult,
     ImageRegion,
     ImageTamperingIndicator,
