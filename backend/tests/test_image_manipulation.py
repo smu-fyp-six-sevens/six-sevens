@@ -8,7 +8,7 @@ import pymupdf
 import pytest
 from PIL import Image
 
-from app.fraud_detection.image_manipulation import (
+from app.fraud_detection.images.image_manipulation import (
     Tolerances,
     _detail_ratio,
     _jpeg_quantisation_tables,

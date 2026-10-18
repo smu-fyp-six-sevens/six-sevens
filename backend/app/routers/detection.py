@@ -18,29 +18,29 @@ from ..case_pipeline.cross_document.company_identity import (
     CompanyNameConsistencyResult,
     check_company_name_consistency,
 )
-from ..fraud_detection.ai_generation import AIGenerationResult, check_ai_generation
+from ..fraud_detection.authenticity.ai_generation import AIGenerationResult, check_ai_generation
 from ..fraud_detection.font_consistency import (
     ExtractedField,
     FontConsistencyResult,
     check_font_consistency,
 )
-from ..fraud_detection.image_integrity import ImageIntegrityReport, build_image_integrity_report
-from ..fraud_detection.image_manipulation import (
+from ..fraud_detection.images.image_integrity import ImageIntegrityReport, build_image_integrity_report
+from ..fraud_detection.images.image_manipulation import (
     ImageManipulationResult,
     ImageTamperingResult,
     check_image_manipulation,
     check_image_tampering,
 )
-from ..fraud_detection.metadata_analysis import MetadataAnalysisResult, check_metadata_anomalies
+from ..fraud_detection.authenticity.metadata_analysis import MetadataAnalysisResult, check_metadata_anomalies
 from ..fraud_detection.layout_anomalies import LayoutAnomalyResult, check_layout_anomalies
 from ..fraud_detection.numerical_validation.models import NumericalValidationResult
 from ..fraud_detection.numerical_validation.runner import build_result, run_numerical_checks
 from ..langgraph.detection.field_checks.binder import bind_checks
-from ..fraud_detection.date_anomalies import (
+from ..fraud_detection.dates.date_anomalies import (
     DateAnomalyResult,
     check_date_anomalies,
 )
-from ..fraud_detection.spelling_anomaly import SpellingAnomalyResult, check_spelling_anomalies
+from ..fraud_detection.spelling.spelling_anomaly import SpellingAnomalyResult, check_spelling_anomalies
 from ..fraud_detection.external_validation.runner import ExternalValidationResult, run_external_validation
 
 router = APIRouter(prefix="/documents", tags=["detection"])

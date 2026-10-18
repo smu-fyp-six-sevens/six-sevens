@@ -22,7 +22,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from ..ingestion.metadata_extractor import EXTRACTION_ERROR_KEY
+from ...ingestion.metadata_extractor import EXTRACTION_ERROR_KEY
 
 # Canonical field name -> the exiftool tag names that can supply it, tried
 # in order. exiftool normalises PDF's CreationDate/ModDate to CreateDate/

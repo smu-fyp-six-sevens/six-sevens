@@ -25,7 +25,7 @@ import re
 from dataclasses import dataclass, field as dc_field
 from typing import Any
 
-from ...field_values import also_printed_in, describe_path, text_values
+from ...shared.field_values import also_printed_in, describe_path, text_values
 from ...numerical_validation.models import SkippedCheck
 from . import hdb, land_use, onemap, ura
 from .http import LookupUnavailable

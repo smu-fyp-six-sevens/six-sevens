@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from app.fraud_detection.font_consistency import ExtractedField
-from app.fraud_detection.date_anomalies import check_date_anomalies
+from app.fraud_detection.dates.date_anomalies import check_date_anomalies
 
 
 def _field(name: str, value, confidence: float = 0.95) -> ExtractedField:
@@ -343,3 +343,44 @@ def test_passport_expired_is_a_signal() -> None:
     findings = _codes(result, "ID.EXPIRED")
     assert len(findings) == 1
     assert findings[0].severity == "signal"
+
+
+# ---------------------------------------------------------------------------
+# Dates printed without a year (statement rows, a financial year end)
+# ---------------------------------------------------------------------------
+
+
+def test_a_date_printed_without_a_year_is_not_an_invalid_date() -> None:
+    for value in ("23rd aug", "31/03", "September 2026"):
+        result = _run([_field("document_date", value)])
+        assert _codes(result, "GEN.DATE_VALID") == [], value
+    # Text that isn't a date at all still is.
+    assert len(_codes(_run([_field("document_date", "Bankruptcy Order")]), "GEN.DATE_VALID")) == 1
+
+
+def _statement(rows: list[str]):
+    transactions = [{"date": d, "amount": 10.0} for d in rows]
+    return _run([
+        _field("transactions", transactions),
+        _field("statement_period_start", "15 Dec 2025"),
+        _field("statement_period_end", "14 Jan 2026"),
+    ], document_type="bank_statement")
+
+
+def test_year_less_statement_rows_take_their_year_from_the_period() -> None:
+    result = _statement(["16 DEC", "28 DEC", "03 JAN", "14 JAN"])
+    assert _codes(result, "BS.PERIOD_BOUNDS") == []
+    assert [d.value for d in result.dates_extracted if d.field.startswith("transactions")] == [
+        "2025-12-16", "2025-12-28", "2026-01-03", "2026-01-14",
+    ]
+
+
+def test_a_year_less_statement_row_outside_the_period_is_still_caught() -> None:
+    [finding] = _codes(_statement(["16 DEC", "20 FEB"]), "BS.PERIOD_BOUNDS")
+    assert "Transaction 2" in finding.summary and "2026-02-20" in finding.summary
+
+
+def test_two_digit_year_statement_rows_are_checked() -> None:
+    result = _statement(["16-Dec-25", "20-Feb-26"])
+    [finding] = _codes(result, "BS.PERIOD_BOUNDS")
+    assert "2026-02-20" in finding.summary

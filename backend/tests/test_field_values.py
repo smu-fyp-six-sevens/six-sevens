@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.fraud_detection.field_values import text_values
+from app.fraud_detection.shared.field_values import text_values
 
 
 def test_walks_lists_rows_and_json_strings_with_paths_top_level_first() -> None:
@@ -23,7 +23,7 @@ def test_walks_lists_rows_and_json_strings_with_paths_top_level_first() -> None:
 
 
 def test_describe_path_reads_like_the_frontend_field_labels() -> None:
-    from app.fraud_detection.field_values import also_printed_in, describe_path
+    from app.fraud_detection.shared.field_values import also_printed_in, describe_path
 
     fields = {
         "shareholders": [{"name": "CHIA WEI MING", "identification_no": "S8934521C"},

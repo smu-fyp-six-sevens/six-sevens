@@ -10,7 +10,7 @@ from app.fraud_detection.font_consistency import (
     FontAnomalyV2,
     FontConsistencyResult,
 )
-from app.fraud_detection.image_manipulation import (
+from app.fraud_detection.images.image_manipulation import (
     ImageManipulationIndicator,
     ImageManipulationResult,
     ImageTamperingIndicator,
@@ -18,8 +18,8 @@ from app.fraud_detection.image_manipulation import (
     TamperingTolerances,
     Tolerances,
 )
-from app.fraud_detection.metadata_analysis import MetadataAnalysisResult, MetadataAnomaly
-from app.fraud_detection.spelling_anomaly import SpellingAnomaly, SpellingAnomalyResult
+from app.fraud_detection.authenticity.metadata_analysis import MetadataAnalysisResult, MetadataAnomaly
+from app.fraud_detection.spelling.spelling_anomaly import SpellingAnomaly, SpellingAnomalyResult
 from app.langgraph.detection import tools
 from app.langgraph.detection.field_checks import external, numerical
 from app.langgraph.detection.field_checks.bindings import BindingArg
@@ -74,7 +74,31 @@ async def test_spelling_tool_findings_include_summary() -> None:
     ):
         output = await tools.spelling_tool.ainvoke({"document_id": "doc-1"})
 
-    assert output["findings"][0]["summary"]
+    assert output["findings"][0]["summary"] == 'Possible misspelling "Helllo" (suggested: "hello").'
+
+
+@pytest.mark.asyncio
+async def test_spelling_tool_reports_a_repeated_word_as_one_finding_with_its_count() -> None:
+    result = SpellingAnomalyResult(
+        document_id="doc-1",
+        anomalies=[SpellingAnomaly(
+            word="Shenton", surrounding_text="2 Shenton Way #20-02", suggested_correction="shelton",
+            occurrences=5, other_contexts=["Shenton Way branch"],
+        )],
+        unable_to_assess=False,
+    )
+    with (
+        patch.object(tools, "_document", AsyncMock(return_value=_document(filename="f.pdf", document_type="nric"))),
+        patch.object(tools, "_file_bytes", AsyncMock(return_value=b"x")),
+        patch.object(tools, "_extracted_fields", AsyncMock(return_value=[])),
+        patch.object(tools, "check_spelling_anomalies", AsyncMock(return_value=result)),
+    ):
+        output = await tools.spelling_tool.ainvoke({"document_id": "doc-1"})
+
+    [finding] = output["findings"]
+    assert finding["summary"] == 'Possible misspelling "Shenton" (suggested: "shelton"), appears 5 times.'
+    assert finding["occurrences"] == 5
+    assert finding["other_contexts"] == ["Shenton Way branch"]
 
 
 def test_metadata_tool_findings_include_summary() -> None:
@@ -330,7 +354,7 @@ async def test_external_validation_tool_runs_the_static_reference_checks_for_the
 
 
 def _ai_result(*images, unable: str | None = None, file_provenance=None):
-    from app.fraud_detection.ai_generation import AIGenerationConfig, AIGenerationResult
+    from app.fraud_detection.authenticity.ai_generation import AIGenerationConfig, AIGenerationResult
 
     return AIGenerationResult(
         document_id="doc-1",
@@ -345,7 +369,7 @@ def _ai_result(*images, unable: str | None = None, file_provenance=None):
 
 
 def _ai_image(score: float, likelihood: str):
-    from app.fraud_detection.ai_generation import AIImageAssessment, AIIndicator
+    from app.fraud_detection.authenticity.ai_generation import AIImageAssessment, AIIndicator
 
     return AIImageAssessment(
         source="embedded", page=1, xref=7, bbox=(10.0, 20.0, 110.0, 120.0),
@@ -382,7 +406,7 @@ async def test_ai_generation_tool_reports_only_medium_and_high_images() -> None:
 
 @pytest.mark.asyncio
 async def test_ai_generation_tool_reports_declared_file_provenance() -> None:
-    from app.fraud_detection.ai_generation import AIIndicator
+    from app.fraud_detection.authenticity.ai_generation import AIIndicator
 
     provenance = AIIndicator(
         indicator="Provenance", assessed=True, value=0.95, strength=0.95,

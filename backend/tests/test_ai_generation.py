@@ -9,8 +9,8 @@ import pymupdf
 import pytest
 from PIL import Image, PngImagePlugin
 
-from app.fraud_detection import ai_generation
-from app.fraud_detection.ai_generation import (
+from app.fraud_detection.authenticity import ai_generation
+from app.fraud_detection.authenticity.ai_generation import (
     AIGenerationConfig,
     _estimate_quality,
     _ijg_table,
