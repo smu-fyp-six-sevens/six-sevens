@@ -2756,6 +2756,30 @@ def test_cell_nudged_off_its_row_is_named() -> None:
     assert findings[0].evidence["vertical_delta_pt"] == pytest.approx(10.0)
 
 
+def _table_with_offset_line(offset_size: float) -> list:
+    """Three 6.9 pt table rows; the first cell of the middle row sits 10 pt off it, in `offset_size`."""
+    blocks = []
+    for index in range(3):
+        y0 = 200.0 + index * 20
+        shift = 10.0 if index == 1 else 0.0
+        size = offset_size if index == 1 else 6.9
+        blocks.append(_block([_line((50.0, y0 + shift, 120.0, y0 + 12 + shift), text=f"Item {index}",
+                                    baseline=y0 + 10 + shift, size=size)]))
+        blocks.append(_block([_line((300.0, y0, 360.0, y0 + 12), text=f"{index}0.00", baseline=y0 + 10, size=6.9)]))
+        blocks.append(_block([_line((420.0, y0, 480.0, y0 + 12), text=f"{index}1.00", baseline=y0 + 10, size=6.9)]))
+    return blocks
+
+
+def test_a_heading_in_another_size_is_not_a_cell_off_its_row() -> None:
+    # A credit report's 9.5 pt section title ("Aggregated Monthly Instalment") above a 6.9 pt table.
+    assert lr._check_vertical_unanchored_lines(_table_with_offset_line(9.5)) == []
+
+
+def test_a_cell_in_the_tables_own_size_is_still_flagged_off_its_row() -> None:
+    findings = lr._check_vertical_unanchored_lines(_table_with_offset_line(6.9))
+    assert [finding.text for finding in findings] == ["Item 1"]
+
+
 def test_a_section_break_is_not_a_spacing_anomaly() -> None:
     block = _block([_sentence(72, 300, 540, "ASSETS Non-current assets Property and equipment")])
     finding = lr._anomaly(

@@ -303,6 +303,24 @@ class _Line(BaseModel):
     baseline: float | None = None
 
 
+# Font sizes this far apart (as a share of the smaller) are a heading or field label and
+# body text: lines in them don't share a row, a rhythm, or a paragraph's alignment.
+SIZE_STEP = 0.15
+
+
+def _different_size(a: _Line, b: _Line) -> bool:
+    if not a.size or not b.size:
+        return False
+    return abs(a.size - b.size) >= SIZE_STEP * min(a.size, b.size)
+
+
+def _mixed_sizes(lines: list[_Line]) -> bool:
+    """A block of lines in clearly different sizes: a label over its value, or a sentence
+    beside a large total, not a paragraph."""
+    sizes = [line.size for line in lines if line.size]
+    return len(sizes) >= 2 and max(sizes) - min(sizes) >= SIZE_STEP * min(sizes)
+
+
 class _Block(BaseModel):
     lines: list[_Line]
     bbox: BBox

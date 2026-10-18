@@ -9,7 +9,7 @@ from .common import (
     ALIGN_EDGE_TOLERANCE_PT, Alignment, _ALIGNMENT_LABEL, _anomaly, _assessed, BBox, _Block,
     _bucket_pt, _by_page, _cannot, _CENTER_MID_BUCKET_PT, CENTER_SHIFT_THRESHOLD_PT,
     CheckAssessment, _delta_confidence, _dominant, _has_strong_majority,
-    INDENT_THRESHOLD_PT, LayoutAnomaly, _majority_confidence, _pct, _pt,
+    INDENT_THRESHOLD_PT, LayoutAnomaly, _majority_confidence, _mixed_sizes, _pct, _pt,
     ROW_ALIGN_THRESHOLD_PT, _signed_pt, _snippet, _union_bbox,
 )
 from .extraction import (
@@ -29,8 +29,14 @@ _ALIGNMENT_MIN_AGREEMENT = 0.75
 def _reportable_alignment(block: _Block, matching: int, comparable: int) -> bool:
     """Table cells set their own alignment (amounts right, labels left), and a
     split vote is not a pattern. Measured on the misalignment sets: removes
-    about a sixth of the new noise and no caught shift."""
-    return block.role != "table" and matching >= _ALIGNMENT_MIN_AGREEMENT * comparable
+    about a sixth of the new noise and no caught shift. Lines in clearly
+    different sizes (a field label over its value, a sentence beside a large
+    total) are not a paragraph, so they have no paragraph alignment."""
+    return (
+        block.role != "table"
+        and not _mixed_sizes(block.lines)
+        and matching >= _ALIGNMENT_MIN_AGREEMENT * comparable
+    )
 
 
 def _check_alignment(

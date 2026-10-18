@@ -1,0 +1,552 @@
+{
+ "name": "generated_term_loan_letter",
+ "document_type": "list_of_loans",
+ "labels": [
+  {
+   "page": 0,
+   "x0": 62.692909240722656,
+   "x1": 178.21690368652344,
+   "baseline": 66.023681640625,
+   "bottom": 68.71468353271484,
+   "text": "private & confidential"
+  },
+  {
+   "page": 0,
+   "x0": 62.692909240722656,
+   "x1": 261.7908630371094,
+   "baseline": 152.031494140625,
+   "bottom": 154.7224884033203,
+   "text": "subject to execution of final facility documentation"
+  },
+  {
+   "page": 0,
+   "x0": 62.692909240722656,
+   "x1": 250.34185791015625,
+   "baseline": 313.466552734375,
+   "bottom": 316.84356689453125,
+   "text": "letter of offer — term loan facility"
+  },
+  {
+   "page": 0,
+   "x0": 62.692909240722656,
+   "x1": 532.5829467773438,
+   "baseline": 329.9665832519531,
+   "bottom": 332.80706787109375,
+   "text": "we are pleased to offer your company a term loan facility on the terms and conditions set out below. this offer is"
+  },
+  {
+   "page": 0,
+   "x0": 62.692909240722656,
+   "x1": 510.17156982421875,
+   "baseline": 343.9665832519531,
+   "bottom": 346.80706787109375,
+   "text": "based on the information provided in the credit application and remains subject to completion of the bank's"
+  },
+  {
+   "page": 0,
+   "x0": 62.692909240722656,
+   "x1": 244.3518829345703,
+   "baseline": 357.9665832519531,
+   "bottom": 360.80706787109375,
+   "text": "standard due diligence and documentation."
+  },
+  {
+   "page": 0,
+   "x0": 76.86614227294922,
+   "x1": 116.87114715576172,
+   "baseline": 381.466552734375,
+   "bottom": 384.22955322265625,
+   "text": "borrower"
+  },
+  {
+   "page": 0,
+   "x0": 76.86614227294922,
+   "x1": 131.38815307617188,
+   "baseline": 401.466552734375,
+   "bottom": 404.22955322265625,
+   "text": "facility type"
+  },
+  {
+   "page": 0,
+   "x0": 232.77163696289062,
+   "x1": 276.2866516113281,
+   "baseline": 401.466552734375,
+   "bottom": 404.1575622558594,
+   "text": "term loan"
+  },
+  {
+   "page": 0,
+   "x0": 76.86614227294922,
+   "x1": 151.37713623046875,
+   "baseline": 421.466552734375,
+   "bottom": 424.22955322265625,
+   "text": "principal amount"
+  },
+  {
+   "page": 0,
+   "x0": 76.86614227294922,
+   "x1": 112.87513732910156,
+   "baseline": 441.466552734375,
+   "bottom": 444.22955322265625,
+   "text": "purpose"
+  },
+  {
+   "page": 0,
+   "x0": 232.77163696289062,
+   "x1": 484.402587890625,
+   "baseline": 441.466552734375,
+   "bottom": 444.1575622558594,
+   "text": "acquisition of business equipment and expansion of operations"
+  },
+  {
+   "page": 0,
+   "x0": 76.86614227294922,
+   "x1": 106.87213897705078,
+   "baseline": 461.466552734375,
+   "bottom": 464.22955322265625,
+   "text": "tenure"
+  },
+  {
+   "page": 0,
+   "x0": 76.86614227294922,
+   "x1": 131.379150390625,
+   "baseline": 481.466552734375,
+   "bottom": 484.22955322265625,
+   "text": "interest rate"
+  },
+  {
+   "page": 0,
+   "x0": 76.86614227294922,
+   "x1": 125.37615203857422,
+   "baseline": 501.466552734375,
+   "bottom": 504.22955322265625,
+   "text": "repayment"
+  },
+  {
+   "page": 0,
+   "x0": 76.86614227294922,
+   "x1": 169.38613891601562,
+   "baseline": 521.466552734375,
+   "bottom": 524.2295532226562,
+   "text": "first repayment date"
+  },
+  {
+   "page": 0,
+   "x0": 232.77163696289062,
+   "x1": 496.903564453125,
+   "baseline": 521.466552734375,
+   "bottom": 524.1575317382812,
+   "text": "one month after first drawdown, on the corresponding day of each"
+  },
+  {
+   "page": 0,
+   "x0": 232.77163696289062,
+   "x1": 257.78265380859375,
+   "baseline": 533.466552734375,
+   "bottom": 536.1575317382812,
+   "text": "month"
+  },
+  {
+   "page": 0,
+   "x0": 76.86614227294922,
+   "x1": 143.39414978027344,
+   "baseline": 553.466552734375,
+   "bottom": 556.2295532226562,
+   "text": "processing fee"
+  },
+  {
+   "page": 0,
+   "x0": 232.77163696289062,
+   "x1": 466.8885803222656,
+   "baseline": 553.466552734375,
+   "bottom": 556.1575317382812,
+   "text": "1.00% of the principal amount, deducted on first drawdown"
+  },
+  {
+   "page": 0,
+   "x0": 76.86614227294922,
+   "x1": 130.38014221191406,
+   "baseline": 573.466552734375,
+   "bottom": 576.2295532226562,
+   "text": "late interest"
+  },
+  {
+   "page": 0,
+   "x0": 232.77163696289062,
+   "x1": 487.9125671386719,
+   "baseline": 573.466552734375,
+   "bottom": 576.1575317382812,
+   "text": "2.00% per annum above the contracted interest rate on overdue"
+  },
+  {
+   "page": 0,
+   "x0": 232.77163696289062,
+   "x1": 267.2866516113281,
+   "baseline": 585.466552734375,
+   "bottom": 588.1575317382812,
+   "text": "amounts"
+  },
+  {
+   "page": 0,
+   "x0": 76.86614227294922,
+   "x1": 112.38014221191406,
+   "baseline": 605.466552734375,
+   "bottom": 608.2295532226562,
+   "text": "security"
+  },
+  {
+   "page": 0,
+   "x0": 232.77163696289062,
+   "x1": 513.1126098632812,
+   "baseline": 605.466552734375,
+   "bottom": 608.1575317382812,
+   "text": "fixed and floating charge over the borrower's assets, joint and several"
+  },
+  {
+   "page": 0,
+   "x0": 232.77163696289062,
+   "x1": 368.8336181640625,
+   "baseline": 617.466552734375,
+   "bottom": 620.1575317382812,
+   "text": "personal guarantee of all directors"
+  },
+  {
+   "page": 0,
+   "x0": 76.86614227294922,
+   "x1": 143.88015747070312,
+   "baseline": 637.466552734375,
+   "bottom": 640.2295532226562,
+   "text": "validity of offer"
+  },
+  {
+   "page": 0,
+   "x0": 232.77163696289062,
+   "x1": 368.8426513671875,
+   "baseline": 637.466552734375,
+   "bottom": 640.1575317382812,
+   "text": "30 days from the date of this letter"
+  },
+  {
+   "page": 0,
+   "x0": 62.692909240722656,
+   "x1": 178.81991577148438,
+   "baseline": 680.474365234375,
+   "bottom": 683.8513793945312,
+   "text": "terms and conditions"
+  },
+  {
+   "page": 0,
+   "x0": 62.692909240722656,
+   "x1": 519.5343627929688,
+   "baseline": 695.9744262695312,
+   "bottom": 698.5159301757812,
+   "text": "1. the borrower shall repay the facility by way of the monthly instalments stated above, commencing one month after the"
+  },
+  {
+   "page": 0,
+   "x0": 62.692909240722656,
+   "x1": 329.60992431640625,
+   "baseline": 707.9744262695312,
+   "bottom": 710.5159301757812,
+   "text": "date of first drawdown and continuing until the facility is fully amortised."
+  },
+  {
+   "page": 0,
+   "x0": 62.692909240722656,
+   "x1": 515.029296875,
+   "baseline": 731.9744262695312,
+   "bottom": 734.5159301757812,
+   "text": "2. any prepayment, whether full or partial, shall be subject to the bank's prevailing prepayment fee schedule and written"
+  },
+  {
+   "page": 0,
+   "x0": 62.692909240722656,
+   "x1": 158.59841918945312,
+   "baseline": 743.9744262695312,
+   "bottom": 746.5159301757812,
+   "text": "confirmation by the bank."
+  },
+  {
+   "page": 0,
+   "x0": 62.692909240722656,
+   "x1": 520.9453125,
+   "baseline": 767.9744262695312,
+   "bottom": 770.5159301757812,
+   "text": "3. the borrower shall maintain all security interests requested by the bank and shall execute all supplemental documents"
+  },
+  {
+   "page": 0,
+   "x0": 62.692909240722656,
+   "x1": 229.930419921875,
+   "baseline": 779.9744262695312,
+   "bottom": 782.5159301757812,
+   "text": "reasonably required to perfect such security."
+  },
+  {
+   "page": 1,
+   "x0": 62.692909240722656,
+   "x1": 515.7688598632812,
+   "baseline": 89.523681640625,
+   "bottom": 92.06517791748047,
+   "text": "4. the bank reserves the right to review, suspend, or cancel any undrawn portion of the facility in the event of a material"
+  },
+  {
+   "page": 1,
+   "x0": 62.692909240722656,
+   "x1": 261.32086181640625,
+   "baseline": 101.523681640625,
+   "bottom": 104.06517791748047,
+   "text": "adverse change in the borrower's financial condition."
+  },
+  {
+   "page": 1,
+   "x0": 62.692909240722656,
+   "x1": 313.0943908691406,
+   "baseline": 125.523681640625,
+   "bottom": 128.065185546875,
+   "text": "5. this offer is governed by the laws of the republic of singapore."
+  },
+  {
+   "page": 1,
+   "x0": 62.692909240722656,
+   "x1": 127.6349105834961,
+   "baseline": 160.531494140625,
+   "bottom": 163.3719940185547,
+   "text": "yours faithfully,"
+  },
+  {
+   "page": 1,
+   "x0": 62.692909240722656,
+   "x1": 147.71791076660156,
+   "baseline": 174.531494140625,
+   "bottom": 177.3719940185547,
+   "text": "for and on behalf of"
+  },
+  {
+   "page": 1,
+   "x0": 62.692909240722656,
+   "x1": 265.973876953125,
+   "baseline": 265.93939208984375,
+   "bottom": 268.7799072265625,
+   "text": "senior relationship manager, business banking"
+  },
+  {
+   "page": 1,
+   "x0": 62.692909240722656,
+   "x1": 124.4359130859375,
+   "baseline": 331.6243591308594,
+   "bottom": 335.0013732910156,
+   "text": "acceptance"
+  },
+  {
+   "page": 1,
+   "x0": 62.692909240722656,
+   "x1": 525.7991333007812,
+   "baseline": 348.1243591308594,
+   "bottom": 350.96484375,
+   "text": "we, the undersigned, being duly authorised, accept the above terms and conditions on behalf of the borrower."
+  },
+  {
+   "page": 1,
+   "x0": 62.692909240722656,
+   "x1": 95.94290924072266,
+   "baseline": 431.5322570800781,
+   "bottom": 434.37274169921875,
+   "text": "director"
+  }
+ ],
+ "slots": [
+  {
+   "page": 0,
+   "x0": 62.692909240722656,
+   "x1": 96.02291107177734,
+   "baseline": 93.69287109375,
+   "bottom": 98.2978744506836,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 430.3186950683594,
+   "x1": 532.5826416015625,
+   "baseline": 86.69287109375,
+   "bottom": 89.08486938476562,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 467.2066650390625,
+   "x1": 532.5826416015625,
+   "baseline": 98.69287109375,
+   "bottom": 101.08486938476562,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 62.692909240722656,
+   "x1": 157.2379150390625,
+   "baseline": 126.031494140625,
+   "bottom": 128.7224884033203,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 62.692909240722656,
+   "x1": 149.74990844726562,
+   "baseline": 139.031494140625,
+   "bottom": 141.7224884033203,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 62.692909240722656,
+   "x1": 198.87539672851562,
+   "baseline": 190.95867919921875,
+   "bottom": 193.87518310546875,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 62.692909240722656,
+   "x1": 150.8814239501953,
+   "baseline": 204.95867919921875,
+   "bottom": 207.79917907714844,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 62.692909240722656,
+   "x1": 92.26641082763672,
+   "baseline": 218.95867919921875,
+   "bottom": 221.79917907714844,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 62.692909240722656,
+   "x1": 140.32691955566406,
+   "baseline": 232.95867919921875,
+   "bottom": 235.79917907714844,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 62.692909240722656,
+   "x1": 142.42640686035156,
+   "baseline": 246.95867919921875,
+   "bottom": 249.79917907714844,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 62.692909240722656,
+   "x1": 160.90391540527344,
+   "baseline": 275.46258544921875,
+   "bottom": 278.3031005859375,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 232.77163696289062,
+   "x1": 351.8326110839844,
+   "baseline": 381.466552734375,
+   "bottom": 384.1575622558594,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 232.77163696289062,
+   "x1": 299.8126525878906,
+   "baseline": 421.466552734375,
+   "bottom": 424.1575622558594,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 232.77163696289062,
+   "x1": 274.7926330566406,
+   "baseline": 461.466552734375,
+   "bottom": 464.1575622558594,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 232.77163696289062,
+   "x1": 327.8206481933594,
+   "baseline": 481.466552734375,
+   "bottom": 484.1575622558594,
+   "text": null
+  },
+  {
+   "page": 0,
+   "x0": 232.77163696289062,
+   "x1": 418.8646240234375,
+   "baseline": 501.466552734375,
+   "bottom": 504.1575622558594,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 62.692909240722656,
+   "x1": 83.80191040039062,
+   "baseline": 188.531494140625,
+   "bottom": 191.447998046875,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 62.692909240722656,
+   "x1": 112.64490509033203,
+   "baseline": 226.03939819335938,
+   "bottom": 230.8394012451172,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 62.692909240722656,
+   "x1": 194.74290466308594,
+   "baseline": 237.93939208984375,
+   "bottom": 240.77989196777344,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 62.692909240722656,
+   "x1": 101.75691223144531,
+   "baseline": 251.93939208984375,
+   "bottom": 254.77989196777344,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 62.692909240722656,
+   "x1": 143.5889129638672,
+   "baseline": 391.63226318359375,
+   "bottom": 396.1122741699219,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 62.692909240722656,
+   "x1": 194.74290466308594,
+   "baseline": 403.5322570800781,
+   "bottom": 406.37274169921875,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 62.692909240722656,
+   "x1": 118.12541961669922,
+   "baseline": 417.5322570800781,
+   "bottom": 420.37274169921875,
+   "text": null
+  },
+  {
+   "page": 1,
+   "x0": 62.692909240722656,
+   "x1": 154.58641052246094,
+   "baseline": 445.5322570800781,
+   "bottom": 448.37274169921875,
+   "text": null
+  }
+ ]
+}

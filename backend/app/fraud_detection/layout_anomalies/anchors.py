@@ -6,8 +6,8 @@ from statistics import median
 from typing import Literal, cast
 
 from .common import (
-    _anomaly, _Block, _block_for_line, _delta_confidence, _edge_anomaly, LayoutAnomaly,
-    _Line, _line_baseline, _line_width, _lines_by_page, _opening, _pt,
+    _anomaly, _Block, _block_for_line, _delta_confidence, _different_size, _edge_anomaly,
+    LayoutAnomaly, _Line, _line_baseline, _line_width, _lines_by_page, _opening, _pt,
     _SHORT_LINE_PAGE_RATIO, _signed_pt, _x_overlap,
 )
 from .extraction import (
@@ -157,6 +157,8 @@ def _check_unanchored_lines(
             ]
             if _shares_an_edge(line, others, (rules or {}).get(line.page)):
                 continue
+            if _heads_a_column(line, others):
+                continue
             column = _left_column(line, others)
             if column is None:
                 continue
@@ -184,6 +186,30 @@ def _check_unanchored_lines(
 
 def _mid_line(line: _Line) -> float:
     return (line.bbox[0] + line.bbox[2]) / 2
+
+
+# A column header is centred over its values by eye, not to the point.
+_HEADER_CENTRE_PT = 3.0
+
+
+def _heads_a_column(line: _Line, others: list[_Line]) -> bool:
+    """A table's column header ("ITEM #") over a column of values that share a centre.
+
+    The header sits inside the column's span with its centre near theirs. Its left edge
+    lines up with nothing, which reads as a shove without this. A header pushed aside
+    sticks out past the column, so it is still caught.
+    """
+    below = [other for other in others if other.bbox[1] >= line.bbox[3] and _x_overlap(line, other) > 0]
+    for anchor in below:
+        centre = _mid_line(anchor)
+        column = [other for other in below if abs(_mid_line(other) - centre) <= _ANCHOR_TOLERANCE_PT]
+        if len(column) < 2:
+            continue
+        left = min(other.bbox[0] for other in column) - _ANCHOR_TOLERANCE_PT
+        right = max(other.bbox[2] for other in column) + _ANCHOR_TOLERANCE_PT
+        if left <= line.bbox[0] and line.bbox[2] <= right and abs(_mid_line(line) - centre) <= _HEADER_CENTRE_PT:
+            return True
+    return False
 
 
 def _stacked_pairs(entries: list[tuple[_Block, _Line]]) -> list[tuple[_Line, _Line, float]]:
@@ -391,10 +417,17 @@ def _vertical_anchor_delta(
             continue
         if abs(delta) > _ROW_MAX_SHIFT_PT:
             break
+        # A row's cells share a size: a heading in another size isn't one of them.
+        if _different_size(line, other):
+            continue
         if _row_slot_left_empty(line, _line_baseline(other), others):
             return delta, "row"
     above, below = _stack_neighbours(line, others)
     if above is None or below is None:
+        return None
+    # A heading set in another size from the lines above and below it keeps its own
+    # spacing; it isn't part of their rhythm.
+    if _different_size(line, above) and _different_size(line, below):
         return None
     gap_above = base - _line_baseline(above)
     gap_below = _line_baseline(below) - base

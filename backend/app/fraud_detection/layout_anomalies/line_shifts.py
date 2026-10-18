@@ -6,8 +6,8 @@ from statistics import median
 
 from .common import (
     _anomaly, _Block, _block_for_line, _COLLISION_MIN_OVERLAP_FRACTION, _delta_confidence,
-    _edge_anomaly, INDENT_THRESHOLD_PT, LayoutAnomaly, _letters_in, _Line, _line_width,
-    MIN_BLOCK_CHARS, _pct, _pt, _signed_pt, VERTICAL_SHIFT_THRESHOLD_PT, _x_overlap,
+    _different_size, _edge_anomaly, INDENT_THRESHOLD_PT, LayoutAnomaly, _letters_in, _Line,
+    _line_width, MIN_BLOCK_CHARS, _pct, _pt, _signed_pt, VERTICAL_SHIFT_THRESHOLD_PT, _x_overlap,
 )
 from .structure import (
     _COLUMN_MIN_MEMBERS, _sets_from_groups, StructuralGroup,
@@ -509,6 +509,9 @@ def _lopsided_gap_delta(
         ):
             next_line = other
     if prev is None or next_line is None:
+        return None
+    # A heading in another size above or below sets its own gap: a section break, not leading.
+    if _different_size(line, prev) or _different_size(line, next_line):
         return None
     gap_before = line.bbox[1] - prev.bbox[1]
     gap_after = next_line.bbox[1] - line.bbox[1]

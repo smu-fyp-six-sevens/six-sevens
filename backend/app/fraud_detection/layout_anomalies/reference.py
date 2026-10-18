@@ -16,6 +16,13 @@ sit where it has them. Each line is measured against the offset of the
 labels around it, so a scan that moves the whole page, or a longer table
 that pushes a section down, is not a finding. Another issuer's or another year's form
 does not fit, and the document gets only the generic checks.
+
+Only values are reported, and only one that moved on its own: every line
+around it sits where the reference has it. Labels place the document on the
+reference but are never findings themselves, since a reference built from a
+few copies can't know every version of a form's wording and spacing. A value
+whose neighbours moved too (a longer name wrapping, an optional line pushing
+the rest down) reflowed; it wasn't edited.
 """
 
 from __future__ import annotations
@@ -127,7 +134,12 @@ def _near(a_x0: float, a_base: float, b_x0: float, b_base: float) -> bool:
 
 
 def build_reference(name: str, document_type: str, copies: list[list[_Block]]) -> ReferenceLayout:
-    """Labels are the text every copy has at the same place; the rest are value slots."""
+    """Labels are the text every copy has at the same place; the rest are value slots.
+
+    Slots come from every copy, not just the first, so a value that sits differently
+    in genuine copies (a name long enough to wrap, the other company type, a clause
+    that runs a line longer) has each of its positions on record. Copies that cover
+    those variants make a reference that doesn't flag them."""
     if len(copies) < 2:
         raise ValueError("A reference needs at least two genuine copies of the form")
     first, others = _doc_lines(copies[0]), [_doc_lines(blocks) for blocks in copies[1:]]
@@ -150,18 +162,50 @@ def build_reference(name: str, document_type: str, copies: list[list[_Block]]) -
     per_page = Counter((line.page, _norm(line.text)) for _, line in first)
     labels: list[ReferenceLine] = []
     slots: list[ReferenceLine] = []
-    for _, line in first:
-        text = _norm(line.text)
-        is_label = _is_label_text(text) and per_page[(line.page, text)] == 1 and in_every_copy(line)
-        entry = ReferenceLine(
+
+    def entry(line: _Line, text: str | None) -> ReferenceLine:
+        return ReferenceLine(
             page=line.page,
             x0=line.bbox[0],
             x1=line.bbox[2],
             baseline=_line_baseline(line),
             bottom=line.bbox[3],
-            text=text if is_label else None,
+            text=text,
         )
-        (labels if is_label else slots).append(entry)
+
+    def same_place(a: ReferenceLine, b: ReferenceLine) -> bool:
+        # The rule a value fills a slot by: same baseline, and the same left edge, right edge, or centre.
+        return (
+            a.page == b.page
+            and abs(a.baseline - b.baseline) <= SLOT_PT
+            and min(abs(a.x0 - b.x0), abs(a.x1 - b.x1), abs((a.x0 + a.x1) / 2 - (b.x0 + b.x1) / 2)) <= SLOT_PT
+        )
+
+    def add_slot(slot: ReferenceLine) -> None:
+        if not any(same_place(slot, known) for known in slots):
+            slots.append(slot)
+
+    for _, line in first:
+        text = _norm(line.text)
+        if _is_label_text(text) and per_page[(line.page, text)] == 1 and in_every_copy(line):
+            labels.append(entry(line, text))
+        else:
+            add_slot(entry(line, None))
+
+    def is_label(line: _Line) -> bool:
+        text = _norm(line.text)
+        return any(
+            label.text == text
+            and label.page == line.page
+            and abs(label.x0 - line.bbox[0]) <= SLOT_PT
+            and abs(label.baseline - _line_baseline(line)) <= SLOT_PT
+            for label in labels
+        )
+
+    for lines in others:
+        for _, line in lines:
+            if not is_label(line):
+                add_slot(entry(line, None))
     return ReferenceLayout(name=name, document_type=document_type, labels=labels, slots=slots)
 
 
@@ -380,12 +424,33 @@ def compare_with_reference(
             (x0 - slot.x0, x1 - slot.x1, (x0 + x1 - slot.x0 - slot.x1) / 2), key=abs
         )
         off_place.append((p, dx, base - ry(slot), "value"))
+    in_place_ids = {id(line) for line in comparison.in_place}
+    assessed = [(p, id(p.line) in in_place_ids) for p in placed if id(p.line) in in_place_ids] + [
+        (p, False) for p, *_ in off_place
+    ]
     comparison.findings.extend(
         _reference_anomaly(p.block, p.line, reference, dx, dy, fit, role)
         for p, dx, dy, role in off_place
-        if not _moved_together(p, dx, dy, off_place, slot_pt)
+        if role == "value"
+        and _stands_alone(p, assessed)
+        and not _moved_together(p, dx, dy, off_place, slot_pt)
     )
     return comparison
+
+
+def _stands_alone(placed: _Placed, assessed: list[tuple[_Placed, bool]]) -> bool:
+    """The value moved on its own: every line around it that was compared with the reference
+    (within _REFLOW_NEIGHBOUR_PT above or below, on its page) sits where the reference has it,
+    and there is at least one. If a neighbour moved too, by any amount, the section reflowed:
+    a long value wrapped, or an optional line pushed the rest down."""
+    neighbours = [
+        in_place
+        for other, in_place in assessed
+        if other is not placed
+        and other.line.page == placed.line.page
+        and abs(other.y - placed.y) <= _REFLOW_NEIGHBOUR_PT
+    ]
+    return bool(neighbours) and all(neighbours)
 
 
 def _moved_together(
@@ -415,6 +480,17 @@ def _moved_together(
     )
 
 
+# Document-type words that are written as acronyms.
+_ACRONYMS = {"nric": "NRIC", "fatca": "FATCA", "crs": "CRS", "noa": "NOA"}
+
+
+def _layout_name(reference: ReferenceLayout) -> str:
+    """How a finding names the reference: by its document type ("standard NRIC"), never by the
+    reference file's own name (generated_nric), which means nothing to an officer."""
+    words = [_ACRONYMS.get(w, w) for w in reference.document_type.split("_")]
+    return "standard " + " ".join(words)
+
+
 def _reference_anomaly(
     block: _Block,
     line: _Line,
@@ -428,7 +504,7 @@ def _reference_anomaly(
     delta = dx if horizontal else dy
     evidence = {
         "kind": "reference-position",
-        "reference": reference.name,
+        "reference": _layout_name(reference),
         "element": role,
         "dx_pt": round(dx, 2),
         "dy_pt": round(dy, 2),
@@ -439,7 +515,7 @@ def _reference_anomaly(
         "Indentation" if horizontal else "Spacing",
         _block_for_line(block, line),
         detected=f"{_signed_pt(dx)} across, {_signed_pt(dy)} down from its reference position",
-        expected=f"Where the {reference.name} reference places this {role}",
+        expected=f"Where the {_layout_name(reference)} layout places this {role}",
         baseline=f"{round(fit * 100)}% of the reference's labels sit in place on this document",
         deviation=_signed_pt(delta),
         confidence=_delta_confidence(abs(delta), SHIFT_PT / 2, fit),
