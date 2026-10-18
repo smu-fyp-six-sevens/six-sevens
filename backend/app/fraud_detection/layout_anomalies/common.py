@@ -301,6 +301,8 @@ class _Line(BaseModel):
     # Text baseline from span["origin"][1]. Bbox y0/y1 include ascent and
     # descent, so mixed font sizes on one baseline do not share those edges.
     baseline: float | None = None
+    # Read by OCR from a picture: edges are only as exact as the detector's boxes.
+    ocr: bool = False
 
 
 # Font sizes this far apart (as a share of the smaller) are a heading or field label and

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from statistics import median
 from typing import Iterable, Literal, cast
 
@@ -110,6 +111,7 @@ def _ocr_blocks(doc: pymupdf.Document) -> list[_Block]:
                 page_width=page_width,
                 page_height=page_height,
                 size=max(8.0, (bbox[3] - bbox[1]) * 0.8),
+                ocr=True,
             )
             blocks.append(
                 _Block(
@@ -405,6 +407,10 @@ def _merge_adjacent_blocks(blocks: list[_Block]) -> list[_Block]:
     return merged
 
 
+# "Page 4 of 6" is the only part of a running footer that changes from page to page.
+_PAGE_NUMBER_RE = re.compile(r"\bpage \d+ (?:of|/) \d+\b")
+
+
 def _mark_repeating_chrome(blocks: list[_Block]) -> None:
     """Text that repeats at the same height on several pages is running furniture.
 
@@ -416,7 +422,7 @@ def _mark_repeating_chrome(blocks: list[_Block]) -> None:
         return
     grouped: dict[str, list[_Block]] = {}
     for block in blocks:
-        key = " ".join(block.text.split()).lower()
+        key = _PAGE_NUMBER_RE.sub("page # of #", " ".join(block.text.split()).lower())
         if len(key) < 8:
             continue
         grouped.setdefault(key, []).append(block)

@@ -28,6 +28,24 @@ _ANCHOR_SIZE_TOLERANCE_PT = 0.6
 # A heading or company name is set larger than the lines under it, so a
 # column of any size counts when it starts right beside the line.
 _MIXED_SIZE_COLUMN_REACH_PT = 20.0
+# OCR boxes of one column wander by a few points, more on larger type.
+_OCR_EDGE_TOLERANCE_RATIO = 0.15
+# The page width the point thresholds were set on. A photo opens at its pixel
+# size (an A4 scan at 150 dpi is 1240 wide), so its neighbours sit further apart.
+_A4_WIDTH_PT = 595.0
+
+
+def _anchor_window(line: _Line) -> float:
+    if not line.ocr:
+        return _ANCHOR_WINDOW_PT
+    return _ANCHOR_WINDOW_PT * max(1.0, line.page_width / _A4_WIDTH_PT)
+
+
+def _edge_tolerance(line: _Line, other: _Line) -> float:
+    if not (line.ocr or other.ocr):
+        return _ANCHOR_TOLERANCE_PT
+    height = min(line.bbox[3] - line.bbox[1], other.bbox[3] - other.bbox[1])
+    return max(_ANCHOR_TOLERANCE_PT, _OCR_EDGE_TOLERANCE_RATIO * height)
 
 
 def _fits_drawn_cell(line: _Line, rules: list[_Rule]) -> bool:
@@ -66,8 +84,8 @@ def _shares_an_edge(
     if abs(mid - line.page_width / 2) <= 2 * _ANCHOR_TOLERANCE_PT:
         return True
     if any(
-        ("left" in sides and abs(other.bbox[0] - x0) <= _ANCHOR_TOLERANCE_PT)
-        or ("right" in sides and abs(other.bbox[2] - x1) <= _ANCHOR_TOLERANCE_PT)
+        ("left" in sides and abs(other.bbox[0] - x0) <= _edge_tolerance(line, other))
+        or ("right" in sides and abs(other.bbox[2] - x1) <= _edge_tolerance(line, other))
         for other in others
     ):
         return True
@@ -76,9 +94,25 @@ def _shares_an_edge(
     centred = sum(
         1
         for other in others
-        if abs((other.bbox[0] + other.bbox[2]) / 2 - mid) <= _ANCHOR_TOLERANCE_PT
+        if abs((other.bbox[0] + other.bbox[2]) / 2 - mid) <= _edge_tolerance(line, other)
     )
-    return centred >= 2
+    return centred >= 2 or _centred_stack(line, others) or _heads_a_column(line, others)
+
+
+def _centred_stack(line: _Line, others: list[_Line]) -> bool:
+    """A two-line heading centred on itself ("PROPOSAL" over "BUDGET").
+
+    Only the line straight above or below, in the same type, counts: a pair that
+    close sharing a centre is set that way. A line pushed aside leaves the centre.
+    """
+    height = line.bbox[3] - line.bbox[1]
+    return any(
+        _x_overlap(line, other) > 0
+        and not _different_size(line, other)
+        and max(other.bbox[1] - line.bbox[3], line.bbox[1] - other.bbox[3]) <= 0.5 * height
+        and abs(_mid_line(other) - _mid_line(line)) <= _edge_tolerance(line, other)
+        for other in others
+    )
 
 
 def _left_column(line: _Line, others: list[_Line]) -> tuple[str, float, list[_Line]] | None:
@@ -153,11 +187,9 @@ def _check_unanchored_lines(
                 other
                 for owner, other in entries
                 if owner is not block
-                and 2 < abs(other.bbox[1] - line.bbox[1]) <= _ANCHOR_WINDOW_PT
+                and 2 < abs(other.bbox[1] - line.bbox[1]) <= _anchor_window(line)
             ]
             if _shares_an_edge(line, others, (rules or {}).get(line.page)):
-                continue
-            if _heads_a_column(line, others):
                 continue
             column = _left_column(line, others)
             if column is None:
@@ -273,8 +305,8 @@ def _check_pair_offsets(
             # Right-aligned amounts or a centred caption differ on the left
             # by design; they still share the other edge or the centre.
             if (
-                abs(upper.bbox[2] - lower.bbox[2]) <= _ANCHOR_TOLERANCE_PT
-                or abs(_mid_line(upper) - _mid_line(lower)) <= _ANCHOR_TOLERANCE_PT
+                abs(upper.bbox[2] - lower.bbox[2]) <= _edge_tolerance(upper, lower)
+                or abs(_mid_line(upper) - _mid_line(lower)) <= _edge_tolerance(upper, lower)
             ):
                 continue
             loose = []
@@ -286,7 +318,7 @@ def _check_pair_offsets(
                     for block, other in entries
                     if block is not owner[id(line)]
                     and other is not partner
-                    and 2 < abs(other.bbox[1] - line.bbox[1]) <= _ANCHOR_WINDOW_PT
+                    and 2 < abs(other.bbox[1] - line.bbox[1]) <= _anchor_window(line)
                 ]
                 if not _shares_an_edge(line, others, (rules or {}).get(page)):
                     loose.append((line, partner))
