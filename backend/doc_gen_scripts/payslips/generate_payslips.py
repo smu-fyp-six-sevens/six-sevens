@@ -20,8 +20,12 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # backend/, for the CPF Board rate tables
 
-from case_facts import seeded_rng
+from app.fraud_detection.external_validation.sg_reference.cpf import (
+    band_for_age, bands_in_force, ceiling_on, contribution,
+)
+from case_facts import as_date, seeded_rng
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -42,9 +46,23 @@ EMPLOYER_STREETS = ["1 Marina Boulevard", "8 Shenton Way", "80 Robinson Road",
                      "6 Battery Road", "50 Raffles Place", "3 Church Street"]
 
 
+def employee_cpf(date_of_birth: date | None, pay_date: date, ordinary_wages: float,
+                 additional_wages: float = 0.0) -> float:
+    """The employee's CPF share for the month, by CPF Board's rules: the age band on the pay date,
+    ordinary wages capped at the monthly OW ceiling, additional wages (bonus, variable pay) on top.
+    Uses the same rate tables as the fraud checks (sg_reference/cpf.py). Without a date of birth the
+    employee is taken to be 55 or younger."""
+    bands = bands_in_force(pay_date) or bands_in_force(date(2026, 1, 1))
+    band = band_for_age(bands, date_of_birth, pay_date) if date_of_birth else bands[0]
+    ceiling = ceiling_on(pay_date) or 8_000
+    _, employee = contribution(band, ordinary_wages, ceiling, additional_wages)
+    return float(employee)
+
+
 def synthesize_payslip_data(individual_id: str, *, employee_name: str,
                              employer_name: str, role: str = "", application_date: date | None = None,
-                             currency: str = "SGD", company_address: str = "") -> dict:
+                             currency: str = "SGD", company_address: str = "",
+                             date_of_birth: date | str | None = None) -> dict:
     """Invent a plausible month of pay for one employee, seeded on their individual
     ID so re-runs are reproducible. The mastersheet's Payslips tab only carries
     identity fields (name, NRIC, role, employer) — no salary figures — so every
@@ -70,9 +88,23 @@ def synthesize_payslip_data(individual_id: str, *, employee_name: str,
     period_end = next_month_start - timedelta(days=1)
 
     basic_salary = round(rng.uniform(3200, 9500), -1)
-    cpf_employee = round(basic_salary * 0.20, 2)  # SG employee CPF rate, age < 55
     tax_withholding = round(basic_salary * rng.uniform(0.05, 0.12), 2)
     other_deductions = round(rng.uniform(20, 120), 2)
+    allowances = round(rng.uniform(150, 700), -1)
+    overtime = round(rng.uniform(0, 300), -1)
+    variable_pay = round(rng.uniform(100, 600), -1)
+    benefits = round(rng.uniform(50, 300), -1)
+    housing_allowance = round(rng.uniform(300, 900), -1)
+    transport_allowance = round(rng.uniform(100, 300), -1)
+    other_allowance = round(rng.uniform(0, 200), -1)
+
+    # Each template's own earnings decide its CPF: salary, allowances and overtime are ordinary
+    # wages; variable pay is an additional wage. Benefits (Payslip 2) are left out as not wages.
+    dob = as_date(date_of_birth)
+    pay_date = period_end
+    cpf_employee = employee_cpf(dob, pay_date, basic_salary + allowances + overtime)
+    cpf_payslip_2 = employee_cpf(dob, pay_date, basic_salary, variable_pay)
+    cpf_payslip_3 = employee_cpf(dob, pay_date, basic_salary + housing_allowance + transport_allowance + other_allowance)
 
     if not company_address:
         street = EMPLOYER_STREETS[rng.randrange(len(EMPLOYER_STREETS))]
@@ -89,21 +121,22 @@ def synthesize_payslip_data(individual_id: str, *, employee_name: str,
         "currency": currency,
         # Payslip 1
         "basic_salary": basic_salary,
-        "allowances": round(rng.uniform(150, 700), -1),
-        "overtime": round(rng.uniform(0, 300), -1),
+        "allowances": allowances,
+        "overtime": overtime,
         "cpf_employee": cpf_employee,
         "other_deductions": other_deductions,
         # Payslip 2
-        "variable_pay": round(rng.uniform(100, 600), -1),
-        "benefits": round(rng.uniform(50, 300), -1),
+        "variable_pay": variable_pay,
+        "benefits": benefits,
         "tax_withholding": tax_withholding,
+        "cpf_employee_2": cpf_payslip_2,
         # Payslip 3
         "department": DEPARTMENTS[rng.randrange(len(DEPARTMENTS))],
         "job_title": role or "Employee",
-        "housing_allowance": round(rng.uniform(300, 900), -1),
-        "transport_allowance": round(rng.uniform(100, 300), -1),
-        "other_allowance": round(rng.uniform(0, 200), -1),
-        "retirement_contribution": cpf_employee,
+        "housing_allowance": housing_allowance,
+        "transport_allowance": transport_allowance,
+        "other_allowance": other_allowance,
+        "retirement_contribution": cpf_payslip_3,
         "tax_deduction": tax_withholding,
         "other_deduction": other_deductions,
     }
@@ -116,7 +149,7 @@ def compute_net_pay(data: dict, template: str) -> float:
     payslip) computes the exact same number, not an approximation."""
     if "2" in template:
         return (data["basic_salary"] + data["variable_pay"] + data["benefits"]) \
-            - (data["tax_withholding"] + data["other_deductions"])
+            - (data["cpf_employee_2"] + data["other_deductions"])
     if "3" in template:
         return (data["basic_salary"] + data["housing_allowance"] + data["transport_allowance"]
                 + data["other_allowance"]) \
@@ -280,7 +313,8 @@ def build_payslip_2(output_path: Path, data: dict) -> float:
     story.append(line("Benefits", f"{data['currency']} {money(data['benefits'])}"))
 
     story.append(Paragraph("DEDUCTIONS", s["section"]))
-    story.append(line("Tax withholding", f"{data['currency']} {money(data['tax_withholding'])}"))
+    # Singapore employers don't withhold income tax from residents' pay; CPF is the statutory deduction.
+    story.append(line("Employee CPF", f"{data['currency']} {money(data['cpf_employee_2'])}"))
     story.append(line("Other deductions", f"{data['currency']} {money(data['other_deductions'])}"))
 
     story.append(Spacer(1, 6 * mm))
@@ -432,6 +466,7 @@ PAYSLIP_2_DATA = {
     "variable_pay": 300.00,
     "benefits": 150.00,
     "tax_withholding": 420.00,
+    "cpf_employee_2": 900.00,
     "other_deductions": 30.00,
 }
 

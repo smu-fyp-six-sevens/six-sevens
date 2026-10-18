@@ -42,8 +42,10 @@ from pathlib import Path
 from typing import Any, Iterable, TypedDict
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # backend/, for Singapore's public holidays
 
 import openpyxl
+from app.fraud_detection.external_validation.sg_reference.holidays import SG_PUBLIC_HOLIDAYS
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader, simpleSplit
@@ -340,42 +342,77 @@ def _card_ref(rng: random.Random) -> str:
     return f"{rng.randint(4000,4999)}-XXXX-XXXX-{rng.randint(1000,9999)}"
 
 
+def _baseline(case_id: str) -> dict[str, Any]:
+    """The account's regular pattern, fixed for the case: the same customers and suppliers paying
+    similar amounts on similar days each month, a fixed salary and rent. Months vary around this
+    rather than being drawn independently, so balances move like a steady SME's."""
+    rng = seeded_rng(f"{case_id}|baseline")
+    customers = rng.sample(CUSTOMERS, 3)
+    suppliers = rng.sample(SUPPLIERS, 3)
+    monthly_sales = rng.uniform(25_000, 60_000)
+    weights = [rng.uniform(0.8, 1.2) for _ in customers]
+    # Suppliers take 55-70% of sales, so the balance drifts gently rather than swinging.
+    spend = monthly_sales * rng.uniform(0.55, 0.70)
+    supplier_weights = [rng.uniform(0.8, 1.2) for _ in suppliers]
+    return {
+        "customers": [(name, monthly_sales * w / sum(weights), rng.randint(3, 26))
+                      for name, w in zip(customers, weights)],
+        "suppliers": [(name, spend * w / sum(supplier_weights), rng.randint(4, 27))
+                      for name, w in zip(suppliers, supplier_weights)],
+        "payroll": round(rng.uniform(4_000, 8_000), 2),
+        "rent": round(rng.uniform(3_000, 7_500), -1),
+        "utilities": rng.uniform(300, 1_200),
+    }
+
+
+def _giro_day(month: date, day: int, last_day: int) -> int:
+    """`day`, or the next day GIRO runs (no Sundays or public holidays); the previous one if the month
+    runs out."""
+    def closed(d: int) -> bool:
+        when = date(month.year, month.month, d)
+        return when.weekday() == 6 or when in SG_PUBLIC_HOLIDAYS
+    for step in (1, -1):
+        d = day
+        while 1 <= d <= last_day and closed(d):
+            d += step
+        if 1 <= d <= last_day:
+            return d
+    return day
+
+
 def month_transactions(
     ctx: dict[str, Any], month: date, opening: float, rng: random.Random
 ) -> list[Txn]:
-    """Invent one month of plausible SME account activity."""
+    """Invent one month of plausible SME account activity around the case's baseline."""
     last_day = (date(month.year + (month.month == 12), (month.month % 12) + 1, 1)
                 - timedelta(days=1)).day
     salary_names = [ctx["director"]["Name (auto/fill)"].upper()] if ctx["director"] else ["STAFF"]
+    base = _baseline(ctx["case_id"])
 
     events: list[tuple[int, str, dict[str, Any]]] = []
 
-    # Customer receipts — the bulk of the credits.
-    for _ in range(rng.randint(2, 3)):
-        events.append((rng.randint(2, last_day - 1), "receipt", {
-            "payer": rng.choice(CUSTOMERS),
-            "amount": round(rng.uniform(4_000, 45_000), 2),
-        }))
+    def around(day: int) -> int:
+        return max(2, min(last_day - 1, day + rng.randint(-2, 2)))
 
-    # Supplier payments.
-    for _ in range(rng.randint(2, 3)):
-        events.append((rng.randint(3, last_day - 1), "supplier", {
-            "payee": rng.choice(SUPPLIERS),
-            "amount": round(rng.uniform(2_000, 28_000), 2),
-        }))
+    # Customer receipts — the bulk of the credits: the regular customers, each within 15% of usual.
+    for payer, amount, day in base["customers"]:
+        events.append((around(day), "receipt", {"payer": payer, "amount": round(amount * rng.uniform(0.85, 1.15), 2)}))
 
-    # Payroll on the 25th, rent on the 1st, utilities mid-month.
-    events.append((25, "payroll", {"name": rng.choice(salary_names),
-                                   "amount": round(rng.uniform(3_500, 9_000), 2)}))
-    events.append((1, "rent", {"amount": round(rng.uniform(3_000, 7_500), 2)}))
+    # Supplier payments, likewise, on GIRO days (OCBC's statement shows these remittances as GIRO).
+    for payee, amount, day in base["suppliers"]:
+        events.append((_giro_day(month, around(day), last_day), "supplier", {"payee": payee, "amount": round(amount * rng.uniform(0.85, 1.15), 2)}))
+
+    # Payroll on the 25th and rent on the 1st (the same every month), utilities mid-month.
+    events.append((25, "payroll", {"name": rng.choice(salary_names), "amount": base["payroll"]}))
+    events.append((_giro_day(month, 1, last_day), "rent", {"amount": base["rent"]}))
     # Always draw the random fallback amount even when a known bill exists below, so
     # the rest of this month's rng sequence (card spend, etc.) doesn't shift depending
     # on whether this case happens to have an Optional Documents utility/telecom bill.
-    utility_amount = round(rng.uniform(280, 1_400), 2)
+    utility_amount = round(base["utilities"] * rng.uniform(0.9, 1.1), 2)
     known_bill = ctx.get("known_utility_bill")
     if known_bill:
         utility_amount = known_bill["amount"]
-    events.append((rng.randint(10, 18), "utilities",
+    events.append((_giro_day(month, rng.randint(10, 18), last_day), "utilities",
                    {"amount": utility_amount, "kind": (known_bill or {}).get("kind", "utility")}))
 
     # Card spend.
@@ -756,7 +793,7 @@ def render(ctx: dict[str, Any], blocks: list[Block], out_pdf: Path) -> Path:
 def build_blocks(ctx: dict[str, Any], opening: float | None = None) -> list[Block]:
     blocks: list[Block] = []
     rng_open = seeded_rng(ctx["case_id"] + "|opening")
-    balance = opening if opening is not None else round(rng_open.uniform(15_000, 90_000), 2)
+    balance = opening if opening is not None else round(rng_open.uniform(40_000, 90_000), 2)
 
     for month in ctx["months"]:
         rng = seeded_rng(f"{ctx['case_id']}|{month:%Y-%m}")

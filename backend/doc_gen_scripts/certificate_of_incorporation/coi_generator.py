@@ -5,7 +5,7 @@ import html
 import json
 import random
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -362,7 +362,11 @@ def write_pdf_reportlab(context: dict[str, Any], output_path: Path) -> None:
     # Signature block: ACRA seal stamp, cursive "signature", then registrar info
     # (typed name, receipt no, date) — the cursive mark sits directly above the
     # typed name, same convention as the FATCA/CRS self-cert's signatory stamps.
-    receipt_no = context.get("receipt_no") or _generate_receipt_no(inc_date_obj)
+    # A re-issued certificate (after a name change) carries its own issue date; the original is dated
+    # the day of incorporation.
+    issue_date_obj = _parse_date(context["issue_date"]) if context.get("issue_date") else inc_date_obj
+    issue_date_display = issue_date_obj.strftime("%d %b %Y")
+    receipt_no = context.get("receipt_no") or _generate_receipt_no(issue_date_obj)
     sig_info_lines = 5  # registrar name + 2 org lines + receipt no + date
     info_h = px(9) * 1.35 * sig_info_lines
     sig_line_h = px(9) * 1.9
@@ -388,7 +392,7 @@ def write_pdf_reportlab(context: dict[str, Any], output_path: Path) -> None:
     c.setFont(FONT, px(9))
     c.drawString(sig_x, iy - px(9), f"RECEIPT NO.  : {receipt_no}")
     iy -= px(9) * 1.35
-    c.drawString(sig_x, iy - px(9), f"DATE          : {inc_date_display}")
+    c.drawString(sig_x, iy - px(9), f"DATE          : {issue_date_display}")
 
     stamp_r = px(30)
     stamp_cx = sig_x + stamp_r
@@ -455,6 +459,7 @@ def generate_certificate_of_incorporation(
     company_type: str | None = None,
     receipt_no: str | None = None,
     verification_url: str | None = None,
+    latest_date: date | None = None,
 ) -> dict:
     """Compatibility wrapper to render a COI PDF from structured args.
 
@@ -485,6 +490,20 @@ def generate_certificate_of_incorporation(
         effective = date(
             incorporation_date.year + rng.randint(1, 6), rng.randint(1, 12), rng.randint(1, 28)
         )
+        # The certificate listing a former name is one re-issued after the change, so it is dated
+        # after the change, and no later than `latest_date` (the application it was submitted with).
+        # A change that would land too close to that date is moved back; draws above are unchanged so
+        # the ACRA business profile, which repeats them, still finds the same former name.
+        if latest_date:
+            effective = max(min(effective, latest_date - timedelta(days=60)),
+                            incorporation_date + timedelta(days=30))
+        reissue_rng = seeded_rng(f"{context['uen']}|coi-reissue")
+        issue_date = effective + timedelta(days=reissue_rng.randint(7, 45))
+        if latest_date:
+            issue_date = max(effective, min(issue_date, latest_date - timedelta(days=1)))
+        context["issue_date"] = issue_date
+        if not receipt_no:
+            context["receipt_no"] = _generate_receipt_no(issue_date)
         effective_str = effective.strftime("%d %b %Y")
         context["former_names"] = [{
             "name": _synthesize_former_name(rng, str(context["company_name"])),

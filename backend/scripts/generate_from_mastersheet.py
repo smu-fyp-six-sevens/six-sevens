@@ -59,7 +59,7 @@ from doc_gen_scripts.optional_documents.investment.generate_statements import ge
 from doc_gen_scripts.output_writer import normalize_extension, write_cropped_region, SUPPORTED_IMAGE_EXTS
 
 BASE = Path(__file__).resolve().parents[1]
-MASTERSHEET = BASE / "doc_gen_scripts" / "v16_document_mastersheet.xlsx"
+MASTERSHEET = BASE / "doc_gen_scripts" / "v17_document_mastersheet.xlsx"
 OUT_DIR = BASE / "documents_generated"
 
 # Bank letterhead addresses for the List of Loans facility letters (section 10) —
@@ -103,6 +103,13 @@ def _openpyxl_case_rows(sheet_name: str, case_id: str, key: str = "Case ID") -> 
     rows = [r for r in _openpyxl_all_rows(sheet_name) if str(r.get(key)) == str(case_id)]
     rows.sort(key=lambda r: r.get("Person Seq") or 0)
     return rows
+
+
+def _date_of_birth(case_id: str, individual_id: str):
+    """The person's date of birth from the Individuals tab, for their payslip's CPF age band."""
+    person = next((p for p in _openpyxl_case_rows("Individuals", case_id)
+                   if str(p.get("Individual ID")) == individual_id), {})
+    return as_date(person.get("Date of Birth (auto/fill)"))
 
 
 def _parse_tenure_months(text: str) -> int:
@@ -240,6 +247,7 @@ def generate_proof_of_address(case_id: str, out: Path, only_individuals=None) ->
                             role=payslip_row.get("Role (auto)") or "",
                             application_date=application_date,
                             company_address=str(payslip_row.get("Employer Address") or ""),
+                            date_of_birth=_date_of_birth(case_id, individual),
                         )
                         known_salary = compute_net_pay(payslip_data, payslip_template)
 
@@ -406,6 +414,7 @@ def generate_for_case(case_id: str) -> None:
                     role=r.get("Role (auto)") or "",
                     application_date=application_date,
                     company_address=employer_address,
+                    date_of_birth=_date_of_birth(case_id, individual),
                 )
                 builder(ps_path, data)
                 print("Wrote", ps_path)
@@ -420,7 +429,7 @@ def generate_for_case(case_id: str) -> None:
                 continue
             try:
                 coi_path = out / str(r.get("Filename") or f"certificate_of_incorporation_{case_id}.pdf")
-                generate_certificate_of_incorporation(str(coi_path), company_name=r.get("Company Name (auto)") or "", company_number=str(r.get("UEN (auto)") or ""), incorporation_date=r.get("Incorporation Date (auto)") or datetime.now().date(), company_type=r.get("Company Type (auto)") or None)
+                generate_certificate_of_incorporation(str(coi_path), company_name=r.get("Company Name (auto)") or "", company_number=str(r.get("UEN (auto)") or ""), incorporation_date=r.get("Incorporation Date (auto)") or datetime.now().date(), company_type=r.get("Company Type (auto)") or None, latest_date=as_date(_openpyxl_case_row("Case Registry", case_id).get("Application Date")))
                 print("Wrote", coi_path)
             except Exception as e:
                 print("COI generation failed:", e)

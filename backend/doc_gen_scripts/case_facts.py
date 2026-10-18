@@ -104,6 +104,10 @@ def company_facts(case: dict[str, Any], people: list[dict[str, Any]]) -> dict[st
     secretary = SECRETARY_NAMES[rng.randrange(len(SECRETARY_NAMES))]
     secretary_id = f"S{rng.randint(6000000, 8999999)}{rng.choice('ABCDEFGHIJZ')}"
     secretary_appointed = incorporation_date + timedelta(days=rng.randint(0, 90))
+    # Appointments are on record by the time the case's documents are issued (a few weeks before the
+    # application), and never before incorporation.
+    latest_appointment = max(incorporation_date, application_date - timedelta(days=30))
+    secretary_appointed = min(secretary_appointed, latest_appointment)
 
     holders = []
     for i, person in enumerate(people):
@@ -128,8 +132,10 @@ def company_facts(case: dict[str, Any], people: list[dict[str, Any]]) -> dict[st
                 "role": person.get("Role", ""),
                 "shares": shares_held,
                 "pct": pct,
-                "appointed": incorporation_date
-                + timedelta(days=0 if i == 0 else rng.randint(180, 1200)),
+                "appointed": min(
+                    incorporation_date + timedelta(days=0 if i == 0 else rng.randint(180, 1200)),
+                    latest_appointment,
+                ),
             }
         )
 
