@@ -30,10 +30,11 @@ MAX_ROWS = 10
 # A fact one of them issued is evidence on its own, even when it comes from a single document.
 COMPUTED_TOOLS = frozenset({
     "transaction_stats", "query_transactions", "top_counterparties", "monthly_flow", "compare_periods",
+    "find_repeated_transactions", "card_usage_tool", "recurring_payment_amounts",
 })
 # Tools whose very job is to relate documents to each other.
 CROSS_DOCUMENT_TOOLS = frozenset({
-    "get_business_profile", "compare_identifiers", "compare_people", "compare_periods",
+    "get_business_profile", "compare_identifiers", "compare_people", "compare_linked_people", "compare_periods",
     "company_name_consistency_tool", "address_consistency_tool",
 })
 
@@ -141,5 +142,7 @@ class ToolKit:
             "available": result.get("available", True) is not False,
             "refs": refs or [],
             "breach_flags": [f for f in result.get("breach_flags", []) if f in BREACH_FLAGS],
+            # A comparison ran and found the documents agree.
+            "consistent": result.get("same") is True and result.get("available", True) is not False,
         })
         return json.dumps(result, default=str)

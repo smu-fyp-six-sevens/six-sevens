@@ -38,6 +38,7 @@ def _to_analysis(row: dict) -> CaseAnalysis:
         risk=CaseRisk(**result["risk"]) if result.get("risk") else None,
         supporting_documents=[SupportingDocumentRecommendation(**s) for s in result.get("supporting_documents") or []],
         additional_documents=AdditionalDocuments(**result["additional_documents"]) if result.get("additional_documents") else None,
+        consistent_checks=[str(c) for c in result.get("consistent_checks") or []],
         audit=AnalysisAudit(**(result.get("audit") or {})),
         trace=row.get("trace") or [],
     )
@@ -80,6 +81,7 @@ def finish_run(analysis: CaseAnalysis) -> bool:
         "risk": analysis.risk.model_dump(mode="json") if analysis.risk else None,
         "supporting_documents": [s.model_dump(mode="json") for s in analysis.supporting_documents],
         "additional_documents": analysis.additional_documents.model_dump(mode="json") if analysis.additional_documents else None,
+        "consistent_checks": analysis.consistent_checks,
         "audit": analysis.audit.model_dump(mode="json"),
     }
     supabase_client.table(_TABLE).update({

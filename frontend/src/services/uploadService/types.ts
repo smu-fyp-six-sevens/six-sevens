@@ -354,6 +354,8 @@ export interface CaseAnalysis {
   findings: CrossDocFinding[];
   outlook: RiskOutlook | null;
   summary: string | null;
+  // Comparisons that found the documents agree, e.g. "uen is the same on a.pdf, b.pdf".
+  consistent_checks?: string[];
   // Tool calls, models and counts of the run.
   audit?: { tool_calls?: unknown[]; [key: string]: unknown };
   // Step-by-step log of the run (debug); written as the run goes.

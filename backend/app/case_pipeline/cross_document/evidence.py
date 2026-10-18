@@ -99,6 +99,8 @@ class CaseContext:
     trace: RunTrace | None = None
     # Model calls spent so far in this run; agents.py refuses to go past its budget.
     model_calls: int = 0
+    # What the code-side comparisons already established (deterministic.brief), shown to the planner.
+    established: str = ""
 
     def note(self, step: str, **fields: Any) -> None:
         """Records a step on the run's trace, if it has one."""

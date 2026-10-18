@@ -64,6 +64,8 @@ Status: plan only, nothing implemented (2026-10-18). Decisions are recorded unde
 4. Show what was checked and found consistent in the verdict, so an empty result is not read as "not checked".
 5. Only if the prompt alone fails: put the comparison tools' results in the dossier as evidence before planning. The agent still proposes, judges and writes every finding.
 
+**Status: superseded by always-run code checks.** The mismatch hypothesis cap and prompt rules were removed; mismatches the code finds are findings on their own (see item 6). `verify.py` still waives the probe for a cited mismatch flag and caps name/address/person mismatches at medium. "Checked and consistent" (`consistent_checks`) is implemented.
+
 **Files:** `agents.py` (prompts, cap), `verify.py`, `graph.py`, `CaseAnalysisCard.tsx`; tests (name and UEN reported separately; a matching UEN does not dismiss a name mismatch).
 
 ---
@@ -145,6 +147,8 @@ Status: plan only, nothing implemented (2026-10-18). Decisions are recorded unde
 - Old stored reports keep `case_identity_match` findings; `read_report` keeps them for display and scoring ignores them when a cross-document finding covers the same fact.
 - **Guardrails:** part A code is untouched; add a test that another UEN still gives `manual_review`, `case_mismatch`, not allowed to proceed, with the reason text, before and after; part B never changes a document's live case-match status (already tested by `test_pairwise_identity_mismatches_are_not_in_live_case_match`). Optional: a lead line "This document does not match the case details" above the reasons (no older generic sentence exists in the history).
 
+**Status: implemented, untested by pytest. Revised:** Part B left `case_match.py` and detection (`add_case_match_findings`, the identity branch, the pseudo-specialist, `include_identity_mismatches`). It now runs on every case analysis as code in `cross_document/deterministic.py` (company name, address, UEN, person ID and name; one finding per difference, `xd-det-N`), and its results go to the agent as established facts. The agent is back to 3 hypotheses and is told not to restate them. `compare_linked_people` stays as an agent tool. Old stored `case_identity_match` findings still display and score. The incumbency is skipped in pairs (part A covers it).
+
 **Files:** `case_match.py`, `case_service.py`, `detection/graph.py`, `cross_document/` (new module, `tools/comparisons.py`), `categories.py`, `flags_repository.py`; tests `test_company_identity.py`, `test_detection_case_match.py`, `test_regression_detection.py`, `test_case_risk.py`, `test_case_match.py`.
 
 ---
@@ -217,6 +221,8 @@ The right column is proof the numbers were edited, or statistics of one statemen
 - Planner and judge prompts: a pattern is a hypothesis to test, not a finding (a repeated payment may be a real standing order); weigh it against the rest of the case. Severity is capped at medium without a hard breach flag.
 - Reuse the existing check functions; do not copy them.
 - Scoring effect: these findings stop scoring per document (3 points each) and appear, if the agent keeps them, as capped cross-document findings.
+
+**Status: implemented, untested by pytest.** `STAT.DUPLICATES`, `BS.CARD_DIVERSITY` and `BS.RECURRING_VARIANCE` are no longer registered checks; their logic is `repeated_payments`, `card_usage`, `recurring_payments` in `statements.py`, used by the new tools `find_repeated_transactions`, `card_usage_tool`, `recurring_payment_amounts`. Benford, round-number and last-two-digit tests stay. The tests in `test_numerical_validation.py` were replaced.
 
 **Files:** `numerical_validation/statements.py` and `registry.py`, `cross_document/tools/transactions.py` and `tools/__init__.py`, `agents.py` (tool catalogue, prompts), `numerical_validation/runner.py` (`render_check_roles` menu). **Caution:** `conftest.py` maps all of `test_numerical_validation.py` to Sprint 3 regression tests FD-009 and FD-010, so moving checks means updating those tests and that mapping, and `detection-report-c028.json` if it contains one of these findings.
 

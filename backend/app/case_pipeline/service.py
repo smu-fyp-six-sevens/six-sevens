@@ -149,6 +149,7 @@ async def _execute(
         analysis.risk = risk
         analysis.supporting_documents = supporting_documents
         analysis.additional_documents = additional
+        analysis.consistent_checks = result.get("consistent_checks") or []
         analysis.audit = AnalysisAudit(
             models={"analysis": settings.LANGGRAPH_SONNET_MODEL},
             prompt_version=PROMPT_VERSION,

@@ -147,6 +147,21 @@ export function CaseAnalysisCard({
               ))}
             </ul>
           )}
+
+          {(analysis.consistent_checks ?? []).length > 0 && (
+            <>
+              <h3 className="analysis-heading">Checked and consistent</h3>
+              <ul className="risk-findings">
+                {(analysis.consistent_checks ?? []).map((line) => (
+                  <li key={line}>
+                    <span className="risk-finding-text">
+                      <span className="risk-finding-rationale">{line}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </>
       )}
     </section>
