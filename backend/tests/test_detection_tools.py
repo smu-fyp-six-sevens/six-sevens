@@ -446,3 +446,18 @@ async def test_registry_check_on_nric_back_without_address_stays_unable() -> Non
 
     assert result.unable_to_assess
     assert not tools._is_nothing_to_check(result.unable_to_assess_reason)
+
+
+async def test_metadata_tool_reports_what_it_saw_when_there_are_no_anomalies() -> None:
+    raw = {
+        "Author": "A. Tan", "Producer": "ReportLab PDF Library", "FileType": "PDF",
+        "CreateDate": "2026:08:31 10:00:00", "ModifyDate": "2026:08:31 10:00:00",
+    }
+    with patch.object(tools, "_document", AsyncMock(return_value=_document(metadata=raw, document_type="proof_of_address"))):
+        output = await tools.metadata_tool.ainvoke({"document_id": "doc-1"})
+
+    assert output["findings"] == []
+    observed = output["observed_metadata"]
+    assert observed["present"]["author"] == "A. Tan"
+    assert "creator" in observed["absent"]
+    assert "created equals modified" in observed["note"]

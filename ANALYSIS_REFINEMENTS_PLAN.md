@@ -118,6 +118,8 @@ Status: plan only, nothing implemented (2026-10-18). Decisions are recorded unde
 3. Show the observed metadata in the report.
 4. Local fixes: a startup warning when exiftool is missing, a PyMuPDF fallback, and re-reading the file when the stored record is a failure.
 
+**Status: 1 and 2 implemented, untested by pytest** (`metadata_tool` returns `observed_metadata`; both prompts carry the rule). The specialist's summary shows it in the report. Not done: 4 (local exiftool fixes).
+
 **Files:** `detection/tools.py`, `specialists.py` and `graph.py` prompts, `metadata_extractor.py`; tests. **Open:** you said the "metadata anomaly" panel shows something; for this document the check returns none, so tell me what the panel shows.
 
 ---
