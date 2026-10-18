@@ -105,12 +105,20 @@ def _is_machine_readable(text: str) -> bool:
     return "<<" in compact and len(compact) >= 20
 
 
+_PLACEHOLDER_RE = re.compile(r"(photo|fingerprint|signature)?\s*placeholder|photo|fingerprint")
+
+
+def _is_placeholder(text: str) -> bool:
+    """A caption in an empty box ("PHOTO PLACEHOLDER") marks where artwork goes; it is not a field."""
+    return bool(_PLACEHOLDER_RE.fullmatch(_norm(text)))
+
+
 def _doc_lines(blocks: list[_Block]) -> list[tuple[_Block, _Line]]:
     return [
         (block, line)
         for block in blocks
         for line in block.lines
-        if _norm(line.text) and not _is_machine_readable(line.text)
+        if _norm(line.text) and not _is_machine_readable(line.text) and not _is_placeholder(line.text)
     ]
 
 
@@ -175,9 +183,11 @@ class ReferenceComparison:
     # Every text line on the document, and the ones that sit where the reference has them.
     lines: list[_Line]
     in_place: list[_Line] = field(default_factory=list)
+    # The fixed labels among them: a value can sit on a slot by chance, a label hardly ever.
+    labels_in_place: list[_Line] = field(default_factory=list)
     findings: list[LayoutAnomaly] = field(default_factory=list)
 
-    def explains(self, anomaly: LayoutAnomaly) -> bool:
+    def explains(self, anomaly: LayoutAnomaly, labels_only: bool = False) -> bool:
         """A generic finding whose lines all sit where the reference has them is the design."""
 
         def inside(line: _Line) -> bool:
@@ -189,7 +199,7 @@ class ReferenceComparison:
             )
 
         covered = [line for line in self.lines if inside(line)]
-        placed = {id(line) for line in self.in_place}
+        placed = {id(line) for line in (self.labels_in_place if labels_only else self.in_place)}
         return bool(covered) and all(id(line) in placed for line in covered)
 
 
@@ -330,6 +340,7 @@ def compare_with_reference(
         return comparison
 
     comparison.in_place.extend(in_place_labels)
+    comparison.labels_in_place.extend(in_place_labels)
     off_place: list[tuple[_Placed, float, float, str]] = [
         (p, dx, dy, "label") for p, _, dx, dy in moved if max(abs(dx), abs(dy)) >= shift_pt
     ]
@@ -437,8 +448,18 @@ def _reference_anomaly(
     )
 
 
-def best_reference(blocks: list[_Block], document_type: str) -> ReferenceComparison | None:
-    """The best-fitting reference of this type, if one fits."""
+def fitting_references(blocks: list[_Block], document_type: str) -> list[ReferenceComparison]:
+    """Every reference of this type that fits, best first: highest fit, then fewest findings.
+
+    Of two versions that fit equally, the one the document disagrees with
+    least is the version it was printed from.
+    """
     comparisons = [compare_with_reference(blocks, ref) for ref in load_references(document_type)]
     fitting = [c for c in comparisons if c.fit >= FIT_MIN]
-    return max(fitting, key=lambda c: c.fit) if fitting else None
+    return sorted(fitting, key=lambda c: (-c.fit, len(c.findings)))
+
+
+def best_reference(blocks: list[_Block], document_type: str) -> ReferenceComparison | None:
+    """The best-fitting reference of this type, if one fits."""
+    fitting = fitting_references(blocks, document_type)
+    return fitting[0] if fitting else None
