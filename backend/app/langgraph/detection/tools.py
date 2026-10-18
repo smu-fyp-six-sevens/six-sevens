@@ -232,7 +232,7 @@ async def font_consistency_tool(document_id: Annotated[str, InjectedState("docum
 
 @tool
 async def layout_anomalies_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
-    """Checks the document's text positioning for indentation, alignment, margin and paragraph-spacing that clash with the rest of the document, and for overlapping/overlaid text blocks — all classic signs of an inserted, edited, or pasted-over clause. Only meaningful for PDFs with native text."""
+    """Checks the document's text positioning for indentation, alignment, margin and paragraph-spacing that clash with the rest of the document, and for overlapping/overlaid text blocks — all classic signs of an inserted, edited, or pasted-over clause. Works on PDFs and, through OCR, on photos and scans (PNG/JPEG); on a recognised form such as an NRIC it also compares each field with the form's standard layout."""
     file_bytes = await _file_bytes(document_id)
     if file_bytes is None:
         return _result("layout_anomalies_tool", [], unable="Document file is not available in storage")

@@ -261,7 +261,13 @@ def check_layout_anomalies(
         elements = _compile_elements(blocks)
 
         checks = (indent_check, align_check, margin_check, spacing_check)
-        unable = all(check.unable_to_assess for check in checks)
+        # A form compared with its reference layout was assessed even when it has too
+        # few lines of its own to compare (an ID card), and so was one with a finding.
+        unable = (
+            all(check.unable_to_assess for check in checks)
+            and not references
+            and not anomalies
+        )
         reason = None
         if unable:
             reason = (
