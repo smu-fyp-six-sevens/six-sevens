@@ -400,6 +400,35 @@ class SupportingDocumentRecommendation(BaseModel):
     items: list[RecommendationItem] = Field(default_factory=list)
 
 
+class AdditionalDocument(BaseModel):
+    """One document to ask the client for, from the checklist rules or from the findings."""
+
+    title: str
+    why: str
+    source: Literal["checklist", "finding"]
+    # Finding ids the request bears on (after matching; may be empty).
+    addresses: list[str] = Field(default_factory=list)
+    # False when more evidence cannot change the score (tampering, registry results, checklist items).
+    affects_score: bool = False
+    score_if_supports: int | None = None
+    level_if_supports: str | None = None
+    # The checklist rule's detail (items, breakdown tables), for checklist items.
+    recommendation: SupportingDocumentRecommendation | None = None
+
+
+class AdditionalDocuments(BaseModel):
+    """What to ask the client for, in one list, with why the list is empty or cannot move the score."""
+
+    items: list[AdditionalDocument] = Field(default_factory=list)
+    # no_reducible_findings: no finding can be answered by more evidence. model_failed / budget: the
+    # model's requests are missing. none_needed: the case has nothing that evidence would address.
+    reason: Literal["none_needed", "no_reducible_findings", "model_failed", "budget"] | None = None
+    current_score: int | None = None
+    current_level: str | None = None
+    best_case_score: int | None = None
+    best_case_level: str | None = None
+
+
 class CaseAnalysisOverview(BaseModel):
     """The latest per-case analysis in brief; the full result is GET /cases/{id}/analysis."""
 
@@ -438,6 +467,8 @@ class CaseSummary(CaseRecord):
     supporting_document_recommendations: list[SupportingDocumentRecommendation] = Field(
         default_factory=list
     )
+    # The same requests merged with the agent's, in one list; None for runs from before it existed.
+    additional_documents: AdditionalDocuments | None = None
     # Every approved document has been scanned, so the case analysis can be run.
     analysis_ready: bool = False
     # None when the case has never been analysed.

@@ -175,6 +175,8 @@ In 121 the score cannot change by design but the UI never says so. In 122 the mo
 - Best-case line only when some item affects the score.
 - Remove `SupportingDocumentsCard` and the outlook section of `CaseAnalysisCard`; keep reading the old fields for one release. Record why a list is empty (`no_reducible_findings`, `model_failed`, `budget`).
 
+**Status: implemented, untested by pytest/Playwright.** New `risk/additional_documents.py`, `AdditionalDocuments` on the run and the case snapshot, `AdditionalDocumentsCard.tsx` (replaces `SupportingDocumentsCard`), outlook section removed from `CaseAnalysisCard`. The model is now asked whenever any finding scores (not only reducible ones). Old runs fall back to the checklist list. Not done: the `FF_ADDITIONAL_DOCUMENTS_CARD` flag.
+
 **Files:** `case_pipeline/service.py`, `models.py`, `risk/outlook.py`, `risk/supporting_documents.py`, `case_service.py`, `UploadSummaryCards.tsx`, new `AdditionalDocumentsCard.tsx`, the Playwright mock and fixtures; tests (121-like: only non-reducible findings; 122-like: prefix ids, one scoring and one non-scoring).
 
 ---

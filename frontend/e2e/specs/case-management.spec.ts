@@ -324,9 +324,44 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     await page.goto(`/cases/${harbor.greenlink_case_id}`);
 
     const section = page.locator('.summary-card', {
-      has: page.getByRole('heading', { name: 'Recommended Supporting Documents' }),
+      has: page.getByRole('heading', { name: 'Additional Documents' }),
     });
     await expect(section).toContainText('No additional documents needed.');
+  });
+
+  test('the additional documents card says when no document can change the score', async ({ page, backend }) => {
+    const harbor = makeCase({
+      greenlink_case_id: 'GLDB-2004',
+      additional_documents: {
+        items: [
+          {
+            title: 'UEN Registration Confirmation Letter',
+            why: 'Confirms the UEN printed on the incorporation certificate.',
+            source: 'finding',
+            addresses: ['60172ada:external_validation_tool-1'],
+            affects_score: false,
+            score_if_supports: null,
+            level_if_supports: null,
+            recommendation: null,
+          },
+        ],
+        reason: 'no_reducible_findings',
+        current_score: 65,
+        current_level: 'High',
+        best_case_score: 65,
+        best_case_level: 'High',
+      },
+    });
+    backend.cases.push(harbor);
+    await page.goto(`/cases/${harbor.greenlink_case_id}`);
+
+    const section = page.locator('.summary-card', {
+      has: page.getByRole('heading', { name: 'Additional Documents' }),
+    });
+    await expect(section).toContainText('No document can change this score.');
+    await expect(section).toContainText('UEN Registration Confirmation Letter');
+    await expect(section).toContainText('No effect on score');
+    await expect(section).not.toContainText('Best case');
   });
 
   test('recommended documents show why and what to request', async ({ page, backend }) => {
@@ -397,7 +432,7 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     await page.goto(`/cases/${harbor.greenlink_case_id}`);
 
     const section = page.locator('.summary-card', {
-      has: page.getByRole('heading', { name: 'Recommended Supporting Documents' }),
+      has: page.getByRole('heading', { name: 'Additional Documents' }),
     });
     await expect(section).toContainText('2 requests');
     await expect(section).toContainText('Purchase Order');
