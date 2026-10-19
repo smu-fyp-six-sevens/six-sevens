@@ -86,14 +86,24 @@ def test_a_company_name_of_exactly_100_characters_is_saved():
 
 @pytest.mark.sprint3
 @pytest.mark.story("SCRUM-116", "CM-022")
-@pytest.mark.xfail(
-    strict=True, reason="REG-005: the API saves a company name over 100 characters; only the UI limits it"
-)
 def test_a_company_name_over_100_characters_is_not_saved():
     response, update = _patch_company_name("A" * 766)
 
     assert response.status_code == 422
     update.assert_not_called()
+
+
+@pytest.mark.sprint3
+@pytest.mark.story("SCRUM-116", "CM-022")
+def test_a_case_cannot_be_created_with_a_company_name_over_100_characters():
+    with patch("app.routers.cases.case_service") as service:
+        service.create_case.return_value = _case("A" * 100)
+        too_long = client.post("/cases", json={"company_name": "A" * 101})
+        exactly_100 = client.post("/cases", json={"company_name": "A" * 100})
+
+    assert too_long.status_code == 422
+    service.create_case.assert_called_once_with("A" * 100)
+    assert exactly_100.status_code == 201
 
 
 # --- SCRUM-117 Delete case / documents --------------------------------------------

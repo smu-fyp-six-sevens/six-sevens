@@ -10,14 +10,14 @@ from ._dependencies import get_case_or_404, to_thread_or_502
 from ..case_match import CaseMatchResult
 from ..case_pipeline import service as analysis_service
 from ..case_pipeline.models import CaseAnalysis
-from ..models import IN_FLIGHT_STATUSES, CaseListItem, CaseRecord, CaseSummary, UpdateCaseRequest
+from ..models import IN_FLIGHT_STATUSES, MAX_COMPANY_NAME_LENGTH, CaseListItem, CaseRecord, CaseSummary, UpdateCaseRequest
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 logger = logging.getLogger(__name__)
 
 
 @router.post("", response_model=CaseRecord, status_code=status.HTTP_201_CREATED)
-async def create_case(company_name: str | None = Body(None, embed=True)) -> CaseRecord:
+async def create_case(company_name: str | None = Body(None, embed=True, max_length=MAX_COMPANY_NAME_LENGTH)) -> CaseRecord:
     return await to_thread_or_502(
         case_service.create_case, company_name,
         detail="Failed to create the case. Check Supabase table access.",

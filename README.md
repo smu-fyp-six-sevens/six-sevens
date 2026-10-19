@@ -11,13 +11,16 @@ The system automates the forgery-check stage of GLDB's loan origination workflow
 - `docs/regression/` regression test report.
 - `docker-compose.yml` local container setup for both services.
 
-Design and status documents at the root:
+Documents at the root:
 
 - `HOW_IT_WORKS.md` the whole system end to end in plain language: pipeline, detection, flags, case analysis, live updates, configuration and cost logs.
-- `CLAUDE.md` project context, decisions, and the planned architecture.
 - `FRAUD_DETECTION_MAP.md` how the fraud checks and the detection agent are wired, plus known detection bugs.
-- `CROSS_DOCUMENT_AND_RISK_PLAN.md` design of the per-case analysis: hypotheses, investigator tools, verification, risk outlook and guardrails.
-- `PENDING_WORK.md` open work only.
+- `CROSS_DOCUMENT_AND_RISK_PLAN.md` design of the per-case analysis: deterministic checks, hypotheses, verification, risk outlook and guardrails.
+- `OUTPUT_VALIDATION.md` how model replies and tool results are validated, and what is bounded.
+- `REFACTORING_AUDIT.md` code smells and optimisations, with effort estimates.
+- `backend_tests.md` state of the test suites and what to add.
+- `PENDING_WORK.md` open product and platform work.
+- `CLAUDE.md` project context and planned architecture (kept locally; git-ignored).
 
 ## Prerequisites
 
@@ -43,15 +46,9 @@ The database is Supabase, and its schema is changed directly there; the repo kee
 | `flags` | per-document findings a specialist approved |
 | sequence `greenlink_case_id_seq` and trigger `set_greenlink_case_id` on `cases` | readable case ids (`GLDB-<n>`); the trigger skips any id already taken |
 
-The backend role needs `select, insert` on `risk_scores` and `flags` (with row level security policies for insert and read if it is on). Deleting a document's old flags goes through the service key, so no delete policy is required. Deleting a document also removes its `extracted_fields`, `flags` and `langgraph_trace` rows, and deleting a case removes its `risk_scores`, `case_analysis_runs` and `flags` rows. The backend deletes them itself, through the service key, before the parent row, so it works whether or not those foreign keys cascade. Deleting one document leaves the case's analysis runs and scores in place; the run is then marked out of date.
+The backend role needs `select, insert` on `risk_scores` and `flags` (with row level security policies for insert and read if it is on). Every delete goes through the service key, so no delete policy is required. Deleting a document removes its `extracted_fields`, `flags` and `langgraph_trace` rows and its stored file; deleting a case removes its documents, then its `risk_scores`, `case_analysis_runs` and `flags` rows. The backend deletes each child itself before the parent, so it works whether or not the foreign keys cascade. Deleting one document leaves the case's analysis runs and scores in place; the run is marked out of date.
 
-Set `CASE_ANALYSIS_ENABLED=false` to switch the case analysis off. `exiftool` should be on the `PATH`; without it the metadata checks report that they could not run.
-
-Optional settings: `QUEUE_WORKER_CONCURRENCY` (documents processed at once, default 4), `DETECTION_CONCURRENCY` (detection runs at once, default 2), `CPU_WORKER_CONCURRENCY` (PDF, OCR and forensic threads, default 1), `DOCUMENT_MAX_MODEL_CALLS` (model calls one document's classify and extract run may make, default 24), `DETECTION_MAX_MODEL_CALLS` (model calls one detection run may make, default 30), `LLM_MAX_RETRIES` (default 1), `LLM_TIMEOUT_SECONDS` (default 300), `TOOL_TIMEOUT_SECONDS` and `SLOW_TOOL_TIMEOUT_SECONDS` (per detection tool, default 60 and 120), `LOG_HTTP_REQUESTS` (log every Supabase call, default off).
-
-Optional keys for the public-registry checks (a check that can't run is skipped, never a finding): `DATA_GOV_SG_API_KEY`, `URA_API_KEY` and `LAND_USE_RUNTIME_REBUILD` (see `HOW_IT_WORKS.md` §7). `python -m scripts.build_land_use_index` builds the URA zoning index ahead of time.
-
-The backend logs one `perf` line per request, snapshot and background job (Supabase calls, Claude calls, tokens, cache hits); see `HOW_IT_WORKS.md` §8.
+`exiftool` should be on the `PATH`; without it the metadata checks report that they could not run. Every setting and its default is in `HOW_IT_WORKS.md` §7, including the public-registry keys (a registry check that can't run is skipped, never a finding) and `CASE_ANALYSIS_ENABLED`. `python -m scripts.build_land_use_index` builds the URA zoning index ahead of time. The backend logs one `perf` line per request, snapshot and background job (§8).
 
 The API runs on `http://localhost:8000`. The interactive docs are at `/docs`.
 
@@ -84,7 +81,7 @@ pytest
 
 Tests never call real Supabase or Claude. `tests/conftest.py` blocks both, so a test that tries to reach them fails.
 
-Regression tests are tagged by sprint: `pytest -m sprint1` and `pytest -m sprint2`.
+Regression tests are tagged by sprint: `pytest -m sprint1` (also `sprint2`, `sprint3`).
 
 Frontend lint, build and end-to-end tests (from `frontend/`):
 
@@ -94,11 +91,11 @@ npm run build
 npm run test:e2e
 ```
 
-The Playwright suite runs against a mocked backend (`frontend/e2e/support/mockBackend.ts`). The sprint filters are `npm run test:e2e:sprint1` and `npm run test:e2e:sprint2`.
+The Playwright suite runs against a mocked backend (`frontend/e2e/support/mockBackend.ts`). Sprint filters: `npm run test:e2e:sprint1` and `:sprint2`.
 
 ## GitHub Actions
 
 Defined in `.github/workflows/`:
 
-- `ci-cd.yml` runs on pushes to `main` and on pull requests. It runs the backend tests with coverage, a pyright type check (warning only), frontend lint, build and the Playwright suite. On a manual run it also publishes the backend and frontend images to GitHub Container Registry.
+- `ci-cd.yml` runs on pushes to `main` and on pull requests. It runs ruff, pyright (a type error fails the build; `# type: ignore` and a weakened pyright config are rejected), the backend tests with coverage, then frontend lint, build and the Playwright suite. On a manual run it also publishes the backend and frontend images to GitHub Container Registry.
 - `deploy.yml` deploys both services to Cloud Run. It is manual only (`workflow_dispatch`), so pushes do not deploy. It needs the repository secrets `DATA_GOV_SG_API_KEY` and `URA_API_KEY`, alongside the Supabase, Anthropic and auth ones.

@@ -482,6 +482,10 @@ class CaseListItem(CaseRecord):
     risk: CaseRisk | None = None
 
 
+# The same limit as the case forms in the frontend (utils/caseValidation.ts).
+MAX_COMPANY_NAME_LENGTH = 100
+
+
 class UpdateCaseRequest(BaseModel):
     """
     A loan officer updating the case's own identifying details. Only
@@ -499,6 +503,8 @@ class UpdateCaseRequest(BaseModel):
         trimmed = value.strip()
         if not trimmed:
             raise ValueError("company_name is required")
+        if len(trimmed) > MAX_COMPANY_NAME_LENGTH:
+            raise ValueError(f"company_name must be at most {MAX_COMPANY_NAME_LENGTH} characters")
         return trimmed
 
 
