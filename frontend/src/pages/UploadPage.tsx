@@ -12,6 +12,7 @@ import { DocumentListPanel } from './upload/DocumentListPanel';
 import { MoveDocumentsDialog } from './upload/MoveDocumentsDialog';
 import { RequirementsSidebar } from './upload/RequirementsSidebar';
 import { UploadSummaryCards } from './upload/UploadSummaryCards';
+import { CaseStageCard } from './upload/CaseStageCard';
 import AppHeader from '../components/AppHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DropZone from '../components/DropZone';
@@ -51,6 +52,10 @@ export default function UploadPage({
     analysisOverview,
     supportingDocumentRecommendations,
     additionalDocuments,
+    stage,
+    setStage,
+    stageHistory,
+    setStageHistory,
     wsConnected,
     snapshotLoaded,
     caseMatches,
@@ -65,6 +70,19 @@ export default function UploadPage({
     identityNames,
     caseMatchNeedsReview,
   } = useCaseSnapshot(selectedCase.id);
+
+  const isFinalised = stage === 'finalised';
+
+  // One line for the Case Progress card when something failed and is holding the case up.
+  const stageProblem = useMemo(() => {
+    const plural = (count: number) => (count === 1 ? '1 document' : `${count} documents`);
+    const failedProcessing = documents.filter((document) => document.status === 'failed').length;
+    const failedDetection = documents.filter((document) => document.has_detection_error).length;
+    if (failedProcessing > 0) return `${plural(failedProcessing)} failed processing. Retry or remove ${failedProcessing === 1 ? 'it' : 'them'}.`;
+    if (failedDetection > 0) return `Detection failed on ${plural(failedDetection)}. Retry it from the document page.`;
+    if (analysisOverview?.status === 'failed') return 'The last case analysis failed. Run it again.';
+    return null;
+  }, [documents, analysisOverview]);
 
   const liveDocumentIds = useMemo(
     () => (snapshotLoaded ? new Set(documents.map((document) => document.id)) : null),
@@ -215,13 +233,14 @@ export default function UploadPage({
                     {
                       id: 'edit',
                       label: 'Edit case details',
+                      disabled: isFinalised,
                       onSelect: () => setIsEditingCase(true),
                     },
                     {
                       id: 'delete',
                       label: isDeletingCase ? 'Deleting…' : 'Delete case',
                       danger: true,
-                      disabled: isDeletingCase || caseHasInFlightDocument,
+                      disabled: isFinalised || isDeletingCase || caseHasInFlightDocument,
                       onSelect: () => setCaseDeleteOpen(true),
                     },
                   ]}
@@ -236,6 +255,12 @@ export default function UploadPage({
             </div>
           )}
 
+          {isFinalised ? (
+            <p className="case-finalised-notice" role="status">
+              This case is finalised, so nothing can be uploaded or changed. Reopen it from Case Progress to make changes.
+            </p>
+          ) : (
+          <>
           <h1>Upload supporting documents</h1>
 
           <p className="sub">
@@ -337,6 +362,8 @@ export default function UploadPage({
               </span>
             </div>
           )}
+          </>
+          )}
 
             <DocumentListPanel
               handleCancelDocument={handleCancelDocument}
@@ -366,13 +393,25 @@ export default function UploadPage({
               setSelectedDocumentIds={setSelectedDocumentIds}
               toggleDocumentSelected={toggleDocumentSelected}
               wsConnected={wsConnected}
+              readOnly={isFinalised}
             />
 
 
 
+          <CaseStageCard
+            caseId={selectedCase.id}
+            stage={stage}
+            history={stageHistory}
+            problem={stageProblem}
+            onChanged={(summary) => {
+              setStage(summary.status ?? 'open');
+              setStageHistory(summary.status_history ?? []);
+            }}
+          />
+
           <UploadSummaryCards
             analysisOverview={analysisOverview}
-            analysisReady={analysisReady}
+            analysisReady={analysisReady && !isFinalised}
             caseId={selectedCase.id}
             caseMatchNeedsReview={caseMatchNeedsReview}
             caseMatches={caseMatches}

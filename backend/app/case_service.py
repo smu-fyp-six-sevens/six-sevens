@@ -6,7 +6,7 @@ import threading
 from collections import defaultdict
 from typing import Any
 
-from . import case_repository, document_repository, extracted_fields_repository
+from . import case_repository, case_stage, document_repository, extracted_fields_repository
 from .case_match import CaseMatchResult, DocumentCaseMatch, check_case_match
 from .case_pipeline import repository as analysis_repository, state as analysis_state
 from .case_pipeline.models import CaseAnalysis
@@ -32,6 +32,8 @@ from .models import (
     CaseListItem,
     CaseRecord,
     CaseRisk,
+    CaseStage,
+    CaseStageChange,
     CaseSummary,
     DocumentRecord,
     DocumentStatus,
@@ -120,8 +122,16 @@ def get_case(case_id: str) -> CaseRecord | None:
     return case_repository.get_case(case_id)
 
 
-def create_case(company_name: str | None = None) -> CaseRecord:
-    return case_repository.create_case(company_name)
+def is_case_finalised(case_id: str) -> bool:
+    """A finalised case accepts no changes until an officer reopens it (see routers/_dependencies.py)."""
+    case = case_repository.get_case(case_id)
+    return case is not None and case.status == CaseStage.FINALISED.value
+
+
+def create_case(company_name: str | None = None, created_by: str = case_stage.SYSTEM) -> CaseRecord:
+    case = case_repository.create_case(company_name)
+    case_stage.record_created(case, created_by)
+    return case
 
 
 def update_case(case_id: str, company_name: str) -> CaseRecord | None:
@@ -190,6 +200,15 @@ def _load_analyses(case_ids: list[str]) -> dict[str, CaseAnalysis]:
         return {}
 
 
+def _load_status_history(case_id: str) -> list[CaseStageChange]:
+    """Empty when the history can't be read: the case still loads, with its current stage."""
+    try:
+        return case_repository.list_status_history(case_id)
+    except Exception:
+        logger.exception("Failed to load the stage history of case %s", case_id)
+        return []
+
+
 def _load_saved_risks(case_ids: list[str]) -> dict[str, CaseRisk]:
     """Empty when the saved scores can't be read: the list then shows those cases unscored."""
     try:
@@ -205,6 +224,7 @@ def build_summary(
     reports: dict[str, dict[str, Any]] | None = None,
     analysis: CaseAnalysis | None = None,
     completed: CaseAnalysis | None = None,
+    status_history: list[CaseStageChange] | None = None,
 ) -> CaseSummary:
     """
     The case's checklist and document rollup, computed from its documents,
@@ -245,6 +265,7 @@ def build_summary(
         additional_documents=completed.additional_documents if completed else None,
         analysis_ready=is_ready_for_analysis(documents),
         analysis=overview,
+        status_history=status_history or [],
     )
 
 
@@ -493,7 +514,7 @@ def _summary_with_analysis(
         except Exception:
             logger.exception("Failed to load the last complete analysis of case %s", case.id)
     reports = detection_states[0] if detection_states is not None else None
-    return build_summary(case, documents, reports, analysis, completed)
+    return build_summary(case, documents, reports, analysis, completed, _load_status_history(case.id))
 
 
 def list_case_summaries() -> list[CaseListItem]:
@@ -516,3 +537,15 @@ def list_case_summaries() -> list[CaseListItem]:
         )
         for case in cases
     ]
+
+
+def finalise_case(case_id: str, changed_by: str) -> CaseSummary | None:
+    """Raises case_stage.StageChangeNotAllowed when the case isn't analysed."""
+    case_stage.finalise(case_id, changed_by)
+    return get_case_summary(case_id)
+
+
+def reopen_case(case_id: str, changed_by: str) -> CaseSummary | None:
+    """Raises case_stage.StageChangeNotAllowed when the case isn't finalised."""
+    case_stage.reopen(case_id, changed_by)
+    return get_case_summary(case_id)

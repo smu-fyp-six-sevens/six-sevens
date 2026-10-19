@@ -6,7 +6,9 @@ import logging
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 
 from .. import case_service, document_repository
-from ._dependencies import get_case_or_404, to_thread_or_502
+from ..auth import current_username
+from ..case_stage import StageChangeNotAllowed
+from ._dependencies import get_case_or_404, get_editable_case_or_404, to_thread_or_502
 from ..case_match import CaseMatchResult
 from ..case_pipeline import service as analysis_service
 from ..case_pipeline.models import CaseAnalysis
@@ -17,9 +19,12 @@ logger = logging.getLogger(__name__)
 
 
 @router.post("", response_model=CaseRecord, status_code=status.HTTP_201_CREATED)
-async def create_case(company_name: str | None = Body(None, embed=True, max_length=MAX_COMPANY_NAME_LENGTH)) -> CaseRecord:
+async def create_case(
+    company_name: str | None = Body(None, embed=True, max_length=MAX_COMPANY_NAME_LENGTH),
+    username: str = Depends(current_username),
+) -> CaseRecord:
     return await to_thread_or_502(
-        case_service.create_case, company_name,
+        case_service.create_case, company_name, username,
         detail="Failed to create the case. Check Supabase table access.",
         log=("Failed to create case",),
     )
@@ -49,7 +54,7 @@ async def get_case(case_id: str) -> CaseSummary:
 
 @router.patch("/{case_id}", response_model=CaseSummary)
 async def update_case(
-    case_id: str, request: UpdateCaseRequest, case: CaseRecord = Depends(get_case_or_404)
+    case_id: str, request: UpdateCaseRequest, case: CaseRecord = Depends(get_editable_case_or_404)
 ) -> CaseSummary:
     await to_thread_or_502(
         case_service.update_case,
@@ -65,8 +70,43 @@ async def update_case(
     return updated
 
 
+async def _change_stage(change, case_id: str, username: str, action: str) -> CaseSummary:
+    try:
+        updated = await asyncio.to_thread(change, case_id, username)
+    except StageChangeNotAllowed as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Failed to %s case %s", action, case_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to {action} the case. Check Supabase table access.",
+        ) from exc
+    if updated is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+    return updated
+
+
+@router.post("/{case_id}/finalise", response_model=CaseSummary)
+async def finalise_case(
+    case_id: str, case: CaseRecord = Depends(get_case_or_404), username: str = Depends(current_username)
+) -> CaseSummary:
+    """
+    The loan officer closes an analysed case. Recorded in its stage history
+    under their username; the case then holds at finalised until reopened.
+    """
+    return await _change_stage(case_service.finalise_case, case_id, username, "finalise")
+
+
+@router.post("/{case_id}/reopen", response_model=CaseSummary)
+async def reopen_case(
+    case_id: str, case: CaseRecord = Depends(get_case_or_404), username: str = Depends(current_username)
+) -> CaseSummary:
+    """The loan officer reopens a finalised case; it returns to the stage its documents and analysis put it at."""
+    return await _change_stage(case_service.reopen_case, case_id, username, "reopen")
+
+
 @router.delete("/{case_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_case(case_id: str, case: CaseRecord = Depends(get_case_or_404)) -> None:
+async def delete_case(case_id: str, case: CaseRecord = Depends(get_editable_case_or_404)) -> None:
     """
     Removes a case from the active queue, along with every document that
     belongs to it. A following GET /cases or GET /cases/{id} no longer
@@ -122,7 +162,7 @@ async def get_case_match(case_id: str) -> CaseMatchResult:
 @router.post(
     "/{case_id}/analysis/run", response_model=CaseAnalysis, status_code=status.HTTP_202_ACCEPTED
 )
-async def run_case_analysis(case_id: str, case: CaseRecord = Depends(get_case_or_404)) -> CaseAnalysis:
+async def run_case_analysis(case_id: str, case: CaseRecord = Depends(get_editable_case_or_404)) -> CaseAnalysis:
     """
     Starts the per-case analysis (cross-document findings, risk outlook and
     summary) in the background. Only once every approved document has been

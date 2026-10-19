@@ -60,13 +60,13 @@ def _on_change(payload: PostgresChangesPayload) -> None:
     thread-based, and is started from main.py's lifespan on this loop), so
     scheduling a task here from synchronous code is safe.
     """
-    record = (payload.get("data") or {}).get("record") or (payload.get("data") or {}).get(
-        "old_record"
-    )
+    data = payload.get("data") or {}
+    record = data.get("record") or data.get("old_record")
     query_stats.count_event("realtime.event")
     if not record:
         return
-    case_id = record.get("case_id")
+    # A cases row (e.g. its stage moving) is the case itself; a documents row names its case.
+    case_id = record.get("id") if data.get("table") == "cases" else record.get("case_id")
     if not case_id:
         return
     if not broadcaster.has_subscribers(case_id):

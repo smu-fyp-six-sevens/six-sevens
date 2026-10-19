@@ -13,6 +13,7 @@ import type {
   AdditionalDocuments,
   CaseAnalysisOverview,
   CaseRisk,
+  CaseStageChange,
   DocumentCaseMatch,
   DocumentRecord,
   SupportingDocumentRecommendation,
@@ -40,6 +41,9 @@ export function useCaseSnapshot(caseId: string) {
     SupportingDocumentRecommendation[]
   >([]);
   const [additionalDocuments, setAdditionalDocuments] = useState<AdditionalDocuments | null>(null);
+  // The case's stage and its history of changes (see backend/app/case_stage.py).
+  const [stage, setStage] = useState<string>('open');
+  const [stageHistory, setStageHistory] = useState<CaseStageChange[]>([]);
   const [wsConnected, setWsConnected] = useState(false);
   // Whether documentDetails holds this case's documents yet, not the empty start or the previous case's.
   const [snapshotLoaded, setSnapshotLoaded] = useState(false);
@@ -109,6 +113,8 @@ export function useCaseSnapshot(caseId: string) {
         setAnalysisOverview(caseSummary.analysis ?? null);
         setSupportingDocumentRecommendations(caseSummary.supporting_document_recommendations ?? []);
         setAdditionalDocuments(caseSummary.additional_documents ?? null);
+        setStage(caseSummary.status ?? 'open');
+        setStageHistory(caseSummary.status_history ?? []);
       },
       (connected) => {
         if (isMountedRef.current) setWsConnected(connected);
@@ -171,6 +177,10 @@ export function useCaseSnapshot(caseId: string) {
     analysisOverview,
     supportingDocumentRecommendations,
     additionalDocuments,
+    stage,
+    setStage,
+    stageHistory,
+    setStageHistory,
     wsConnected,
     snapshotLoaded,
     caseMatches,

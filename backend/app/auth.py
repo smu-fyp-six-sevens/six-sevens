@@ -6,7 +6,7 @@ stakeholders to view, not a product with accounts, so a single signed
 bearer token is enough to keep it from being wide open.
 
 Token = base64url(payload_json) + "." + base64url(hmac_sha256(secret, payload_b64)),
-where payload is just {"exp": <unix_ts>}. Verified via constant-time
+where payload is {"exp": <unix_ts>, "sub": <username>}. Verified via constant-time
 comparison; no external JWT dependency needed for something this small.
 """
 from __future__ import annotations
@@ -54,8 +54,12 @@ def _sign(payload_b64: str) -> str:
     return _b64encode(digest)
 
 
-def create_token() -> str:
-    payload = json.dumps({"exp": int(time.time()) + TOKEN_TTL_SECONDS}).encode("utf-8")
+def create_token(username: str | None = None) -> str:
+    # sub: who signed in, recorded against the case stage changes they make (see current_username).
+    claims: dict = {"exp": int(time.time()) + TOKEN_TTL_SECONDS}
+    if username is not None:
+        claims["sub"] = username
+    payload = json.dumps(claims).encode("utf-8")
     payload_b64 = _b64encode(payload)
     return f"{payload_b64}.{_sign(payload_b64)}"
 
@@ -67,22 +71,27 @@ def verify_credentials(username: str, password: str) -> bool:
     return valid_user and valid_pass
 
 
-def _verify_token(token: str) -> bool:
+def _token_claims(token: str) -> dict | None:
+    """The signed, unexpired payload, or None."""
     try:
         payload_b64, sig = token.split(".", 1)
     except ValueError:
-        return False
+        return None
 
     if not hmac.compare_digest(sig, _sign(payload_b64)):
-        return False
+        return None
 
     try:
         payload = json.loads(_b64decode(payload_b64))
         exp = int(payload["exp"])
     except (ValueError, KeyError, TypeError):
-        return False
+        return None
 
-    return time.time() < exp
+    return payload if time.time() < exp else None
+
+
+def _verify_token(token: str) -> bool:
+    return _token_claims(token) is not None
 
 
 def create_ws_ticket() -> str:
@@ -123,3 +132,16 @@ def require_auth(authorization: str | None = Header(default=None)) -> None:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
         )
+
+
+def current_username(authorization: str | None = Header(default=None)) -> str:
+    """
+    Who is making the request, for the record of what they changed. The
+    username they signed in with; a token issued before tokens carried it
+    falls back to the one shared username. Authentication itself is
+    require_auth's job, applied to the router.
+    """
+    token = (authorization or "").removeprefix("Bearer ").strip()
+    claims = _token_claims(token) if token else None
+    username = claims.get("sub") if claims else None
+    return username if isinstance(username, str) and username else settings.AUTH_USERNAME

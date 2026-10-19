@@ -18,7 +18,7 @@ from typing import Any, Callable, Iterator, TypeVar
 from fastapi import HTTPException, status
 
 from .. import case_service, document_repository
-from ..models import CaseRecord, DocumentRecord
+from ..models import CaseRecord, CaseStage, DocumentRecord
 
 logger = logging.getLogger(__name__)
 
@@ -95,3 +95,44 @@ async def get_case_or_404(case_id: str) -> CaseRecord:
     if case is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
     return case
+
+
+FINALISED_DETAIL = "This case is finalised. Reopen it to make changes."
+
+
+def raise_if_finalised(case: CaseRecord) -> None:
+    if case.status == CaseStage.FINALISED.value:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=FINALISED_DETAIL)
+
+
+async def ensure_case_editable(case_id: str | None) -> None:
+    """A 409 when the case is finalised: it accepts no changes until an officer reopens it."""
+    if case_id is None:
+        return
+    finalised = await to_thread_or_502(
+        case_service.is_case_finalised, case_id,
+        detail="Failed to fetch the case. Check Supabase table access.",
+        log=("Failed to fetch case %s", case_id),
+    )
+    if finalised:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=FINALISED_DETAIL)
+
+
+async def get_editable_case_or_404(case_id: str) -> CaseRecord:
+    """get_case_or_404, for a handler that changes the case: refused once the case is finalised."""
+    case = await get_case_or_404(case_id)
+    raise_if_finalised(case)
+    return case
+
+
+async def get_editable_document_or_404(document_id: str) -> DocumentRecord:
+    """get_document_or_404, for a handler that changes the document: refused once its case is finalised."""
+    document = await get_document_or_404(document_id)
+    await ensure_case_editable(document.case_id)
+    return document
+
+
+async def get_editable_document_with_fields_or_404(document_id: str) -> DocumentRecord:
+    document = await get_document_with_fields_or_404(document_id)
+    await ensure_case_editable(document.case_id)
+    return document

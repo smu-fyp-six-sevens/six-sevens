@@ -3,6 +3,7 @@ import { authFetch } from '../../lib/api';
 import type {
   CaseAnalysis,
   CaseOption,
+  CaseRequirementCoverage,
   UpdatedCase,
 } from './types';
 
@@ -50,4 +51,22 @@ export async function getCaseAnalysis(caseId: string): Promise<CaseAnalysis | nu
   await assertOk(response, 'Failed to fetch the case analysis');
 
   return (await response.json()) as CaseAnalysis;
+}
+
+// Closes an analysed case; recorded in its stage history under the signed-in username.
+export async function finaliseCase(caseId: string): Promise<CaseRequirementCoverage> {
+  const response = await authFetch(`/cases/${caseId}/finalise`, { method: 'POST' });
+
+  await assertOk(response, 'Failed to finalise the case');
+
+  return (await response.json()) as CaseRequirementCoverage;
+}
+
+// Reopens a finalised case; it returns to the stage its documents and analysis put it at.
+export async function reopenCase(caseId: string): Promise<CaseRequirementCoverage> {
+  const response = await authFetch(`/cases/${caseId}/reopen`, { method: 'POST' });
+
+  await assertOk(response, 'Failed to reopen the case');
+
+  return (await response.json()) as CaseRequirementCoverage;
 }

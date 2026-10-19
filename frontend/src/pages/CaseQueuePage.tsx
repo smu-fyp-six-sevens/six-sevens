@@ -16,16 +16,6 @@ interface CaseQueuePageProps {
   onCaseDeleted: (caseId: string) => void;
 }
 
-// One colour per status label (see mapStatus in App.tsx); anything else
-// falls back to neutral.
-const STATUS_CHIP_CLASS: Record<string, string> = {
-  'Ready for review': 'status-chip--green',
-  'In progress': 'status-chip--blue',
-  'Documents failed': 'status-chip--red',
-  'Processing stuck': 'status-chip--amber',
-  'Documents pending': 'status-chip--grey',
-};
-
 const PREFS_STORAGE_KEY = 'caseQueue.prefs';
 
 interface QueuePrefs {
@@ -114,13 +104,19 @@ export default function CaseQueuePage({
     savePrefs({ statuses: Array.from(savedStatuses), sortOrder, riskFirst });
   }, [savedStatuses, sortOrder, riskFirst]);
 
-  const statusOptions = useMemo(() => {
-    const statuses = cases
-      .map((item) => item.status)
-      .filter(Boolean);
-
-    return Array.from(new Set(statuses));
+  // The statuses some case has right now, in the order a case moves through them, each with its colour.
+  const statusTones = useMemo(() => {
+    const tones = new Map<string, { tone: string; rank: number }>();
+    for (const item of cases) {
+      if (item.status) tones.set(item.status, { tone: item.statusTone, rank: item.statusRank });
+    }
+    return tones;
   }, [cases]);
+
+  const statusOptions = useMemo(
+    () => Array.from(statusTones.keys()).sort((a, b) => statusTones.get(a)!.rank - statusTones.get(b)!.rank),
+    [statusTones],
+  );
 
   // A saved status no case has right now (e.g. nothing is "stuck" today)
   // has no chip to switch it off, so it must not filter anything — only
@@ -267,9 +263,9 @@ export default function CaseQueuePage({
                     key={status}
                     type="button"
                     aria-pressed={isActive}
-                    className={`status-chip ${
-                      STATUS_CHIP_CLASS[status] ?? 'status-chip--grey'
-                    } ${isActive ? 'status-chip--active' : ''}`}
+                    className={`status-chip tone-${statusTones.get(status)?.tone ?? 'grey'} ${
+                      isActive ? 'status-chip--active' : ''
+                    }`}
                     onClick={() => toggleStatus(status)}
                   >
                     {status}

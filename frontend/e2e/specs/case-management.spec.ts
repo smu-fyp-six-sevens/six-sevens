@@ -14,6 +14,7 @@ function seedQueue(backend: MockBackend) {
     id: 'case-harbor',
     greenlink_case_id: 'GLDB-1014',
     company_name: 'Harbor Light Shipping Pte Ltd',
+    status: 'documents_extracted',
     documents_status: 'analyzed',
     created_at: '2026-09-01T00:00:00Z',
   });
@@ -21,6 +22,7 @@ function seedQueue(backend: MockBackend) {
     id: 'case-meridian',
     greenlink_case_id: 'GLDB-1067',
     company_name: 'Meridian Warehousing Solutions Pte Ltd',
+    status: 'documents_uploaded',
     documents_status: 'in_progress',
     created_at: '2026-09-02T00:00:00Z',
   });
@@ -84,45 +86,48 @@ test.describe('View cases @sprint2 @SCRUM-78', () => {
     seedQueue(backend);
     await page.goto('/cases');
 
-    await page.locator('.status-chip', { hasText: 'Ready for review' }).click();
+    // One chip per stage some case is at, in the order a case moves through them.
+    await expect(page.locator('.status-chip')).toHaveText(['Open', 'Documents Uploaded', 'Documents Extracted']);
+
+    await page.locator('.status-chip', { hasText: 'Documents Extracted' }).click();
     await expect(caseCards(page)).toHaveCount(1);
     await expect(caseCards(page)).toContainText('Harbor Light Shipping Pte Ltd');
 
-    await page.locator('.status-chip', { hasText: 'In progress' }).click();
+    await page.locator('.status-chip', { hasText: 'Documents Uploaded' }).click();
     await expect(caseCards(page)).toHaveCount(2);
 
-    await page.locator('.status-chip', { hasText: 'Ready for review' }).click();
-    await page.locator('.status-chip', { hasText: 'In progress' }).click();
+    await page.locator('.status-chip', { hasText: 'Documents Extracted' }).click();
+    await page.locator('.status-chip', { hasText: 'Documents Uploaded' }).click();
     await expect(caseCards(page)).toHaveCount(3);
   });
 
-  test('CM-004 the Documents failed chip shows only cases with a failed document @CM-004', async ({ page, backend }) => {
+  test('CM-004 the Documents Failed chip shows only cases with a failed document @CM-004', async ({ page, backend }) => {
     seedQueue(backend);
-    backend.cases.push(makeCase({ id: 'case-failed', greenlink_case_id: 'GLDB-1099', company_name: 'Failing Co Pte Ltd', documents_status: 'failed' }));
+    backend.cases.push(makeCase({ id: 'case-failed', greenlink_case_id: 'GLDB-1099', company_name: 'Failing Co Pte Ltd', status: 'documents_failed', documents_status: 'failed' }));
     await page.goto('/cases');
 
-    await page.locator('.status-chip', { hasText: 'Documents failed' }).click();
+    await page.locator('.status-chip', { hasText: 'Documents Failed' }).click();
 
     await expect(caseCards(page)).toHaveCount(1);
     await expect(caseCards(page)).toContainText('Failing Co Pte Ltd');
   });
 
-  test('CM-004 the Processing stuck chip shows only cases with a stuck document @CM-004', async ({ page, backend }) => {
+  test('CM-004 the Processing Stuck chip shows only cases with a stuck document @CM-004', async ({ page, backend }) => {
     seedQueue(backend);
     backend.cases.push(makeCase({ id: 'case-stuck', greenlink_case_id: 'GLDB-1100', company_name: 'Stuck Co Pte Ltd', documents_status: 'stuck' }));
     await page.goto('/cases');
 
-    await page.locator('.status-chip', { hasText: 'Processing stuck' }).click();
+    await page.locator('.status-chip', { hasText: 'Processing Stuck' }).click();
 
     await expect(caseCards(page)).toHaveCount(1);
     await expect(caseCards(page)).toContainText('Stuck Co Pte Ltd');
   });
 
-  test('CM-004 the Documents pending chip shows only cases with no documents yet @CM-004', async ({ page, backend }) => {
+  test('CM-004 the Open chip shows only cases with no documents yet @CM-004', async ({ page, backend }) => {
     const { platinum } = seedQueue(backend);
     await page.goto('/cases');
 
-    await page.locator('.status-chip', { hasText: 'Documents pending' }).click();
+    await page.locator('.status-chip', { hasText: 'Open' }).click();
 
     await expect(caseCards(page)).toHaveCount(1);
     await expect(caseCards(page)).toContainText(platinum.company_name!);

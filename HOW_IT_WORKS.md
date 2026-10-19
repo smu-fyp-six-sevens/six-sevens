@@ -124,20 +124,44 @@ uploaded → queued → processing → extracting → analyzed ──approve─�
 
 ---
 
+### Case stages
+
+```
+open → documents_uploaded → documents_classified → documents_extracted → documents_approved → detection_triggered → ready_for_analysis → case_analysed ──finalise──→ finalised
+detours: documents_failed, manual_review, documents_incomplete, documents_rejected, detection_failed, additional_documents_required        ←──reopen───
+```
+
+Every stage but `finalised` follows from the case, earliest unfinished work first:
+
+1. A document uploaded, queued or being classified: `documents_uploaded`; classified and still being extracted: `documents_classified`.
+2. A document that failed processing: `documents_failed`; one the classifier sent to manual review: `manual_review`; one extracted and waiting for the officer: `documents_extracted`.
+3. Every document decided. None approved: `documents_rejected`. An approved document whose detection run crashed or was cancelled (until retried): `detection_failed`. A required checklist item still missing, before detection starts: `documents_incomplete` (for now not a hard stop: once detection starts the case moves on).
+4. Detection not started yet (and nothing missing): `documents_approved`; running: `detection_triggered`.
+5. Every approved document scanned. No current analysis (none yet, running, failed, or out of date): `ready_for_analysis`. A current analysis that asks the client for more evidence: `additional_documents_required`; otherwise `case_analysed`. Either of the last two can be finalised.
+
+A case moves back when its documents change (a new upload sends an analysed case back to `documents_uploaded`); the history keeps every step, and the case page marks those rows "Moved back". The system moves the case after each document or analysis change, when a case is opened, and for every case at startup, recorded as `System`. The officer finalises an analysed case and can reopen a finalised one, recorded under the signed-in username. Every change is a `case_status_history` row (from, to, when, by whom), shown on the case page under **Case Progress**, which also shows one line when a document failed processing, a detection run failed, or the last analysis failed. See `backend/app/case_stage.py`.
+
+The case queue shows each case's stage, in one colour per stage, and filters by it; a case with a document stuck in processing shows **Processing Stuck** instead until it moves.
+
+**A finalised case takes no changes** until it is reopened: uploading, moving documents in or out, approving, rejecting, editing fields or the type, retrying, cancelling, deleting documents or the case, editing the case and running the analysis all return 409 (`routers/_dependencies.py`), and the case page hides those controls.
+
+---
+
 ## 6. Where data lives
 
 | Table | Holds |
 |---|---|
-| `cases` | company name, GreenLink ID, `submission_finalized`, dev flag. `recommended_additional_documents` is always empty; the API reports the missing checklist types under that name |
+| `cases` | company name, GreenLink ID, stage (`status`), `submission_finalized`, dev flag. `recommended_additional_documents` is always empty; the API reports the missing checklist types under that name |
 | `documents` | one row per file: status, type, confidences, routing, requirements fulfilled, file metadata (read only by the metadata checks) |
 | `extracted_fields` | one row per field per document |
 | `langgraph_trace` | one JSON trace per document: pipeline steps and the **full detection report** |
 | `flags` | the per-document findings a specialist approved, with severity, check, description and evidence |
+| `case_status_history` | one row per stage change: from, to, when and by whom |
 | `case_analysis_runs` | each run: findings (including `xd-det-N`), `consistent_checks`, outlook, summary, **risk**, **additional documents**, audit, step trace |
 | `risk_scores` (+ `latest_risk_scores` view) | one row per completed run: score, level, reasoning, `flag_ids` |
 | Storage bucket `documents` | the uploaded files |
 
-Deleting a document removes its fields, flags, trace and file; deleting a case removes its documents, then its runs, scores and flags. The schema is changed directly in Supabase (no SQL in the repo); `README.md` lists the objects the backend expects.
+Deleting a document removes its fields, flags, trace and file; deleting a case removes its documents, then its runs, scores, flags and stage history. The schema is changed directly in Supabase (no SQL in the repo); `README.md` lists the objects the backend expects.
 
 ---
 

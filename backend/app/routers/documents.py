@@ -7,14 +7,17 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from .. import case_service, document_repository, extracted_fields_repository, monitoring, query_stats, storage_service
+from .. import case_service, case_stage, document_repository, extracted_fields_repository, monitoring, query_stats, storage_service
 from ..extracted_fields_repository import normalise_field_name
 from ..case_broadcaster import broadcaster
 
 from ._dependencies import (
+    FINALISED_DETAIL,
     bad_gateway_on_error,
+    ensure_case_editable,
     get_document_or_404,
-    get_document_with_fields_or_404,
+    get_editable_document_or_404,
+    get_editable_document_with_fields_or_404,
     to_thread_or_502,
 )
 from ..config import settings
@@ -82,6 +85,7 @@ async def _run_detection_task(document_id: str, case_id: str | None) -> None:
         # Not an Exception, so run_detection's own handler never runs; revert DETECTING -> APPROVED here.
         logger.info("Detection cancelled for document %s", document_id)
         langgraph_trace.record(document_id, "detection_error", error="Cancelled by loan officer")
+        await asyncio.to_thread(langgraph_trace.flush, document_id)
         await asyncio.to_thread(document_repository.revert_to_approved, document_id)
         raise
     except Exception:
@@ -160,7 +164,7 @@ async def get_document(document_id: str) -> DocumentRecord:
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_document(
-    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+    document_id: str, document: DocumentRecord = Depends(get_editable_document_or_404)
 ) -> None:
     """Removes a document from its case. Only once it is out of flight; cancel an in-flight one first."""
     if document.status in _UNDELETABLE_STATUSES:
@@ -199,11 +203,15 @@ async def _push_case_snapshot(case_id: str) -> None:
 
 
 async def _resync_case(case_id: str) -> None:
-    """Persists submission_finalized and pushes a snapshot, for any change to a case's document set. Never raises."""
+    """Persists submission_finalized and the stage, and pushes a snapshot, for any change to a case's document set. Never raises."""
     try:
         await asyncio.to_thread(case_service.sync_submission_finalized, case_id)
     except Exception:
         logger.exception("Failed to resync submission_finalized for case %s", case_id)
+    try:
+        await asyncio.to_thread(case_stage.sync_case_stage, case_id)
+    except Exception:
+        logger.exception("Failed to update the stage of case %s", case_id)
     await _push_case_snapshot(case_id)
 
 
@@ -211,7 +219,7 @@ async def _resync_case(case_id: str) -> None:
 async def move_document(
     document_id: str,
     body: MoveDocumentRequest,
-    document: DocumentRecord = Depends(get_document_or_404),
+    document: DocumentRecord = Depends(get_editable_document_or_404),
 ) -> DocumentRecord:
     """Reassigns a document to another case. Same eligibility as delete."""
     if document.status in _LOCKED_STATUSES:
@@ -236,6 +244,7 @@ async def move_document(
     target_case = await asyncio.to_thread(case_service.get_case, body.case_id)
     if target_case is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target case not found")
+    await ensure_case_editable(body.case_id)
 
     old_case_id = document.case_id
     await to_thread_or_502(
@@ -251,6 +260,20 @@ async def move_document(
     return await get_document(document_id)
 
 
+async def _finalised_cases(documents: list[DocumentRecord]) -> set[str]:
+    """Which of the documents' cases are finalised, and so take no changes: one read per case."""
+    case_ids = {document.case_id for document in documents if document.case_id is not None}
+    finalised: set[str] = set()
+    for case_id in case_ids:
+        if await to_thread_or_502(
+            case_service.is_case_finalised, case_id,
+            detail="Failed to fetch the case. Check Supabase table access.",
+            log=("Failed to fetch case %s", case_id),
+        ):
+            finalised.add(case_id)
+    return finalised
+
+
 @router.post("/bulk-move", response_model=BulkMoveResponse)
 async def bulk_move_documents(body: BulkMoveRequest) -> BulkMoveResponse:
     """The single move applied to a batch, with each affected case resynced once."""
@@ -260,6 +283,7 @@ async def bulk_move_documents(body: BulkMoveRequest) -> BulkMoveResponse:
     target_case = await asyncio.to_thread(case_service.get_case, body.case_id)
     if target_case is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target case not found")
+    await ensure_case_editable(body.case_id)
 
     documents = await to_thread_or_502(
         document_repository.get_documents_by_ids,
@@ -269,6 +293,7 @@ async def bulk_move_documents(body: BulkMoveRequest) -> BulkMoveResponse:
         log=("Failed to fetch documents %s", body.document_ids),
     )
     documents_by_id = {document.id: document for document in documents}
+    finalised = await _finalised_cases(documents)
 
     eligible_ids: list[str] = []
     failed: list[BulkActionFailure] = []
@@ -278,6 +303,8 @@ async def bulk_move_documents(body: BulkMoveRequest) -> BulkMoveResponse:
         document = documents_by_id.get(document_id)
         if document is None:
             failed.append(BulkActionFailure(document_id=document_id, reason="Document not found"))
+        elif document.case_id in finalised:
+            failed.append(BulkActionFailure(document_id=document_id, reason=FINALISED_DETAIL))
         elif document.status in _LOCKED_STATUSES:
             failed.append(
                 BulkActionFailure(
@@ -325,6 +352,7 @@ async def bulk_delete_documents(body: BulkDeleteRequest) -> BulkDeleteResponse:
         log=("Failed to fetch documents %s", body.document_ids),
     )
     documents_by_id = {document.id: document for document in documents}
+    finalised = await _finalised_cases(documents)
 
     eligible: list[DocumentRecord] = []
     failed: list[BulkActionFailure] = []
@@ -334,6 +362,8 @@ async def bulk_delete_documents(body: BulkDeleteRequest) -> BulkDeleteResponse:
         document = documents_by_id.get(document_id)
         if document is None:
             failed.append(BulkActionFailure(document_id=document_id, reason="Document not found"))
+        elif document.case_id in finalised:
+            failed.append(BulkActionFailure(document_id=document_id, reason=FINALISED_DETAIL))
         elif document.status in _UNDELETABLE_STATUSES:
             failed.append(
                 BulkActionFailure(
@@ -366,7 +396,7 @@ async def bulk_delete_documents(body: BulkDeleteRequest) -> BulkDeleteResponse:
 async def update_extracted_fields(
     document_id: str,
     request: UpdateExtractedFieldsRequest,
-    document: DocumentRecord = Depends(get_document_or_404),
+    document: DocumentRecord = Depends(get_editable_document_or_404),
 ) -> DocumentRecord:
     """The officer correcting extracted fields. Marks the document human-verified (extraction_confidence 1.0)."""
     _ensure_unlocked(document, "edited")
@@ -470,7 +500,7 @@ async def update_extracted_fields(
 async def add_extracted_field(
     document_id: str,
     request: AddExtractedFieldRequest,
-    document: DocumentRecord = Depends(get_document_or_404),
+    document: DocumentRecord = Depends(get_editable_document_or_404),
 ) -> DocumentRecord:
     """Adds one manually entered field, stored at confidence 1.0."""
     _ensure_unlocked(document, "edited")
@@ -544,7 +574,7 @@ async def add_extracted_field(
 async def delete_extracted_field(
     document_id: str,
     field_id: str,
-    document: DocumentRecord = Depends(get_document_or_404),
+    document: DocumentRecord = Depends(get_editable_document_or_404),
 ) -> DocumentRecord:
     """Deletes one field of this document and recomputes fulfilled requirements."""
     _ensure_unlocked(document, "edited")
@@ -603,7 +633,7 @@ async def delete_extracted_field(
 @router.post("/{document_id}/approve", response_model=DocumentRecord)
 async def approve_document(
     document_id: str,
-    document: DocumentRecord = Depends(get_document_or_404),
+    document: DocumentRecord = Depends(get_editable_document_or_404),
 ) -> DocumentRecord:
     """Approves an analysed document after officer review, and starts detection."""
     if document.status != DocumentStatus.ANALYZED:
@@ -694,7 +724,7 @@ async def approve_document(
 
 @router.post("/{document_id}/reject", response_model=DocumentRecord)
 async def reject_document(
-    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+    document_id: str, document: DocumentRecord = Depends(get_editable_document_or_404)
 ) -> DocumentRecord:
     if document.status != DocumentStatus.ANALYZED:
         raise HTTPException(
@@ -719,7 +749,7 @@ async def update_document_type(
     document_id: str,
     request: UpdateDocumentTypeRequest,
     background_tasks: BackgroundTasks,
-    document: DocumentRecord = Depends(get_document_with_fields_or_404),
+    document: DocumentRecord = Depends(get_editable_document_with_fields_or_404),
 ) -> DocumentRecord:
     """
     The officer confirming or correcting a low-confidence type (enforced here, not just in the UI).
@@ -799,7 +829,7 @@ async def update_document_type(
 
 @router.post("/{document_id}/retry", response_model=DocumentRecord)
 async def retry_document(
-    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+    document_id: str, document: DocumentRecord = Depends(get_editable_document_or_404)
 ) -> DocumentRecord:
     """
     Re-enqueues a FAILED document, or one stuck in PROCESSING past the threshold (the in-memory queue
@@ -845,7 +875,7 @@ async def retry_document(
 
 @router.post("/{document_id}/cancel", response_model=DocumentRecord)
 async def cancel_document(
-    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+    document_id: str, document: DocumentRecord = Depends(get_editable_document_or_404)
 ) -> DocumentRecord:
     """
     Stops a QUEUED, PROCESSING or EXTRACTING document. The status write is a compare-and-swap, so

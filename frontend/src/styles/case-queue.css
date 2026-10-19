@@ -78,31 +78,6 @@
   color: #ffffff;
 }
 
-.status-chip--green {
-  --chip-color: #1f7a4d;
-  --chip-tint: #e8f5ee;
-}
-
-.status-chip--blue {
-  --chip-color: #2563b8;
-  --chip-tint: #e8f0fb;
-}
-
-.status-chip--red {
-  --chip-color: #b33131;
-  --chip-tint: #fbeaea;
-}
-
-.status-chip--amber {
-  --chip-color: #b26a00;
-  --chip-tint: #fdf1de;
-}
-
-.status-chip--grey {
-  --chip-color: #667085;
-  --chip-tint: #f2f4f7;
-}
-
 .sort-toggle-btn {
   display: inline-flex;
   align-items: center;
@@ -219,26 +194,6 @@
   color: inherit;
   text-align: left;
   transition: border-color 0.12s, transform 0.12s;
-}
-
-.case-card--green {
-  border-color: #a7e3c5;
-}
-
-.case-card--blue {
-  border-color: #b8d4ff;
-}
-
-.case-card--red {
-  border-color: #f0b8b8;
-}
-
-.case-card--amber {
-  border-color: #f2d18a;
-}
-
-.case-card--grey {
-  border-color: #d5d9e0;
 }
 
 .case-card-open {
@@ -383,39 +338,6 @@
   border-radius: 5px;
   flex-shrink: 0;
 }
-.case-id--ready,
-.case-id--green {
-  background: #ecfdf5;
-  color: #18794e;
-  border: 1px solid #a7e3c5;
-}
-
-.case-id--in-progress,
-.case-id--blue {
-  background: #eff6ff;
-  color: #2563eb;
-  border: 1px solid #b8d4ff;
-}
-
-.case-id--failed,
-.case-id--red {
-  background: #fef2f2;
-  color: #b42318;
-  border: 1px solid #f0b8b8;
-}
-
-.case-id--pending,
-.case-id--grey {
-  background: #f3f4f6;
-  color: #667085;
-  border: 1px solid #d5d9e0;
-}
-.case-id--amber {
-  background: #fffbeb;
-  color: #b45309;
-  border: 1px solid #f2d18a;
-}
-
 .case-main {
   flex: 1;
   min-width: 0;
@@ -496,4 +418,42 @@
 
 .back-link:hover {
   color: var(--steel);
+}
+
+/* =========================================================
+   Status tones: one colour per case stage (see caseStageTone in
+   utils/caseStages.ts), shared by the queue's filter chips and cards
+   and the case page's Case Progress badge.
+   ========================================================= */
+
+.tone-grey   { --tone: #667085; --tone-tint: #f2f4f7; --tone-border: #d5d9e0; }
+.tone-sky    { --tone: #0369a1; --tone-tint: #e6f4fc; --tone-border: #a9d7f2; }
+.tone-blue   { --tone: #2563b8; --tone-tint: #e8f0fb; --tone-border: #b8d4ff; }
+.tone-indigo { --tone: #4338ca; --tone-tint: #eef0ff; --tone-border: #c7cdfa; }
+.tone-red    { --tone: #b33131; --tone-tint: #fbeaea; --tone-border: #f0b8b8; }
+.tone-orange { --tone: #c2410c; --tone-tint: #fff1e6; --tone-border: #f9c9a3; }
+.tone-amber  { --tone: #b26a00; --tone-tint: #fdf1de; --tone-border: #f2d18a; }
+.tone-gold   { --tone: #806300; --tone-tint: #fdf7d9; --tone-border: #e8d68a; }
+.tone-teal   { --tone: #0f766e; --tone-tint: #e6f6f4; --tone-border: #a3ddd6; }
+.tone-rose   { --tone: #be185d; --tone-tint: #fdecf4; --tone-border: #f5b8d3; }
+.tone-purple { --tone: #7e22ce; --tone-tint: #f4ebfd; --tone-border: #dcc0f5; }
+.tone-maroon { --tone: #8b1e3f; --tone-tint: #f9e9ee; --tone-border: #e3b0c0; }
+.tone-lime   { --tone: #4d7c0f; --tone-tint: #f1f8e4; --tone-border: #cde5a5; }
+.tone-cyan   { --tone: #0e7490; --tone-tint: #e5f7fa; --tone-border: #a5dde8; }
+.tone-green  { --tone: #1f7a4d; --tone-tint: #e8f5ee; --tone-border: #a7e3c5; }
+.tone-slate  { --tone: #1e3a5f; --tone-tint: #e8edf3; --tone-border: #b7c4d4; }
+
+.status-chip[class*='tone-'] {
+  --chip-color: var(--tone);
+  --chip-tint: var(--tone-tint);
+}
+
+.case-card[class*='tone-'] {
+  border-color: var(--tone-border);
+}
+
+.case-id[class*='tone-'] {
+  background: var(--tone-tint);
+  color: var(--tone);
+  border: 1px solid var(--tone-border);
 }

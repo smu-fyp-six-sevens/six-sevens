@@ -18,34 +18,22 @@ const UploadPage = lazy(() => import('./pages/UploadPage'));
 const DocumentDetailsPage = lazy(() => import('./pages/DocumentDetailsPage'));
 import { authFetch, getToken } from './lib/api';
 import type { CaseRisk, CaseRiskLevel } from './services/uploadService';
+import { queueStatus } from './utils/caseStages';
+import type { StatusTone } from './utils/caseStages';
 
 export interface CaseRecord {
   id: string;
   caseNumber?: string | null;
   applicant: string;
   type: string;
+  // The queue's status label and its colour (see queueStatus in utils/caseStages.ts).
   status: string;
+  statusTone: StatusTone;
+  statusRank: number;
   caseStatus: string;
   created_at?: string | null;
   // Only set once the case has been scored (see backend/app/case_risk.py).
   riskLevel?: CaseRiskLevel | null;
-}
-
-function mapStatus(status: string): string {
-  switch (status) {
-    case 'no_documents':
-      return 'Documents pending';
-    case 'stuck':
-      return 'Processing stuck';
-    case 'failed':
-      return 'Documents failed';
-    case 'in_progress':
-      return 'In progress';
-    case 'analyzed':
-      return 'Ready for review';
-    default:
-      return status || 'Open';
-  }
 }
 
 function CaseQueueRoute({
@@ -258,8 +246,8 @@ export default function App() {
           caseNumber: item.greenlink_case_id ?? null,
           applicant: item.company_name ?? 'Unnamed company',
           type: 'Corporate Loan',
-          status: mapStatus(
-            item.documents_status ?? item.status ?? 'open'
+          ...(({ label, tone, rank }) => ({ status: label, statusTone: tone, statusRank: rank }))(
+            queueStatus(item.status, item.documents_status)
           ),
           caseStatus: item.status ?? 'open',
           created_at: item.created_at ?? null,

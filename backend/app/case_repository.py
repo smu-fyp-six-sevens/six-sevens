@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 
 from .config import settings
-from .models import CaseRecord
+from .models import CaseRecord, CaseStageChange
 from .supabase_client import service_supabase_client, supabase_client
 from .supabase_rows import row as _row
 
@@ -70,7 +70,7 @@ def update_case(case_id: str, company_name: str) -> CaseRecord | None:
 
 def delete_case(case_id: str) -> None:
     """
-    Removes the case's analysis runs, saved risk history and flags, and then its row. Callers delete
+    Removes the case's analysis runs, saved risk history, flags and stage history, and then its row. Callers delete
     its documents first. These are historical per-analysis rows, but a foreign key can prevent
     deleting the case until they are removed.
 
@@ -79,7 +79,7 @@ def delete_case(case_id: str) -> None:
     still there.
     """
     client = service_supabase_client()
-    for table in ("risk_scores", "case_analysis_runs", "flags"):
+    for table in ("risk_scores", "case_analysis_runs", "flags", "case_status_history"):
         client.table(table).delete().eq("case_id", case_id).execute()
     result = client.table("cases").delete().eq("id", case_id).execute()
     if not result.data:
@@ -99,3 +99,44 @@ def set_submission_finalized(case_id: str, finalized: bool) -> None:
         "finalized_at": datetime.now(timezone.utc).isoformat() if finalized else None,
     }
     supabase_client.table("cases").update(update).eq("id", case_id).execute()
+
+
+def set_status(case_id: str, expected: str, status: str) -> bool:
+    """
+    Moves the case to a new stage only if it is still at `expected` — a
+    compare-and-swap, so two processes syncing the same case can't both
+    record the same change. Returns whether this call made the change.
+    """
+    result = (
+        supabase_client.table("cases")
+        .update({"status": status})
+        .eq("id", case_id)
+        .eq("status", expected)
+        .execute()
+    )
+    return bool(result.data)
+
+
+def add_status_change(case_id: str, from_status: str | None, to_status: str, changed_by: str) -> CaseStageChange:
+    row = {
+        "id": str(uuid.uuid4()),
+        "case_id": case_id,
+        "from_status": from_status,
+        "to_status": to_status,
+        "changed_by": changed_by,
+        "changed_at": datetime.now(timezone.utc).isoformat(),
+    }
+    result = supabase_client.table("case_status_history").insert(row).execute()
+    return CaseStageChange(**_row(result.data[0]))
+
+
+def list_status_history(case_id: str) -> list[CaseStageChange]:
+    """Every stage change of the case, oldest first."""
+    result = (
+        supabase_client.table("case_status_history")
+        .select("*")
+        .eq("case_id", case_id)
+        .order("changed_at")
+        .execute()
+    )
+    return [CaseStageChange(**_row(row)) for row in result.data]

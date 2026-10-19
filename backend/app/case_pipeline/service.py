@@ -92,6 +92,7 @@ async def start_analysis(case_id: str) -> CaseAnalysis:
     state.running_tasks[case_id] = asyncio.create_task(
         _execute_scoped(analysis, documents, reports, failed_ids)
     )
+    await _sync_stage(case_id)
     return analysis
 
 
@@ -178,7 +179,18 @@ async def _execute(
         except Exception:
             logger.exception("Failed to store the case analysis result for case %s", case_id)
         state.running_tasks.pop(case_id, None)
+        await _sync_stage(case_id)
         await _push_snapshot(case_id)
+
+
+async def _sync_stage(case_id: str) -> None:
+    """The run started or finished, which moves the case's stage. Never raises: the run itself is unaffected."""
+    from .. import case_stage
+
+    try:
+        await asyncio.to_thread(case_stage.sync_case_stage, case_id)
+    except Exception:
+        logger.exception("Failed to update the stage of case %s", case_id)
 
 
 async def _push_snapshot(case_id: str) -> None:

@@ -158,6 +158,34 @@ export interface RecommendationItem {
   breakdown: RecommendationItem[];
 }
 
+// Mirrors CaseStage in backend/app/models.py, in the order a case moves through them.
+export type CaseStage =
+  | 'open'
+  | 'documents_uploaded'
+  | 'documents_classified'
+  | 'documents_extracted'
+  | 'documents_failed'
+  | 'manual_review'
+  | 'documents_incomplete'
+  | 'documents_approved'
+  | 'documents_rejected'
+  | 'detection_triggered'
+  | 'detection_failed'
+  | 'ready_for_analysis'
+  | 'additional_documents_required'
+  | 'case_analysed'
+  | 'finalised';
+
+// Mirrors CaseStageChange in backend/app/models.py: one row of the case's stage history.
+export interface CaseStageChange {
+  id: string;
+  case_id: string;
+  from_status: string | null;
+  to_status: string;
+  changed_by: string;
+  changed_at: string;
+}
+
 // Mirrors the subset of CaseSummary in backend/app/models.py this page needs.
 export interface CaseRequirementCoverage {
   fulfilled_requirements: string[];
@@ -176,6 +204,9 @@ export interface CaseRequirementCoverage {
   analysis_ready?: boolean;
   // The latest per-case analysis in brief; null when the case was never analysed.
   analysis?: CaseAnalysisOverview | null;
+  // The case's current stage (a CaseStage value) and every change to it, oldest first.
+  status?: string;
+  status_history?: CaseStageChange[];
 }
 
 // Mirrors UpdateCaseRequest in backend/app/models.py.

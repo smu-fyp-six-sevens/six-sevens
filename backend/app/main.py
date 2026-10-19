@@ -6,7 +6,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from . import auth, health, query_stats, realtime_listener, telemetry
+from . import auth, case_stage, health, query_stats, realtime_listener, telemetry
 from .config import settings
 from .fraud_detection.external_validation.registry_lookups import land_use
 from .health import check_db_connection
@@ -61,11 +61,20 @@ async def lifespan(app: FastAPI):
         logger.exception("Claude client warm-up failed — continuing anyway")
 
     reporter = asyncio.create_task(query_stats.run_reporter())
+    # In the background, so a long case list doesn't hold up startup.
+    stage_backfill = asyncio.create_task(_bring_case_stages_up_to_date())
 
     yield
 
     reporter.cancel()
+    stage_backfill.cancel()
     await realtime_listener.stop()
+
+
+async def _bring_case_stages_up_to_date() -> None:
+    """Cases that changed while no stage was kept (or the backend was down) catch up once at startup."""
+    moved = await asyncio.to_thread(case_stage.sync_all_cases)
+    logger.info("Case stages brought up to date at startup (%d case(s) moved)", moved)
 
 
 app = FastAPI(title="fyp API", lifespan=lifespan)
@@ -123,7 +132,7 @@ def login(body: LoginRequest) -> LoginResponse:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
         )
-    return LoginResponse(token=auth.create_token())
+    return LoginResponse(token=auth.create_token(body.username))
 
 
 @app.get("/message")

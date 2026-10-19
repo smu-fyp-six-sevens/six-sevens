@@ -12,19 +12,6 @@ interface CaseCardProps {
   isDeleting: boolean;
 }
 
-const CASE_ID_CLASS: Record<string, string> = {
-  'Ready for review': 'case-id--green',
-  'In progress': 'case-id--blue',
-  'Documents failed': 'case-id--red',
-  'Processing stuck': 'case-id--amber',
-  'Documents pending': 'case-id--grey',
-};
-
-function caseCardColorClass(status: string): string {
-  const idClass = CASE_ID_CLASS[status] ?? 'case-id--grey';
-  return idClass.replace('case-id--', 'case-card--');
-}
-
 function formatCreationDate(caseRecord: CaseRecord): string {
   const createdAt = (caseRecord as CaseRecord & {
     created_at?: string | null;
@@ -55,7 +42,6 @@ export default function CaseCard({
   isDeleting,
 }: CaseCardProps) {
   const caseLabel = caseRecord.caseNumber || caseRecord.id;
-  const cardColorClass = caseCardColorClass(caseRecord.status);
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState(caseRecord.applicant);
   const [isSaving, setIsSaving] = useState(false);
@@ -101,11 +87,9 @@ export default function CaseCard({
 
   if (isEditing) {
     return (
-      <div className={`case-card ${cardColorClass}`}>
+      <div className={`case-card tone-${caseRecord.statusTone}`}>
         <span
-          className={`case-id ${
-            CASE_ID_CLASS[caseRecord.status] ?? 'case-id--grey'
-          }`}
+          className={`case-id tone-${caseRecord.statusTone}`}
         >
           {caseRecord.caseNumber}
         </span>
@@ -142,7 +126,7 @@ export default function CaseCard({
   }
 
   return (
-    <div className={`case-card ${cardColorClass}`}>
+    <div className={`case-card tone-${caseRecord.statusTone}`}>
       <button
         type="button"
         className="case-card-open"
@@ -150,9 +134,7 @@ export default function CaseCard({
         aria-label={`Open case ${caseLabel}, ${caseRecord.applicant}`}
       >
         <span
-          className={`case-id ${
-            CASE_ID_CLASS[caseRecord.status] ?? 'case-id--grey'
-          }`}
+          className={`case-id tone-${caseRecord.statusTone}`}
         >
           {caseRecord.caseNumber}
         </span>

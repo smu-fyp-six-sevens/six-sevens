@@ -228,11 +228,49 @@ def compute_fulfilled_requirements(
     return fulfilled
 
 
+class CaseStage(str, Enum):
+    """
+    Where a case stands, in the order a case normally moves through them.
+    Stored in cases.status. Every stage but FINALISED follows from the case's
+    documents and its latest analysis (see case_stage.derive_stage);
+    FINALISED is set by a loan officer once the case is analysed, and holds
+    until they reopen it. Each change is recorded in case_status_history.
+    """
+
+    OPEN = "open"                                  # created, no documents yet
+    DOCUMENTS_UPLOADED = "documents_uploaded"      # a document is uploaded, queued or being classified
+    DOCUMENTS_CLASSIFIED = "documents_classified"  # every document is classified; one is still being extracted
+    DOCUMENTS_EXTRACTED = "documents_extracted"    # every document is extracted and waits for the officer's decision
+    DOCUMENTS_FAILED = "documents_failed"          # a document failed processing and needs a retry or removal
+    MANUAL_REVIEW = "manual_review"                # the classifier sent a document to manual review
+    DOCUMENTS_INCOMPLETE = "documents_incomplete"  # every document is decided, a required one is missing; detection not started
+    DOCUMENTS_APPROVED = "documents_approved"      # every document is decided, some approved; detection not started
+    DOCUMENTS_REJECTED = "documents_rejected"      # every document was rejected, so there is nothing to scan
+    DETECTION_TRIGGERED = "detection_triggered"    # detection has started on the approved documents
+    DETECTION_FAILED = "detection_failed"          # detection crashed (or was cancelled) on an approved document
+    READY_FOR_ANALYSIS = "ready_for_analysis"      # every approved document is scanned; no current analysis yet
+    ADDITIONAL_DOCUMENTS_REQUIRED = "additional_documents_required"  # the current analysis asks the client for more
+    CASE_ANALYSED = "case_analysed"                # the latest case analysis is complete and current
+    FINALISED = "finalised"                        # an officer closed the case — terminal until reopened
+
+
+class CaseStageChange(BaseModel):
+    """One row of case_status_history: the stage a case moved to, when, and who moved it."""
+
+    id: str
+    case_id: str
+    from_status: str | None = None
+    to_status: str
+    changed_by: str
+    changed_at: datetime
+
+
 class CaseRecord(BaseModel):
     id: str
     greenlink_case_id: str
     company_name: str | None = None
-    status: str = "open"
+    # A CaseStage value; kept a plain string so a row written before the stages existed still loads.
+    status: str = CaseStage.OPEN.value
     submission_finalized: bool = False
     finalized_at: datetime | None = None
     recommended_additional_documents: list = Field(default_factory=list)
@@ -472,6 +510,8 @@ class CaseSummary(CaseRecord):
     analysis_ready: bool = False
     # None when the case has never been analysed.
     analysis: CaseAnalysisOverview | None = None
+    # Every stage change, oldest first. Empty when the history couldn't be loaded.
+    status_history: list[CaseStageChange] = Field(default_factory=list)
 
 
 class CaseListItem(CaseRecord):

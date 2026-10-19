@@ -8,7 +8,7 @@ from postgrest.exceptions import APIError
 from pydantic import BaseModel
 
 from .. import case_service, document_repository, storage_service
-from ._dependencies import bad_gateway_on_error, to_thread_or_502
+from ._dependencies import bad_gateway_on_error, ensure_case_editable, to_thread_or_502
 from ..config import settings
 from ..models import DocumentRecord, DocumentStatus
 from ..queue_service import document_queue
@@ -141,6 +141,7 @@ async def upload_documents_batch(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="At least one file is required",
         )
+    await ensure_case_editable(case_id)
 
     if len(files) > settings.MAX_BULK_FILES:
         raise HTTPException(

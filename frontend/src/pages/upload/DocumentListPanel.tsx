@@ -39,6 +39,7 @@ export function DocumentListPanel({
   setSelectedDocumentIds,
   toggleDocumentSelected,
   wsConnected,
+  readOnly = false,
 }: {
   handleCancelDocument: (documentId: string) => void | Promise<void>;
   handleRetryDocument: (documentId: string) => void | Promise<void>;
@@ -67,6 +68,8 @@ export function DocumentListPanel({
   setSelectedDocumentIds: Dispatch<SetStateAction<Set<string>>>;
   toggleDocumentSelected: (documentId: string) => void;
   wsConnected: boolean;
+  // A finalised case: documents can be opened, but nothing in the list can be changed.
+  readOnly?: boolean;
 }) {
   return (
     <>
@@ -82,6 +85,7 @@ export function DocumentListPanel({
                         </div>
 
                         <div className="documents-card-actions">
+                          {!readOnly && (
                           <div className="bulk-icon-toolbar">
                             {selectedDocumentIds.size > 0 && (
                               <button
@@ -160,6 +164,7 @@ export function DocumentListPanel({
                               <span className="bulk-icon-count">{selectedMovableOrDeletableCount}</span>
                             </button>
                           </div>
+                          )}
                           <span
                             className={`mock-badge${wsConnected ? ' live' : ''}`}
                             title={
@@ -189,6 +194,7 @@ export function DocumentListPanel({
                             <input
                               type="checkbox"
                               aria-label="Select all extracted files"
+                              disabled={readOnly}
                               checked={allExtractedSelected}
                               onChange={() =>
                                 setSelectedDocumentIds(
@@ -245,6 +251,7 @@ export function DocumentListPanel({
                                   type="checkbox"
                                   checked={isSelected}
                                   aria-label={`Select ${document.filename}`}
+                                  disabled={readOnly}
                                   onChange={() => toggleDocumentSelected(document.id)}
                                 />
                               </label>
@@ -293,7 +300,7 @@ export function DocumentListPanel({
                                   <span className="document-status-stuck-badge">Stuck</span>
                                 )}
 
-                                {canRetryDocument(document) && (
+                                {!readOnly && canRetryDocument(document) && (
                                   <button
                                     type="button"
                                     className="document-row-action-icon document-row-action-icon--retry"
@@ -325,7 +332,7 @@ export function DocumentListPanel({
                                   </button>
                                 )}
 
-                                {canCancelDocument(status) && (
+                                {!readOnly && canCancelDocument(status) && (
                                   <button
                                     type="button"
                                     className="document-row-action-icon document-row-action-icon--cancel"
