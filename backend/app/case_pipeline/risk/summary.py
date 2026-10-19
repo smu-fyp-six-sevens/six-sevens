@@ -19,6 +19,7 @@ from ...llm_contracts import SummaryReply
 from ...run_context import spend_model_call
 from ...llm_io import message_text, parse_json_object, validate
 from ...models import CaseRisk
+from ..cross_document.bias import withhold_if_protected
 from ..models import RiskOutlook
 
 logger = logging.getLogger("classifier_pipeline.case_pipeline.summary")
@@ -67,7 +68,8 @@ async def write_summary(
     findings = [f for f in risk.contributing_findings if f.points > 0][:10]
     known_ids = {f.finding_id for f in findings}
     listing = "\n".join(
-        f"- {f.finding_id} [{f.severity}] {f.filename}: {f.summary[:240]} (why: {f.rationale[:200]})" for f in findings
+        f"- {f.finding_id} [{f.severity}] {f.filename}: {withhold_if_protected(f.summary)[:240]} "
+        f"(why: {withhold_if_protected(f.rationale)[:200]})" for f in findings
     ) or "- none"
     requests = "\n".join(
         f"- {r.title}: {r.what_it_shows} (score would be {r.score_if_supports} if it supports the client)"

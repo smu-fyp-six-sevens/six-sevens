@@ -56,7 +56,7 @@ The run record lives in the database, so the fence survives a restart.
 dossier (code) -> plan: hypotheses + checks (LLM) -> run the checks (code) -> judge all (LLM) -> verify (code)
 ```
 
-0. **Deterministic comparisons (no LLM).** Company name, address, UEN, and a person's ID number and name across documents. Each difference is a finding on its own (`xd-det-N`); they are merged with the agent's and are also shown to the agent, grouped by value and capped, as facts it must not restate.
+0. **Deterministic comparisons (no LLM).** Company name, address, UEN, and a person's ID number and name across documents. Each difference is a finding on its own (`xd-det-N`); each finding is one plain sentence naming the documents by type ("The ID number is X on the credit report, but Y on the NRIC and the certificate of incumbency") and cites every document carrying either value. They are merged with the agent's (an agent finding that only restates one is dropped in code) and are also shown to the agent, grouped by value and capped, as facts it must not restate.
 1. **Dossier (no LLM).** A digest per approved document, including derived facts so the model never does arithmetic:
    - statement period, transaction count and totals, median and max transaction size, top counterparties
    - declared business activity, SSIC, share capital, directors, addresses
@@ -71,7 +71,7 @@ dossier (code) -> plan: hypotheses + checks (LLM) -> run the checks (code) -> ju
    - nothing in its text (claim, summary, rationale, probe summary) touches a protected attribute
    - the severity cap and category rules below pass
 
-   A verdict that cites a comparison tool's mismatch flag needs no separate refutation probe (the flag is the proof); name, address and person mismatches stop at medium, identifier conflicts may be high.
+   The judge writes for a loan officer; code strips tool names, flags and ref ids from its wording (`verify.plain_text`). A verdict that cites a comparison tool's mismatch flag needs no separate refutation probe (the flag is the proof); name, address and person mismatches stop at medium, identifier conflicts may be high.
 
    Anything else is discarded.
 

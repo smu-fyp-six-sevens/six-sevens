@@ -7,14 +7,16 @@ best match on the other document).
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from ...case_match import COMPANY_ONLY_DOCUMENT_TYPES, Person, individual_names_match, linked_people, normalize_id
-from ...models import DocumentType
+from ...fraud_detection.numerical_validation.common import _decode, _parse_field_date
 from .evidence import CaseContext, DocView
 
-# The certificate of incumbency is the case's reference: its people are compared by the case-match check.
-_SKIPPED_TYPES = COMPANY_ONLY_DOCUMENT_TYPES | {DocumentType.CERTIFICATE_OF_INCUMBENCY.value}
+# Every document that names a person is compared with every other (an NRIC, a credit report, a payslip, the
+# certificate of incumbency's officers...). Only a constitution, which lists shareholders, is left out.
+_SKIPPED_TYPES = COMPANY_ONLY_DOCUMENT_TYPES
 _MAX_PAIRS = 12
 
 
@@ -57,10 +59,42 @@ def candidate_pairs(context: CaseContext) -> list[tuple[str, str]]:
     return pairs[:_MAX_PAIRS]
 
 
+# Personal details two documents can both state about the one person. Compared only by code, only when both state
+# them, and never shown to a model (see bias.py). A country of birth is not a nationality, so "country" is not one.
+_ATTRIBUTES = (
+    ("individual_dob", "date_of_birth"), ("individual_race", "race"),
+    ("individual_sex", "sex"), ("individual_nationality", "nationality"),
+)
+
+
+def _stated(view: DocView, name: str) -> str | None:
+    value = _decode(view.fields.get(name))
+    return str(value).strip() if value not in (None, "") and not isinstance(value, (list, dict)) else None
+
+
+def _same_attribute(check: str, a: str, b: str) -> bool | None:
+    """Whether two statements of one personal detail agree; None when they cannot be compared."""
+    if check == "individual_dob":
+        first, second = _parse_field_date(a), _parse_field_date(b)
+        return None if first is None or second is None else first == second
+    if check == "individual_sex":
+        return a[:1].lower() == b[:1].lower()
+    plain = [re.sub(r"[^a-z]", "", v.lower()) for v in (a, b)]
+    if check == "individual_nationality":  # "Singaporean" and "SINGAPORE" are the same
+        return plain[0][:4] == plain[1][:4] if min(map(len, plain)) >= 4 else plain[0] == plain[1]
+    return plain[0] == plain[1]
+
+
 def compare_pair(left: DocView, right: DocView) -> PairComparison:
-    """The people the two documents share and the differences in their ID numbers or names."""
+    """The people the two documents share and the differences in their ID numbers, names and personal details."""
     result = PairComparison()
-    for a, b in _links(left, right):
+    links = _links(left, right)
+    if len(links) == 1:  # a document's own personal details are only comparable when it names one person
+        for check, name in _ATTRIBUTES:
+            a, b = _stated(left, name), _stated(right, name)
+            if a is not None and b is not None and _same_attribute(check, a, b) is False:
+                result.mismatches.append(PersonMismatch(check, name, name, a, b))
+    for a, b in links:
         result.linked += 1
         id_a, id_b = normalize_id(a.id_number), normalize_id(b.id_number)
         if id_a and id_b:

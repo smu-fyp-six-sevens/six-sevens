@@ -26,7 +26,7 @@ _PROTECTED_TEXT_RE = re.compile(
     r"\b("
     r"race|racial|racially|ethnic\w*|religio\w*|gender\w*|sex|sexes|sexual\w*|male|female|males|females|"
     r"man|men|woman|women|boy|girl|nationalit\w*|citizen\w*|immigra\w*|"
-    r"age|aged|elderly|marital\w*|married|unmarried|spouse|pregnan\w*|disabl\w*|handicap\w*|"
+    r"age|aged|elderly|birth\w*|born|dob|marital\w*|married|unmarried|spouse|pregnan\w*|disabl\w*|handicap\w*|"
     r"chinese|malay|indian|eurasian|caucasian|asian|african|muslim|christian|buddhist|hindu|sikh|"
     r"jewish|catholic"
     r")\b"
@@ -47,3 +47,11 @@ def is_protected_field(name: str) -> bool:
 
 def has_protected_text(text: str) -> bool:
     return bool(_PROTECTED_TEXT_RE.search(text or ""))
+
+
+WITHHELD = "(details withheld: concerns a personal attribute)"
+
+
+def withhold_if_protected(text: str) -> str:
+    """What any model is shown of a finding: the text, or a note that it concerns a personal attribute."""
+    return WITHHELD if has_protected_text(text) else text

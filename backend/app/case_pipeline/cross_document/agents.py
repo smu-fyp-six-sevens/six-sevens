@@ -91,6 +91,7 @@ Documents:
 
 _JUDGE_INSTRUCTIONS = """For each hypothesis decide whether it is conclusive: the evidence is sufficient to prove it AND the refutation check did not refute it. Suspicion, a plausible story, a missing document or an unavailable result is not conclusive. If unsure, it is not conclusive. A hypothesis that touches rule 1 is never conclusive. A claim about one document's own figures that no computed measure or second document supports is never conclusive here. A refutation check that merely restates the claim, or re-reads the fields it rests on, has not tested it: then the hypothesis is not conclusive.
 severity is low, medium or high and only matters when conclusive. category is behavioural_anomaly or unsupported_claim. citations are ref ids from the evidence below.
+summary, rationale and probe_summary are read by a loan officer: write plain sentences about the documents, and never name a tool, a flag (such as ADDRESS_MISMATCH) or a ref id in them; those belong only in citations. Say "cross-check", not "refutation check".
 Keep every field short: the reply has a hard length limit. For a hypothesis that is not conclusive, give a one-sentence summary and leave rationale, citations and probe_summary empty.
 
 Submit your answer by calling submit_verdicts.

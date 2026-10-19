@@ -11,7 +11,7 @@ from langgraph.graph import END, StateGraph
 
 from ..models import CrossDocFinding, Hypothesis
 from .agents import adjudicate, gather_evidence, hypothesise
-from .deterministic import brief, run_deterministic_checks
+from .deterministic import brief, restates_a_code_finding, run_deterministic_checks
 from .evidence import CaseContext
 from .verify import verify_verdict
 
@@ -126,6 +126,12 @@ async def run_cross_document_analysis(context: CaseContext) -> AnalysisState:
     )
     graph = build_cross_document_graph()
     state = cast(AnalysisState, await graph.ainvoke({"context": context}))
-    state["findings"] = [*established.findings, *(state.get("findings") or [])]
+    # The agent may still say again what the code found; one row for each fact is enough.
+    from_agent = state.get("findings") or []
+    repeated = [f for f in from_agent if restates_a_code_finding(established.findings, f)]
+    if repeated:
+        context.note("restated_by_agent", dropped=[f.id for f in repeated])
+        state["discarded"] = [*(state.get("discarded") or []), *("restates a comparison made by code" for _ in repeated)]
+    state["findings"] = [*established.findings, *(f for f in from_agent if f not in repeated)]
     state["consistent_checks"] = list(dict.fromkeys([*established.consistent, *(state.get("consistent_checks") or [])]))
     return state

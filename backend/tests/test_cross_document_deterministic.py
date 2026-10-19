@@ -46,7 +46,7 @@ def test_one_conflicting_name_on_two_documents_is_still_one_finding() -> None:
         _doc("c", "certificate_of_incorporation", {"company_name": "REAL CO PTE LTD"}),
     )
 
-    names = [f for f in run_deterministic_checks(context).findings if "Company name" in f.summary]
+    names = [f for f in run_deterministic_checks(context).findings if "company name" in f.summary]
 
     assert len(names) == 1
 
@@ -126,3 +126,167 @@ def test_the_agent_sees_one_line_for_one_disagreement_not_one_per_pair() -> None
     assert 'b.pdf, c.pdf have "BETA ANALYTICS PTE LTD"' in differs[0]
     assert 'a.pdf has "ALPHA ANALYTICS PTE LTD"' in differs[0]
     assert 'd.pdf has "GAMMA ANALYTICS PTE LTD"' in differs[0]
+
+
+# --- personal details of one person across documents -----------------------------
+
+
+def _person_docs(**credit_report) -> list[DocumentRecord]:
+    return [
+        _doc("nric", "nric", {
+            "nric_number": "S8427269H", "individual_name": "LAKSHMI D/O RAJENDRAN", "race": "INDIAN",
+            "date_of_birth": "13-02-1984", "sex": "F", "nationality": "SINGAPOREAN", "country": "SINGAPORE",
+        }),
+        _doc("cbr", "credit_report", {
+            "id_number": "S8427269H", "individual_name": "Lakshmi d/o Rajendran", "date_of_birth": "13/02/1984",
+            "nationality": "Singaporean", **credit_report,
+        }),
+    ]
+
+
+def test_the_same_details_in_different_formats_are_not_a_difference() -> None:
+    assert run_deterministic_checks(_context(*_person_docs())).findings == []
+
+
+def test_a_different_id_number_is_flagged_high() -> None:
+    findings = run_deterministic_checks(_context(*_person_docs(id_number="S8417611G"))).findings
+
+    assert [(f.severity, f.category.value) for f in findings] == [("high", "identity_entity_conflict")]
+    assert "ID number" in findings[0].summary
+
+
+def test_a_different_birth_date_race_sex_or_nationality_is_flagged() -> None:
+    docs = _person_docs(date_of_birth="14/02/1984", race="CHINESE", sex="M", nationality="Malaysian")
+    findings = run_deterministic_checks(_context(*docs)).findings
+
+    summaries = " ".join(f.summary for f in findings).lower()
+    assert len(findings) == 4
+    for label in ("date of birth", "race", "sex", "nationality"):
+        assert label in summaries
+    assert {f.severity for f in findings} == {"high", "medium"}
+
+
+def test_a_detail_only_one_document_states_is_not_compared() -> None:
+    docs = _person_docs()
+    docs[1].extracted_fields.pop("date_of_birth")  # type: ignore[union-attr]
+
+    assert run_deterministic_checks(_context(*docs)).findings == []
+
+
+def test_personal_detail_differences_are_never_shown_to_a_model() -> None:
+    from app.case_pipeline.cross_document.bias import WITHHELD, withhold_if_protected
+
+    context = _context(*_person_docs(id_number="S8417611G", date_of_birth="14/02/1984", sex="M"))
+    result = run_deterministic_checks(context)
+
+    text = brief(result, context)
+    assert "birth" not in text.lower() and "sex" not in text.lower()
+    assert "ID number" not in text or "identifier" in text  # the ID difference is still told
+    assert any("date of birth" in f.summary for f in result.findings)
+    assert withhold_if_protected(next(f.summary for f in result.findings if "date of birth" in f.summary)) == WITHHELD
+    assert withhold_if_protected("UEN 201298459R is not in ACRA's register") == "UEN 201298459R is not in ACRA's register"
+
+
+def test_values_that_differ_only_by_case_or_line_breaks_are_one_value_for_the_agent() -> None:
+    context = _context(
+        _doc("a", "certificate_of_incorporation", {"company_name": "ACME PTE LTD", "company_address": "10 Bedok North, Singapore 460022"}),
+        _doc("b", "company_constitution", {"company_name": "ACME PTE LTD", "company_address": "10 BEDOK NORTH,\nSINGAPORE 460022"}),
+        _doc("c", "bank_statement", {"company_name": "ACME PTE LTD", "company_address": "20 Bedok North, Singapore 460023"}),
+    )
+
+    differs = [line for line in brief(run_deterministic_checks(context), context).splitlines() if "(address)" in line]
+
+    assert len(differs) == 1
+    assert differs[0].count('"') == 4  # two values, not three
+
+
+# --- a person is compared with every document that names them, not only an NRIC ------
+
+
+def _incumbency(**fields) -> DocumentRecord:
+    return _doc("inc", "certificate_of_incumbency", {
+        "company_name": "ACME PTE LTD", "uen": "201912345K", "director_name": "LAKSHMI D/O RAJENDRAN",
+        "director_id_number": "S8427269H", **fields,
+    })
+
+
+def test_a_wrong_id_is_found_against_the_certificate_of_incumbency_when_there_is_no_nric() -> None:
+    credit_report = _person_docs(id_number="S8417611G")[1]
+
+    findings = run_deterministic_checks(_context(_incumbency(), credit_report)).findings
+
+    assert [f.severity for f in findings] == ["high"]
+    assert "ID number" in findings[0].summary
+
+
+def test_one_wrong_id_against_an_nric_and_an_incumbency_is_one_finding_citing_all_three() -> None:
+    nric, credit_report = _person_docs(id_number="S8417611G")
+
+    findings = run_deterministic_checks(_context(nric, credit_report, _incumbency())).findings
+
+    assert len(findings) == 1
+    assert len(findings[0].document_ids) == 3
+
+
+def test_an_nric_is_not_required_for_a_name_to_be_compared() -> None:
+    payslip = _doc("pay", "payslip", {"individual_name": "Lakshmi Rajendran Pte", "company_name": "ACME PTE LTD"})
+    credit_report = _person_docs(individual_name="Wei Ming Tan")[1]
+
+    findings = run_deterministic_checks(_context(_incumbency(), credit_report, payslip)).findings
+
+    assert any("name" in f.summary for f in findings)
+
+
+# --- readable findings, one row for each fact -------------------------------------
+
+
+def test_findings_read_as_sentences_about_the_documents() -> None:
+    context = _context(*_person_docs(id_number="S8417611G"), _incumbency())
+
+    [finding] = run_deterministic_checks(context).findings
+
+    assert finding.summary == 'The ID number is "S****611G" on the credit report, but "S****269H" on the certificate of incumbency and the NRIC.'
+    assert "same person" in finding.rationale and "cbr.pdf" in finding.rationale
+    assert "_tool" not in finding.summary + finding.rationale
+
+
+def test_addresses_that_differ_only_in_formatting_are_one_finding() -> None:
+    context = _context(
+        _doc("a", "certificate_of_incumbency", {"company_name": "ACME PTE LTD", "company_address": "7 Temasek Boulevard, #12-14, Singapore 038987"}),
+        _doc("b", "company_constitution", {"company_name": "ACME PTE LTD", "company_address": "21 Media Circle, #03-05, Singapore 138562"}),
+        _doc("c", "notice_of_assessment", {"company_name": "ACME PTE LTD", "company_address": "21 MEDIA CIRCLE\n#03-05\nSINGAPORE 138562"}),
+    )
+
+    findings = [f for f in run_deterministic_checks(context).findings if "address" in f.summary]
+
+    assert len(findings) == 1
+    assert "notice of assessment" in findings[0].summary and "company constitution" in findings[0].summary
+
+
+def test_an_agent_finding_that_restates_a_code_finding_is_dropped() -> None:
+    from app.case_pipeline.cross_document.deterministic import restates_a_code_finding
+    from app.case_pipeline.models import CrossDocFinding, FindingCategory
+
+    def finding(finding_id: str, flags: list[str], documents: list[str]) -> CrossDocFinding:
+        return CrossDocFinding(
+            id=finding_id, hypothesis_id="h", summary="s", rationale="r", severity="high",
+            category=FindingCategory.IDENTITY_ENTITY_CONFLICT, document_ids=documents, breach_flags=flags,
+        )
+
+    code = [finding("xd-det-1", ["IDENTIFIER_CONFLICT"], ["cbr", "nric", "inc"])]
+
+    assert restates_a_code_finding(code, finding("xd-h1", ["IDENTIFIER_CONFLICT"], ["cbr", "nric"]))
+    assert not restates_a_code_finding(code, finding("xd-h2", ["IDENTIFIER_CONFLICT"], ["bank"]))  # other documents
+    assert not restates_a_code_finding(code, finding("xd-h3", ["PERIOD_OVERLAP"], ["cbr"]))  # a different kind of fact
+    assert not restates_a_code_finding(code, finding("xd-h4", [], ["cbr", "nric"]))  # nothing a tool flagged
+
+
+def test_what_the_agent_writes_for_the_officer_has_no_tool_names_flags_or_ref_ids() -> None:
+    from app.case_pipeline.cross_document.verify import plain_text
+
+    text = plain_text(
+        "compare_identifiers flagged an IDENTIFIER_CONFLICT. The address_consistency_tool confirmed it "
+        "(ref:credit_report_1:enquiry_reference). The refutation check strengthens the claim."
+    )
+
+    assert text == "the check flagged the mismatch. The check confirmed it. The cross-check strengthens the claim."

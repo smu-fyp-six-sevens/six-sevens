@@ -6,6 +6,7 @@ category fit what the evidence is. The model's own account is never trusted.
 
 from __future__ import annotations
 
+import re
 from typing import Any, cast
 
 from ..models import (
@@ -16,7 +17,38 @@ from .evidence import CaseContext
 from .tools import BREACH_FLAGS, COMPUTED_TOOLS, IDENTITY_FLAGS, VARIANCE_FLAGS
 
 _SEVERITIES = ("low", "medium", "high")
+# The officer reads these sentences; tool names, flags and ref ids are for citations only.
+_REF_RE = re.compile(r"\(?\bref:[\w:\[\]\-.]+\)?")
+_TOOL_RE = re.compile(
+    r"\b[a-z]+(?:_[a-z]+)*_tool\b|\b(?:compare_[a-z_]+|get_fields|get_business_profile|list_documents|transaction_stats|"
+    r"query_transactions|top_counterparties|monthly_flow|find_repeated_transactions|recurring_payment_amounts)\b"
+)
+_FLAG_RE = re.compile(r"\b[A-Z]+(?:_[A-Z]+)*_(?:MISMATCH|CONFLICT|OVERLAP|DISCONTINUITY|IMPOSSIBILITY)\b")
+_JARGON_RE = re.compile(r"\brefutation (?:check|test|probe)\b", re.IGNORECASE)
+
+
 _MAX_CITATIONS = 12
+_ARTICLE = r"(?:\b(?:the|an?)\s+)?"
+
+
+def _replace(pattern: re.Pattern, word: str, text: str) -> str:
+    """Swaps each match, and any article before it, for 'the <word>', keeping a leading capital."""
+
+    def swap(match: re.Match) -> str:
+        found = match.group(0)
+        capital = found[:1].isupper() and found[1:2].islower()  # a capitalised article, not a flag in capitals
+        return ("The " if capital else "the ") + word
+
+    return pattern.sub(swap, text)
+
+
+def plain_text(text: str) -> str:
+    """The model's wording with ref ids, tool names, flags and 'refutation' jargon replaced by plain words."""
+    text = _REF_RE.sub("", text)
+    text = _replace(re.compile(_ARTICLE + _TOOL_RE.pattern, re.IGNORECASE), "check", text)
+    text = _replace(re.compile(_ARTICLE + _FLAG_RE.pattern, re.IGNORECASE), "mismatch", text)
+    text = _JARGON_RE.sub("cross-check", text)
+    return re.sub(r"\s+([,.;:])", r"\1", " ".join(text.split()))
 
 
 def _read_keys(context: CaseContext, call: dict[str, Any]) -> set[tuple[str, str]]:
@@ -108,12 +140,12 @@ def verify_verdict(
     return CrossDocFinding(
         id=f"xd-{hypothesis.id}",
         hypothesis_id=hypothesis.id,
-        summary=str(verdict.get("summary") or hypothesis.claim)[:400],
-        rationale=str(verdict.get("rationale") or "")[:1200],
+        summary=plain_text(str(verdict.get("summary") or hypothesis.claim))[:400],
+        rationale=plain_text(str(verdict.get("rationale") or ""))[:1200],
         severity=cast(Severity, severity),
         category=category,
         citations=citations,
         document_ids=document_ids,
-        probe_summary=str(verdict.get("probe_summary") or "")[:400],
+        probe_summary=plain_text(str(verdict.get("probe_summary") or ""))[:400],
         breach_flags=flags,
     ), ""

@@ -21,6 +21,7 @@ from ...llm_contracts import EvidenceRequests
 from ...run_context import RunBudgetExceeded, spend_model_call
 from ...llm_io import forced_args, message_text, parse_json_object, salvage_list, validate
 from ...models import CaseRisk, ContributingFinding
+from ..cross_document.bias import withhold_if_protected
 from ..models import REDUCIBLE_CATEGORIES, EvidenceRequest, FindingCategory, OutlookRequest, RiskOutlook
 from .case_risk import rate_findings
 
@@ -96,7 +97,7 @@ async def propose_requests_with_status(risk: CaseRisk) -> tuple[list[EvidenceReq
         return [], "not_asked"
     listing = "\n".join(
         f"- {f.finding_id} [{f.severity}] ({f.category}, {'reducible' if _reducible(f) else 'not reducible'}) "
-        f"{f.filename}: {f.summary[:240]}"
+        f"{f.filename}: {withhold_if_protected(f.summary)[:240]}"
         for f in findings
     )
     model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 900).bind_tools(
