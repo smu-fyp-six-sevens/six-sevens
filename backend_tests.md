@@ -10,7 +10,7 @@ Updated 2026-10-19. This comes from reading the tests, not from a full run: rece
 2. **Run the full backend suite** (`pytest` in `backend/`) **and Playwright** (`npm run test:e2e` in `frontend/`). The tests in this file were changed in steps 1–6 below and checked only by calling them directly. Send me any failures and I'll fix them.
 3. **Commit and push**, then check that CI is green. The test changes from steps 1–6 are not committed yet.
 4. **Decide what to do with the six ignored test files** (about 140 tests that never run): delete them, move them out of `tests/`, or turn them back on. I'd move them out: today they look like coverage but aren't. They test the synthetic-data tool in `app/injection/`.
-5. **Optional:** install `exiftool` locally. A few tests are skipped, or fail in my direct runs, without it. CI already handles this.
+5. **Optional:** install `exiftool` locally. Two tests in `test_ai_generation.py` are skipped without it. CI now installs it, so they run there; the other tests that deal with a missing exiftool fake its absence and are unaffected.
 6. **Optional:** change the Jira wording for SCRUM-109. The code is right: "confidences sum to 1" holds whenever there is at least one candidate.
 
 ## 2. How healthy is the suite?
