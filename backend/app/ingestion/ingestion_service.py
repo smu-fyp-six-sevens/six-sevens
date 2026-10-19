@@ -31,17 +31,18 @@ def _needs_review(extraction_method: str, raw_text: str, pages: list) -> bool:
 def ingest_document(
     file_bytes: bytes,
     file_name: str,
-    content_type: str
+    content_type: str,
+    *,
+    with_metadata: bool = True,
 ):
+    """Text (and OCR) of a document. with_metadata=False leaves out the exiftool run, for a caller that
+    reads the metadata separately or doesn't need it."""
 
     # --------------------------------------
     # 1. Extract metadata
     # --------------------------------------
 
-    metadata = extract_metadata(
-        file_bytes,
-        file_name
-    )
+    metadata = extract_metadata(file_bytes, file_name) if with_metadata else {}
 
     # --------------------------------------
     # 2. PDF processing

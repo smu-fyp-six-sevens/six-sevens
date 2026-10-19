@@ -131,7 +131,16 @@ def get_case_detection_reports(case_id: str) -> list[dict[str, Any]]:
 _DETECTION_STATE_CHUNK = 100  # keeps the in.(...) filter well under URL length limits
 
 
-def get_detection_states(document_ids: list[str]) -> tuple[dict[str, dict[str, Any]], set[str]]:
+def forget(document_ids: list[str]) -> None:
+    """Drops the in-memory traces of documents being deleted, so a pending write can't bring one back."""
+    with _lock:
+        for document_id in document_ids:
+            _traces.pop(document_id, None)
+
+
+def get_detection_states(
+    document_ids: list[str], *, slim: bool = False
+) -> tuple[dict[str, dict[str, Any]], set[str]]:
     """
     (reports by document_id, ids whose last run failed and left no report)
     for many documents in one query per 100 — what case_risk needs for a
@@ -139,20 +148,25 @@ def get_detection_states(document_ids: list[str]) -> tuple[dict[str, dict[str, A
     keys it needs, not each trace's full step history. Keyed by document
     rather than trace->>case_id so a document moved to another case still
     counts towards the case it's in now.
+
+    slim=True fetches only each report's verdict, enough to know a report exists: its value is then just
+    {"verdict": ...}, not a full report. For callers that only need which documents were scanned.
     """
+    report_path = "trace->detection_report->verdict" if slim else "trace->detection_report"
     reports: dict[str, dict[str, Any]] = {}
     failed: set[str] = set()
     for start_index in range(0, len(document_ids), _DETECTION_STATE_CHUNK):
         rows = (
             supabase_client.table("langgraph_trace")
-            .select("document_id, report:trace->detection_report, error:trace->detection_error")
+            .select(f"document_id, report:{report_path}, error:trace->detection_error")
             .in_("document_id", document_ids[start_index : start_index + _DETECTION_STATE_CHUNK])
             .execute()
             .data
         )
         for raw_row in rows:
             row = cast(dict, raw_row)
-            report = read_report(row.get("report"))
+            raw = row.get("report")
+            report = {"verdict": raw} if slim and isinstance(raw, str) else read_report(raw)
             if report:
                 reports[row["document_id"]] = report
             elif row.get("error"):

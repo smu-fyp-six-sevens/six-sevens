@@ -43,7 +43,7 @@ The database is Supabase, and its schema is changed directly there; the repo kee
 | `flags` | per-document findings a specialist approved |
 | sequence `greenlink_case_id_seq` and trigger `set_greenlink_case_id` on `cases` | readable case ids (`GLDB-<n>`); the trigger skips any id already taken |
 
-The backend role needs `select, insert` on `risk_scores` and `flags` (with row level security policies for insert and read if it is on). Deleting a document's old flags goes through the service key, so no delete policy is required.
+The backend role needs `select, insert` on `risk_scores` and `flags` (with row level security policies for insert and read if it is on). Deleting a document's old flags goes through the service key, so no delete policy is required. Deleting a document also removes its `extracted_fields`, `flags` and `langgraph_trace` rows, and deleting a case removes its `risk_scores`, `case_analysis_runs` and `flags` rows. The backend deletes them itself, through the service key, before the parent row, so it works whether or not those foreign keys cascade. Deleting one document leaves the case's analysis runs and scores in place; the run is then marked out of date.
 
 Set `CASE_ANALYSIS_ENABLED=false` to switch the case analysis off. `exiftool` should be on the `PATH`; without it the metadata checks report that they could not run.
 

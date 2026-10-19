@@ -153,7 +153,7 @@ class FakeStore:
         return document_id
 
     # document_repository
-    def get_document(self, document_id, include_fields=True):
+    def get_document(self, document_id, include_fields=True, include_metadata=False):
         return self.documents.get(document_id)
 
     def update_status(self, document_id, status, **changes):
@@ -193,7 +193,7 @@ class FakeStore:
         return b"%PDF-1.4 stored file"
 
     # ingestion_service.ingest_document
-    def ingest(self, file_bytes, filename, content_type):
+    def ingest(self, file_bytes, filename, content_type, **_):
         self.ingested.append((filename, content_type))
         is_image = content_type.startswith("image/") or "scanned" in filename
         return {
@@ -222,6 +222,7 @@ def store(monkeypatch) -> FakeStore:
     monkeypatch.setattr("app.langgraph.nodes.extracted_fields_repository", fake)
     monkeypatch.setattr("app.langgraph.nodes.storage_service", fake)
     monkeypatch.setattr("app.langgraph.nodes.ingest_document", fake.ingest)
+    monkeypatch.setattr("app.langgraph.nodes.extract_metadata", lambda *_: {})
     monkeypatch.setattr(trace, "_persist", lambda document_id: None)  # keep the trace in memory only
     return fake
 

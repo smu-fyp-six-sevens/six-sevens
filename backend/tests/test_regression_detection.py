@@ -198,7 +198,7 @@ class FakeStore:
             self.files[document.storage_path] = file
 
     # document_repository
-    def get_document(self, document_id, include_fields=True):
+    def get_document(self, document_id, include_fields=True, include_metadata=False):
         return self.documents.get(document_id)
 
     def list_documents(self, case_id=None, **kwargs):

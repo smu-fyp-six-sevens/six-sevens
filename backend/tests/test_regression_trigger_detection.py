@@ -66,7 +66,7 @@ class Repo:
     def __init__(self, document: DocumentRecord) -> None:
         self.document = document
 
-    def get_document(self, document_id, include_fields=True):
+    def get_document(self, document_id, include_fields=True, include_metadata=False):
         return self.document
 
     def approve_document(self, document_id):

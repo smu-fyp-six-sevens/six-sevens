@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import uuid
 from datetime import datetime, timezone
 
@@ -11,8 +12,14 @@ from .supabase_rows import row as _row
 
 logger = logging.getLogger(__name__)
 
+# Writes in a burst (a batch upload classifying several documents) share one recompute of the case's
+# submission_finalized flag. 0 recomputes after every write (the tests do this).
+SYNC_DEBOUNCE_SECONDS = 1.5
+_sync_timers: dict[str, threading.Timer] = {}
+_sync_lock = threading.Lock()
 
-# List reads skip the large exiftool `metadata` blob and the retired extracted_fields column; get_document keeps "*".
+
+# Reads skip the large exiftool `metadata` blob and the retired extracted_fields column; only the metadata checks ask for it.
 _LIST_COLUMNS = (
     "id, case_id, filename, document_type, classification_confidence, routing_status, storage_path, status, "
     "retry_count, uploaded_at, queued_at, processing_started_at, failure_reason, evidence, "
@@ -21,6 +28,27 @@ _LIST_COLUMNS = (
 
 
 def _sync_case(case_id: str | None) -> None:
+    """Schedules the refresh below; a case with one already pending shares it, since it reads the latest state."""
+    if case_id is None:
+        return
+    if SYNC_DEBOUNCE_SECONDS <= 0:
+        _sync_case_now(case_id)
+        return
+    with _sync_lock:
+        if case_id in _sync_timers:
+            return
+        timer = _sync_timers[case_id] = threading.Timer(SYNC_DEBOUNCE_SECONDS, _run_scheduled_sync, args=(case_id,))
+        timer.daemon = True
+    timer.start()
+
+
+def _run_scheduled_sync(case_id: str) -> None:
+    with _sync_lock:
+        _sync_timers.pop(case_id, None)  # a write from here on schedules the next run
+    _sync_case_now(case_id)
+
+
+def _sync_case_now(case_id: str | None) -> None:
     """
     Best-effort refresh of the case-level submission_finalized cache after a
     write that can change a document's routing_status or
@@ -162,7 +190,7 @@ def get_documents_by_ids(
 ) -> list[DocumentRecord]:
     if not document_ids:
         return []
-    result = supabase_client.table("documents").select("*").in_("id", document_ids).execute()
+    result = supabase_client.table("documents").select(_LIST_COLUMNS).in_("id", document_ids).execute()
     documents = [DocumentRecord(**_row(row)) for row in result.data]
     return _attach_extracted_fields(documents) if include_fields else documents
 
@@ -312,16 +340,32 @@ def update_metadata(document_id: str, metadata: dict) -> None:
     ).execute()
 
 
+# Tables whose rows belong to one document, besides extracted_fields (which has its own helper).
+_DOCUMENT_CHILD_TABLES = ("flags", "langgraph_trace")
+
+
+def _delete_document_children(document_ids: list[str]) -> None:
+    """Removes what hangs off the documents: field rows, flags and the detection trace. Runs before the
+    documents delete, so a foreign key on any of them cannot block it, and works whether or not they cascade."""
+    from .langgraph import trace
+
+    extracted_fields_repository.delete_fields_for_documents(document_ids)
+    client = service_supabase_client()
+    for table in _DOCUMENT_CHILD_TABLES:
+        client.table(table).delete().in_("document_id", document_ids).execute()
+    trace.forget(document_ids)
+
+
 def remove_document(document: DocumentRecord) -> None:
     """
-    Permanently removes a document: its extracted-field rows, the stored
-    file, and the documents row. Field rows go first so a foreign key on
-    extracted_fields.document_id cannot block the documents delete.
+    Permanently removes a document: its extracted-field rows, flags and
+    trace, the stored file, and the documents row. The dependent rows go
+    first so a foreign key cannot block the documents delete.
 
     Storage deletion is best-effort. A missing object should not leave the
     row in place; a later retry still deletes the row.
     """
-    extracted_fields_repository.delete_fields_for_document(document.id)
+    _delete_document_children([document.id])
     if document.storage_path:
         try:
             storage_service.delete_file(document.storage_path)
@@ -348,7 +392,7 @@ def remove_documents(documents: list[DocumentRecord]) -> None:
     if not documents:
         return
     document_ids = [document.id for document in documents]
-    extracted_fields_repository.delete_fields_for_documents(document_ids)
+    _delete_document_children(document_ids)
     storage_paths = [document.storage_path for document in documents if document.storage_path]
     if storage_paths:
         try:
@@ -376,7 +420,9 @@ def _attach_extracted_fields(documents: list[DocumentRecord]) -> list[DocumentRe
     return documents
 
 
-def get_document(document_id: str, *, include_fields: bool = True) -> DocumentRecord | None:
+def get_document(
+    document_id: str, *, include_fields: bool = True, include_metadata: bool = False
+) -> DocumentRecord | None:
     """
     include_fields=False skips the extracted_fields table round-trip for
     callers that only need status/document_type/etc. (the langgraph pipeline
@@ -385,8 +431,10 @@ def get_document(document_id: str, *, include_fields: bool = True) -> DocumentRe
     itself. Defaults to True since most callers (API responses, case-match,
     mapper) do need it and forgetting to ask for it would silently produce
     wrong data, whereas forgetting to opt out just costs an extra query.
+    include_metadata=True adds the exiftool blob, which only the metadata checks read.
     """
-    result = supabase_client.table("documents").select("*").eq("id", document_id).execute()
+    columns = f"{_LIST_COLUMNS}, metadata" if include_metadata else _LIST_COLUMNS
+    result = supabase_client.table("documents").select(columns).eq("id", document_id).execute()
     if not result.data:
         return None
     document = DocumentRecord(**_row(result.data[0]))

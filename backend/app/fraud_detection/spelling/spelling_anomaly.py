@@ -371,7 +371,7 @@ async def check_spelling_anomalies(
     content_type = content_type_from_filename(filename)
 
     try:
-        ingestion_result = await run_cpu(ingest_document, file_bytes, filename, content_type)
+        ingestion_result = await run_cpu(ingest_document, file_bytes, filename, content_type, with_metadata=False)
     except Exception as exc:
         reason = f"Text extraction failed: {type(exc).__name__}: {exc}"
         logger.warning("Document %s: %s", document_id, reason, exc_info=True)

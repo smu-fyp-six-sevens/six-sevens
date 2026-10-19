@@ -47,10 +47,10 @@ def bad_gateway_on_error(detail: str, *log: Any) -> Iterator[None]:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail) from exc
 
 
-async def _load_document(document_id: str, include_fields: bool) -> DocumentRecord:
+async def _load_document(document_id: str, include_fields: bool, include_metadata: bool = False) -> DocumentRecord:
     try:
         document = await asyncio.to_thread(
-            document_repository.get_document, document_id, include_fields=include_fields
+            document_repository.get_document, document_id, include_fields=include_fields, include_metadata=include_metadata
         )
     except Exception as exc:
         logger.exception("Failed to fetch document %s", document_id)
@@ -75,6 +75,11 @@ async def get_document_or_404(document_id: str) -> DocumentRecord:
 async def get_document_with_fields_or_404(document_id: str) -> DocumentRecord:
     """For the handlers that read document.extracted_fields (a plain {name: value} dict)."""
     return await _load_document(document_id, include_fields=True)
+
+
+async def get_document_with_metadata_or_404(document_id: str) -> DocumentRecord:
+    """For the one handler that reads document.metadata (the exiftool blob)."""
+    return await _load_document(document_id, include_fields=False, include_metadata=True)
 
 
 async def get_case_or_404(case_id: str) -> CaseRecord:

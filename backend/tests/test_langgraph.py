@@ -484,3 +484,14 @@ def test_specialist_graphs_compile():
 
     for spec in SPECIALISTS.values():
         assert build_specialist_graph(spec) is not None
+
+
+def test_forget_drops_the_in_memory_traces_of_deleted_documents() -> None:
+    from app.langgraph import trace
+
+    trace._traces["gone-1"] = {"document_id": "gone-1", "steps": []}
+    trace._traces["kept-1"] = {"document_id": "kept-1", "steps": []}
+    trace.forget(["gone-1", "never-seen"])
+
+    assert "gone-1" not in trace._traces and "kept-1" in trace._traces
+    trace._traces.pop("kept-1", None)

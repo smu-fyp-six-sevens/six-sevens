@@ -135,7 +135,7 @@ def delete_case(case_id: str) -> None:
     their extracted-field rows and stored files) so nothing is left orphaned
     if the case delete were to run first and fail partway through.
     """
-    documents = document_repository.list_documents(case_id=case_id)
+    documents = document_repository.list_documents(case_id=case_id, include_fields=False)
     document_repository.remove_documents(documents)
     case_repository.delete_case(case_id)
     _synced_finalized.pop(case_id, None)
@@ -172,10 +172,10 @@ def sync_submission_finalized(case_id: str) -> None:
 DetectionStates = tuple[dict[str, dict[str, Any]], set[str]]
 
 
-def _load_detection_states(documents: list[DocumentRecord]) -> DetectionStates | None:
+def _load_detection_states(documents: list[DocumentRecord], *, slim: bool = False) -> DetectionStates | None:
     """None when the trace table can't be read — the case still loads, without detection states."""
     try:
-        return langgraph_trace.get_detection_states([document.id for document in documents])
+        return langgraph_trace.get_detection_states([document.id for document in documents], slim=slim)
     except Exception:
         logger.exception("Failed to load detection reports for %d document(s)", len(documents))
         return None
@@ -440,8 +440,10 @@ def _build_case_snapshot(case_id: str) -> dict | None:
     for document in documents:
         fields = fields_by_document.get(document.id)
         document.extracted_fields = {f.field_name: f.field_value for f in fields} if fields else None
-    detection_states = _load_detection_states(documents)
-    summary = _summary_with_analysis(case, documents, detection_states)
+    # Full reports only matter for the staleness check of an existing analysis; otherwise "was it scanned" is enough.
+    analysis = _load_analyses([case.id]).get(case.id)
+    detection_states = _load_detection_states(documents, slim=analysis is None)
+    summary = _summary_with_analysis(case, documents, detection_states, analysis)
     # Before enrichment: that rewrites extracted_fields in place into
     # {"value", "confidence"} wrappers, while case_match (and mapper.py, via
     # build_summary above) reads the plain values document_repository
@@ -474,13 +476,16 @@ def get_case_summary(case_id: str) -> CaseSummary | None:
     if case is None:
         return None
     documents = document_repository.list_documents(case_id=case_id)
-    return _summary_with_analysis(case, documents, _load_detection_states(documents))
+    analysis = _load_analyses([case.id]).get(case.id)
+    return _summary_with_analysis(
+        case, documents, _load_detection_states(documents, slim=analysis is None), analysis
+    )
 
 
 def _summary_with_analysis(
-    case, documents: list[DocumentRecord], detection_states: DetectionStates | None
+    case, documents: list[DocumentRecord], detection_states: DetectionStates | None,
+    analysis: CaseAnalysis | None,
 ) -> CaseSummary:
-    analysis = _load_analyses([case.id]).get(case.id)
     completed = None
     if analysis is not None and analysis.status != "complete":
         try:

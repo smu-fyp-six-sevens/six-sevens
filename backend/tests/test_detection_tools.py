@@ -110,7 +110,7 @@ def test_metadata_tool_findings_include_summary() -> None:
         unable_to_assess=False,
     )
     with (
-        patch.object(tools, "_document", AsyncMock(return_value=_document(metadata={}, document_type="nric"))),
+        patch.object(tools, "_document_with_metadata", AsyncMock(return_value=_document(metadata={}, document_type="nric"))),
         patch.object(tools, "check_metadata_anomalies", return_value=result),
     ):
         import asyncio
@@ -477,7 +477,7 @@ async def test_metadata_tool_reports_what_it_saw_when_there_are_no_anomalies() -
         "Author": "A. Tan", "Producer": "ReportLab PDF Library", "FileType": "PDF",
         "CreateDate": "2026:08:31 10:00:00", "ModifyDate": "2026:08:31 10:00:00",
     }
-    with patch.object(tools, "_document", AsyncMock(return_value=_document(metadata=raw, document_type="proof_of_address"))):
+    with patch.object(tools, "_document_with_metadata", AsyncMock(return_value=_document(metadata=raw, document_type="proof_of_address"))):
         output = await tools.metadata_tool.ainvoke({"document_id": "doc-1"})
 
     assert output["findings"] == []

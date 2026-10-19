@@ -19,6 +19,7 @@ from .. import document_repository, extracted_fields_repository, storage_service
 from ..config import settings
 from .extraction_prompts import schema_field_names
 from ..ingestion.ingestion_service import ingest_document, content_type_from_filename
+from ..ingestion.metadata_extractor import EXTRACTION_ERROR_KEY, extract_metadata
 from ..cpu_pool import run_cpu
 from ..models import DocumentStatus, RoutingStatus, compute_fulfilled_requirements
 
@@ -96,20 +97,24 @@ async def ingest_document_text(document_id: str, document) -> str:
 
     content_type = content_type_from_filename(document.filename)
 
-    try:
-        ingestion_result = await run_cpu(
-            ingest_document, file_bytes, document.filename, content_type
-        )
-    except Exception as exc:
-        raise IngestError(f"Text extraction failed: {exc}") from exc
+    # exiftool is a subprocess: run it beside the text extraction, not inside the one PDF worker.
+    extracted, metadata = await asyncio.gather(
+        run_cpu(ingest_document, file_bytes, document.filename, content_type, with_metadata=False),
+        asyncio.to_thread(extract_metadata, file_bytes, document.filename),
+        return_exceptions=True,
+    )
+    if isinstance(extracted, BaseException):
+        raise IngestError(f"Text extraction failed: {extracted}") from extracted
+    ingestion_result = extracted
+    if isinstance(metadata, BaseException):
+        logger.error("Metadata extraction failed for %s: %s", document.filename, metadata)
+        metadata = {EXTRACTION_ERROR_KEY: f"metadata could not be read ({type(metadata).__name__})"}
 
     # Persisted regardless of whether the text turns out usable — file
     # metadata (author, creation date, software, ...) is independent of text
     # extraction quality.
-    if ingestion_result["metadata"]:
-        await asyncio.to_thread(
-            document_repository.update_metadata, document_id, ingestion_result["metadata"]
-        )
+    if metadata:
+        await asyncio.to_thread(document_repository.update_metadata, document_id, metadata)
 
     if ingestion_result["needs_review"]:
         logger.warning(

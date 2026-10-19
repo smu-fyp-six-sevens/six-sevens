@@ -12,7 +12,7 @@ from ..models import DocumentRecord
 from .. import case_service, document_repository, extracted_fields_repository, storage_service
 from ..cpu_pool import run_cpu
 from . import documents as documents_router
-from ._dependencies import get_document_or_404, to_thread_or_502
+from ._dependencies import get_document_or_404, get_document_with_metadata_or_404, to_thread_or_502
 from ..case_match import DocumentCaseMatch
 from ..case_pipeline.cross_document.company_identity import (
     CompanyNameConsistencyResult,
@@ -89,6 +89,16 @@ async def _record_result(document_id: str, step: str, result, findings: list) ->
 async def _require_detection_has_run(
     document_id: str, document: DocumentRecord = Depends(get_document_or_404)
 ) -> DocumentRecord:
+    return await _check_detection_has_run(document_id, document)
+
+
+async def _require_detection_has_run_with_metadata(
+    document_id: str, document: DocumentRecord = Depends(get_document_with_metadata_or_404)
+) -> DocumentRecord:
+    return await _check_detection_has_run(document_id, document)
+
+
+async def _check_detection_has_run(document_id: str, document: DocumentRecord) -> DocumentRecord:
     """
     Gate for the individual on-demand checks below: a loan officer can run
     one specific check manually, but only after the full Lead Investigator
@@ -467,7 +477,7 @@ async def get_company_name_consistency(
     "/{document_id}/detection/metadata-anomaly", response_model=MetadataAnalysisResult
 )
 async def get_metadata_anomaly(
-    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
+    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run_with_metadata)
 ) -> MetadataAnalysisResult:
     """
     Digital Authenticity Specialist. Like the checks above, this doesn't

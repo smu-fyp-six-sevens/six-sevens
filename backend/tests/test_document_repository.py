@@ -72,6 +72,45 @@ def test_sync_case_is_a_noop_for_a_caseless_document() -> None:
     mock_case_service.assert_not_called()
 
 
+class _FakeTimer:
+    """Stands in for threading.Timer: records the call and runs it only when the test says so."""
+
+    created: list["_FakeTimer"] = []
+
+    def __init__(self, interval, function, args=()):
+        self.interval, self.function, self.args, self.daemon = interval, function, args, False
+        _FakeTimer.created.append(self)
+
+    def start(self) -> None:
+        pass
+
+    def fire(self) -> None:
+        self.function(*self.args)
+
+
+def test_a_burst_of_writes_to_one_case_schedules_a_single_resync() -> None:
+    _FakeTimer.created.clear()
+    document_repository._sync_timers.clear()
+    with (
+        patch.object(document_repository, "SYNC_DEBOUNCE_SECONDS", 1.5),
+        patch("app.document_repository.threading.Timer", _FakeTimer),
+        patch("app.case_service.sync_submission_finalized") as mock_case_service,
+    ):
+        for _ in range(5):
+            document_repository._sync_case("case-1")
+        document_repository._sync_case("case-2")
+        assert [t.args for t in _FakeTimer.created] == [("case-1",), ("case-2",)]
+        mock_case_service.assert_not_called()
+
+        _FakeTimer.created[0].fire()
+        mock_case_service.assert_called_once_with("case-1")
+
+        # A write after the run has started schedules the next one.
+        document_repository._sync_case("case-1")
+        assert len(_FakeTimer.created) == 3
+    document_repository._sync_timers.clear()
+
+
 def test_update_status_does_not_resync_the_case_even_for_analyzed() -> None:
     # Coverage depends on routing, the confirmed type, rejection and the fields; a status
     # change alone can't move it, and the writes that can already resync.
@@ -391,9 +430,11 @@ def test_remove_document_deletes_fields_storage_and_row() -> None:
         )
         document_repository.remove_document(document)
 
-    mock_fields.delete_fields_for_document.assert_called_once_with("doc-1")
+    mock_fields.delete_fields_for_documents.assert_called_once_with(["doc-1"])
     mock_storage.delete_file.assert_called_once_with("case-1/doc-1_statement.pdf")
-    mock_client.table.assert_called_with("documents")
+    # What hangs off the document goes first, then the document itself.
+    assert [c.args for c in mock_client.table.call_args_list] == [("flags",), ("langgraph_trace",), ("documents",)]
+    mock_client.table.return_value.delete.return_value.in_.assert_any_call("document_id", ["doc-1"])
     mock_client.table.return_value.delete.return_value.eq.assert_called_once_with("id", "doc-1")
     mock_client.table.return_value.delete.return_value.eq.return_value.execute.assert_called_once()
 
@@ -474,9 +515,11 @@ def test_remove_documents_batches_fields_storage_and_row_deletes() -> None:
     mock_storage.delete_files.assert_called_once_with(
         ["case-1/doc-1_statement.pdf", "case-1/doc-2_statement.pdf"]
     )
-    mock_service.return_value.table.return_value.delete.return_value.in_.assert_called_once_with(
-        "id", ["doc-1", "doc-2"]
-    )
+    mock_client = mock_service.return_value
+    assert [c.args for c in mock_client.table.call_args_list] == [("flags",), ("langgraph_trace",), ("documents",)]
+    assert [c.args for c in mock_client.table.return_value.delete.return_value.in_.call_args_list] == [
+        ("document_id", ["doc-1", "doc-2"]), ("document_id", ["doc-1", "doc-2"]), ("id", ["doc-1", "doc-2"]),
+    ]
     # Batch removal skips the per-document case resync (see remove_documents'
     # docstring) — callers doing this in bulk delete the case right after.
     mock_case_service.assert_not_called()
@@ -507,6 +550,4 @@ def test_remove_documents_swallows_a_storage_batch_delete_failure() -> None:
 
         document_repository.remove_documents(documents)
 
-    mock_service.return_value.table.return_value.delete.return_value.in_.assert_called_once_with(
-        "id", ["doc-1"]
-    )
+    mock_service.return_value.table.return_value.delete.return_value.in_.assert_called_with("id", ["doc-1"])

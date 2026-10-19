@@ -95,6 +95,16 @@ async def _document(document_id: str):
     )
 
 
+async def _document_with_metadata(document_id: str):
+    """The document with its exiftool metadata, which only the metadata tool reads."""
+    return await _once(
+        document_id, "document_metadata",
+        lambda: asyncio.to_thread(
+            document_repository.get_document, document_id, include_fields=False, include_metadata=True
+        ),
+    )
+
+
 async def _load_fields(document_id: str) -> list:
     try:
         return await asyncio.to_thread(extracted_fields_repository.get_extracted_fields, document_id)
@@ -346,7 +356,7 @@ def _observed_metadata(extracted: dict) -> dict:
 @tool
 async def metadata_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
     """Inspects the file's embedded metadata (author, creation/modification dates, producing software) for signs of editing: consumer editing software in the producer chain, or a modification date well after creation."""
-    document = await _document(document_id)
+    document = await _document_with_metadata(document_id)
     if document is None:
         return _result("metadata_tool", [], unable="Document not found")
 

@@ -22,6 +22,7 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Last reviewed 2026-1
 - Land-use and URA: `zones_at` runs through `run_cpu`, and the `ura._answers` cache is bounded.
 - Identifier normalisation: one `app/identifiers.py` (leaf module, imports neither `case_match` nor `cross_document`) holds `alnum`, `id_key`, `uen_key`, `name_key`, `company_key`, the company/individual name matchers and the person extraction (`Person`, `linked_people`). `case_match` (829 -> 552 lines), `cross_document`, `mapper`, `acra.py` and `bank.py` use it, and neither `cross_document` nor `acra.py` imports `case_match` any more. The cross-document company-name comparison stays strict on purpose, in `company_identity.py`.
 - Router 502 blocks: `to_thread_or_502` for a single blocking call and the new `bad_gateway_on_error` context manager for a block of work (HTTPException passes through) replaced 18 hand-written blocks. Four stay on purpose: the specific-exception handlers in `cases.py` and `upload.py`, and one response status in `detection.py`.
+- Optimisations: the spelling check no longer re-runs exiftool (`ingest_document(with_metadata=False)`); the ingest node runs exiftool in a thread beside the text extraction instead of inside the one PDF worker; document reads select named columns, with `metadata` only when the metadata tool or endpoint asks (`include_metadata=True`); `delete_case` skips the field query; case snapshots of a case with no analysis fetch only each report's verdict (93 KB of reports became 110 bytes on live data, same set of documents and failures); and the case's `submission_finalized` refresh is batched per case (`SYNC_DEBOUNCE_SECONDS`, 1.5 s, 0 in tests). Not done: keeping the per-page OCR text for the spelling check. Detection runs hours after upload and after restarts, so an in-memory copy would mostly miss and would grow without bound; it would need storing in the database.
 - Cross-document work: deterministic checks always run, one row per difference, the agent sees conflicts grouped by value and is bounded (plan, judge, 6-call ceiling), identity matching moved out of detection, birth date, race, sex and nationality are compared in code, and findings are plain sentences.
 
 ---
@@ -68,19 +69,15 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Last reviewed 2026-1
 
 ## 3. Optimisations
 
-Found by reading the hot paths (upload, detection run, case snapshot, case list, case analysis) and measuring the frontend build. Nothing here was profiled against production data; the effect column is from reading the code. Most are one-line or one-function changes.
+Found by reading the hot paths (upload, detection run, case snapshot, case list, case analysis) and measuring the frontend build. Nothing was profiled against production data; effects come from reading the code.
 
-### Worth doing
+### Still open
 
 | # | Where | What happens now | Fix | Effect | Effort |
 |---|---|---|---|---|---|
-| 1 | `spelling_anomaly.check_spelling_anomalies` | Every spelling check calls `ingest_document` again: it re-runs exiftool and the native-PDF or OCR text extraction that upload already did. On a scan that is a full OCR pass. | Short: add `with_metadata=False` to `ingest_document` so the spelling call skips exiftool. Better: keep the per-page text from the first ingestion (the way `text_cache` keeps the raw text) and reuse it. | Removes one OCR/text pass and one subprocess per scanned document, per detection run (and per manual re-run). | S, then M |
-| 2 | `ingest_document` on the CPU pool | The exiftool subprocess runs inside `run_cpu`, whose single worker exists because PyMuPDF isn't thread-safe. The worker sits idle while exiftool runs, and every other PDF job queues behind it. | Run exiftool with `asyncio.to_thread` next to the text extraction instead of inside it. | Frees the one PDF worker for the length of each exiftool call; uploads of a batch finish sooner. | S-M |
-| 3 | `document_repository.get_document` and `get_documents_by_ids` | `select("*")` returns the large exiftool `metadata` blob and the retired `extracted_fields` column on every route that uses `get_document_or_404` (approve, reject, retry, change type, download, delete). Only the two metadata checks read `document.metadata`. | Select `_LIST_COLUMNS`, and add `metadata` only when asked (`include_metadata=True` from the metadata tool and the metadata endpoint). | Smaller response on most document calls; the blob is the largest column. | S |
-| 4 | `case_service.delete_case` | Loads each document with its extracted fields (a second query and payload), then only reads ids and storage paths. | `list_documents(case_id=..., include_fields=False)`. | One query and one payload less per case delete. | S |
 | 5 | `case_service.list_case_summaries` | Reads every document in the database (all cases, including the `evidence` arrays) on each queue page load, then groups them. | Select only the columns `is_stuck` and `compute_documents_status` use, and filter with `.in_("case_id", ids)` for the cases being listed. | Queue load no longer grows with the total document count times the width of a row. | S-M |
-| 6 | `langgraph_trace.get_detection_states` | Every case snapshot (one per debounced Realtime push for an open case) downloads the full detection report of each document. The snapshot needs it only to know whether a report or error exists, and, for a case that has an analysis, the finding ids and severities for the staleness fingerprint. | When the case has no analysis, select only `detection_report->verdict` and `detection_error`; fetch the full report only when there is an analysis to compare. | Snapshots of un-analysed cases stop moving report JSON. | S |
-| 7 | `case_service.sync_submission_finalized` | Runs after every classification result and reads all the case's documents and fields each time. The memo only avoids the write. A batch upload of twelve documents does twelve full case reads. | Debounce per case, like `realtime_listener`, so a burst of classifications triggers one recompute. | Cuts reads on batch uploads from N to about 1. | M |
+
+Waiting on the rework of how case statuses work.
 
 ### Checked, nothing to do
 
@@ -99,7 +96,6 @@ Found by reading the hot paths (upload, detection run, case snapshot, case list,
 
 ## Suggested order
 
-1. **The quick optimisations (3.1 first step, 3.3, 3.4, 3.6).** Each is a few lines; 3.1 alone removes a repeated OCR pass.
-2. **Move rules out of the routers (2.1) and detection task handling (2.2).** Unblocks splitting `routers/documents.py`.
-3. **The detection endpoint table (1.1).** Biggest line-count win left.
-4. **The remaining optimisations (3.2, 3.5, 3.7), then the `injection` package (2.6)**, the two trace files (2.11) and CSS tokens (frontend 2.2), whenever convenient.
+1. **Move rules out of the routers (2.1) and detection task handling (2.2).** Unblocks splitting `routers/documents.py`.
+2. **The detection endpoint table (1.1).** Biggest line-count win left.
+3. **The case-list query (3.5, after the status rework), the `injection` package (2.6)**, the two trace files (2.11) and CSS tokens (frontend 2.2), whenever convenient.

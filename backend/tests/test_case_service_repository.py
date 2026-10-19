@@ -144,6 +144,6 @@ def test_delete_case_removes_its_documents_then_the_case() -> None:
 
         case_service.delete_case("case-1")
 
-        mock_doc_repo.list_documents.assert_called_once_with(case_id="case-1")
+        mock_doc_repo.list_documents.assert_called_once_with(case_id="case-1", include_fields=False)
         mock_doc_repo.remove_documents.assert_called_once_with(documents)
         mock_case_repo.delete_case.assert_called_once_with("case-1")
