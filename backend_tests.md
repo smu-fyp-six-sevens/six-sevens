@@ -1,34 +1,42 @@
-# Test suite review: status and plan (as of 2026-10-16, re-audited after merging main)
+# Test suite review: status and plan (as of 2026-10-19, re-audited after the cross-document and identity-matching work)
 
-Static review (AST scan plus reading). Numbers come from the user's own full runs and
-from `pytest --collect`-equivalent static counts; the audit itself did not run the suites.
+Static review (AST scan plus `pytest --collect-only`). The audit did not execute the suites;
+the last full run was the user's own (see below), so the 2026-10-19 additions are unrun here.
 
-## Findings: backend (1,544 test functions, 71 files; 1,671 cases collected)
+## Findings: backend (1,729 test functions, 79 files; 2,004 cases collected)
 
 - **What actually runs:** `conftest.py` has a `collect_ignore` list of six files
   (`test_pdf.py`, `test_store.py`, `test_field_text.py`, `test_fraud_injections.py`,
   `test_injection_router.py`, `test_injectors.py`) = 140 functions that never run, in CI or
-  locally. That leaves **~1,404 active functions** expanding to **1,671 cases** (60 functions
-  are parametrized).
-- **Last full run (CI-equivalent, before the final fixture fix):** 1,665 passed, 4 skipped,
-  1 xfailed, 1 failed. The one failure (the shared detection-report fixture) is fixed; the
-  other 1,665 are unaffected.
+  locally. That leaves **~1,592 active functions** expanding to **2,004 cases** (80 functions
+  are parametrized). Since 10-16 the suite grew by ~185 functions / 8 files, mostly from
+  main: `test_cross_document_deterministic`, `test_cross_document_mismatches`,
+  `test_entity_holder`, `test_date_parsing`, `test_additional_documents`, plus additions to
+  `test_detection_tools`, `test_layout_anomalies`, `test_case_risk`, `test_case_match`.
+- **Last full run on record (before the fixture fix and the 10-19 additions):** 1,665 passed,
+  4 skipped, 1 xfailed, 1 failed. The failure (the shared detection-report fixture) is fixed.
+  The new cross-document tests have not been part of a full-suite pass here.
 - **Redundancy is down.** Same-shape clusters (identical once literals are stripped) fell from
-  53 clusters / 142 tests to 38 / 87 after parametrizing `test_date_anomalies` and
-  `test_numerical_validation`. Roughly 8-10% (~110-140 active tests) can still be cut or merged.
+  53 clusters / 142 tests to 38 / 87 after parametrizing. A stricter re-scan (bodies over
+  120 characters, f-strings normalised) finds only **17 clusters / 38 tests** now, mostly
+  router not-found / 502 pairs and the `test_mapper` progress tests. Roughly 6-8% (~90-120
+  active tests) can still be cut or merged, mainly via the router-boilerplate refactor.
 
 | Tier | What | Action |
 |---|---|---|
 | Strong (~65%) | Detection-logic tests (numerical, layout, metadata, date, spelling, image), real-fixture `test_regression_*`, `test_case_match` / `test_company_identity` / `test_case_risk` / `test_supporting_documents`, `test_external_guard` canary | Keep |
-| Brittle (~25%) | Router tests (`test_documents`, `test_detection`, `test_cases`, `test_ws`) and repository tests that assert MagicMock call chains; 56 tests use >= 4 `patch`es (was 45) | Refactor (see Still to do) |
+| Brittle (~25%) | Router tests (`test_documents`, `test_detection`, `test_cases`, `test_ws`) and repository tests that assert MagicMock call chains; 60 tests use >= 4 `patch`es (was 56) | Refactor (see Still to do) |
 | Low value (~10%) | `*_graph_compiles` (4 tests, `is not None` + `importorskip`), mock-echo tests in `test_supabase_client`, the 140 never-run injection-tooling tests | Merge / trim / decide |
 
 Static smells (active files only; the ignored files hold 12 of the 19 flagged):
-- 3 tests with no explicit assertion: two `test_case_broadcaster` "does not raise" contracts
-  (fine) and `test_public_holidays::test_only_bank_statements_make_the_holiday_lookup`, which
-  is a legitimate "must not be called" test (the patched function raises if called).
+- 45 active tests have no plain `assert`; 42 assert only through `mock.assert_called*`
+  (repositories, `test_health`, `test_realtime_listener`, `test_storage_service`,
+  `test_document_repository`, `test_extracted_fields_repository`). The rest are "does not
+  raise" contracts (`test_case_broadcaster`) and
+  `test_public_holidays::test_only_bank_statements_make_the_holiday_lookup` (must-not-be-called,
+  legitimate). The three `test_case_service::test_sync_submission_finalized_*` tests have no
+  assertion of their own; check they exercise something.
 - 4 `is not None` graph-compile tests in `test_langgraph.py`.
-- 40 tests assert only on mock calls (was 42); 644 are single-assert (normal).
 
 Validity caveats:
 - Detection tests build the tamper themselves and assert it is found (circular). A small
@@ -39,22 +47,23 @@ Validity caveats:
 - **Two SCRUM-70 regression tests are skipped** (company-name mismatch in detection): that
   tool moved to the case pipeline. Coverage now lives in `test_company_identity.py`; the two
   scenarios still need porting.
-- **Modules no test references by name (13)** - treat as leads, indirect coverage not traced:
-  `case_pipeline/cross_document/agents.py` (371 lines, the cross-document investigator and the
-  largest gap), `fraud_detection/layout_anomalies/line_shifts.py` (637), `query_stats.py`,
-  `langgraph/vision_tool.py`, `numerical_validation/payslip_inputs.py`,
-  `case_pipeline/risk/outlook.py`, `telemetry.py`, `sg_reference/banks.py`,
-  `external_validation/giro.py`, `llm_io.py`, `cross_document/bias.py`,
-  `case_pipeline/categories.py`, `cpu_pool.py`.
+- **Modules no test references by name (10, was 13)** - leads only, indirect coverage not
+  traced: `fraud_detection/layout_anomalies/line_shifts.py` (637 lines, the largest),
+  `query_stats.py`, `langgraph/vision_tool.py`, `telemetry.py`, `sg_reference/banks.py`,
+  `external_validation/giro.py`, `case_pipeline/categories.py`, `cpu_pool.py`, `pdf_pages.py`,
+  `supabase_rows.py`. Newly referenced: cross-document `agents.py` (394 lines), `bias.py`,
+  `risk/outlook.py`, `payslip_inputs.py`, `llm_io.py`. A name reference does not prove the
+  agent's verification paths (citations, refutation probe, severity cap) are covered; check
+  with a coverage run.
 - **Slowest file:** `test_ai_generation.py` (~16-25s of a ~42-50s suite): 29 detector runs
   (~0.27s each) plus the test's own 768x768 `_scene()` fixture rebuilt ~20 times with identical
   arguments. Caching `_scene()` would save a few seconds.
 
-## Findings: Playwright (102 tests, 5 specs)
+## Findings: Playwright (105 tests, 5 specs)
 
-Larger and better aimed than at the last audit (72 tests, 4 specs): `case-management` 38,
-`upload` 22, `document-review` 17, `detection` 15 (new), `checklist` 10. No `.skip`, `.fixme`
-or `waitForTimeout`; chromium only, one CI retry. Not too many; still needs additions.
+Larger and better aimed than at the last audit (72 tests, 4 specs): `case-management` 39,
+`upload` 24, `document-review` 17, `detection` 15 (new), `checklist` 10. No `.skip`, `.fixme`
+or `waitForTimeout` (re-checked 10-19); chromium only, one CI retry. Not too many; still needs additions.
 
 Gaps closed since the last audit: the detection panel (FD-015 - FD-020, MA-009/MA-011),
 approve/reject locking (MA-005 - MA-012), case update and delete (CM-014 - CM-029), and the
@@ -94,6 +103,10 @@ Validity and hygiene:
 - `e2e/support/test.ts` still says "login.spec.ts opts out of the token"; no such file exists
   (the login flow lives in `case-management.spec.ts`). CSS-class selectors throughout, no
   `data-testid`.
+
+There are no frontend unit or component tests (no vitest/jest in `package.json`), so UI logic
+not reachable through Playwright (`useCaseSnapshot`, `canApprove`, snapshot merging) is
+untested below the browser. A handful of vitest tests for those pure helpers would help.
 
 ## Decisions made
 
@@ -146,6 +159,14 @@ Validity and hygiene:
 - `detection-report-c028.json` regenerated with deterministic `flag_id`s (`flag-1..4`); only
   `ai_accepted` and `flag_id` were added.
 
+## Done since 10-16
+
+- Cross-document identity, address and company comparisons now live in
+  `cross_document/deterministic.py` with new test files (`test_cross_document_deterministic`,
+  `test_cross_document_mismatches`, `test_entity_holder`); commit `8164064` touched
+  `test_cross_document_deterministic.py`.
+- Date parsing and additional-documents recommendations got their own test files.
+
 ## Still to do (suggested order)
 
 1. Commit and push: the merge from main and the work after it are local. CI failed earlier
@@ -175,8 +196,11 @@ Validity and hygiene:
     cancel/retry detection, merge the overlaps above, `data-testid`s, remove the stale
     `login.spec.ts` comment.
 12. Cache `_scene()` in `test_ai_generation.py`.
-13. Coverage run to confirm the unreferenced modules, starting with
-    `cross_document/agents.py`. Fix REG-005 (API company-name length) and drop its xfail.
+14. Vitest tests for pure frontend helpers (`useCaseSnapshot`, `canApprove`).
+15. Replace mock-only assertions in `test_health`, `test_storage_service` and
+    `test_realtime_listener` with state or behaviour assertions where practical.
+13. Coverage run to confirm the unreferenced modules, starting with `line_shifts.py` and the
+    verification paths of `cross_document/agents.py` / `verify.py`. Fix REG-005 (API company-name length) and drop its xfail.
 
 ## Pre-existing failures
 

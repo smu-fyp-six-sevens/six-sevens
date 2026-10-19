@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import Any
 
-from ....case_match import case_company_names_match, normalize_uen
+from ....identifiers import company_names_match, uen_key
 from ...numerical_validation.common import _parse_field_date
 from ...numerical_validation.models import SkippedCheck
 from .datagov import collection, dataset_name, datastore_search
@@ -133,7 +133,7 @@ def _finding(code: str, severity: Any, summary: str, **kwargs: Any) -> RegistryF
 
 def _uen(fields: dict[str, Any]) -> tuple[str, str] | None:
     for name in UEN_FIELDS:
-        uen = normalize_uen(fields.get(name))
+        uen = uen_key(fields.get(name))
         if uen:
             return name, uen
     return None
@@ -187,9 +187,9 @@ def _status_findings(entity: AcraEntity, uen_field: str) -> list[RegistryFinding
 
 
 def _name_findings(entity: AcraEntity, stated: Any) -> list[RegistryFinding]:
-    if not isinstance(stated, str) or not stated.strip() or case_company_names_match(stated, entity.name):
+    if not isinstance(stated, str) or not stated.strip() or company_names_match(stated, entity.name):
         return []
-    former = next((n for n in entity.former_names if case_company_names_match(stated, n)), None)
+    former = next((n for n in entity.former_names if company_names_match(stated, n)), None)
     if former:
         return [_finding(
             "REG.ENTITY_NAME", "signal",

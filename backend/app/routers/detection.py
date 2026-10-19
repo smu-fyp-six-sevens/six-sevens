@@ -56,7 +56,7 @@ async def _download_document_bytes(document: DocumentRecord) -> bytes:
     return await to_thread_or_502(
         storage_service.download_file, document.storage_path,
         detail="Failed to fetch the document from storage",
-        log=("Failed to download document %s from storage", document.id,),
+        log=("Failed to download document %s from storage", document.id),
     )
 
 
@@ -349,13 +349,12 @@ async def retry_document_detection(
 @cases_router.get("/{case_id}/detection/reports")
 async def get_case_detection_reports(case_id: str) -> list[dict]:
     """Every stored detection report for a case's documents, for one combined view."""
-    try:
-        return await asyncio.to_thread(langgraph_trace.get_case_detection_reports, case_id)
-    except Exception as exc:
-        logger.exception("Failed to load detection reports for case %s", case_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to load detection reports."
-        ) from exc
+    return await to_thread_or_502(
+        langgraph_trace.get_case_detection_reports,
+        case_id,
+        detail="Failed to load detection reports.",
+        log=("Failed to load detection reports for case %s", case_id),
+    )
 
 
 @router.get(

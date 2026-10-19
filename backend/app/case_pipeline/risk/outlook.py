@@ -85,11 +85,6 @@ def _reducible(finding: ContributingFinding) -> bool:
         return False
 
 
-async def propose_requests(risk: CaseRisk) -> list[EvidenceRequest]:
-    """The model's evidence requests. Any failure gives no requests: the case is still scored and explained."""
-    return (await propose_requests_with_status(risk))[0]
-
-
 async def propose_requests_with_status(risk: CaseRisk) -> tuple[list[EvidenceRequest], str]:
     """The requests and how they came out: "ok", "not_asked" (no scoring finding), "budget" or "failed"."""
     findings = [f for f in risk.contributing_findings if f.points > 0]

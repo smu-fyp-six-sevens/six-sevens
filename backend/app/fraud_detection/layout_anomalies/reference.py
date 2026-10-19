@@ -533,9 +533,3 @@ def fitting_references(blocks: list[_Block], document_type: str) -> list[Referen
     comparisons = [compare_with_reference(blocks, ref) for ref in load_references(document_type)]
     fitting = [c for c in comparisons if c.fit >= FIT_MIN]
     return sorted(fitting, key=lambda c: (-c.fit, len(c.findings)))
-
-
-def best_reference(blocks: list[_Block], document_type: str) -> ReferenceComparison | None:
-    """The best-fitting reference of this type, if one fits."""
-    fitting = fitting_references(blocks, document_type)
-    return fitting[0] if fitting else None

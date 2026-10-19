@@ -11,7 +11,12 @@ from .. import case_service, document_repository, extracted_fields_repository, m
 from ..extracted_fields_repository import normalise_field_name
 from ..case_broadcaster import broadcaster
 
-from ._dependencies import get_document_or_404, get_document_with_fields_or_404, to_thread_or_502
+from ._dependencies import (
+    bad_gateway_on_error,
+    get_document_or_404,
+    get_document_with_fields_or_404,
+    to_thread_or_502,
+)
 from ..config import settings
 from ..langgraph.extraction_prompts import (
     KNOWN_DOCUMENT_TYPES,
@@ -129,18 +134,13 @@ def _present(document: DocumentRecord, fields: list) -> DocumentRecord:
 
 @router.get("/{document_id}", response_model=DocumentRecord)
 async def get_document(document_id: str) -> DocumentRecord:
-    try:
-        document = await asyncio.to_thread(
-            document_repository.get_document,
-            document_id,
-            include_fields=False,
-        )
-    except Exception as exc:
-        logger.exception("Failed to fetch document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch the document. Check Supabase table access.",
-        ) from exc
+    document = await to_thread_or_502(
+        document_repository.get_document,
+        document_id,
+        include_fields=False,
+        detail="Failed to fetch the document. Check Supabase table access.",
+        log=("Failed to fetch document %s", document_id),
+    )
 
     if document is None:
         raise HTTPException(
@@ -148,20 +148,12 @@ async def get_document(document_id: str) -> DocumentRecord:
             detail="Document not found",
         )
 
-    try:
-        extracted_fields = await asyncio.to_thread(
-            extracted_fields_repository.get_extracted_fields,
-            document_id,
-        )
-    except Exception as exc:
-        logger.exception(
-            "Failed to fetch extracted fields for document %s",
-            document_id,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch extracted fields.",
-        ) from exc
+    extracted_fields = await to_thread_or_502(
+        extracted_fields_repository.get_extracted_fields,
+        document_id,
+        detail="Failed to fetch extracted fields.",
+        log=("Failed to fetch extracted fields for document %s", document_id),
+    )
 
     return _present(document, extracted_fields)
 
@@ -188,7 +180,7 @@ async def delete_document(
     await to_thread_or_502(
         document_repository.remove_document, document,
         detail="Failed to delete the document. Check Supabase table access.",
-        log=("Failed to delete document %s", document_id,),
+        log=("Failed to delete document %s", document_id),
     )
 
 
@@ -249,7 +241,7 @@ async def move_document(
     await to_thread_or_502(
         document_repository.move_document, document_id, body.case_id,
         detail="Failed to move the document. Check Supabase table access.",
-        log=("Failed to move document %s to case %s", document_id, body.case_id,),
+        log=("Failed to move document %s to case %s", document_id, body.case_id),
     )
 
     # The repository resyncs the new case; the old one never sees an event carrying it.
@@ -269,16 +261,13 @@ async def bulk_move_documents(body: BulkMoveRequest) -> BulkMoveResponse:
     if target_case is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target case not found")
 
-    try:
-        documents = await asyncio.to_thread(
-            document_repository.get_documents_by_ids, body.document_ids, include_fields=False
-        )
-    except Exception as exc:
-        logger.exception("Failed to fetch documents %s", body.document_ids)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch the documents. Check Supabase table access.",
-        ) from exc
+    documents = await to_thread_or_502(
+        document_repository.get_documents_by_ids,
+        body.document_ids,
+        include_fields=False,
+        detail="Failed to fetch the documents. Check Supabase table access.",
+        log=("Failed to fetch documents %s", body.document_ids),
+    )
     documents_by_id = {document.id: document for document in documents}
 
     eligible_ids: list[str] = []
@@ -313,7 +302,7 @@ async def bulk_move_documents(body: BulkMoveRequest) -> BulkMoveResponse:
         await to_thread_or_502(
             document_repository.move_documents, eligible_ids, body.case_id,
             detail="Failed to move the documents. Check Supabase table access.",
-            log=("Bulk move failed for documents %s", eligible_ids,),
+            log=("Bulk move failed for documents %s", eligible_ids),
         )
 
         for case_id in {*old_case_ids, body.case_id}:
@@ -328,16 +317,13 @@ async def bulk_delete_documents(body: BulkDeleteRequest) -> BulkDeleteResponse:
     if not body.document_ids:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No documents specified.")
 
-    try:
-        documents = await asyncio.to_thread(
-            document_repository.get_documents_by_ids, body.document_ids, include_fields=False
-        )
-    except Exception as exc:
-        logger.exception("Failed to fetch documents %s", body.document_ids)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch the documents. Check Supabase table access.",
-        ) from exc
+    documents = await to_thread_or_502(
+        document_repository.get_documents_by_ids,
+        body.document_ids,
+        include_fields=False,
+        detail="Failed to fetch the documents. Check Supabase table access.",
+        log=("Failed to fetch documents %s", body.document_ids),
+    )
     documents_by_id = {document.id: document for document in documents}
 
     eligible: list[DocumentRecord] = []
@@ -367,7 +353,7 @@ async def bulk_delete_documents(body: BulkDeleteRequest) -> BulkDeleteResponse:
         await to_thread_or_502(
             document_repository.remove_documents, eligible,
             detail="Failed to delete the documents. Check Supabase table access.",
-            log=("Bulk delete failed for documents %s", [d.id for d in eligible],),
+            log=("Bulk delete failed for documents %s", [d.id for d in eligible]),
         )
 
         for case_id in case_ids:
@@ -386,7 +372,11 @@ async def update_extracted_fields(
     _ensure_unlocked(document, "edited")
     # An optional field saved empty is dropped; a required one stays so it still blocks approval.
     drop_empty_optional_fields(document.document_type, request.extracted_fields)
-    try:
+    with bad_gateway_on_error(
+        "Failed to save extracted fields. Check Supabase table access.",
+        "Failed to update extracted fields for document %s",
+        document_id,
+    ):
         # An edited address can change whether the document now fulfils proof_of_address.
         fulfilled_requirements = compute_fulfilled_requirements(
             document.document_type, request.extracted_fields
@@ -469,14 +459,9 @@ async def update_extracted_fields(
         saved_fields = await asyncio.to_thread(
             extracted_fields_repository.get_extracted_fields, document_id
         )
-    except Exception as exc:
-        logger.exception("Failed to update extracted fields for document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to save extracted fields. Check Supabase table access.",
-        ) from exc
 
     return _present(updated or document, saved_fields)
+
 
 @router.post(
     "/{document_id}/extracted-fields",
@@ -497,7 +482,11 @@ async def add_extracted_field(
             detail="Field name cannot be empty.",
         )
 
-    try:
+    with bad_gateway_on_error(
+        "Failed to add extracted field. Check Supabase table access.",
+        "Failed to add extracted field to document %s",
+        document_id,
+    ):
         existing_fields = await asyncio.to_thread(
             extracted_fields_repository.get_extracted_fields,
             document_id,
@@ -547,17 +536,6 @@ async def add_extracted_field(
 
         return _present(updated or document, all_fields)
 
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.exception(
-            "Failed to add extracted field to document %s",
-            document_id,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to add extracted field. Check Supabase table access.",
-        ) from exc
 
 @router.delete(
     "/{document_id}/extracted-fields/{field_id}",
@@ -570,7 +548,12 @@ async def delete_extracted_field(
 ) -> DocumentRecord:
     """Deletes one field of this document and recomputes fulfilled requirements."""
     _ensure_unlocked(document, "edited")
-    try:
+    with bad_gateway_on_error(
+        "Failed to delete extracted field. Check Supabase table access.",
+        "Failed to delete extracted field %s from document %s",
+        field_id,
+        document_id,
+    ):
         existing_fields = await asyncio.to_thread(
             extracted_fields_repository.get_extracted_fields,
             document_id,
@@ -616,18 +599,6 @@ async def delete_extracted_field(
 
         return _present(updated or document, remaining_fields)
 
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.exception(
-            "Failed to delete extracted field %s from document %s",
-            field_id,
-            document_id,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to delete extracted field. Check Supabase table access.",
-        ) from exc
 
 @router.post("/{document_id}/approve", response_model=DocumentRecord)
 async def approve_document(
@@ -649,7 +620,7 @@ async def approve_document(
             ),
         )
 
-    try:
+    with bad_gateway_on_error("Failed to approve document.", "Failed to approve document %s", document_id):
         extracted_fields = await asyncio.to_thread(
             extracted_fields_repository.get_extracted_fields,
             document_id,
@@ -720,15 +691,7 @@ async def approve_document(
 
         return _present(approved, extracted_fields)
 
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.exception("Failed to approve document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to approve document.",
-        ) from exc
-    
+
 @router.post("/{document_id}/reject", response_model=DocumentRecord)
 async def reject_document(
     document_id: str, document: DocumentRecord = Depends(get_document_or_404)
@@ -739,7 +702,7 @@ async def reject_document(
             detail="Only completed documents can be rejected.",
         )
 
-    try:
+    with bad_gateway_on_error("Failed to reject document.", "Failed to reject document %s", document_id):
         rejected = await asyncio.to_thread(
             document_repository.reject_document,
             document_id,
@@ -749,15 +712,6 @@ async def reject_document(
 
         fields = await asyncio.to_thread(extracted_fields_repository.get_extracted_fields, document_id)
         return _present(rejected, fields)
-
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.exception("Failed to reject document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to reject document.",
-        ) from exc
     
 
 @router.patch("/{document_id}/document-type", response_model=DocumentRecord)
@@ -801,7 +755,11 @@ async def update_document_type(
         first_pass_generic and document_type != "unrecognised"
     )
 
-    try:
+    with bad_gateway_on_error(
+        "Failed to save the document type. Check Supabase table access.",
+        "Failed to update document type for document %s",
+        document_id,
+    ):
         if needs_extraction:
             # The old fields came from the wrong schema: self-fulfilment only, and the old evidence is cleared.
             await asyncio.to_thread(
@@ -832,12 +790,6 @@ async def update_document_type(
                 evidence=document.evidence,
                 fulfilled_requirements=compute_fulfilled_requirements(document_type, document.extracted_fields),
             )
-    except Exception as exc:
-        logger.exception("Failed to update document type for document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to save the document type. Check Supabase table access.",
-        ) from exc
 
     if needs_extraction:
         background_tasks.add_task(langgraph_pipeline.rerun_extraction, document_id)
@@ -864,7 +816,11 @@ async def retry_document(
             ),
         )
 
-    try:
+    with bad_gateway_on_error(
+        "Failed to re-enqueue the document.",
+        "Failed to re-enqueue document %s",
+        document_id,
+    ):
         # Only applies if the status hasn't moved on since the check above.
         updated = await asyncio.to_thread(
             document_repository.update_status,
@@ -880,14 +836,6 @@ async def retry_document(
             )
         # update_status can't clear the previous failure_reason (known; see PENDING_WORK.md).
         await document_queue.enqueue(document_id)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.exception("Failed to re-enqueue document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to re-enqueue the document.",
-        ) from exc
 
     refreshed = await asyncio.to_thread(document_repository.get_document, document_id)
     if refreshed is None:
@@ -951,19 +899,14 @@ async def get_document_download_url(
             status_code=status.HTTP_404_NOT_FOUND, detail="Document has no stored file"
         )
 
-    try:
-        signed_url = await asyncio.to_thread(
-            storage_service.create_signed_url,
-            document.storage_path,
-            settings.SIGNED_URL_EXPIRY_SECONDS,
-            None if inline else document.filename,
-        )
-    except Exception as exc:
-        logger.exception("Failed to create signed URL for document %s", document_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to generate download URL",
-        ) from exc
+    signed_url = await to_thread_or_502(
+        storage_service.create_signed_url,
+        document.storage_path,
+        settings.SIGNED_URL_EXPIRY_SECONDS,
+        None if inline else document.filename,
+        detail="Failed to generate download URL",
+        log=("Failed to create signed URL for document %s", document_id),
+    )
 
     return DocumentDownloadResponse(
         document_id=document.id,

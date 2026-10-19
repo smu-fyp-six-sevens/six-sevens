@@ -8,30 +8,13 @@ from __future__ import annotations
 
 from typing import NamedTuple
 
+from .identifiers import id_key, name_key
 from .models import (
     DocumentRecord,
     IDENTITY_DOCUMENT_TYPES,
     counts_as_address_proof,
     counts_towards_checklist,
 )
-
-
-def _normalize_name(name: object) -> str | None:
-    # extracted_fields is LLM output, not a validated schema — individual_name
-    # usually comes back as a single string, but a document naming several
-    # people (e.g. a company constitution listing multiple directors) can
-    # legitimately come back as a list instead. Not a string means it can't
-    # be joined against anything here, so treat it as no usable name rather
-    # than crashing the whole case list over one document's shape.
-    if not isinstance(name, str) or not name:
-        return None
-    return " ".join(name.strip().upper().split())
-
-
-def _normalize_id_number(id_number: object) -> str | None:
-    if not isinstance(id_number, str) or not id_number:
-        return None
-    return "".join(id_number.strip().upper().split())
 
 
 class _Identity(NamedTuple):
@@ -79,7 +62,7 @@ def _named_addresses_from_document(doc: DocumentRecord) -> list[_NamedAddress]:
     raw_name = fields.get("individual_name")
     if not fields.get("individual_address") or not isinstance(raw_name, str):
         return []
-    normalized = _normalize_name(raw_name)
+    normalized = name_key(raw_name)
     if normalized is None:
         return []
     return [_NamedAddress(raw_name.strip(), normalized)]
@@ -96,7 +79,7 @@ def _collect_identity_state(documents: list[DocumentRecord]) -> _IdentityState:
         if doc.document_type not in IDENTITY_DOCUMENT_TYPES:
             continue
         fields = doc.extracted_fields or {}
-        name = _normalize_name(fields.get("individual_name"))
+        name = name_key(fields.get("individual_name"))
         # nric_number, not passport_number: a person's NRIC number is the
         # one identifier that's actually shared between their NRIC and
         # their passport (see extraction_prompts.EXTRACTION_SCHEMAS —
@@ -104,7 +87,7 @@ def _collect_identity_state(documents: list[DocumentRecord]) -> _IdentityState:
         # No" field a real Singapore passport page prints). passport_number
         # is the passport's own document serial, unrelated to the person's
         # NRIC and useless for cross-document identity linking.
-        id_number = _normalize_id_number(fields.get("nric_number"))
+        id_number = id_key(fields.get("nric_number"))
         key = id_number or name
         if key is None:
             continue

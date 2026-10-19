@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from ...case_match import COMPANY_ONLY_DOCUMENT_TYPES, Person, individual_names_match, linked_people, normalize_id
+from ...identifiers import COMPANY_ONLY_DOCUMENT_TYPES, Person, id_key, individual_names_match, linked_people
 from ...fraud_detection.numerical_validation.common import _decode, _parse_field_date
 from .evidence import CaseContext, DocView
 
@@ -96,7 +96,7 @@ def compare_pair(left: DocView, right: DocView) -> PairComparison:
                 result.mismatches.append(PersonMismatch(check, name, name, a, b))
     for a, b in links:
         result.linked += 1
-        id_a, id_b = normalize_id(a.id_number), normalize_id(b.id_number)
+        id_a, id_b = id_key(a.id_number), id_key(b.id_number)
         if id_a and id_b:
             result.ids_compared += 1
             if id_a != id_b:

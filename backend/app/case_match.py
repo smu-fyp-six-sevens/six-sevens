@@ -15,7 +15,7 @@ the company's UEN, name, officers and shareholders. Three steps:
    every other document being flagged against a bad reference.
 2. Compare each document's company against the incumbency — UEN first when
    the document has one, otherwise company name with fuzzy matching (see
-   case_company_names_match).
+   company_names_match).
 3. Compare each individual a document names against the incumbency's
    officers/shareholders — ID number first, otherwise name. Mismatches are
    returned for the fraud detection report; they do not block approval.
@@ -27,14 +27,23 @@ would keep a stored copy honest.
 """
 from __future__ import annotations
 
-import re
 from collections import Counter
-from difflib import SequenceMatcher
 from enum import Enum
-from typing import Iterable, NamedTuple
+from typing import Iterable
 
 from pydantic import BaseModel, Field
 
+from .identifiers import (
+    COMPANY_ONLY_DOCUMENT_TYPES,
+    Person,
+    company_names_match,
+    company_tokens,
+    document_people,
+    id_key,
+    individual_names_match,
+    text_values,
+    uen_key,
+)
 from .models import (
     CaseRecord,
     DocumentRecord,
@@ -52,34 +61,6 @@ MIN_CORROBORATING_DOCUMENTS = 3
 # is too (see extraction_prompts.EXTRACTION_SCHEMAS's comments on both).
 _UEN_FIELDS: tuple[str, ...] = ("uen", "tax_reference_number", "tin")
 
-_INDIVIDUAL_NAME_FIELDS: tuple[str, ...] = ("individual_name", "account_holder_name")
-# nric_number, not passport_number: the incumbency lists each person's NRIC,
-# which a passport also carries (see mapper._collect_identity_state).
-_INDIVIDUAL_ID_FIELDS: tuple[str, ...] = ("nric_number", "id_number")
-# Role-prefixed person keys — the certificate of incumbency's extracted
-# fields list each officer and shareholder as director_name,
-# secretary_name, shareholder_1_name, shareholder_2_name, ... each with a
-# matching <prefix>_id_number. The role list keeps out other *_name keys
-# that aren't people (company_name, audit_firm_name, bank_name, ...).
-_ROLE_NAME_KEY = re.compile(
-    r"^(?P<prefix>(?:director|secretary|shareholder|officer|member|partner|manager)"
-    r"(?:_\d+)?)_name$"
-)
-_ROLE_ID_SUFFIXES: tuple[str, ...] = ("_id_number", "_id", "_nric_number")
-# Array fields listing several people, each an object with name/id keys —
-# in case extraction returns officers/shareholders that way instead.
-_PEOPLE_LIST_FIELDS: tuple[str, ...] = ("officers", "shareholders")
-# The key each list entry's ID number comes under. Extraction has used
-# several over time — the current incumbency schema returns
-# "identification_no" (the ACRA table's "Identification No." column) — so
-# accept any of them; missing it silently drops every officer's ID.
-_LIST_ENTRY_ID_KEYS: tuple[str, ...] = ("id_number", "identification_no", "nric_number", "id")
-
-# Individuals aren't checked on a constitution: its subscribers are the
-# people who formed the company, who may no longer be officers or
-# shareholders on the current certificate of incumbency. Its UEN/company
-# is still checked.
-_COMPANY_ONLY_DOCUMENT_TYPES: set[str] = {DocumentType.COMPANY_CONSTITUTION.value}
 
 # Documents about a person rather than the company. Their company_name (if
 # any) isn't the applicant company — a payslip's is the employer, which may
@@ -91,18 +72,6 @@ _PERSONAL_DOCUMENT_TYPES: set[str] = {
     DocumentType.CREDIT_REPORT.value,
 }
 
-# Trailing legal-form words dropped before comparing company names, so
-# "ACME Pte. Ltd." and "ACME Private Limited" compare equal. Only stripped
-# from the END of the name — "CO" in the middle of a name is meaningful.
-_COMPANY_SUFFIXES: set[str] = {
-    "PTE", "PRIVATE", "LTD", "LIMITED", "LLP", "LLC", "INC", "INCORPORATED",
-    "CORP", "CORPORATION", "CO", "COMPANY", "PLC", "BHD", "SDN", "S",
-}
-
-# Singapore UEN formats: business (8 digits + letter), local company
-# (9 digits + letter), and others (T/S/R + 2 digits + 2 letters + 4 digits +
-# letter). Used to pull the UEN out of a value like "UEN: 201912345K".
-_UEN_PATTERN = re.compile(r"\d{8,9}[A-Z]|[TSR]\d{2}[A-Z]{2}\d{4}[A-Z]")
 
 
 class IncumbencyStatus(str, Enum):
@@ -189,211 +158,21 @@ class CaseMatchResult(BaseModel):
     mismatched_document_ids: list[str] = Field(default_factory=list)
 
 
-# --- normalisation ------------------------------------------------------------
-
-
-def _strings(value: object) -> list[str]:
-    """
-    Every non-empty string in an extracted value. extracted_fields is LLM
-    output, not a validated schema — a field can come back as a string, a
-    list of strings, or (for an incumbency listing several people in flat
-    fields) one "A; B" joined string.
-    """
-    if isinstance(value, str):
-        return [part.strip() for part in re.split(r"[;\n]", value) if part.strip()]
-    if isinstance(value, list):
-        return [s for item in value if isinstance(item, str) for s in _strings(item)]
-    return []
-
-
-def normalize_uen(value: object) -> str | None:
-    if not isinstance(value, str):
-        return None
-    cleaned = re.sub(r"[^A-Z0-9]", "", value.upper())
-    if not cleaned:
-        return None
-    found = _UEN_PATTERN.search(cleaned)
-    return found.group(0) if found else cleaned
-
-
-def _normalize_id(value: object) -> str | None:
-    if not isinstance(value, str):
-        return None
-    cleaned = re.sub(r"[^A-Z0-9]", "", value.upper())
-    return cleaned or None
-
-
-def _name_tokens(value: object) -> list[str]:
-    if not isinstance(value, str):
-        return []
-    return re.sub(r"[^A-Z0-9]+", " ", value.upper()).split()
-
-
-def _company_tokens(value: object) -> list[str]:
-    if not isinstance(value, str):
-        return []
-    tokens = _name_tokens(value.upper().replace("&", " AND "))
-    while tokens and tokens[-1] in _COMPANY_SUFFIXES:
-        tokens.pop()
-    return tokens
-
-
-def case_company_names_match(a: object, b: object) -> bool:
-    """
-    Fuzzy, but deliberately not typo-tolerant: "ACME Trading Pte Ltd" matches
-    "ACME Pte Ltd" (one name is the other plus extra words, same leading
-    word), but "ACNE Pte Ltd" does not — a one-letter difference in a
-    company name is exactly what a document from a different company looks
-    like, so edit-distance matching would defeat the point of this check.
-    """
-    tokens_a, tokens_b = _company_tokens(a), _company_tokens(b)
-    if not tokens_a or not tokens_b:
-        return False
-    if tokens_a == tokens_b or "".join(tokens_a) == "".join(tokens_b):
-        return True
-    shorter, longer = sorted((tokens_a, tokens_b), key=len)
-    return shorter[0] == longer[0] and set(shorter) <= set(longer)
-
-
-def individual_names_match(a: object, b: object) -> bool:
-    """Same words in any order — "Tan Wei Ming" matches "Wei Ming Tan"."""
-    tokens_a, tokens_b = _name_tokens(a), _name_tokens(b)
-    return bool(tokens_a) and sorted(tokens_a) == sorted(tokens_b)
-
-
-def _identity_name_similarity(a: object, b: object) -> float:
-    """Similarity used only to link a name-only document to an identified person.
-
-    Exact matching remains the decision rule. A near name can link two records
-    for comparison, but any difference is then sent to manual review.
-    """
-    tokens_a, tokens_b = _name_tokens(a), _name_tokens(b)
-    if not tokens_a or not tokens_b:
-        return 0.0
-    return SequenceMatcher(None, " ".join(sorted(tokens_a)), " ".join(sorted(tokens_b))).ratio()
-
 
 # --- field extraction ---------------------------------------------------------
 
-
-class _Person(NamedTuple):
-    name: str | None
-    id_number: str | None
-    name_field: str
-    id_field: str
 
 
 def _document_uen(fields: dict) -> tuple[str | None, str | None, str | None]:
     """(field name, raw value, normalised UEN) of the first UEN-bearing field."""
     for field in _UEN_FIELDS:
-        for raw in _strings(fields.get(field)):
-            normalized = normalize_uen(raw)
+        for raw in text_values(fields.get(field)):
+            normalized = uen_key(raw)
             if normalized:
                 return field, raw, normalized
     return None, None, None
 
 
-def _role_prefixed_people(fields: dict) -> list[_Person]:
-    """
-    People stored as flat, role-prefixed keys — how the certificate of
-    incumbency actually comes back from extraction: director_name +
-    director_id_number, secretary_name + secretary_id_number,
-    shareholder_1_name + shareholder_1_id_number, shareholder_2_..., etc.
-    """
-    people: list[_Person] = []
-    for key, value in fields.items():
-        found = _ROLE_NAME_KEY.match(key)
-        if not found or not isinstance(value, str) or not value.strip():
-            continue
-        prefix = found.group("prefix")
-        id_field = next(
-            (f"{prefix}{suffix}" for suffix in _ROLE_ID_SUFFIXES if fields.get(f"{prefix}{suffix}")),
-            f"{prefix}_id_number",
-        )
-        raw_id = fields.get(id_field)
-        people.append(
-            _Person(value.strip(), raw_id if isinstance(raw_id, str) else None, key, id_field)
-        )
-    return people
-
-
-def _list_field_people(fields: dict) -> list[_Person]:
-    """People stored as an array of {name, id_number} objects."""
-    people: list[_Person] = []
-    for list_field in _PEOPLE_LIST_FIELDS:
-        entries = fields.get(list_field)
-        if not isinstance(entries, list):
-            continue
-        for entry in entries:
-            if not isinstance(entry, dict):
-                continue
-            name = entry.get("name") if isinstance(entry.get("name"), str) else None
-            id_key = next((k for k in _LIST_ENTRY_ID_KEYS if isinstance(entry.get(k), str) and entry[k]), None)
-            id_number = entry[id_key] if id_key else None
-            if name or id_number:
-                people.append(
-                    _Person(name, id_number, f"{list_field}.name", f"{list_field}.{id_key or 'id_number'}")
-                )
-    return people
-
-
-def _individual_field_people(fields: dict) -> list[_Person]:
-    """
-    People in the generic individual_name/id_number fields most document
-    types use. A name list and an ID list of the same length are paired up
-    by position; otherwise each is recorded on its own.
-    """
-    for name_field in _INDIVIDUAL_NAME_FIELDS:
-        names = _strings(fields.get(name_field))
-        if not names:
-            continue
-        id_field, ids = next(
-            ((f, _strings(fields.get(f))) for f in _INDIVIDUAL_ID_FIELDS if fields.get(f)),
-            (_INDIVIDUAL_ID_FIELDS[0], []),
-        )
-        if len(ids) == len(names):
-            return [_Person(n, i, name_field, id_field) for n, i in zip(names, ids)]
-        return [
-            *(_Person(n, None, name_field, id_field) for n in names),
-            *(_Person(None, i, name_field, id_field) for i in ids),
-        ]
-
-    # IDs with no name at all, e.g. the back of an NRIC.
-    for id_field in _INDIVIDUAL_ID_FIELDS:
-        ids = _strings(fields.get(id_field))
-        if ids:
-            return [_Person(None, i, _INDIVIDUAL_NAME_FIELDS[0], id_field) for i in ids]
-    return []
-
-
-def _people(fields: dict) -> list[_Person]:
-    """
-    Every distinct individual a document names, from whichever shape the
-    extraction used. The same person often appears several times — on the
-    incumbency sample, the director is also shareholder_1 and the
-    individual_name — so entries are de-duplicated by ID number, or by name
-    for an entry with no ID.
-    """
-    people: list[_Person] = []
-    seen_ids: set[str] = set()
-    seen_names: set[tuple[str, ...]] = set()
-    for person in (
-        # Lists first: they're the complete set (every officer/shareholder,
-        # with IDs), so a flat duplicate without an ID is recognised and dropped.
-        *_list_field_people(fields),
-        *_role_prefixed_people(fields),
-        *_individual_field_people(fields),
-    ):
-        id_number = _normalize_id(person.id_number)
-        name = tuple(sorted(_name_tokens(person.name)))
-        if id_number in seen_ids or (id_number is None and name and name in seen_names):
-            continue
-        if id_number:
-            seen_ids.add(id_number)
-        if name:
-            seen_names.add(name)
-        people.append(person)
-    return people
 
 
 def _is_personal_document(doc: DocumentRecord, fields: dict) -> bool:
@@ -426,8 +205,8 @@ def _pick_incumbency(documents: list[DocumentRecord]) -> DocumentRecord | None:
 def _company_key(comparison: FieldComparison) -> str:
     """Groups conflicting documents that name the same other company."""
     if comparison.check == "company_uen":
-        return f"UEN {normalize_uen(comparison.document_value)}"
-    return f'company "{" ".join(_company_tokens(comparison.document_value))}"'
+        return f"UEN {uen_key(comparison.document_value)}"
+    return f'company "{" ".join(company_tokens(comparison.document_value))}"'
 
 
 def _verify_incumbency(
@@ -447,13 +226,13 @@ def _verify_incumbency(
 
     fields = incumbency.extracted_fields or {}
     _, _, uen = _document_uen(fields)
-    company_name = next(iter(_strings(fields.get("company_name"))), None)
+    company_name = next(iter(text_values(fields.get("company_name"))), None)
     verification = IncumbencyVerification(
         status=IncumbencyStatus.INSUFFICIENT_EVIDENCE,
         document_id=incumbency.id,
         uen=uen,
         company_name=company_name,
-        individuals=[IncumbencyPerson(name=p.name, id_number=p.id_number) for p in _people(fields)],
+        individuals=[IncumbencyPerson(name=p.name, id_number=p.id_number) for p in document_people(fields)],
     )
 
     review_reasons: list[str] = []
@@ -554,10 +333,10 @@ def _compare_company(
             ),
         )
 
-    company_name = next(iter(_strings(fields.get("company_name"))), None)
+    company_name = next(iter(text_values(fields.get("company_name"))), None)
     if company_name is None or reference.company_name is None:
         return None
-    matched = case_company_names_match(company_name, reference.company_name)
+    matched = company_names_match(company_name, reference.company_name)
     return FieldComparison(
         check="company_name",
         outcome=CheckOutcome.MATCH if matched else CheckOutcome.MISMATCH,
@@ -574,12 +353,12 @@ def _compare_company(
 
 
 def _compare_person(
-    person: _Person, reference: IncumbencyVerification
+    person: Person, reference: IncumbencyVerification
 ) -> list[FieldComparison] | None:
-    reference_ids = {_normalize_id(p.id_number) for p in reference.individuals} - {None}
-    id_number = _normalize_id(person.id_number)
+    reference_ids = {id_key(p.id_number) for p in reference.individuals} - {None}
+    id_number = id_key(person.id_number)
     if id_number and reference_ids:
-        # _normalize_id only returns truthy when given a real string, so
+        # id_key only returns truthy when given a real string, so
         # person.id_number (the raw value it was normalised from) is too.
         assert person.id_number is not None
         matched = id_number in reference_ids
@@ -605,7 +384,7 @@ def _compare_person(
         if matched and person.name:
             matching_people = [
                 p for p in reference.individuals
-                if _normalize_id(p.id_number) == id_number and p.name
+                if id_key(p.id_number) == id_number and p.name
             ]
             if matching_people and not any(
                 individual_names_match(person.name, p.name) for p in matching_people
@@ -679,10 +458,10 @@ def _match_document(
     company = _compare_company(doc, fields, reference)
     if company is not None:
         comparisons.append(company)
-    if doc.document_type not in _COMPANY_ONLY_DOCUMENT_TYPES:
+    if doc.document_type not in COMPANY_ONLY_DOCUMENT_TYPES:
         comparisons.extend(
             c
-            for p in _people(fields)
+            for p in document_people(fields)
             for c in (_compare_person(p, reference) or [])
         )
 
@@ -738,62 +517,6 @@ def _match_document(
     return result(DocumentMatchStatus.MATCH, "Matches the case's company and individuals", comparisons)
 
 
-def _person_link_score(a: _Person, b: _Person) -> float:
-    """Whether two extracted person records could refer to the same person.
-
-    Equal IDs are strongest. Exact names also link records, including when
-    their IDs conflict so the ID difference can be reported. When one side has
-    no ID, a close name can link the records for review; it never makes the
-    values a match.
-    """
-    id_a, id_b = _normalize_id(a.id_number), _normalize_id(b.id_number)
-    if id_a and id_b:
-        if id_a == id_b:
-            return 1.0
-        return 1.0 if individual_names_match(a.name, b.name) else 0.0
-
-    if individual_names_match(a.name, b.name):
-        return 1.0
-    return _identity_name_similarity(a.name, b.name)
-
-
-def _unique_person_pairs(
-    left: list[_Person], right: list[_Person], *, min_score: float = 0.86
-) -> list[tuple[_Person, _Person]]:
-    """Link only reciprocal, unambiguous best candidates across two documents."""
-    scores = [[_person_link_score(a, b) for b in right] for a in left]
-    left_best: dict[int, int] = {}
-    right_best: dict[int, int] = {}
-
-    for i, row in enumerate(scores):
-        best = max(row, default=0.0)
-        if best < min_score or row.count(best) != 1:
-            continue
-        left_best[i] = row.index(best)
-
-    for j in range(len(right)):
-        column = [scores[i][j] for i in range(len(left))]
-        best = max(column, default=0.0)
-        if best < min_score or column.count(best) != 1:
-            continue
-        right_best[j] = column.index(best)
-
-    return [
-        (left[i], right[j])
-        for i, j in left_best.items()
-        if right_best.get(j) == i
-    ]
-
-
-# Used by the cross-document agent (case_pipeline/cross_document/identity_pairs.py) to link one person across documents.
-Person = _Person
-COMPANY_ONLY_DOCUMENT_TYPES = _COMPANY_ONLY_DOCUMENT_TYPES
-normalize_id = _normalize_id
-
-
-def linked_people(left_fields: dict, right_fields: dict) -> list[tuple[Person, Person]]:
-    """The people two documents both name, linked only when each is the other's single best match."""
-    return _unique_person_pairs(_people(left_fields), _people(right_fields))
 
 
 def _rejected(doc: DocumentRecord) -> DocumentCaseMatch:

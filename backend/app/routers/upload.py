@@ -8,6 +8,7 @@ from postgrest.exceptions import APIError
 from pydantic import BaseModel
 
 from .. import case_service, document_repository, storage_service
+from ._dependencies import bad_gateway_on_error, to_thread_or_502
 from ..config import settings
 from ..models import DocumentRecord, DocumentStatus
 from ..queue_service import document_queue
@@ -66,20 +67,15 @@ async def _ingest_one(
                 detail=f"case_id '{case_id}' does not exist",
             )
 
-    try:
-        storage_path = await asyncio.to_thread(
-            storage_service.upload_file,
-            case_id,
-            filename,
-            file_bytes,
-            file.content_type,
-        )
-    except Exception as exc:
-        logger.exception("Failed to store uploaded file in Supabase Storage")
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to store the uploaded file. Check Supabase bucket access.",
-        ) from exc
+    storage_path = await to_thread_or_502(
+        storage_service.upload_file,
+        case_id,
+        filename,
+        file_bytes,
+        file.content_type,
+        detail="Failed to store the uploaded file. Check Supabase bucket access.",
+        log=("Failed to store uploaded file in Supabase Storage",),
+    )
 
     try:
         document = await asyncio.to_thread(
@@ -105,17 +101,13 @@ async def _ingest_one(
             detail="Failed to store the uploaded document record. Check Supabase table access.",
         ) from exc
 
-    try:
+    with bad_gateway_on_error(
+        "Document was stored but could not be queued for processing.",
+        "Document %s stored but failed to enqueue for processing",
+        document.id,
+    ):
         # AC1: enters the background task queue for async processing.
         await document_queue.enqueue(document.id)
-    except Exception as exc:
-        logger.exception(
-            "Document %s stored but failed to enqueue for processing", document.id
-        )
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Document was stored but could not be queued for processing.",
-        ) from exc
 
     return document
 

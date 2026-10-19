@@ -21,11 +21,6 @@ export function displayableFieldEntries(fields: Record<string, unknown>): [strin
   return Object.entries(fields).filter(([key]) => !NON_DISPLAYED_FIELD_KEYS.has(key));
 }
 
-// True for a value the LLM returned as an array or nested object rather than a single scalar.
-export function isStructuredValue(value: unknown): boolean {
-  return Array.isArray(value) || (typeof value === 'object' && value !== null);
-}
-
 // The case snapshot wraps each extracted field as {value, confidence}.
 export function extractedFieldValue(
   fields: Record<string, unknown> | null,

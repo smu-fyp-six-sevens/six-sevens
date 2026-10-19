@@ -54,7 +54,7 @@ Comparing a document with the rest of its case is not done here: that is the per
 | `external_validation/` | The document's facts against outside references, chosen by document type. `runner.py` is the entry point; `registry_lookups/` holds the live ACRA, OneMap, HDB, URA (approved residential use and the Master Plan zoning index) and MOM holiday lookups; `sg_reference/` holds the published tables (CPF rates and ceilings, GST rate, IRAS tax rules, bank identifiers, public holidays); `reference_checks/` holds the checks that read those tables (`PAY.CPF_RATE`, `PAY.CPF_CEILING`, `PAY.CPF_BASE`, `POA.GST`, `NOA.PAYABLE`, `BS.BANK_IDENTIFIERS`, `BS.ACCOUNT_NUMBER_FORMAT`), registered as `group="external"`; `giro.py` is the GIRO closed-day check. Run by `external_validation_tool` and the `external-validation` endpoint | — |
 | `font_consistency.py` | Font family/size/emphasis (bold/italic/underline) inconsistency | 16 |
 
-The three `PAY.CPF_*` checks (`reference_checks/cpf.py`) share one assessment, so a wrong contribution is reportedonce: `CPF_CEILING` (ceiling not applied, impossible), `CPF_BASE` (rate applied to basic pay only, inconsistent),
+The three `PAY.CPF_*` checks (`reference_checks/cpf.py`) share one assessment, so a wrong contribution is reported once: `CPF_CEILING` (ceiling not applied, impossible), `CPF_BASE` (rate applied to basic pay only, inconsistent),
 `CPF_RATE` (anything else). Earnings are split into ordinary, additional (bonus) and non-wages; a line that can't be
 classified, or a negative adjustment, is uncertain and any reading of it is accepted.
 

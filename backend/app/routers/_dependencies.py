@@ -12,7 +12,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Callable, TypeVar
+from contextlib import contextmanager
+from typing import Any, Callable, Iterator, TypeVar
 
 from fastapi import HTTPException, status
 
@@ -28,6 +29,19 @@ async def to_thread_or_502(fn: Callable[..., T], *args: Any, detail: str, log: t
     """Runs a blocking call off the event loop; on any error logs `log` (format, *args) and raises a 502."""
     try:
         return await asyncio.to_thread(fn, *args, **kwargs)
+    except Exception as exc:
+        logger.exception(*log)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail) from exc
+
+
+@contextmanager
+def bad_gateway_on_error(detail: str, *log: Any) -> Iterator[None]:
+    """For a block that does more than one blocking call: any error inside logs `log` (format, *args) and
+    becomes a 502. An HTTPException raised inside (a 404, a 409) passes through unchanged."""
+    try:
+        yield
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception(*log)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail) from exc

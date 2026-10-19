@@ -13,9 +13,15 @@ from app.case_match import (
     DocumentMatchStatus,
     IncumbencyStatus,
     check_case_match,
-    case_company_names_match,
+)
+from app import identifiers
+from app.identifiers import (
+    Person,
+    company_names_match,
+    company_tokens,
     individual_names_match,
-    normalize_uen,
+    text_values,
+    uen_key,
 )
 from app.main import app
 from app.models import CaseRecord, DocumentRecord, DocumentStatus
@@ -138,7 +144,7 @@ def _by_id(result, doc_id: str):
     ],
 )
 def test_company_names_match(a: str, b: str, expected: bool) -> None:
-    assert case_company_names_match(a, b) is expected
+    assert company_names_match(a, b) is expected
 
 
 def test_individual_names_match_ignores_order_and_case() -> None:
@@ -147,8 +153,8 @@ def test_individual_names_match_ignores_order_and_case() -> None:
 
 
 def test_normalize_uen_pulls_uen_out_of_labelled_value() -> None:
-    assert normalize_uen("UEN: 2019-12345K") == UEN
-    assert normalize_uen("t08ll1234a") == "T08LL1234A"
+    assert uen_key("UEN: 2019-12345K") == UEN
+    assert uen_key("t08ll1234a") == "T08LL1234A"
 
 
 # --- step 1: incumbency verification ------------------------------------------
@@ -763,23 +769,23 @@ def test_rejected_documents_do_not_count_towards_verifying_incumbency() -> None:
 
 
 def test_strings_flattens_only_the_string_items_of_a_list() -> None:
-    assert cm._strings([1, "a; b", None, ["nested, ignored"]]) == ["a", "b"]
+    assert text_values([1, "a; b", None, ["nested, ignored"]]) == ["a", "b"]
 
 
 def test_normalize_uen_none_for_non_string_input() -> None:
-    assert cm.normalize_uen(12345) is None
+    assert uen_key(12345) is None
 
 
 def test_normalize_uen_none_when_nothing_alphanumeric_remains() -> None:
-    assert cm.normalize_uen("!!!") is None
+    assert uen_key("!!!") is None
 
 
 def test_company_tokens_empty_for_non_string_input() -> None:
-    assert cm._company_tokens(None) == []
+    assert company_tokens(None) == []
 
 
 def test_list_field_people_skips_non_dict_entries() -> None:
-    people = cm._list_field_people({"officers": [123, {"name": "Jane Tan"}]})
+    people = identifiers._list_field_people({"officers": [123, {"name": "Jane Tan"}]})
     assert len(people) == 1
     assert people[0].name == "Jane Tan"
 
@@ -790,6 +796,6 @@ def test_is_personal_document_true_for_personal_bank_statement() -> None:
 
 
 def test_compare_person_returns_none_without_id_or_name_to_compare() -> None:
-    person = cm._Person(name=None, id_number=None, name_field="x", id_field="y")
+    person = Person(name=None, id_number=None, name_field="x", id_field="y")
     reference = cm.IncumbencyVerification(status=IncumbencyStatus.VERIFIED)
     assert cm._compare_person(person, reference) is None

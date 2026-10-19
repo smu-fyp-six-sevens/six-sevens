@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from ....identifiers import alnum
 from ...numerical_validation.registry import check
 from ..sg_reference.banks import bank_reference
 from ...numerical_validation.common import (
@@ -43,7 +44,7 @@ def _identifier_in(stated: Any, shape: re.Pattern[str]) -> str | None:
     text = str(stated)
     candidates = [text, text.rsplit(":", 1)[-1], _IDENTIFIER_LABEL_RE.sub("", text, count=1)]
     for candidate in candidates:
-        normalised = re.sub(r"[^A-Z0-9]", "", candidate.upper())
+        normalised = alnum(candidate)
         if shape.match(normalised):
             return normalised
     return None
@@ -100,7 +101,7 @@ def _check_bank_identifiers(
             continue
         ran_any = True
         stated_norm = stated_full[:length]
-        expected_norm = re.sub(r"[^A-Z0-9]", "", str(expected).upper())[:length]
+        expected_norm = alnum(str(expected))[:length]
         if stated_norm != expected_norm:
             findings.append(_finding(
                 "BS.BANK_IDENTIFIERS", "impossible",

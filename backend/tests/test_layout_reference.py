@@ -148,7 +148,7 @@ def test_another_form_does_not_fit(noa_reference, tmp_path, monkeypatch) -> None
 
     assert _compare(noa_reference, other).fit < ref.FIT_MIN
     _store(noa_reference, tmp_path, monkeypatch)
-    assert ref.best_reference(_blocks(other), "notice_of_assessment") is None
+    assert ref.fitting_references(_blocks(other), "notice_of_assessment") == []
 
 
 def _store(reference: ref.ReferenceLayout, tmp_path, monkeypatch) -> None:

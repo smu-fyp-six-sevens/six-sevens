@@ -52,8 +52,6 @@ SHOPHOUSE_ZONES = frozenset({"RESIDENTIAL WITH COMMERCIAL AT 1ST STOREY"})
 # Zones meant for homes, where a unit URA has no record of is more likely a gap in its data than a non-home.
 HOME_ZONES = frozenset({"RESIDENTIAL", "RESIDENTIAL / INSTITUTION"})
 
-# Six digits not part of a longer number, so "S460022" and "Singapore 460022" both count.
-_POSTAL_RE = re.compile(r"(?<!\d)(\d{6})(?!\d)")
 _BLOCK_RE = re.compile(r"^\s*(?:blk|block)?\s*(\d{1,4}[A-Z]?)\b(?!\s*-)", re.IGNORECASE)
 
 

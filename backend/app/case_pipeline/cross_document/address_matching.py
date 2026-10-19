@@ -9,6 +9,7 @@ from itertools import combinations
 from typing import Iterable
 
 from ...holder import holder_kind
+from ...identifiers import company_key, id_key, name_key
 from ...models import DocumentRecord, is_personal_bank_statement
 
 _PERSONAL_DOCUMENT_TYPES = {
@@ -34,10 +35,6 @@ _ADDRESS_ROLE_RE = re.compile(
     re.IGNORECASE,
 )
 _POSTAL_CODE_RE = re.compile(r"(?<!\d)(\d{6})(?!\d)")
-_COMPANY_SUFFIXES = {
-    "PTE", "PRIVATE", "LTD", "LIMITED", "LLP", "LLC", "INC", "INCORPORATED",
-    "CORP", "CORPORATION", "CO", "COMPANY", "PLC", "BHD", "SDN",
-}
 _ADDRESS_ABBREVIATIONS = {
     "AVE": "AVENUE",
     "AV": "AVENUE",
@@ -126,20 +123,12 @@ def _strings(value: object) -> list[str]:
     return []
 
 
-def _normalize_person_name(value: object) -> str | None:
-    if not isinstance(value, str):
-        return None
-    tokens = re.findall(r"[A-Z0-9]+", value.upper())
-    return " ".join(sorted(tokens)) or None
-
-
 def _identity_keys(name: object, id_number: object) -> frozenset[str]:
     keys: set[str] = set()
-    if isinstance(id_number, str):
-        normalized_id = re.sub(r"[^A-Z0-9]", "", id_number.upper())
-        if normalized_id:
-            keys.add(f"id:{normalized_id}")
-    normalized_name = _normalize_person_name(name)
+    normalized_id = id_key(id_number)
+    if normalized_id:
+        keys.add(f"id:{normalized_id}")
+    normalized_name = name_key(name)
     if normalized_name:
         keys.add(f"name:{normalized_name}")
     return frozenset(keys)
@@ -151,18 +140,14 @@ def _company_keys(fields: dict) -> frozenset[str]:
     keys: set[str] = set()
     for field in ("uen", "tax_reference_number", "tin"):
         values = _strings(fields.get(field))
-        if values:
-            normalized_id = re.sub(r"[^A-Z0-9]", "", values[0].upper())
-            if normalized_id:
-                keys.add(f"id:{normalized_id}")
-                break
+        normalized_id = id_key(values[0]) if values else None
+        if normalized_id:
+            keys.add(f"id:{normalized_id}")
+            break
     names = _strings(fields.get("company_name"))
-    if names:
-        tokens = re.findall(r"[A-Z0-9]+", names[0].upper())
-        while tokens and tokens[-1] in _COMPANY_SUFFIXES:
-            tokens.pop()
-        if tokens:
-            keys.add(f"name:{' '.join(tokens)}")
+    normalized_name = company_key(names[0]) if names else None
+    if normalized_name:
+        keys.add(f"name:{normalized_name}")
     return frozenset(keys)
 
 

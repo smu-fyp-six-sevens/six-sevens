@@ -39,7 +39,7 @@ async def get_case(case_id: str) -> CaseSummary:
     summary = await to_thread_or_502(
         case_service.get_case_summary, case_id,
         detail="Failed to fetch the case. Check Supabase table access.",
-        log=("Failed to fetch case %s", case_id,),
+        log=("Failed to fetch case %s", case_id),
     )
 
     if summary is None:
@@ -51,16 +51,13 @@ async def get_case(case_id: str) -> CaseSummary:
 async def update_case(
     case_id: str, request: UpdateCaseRequest, case: CaseRecord = Depends(get_case_or_404)
 ) -> CaseSummary:
-    try:
-        await asyncio.to_thread(
-            case_service.update_case, case_id, request.company_name
-        )
-    except Exception as exc:
-        logger.exception("Failed to update case %s", case_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to save the case. Check Supabase table access.",
-        ) from exc
+    await to_thread_or_502(
+        case_service.update_case,
+        case_id,
+        request.company_name,
+        detail="Failed to save the case. Check Supabase table access.",
+        log=("Failed to update case %s", case_id),
+    )
 
     updated = await asyncio.to_thread(case_service.get_case_summary, case_id)
     if updated is None:
@@ -85,7 +82,7 @@ async def delete_case(case_id: str, case: CaseRecord = Depends(get_case_or_404))
     documents = await to_thread_or_502(
         document_repository.list_documents, case_id,
         detail="Failed to fetch the case's documents. Check Supabase table access.",
-        log=("Failed to fetch documents for case %s", case_id,),
+        log=("Failed to fetch documents for case %s", case_id),
     )
 
     if any(document.status in IN_FLIGHT_STATUSES for document in documents):
@@ -100,7 +97,7 @@ async def delete_case(case_id: str, case: CaseRecord = Depends(get_case_or_404))
     await to_thread_or_502(
         case_service.delete_case, case_id,
         detail="Failed to delete the case. Check Supabase table access.",
-        log=("Failed to delete case %s", case_id,),
+        log=("Failed to delete case %s", case_id),
     )
 
 
@@ -114,7 +111,7 @@ async def get_case_match(case_id: str) -> CaseMatchResult:
     result = await to_thread_or_502(
         case_service.get_case_match_for_case, case_id,
         detail="Failed to fetch the case. Check Supabase table access.",
-        log=("Failed to fetch case %s for case-match", case_id,),
+        log=("Failed to fetch case %s for case-match", case_id),
     )
 
     if result is None:
@@ -160,7 +157,7 @@ async def get_case_analysis(case_id: str, case: CaseRecord = Depends(get_case_or
     analysis = await to_thread_or_502(
         analysis_service.get_current, case_id,
         detail="Failed to fetch the analysis. Check Supabase table access.",
-        log=("Failed to fetch the analysis for case %s", case_id,),
+        log=("Failed to fetch the analysis for case %s", case_id),
     )
     if analysis is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="This case has not been analysed.")

@@ -254,13 +254,13 @@ def _requests_model(response=None, error: Exception | None = None):
 
 async def test_evidence_requests_failing_gives_no_requests() -> None:
     with patch.object(outlook, "build_chat_anthropic", return_value=_requests_model(error=RuntimeError("down"))):
-        assert await outlook.propose_requests(_risk()) == []
+        assert (await outlook.propose_requests_with_status(_risk()))[0] == []
 
 
 @pytest.mark.parametrize("text", ["", "no requests", "[1]", '{"requests": "x"}', '{"requests": [{"title": ""}]}'])
 async def test_evidence_requests_unreadable_gives_no_requests(text) -> None:
     with patch.object(outlook, "build_chat_anthropic", return_value=_requests_model(AIMessage(content=text))):
-        assert await outlook.propose_requests(_risk()) == []
+        assert (await outlook.propose_requests_with_status(_risk()))[0] == []
 
 
 async def test_evidence_requests_read_from_the_forced_tool_call() -> None:
@@ -273,7 +273,7 @@ async def test_evidence_requests_read_from_the_forced_tool_call() -> None:
         ]},
     }])
     with patch.object(outlook, "build_chat_anthropic", return_value=_requests_model(reply)):
-        [request] = await outlook.propose_requests(_risk())
+        [request] = (await outlook.propose_requests_with_status(_risk()))[0]
     assert request.title == "Tenancy agreement" and request.addresses == ["f1"]
     assert request.expected_effect == "partial"
 
@@ -281,7 +281,7 @@ async def test_evidence_requests_read_from_the_forced_tool_call() -> None:
 async def test_evidence_requests_fall_back_to_text_and_cut_off_replies() -> None:
     cut = '{"requests": [{"title": "Board resolution", "addresses": ["f1"]}, {"title": "Aud'
     with patch.object(outlook, "build_chat_anthropic", return_value=_requests_model(AIMessage(content=cut))):
-        [request] = await outlook.propose_requests(_risk())
+        [request] = (await outlook.propose_requests_with_status(_risk()))[0]
     assert request.title == "Board resolution" and request.expected_effect == "full"
 
 

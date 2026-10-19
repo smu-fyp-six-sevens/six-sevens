@@ -8,7 +8,7 @@ from typing import Any, Callable
 from langchain_core.tools import tool
 from pydantic import BaseModel
 
-from ....case_match import individual_names_match, normalize_uen
+from ....identifiers import alnum, individual_names_match, uen_key
 from ....fraud_detection.numerical_validation.common import _as_number, _decode
 from ..bias import is_protected_field
 from ..evidence import mask_identifiers
@@ -106,7 +106,7 @@ def build_comparison_tools(kit: ToolKit) -> list:
     async def compare_identifiers(items: list[FieldRef], is_refutation_probe: bool = False) -> str:
         """Whether an identifier (UEN, NRIC or passport number, registration number) is the same across documents. items: [{document, field}]."""
         def clean(value: Any) -> str:
-            return normalize_uen(value) or re.sub(r"[^A-Z0-9]", "", str(value).upper())
+            return uen_key(value) or alnum(str(value))
 
         # A name or address differing is a variance, not a conflicting identity; those have their own tools.
         not_identifiers = [i.field for i in items if not _IDENTIFIER_FIELD_RE.search(i.field)]
