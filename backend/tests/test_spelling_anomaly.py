@@ -277,6 +277,21 @@ def _stub_ingestion(mock_ingest, raw_text: str = "Helllo there") -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_company_name_printed_on_the_document_is_not_reported_as_a_misspelling() -> None:
+    # The name is in the document's own extracted fields, so it is a known term; a misspelt company name
+    # is a case-level finding (comparing the case's documents), not a spelling one.
+    fields = [ExtractedField(field_name="company_name", field_type="string",
+                             field_value="HARBOR LIGHT SHIPING PTE LTD", confidence=0.9)]
+    with patch("app.fraud_detection.spelling.spelling_anomaly.ingest_document") as mock_ingest:
+        _stub_ingestion(mock_ingest, "HARBOR LIGHT SHIPING PTE LTD")
+
+        result = await check_spelling_anomalies("doc-1", b"bytes", "cert.pdf", fields)
+
+    assert result.unable_to_assess is False
+    assert result.anomalies == []
+
+
+@pytest.mark.asyncio
 async def test_check_spelling_anomalies_unable_to_assess_on_extraction_failure() -> None:
     with patch("app.fraud_detection.spelling.spelling_anomaly.ingest_document") as mock_ingest:
         mock_ingest.side_effect = RuntimeError("corrupt file")

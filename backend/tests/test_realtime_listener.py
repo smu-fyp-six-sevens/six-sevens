@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app import realtime_listener
+from app.case_broadcaster import CaseBroadcaster
 
 
 @pytest.fixture(autouse=True)
@@ -90,83 +91,94 @@ async def test_debounced_publish_skips_broadcast_when_case_no_longer_exists() ->
         mock_publish.assert_not_called()
 
 
-def test_on_change_ignores_payload_with_no_record() -> None:
-    with patch("app.realtime_listener.asyncio.create_task") as mock_create_task:
-        realtime_listener._on_change({"data": {}})
-
-        mock_create_task.assert_not_called()
+# --- a change event, end to end: real debounce, real broadcaster, a viewer's queue ---------------
 
 
-def test_on_change_ignores_record_with_no_case_id() -> None:
-    with patch("app.realtime_listener.asyncio.create_task") as mock_create_task:
-        realtime_listener._on_change({"data": {"record": {"id": "doc-1"}}})
+def _open_cases(*case_ids: str):
+    """A real broadcaster with one viewer per case, and a snapshot builder that records what it built."""
+    live = CaseBroadcaster()
+    viewers = {case_id: live.subscribe(case_id) for case_id in case_ids}
+    built: list[str] = []
 
-        mock_create_task.assert_not_called()
+    def build(case_id: str) -> dict:
+        built.append(case_id)
+        return {"type": "snapshot", "case": case_id}
+
+    return live, viewers, built, build
 
 
-def test_on_change_drops_events_for_a_case_nobody_has_open() -> None:
+async def _deliver(live, build, *payloads: dict) -> None:
+    """Feeds change events to the listener and waits out the debounce."""
     with (
-        patch("app.realtime_listener.asyncio.create_task") as mock_create_task,
-        patch("app.realtime_listener.broadcaster.has_subscribers", return_value=False),
+        patch.object(realtime_listener, "broadcaster", live),
+        patch.object(realtime_listener, "DEBOUNCE_SECONDS", 0.01),
+        patch("app.realtime_listener.case_service.build_case_snapshot", side_effect=build),
     ):
-        realtime_listener._on_change({"data": {"record": {"case_id": "case-1"}}})
-
-        mock_create_task.assert_not_called()
-
-
-def test_on_change_schedules_debounced_publish_for_the_records_case_id() -> None:
-    with (
-        patch("app.realtime_listener.asyncio.create_task") as mock_create_task,
-        patch("app.realtime_listener._debounced_publish", new=MagicMock()),
-        patch("app.realtime_listener.broadcaster.has_subscribers", return_value=True),
-    ):
-        realtime_listener._on_change({"data": {"record": {"case_id": "case-1"}}})
-
-        mock_create_task.assert_called_once()
-        assert realtime_listener._pending["case-1"] is mock_create_task.return_value
+        try:
+            for payload in payloads:
+                realtime_listener._on_change(payload)
+            await asyncio.sleep(0.1)
+        finally:
+            realtime_listener._pending.clear()
 
 
-def test_on_change_falls_back_to_old_record_when_record_is_absent() -> None:
-    with (
-        patch("app.realtime_listener.asyncio.create_task") as mock_create_task,
-        patch("app.realtime_listener._debounced_publish", new=MagicMock()),
-        patch("app.realtime_listener.broadcaster.has_subscribers", return_value=True),
-    ):
-        realtime_listener._on_change({"data": {"old_record": {"case_id": "case-1"}}})
-
-        mock_create_task.assert_called_once()
+def _change(case_id: str, key: str = "record") -> dict:
+    return {"data": {key: {"case_id": case_id}}}
 
 
-def test_on_change_cancels_a_still_pending_task_for_the_same_case_before_scheduling_a_new_one() -> None:
-    stale_task = MagicMock()
-    stale_task.done.return_value = False
-    realtime_listener._pending["case-1"] = stale_task
+@pytest.mark.asyncio
+async def test_a_burst_of_changes_to_an_open_case_delivers_one_snapshot() -> None:
+    live, viewers, built, build = _open_cases("case-1")
 
-    with (
-        patch("app.realtime_listener.asyncio.create_task") as mock_create_task,
-        patch("app.realtime_listener._debounced_publish", new=MagicMock()),
-        patch("app.realtime_listener.broadcaster.has_subscribers", return_value=True),
-    ):
-        realtime_listener._on_change({"data": {"record": {"case_id": "case-1"}}})
+    await _deliver(live, build, *[_change("case-1")] * 5)
 
-        stale_task.cancel.assert_called_once()
-        assert realtime_listener._pending["case-1"] is mock_create_task.return_value
+    assert built == ["case-1"]
+    assert viewers["case-1"].qsize() == 1
+    assert viewers["case-1"].get_nowait() == {"type": "snapshot", "case": "case-1"}
 
 
-def test_on_change_does_not_cancel_an_already_done_task() -> None:
-    done_task = MagicMock()
-    done_task.done.return_value = True
-    realtime_listener._pending["case-1"] = done_task
+@pytest.mark.asyncio
+async def test_each_open_case_gets_its_own_snapshot() -> None:
+    live, viewers, built, build = _open_cases("case-1", "case-2")
 
-    with (
-        patch("app.realtime_listener.asyncio.create_task") as mock_create_task,
-        patch("app.realtime_listener._debounced_publish", new=MagicMock()),
-        patch("app.realtime_listener.broadcaster.has_subscribers", return_value=True),
-    ):
-        realtime_listener._on_change({"data": {"record": {"case_id": "case-1"}}})
+    await _deliver(live, build, _change("case-1"), _change("case-2"), _change("case-1"))
 
-        done_task.cancel.assert_not_called()
-        mock_create_task.assert_called_once()
+    assert sorted(built) == ["case-1", "case-2"]
+    assert {case_id: queue.qsize() for case_id, queue in viewers.items()} == {"case-1": 1, "case-2": 1}
+
+
+@pytest.mark.asyncio
+async def test_a_change_to_a_case_nobody_has_open_builds_nothing() -> None:
+    live, viewers, built, build = _open_cases("case-1")
+
+    await _deliver(live, build, _change("case-2"))
+
+    assert built == []
+    assert viewers["case-1"].empty()
+    assert realtime_listener._pending == {}
+
+
+@pytest.mark.asyncio
+async def test_a_deleted_row_still_refreshes_its_case_from_the_old_record() -> None:
+    live, viewers, built, build = _open_cases("case-1")
+
+    await _deliver(live, build, _change("case-1", key="old_record"))
+
+    assert built == ["case-1"]
+    assert viewers["case-1"].qsize() == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("payload", [{"data": {}}, {}, {"data": {"record": {"id": "doc-1"}}}], ids=[
+    "no record", "no data", "a record with no case id",
+])
+async def test_an_event_that_names_no_case_delivers_nothing(payload) -> None:
+    live, viewers, built, build = _open_cases("case-1")
+
+    await _deliver(live, build, payload)
+
+    assert built == []
+    assert viewers["case-1"].empty()
 
 
 @pytest.mark.asyncio

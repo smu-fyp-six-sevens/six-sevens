@@ -57,7 +57,6 @@ from app.langgraph.detection.specialists import SPECIALISTS
 from app.models import DocumentRecord, DocumentStatus, RoutingStatus
 
 FIXTURES = Path(__file__).parent / "fixtures" / "regression"
-HARBOR_LIGHT = json.loads((FIXTURES / "harbor-light.json").read_text())
 
 LAYOUT, CONTENT, DIGITAL = "layout_rendering", "content_validation", "digital_authenticity"
 
@@ -890,57 +889,6 @@ async def test_a_consistently_styled_document_has_no_font_finding(ai, store):
 
 
 # --- SCRUM-70 Spelling anomalies ---------------------------------------------------------
-
-
-def _harbor_light_case(store: FakeStore) -> str:
-    """GLDB-16's real documents: its C014_CertIncorp spells the company "SHIPING"."""
-    cert_id = ""
-    for row in HARBOR_LIGHT["rows"]:
-        document = DocumentRecord(**{**row, "status": DocumentStatus.ANALYZED})
-        if "C014_CertIncorp" not in document.filename:
-            store.add_record(document)
-            continue
-        assert document.extracted_fields is not None
-        document.status = DocumentStatus.APPROVED
-        store.add_record(document, certificate_pdf(document.extracted_fields["company_name"]))
-        cert_id = document.id
-    assert cert_id
-    return cert_id
-
-
-@pytest.mark.sprint3
-@pytest.mark.story("SCRUM-70", "FD-025")
-@pytest.mark.skip(reason="company_name_consistency_tool moved from the per-document detection agent to the case pipeline (cross_document/tools/consistency.py); covered by test_company_identity.py. Port this scenario to the case-pipeline suite.")
-async def test_a_misspelt_company_name_is_flagged_against_the_cases_other_documents(ai, store):
-    # The spelling check leaves company names alone by design (coined brand
-    # words are normal in them); a misspelt one is caught by comparing it with
-    # the name on the case's other documents. So C014's "SHIPING" is flagged —
-    # as a company-name mismatch, not under a Spelling heading.
-    document_id = _harbor_light_case(store)
-    ai.specialists[CONTENT] = Specialist(tools=["spelling_tool", "company_name_consistency_tool"])
-
-    report = await run_detection(document_id)
-
-    assert findings_from(report, "spelling_tool") == []
-    [mismatch] = findings_from(report, "company_name_consistency_tool")
-    assert mismatch["stated"] == "HARBOR LIGHT SHIPING PTE LTD"
-    assert mismatch["conflicting"] == "HARBOR LIGHT SHIPPING PTE LTD"
-    assert report["verdict"] == "flagged"
-
-
-@pytest.mark.sprint3
-@pytest.mark.story("SCRUM-70", "FD-025")
-@pytest.mark.skip(reason="company_name_consistency_tool moved from the per-document detection agent to the case pipeline (cross_document/tools/consistency.py); covered by test_company_identity.py. Port this scenario to the case-pipeline suite.")
-async def test_a_company_name_mismatch_cannot_be_dismissed_by_the_specialist(ai, store):
-    document_id = _harbor_light_case(store)
-    ai.specialists[CONTENT] = Specialist(tools=["company_name_consistency_tool"],
-                                         dismiss={"company_name_consistency_tool"})
-
-    report = await run_detection(document_id)
-
-    [mismatch] = findings_from(report, "company_name_consistency_tool")
-    assert mismatch["severity"] == "medium"
-    assert report["verdict"] == "flagged"
 
 
 @pytest.mark.sprint3

@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
+import pytest
+
 from app.case_service import (
     _enrich_with_extracted_fields,
     compute_documents_status,
@@ -532,39 +534,54 @@ def _make_fully_covered_documents() -> list[DocumentRecord]:
     ]
 
 
-def test_sync_submission_finalized_true_when_all_requirements_met() -> None:
-    all_fulfilled = _make_fully_covered_documents()
+class _FakeCases:
+    """Holds the one thing sync_submission_finalized writes: each case's stored flag."""
 
-    with (
-        patch("app.case_service.document_repository") as mock_doc_repo,
-        patch("app.case_service.case_repository") as mock_case_repo,
-    ):
-        mock_doc_repo.list_documents.return_value = all_fulfilled
+    def __init__(self) -> None:
+        self.finalized: dict[str, bool] = {}
+        self.writes = 0
 
-        sync_submission_finalized("case-1")
-
-        mock_case_repo.set_submission_finalized.assert_called_once_with("case-1", finalized=True)
+    def set_submission_finalized(self, case_id: str, finalized: bool) -> None:
+        self.finalized[case_id] = finalized
+        self.writes += 1
 
 
-def test_sync_submission_finalized_writes_only_when_the_flag_changes() -> None:
-    all_fulfilled = _make_fully_covered_documents()
+class _FakeDocuments:
+    def __init__(self, documents: list[DocumentRecord]) -> None:
+        self.documents = documents
+        self.reads = 0
 
-    with (
-        patch("app.case_service.document_repository") as mock_doc_repo,
-        patch("app.case_service.case_repository") as mock_case_repo,
-    ):
-        mock_doc_repo.list_documents.return_value = all_fulfilled
-
-        sync_submission_finalized("case-1")
-        sync_submission_finalized("case-1")
-        sync_submission_finalized("case-1")
-
-        # Three syncs, one unchanged answer: one write (and one Realtime event), not three.
-        mock_case_repo.set_submission_finalized.assert_called_once_with("case-1", finalized=True)
-        assert mock_doc_repo.list_documents.call_count == 3
+    def list_documents(self, case_id=None, **_) -> list[DocumentRecord]:
+        self.reads += 1
+        return self.documents
 
 
-def test_sync_submission_finalized_false_when_incomplete() -> None:
+def _sync_with(documents: list[DocumentRecord], cases: _FakeCases, times: int = 1) -> _FakeDocuments:
+    store = _FakeDocuments(documents)
+    with patch("app.case_service.document_repository", store), patch("app.case_service.case_repository", cases):
+        for _ in range(times):
+            sync_submission_finalized("case-1")
+    return store
+
+
+def test_a_case_with_every_requirement_met_is_stored_as_finalized() -> None:
+    cases = _FakeCases()
+    _sync_with(_make_fully_covered_documents(), cases)
+
+    assert cases.finalized == {"case-1": True}
+
+
+def test_an_unchanged_answer_is_written_once_however_often_it_is_synced() -> None:
+    cases = _FakeCases()
+    store = _sync_with(_make_fully_covered_documents(), cases, times=3)
+
+    # Three syncs and one unchanged answer: one write (and one Realtime event), though every sync re-reads.
+    assert cases.finalized == {"case-1": True}
+    assert cases.writes == 1
+    assert store.reads == 3
+
+
+def test_a_case_missing_a_requirement_is_stored_as_not_finalized() -> None:
     documents = [
         _make_document(
             "doc-1",
@@ -573,41 +590,26 @@ def test_sync_submission_finalized_false_when_incomplete() -> None:
             fulfilled_requirements=["bank_statement"],
         )
     ]
+    cases = _FakeCases()
+    _sync_with(documents, cases)
 
-    with (
-        patch("app.case_service.document_repository") as mock_doc_repo,
-        patch("app.case_service.case_repository") as mock_case_repo,
-    ):
-        mock_doc_repo.list_documents.return_value = documents
-
-        sync_submission_finalized("case-1")
-
-        mock_case_repo.set_submission_finalized.assert_called_once_with("case-1", finalized=False)
+    assert cases.finalized == {"case-1": False}
 
 
-def test_sync_submission_finalized_reverses_when_coverage_drops() -> None:
-    """
-    Simulates a /retry reclassifying a document away from a requirement
-    nothing else covers — a previously-complete case must flip back to
-    finalized=False, not keep a stale True.
-    """
-    with (
-        patch("app.case_service.document_repository") as mock_doc_repo,
-        patch("app.case_service.case_repository") as mock_case_repo,
-    ):
-        mock_doc_repo.list_documents.return_value = _make_fully_covered_documents()
-        sync_submission_finalized("case-1")
-        mock_case_repo.set_submission_finalized.assert_called_with("case-1", finalized=True)
+def test_a_finalized_case_flips_back_when_coverage_drops() -> None:
+    """A /retry that reclassifies a document away from a requirement nothing else covers must undo a stale True."""
+    cases = _FakeCases()
+    _sync_with(_make_fully_covered_documents(), cases)
+    assert cases.finalized == {"case-1": True}
 
-        # doc-0 (bank_statement, not the identity document) is now
-        # reclassified away — its fulfilled_requirements goes empty, leaving
-        # the NRIC's own address-based proof_of_address coverage untouched.
-        dropped = _make_fully_covered_documents()
-        dropped[0] = dropped[0].model_copy(update={"fulfilled_requirements": []})
-        mock_doc_repo.list_documents.return_value = dropped
+    # doc-0 (the bank statement, not the identity document) is reclassified away: its requirements go empty,
+    # leaving the NRIC's own address-based proof_of_address coverage untouched.
+    dropped = _make_fully_covered_documents()
+    dropped[0] = dropped[0].model_copy(update={"fulfilled_requirements": []})
+    _sync_with(dropped, cases)
 
-        sync_submission_finalized("case-1")
-        mock_case_repo.set_submission_finalized.assert_called_with("case-1", finalized=False)
+    assert cases.finalized == {"case-1": False}
+    assert cases.writes == 2
 
 
 def test_required_and_additional_requirements_are_distinct() -> None:
@@ -639,9 +641,77 @@ def test_case_finalizes_without_additional_document() -> None:
     assert missing == []
 
 
-def test_additional_document_maps_to_its_own_requirement() -> None:
-    """AC3: an uploaded additional document fulfils its own requirement."""
-    assert compute_fulfilled_requirements("list_of_loans", None) == ["list_of_loans"]
+# What one document fulfils, by type and extracted fields: (document type, fields, requirements it fulfils).
+_FULFILMENT = [
+    pytest.param("list_of_loans", None, ["list_of_loans"], id="an additional document fulfils its own requirement"),
+    # Classification runs before extraction, so with no fields yet each type takes its default reading.
+    pytest.param("proof_of_address", None, ["proof_of_address"], id="proof of address before extraction is personal"),
+    pytest.param("bank_statement", None, ["bank_statement"], id="a bank statement before extraction is corporate"),
+    pytest.param("source_of_wealth", None, ["source_of_wealth"], id="source of wealth before extraction is corporate"),
+    pytest.param(
+        "proof_of_address", {"individual_name": "Jane Tan", "individual_address": "1 Main St"},
+        ["proof_of_address"], id="a personal proof of address fulfils only the personal item",
+    ),
+    # A company address says nothing about any person's residence.
+    pytest.param(
+        "proof_of_address", {"company_name": "Acme Pte Ltd", "company_address": "10 Robinson Rd"},
+        ["company_proof_of_address"], id="a company proof of address fulfils only the company item",
+    ),
+    pytest.param(
+        "proof_of_address", {"individual_address": "1 Main St", "company_address": "10 Robinson Rd"},
+        ["company_proof_of_address", "proof_of_address"], id="proof of address with both addresses fulfils both",
+    ),
+    # The regression: a personal statement used to also tick the corporate bank_statement item.
+    pytest.param(
+        "bank_statement", {"individual_name": "Jane Tan", "individual_address": "1 Main St"},
+        ["proof_of_address"], id="a personal bank statement fulfils only proof of address",
+    ),
+    pytest.param(
+        "bank_statement", {"individual_name": "Jane Tan"}, [], id="a personal bank statement without an address fulfils nothing",
+    ),
+    pytest.param(
+        "bank_statement", {"company_name": "Acme Pte Ltd", "account_number": "123"},
+        ["bank_statement"], id="a corporate bank statement fulfils only the bank statement",
+    ),
+    # company_name present means a company holds the account, whatever else was extracted.
+    pytest.param(
+        "bank_statement",
+        {"company_name": "Acme Pte Ltd", "individual_name": "Jane Tan", "individual_address": "1 Main St"},
+        ["bank_statement"], id="a corporate statement with a stray individual address is not proof of address",
+    ),
+    # Only a proof_of_address document counts as company proof (a bank statement also carries a company address).
+    pytest.param(
+        "bank_statement", {"company_address": "10 Robinson Rd"}, ["bank_statement"],
+        id="a company address on another document type is not company proof",
+    ),
+    pytest.param(
+        "source_of_wealth", {"company_name": "Golden Harvest Trading Pte Ltd", "uen": "201812345A"},
+        ["source_of_wealth"], id="a corporate source of wealth with a UEN fulfils only the corporate item",
+    ),
+    # The broker's own Pte. Ltd. name must not make a personal statement read as corporate.
+    pytest.param(
+        "source_of_wealth",
+        {
+            "account_holder_name": "Nurul Hassan", "broker_name": "Moomoo Financial Singapore Pte. Ltd.",
+            "company_name": "Moomoo Financial Singapore Pte. Ltd.",
+        },
+        ["source_of_personal_wealth"], id="a personal brokerage statement fulfils only the personal item",
+    ),
+    pytest.param(
+        "source_of_wealth", {"account_holder_name": "Nurul Hassan", "individual_address": "16 Eng Kong Terrace"},
+        ["source_of_personal_wealth"], id="a personal source of wealth with an address is not proof of address",
+    ),
+    # A UEN marks it corporate even if a person (for example a director) is named on it.
+    pytest.param(
+        "source_of_wealth", {"individual_name": "Tan Wei Ming", "uen": "201812345A"},
+        ["source_of_wealth"], id="a company statement naming a director stays corporate",
+    ),
+]
+
+
+@pytest.mark.parametrize(("document_type", "fields", "expected"), _FULFILMENT)
+def test_a_document_fulfils_the_requirements_its_type_and_fields_imply(document_type, fields, expected) -> None:
+    assert sorted(compute_fulfilled_requirements(document_type, fields)) == sorted(expected)
 
 
 def test_uploaded_additional_document_does_not_change_completeness() -> None:
@@ -660,36 +730,6 @@ def test_uploaded_additional_document_does_not_change_completeness() -> None:
     assert missing == REQUIRED_DOCUMENT_TYPES
 
 
-def test_proof_of_address_before_extraction_is_personal() -> None:
-    """Classification runs before extraction, so with no fields yet it stays the personal item."""
-    assert compute_fulfilled_requirements("proof_of_address", None) == ["proof_of_address"]
-
-
-def test_personal_proof_of_address_fulfils_only_personal_item() -> None:
-    fulfilled = compute_fulfilled_requirements(
-        "proof_of_address",
-        {"individual_name": "Jane Tan", "individual_address": "1 Main St"},
-    )
-    assert fulfilled == ["proof_of_address"]
-
-
-def test_company_proof_of_address_fulfils_only_the_company_item() -> None:
-    """A company address says nothing about any person's residence."""
-    fulfilled = compute_fulfilled_requirements(
-        "proof_of_address",
-        {"company_name": "Acme Pte Ltd", "company_address": "10 Robinson Rd"},
-    )
-    assert fulfilled == ["company_proof_of_address"]
-
-
-def test_proof_of_address_with_both_addresses_fulfils_both_items() -> None:
-    fulfilled = compute_fulfilled_requirements(
-        "proof_of_address",
-        {"individual_address": "1 Main St", "company_address": "10 Robinson Rd"},
-    )
-    assert set(fulfilled) == {"proof_of_address", "company_proof_of_address"}
-
-
 def test_only_nric_utility_bill_or_bank_statement_address_fulfils_proof_of_address() -> None:
     fields = {"individual_name": "Jane Tan", "individual_address": "1 Main St"}
     assert compute_fulfilled_requirements("nric", fields) == ["id_document", "proof_of_address"]
@@ -698,51 +738,6 @@ def test_only_nric_utility_bill_or_bank_statement_address_fulfils_proof_of_addre
     # Company documents that merely list people's addresses aren't proof of address.
     for document_type in ("certificate_of_incumbency", "company_constitution"):
         assert compute_fulfilled_requirements(document_type, fields) == [document_type]
-
-
-def test_personal_bank_statement_fulfils_only_proof_of_address() -> None:
-    """The regression: a personal statement used to also tick the corporate bank_statement item."""
-    fulfilled = compute_fulfilled_requirements(
-        "bank_statement", {"individual_name": "Jane Tan", "individual_address": "1 Main St"}
-    )
-    assert fulfilled == ["proof_of_address"]
-
-
-def test_personal_bank_statement_without_address_fulfils_nothing() -> None:
-    fulfilled = compute_fulfilled_requirements("bank_statement", {"individual_name": "Jane Tan"})
-    assert fulfilled == []
-
-
-def test_corporate_bank_statement_fulfils_only_bank_statement() -> None:
-    fulfilled = compute_fulfilled_requirements(
-        "bank_statement", {"company_name": "Acme Pte Ltd", "account_number": "123"}
-    )
-    assert fulfilled == ["bank_statement"]
-
-
-def test_corporate_bank_statement_with_a_stray_individual_address_is_not_proof_of_address() -> None:
-    """company_name present means a company holds the account, whatever else was extracted."""
-    fulfilled = compute_fulfilled_requirements(
-        "bank_statement",
-        {
-            "company_name": "Acme Pte Ltd",
-            "individual_name": "Jane Tan",
-            "individual_address": "1 Main St",
-        },
-    )
-    assert fulfilled == ["bank_statement"]
-
-
-def test_bank_statement_before_extraction_is_corporate() -> None:
-    assert compute_fulfilled_requirements("bank_statement", None) == ["bank_statement"]
-
-
-def test_company_address_on_other_document_types_does_not_fulfil_company_proof() -> None:
-    """Only a proof_of_address document counts (a bank statement also carries a company address)."""
-    fulfilled = compute_fulfilled_requirements(
-        "bank_statement", {"company_address": "10 Robinson Rd"}
-    )
-    assert fulfilled == ["bank_statement"]
 
 
 def test_accepted_company_proof_of_address_is_ticked_but_never_missing() -> None:
@@ -762,46 +757,6 @@ def test_accepted_company_proof_of_address_is_ticked_but_never_missing() -> None
     # It doesn't count as anyone's personal proof of address.
     assert "proof_of_address" not in fulfilled
     assert "proof_of_address" in missing
-
-
-def test_source_of_wealth_before_extraction_is_corporate() -> None:
-    assert compute_fulfilled_requirements("source_of_wealth", None) == ["source_of_wealth"]
-
-
-def test_corporate_source_of_wealth_with_uen_fulfils_only_the_corporate_item() -> None:
-    fulfilled = compute_fulfilled_requirements(
-        "source_of_wealth", {"company_name": "Golden Harvest Trading Pte Ltd", "uen": "201812345A"}
-    )
-    assert fulfilled == ["source_of_wealth"]
-
-
-def test_personal_brokerage_statement_fulfils_only_the_personal_item() -> None:
-    """The broker's own Pte. Ltd. name must not make a personal statement read as corporate."""
-    fulfilled = compute_fulfilled_requirements(
-        "source_of_wealth",
-        {
-            "account_holder_name": "Nurul Hassan",
-            "broker_name": "Moomoo Financial Singapore Pte. Ltd.",
-            "company_name": "Moomoo Financial Singapore Pte. Ltd.",
-        },
-    )
-    assert fulfilled == ["source_of_personal_wealth"]
-
-
-def test_personal_source_of_wealth_with_address_does_not_fulfil_proof_of_address() -> None:
-    fulfilled = compute_fulfilled_requirements(
-        "source_of_wealth",
-        {"account_holder_name": "Nurul Hassan", "individual_address": "16 Eng Kong Terrace"},
-    )
-    assert set(fulfilled) == {"source_of_personal_wealth"}
-
-
-def test_company_statement_naming_a_director_stays_corporate() -> None:
-    """A UEN marks it corporate even if a person (e.g. a director) is named on it."""
-    fulfilled = compute_fulfilled_requirements(
-        "source_of_wealth", {"individual_name": "Tan Wei Ming", "uen": "201812345A"}
-    )
-    assert fulfilled == ["source_of_wealth"]
 
 
 def test_accepted_personal_source_of_wealth_is_ticked_but_never_missing() -> None:

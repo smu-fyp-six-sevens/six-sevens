@@ -6,15 +6,16 @@ Updated 2026-10-19. This comes from reading the tests, not from a full run: rece
 
 ## 1. What you need to do next
 
-1. **Run the full backend suite** (`pytest` in `backend/`) **and Playwright** (`npm run test:e2e` in `frontend/`). A lot changed since the last real run: the shared `identifiers.py`, the router error helpers, the performance changes, the delete clean-up, the 100-character name limit. Send me any failures and I'll fix them.
-2. **Commit and push**, then check that CI is green. Nothing from this work is committed yet.
-3. **Decide what to do with the six ignored test files** (about 140 tests that never run): delete them, move them out of `tests/`, or turn them back on. I'd move them out: today they look like coverage but aren't. They test the synthetic-data tool in `app/injection/`.
-4. **Optional:** install `exiftool` locally. A few tests are skipped, or fail in my direct runs, without it. CI already handles this.
-5. **Optional:** change the Jira wording for SCRUM-109. The code is right: "confidences sum to 1" holds whenever there is at least one candidate.
+1. **Give the service role `DELETE` on the tables the backend now deletes from.** A test run reached the real database by accident (my direct-call runner lacked `conftest.py`'s network guard; it deleted nothing, because it used a case id that doesn't exist) and the database answered `permission denied for table case_analysis_runs` (42501). Until the privilege exists, **deleting a case will fail**. Run `grant delete on public.case_analysis_runs, public.flags, public.langgraph_trace to service_role;` in Supabase (it is harmless if the privilege is already there), and check `risk_scores` too, since the case delete touches it first. The README now lists the required privileges.
+2. **Run the full backend suite** (`pytest` in `backend/`) **and Playwright** (`npm run test:e2e` in `frontend/`). The tests in this file were changed in steps 1–6 below and checked only by calling them directly. Send me any failures and I'll fix them.
+3. **Commit and push**, then check that CI is green. The test changes from steps 1–6 are not committed yet.
+4. **Decide what to do with the six ignored test files** (about 140 tests that never run): delete them, move them out of `tests/`, or turn them back on. I'd move them out: today they look like coverage but aren't. They test the synthetic-data tool in `app/injection/`.
+5. **Optional:** install `exiftool` locally. A few tests are skipped, or fail in my direct runs, without it. CI already handles this.
+6. **Optional:** change the Jira wording for SCRUM-109. The code is right: "confidences sum to 1" holds whenever there is at least one candidate.
 
 ## 2. How healthy is the suite?
 
-About 1,740 backend tests in 80 files, and 105 Playwright tests in 5 specs.
+About 1,670 backend test functions in 80 files (many are parametrised, so they run as well over 2,000 cases), and 105 Playwright tests in 5 specs.
 
 | Group | Share | What to do |
 |---|---|---|
@@ -24,8 +25,7 @@ About 1,740 backend tests in 80 files, and 105 Playwright tests in 5 specs.
 
 A few specific problems:
 
-- **Skipped tests:** two SCRUM-70 regression tests (company-name mismatch, in `test_regression_detection.py`). That check moved to the case pipeline and `test_company_identity.py` covers it, but the two scenarios were never ported.
-- **Tests that prove little:** about 45 tests have no plain `assert`, and 42 only assert that a mock was called. The three `test_case_service::test_sync_submission_finalized_*` tests have no assertion of their own, so check they exercise something.
+- **Tests that prove little:** many of the repository and router tests still only assert that a mock was called (`test_document_repository`, `test_extracted_fields_repository`, `test_case_repository` and others). Step 7 below addresses this.
 - **Modules no test names:** `line_shifts.py` (the largest), `query_stats.py`, `vision_tool.py`, `telemetry.py`, `sg_reference/banks.py`, `giro.py`, `categories.py`, `cpu_pool.py`, `pdf_pages.py`, `supabase_rows.py`. Another test may cover them indirectly; a coverage run will tell. The same run should confirm the agent's checks in `cross_document/agents.py` and `verify.py`.
 - **Slowest file:** `test_ai_generation.py`, about 8 s (it was about 13 s; the shared test image is now cached). What's left is the detector itself.
 - **Noise:** some tests (for example in `test_ws`) log swallowed "real Supabase call" errors. They pass but are noisy.
@@ -50,21 +50,28 @@ Other notes: `mockBackend.ts` re-implements some backend rules, so it can drift 
 - **Two company-name matchers, on purpose.** `identifiers.company_names_match` is lenient (legal suffix and `&` ignored, never typo-tolerant) and decides whether a document matches the case. `company_identity.cross_document_company_names_match` is strict ("A.B.C." differs from "ABC") and is a fraud signal across documents.
 - **Case match is a triage check, not a fraud signal.** A document whose company or person isn't the case's goes to manual review, and the officer can still approve it. Comparing one person across documents is the case analysis's job.
 
-## 5. Plan: what I'll change
+## 5. Plan
 
-I'll go one step at a time, you review each, and I won't commit. For steps 1–6 I'll check each change by calling the affected tests directly, and you confirm with a real `pytest` run.
+### Done (steps 1-6)
+
+Across 13 test files: 798 lines added, 1,146 removed (net 348 fewer), with no app code changed. Checked by calling the tests directly (about 1,900 cases pass; the failures that remain also fail without my changes and come from `exiftool`, the missing `ijson` package and fixtures my runner doesn't provide).
+
+| Step | What changed | Result |
+|---|---|---|
+| 1 | **Router tests:** one parametrised matrix in `test_detection.py` (502 on fetch failure, 404 not found, 409 before a full run, 409 untyped, storage 404 and 502) over 11 check endpoints; the same for nine `{document_id}` routes in `test_documents.py`. It also asserts nothing was written | 23 near-identical tests replaced by 8 parametrised ones that run as about 76 cases |
+| 2 | **Folded repeated cases:** 22 "is not flagged" metadata tests, 16 document-fulfilment tests, 14 prompt-content tests and three pairs in `test_langgraph.py` became tables with an id per case | Same checks in far fewer lines; the metadata cases also assert `unable_to_assess` is false |
+| 3 | **Graph tests:** the four "compiles" tests are now one test over all six graphs asserting their real node names; every `importorskip` is gone, so a broken langgraph install fails | |
+| 4 | **Supabase client tests:** kept, but tightened. One now proves the secret key (not the publishable one) is used; the "builds once" test now calls twice and proves the cache. I did not delete them because they check real behaviour | |
+| 5 | **Behaviour instead of mock calls:** `test_realtime_listener` now runs the real debounce and a real broadcaster and asserts what a viewer receives (a burst gives one snapshot; I broke the coalescing on purpose to confirm the test fails); `test_storage_service` runs on an in-memory bucket; the case-flag tests assert the stored flag; `test_health` asserts the query that ran | Fewer tests that can only fail when the implementation changes |
+| 6 | **SCRUM-70 scenarios ported:** the misspelt-company-name case (Harbor Light "SHIPING") and "cannot be dropped by the agent" now run in `test_cross_document_deterministic.py`; a spelling test confirms a company name printed on the document isn't a spelling finding | No skipped tests left from this item |
+
+### Still to do
 
 | Step | Change | Why | Size |
 |---|---|---|---|
-| 1 | **Router tests:** one shared fixture in `test_detection.py` replacing the 5-patch blocks, and one parametrised test over the detection endpoints (needs full detection first, document missing, fetch fails → 502). Same pattern for not-found and 502 in `test_documents.py`. Assert on the response, not on the mock call | Removes 30–40 near-identical tests and the most fragile ones | M |
-| 2 | **Fold repeated cases** with `parametrize`: the 18 "does not flag X" tests in `test_metadata_analysis.py`, plus the smaller clusters in `test_case_service`, `test_extraction_prompts` and `test_langgraph` | Same coverage, much less code | S-M |
-| 3 | **`*_graph_compiles`:** one parametrised test, and make a broken langgraph import fail instead of silently skipping | A dependency break would currently go unnoticed | S |
-| 4 | **Drop the two mock-echo tests** in `test_supabase_client.py`; keep the missing-config and caching tests | They test the mock, not our code | S |
-| 5 | **Give the three `test_sync_submission_finalized_*` tests** a real assertion each, and replace mock-only assertions in `test_health`, `test_storage_service` and `test_realtime_listener` with behaviour checks where practical | Tests that can't fail aren't tests | S-M |
-| 6 | **Port the two skipped SCRUM-70 scenarios** to the case-pipeline suite (or retire them, if you tell me Jira has) | Closes a coverage gap | S |
 | 7 | **Repository tests on an in-memory fake Supabase client**, asserting stored state instead of mock call chains | Makes refactors safe; the biggest brittleness left | L |
 | 8 | **Playwright:** the triage-chip test and a faithful `DI-045`; login failure and redirect; the analysis card; cancel and retry detection; merge the overlaps; add `data-testid`s | Fills the biggest UI gaps | M-L |
 | 9 | **Vitest** for the pure frontend helpers (`useCaseSnapshot`, `canApprove`) | Logic with no test below the browser | M |
 | 10 | **Coverage run** on the unreferenced modules, starting with `line_shifts.py` and the `cross_document` verify paths, then add tests where there are holes | Turns "no test names it" into facts | M |
 
-My suggested order is 1, 2, 3, 4, 5, 6, then 8, 7, 9, 10. Steps 1–4 are quick and safe, step 7 is the biggest, and step 10 needs a coverage run from you first.
+Suggested order: 8, 7, 9, 10. Step 10 needs a coverage run from you first.

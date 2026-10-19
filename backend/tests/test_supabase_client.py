@@ -43,19 +43,18 @@ async def test_build_async_supabase_client_requires_supabase_secret_key(
 
 
 @pytest.mark.asyncio
-async def test_build_async_supabase_client_builds_with_url_and_secret_key(
+async def test_build_async_supabase_client_uses_the_secret_key_not_the_publishable_one(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr("app.supabase_client.settings.SUPABASE_URL", "https://example.supabase.co")
     monkeypatch.setattr("app.supabase_client.settings.SUPABASE_SECRET_KEY", "secret-key")
+    monkeypatch.setattr("app.supabase_client.settings.SUPABASE_PUBLISHABLE_KEY", "publishable-key")
 
-    with patch(
-        "app.supabase_client.acreate_client", new=AsyncMock(return_value="async-client")
-    ) as mock_acreate_client:
-        result = await build_async_supabase_client()
+    with patch("app.supabase_client.acreate_client", new=AsyncMock()) as mock_acreate_client:
+        await build_async_supabase_client()
 
+    # The Realtime subscription needs the secret key; the publishable one would be refused by RLS.
     mock_acreate_client.assert_awaited_once_with("https://example.supabase.co", "secret-key")
-    assert result == "async-client"
 
 
 def test_service_supabase_client_returns_the_cached_instance_without_rebuilding(
@@ -92,11 +91,10 @@ def test_service_supabase_client_builds_once_and_caches_it(monkeypatch: pytest.M
     monkeypatch.setattr("app.supabase_client.settings.SUPABASE_URL", "https://example.supabase.co")
     monkeypatch.setattr("app.supabase_client.settings.SUPABASE_SECRET_KEY", "secret-key")
 
-    with patch("app.supabase_client.create_client", return_value="new-service-client") as mock_create_client:
-        result = service_supabase_client()
+    with patch("app.supabase_client.create_client", side_effect=[object(), object()]) as mock_create_client:
+        first = service_supabase_client()
+        second = service_supabase_client()
 
-    assert result == "new-service-client"
+    assert first is second
     mock_create_client.assert_called_once()
-    assert supabase_client_module._service_client == "new-service-client"
-
-    monkeypatch.setattr(supabase_client_module, "_service_client", None)
+    assert mock_create_client.call_args.args[:2] == ("https://example.supabase.co", "secret-key")

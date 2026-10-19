@@ -44,6 +44,117 @@ def _mark_detection_already_ran(mock_trace) -> None:
     mock_trace.load.return_value = {"detection_report": {"verdict": "clean"}}
 
 
+# --- the gate every on-demand check shares ------------------------------------------
+
+DOCUMENTS = "app.routers._dependencies.document_repository"
+# (endpoint, the check a refused request must never reach)
+GATED_CHECKS = [
+    ("font-consistency", "check_font_consistency"),
+    ("layout-anomalies", "check_layout_anomalies"),
+    ("spelling-anomaly", "check_spelling_anomalies"),
+    ("metadata-anomaly", "check_metadata_anomalies"),
+    ("numerical-validation", "bind_checks"),
+    ("external-validation", "run_external_validation"),
+    ("date-anomalies", "check_date_anomalies"),
+    ("image-manipulation", "check_image_manipulation"),
+    ("image-tampering", "check_image_tampering"),
+    ("image-integrity", "check_image_manipulation"),
+    ("ai-generation", "check_ai_generation"),
+]
+# The ones that read the stored file.
+DOWNLOADING = [pair for pair in GATED_CHECKS if pair[0] in {
+    "font-consistency", "layout-anomalies", "spelling-anomaly", "image-manipulation",
+    "image-tampering", "image-integrity", "ai-generation",
+}]
+
+
+def _get_check(endpoint: str):
+    return client.get(f"/documents/doc-1/detection/{endpoint}")
+
+
+@pytest.mark.parametrize(("endpoint", "check"), GATED_CHECKS)
+def test_a_check_returns_502_when_the_document_cannot_be_fetched(endpoint, check) -> None:
+    with patch(DOCUMENTS) as repo, patch(f"app.routers.detection.{check}") as mock_check:
+        repo.get_document.side_effect = RuntimeError("db down")
+        response = _get_check(endpoint)
+
+    assert response.status_code == 502
+    mock_check.assert_not_called()
+
+
+@pytest.mark.parametrize(("endpoint", "check"), GATED_CHECKS)
+def test_a_check_returns_404_for_a_document_that_does_not_exist(endpoint, check) -> None:
+    with patch(DOCUMENTS) as repo, patch(f"app.routers.detection.{check}") as mock_check:
+        repo.get_document.return_value = None
+        response = _get_check(endpoint)
+
+    assert response.status_code == 404
+    mock_check.assert_not_called()
+
+
+@pytest.mark.parametrize(("endpoint", "check"), GATED_CHECKS)
+def test_a_check_is_refused_until_a_full_detection_has_run(endpoint, check) -> None:
+    with (
+        patch(DOCUMENTS) as repo,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
+        patch(f"app.routers.detection.{check}") as mock_check,
+    ):
+        repo.get_document.return_value = _document()
+        mock_trace.load.return_value = None
+        response = _get_check(endpoint)
+
+    assert response.status_code == 409
+    mock_check.assert_not_called()
+
+
+@pytest.mark.parametrize(("endpoint", "check"), GATED_CHECKS)
+def test_a_check_is_refused_for_a_document_with_no_type(endpoint, check) -> None:
+    with (
+        patch(DOCUMENTS) as repo,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
+        patch(f"app.routers.detection.{check}") as mock_check,
+    ):
+        repo.get_document.return_value = _document(status=DocumentStatus.APPROVED, document_type=None)
+        _mark_detection_already_ran(mock_trace)
+        response = _get_check(endpoint)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Detection doesn't run on documents with no type."
+    mock_check.assert_not_called()
+
+
+@pytest.mark.parametrize(("endpoint", "check"), DOWNLOADING)
+def test_a_check_returns_404_when_the_document_has_no_stored_file(endpoint, check) -> None:
+    with (
+        patch(DOCUMENTS) as repo,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
+        patch(f"app.routers.detection.{check}") as mock_check,
+    ):
+        repo.get_document.return_value = _document(storage_path=None)
+        _mark_detection_already_ran(mock_trace)
+        response = _get_check(endpoint)
+
+    assert response.status_code == 404
+    mock_check.assert_not_called()
+
+
+@pytest.mark.parametrize(("endpoint", "check"), DOWNLOADING)
+def test_a_check_returns_502_when_the_stored_file_cannot_be_downloaded(endpoint, check) -> None:
+    with (
+        patch(DOCUMENTS) as repo,
+        patch("app.routers.detection.storage_service") as mock_storage,
+        patch("app.routers.detection.langgraph_trace") as mock_trace,
+        patch(f"app.routers.detection.{check}") as mock_check,
+    ):
+        repo.get_document.return_value = _document()
+        mock_storage.download_file.side_effect = RuntimeError("storage down")
+        _mark_detection_already_ran(mock_trace)
+        response = _get_check(endpoint)
+
+    assert response.status_code == 502
+    mock_check.assert_not_called()
+
+
 def test_font_consistency_uses_extracted_fields() -> None:
     result = FontConsistencyResult(
         document_id="doc-1",
@@ -132,33 +243,6 @@ def test_layout_anomalies_happy_path() -> None:
     mock_check.assert_called_once()
 
 
-def test_font_consistency_fetch_errors() -> None:
-    with patch("app.routers._dependencies.document_repository") as mock_repo:
-        mock_repo.get_document.side_effect = RuntimeError("db down")
-        assert client.get("/documents/doc-1/detection/font-consistency").status_code == 502
-
-    with patch("app.routers._dependencies.document_repository") as mock_repo:
-        mock_repo.get_document.return_value = None
-        assert client.get("/documents/doc-1/detection/font-consistency").status_code == 404
-
-    with (
-        patch("app.routers._dependencies.document_repository") as mock_repo,
-        patch("app.routers.detection.langgraph_trace") as mock_trace,
-    ):
-        mock_repo.get_document.return_value = _document(storage_path=None)
-        _mark_detection_already_ran(mock_trace)
-        assert client.get("/documents/doc-1/detection/font-consistency").status_code == 404
-
-    with (
-        patch("app.routers._dependencies.document_repository") as mock_repo,
-        patch("app.routers.detection.storage_service") as mock_storage,
-        patch("app.routers.detection.langgraph_trace") as mock_trace,
-    ):
-        mock_repo.get_document.return_value = _document()
-        mock_storage.download_file.side_effect = RuntimeError("storage down")
-        _mark_detection_already_ran(mock_trace)
-        assert client.get("/documents/doc-1/detection/font-consistency").status_code == 502
-
 def _make_document(document_id: str = "doc-1") -> DocumentRecord:
     return DocumentRecord(
         id=document_id,
@@ -206,55 +290,6 @@ def test_get_spelling_anomaly_success_returns_result_with_no_persistence() -> No
     assert body["unable_to_assess"] is False
 
     mock_check.assert_awaited_once_with("doc-1", b"%PDF-1.4 fake bytes", "statement.pdf", [])
-
-
-def test_get_spelling_anomaly_fetch_document_failure_returns_502() -> None:
-    with (
-        patch("app.routers._dependencies.document_repository") as mock_repo,
-        patch(
-            "app.routers.detection.check_spelling_anomalies", new_callable=AsyncMock
-        ) as mock_check,
-    ):
-        mock_repo.get_document.side_effect = RuntimeError("Supabase table access failed")
-
-        response = client.get("/documents/doc-1/detection/spelling-anomaly")
-
-    assert response.status_code == 502
-    mock_check.assert_not_called()
-
-
-def test_get_spelling_anomaly_document_not_found() -> None:
-    with (
-        patch("app.routers._dependencies.document_repository") as mock_repo,
-        patch(
-            "app.routers.detection.check_spelling_anomalies", new_callable=AsyncMock
-        ) as mock_check,
-    ):
-        mock_repo.get_document.return_value = None
-
-        response = client.get("/documents/missing-id/detection/spelling-anomaly")
-
-    assert response.status_code == 404
-    mock_check.assert_not_called()
-
-
-def test_get_spelling_anomaly_storage_failure_returns_502() -> None:
-    with (
-        patch("app.routers._dependencies.document_repository") as mock_repo,
-        patch("app.routers.detection.storage_service") as mock_storage,
-        patch(
-            "app.routers.detection.check_spelling_anomalies", new_callable=AsyncMock
-        ) as mock_check,
-        patch("app.routers.detection.langgraph_trace") as mock_trace,
-    ):
-        mock_repo.get_document.return_value = _make_document()
-        mock_storage.download_file.side_effect = RuntimeError("bucket unreachable")
-        _mark_detection_already_ran(mock_trace)
-
-        response = client.get("/documents/doc-1/detection/spelling-anomaly")
-
-    assert response.status_code == 502
-    mock_check.assert_not_called()
 
 
 def test_get_metadata_anomaly_success_persists_result() -> None:
@@ -315,32 +350,6 @@ def test_get_metadata_anomaly_passes_stored_metadata_and_document_type_through()
 
     assert response.status_code == 200
     mock_check.assert_called_once_with("doc-1", {"Author": "Jane Tan"}, "bank_statement")
-
-
-def test_get_metadata_anomaly_fetch_document_failure_returns_502() -> None:
-    with (
-        patch("app.routers._dependencies.document_repository") as mock_repo,
-        patch("app.routers.detection.check_metadata_anomalies") as mock_check,
-    ):
-        mock_repo.get_document.side_effect = RuntimeError("Supabase table access failed")
-
-        response = client.get("/documents/doc-1/detection/metadata-anomaly")
-
-    assert response.status_code == 502
-    mock_check.assert_not_called()
-
-
-def test_get_metadata_anomaly_document_not_found() -> None:
-    with (
-        patch("app.routers._dependencies.document_repository") as mock_repo,
-        patch("app.routers.detection.check_metadata_anomalies") as mock_check,
-    ):
-        mock_repo.get_document.return_value = None
-
-        response = client.get("/documents/missing-id/detection/metadata-anomaly")
-
-    assert response.status_code == 404
-    mock_check.assert_not_called()
 
 
 def test_get_numerical_validation_passes_extracted_fields_and_document_type() -> None:
@@ -414,28 +423,6 @@ def test_get_numerical_validation_writes_nothing() -> None:
     mock_repo.update_extracted_fields.assert_not_called()
 
 
-def test_get_numerical_validation_fetch_and_not_found_errors() -> None:
-    with (
-        patch("app.routers._dependencies.document_repository") as mock_repo,
-        patch("app.routers.detection.bind_checks", new=AsyncMock(return_value=BindingResult())) as mock_check,
-    ):
-        mock_repo.get_document.side_effect = RuntimeError("db down")
-        assert (
-            client.get("/documents/doc-1/detection/numerical-validation").status_code == 502
-        )
-        mock_check.assert_not_called()
-
-    with (
-        patch("app.routers._dependencies.document_repository") as mock_repo,
-        patch("app.routers.detection.bind_checks", new=AsyncMock(return_value=BindingResult())) as mock_check,
-    ):
-        mock_repo.get_document.return_value = None
-        assert (
-            client.get("/documents/missing/detection/numerical-validation").status_code == 404
-        )
-        mock_check.assert_not_called()
-
-
 def test_image_manipulation_happy_path() -> None:
     result = ImageManipulationResult(
         document_id="doc-1",
@@ -465,29 +452,6 @@ def test_image_manipulation_happy_path() -> None:
     assert body["document_id"] == "doc-1"
     assert body["unable_to_assess"] is True
     mock_check.assert_called_once_with("doc-1", b"%PDF-1.4")
-
-
-def test_image_manipulation_requires_full_detection_first() -> None:
-    """Individual checks unlock only after a full detection pass, same as
-    the other on-demand checks."""
-    with (
-        patch("app.routers._dependencies.document_repository") as mock_repo,
-        patch("app.routers.detection.langgraph_trace") as mock_trace,
-        patch("app.routers.detection.check_image_manipulation") as mock_check,
-    ):
-        mock_repo.get_document.return_value = _document()
-        mock_trace.load.return_value = None
-        response = client.get("/documents/doc-1/detection/image-manipulation")
-
-    assert response.status_code == 409
-    mock_check.assert_not_called()
-
-
-def test_image_manipulation_document_missing() -> None:
-    with patch("app.routers._dependencies.document_repository") as mock_repo:
-        mock_repo.get_document.return_value = None
-        response = client.get("/documents/doc-1/detection/image-manipulation")
-    assert response.status_code == 404
 
 
 def _date_anomaly_result() -> DateAnomalyResult:
@@ -548,28 +512,6 @@ def test_get_date_anomalies_writes_nothing() -> None:
     mock_repo.update_extracted_fields.assert_not_called()
 
 
-def test_get_date_anomalies_fetch_and_not_found_errors() -> None:
-    with (
-        patch("app.routers._dependencies.document_repository") as mock_repo,
-        patch("app.routers.detection.check_date_anomalies") as mock_check,
-    ):
-        mock_repo.get_document.side_effect = RuntimeError("db down")
-        assert (
-            client.get("/documents/doc-1/detection/date-anomalies").status_code == 502
-        )
-        mock_check.assert_not_called()
-
-    with (
-        patch("app.routers._dependencies.document_repository") as mock_repo,
-        patch("app.routers.detection.check_date_anomalies") as mock_check,
-    ):
-        mock_repo.get_document.return_value = None
-        assert (
-            client.get("/documents/missing/detection/date-anomalies").status_code == 404
-        )
-        mock_check.assert_not_called()
-
-
 def test_image_tampering_happy_path() -> None:
     result = ImageTamperingResult(
         document_id="doc-1",
@@ -596,22 +538,6 @@ def test_image_tampering_happy_path() -> None:
     assert response.status_code == 200
     assert response.json()["unable_to_assess"] is False
     mock_check.assert_called_once_with("doc-1", b"%PDF-1.4")
-
-
-def test_image_tampering_requires_full_detection_first() -> None:
-    """Individual checks unlock only after a full detection pass, same as
-    the other on-demand checks."""
-    with (
-        patch("app.routers._dependencies.document_repository") as mock_repo,
-        patch("app.routers.detection.langgraph_trace") as mock_trace,
-        patch("app.routers.detection.check_image_tampering") as mock_check,
-    ):
-        mock_repo.get_document.return_value = _document()
-        mock_trace.load.return_value = None
-        response = client.get("/documents/doc-1/detection/image-tampering")
-
-    assert response.status_code == 409
-    mock_check.assert_not_called()
 
 
 def _image_integrity_results():
@@ -648,29 +574,6 @@ def test_image_integrity_runs_both_checks_on_one_download() -> None:
     mock_storage.download_file.assert_called_once()
     mock_m.assert_called_once_with("doc-1", b"%PDF-1.4")
     mock_t.assert_called_once_with("doc-1", b"%PDF-1.4")
-
-
-def test_image_integrity_requires_full_detection_first() -> None:
-    with (
-        patch("app.routers._dependencies.document_repository") as mock_repo,
-        patch("app.routers.detection.langgraph_trace") as mock_trace,
-        patch("app.routers.detection.check_image_manipulation") as mock_m,
-        patch("app.routers.detection.check_image_tampering") as mock_t,
-    ):
-        mock_repo.get_document.return_value = _document()
-        mock_trace.load.return_value = None
-        response = client.get("/documents/doc-1/detection/image-integrity")
-
-    assert response.status_code == 409
-    mock_m.assert_not_called()
-    mock_t.assert_not_called()
-
-
-def test_image_tampering_document_missing() -> None:
-    with patch("app.routers._dependencies.document_repository") as mock_repo:
-        mock_repo.get_document.return_value = None
-        response = client.get("/documents/doc-1/detection/image-tampering")
-    assert response.status_code == 404
 
 
 # --- detection/cancel, detection/retry --------------------------------------
@@ -773,7 +676,6 @@ def test_retry_detection_rejected_when_nothing_ran_yet() -> None:
     mock_launch.assert_not_called()
 
 
-
 def test_retry_detection_refused_for_untyped_document() -> None:
     from app.routers import documents as documents_router
 
@@ -792,25 +694,6 @@ def test_retry_detection_refused_for_untyped_document() -> None:
     assert response.status_code == 409
     assert response.json()["detail"] == "Detection doesn't run on documents with no type."
     mock_launch.assert_not_called()
-
-
-def test_individual_checks_refused_for_untyped_document() -> None:
-    with (
-        patch("app.routers._dependencies.document_repository") as mock_repo,
-        patch("app.routers.detection.langgraph_trace") as mock_trace,
-        patch("app.routers.detection.check_image_manipulation") as mock_m,
-        patch("app.routers.detection.check_image_tampering") as mock_t,
-    ):
-        mock_repo.get_document.return_value = _document(
-            status=DocumentStatus.APPROVED, document_type=None
-        )
-        _mark_detection_already_ran(mock_trace)
-        response = client.get("/documents/doc-1/detection/image-integrity")
-
-    assert response.status_code == 409
-    assert response.json()["detail"] == "Detection doesn't run on documents with no type."
-    mock_m.assert_not_called()
-    mock_t.assert_not_called()
 
 
 def test_get_numerical_validation_reports_a_binder_failure_and_still_runs() -> None:
@@ -868,15 +751,3 @@ def test_ai_generation_happy_path() -> None:
     mock_check.assert_called_once_with("doc-1", b"%PDF-1.4")
 
 
-def test_ai_generation_requires_full_detection_first() -> None:
-    with (
-        patch("app.routers._dependencies.document_repository") as mock_repo,
-        patch("app.routers.detection.langgraph_trace") as mock_trace,
-        patch("app.routers.detection.check_ai_generation") as mock_check,
-    ):
-        mock_repo.get_document.return_value = _document()
-        mock_trace.load.return_value = None
-        response = client.get("/documents/doc-1/detection/ai-generation")
-
-    assert response.status_code == 409
-    mock_check.assert_not_called()

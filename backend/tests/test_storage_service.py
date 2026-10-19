@@ -1,100 +1,128 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from app import storage_service
 from app.config import settings
 
 
-def test_upload_file_builds_uuid_prefixed_path_under_case_folder() -> None:
-    with patch("app.storage_service.supabase_client") as mock_client:
-        storage_path = storage_service.upload_file(
-            "case-1", "statement.pdf", b"%PDF-1.4", "application/pdf"
-        )
+class _FakeBucket:
+    """An in-memory bucket with the few storage3 calls the service makes."""
 
-        assert storage_path.startswith("case-1/")
-        assert storage_path.endswith("_statement.pdf")
-        mock_client.storage.from_.assert_called_once_with(settings.SUPABASE_STORAGE_BUCKET)
-        upload_call = mock_client.storage.from_.return_value.upload
-        upload_call.assert_called_once_with(
-            storage_path, b"%PDF-1.4", {"content-type": "application/pdf"}
-        )
+    def __init__(self) -> None:
+        self.files: dict[str, bytes] = {}
+        self.content_types: dict[str, str] = {}
+        self.remove_calls: list[list[str]] = []
+        self.signed: list[tuple[str, int, dict]] = []
 
+    def upload(self, path: str, data: bytes, options: dict) -> None:
+        self.files[path] = data
+        self.content_types[path] = options["content-type"]
 
-def test_upload_file_uses_unassigned_folder_when_no_case_id() -> None:
-    with patch("app.storage_service.supabase_client"):
-        storage_path = storage_service.upload_file(
-            None, "statement.pdf", b"%PDF-1.4", "application/pdf"
-        )
+    def download(self, path: str) -> bytes:
+        return self.files[path]
 
-        assert storage_path.startswith("unassigned/")
+    def remove(self, paths: list[str]) -> None:
+        self.remove_calls.append(list(paths))
+        for path in paths:
+            self.files.pop(path, None)
 
-
-def test_download_file_returns_bytes_from_bucket() -> None:
-    with patch("app.storage_service.supabase_client") as mock_client:
-        mock_client.storage.from_.return_value.download.return_value = b"%PDF-1.4 bytes"
-
-        content = storage_service.download_file("case-1/uuid_statement.pdf")
-
-        assert content == b"%PDF-1.4 bytes"
-        mock_client.storage.from_.assert_called_once_with(settings.SUPABASE_STORAGE_BUCKET)
-        mock_client.storage.from_.return_value.download.assert_called_once_with(
-            "case-1/uuid_statement.pdf"
-        )
+    def create_signed_url(self, path: str, expires_in: int, options: dict) -> dict:
+        self.signed.append((path, expires_in, options))
+        query = f"?download={options['download']}" if "download" in options else ""
+        return {"signedUrl": f"https://example.supabase.co/signed/{path}{query}"}
 
 
-def test_delete_file_removes_by_path() -> None:
-    with patch("app.storage_service.supabase_client") as mock_client:
-        storage_service.delete_file("case-1/uuid_statement.pdf")
+class _FakeClient:
+    """Hands out the same bucket, and remembers which bucket name was asked for."""
 
-        mock_client.storage.from_.assert_called_once_with(settings.SUPABASE_STORAGE_BUCKET)
-        mock_client.storage.from_.return_value.remove.assert_called_once_with(
-            ["case-1/uuid_statement.pdf"]
-        )
+    def __init__(self) -> None:
+        self.bucket = _FakeBucket()
+        self.buckets_used: list[str] = []
+        self.storage = SimpleNamespace(from_=self._from)
 
-
-def test_delete_files_batches_removal_of_many_paths() -> None:
-    with patch("app.storage_service.supabase_client") as mock_client:
-        storage_service.delete_files(["case-1/a.pdf", "case-1/b.pdf"])
-
-        mock_client.storage.from_.assert_called_once_with(settings.SUPABASE_STORAGE_BUCKET)
-        mock_client.storage.from_.return_value.remove.assert_called_once_with(
-            ["case-1/a.pdf", "case-1/b.pdf"]
-        )
+    def _from(self, name: str) -> _FakeBucket:
+        self.buckets_used.append(name)
+        return self.bucket
 
 
-def test_delete_files_is_a_noop_for_an_empty_list() -> None:
-    with patch("app.storage_service.supabase_client") as mock_client:
+def _storage():
+    client = _FakeClient()
+    return client, patch("app.storage_service.supabase_client", client)
+
+
+def test_an_uploaded_file_lands_under_its_case_folder_and_can_be_read_back() -> None:
+    client, patched = _storage()
+    with patched:
+        path = storage_service.upload_file("case-1", "statement.pdf", b"%PDF-1.4", "application/pdf")
+        content = storage_service.download_file(path)
+
+    assert path.startswith("case-1/") and path.endswith("_statement.pdf")
+    assert content == b"%PDF-1.4"
+    assert client.bucket.content_types[path] == "application/pdf"
+    assert set(client.buckets_used) == {settings.SUPABASE_STORAGE_BUCKET}
+
+
+def test_the_same_filename_uploaded_twice_gets_two_distinct_paths() -> None:
+    client, patched = _storage()
+    with patched:
+        first = storage_service.upload_file("case-1", "statement.pdf", b"one", "application/pdf")
+        second = storage_service.upload_file("case-1", "statement.pdf", b"two", "application/pdf")
+
+    assert first != second
+    assert client.bucket.files == {first: b"one", second: b"two"}
+
+
+def test_a_file_with_no_case_goes_to_the_unassigned_folder() -> None:
+    _, patched = _storage()
+    with patched:
+        path = storage_service.upload_file(None, "statement.pdf", b"%PDF-1.4", "application/pdf")
+
+    assert path.startswith("unassigned/")
+
+
+def test_a_deleted_file_is_gone_and_the_others_stay() -> None:
+    client, patched = _storage()
+    with patched:
+        kept = storage_service.upload_file("case-1", "keep.pdf", b"keep", "application/pdf")
+        gone = storage_service.upload_file("case-1", "gone.pdf", b"gone", "application/pdf")
+        storage_service.delete_file(gone)
+
+    assert set(client.bucket.files) == {kept}
+
+
+def test_deleting_many_files_is_one_removal_call() -> None:
+    client, patched = _storage()
+    with patched:
+        paths = [storage_service.upload_file("case-1", f"{name}.pdf", b"x", "application/pdf") for name in "ab"]
+        storage_service.delete_files(paths)
+
+    assert client.bucket.files == {}
+    assert client.bucket.remove_calls == [paths]
+
+
+def test_deleting_no_files_does_not_call_storage_at_all() -> None:
+    client, patched = _storage()
+    with patched:
         storage_service.delete_files([])
 
-        mock_client.storage.from_.assert_not_called()
+    assert client.buckets_used == []
 
 
-def test_create_signed_url_without_download_filename() -> None:
-    with patch("app.storage_service.supabase_client") as mock_client:
-        mock_client.storage.from_.return_value.create_signed_url.return_value = {
-            "signedUrl": "https://example.supabase.co/signed/doc-1",
-            "signedURL": "https://example.supabase.co/signed/doc-1",
-        }
-
+def test_a_signed_url_for_viewing_has_no_download_option() -> None:
+    client, patched = _storage()
+    with patched:
         url = storage_service.create_signed_url("case-1/uuid_statement.pdf", 300)
 
-        assert url == "https://example.supabase.co/signed/doc-1"
-        mock_client.storage.from_.return_value.create_signed_url.assert_called_once_with(
-            "case-1/uuid_statement.pdf", 300, {}
-        )
+    assert url == "https://example.supabase.co/signed/case-1/uuid_statement.pdf"
+    assert client.bucket.signed == [("case-1/uuid_statement.pdf", 300, {})]
 
 
-def test_create_signed_url_with_download_filename_sets_download_option() -> None:
-    with patch("app.storage_service.supabase_client") as mock_client:
-        mock_client.storage.from_.return_value.create_signed_url.return_value = {
-            "signedUrl": "https://example.supabase.co/signed/doc-1",
-        }
+def test_a_signed_url_can_ask_the_browser_to_download_under_a_filename() -> None:
+    client, patched = _storage()
+    with patched:
+        url = storage_service.create_signed_url("case-1/uuid_statement.pdf", 300, download_filename="statement.pdf")
 
-        storage_service.create_signed_url(
-            "case-1/uuid_statement.pdf", 300, download_filename="statement.pdf"
-        )
-
-        mock_client.storage.from_.return_value.create_signed_url.assert_called_once_with(
-            "case-1/uuid_statement.pdf", 300, {"download": "statement.pdf"}
-        )
+    assert url.endswith("?download=statement.pdf")
+    assert client.bucket.signed == [("case-1/uuid_statement.pdf", 300, {"download": "statement.pdf"})]

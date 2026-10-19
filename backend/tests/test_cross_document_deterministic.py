@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 from app.case_pipeline.cross_document import graph
@@ -10,6 +12,8 @@ from app.case_pipeline.cross_document.agents import MAX_JUDGE_EVIDENCE_CHARS, fi
 from app.case_pipeline.cross_document.deterministic import MAX_BRIEF_LINES, brief, run_deterministic_checks
 from app.case_pipeline.cross_document.evidence import build_context
 from app.models import DocumentRecord, DocumentStatus
+
+FIXTURES = Path(__file__).parent / "fixtures" / "regression"
 
 
 def _doc(doc_id: str, document_type: str, fields: dict) -> DocumentRecord:
@@ -290,3 +294,33 @@ def test_what_the_agent_writes_for_the_officer_has_no_tool_names_flags_or_ref_id
     )
 
     assert text == "the check flagged the mismatch. The check confirmed it. The cross-check strengthens the claim."
+
+
+def _harbor_light_context():
+    """GLDB-16's real documents: its C014_CertIncorp spells the company "SHIPING"."""
+    rows = json.loads((FIXTURES / "harbor-light.json").read_text())["rows"]
+    return _context(*(DocumentRecord(**{**row, "status": DocumentStatus.DETECTED}) for row in rows))
+
+
+def test_a_misspelt_company_name_is_flagged_against_the_cases_other_documents() -> None:
+    # The spelling check leaves company names alone (coined brand words are normal in them), so a misspelt
+    # one is caught by comparing it with the name on the case's other documents, as a company-name difference.
+    result = run_deterministic_checks(_harbor_light_context())
+
+    [mismatch] = [f for f in result.findings if "company name" in f.summary]
+    assert "HARBOR LIGHT SHIPING PTE LTD" in mismatch.summary
+    assert "HARBOR LIGHT SHIPPING PTE LTD" in mismatch.summary
+    assert mismatch.category.value == "cross_document_variance"
+    assert mismatch.severity == "medium"
+
+
+async def test_a_company_name_mismatch_cannot_be_dropped_by_the_agent() -> None:
+    # The code finding is added to the result whatever the agent proposes or concludes.
+    context = _harbor_light_context()
+
+    with patch.object(graph, "hypothesise", AsyncMock(return_value=[])):
+        state = await graph.run_cross_document_analysis(context)
+
+    [mismatch] = [f for f in state["findings"] if "company name" in f.summary]
+    assert mismatch.hypothesis_id == "deterministic"
+    assert mismatch.severity == "medium"

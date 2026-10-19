@@ -1,5 +1,6 @@
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.health import check_db_connection
@@ -38,17 +39,46 @@ def test_health_check_db_unhealthy() -> None:
     assert "connection refused" in body["detail"]
 
 
-def test_check_db_connection_queries_documents_table() -> None:
-    # The /health/db tests above mock check_db_connection itself (to test
-    # main.py's error-handling around it), so they never actually exercise
-    # this function's own body — cover that directly here.
-    with patch("app.health.supabase_client") as mock_supabase:
+class _RecordingQuery:
+    """Stands in for a Supabase query builder: remembers the query it was asked to run."""
+
+    def __init__(self, fail: Exception | None = None) -> None:
+        self.fail = fail
+        self.ran: list[dict] = []
+        self._query: dict = {}
+
+    def table(self, name: str):
+        self._query = {"table": name}
+        return self
+
+    def select(self, columns: str):
+        self._query["columns"] = columns
+        return self
+
+    def limit(self, rows: int):
+        self._query["limit"] = rows
+        return self
+
+    def execute(self):
+        if self.fail:
+            raise self.fail
+        self.ran.append(self._query)
+
+
+def test_check_db_connection_runs_one_cheap_query_against_documents() -> None:
+    # The /health/db tests above replace check_db_connection itself (to test main.py's
+    # error handling around it), so cover its own body here.
+    database = _RecordingQuery()
+    with patch("app.health.supabase_client", database):
         check_db_connection()
 
-    mock_supabase.table.assert_called_once_with("documents")
-    mock_supabase.table.return_value.select.assert_called_once_with("id")
-    mock_supabase.table.return_value.select.return_value.limit.assert_called_once_with(1)
-    mock_supabase.table.return_value.select.return_value.limit.return_value.execute.assert_called_once_with()
+    assert database.ran == [{"table": "documents", "columns": "id", "limit": 1}]
+
+
+def test_check_db_connection_lets_a_database_failure_through() -> None:
+    database = _RecordingQuery(fail=RuntimeError("project paused"))
+    with patch("app.health.supabase_client", database), pytest.raises(RuntimeError, match="project paused"):
+        check_db_connection()
 
 
 def test_message_endpoint() -> None:

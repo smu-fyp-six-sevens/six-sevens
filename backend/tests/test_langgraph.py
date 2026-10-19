@@ -1,13 +1,10 @@
 """
 Tests for the langgraph pipeline (backend/app/langgraph).
 
-Split in two tiers:
-- Pure-logic tests (rule_classify, llm_classify parsing, classify_support,
-  extract parsing, tool-staging) have no dependency on the
-  langgraph/langchain-anthropic packages and always run.
-- Graph-shape tests need `langgraph` installed — see requirements.txt /
-  pyproject.toml. They're skipped, not failed, if it isn't (`importorskip`),
-  matching this repo's CI/CD stance of no network calls in tests.
+Pure-logic tests (rule_classify, llm_classify parsing, classify_support,
+extract parsing, tool-staging) and graph-shape tests. langgraph and
+langchain-anthropic are hard requirements (app.main imports them), so a
+broken install fails these tests instead of skipping them.
 """
 
 from __future__ import annotations
@@ -48,17 +45,19 @@ def test_rule_classify_residential_address_note():
     assert any("residential address" in note for note in result["notes"])
 
 
-def test_residential_address_evidence_business_address_cancels_out_a_weak_positive():
-    notes = rc._residential_address_evidence("registered office blk 123")
-    assert notes == [
-        "Proof of address check: address present but appears to be a "
-        "business/office address, not residential"
-    ]
-
-
-def test_residential_address_evidence_weak_positive_alone_is_not_enough():
-    notes = rc._residential_address_evidence("123 Jalan Road")
-    assert notes == ["Proof of address check: no residential address detected"]
+@pytest.mark.parametrize(("text", "expected"), [
+    pytest.param(
+        "registered office blk 123",
+        ["Proof of address check: address present but appears to be a business/office address, not residential"],
+        id="a business address cancels out a weak positive",
+    ),
+    pytest.param(
+        "123 Jalan Road", ["Proof of address check: no residential address detected"],
+        id="a weak positive alone is not enough",
+    ),
+])
+def test_residential_address_evidence(text, expected):
+    assert rc._residential_address_evidence(text) == expected
 
 
 def test_certain_signal_returns_the_one_matching_document_type():
@@ -125,18 +124,19 @@ def test_parse_llm_classification_invalid_json_never_raises():
 
 # --- classify_support ----------------------------------------------------
 
-def test_address_check_visible():
-    rule_result = {"notes": ["Proof of address check: appears to show a residential address (x)"]}
-    assert classify_support.address_check(rule_result, text_available=True) == "visible"
-
-
-def test_address_check_not_visible_business_address():
-    rule_result = {"notes": ["Proof of address check: address present but appears to be a business/office address, not residential"]}
-    assert classify_support.address_check(rule_result, text_available=True) == "not_visible"
-
-
-def test_address_check_unknown_when_no_text():
-    assert classify_support.address_check({}, text_available=False) == "unknown"
+@pytest.mark.parametrize(("rule_result", "text_available", "expected"), [
+    pytest.param(
+        {"notes": ["Proof of address check: appears to show a residential address (x)"]}, True, "visible",
+        id="a residential address is visible",
+    ),
+    pytest.param(
+        {"notes": ["Proof of address check: address present but appears to be a business/office address, not residential"]},
+        True, "not_visible", id="a business address is not visible",
+    ),
+    pytest.param({}, False, "unknown", id="unknown when there is no text"),
+])
+def test_address_check(rule_result, text_available, expected):
+    assert classify_support.address_check(rule_result, text_available=text_available) == expected
 
 
 def test_validate_agent_output_happy_path():
@@ -324,7 +324,6 @@ async def test_run_extraction_calls_the_model_and_parses_its_response():
     from types import SimpleNamespace
     from unittest.mock import AsyncMock, MagicMock, patch
 
-    pytest.importorskip("langchain_anthropic", reason="langchain-anthropic not installed")
 
     fake_response = SimpleNamespace(
         content='{"extracted_fields": {"net_pay": {"value": 5000, "confidence": 0.9}}}'
@@ -340,7 +339,7 @@ async def test_run_extraction_calls_the_model_and_parses_its_response():
     mock_model.ainvoke.assert_awaited_once()
 
 
-# --- tool staging + graph shape (needs langgraph installed) -----------------
+# --- tool staging + graph shape ---------------------------------------------
 
 def test_available_tools_enforces_llm_first_vision_last():
     """
@@ -350,7 +349,6 @@ def test_available_tools_enforces_llm_first_vision_last():
     not just prompted, since vision sends the whole document image and is by
     far the most expensive tool. See classify_graph.py's module docstring.
     """
-    pytest.importorskip("langgraph", reason="langgraph not installed — see requirements.txt")
     from langchain_core.messages import AIMessage, HumanMessage
 
     from app.langgraph.classify_graph import _available_tools
@@ -367,22 +365,6 @@ def test_available_tools_enforces_llm_first_vision_last():
         AIMessage(content="", tool_calls=[{"name": "vision_llm", "args": {}, "id": "2"}])
     ]
     assert _available_tools(used_vision) == []
-
-
-def test_classify_graph_compiles():
-    pytest.importorskip("langgraph", reason="langgraph not installed — see requirements.txt")
-    from app.langgraph.classify_graph import build_classify_graph
-
-    graph = build_classify_graph()
-    assert graph is not None
-
-
-def test_document_graph_compiles():
-    pytest.importorskip("langgraph", reason="langgraph not installed — see requirements.txt")
-    from app.langgraph.graph import build_document_graph
-
-    graph = build_document_graph()
-    assert graph is not None
 
 
 def test_route_after_ingest():
@@ -431,36 +413,82 @@ def _redacted_ic_state(escalation: dict, *, basis: str = "certain_match") -> dic
     }
 
 
-def test_escalation_naming_the_same_type_is_not_a_reclassify():
+@pytest.mark.parametrize(("escalation", "basis", "expected"), [
+    pytest.param(
+        {"reason": "This is a Singapore Identity Card", "suggested_document_type": "nric"}, "certain_match",
+        "analyzed", id="naming the same type is not a reclassify",
+    ),
+    pytest.param(
+        {"reason": "NRIC number is absent from the OCR text"}, "certain_match",
+        "analyzed", id="no other type on a certain classification is not a reclassify",
+    ),
+    pytest.param(
+        {"reason": "This is a passport", "suggested_document_type": "passport"}, "certain_match",
+        "reclassify", id="naming a different type still reclassifies",
+    ),
+    pytest.param(
+        {"reason": "Doesn't look like an NRIC"}, "uncorroborated",
+        "reclassify", id="no other type on an uncertain classification still reclassifies",
+    ),
+])
+def test_an_escalation_decides_whether_to_reclassify(escalation, basis, expected):
     from app.langgraph.graph import _decide_after_extract
 
-    escalation = {"reason": "This is a Singapore Identity Card", "suggested_document_type": "nric"}
-    assert _decide_after_extract(_redacted_ic_state(escalation)) == "analyzed"
+    assert _decide_after_extract(_redacted_ic_state(escalation, basis=basis)) == expected
 
 
-def test_escalation_without_another_type_on_a_certain_classification_is_not_a_reclassify():
-    from app.langgraph.graph import _decide_after_extract
-
-    escalation = {"reason": "NRIC number is absent from the OCR text"}
-    assert _decide_after_extract(_redacted_ic_state(escalation)) == "analyzed"
+def _classify_graph():
+    from app.langgraph.classify_graph import build_classify_graph
+    return build_classify_graph()
 
 
-def test_escalation_naming_a_different_type_still_reclassifies():
-    from app.langgraph.graph import _decide_after_extract
-
-    escalation = {"reason": "This is a passport", "suggested_document_type": "passport"}
-    assert _decide_after_extract(_redacted_ic_state(escalation)) == "reclassify"
+def _document_graph():
+    from app.langgraph.graph import build_document_graph
+    return build_document_graph()
 
 
-def test_escalation_without_another_type_on_an_uncertain_classification_still_reclassifies():
-    from app.langgraph.graph import _decide_after_extract
+def _detection_graph():
+    from app.langgraph.detection.graph import build_detection_graph
+    return build_detection_graph()
 
-    escalation = {"reason": "Doesn't look like an NRIC"}
-    assert _decide_after_extract(_redacted_ic_state(escalation, basis="uncorroborated")) == "reclassify"
+
+def _specialist_graph(name: str):
+    from app.langgraph.detection.specialists import SPECIALISTS, build_specialist_graph
+    return build_specialist_graph(SPECIALISTS[name])
+
+
+_SPECIALIST_NODES = {"agent", "tools", "collect"}
+_GRAPHS = [
+    pytest.param(_classify_graph, {"rule_classify", "agent", "tools", "validate", "repair"}, id="classify"),
+    pytest.param(
+        _document_graph,
+        {"ingest", "classify", "extract", "check_text_available", "finalise_classification", "mark_analyzed", "fail"},
+        id="document",
+    ),
+    pytest.param(
+        _detection_graph,
+        {"load_context", "lead_plan", "specialist", "lead_review", "run_second_look", "synthesize"},
+        id="detection",
+    ),
+    *(
+        pytest.param(lambda name=name: _specialist_graph(name), _SPECIALIST_NODES, id=f"specialist-{name}")
+        for name in ("layout_rendering", "content_validation", "digital_authenticity")
+    ),
+]
+
+
+@pytest.mark.parametrize(("build", "expected_nodes"), _GRAPHS)
+def test_a_graph_compiles_with_its_expected_steps(build, expected_nodes):
+    assert expected_nodes <= set(build().get_graph().nodes)
+
+
+def test_every_specialist_has_a_compiled_graph_test():
+    from app.langgraph.detection.specialists import SPECIALISTS
+
+    assert set(SPECIALISTS) == {"layout_rendering", "content_validation", "digital_authenticity"}
 
 
 def test_get_document_graph_builds_once_and_caches():
-    pytest.importorskip("langgraph", reason="langgraph not installed — see requirements.txt")
     from app.langgraph import graph as document_graph_module
 
     document_graph_module.document_graph = None
@@ -468,22 +496,6 @@ def test_get_document_graph_builds_once_and_caches():
     second = document_graph_module.get_document_graph()
     assert first is second
     document_graph_module.document_graph = None
-
-
-def test_detection_graph_compiles():
-    pytest.importorskip("langgraph", reason="langgraph not installed — see requirements.txt")
-    from app.langgraph.detection.graph import build_detection_graph
-
-    graph = build_detection_graph()
-    assert graph is not None
-
-
-def test_specialist_graphs_compile():
-    pytest.importorskip("langgraph", reason="langgraph not installed — see requirements.txt")
-    from app.langgraph.detection.specialists import SPECIALISTS, build_specialist_graph
-
-    for spec in SPECIALISTS.values():
-        assert build_specialist_graph(spec) is not None
 
 
 def test_forget_drops_the_in_memory_traces_of_deleted_documents() -> None:

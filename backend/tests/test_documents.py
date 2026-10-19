@@ -97,6 +97,54 @@ def test_upload_batch_rejects_no_files() -> None:
     assert response.json()["detail"] == "At least one file is required"
 
 
+# --- the lookup every {document_id} route shares -----------------------------------
+
+# (method, path, json body): every route that loads its document through get_document_or_404.
+DOCUMENT_ROUTES = [
+    ("GET", "/documents/{id}/download", None),
+    ("POST", "/documents/{id}/retry", None),
+    ("POST", "/documents/{id}/approve", None),
+    ("POST", "/documents/{id}/reject", None),
+    ("PATCH", "/documents/{id}/extracted-fields", {"extracted_fields": {"net_pay": 5000}}),
+    ("PATCH", "/documents/{id}/document-type", {"document_type": "nric"}),
+    ("POST", "/documents/{id}/extracted-fields", {"field_name": "net_pay", "field_value": 5000}),
+    ("DELETE", "/documents/{id}/extracted-fields/field-1", None),
+    ("DELETE", "/documents/{id}", None),
+]
+
+
+def _call_document_route(method: str, path: str, body):
+    return client.request(method, path.format(id="doc-1"), json=body)
+
+
+@pytest.mark.parametrize(("method", "path", "body"), DOCUMENT_ROUTES)
+def test_a_document_route_returns_404_for_a_document_that_does_not_exist(method, path, body) -> None:
+    with (
+        patch("app.routers._dependencies.document_repository") as lookup,
+        patch("app.routers.documents.document_repository") as documents,
+        patch("app.routers.documents.extracted_fields_repository") as fields,
+    ):
+        lookup.get_document.return_value = None
+        response = _call_document_route(method, path, body)
+
+    assert response.status_code == 404
+    assert not documents.mock_calls and not fields.mock_calls  # nothing was written
+
+
+@pytest.mark.parametrize(("method", "path", "body"), DOCUMENT_ROUTES)
+def test_a_document_route_returns_502_when_the_document_cannot_be_fetched(method, path, body) -> None:
+    with (
+        patch("app.routers._dependencies.document_repository") as lookup,
+        patch("app.routers.documents.document_repository") as documents,
+        patch("app.routers.documents.extracted_fields_repository") as fields,
+    ):
+        lookup.get_document.side_effect = RuntimeError("connection refused")
+        response = _call_document_route(method, path, body)
+
+    assert response.status_code == 502
+    assert not documents.mock_calls and not fields.mock_calls
+
+
 def test_get_document_not_found() -> None:
     with patch("app.routers.documents.document_repository") as mock_repo:
         mock_repo.get_document.return_value = None
@@ -122,26 +170,6 @@ def test_get_document_db_failure_returns_502() -> None:
         response = client.get("/documents/doc-1")
 
     assert response.status_code == 502
-
-
-def test_get_document_download_url_db_failure_returns_502() -> None:
-    # GET .../download sits behind Depends(get_document_or_404), which
-    # fetches via _dependencies.document_repository, not documents.py's own.
-    with patch("app.routers._dependencies.document_repository") as mock_repo:
-        mock_repo.get_document.side_effect = RuntimeError("connection refused")
-
-        response = client.get("/documents/doc-1/download")
-
-    assert response.status_code == 502
-
-
-def test_retry_document_not_found() -> None:
-    with patch("app.routers._dependencies.document_repository") as mock_dep_repo:
-        mock_dep_repo.get_document.return_value = None
-
-        response = client.post("/documents/missing-id/retry")
-
-    assert response.status_code == 404
 
 
 def test_retry_document_rejects_already_analyzed() -> None:
@@ -524,22 +552,6 @@ def test_update_extracted_fields_treats_blank_existing_value_as_editable() -> No
     )
 
 
-def test_update_extracted_fields_not_found() -> None:
-    with (
-        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
-        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
-    ):
-        mock_dep_repo.get_document.return_value = None
-
-        response = client.patch(
-            "/documents/missing-id/extracted-fields",
-            json={"extracted_fields": {"a": "b"}},
-        )
-
-    assert response.status_code == 404
-    mock_fields_repo.replace_extracted_fields.assert_not_called()
-
-
 def test_get_document_attaches_extracted_fields() -> None:
     document = _make_document("doc-1")
     with (
@@ -769,24 +781,6 @@ def test_update_document_type_rejects_unknown_type() -> None:
     assert response.status_code == 422
 
 
-def test_update_document_type_not_found() -> None:
-    with patch("app.routers._dependencies.document_repository") as mock_dep_repo:
-        mock_dep_repo.get_document.return_value = None
-
-        response = client.patch("/documents/missing/document-type", json={"document_type": "nric"})
-
-    assert response.status_code == 404
-
-
-def test_update_document_type_fetch_failure_returns_502() -> None:
-    with patch("app.routers._dependencies.document_repository") as mock_dep_repo:
-        mock_dep_repo.get_document.side_effect = RuntimeError("db down")
-
-        response = client.patch("/documents/doc-1/document-type", json={"document_type": "nric"})
-
-    assert response.status_code == 502
-
-
 def test_update_document_type_conflicts_while_pipeline_is_running() -> None:
     with (
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
@@ -935,22 +929,6 @@ def test_add_extracted_field_rejects_blank_name_before_touching_the_database() -
     mock_fields_repo.add_extracted_field.assert_not_called()
 
 
-def test_add_extracted_field_document_not_found() -> None:
-    with (
-        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
-        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
-    ):
-        mock_dep_repo.get_document.return_value = None
-
-        response = client.post(
-            "/documents/missing-id/extracted-fields",
-            json={"field_name": "net_pay", "field_value": 5000},
-        )
-
-    assert response.status_code == 404
-    mock_fields_repo.add_extracted_field.assert_not_called()
-
-
 def test_add_extracted_field_rejects_duplicate_name() -> None:
     existing = ExtractedField(
         id="field-1", field_name="net_pay", field_type="number",
@@ -1053,19 +1031,6 @@ def test_delete_extracted_field_removes_and_recomputes_requirements() -> None:
     # now — not observable from here since that call is mocked.
 
 
-def test_delete_extracted_field_document_not_found() -> None:
-    with (
-        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
-        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
-    ):
-        mock_dep_repo.get_document.return_value = None
-
-        response = client.delete("/documents/missing-id/extracted-fields/field-1")
-
-    assert response.status_code == 404
-    mock_fields_repo.delete_extracted_field.assert_not_called()
-
-
 def test_delete_extracted_field_rejects_field_belonging_to_another_document() -> None:
     other = ExtractedField(
         id="field-9", field_name="net_pay", field_type="number",
@@ -1160,19 +1125,6 @@ def test_delete_document_rejects_an_approved_document() -> None:
         response = client.delete("/documents/doc-1")
 
     assert response.status_code == 409
-    mock_repo.remove_document.assert_not_called()
-
-
-def test_delete_document_not_found() -> None:
-    with (
-        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
-        patch("app.routers.documents.document_repository") as mock_repo,
-    ):
-        mock_dep_repo.get_document.return_value = None
-
-        response = client.delete("/documents/missing-id")
-
-    assert response.status_code == 404
     mock_repo.remove_document.assert_not_called()
 
 

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+import pytest
+
 from app.fraud_detection.authenticity.metadata_analysis import (
     SUPPORTED_METADATA_FIELDS,
     check_metadata_anomalies,
@@ -98,6 +100,98 @@ def test_assessed_when_at_least_one_supported_field_present() -> None:
 # AC3 -----------------------------------------------------------------
 
 
+# Metadata that must produce no anomaly, and must still count as assessed. Each id says what it guards.
+_ACROBAT = {"Producer": "Adobe Acrobat Pro DC 23"}
+_NOT_FLAGGED = [
+    pytest.param({"Author": "Jane Tan"}, None, id="a real-looking author"),
+    pytest.param(_ACROBAT, "fatca_crs_declaration", id="a pdf editor on a form the applicant fills in"),
+    pytest.param(_ACROBAT, None, id="a pdf editor when the document type is unknown"),
+    # nric and passport are photographed or scanned by the applicant, so a scanning app's Acrobat-branded
+    # metadata is the normal producer, not tampering (they were once wrongly institution-originated).
+    pytest.param(_ACROBAT, "nric", id="a pdf editor on a scanned nric"),
+    pytest.param(_ACROBAT, "passport", id="a pdf editor on a scanned passport"),
+    # Distiller generates PDFs from PostScript; widening the Acrobat marker must not sweep it up.
+    pytest.param({"Producer": "Acrobat Distiller 11.0 (Windows)"}, "bank_statement", id="acrobat distiller"),
+    # Documents a known gap: a deny-list can't catch a tool it doesn't know, however fabricated the document.
+    pytest.param({"Producer": "DocuSuite Enterprise 4.2"}, "bank_statement", id="an unknown producer"),
+    pytest.param({"Producer": "Microsoft: Print To PDF"}, "bank_statement", id="an ordinary producer on a statement"),
+    # exiftool's "creator" is not always a tool name; a person's name there must stay clean.
+    pytest.param({"Creator": "TAN YI XI JOVI _"}, "bank_statement", id="a person's name as creator"),
+    pytest.param(
+        {"CreateDate": "2024:01:15 10:23:00", "ModifyDate": "2024:01:15 10:25:00"}, None, id="modified after created"
+    ),
+    pytest.param({"CreateDate": "2024:01:15 10:23:00"}, None, id="only one date present"),
+    pytest.param({"CreateDate": "not a date", "ModifyDate": "also not a date"}, None, id="unparseable dates"),
+    # Matches the exiftool shape but names an impossible calendar date, which datetime() rejects.
+    pytest.param(
+        {"CreateDate": "2024:13:99 10:23:00", "ModifyDate": "2024:01:15 10:25:00"}, None, id="an impossible date"
+    ),
+    # The real GLDB FATCA form was authored in Word, so its dates are an hour apart.
+    pytest.param(
+        {"CreateDate": "2025:11:05 08:47:33", "ModifyDate": "2025:11:05 09:45:07"},
+        "fatca_crs_declaration", id="a re-save on a form the applicant edits",
+    ),
+    # One conversion pass gave a one-second gap on a real file; ReportLab writes the two dates identically.
+    pytest.param(
+        {"CreateDate": "2026:09:19 14:43:14", "ModifyDate": "2026:09:19 14:43:15"},
+        "bank_statement", id="a same-pass generation gap",
+    ),
+    # Clock skew and ignored timezone offsets shouldn't read as fabrication.
+    pytest.param(
+        {"CreateDate": (datetime.now() + timedelta(hours=6)).strftime("%Y:%m:%d %H:%M:%S")}, None,
+        id="a date a few hours ahead",
+    ),
+    pytest.param(
+        {"Author": "X", "DocumentID": "uuid:AAA", "InstanceID": "uuid:AAA"}, "bank_statement",
+        id="matching instance and document ids",
+    ),
+    # The real GLDB FATCA form has differing ids legitimately.
+    pytest.param(
+        {"Author": "X", "DocumentID": "uuid:AAA", "InstanceID": "uuid:BBB"}, "fatca_crs_declaration",
+        id="differing ids on a form the applicant edits",
+    ),
+    # Genuine samples supplied by users:
+    pytest.param(
+        {"Creator": "PDFium", "Producer": "PDFium", "CreateDate": "2023:03:09 17:09:29"}, "nric",
+        id="a real scanned nric",
+    ),
+    pytest.param(
+        {"Producer": "OpenPDF 2.0.2", "CreateDate": "2025:10:01 17:55:29Z"}, "bank_statement",
+        id="a real standard chartered statement (no creator, no modify date)",
+    ),
+    pytest.param(
+        {
+            "Producer": "iOS Version 17.1.2 (Build 21B101) Quartz PDFContext", "Creator": "Notes",
+            "CreateDate": "2025:10:12 08:19:18Z", "ModifyDate": "2025:10:12 08:19:18Z",
+        },
+        "passport", id="a real passport scanned with the iOS Notes app",
+    ),
+    # Two genuine OCBC statements with single-digit-second gaps, well under the 60 s tolerance.
+    pytest.param(
+        {
+            "Producer": "Streamline PDFGen for OCBC Group", "Creator": "pdfgen",
+            "CreateDate": "2026:02:03 11:43:08+08:00", "ModifyDate": "2026:02:03 11:43:11+08:00",
+        },
+        "bank_statement", id="a real ocbc statement (3 s gap)",
+    ),
+    pytest.param(
+        {
+            "Producer": "Streamline PDFGen for OCBC Group", "Creator": "pdfgen",
+            "CreateDate": "2026:09:02 22:36:34+08:00", "ModifyDate": "2026:09:02 22:36:38+08:00",
+        },
+        "bank_statement", id="a real ocbc statement (4 s gap)",
+    ),
+]
+
+
+@pytest.mark.parametrize(("metadata", "document_type"), _NOT_FLAGGED)
+def test_ordinary_metadata_is_not_flagged(metadata, document_type) -> None:
+    result = check_metadata_anomalies("doc-1", metadata, document_type)
+
+    assert result.anomalies == []
+    assert result.unable_to_assess is False
+
+
 def test_flags_generic_placeholder_author() -> None:
     result = check_metadata_anomalies("doc-1", {"Author": "admin"})
     assert len(result.anomalies) == 1
@@ -107,11 +201,6 @@ def test_flags_generic_placeholder_author() -> None:
     # Weak corroborating evidence only — plenty of genuine PDFs are
     # produced by a system account.
     assert result.anomalies[0].severity == "low"
-
-
-def test_does_not_flag_a_real_looking_author() -> None:
-    result = check_metadata_anomalies("doc-1", {"Author": "Jane Tan"})
-    assert result.anomalies == []
 
 
 def test_generic_pattern_check_is_case_and_whitespace_insensitive() -> None:
@@ -155,63 +244,6 @@ def test_flags_pdf_editor_on_institution_originated_document() -> None:
     assert "bank statement" in result.anomalies[0].reason
 
 
-def test_does_not_flag_pdf_editor_on_a_form_the_applicant_fills_in() -> None:
-    # The whole point of the document-type scoping: an applicant
-    # completing a FATCA/CRS declaration in Acrobat is the expected
-    # workflow, not evidence of tampering.
-    result = check_metadata_anomalies(
-        "doc-1", {"Producer": "Adobe Acrobat Pro DC 23"}, "fatca_crs_declaration"
-    )
-    assert result.anomalies == []
-
-
-def test_does_not_flag_pdf_editor_when_document_type_is_unknown() -> None:
-    result = check_metadata_anomalies("doc-1", {"Producer": "Adobe Acrobat Pro DC 23"})
-    assert result.anomalies == []
-
-
-def test_does_not_flag_pdf_editor_on_a_scanned_identity_document() -> None:
-    # Regression: nric/passport used to be in
-    # INSTITUTION_ORIGINATED_DOCUMENT_TYPES on the (wrong) assumption that
-    # they're issuer-generated PDFs like a bank statement. There is no such
-    # thing — every one is a physical card an applicant photographed or
-    # scanned, so a common scanning app (e.g. Adobe Scan, which writes
-    # Acrobat-branded metadata) is the NORMAL producer here, not evidence
-    # of tampering.
-    for document_type in ("nric", "passport"):
-        result = check_metadata_anomalies(
-            "doc-1", {"Producer": "Adobe Acrobat Pro DC 23"}, document_type
-        )
-        assert result.anomalies == [], f"false positive for {document_type}"
-
-
-def test_real_scanned_nric_metadata_is_clean() -> None:
-    # A genuine scanned NRIC (user-supplied sample): PDFium as both
-    # Creator and Producer, a single CreateDate with no ModifyDate at all.
-    result = check_metadata_anomalies(
-        "doc-1",
-        {"Creator": "PDFium", "Producer": "PDFium", "CreateDate": "2023:03:09 17:09:29"},
-        "nric",
-    )
-    assert result.anomalies == []
-    assert result.unable_to_assess is False
-
-
-def test_real_standard_chartered_statement_metadata_is_clean() -> None:
-    # A genuine Standard Chartered eStatement (user-supplied): OpenPDF
-    # (a real, legitimate open-source PDF library), no Creator at all, and
-    # only a CreateDate with no ModifyDate — a different metadata shape
-    # from OCBC's, confirming there's no single universal "bank statement"
-    # signature and a baseline needs to be per-issuer, not per-type.
-    result = check_metadata_anomalies(
-        "doc-1",
-        {"Producer": "OpenPDF 2.0.2", "CreateDate": "2025:10:01 17:55:29Z"},
-        "bank_statement",
-    )
-    assert result.anomalies == []
-    assert result.unable_to_assess is False
-
-
 # Parse warnings (a genuinely re-saved/tampered file) ------------------
 
 
@@ -249,16 +281,6 @@ def test_flags_canva_regardless_of_document_type() -> None:
     )
     assert len(result.anomalies) == 1
     assert result.anomalies[0].severity == "high"
-
-
-def test_creator_field_can_legitimately_hold_a_person_name() -> None:
-    # Documents the confirmed exiftool collision itself: "creator" isn't
-    # always a tool name and shouldn't be assumed to be one — a genuine
-    # person's name there (with no other marker present) must stay clean.
-    result = check_metadata_anomalies(
-        "doc-1", {"Creator": "TAN YI XI JOVI _"}, "bank_statement"
-    )
-    assert result.anomalies == []
 
 
 def test_real_annotated_and_resaved_bank_statement_is_flagged() -> None:
@@ -304,54 +326,6 @@ def test_parse_warning_fires_regardless_of_document_type() -> None:
     assert len(result.anomalies) == 1
 
 
-def test_no_parse_warning_key_present_is_not_flagged() -> None:
-    result = check_metadata_anomalies("doc-1", {"Author": "Jane Tan"})
-    assert result.anomalies == []
-
-
-def test_real_ios_notes_passport_scan_metadata_is_clean() -> None:
-    # A genuine passport scan made via iOS's Notes app scan-to-PDF feature
-    # (user-supplied): Producer names the OS/Quartz PDF stack, Creator is
-    # the app ("Notes") — exactly the kind of applicant-side capture
-    # tooling that must NOT be scrutinised like an issuer document (see
-    # the nric/passport exclusion above). CreateDate == ModifyDate to the
-    # second, as a single scan-to-PDF pass should be.
-    result = check_metadata_anomalies(
-        "doc-1",
-        {
-            "Producer": "iOS Version 17.1.2 (Build 21B101) Quartz PDFContext",
-            "Creator": "Notes",
-            "CreateDate": "2025:10:12 08:19:18Z",
-            "ModifyDate": "2025:10:12 08:19:18Z",
-        },
-        "passport",
-    )
-    assert result.anomalies == []
-    assert result.unable_to_assess is False
-
-
-def test_real_ocbc_bank_statement_metadata_is_clean() -> None:
-    # Two genuine OCBC statements (user-supplied), 7 months apart, with
-    # identical Producer/Creator — confirms the same-pass tolerance holds
-    # for a real institutional generator (both gaps are single-digit
-    # seconds, well under the 60s tolerance).
-    for create, modify in [
-        ("2026:02:03 11:43:08+08:00", "2026:02:03 11:43:11+08:00"),
-        ("2026:09:02 22:36:34+08:00", "2026:09:02 22:36:38+08:00"),
-    ]:
-        result = check_metadata_anomalies(
-            "doc-1",
-            {
-                "Producer": "Streamline PDFGen for OCBC Group",
-                "Creator": "pdfgen",
-                "CreateDate": create,
-                "ModifyDate": modify,
-            },
-            "bank_statement",
-        )
-        assert result.anomalies == []
-
-
 def test_flags_plain_adobe_acrobat_not_just_the_pro_edition() -> None:
     # Regression: the marker list only held "acrobat pro", so a real
     # install writing plain "Adobe Acrobat" — the most common of the three
@@ -360,16 +334,6 @@ def test_flags_plain_adobe_acrobat_not_just_the_pro_edition() -> None:
     assert len(result.anomalies) == 1
     assert result.anomalies[0].field == "creator"
     assert result.anomalies[0].severity == "medium"
-
-
-def test_does_not_flag_acrobat_distiller() -> None:
-    # Distiller is a PostScript-to-PDF generator, not an editor — plenty of
-    # institutions produce their genuine statements with it, so widening
-    # the Acrobat marker must not have swept it up.
-    result = check_metadata_anomalies(
-        "doc-1", {"Producer": "Acrobat Distiller 11.0 (Windows)"}, "bank_statement"
-    )
-    assert result.anomalies == []
 
 
 def test_flags_test_artefact_author_not_only_exact_placeholders() -> None:
@@ -386,24 +350,6 @@ def test_flags_template_artefact_in_producer() -> None:
     result = check_metadata_anomalies("doc-1", {"Producer": "invoice_template_final"})
     assert len(result.anomalies) == 1
     assert result.anomalies[0].field == "producer"
-
-
-def test_unknown_producer_is_not_flagged_by_the_deny_list() -> None:
-    # Documents the known gap, so it fails loudly if someone later adds a
-    # producer allow-list and forgets this test: a deny-list can only catch
-    # tools it already knows, so an invented one like "DocuSuite Enterprise"
-    # passes cleanly no matter how fabricated the document is.
-    result = check_metadata_anomalies(
-        "doc-1", {"Producer": "DocuSuite Enterprise 4.2"}, "bank_statement"
-    )
-    assert result.anomalies == []
-
-
-def test_does_not_flag_ordinary_producer_on_institution_document() -> None:
-    result = check_metadata_anomalies(
-        "doc-1", {"Producer": "Microsoft: Print To PDF"}, "bank_statement"
-    )
-    assert result.anomalies == []
 
 
 # AC8 -----------------------------------------------------------------
@@ -446,39 +392,6 @@ def test_flags_modification_before_creation() -> None:
     assert result.anomalies[0].severity == "high"
 
 
-def test_does_not_flag_modification_after_creation() -> None:
-    result = check_metadata_anomalies(
-        "doc-1",
-        {"CreateDate": "2024:01:15 10:23:00", "ModifyDate": "2024:01:15 10:25:00"},
-    )
-    assert result.anomalies == []
-
-
-def test_does_not_flag_date_relationship_when_only_one_date_present() -> None:
-    result = check_metadata_anomalies("doc-1", {"CreateDate": "2024:01:15 10:23:00"})
-    assert result.anomalies == []
-
-
-def test_unparseable_dates_do_not_crash_or_flag() -> None:
-    result = check_metadata_anomalies(
-        "doc-1",
-        {"CreateDate": "not a date", "ModifyDate": "also not a date"},
-    )
-    assert result.unable_to_assess is False
-    assert result.anomalies == []
-
-
-def test_semantically_invalid_date_does_not_crash_or_flag() -> None:
-    # Matches the exiftool date shape syntactically (regex-wise) but names
-    # an impossible calendar date — datetime() itself rejects it.
-    result = check_metadata_anomalies(
-        "doc-1",
-        {"CreateDate": "2024:13:99 10:23:00", "ModifyDate": "2024:01:15 10:25:00"},
-    )
-    assert result.unable_to_assess is False
-    assert result.anomalies == []
-
-
 # Re-saved after creation ----------------------------------------------
 
 
@@ -511,28 +424,6 @@ def test_resave_gap_is_described_in_the_largest_sensible_unit() -> None:
     assert "7 day(s)" in days.anomalies[0].reason
 
 
-def test_does_not_flag_resave_on_a_document_the_applicant_edits() -> None:
-    # Verified against the real GLDB FATCA form, whose dates are an hour
-    # apart because someone authored it in Word — entirely normal.
-    result = check_metadata_anomalies(
-        "doc-1",
-        {"CreateDate": "2025:11:05 08:47:33", "ModifyDate": "2025:11:05 09:45:07"},
-        "fatca_crs_declaration",
-    )
-    assert result.anomalies == []
-
-
-def test_does_not_flag_same_pass_generation_gap() -> None:
-    # A single conversion pass produced a 1-second gap on a real file, and
-    # ReportLab writes the two dates identically — neither is a re-save.
-    result = check_metadata_anomalies(
-        "doc-1",
-        {"CreateDate": "2026:09:19 14:43:14", "ModifyDate": "2026:09:19 14:43:15"},
-        "bank_statement",
-    )
-    assert result.anomalies == []
-
-
 # Impossible dates ------------------------------------------------------
 
 
@@ -552,16 +443,6 @@ def test_flags_future_date() -> None:
     assert "in the future" in result.anomalies[0].reason
 
 
-def test_does_not_flag_a_date_a_few_hours_ahead() -> None:
-    # Clock skew and the timezone offsets _parse_exif_datetime ignores
-    # shouldn't read as fabrication.
-    soon = datetime.now() + timedelta(hours=6)
-    result = check_metadata_anomalies(
-        "doc-1", {"CreateDate": soon.strftime("%Y:%m:%d %H:%M:%S")}
-    )
-    assert result.anomalies == []
-
-
 # XMP edit history ------------------------------------------------------
 
 
@@ -574,25 +455,6 @@ def test_flags_instance_id_differing_from_document_id_on_institution_document() 
     assert len(result.anomalies) == 1
     assert result.anomalies[0].field == "xmp_instance_id"
     assert result.anomalies[0].severity == "medium"
-
-
-def test_does_not_flag_matching_instance_and_document_ids() -> None:
-    result = check_metadata_anomalies(
-        "doc-1",
-        {"Author": "X", "DocumentID": "uuid:AAA", "InstanceID": "uuid:AAA"},
-        "bank_statement",
-    )
-    assert result.anomalies == []
-
-
-def test_does_not_flag_differing_ids_on_an_applicant_edited_document() -> None:
-    # The real GLDB FATCA form has differing IDs legitimately.
-    result = check_metadata_anomalies(
-        "doc-1",
-        {"Author": "X", "DocumentID": "uuid:AAA", "InstanceID": "uuid:BBB"},
-        "fatca_crs_declaration",
-    )
-    assert result.anomalies == []
 
 
 def test_provenance_ids_alone_are_still_unable_to_assess() -> None:
