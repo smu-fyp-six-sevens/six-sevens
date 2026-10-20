@@ -1,111 +1,139 @@
 /* =========================================================
-   Login Page
+   Login Page: brand panel on the left, sign-in form on the right
    ========================================================= */
 
 .login-page {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   position: relative;
-  overflow: hidden;
-  padding: 40px 20px;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
   background: var(--paper);
 }
 
-.login-background-decoration {
-  position: absolute;
-  width: 280px;
-  height: 280px;
-  border-radius: 50%;
-  pointer-events: none;
-  opacity: 0.45;
-}
-
-.login-background-decoration--top {
-  top: -160px;
-  right: -100px;
-  background: var(--teal-bg);
-}
-
-.login-background-decoration--bottom {
-  bottom: -170px;
-  left: -120px;
-  background: var(--amber-bg);
-}
-
-.login-card {
-  position: relative;
-  z-index: 1;
-  width: min(100%, 460px);
-  padding: 38px;
-  background: #ffffff;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  box-shadow: 0 18px 45px rgba(18, 32, 61, 0.10);
-}
-
-.login-brand {
+.login-panel {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 34px;
-}
-
-.login-brand-mark {
-  width: 42px;
-  height: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9px;
+  flex-direction: column;
+  gap: 40px;
+  padding: 0 72px 56px;
   background: var(--ink);
+  color: #dfe5ee;
+}
+
+/* Same spot as the top bar's brand on every other page (.app-header: 64px tall, 24px in). */
+.login-panel-brand,
+.login-card-brand {
+  height: var(--topbar-height);
+}
+
+.login-panel-brand {
+  margin-left: -48px;
   color: #ffffff;
-  font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
+}
+
+.login-panel-brand .brand-text span {
+  color: #9db4d3;
+}
+
+/* Auto margins centre the copy vertically and keep the footer at the bottom. */
+.login-panel-body {
+  max-width: 540px;
+  margin: auto 0;
+}
+
+.login-panel-eyebrow {
+  margin: 0 0 14px;
+  font-family: var(--mono);
   font-size: 13px;
-  font-weight: 700;
-}
-
-.login-brand-name {
-  color: var(--ink);
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.login-brand-subtitle {
-  margin-top: 1px;
-  color: var(--ink-soft);
-  font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
-  font-size: 10px;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
+  color: #9db4d3;
 }
 
-.login-heading {
+.login-panel h2 {
+  margin: 0 0 40px;
+  color: #ffffff;
+  font-size: 40px;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.login-panel-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 28px;
+  flex-direction: column;
+  gap: 26px;
+  counter-reset: login-step;
 }
 
-.login-security-icon {
-  width: 28px;
-  height: 28px;
-  flex-shrink: 0;
+.login-panel-steps li {
+  position: relative;
+  padding-left: 58px;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #b9c3d3;
+  counter-increment: login-step;
+}
+
+.login-panel-steps li::before {
+  content: counter(login-step);
+  position: absolute;
+  left: 0;
+  top: 2px;
+  width: 38px;
+  height: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 7px;
-  background: var(--teal-bg);
-  color: var(--teal);
+  border: 1px solid rgba(157, 180, 211, 0.4);
+  border-radius: 50%;
+  font-family: var(--mono);
+  font-size: 14px;
+  color: #ffffff;
+}
+
+.login-panel-steps strong {
+  display: block;
+  margin-bottom: 2px;
+  color: #ffffff;
   font-size: 18px;
 }
 
+.login-panel-footer {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: #8592a8;
+}
+
+.login-form-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+}
+
+.login-card {
+  width: min(100%, 460px);
+}
+
+/* The panel carries the brand on wide screens; this copy is for narrow ones. */
+.login-card-brand {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 24px;
+}
+
+.login-heading {
+  margin-bottom: 32px;
+}
+
 .login-heading h1 {
-  margin: 0 0 5px;
+  margin: 0 0 8px;
   color: var(--ink);
-  font-size: 27px;
+  font-size: 36px;
   line-height: 1.2;
   letter-spacing: -0.02em;
 }
@@ -113,81 +141,99 @@
 .login-heading p {
   margin: 0;
   color: var(--ink-soft);
-  font-size: 13px;
+  font-size: 16px;
   line-height: 1.5;
 }
 
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 22px;
 }
 
 .login-form .form-field {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
 }
 
 .login-form .form-field label {
   color: var(--ink);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 600;
 }
 
-.login-input-wrapper {
-  position: relative;
-}
-
-.login-input-icon {
-  position: absolute;
-  left: 13px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--ink-soft);
-  font-size: 13px;
-  pointer-events: none;
-}
-
-.login-input-wrapper input {
+.login-form input {
   width: 100%;
-  height: 46px;
-  padding: 0 13px 0 38px;
+  height: 52px;
+  padding: 0 16px;
   border: 1px solid var(--line);
-  border-radius: 7px;
-  background: #fffefb;
+  border-radius: 8px;
+  background: #ffffff;
   color: var(--ink);
-  font-size: 13.5px;
+  font-size: 16px;
   outline: none;
   transition:
     border-color 0.15s ease,
     box-shadow 0.15s ease;
 }
 
-.login-input-wrapper input::placeholder {
+.login-form input::placeholder {
   color: #9ea6b5;
 }
 
-.login-input-wrapper input:focus {
+.login-form input:focus {
   border-color: var(--steel);
   box-shadow: 0 0 0 3px rgba(61, 90, 128, 0.12);
 }
 
-.login-input-wrapper input:disabled {
+.login-form input:disabled {
   opacity: 0.65;
   cursor: not-allowed;
+}
+
+.login-password-wrapper {
+  position: relative;
+}
+
+.login-password-wrapper input {
+  padding-right: 72px;
+}
+
+.login-password-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--steel);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.login-password-toggle:hover:not(:disabled) {
+  background: rgba(61, 90, 128, 0.08);
+}
+
+.login-password-toggle:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 1px;
 }
 
 .login-error {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border: 1px solid #e9c5bb;
-  border-radius: 7px;
+  border-radius: 8px;
   background: var(--red-bg);
   color: var(--red);
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.4;
 }
 
@@ -197,18 +243,18 @@
 
 .login-submit-button {
   width: 100%;
-  min-height: 46px;
+  min-height: 52px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 9px;
-  margin-top: 4px;
+  margin-top: 6px;
   border: none;
-  border-radius: 7px;
-  background: var(--steel);
+  border-radius: 8px;
+  background: var(--ink);
   color: #ffffff;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 15.5px;
+  font-weight: 600;
   cursor: pointer;
   transition:
     background 0.15s ease,
@@ -221,6 +267,11 @@
 
 .login-submit-button:active:not(:disabled) {
   transform: translateY(1px);
+}
+
+.login-submit-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(61, 90, 128, 0.3);
 }
 
 .login-submit-button:disabled {
@@ -248,41 +299,30 @@
   }
 }
 
-.login-footer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  margin-top: 24px;
-  padding-top: 18px;
-  border-top: 1px solid #eeeae1;
-  color: var(--ink-soft);
-  font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
-  font-size: 10.5px;
-}
-
-.login-footer-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--teal);
-}
-
-@media (max-width: 620px) {
+@media (max-width: 860px) {
   .login-page {
-    padding: 24px 16px;
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .login-card {
-    padding: 28px 24px;
+  .login-panel {
+    display: none;
   }
 
-  .login-brand {
-    margin-bottom: 28px;
+  .login-card-brand {
+    display: inline-flex;
   }
 
-  .login-heading h1 {
-    font-size: 24px;
+  .login-form-area {
+    align-items: flex-start;
+    padding: calc(var(--topbar-height) + 32px) 16px 40px;
+  }
+}
+
+/* The top bar tightens at this width too (see upload.css). */
+@media (max-width: 620px) {
+  .login-card-brand {
+    left: 12px;
+    font-size: 16px;
   }
 }
 

@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import type { CaseRecord } from '../App';
 import {
   describeIssue,
@@ -11,8 +12,16 @@ import { useUploadSelection } from './upload/useUploadSelection';
 import { DocumentListPanel } from './upload/DocumentListPanel';
 import { MoveDocumentsDialog } from './upload/MoveDocumentsDialog';
 import { RequirementsSidebar } from './upload/RequirementsSidebar';
-import { UploadSummaryCards } from './upload/UploadSummaryCards';
+import { AdditionalDocumentsCard } from './upload/AdditionalDocumentsCard';
+import { AuditTrailCard } from './upload/AuditTrailCard';
+import { CaseAnalysisCard } from './upload/CaseAnalysisCard';
+import { CaseRiskCard } from './upload/CaseRiskCard';
+import { CaseSectionNav } from './upload/CaseSectionNav';
+import { caseSectionStatuses, isCaseSection, type CaseSection } from './upload/caseSections';
+import { FlaggedItemsCard } from './upload/FlaggedItemsCard';
 import AppHeader from '../components/AppHeader';
+import CaseHeader, { CaseTitle, caseCrumb, caseLabel, caseQueueCrumb } from '../components/CaseHeader';
+import { useCases } from '../casesContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DropZone from '../components/DropZone';
 import FileRow from '../components/FileRow';
@@ -28,7 +37,6 @@ import {
 
 interface UploadPageProps {
   selectedCase: CaseRecord;
-  onBack: () => void;
   onOpenDocument: (documentId: string) => void;
   onCaseUpdated: (companyName: string) => void;
   onCaseDeleted: () => void;
@@ -36,11 +44,11 @@ interface UploadPageProps {
 
 export default function UploadPage({
   selectedCase,
-  onBack,
   onOpenDocument,
   onCaseUpdated,
   onCaseDeleted,
 }: UploadPageProps) {
+  const cases = useCases();
   const {
     setDocumentDetails,
     fulfilledRequirements,
@@ -65,6 +73,14 @@ export default function UploadPage({
     identityNames,
     caseMatchNeedsReview,
   } = useCaseSnapshot(selectedCase.id);
+
+  // Kept in the URL so a refresh or a trip to a document and back lands on the same section.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sectionParam = searchParams.get('section');
+  const activeSection: CaseSection = isCaseSection(sectionParam) ? sectionParam : 'documents';
+  const selectSection = (section: CaseSection) => {
+    setSearchParams(section === 'documents' ? {} : { section }, { replace: true });
+  };
 
   const liveDocumentIds = useMemo(
     () => (snapshotLoaded ? new Set(documents.map((document) => document.id)) : null),
@@ -164,232 +180,260 @@ export default function UploadPage({
     <main className="shell shell--upload">
       <AppHeader />
 
-      <div className="upload-view">
-        <section className="upload-main">
-          <button type="button" className="back-link" onClick={onBack}>
-            ← Back to case queue
-          </button>
-
-          {isEditingCase ? (
-            <div className="add-field-form">
-              <div className="add-field-form-row">
-                <label htmlFor="case-company-name">Company name</label>
-                <input
-                  id="case-company-name"
-                  type="text"
-                  value={companyNameDraft}
-                  onChange={(event) => setCompanyNameDraft(event.target.value)}
-                  maxLength={MAX_COMPANY_NAME_LENGTH}
-                  disabled={isSavingCase}
-                  aria-invalid={saveCaseError ? true : undefined}
-                  aria-describedby={saveCaseError ? 'case-company-name-error' : undefined}
-                />
-              </div>
-
-              {saveCaseError && (
-                <p id="case-company-name-error" className="add-field-error" role="alert">
-                  {saveCaseError}
-                </p>
-              )}
-
-              <div className="add-field-form-actions">
+      <CaseHeader crumbs={[caseQueueCrumb, caseCrumb(cases, selectedCase, { current: true })]}>
+        {isEditingCase ? (
+          <div className="case-title-editing">
+            <label htmlFor="case-company-name" className="sr-only">Company name</label>
+            <div className="case-title">
+              <span className="case-id-tag">{caseLabel(selectedCase)}</span>
+              <input
+                id="case-company-name"
+                type="text"
+                className="case-title-input"
+                value={companyNameDraft}
+                onChange={(event) => setCompanyNameDraft(event.target.value)}
+                maxLength={MAX_COMPANY_NAME_LENGTH}
+                disabled={isSavingCase}
+                aria-invalid={saveCaseError ? true : undefined}
+                aria-describedby={saveCaseError ? 'case-company-name-error' : undefined}
+                autoFocus
+              />
+              <span className="add-field-form-actions">
                 <button type="button" onClick={handleCancelEditCase} disabled={isSavingCase}>
                   Cancel
                 </button>
                 <button type="button" onClick={() => void handleSaveCase()} disabled={isSavingCase}>
                   {isSavingCase ? 'Saving…' : 'Save'}
                 </button>
-              </div>
-            </div>
-          ) : (
-            <div className="case-header-row">
-              <p className="eyebrow">
-                Case #{selectedCase.caseNumber} · {selectedCase.type} —{' '}
-                {selectedCase.applicant}
-              </p>
-              <div className="case-header-actions">
-                <KebabMenu
-                  label={isDeletingCase ? 'Deleting case' : 'Case actions'}
-                  disabled={isDeletingCase}
-                  items={[
-                    {
-                      id: 'edit',
-                      label: 'Edit case details',
-                      onSelect: () => setIsEditingCase(true),
-                    },
-                    {
-                      id: 'delete',
-                      label: isDeletingCase ? 'Deleting…' : 'Delete case',
-                      danger: true,
-                      disabled: isDeletingCase || caseHasInFlightDocument,
-                      onSelect: () => setCaseDeleteOpen(true),
-                    },
-                  ]}
-                />
-              </div>
-            </div>
-          )}
-
-          {deleteError && (
-            <div className="toast show mixed" role="alert">
-              ⚠ {deleteError}
-            </div>
-          )}
-
-          <h1>Upload supporting documents</h1>
-
-          <p className="sub">
-            Accepted files are logged and assigned a document ID for the
-            investigation record.
-          </p>
-
-          <DropZone onFiles={handleFiles} disabled={isSubmitting} />
-
-          {selectedFiles.length > 0 && (
-            <>
-              <div className="section-label">
-                <span>Selected files</span>
-                <span>{selectedFiles.length} selected</span>
-              </div>
-
-              <div className="file-list">
-                {selectedFiles.map((file, index) => {
-                  const rejection = rejections.find(
-                    (item) => item.file === file,
-                  );
-
-                  return (
-                    <FileRow
-                      key={`${file.name}-${index}`}
-                      file={file}
-                      result={resultByFilename.get(file.name)}
-                      rejected={
-                        rejection
-                          ? describeIssue(rejection.issue)
-                          : undefined
-                      }
-                      isUploading={isSubmitting}
-                      onRemove={() => removeFile(index)}
-                    />
-                  );
-                })}
-              </div>
-
-              <div className="action-bar">
-                <span className="count">
-                  {hasOutcome
-                    ? `${completedCount} / ${selectedFiles.length} processed`
-                    : `${selectedFiles.length} file${
-                        selectedFiles.length > 1 ? 's' : ''
-                      } selected`}
-                </span>
-
-                <button
-                  type="button"
-                  className="upload-btn"
-                  disabled={isSubmitting || selectedFiles.length === 0}
-                  onClick={() => {
-                    void handleSubmit();
-                  }}
-                >
-                  {isSubmitting
-                    ? 'Uploading…'
-                    : hasOutcome
-                      ? 'Upload again'
-                      : `Upload ${selectedFiles.length} file${
-                          selectedFiles.length > 1 ? 's' : ''
-                        }`}
-                </button>
-              </div>
-            </>
-          )}
-
-          {selectedFiles.length === 0 && !isSubmitting && (
-            <div className="empty">
-              No files selected yet — drag files above or click browse
-            </div>
-          )}
-
-          {countError && (
-            <div className="toast show mixed">⚠ {countError}</div>
-          )}
-
-          {error && (
-            <div className="toast show mixed">⚠ {error}</div>
-          )}
-
-          {justSubmitted && hasOutcome && !error && !isSubmitting && (
-            <div
-              className={`toast show ${
-                failedCount > 0 ? 'mixed' : 'all-ok'
-              }`}
-            >
-              <span>{failedCount > 0 ? '⚠' : '✓'}</span>
-
-              <span>
-                <b>
-                  {successfulCount} of {selectedFiles.length} documents
-                  uploaded.
-                </b>{' '}
-                {failedCount > 0
-                  ? `${failedCount} need attention above.`
-                  : 'All documents uploaded successfully.'}
               </span>
             </div>
+            {saveCaseError && (
+              <p id="case-company-name-error" className="add-field-error" role="alert">
+                {saveCaseError}
+              </p>
+            )}
+          </div>
+        ) : (
+          <>
+            <CaseTitle caseRecord={selectedCase} />
+            <KebabMenu
+              label={isDeletingCase ? 'Deleting case' : 'Case actions'}
+              disabled={isDeletingCase}
+              items={[
+                {
+                  id: 'edit',
+                  label: 'Edit case details',
+                  onSelect: () => setIsEditingCase(true),
+                },
+                {
+                  id: 'delete',
+                  label: isDeletingCase ? 'Deleting…' : 'Delete case',
+                  danger: true,
+                  disabled: isDeletingCase || caseHasInFlightDocument,
+                  onSelect: () => setCaseDeleteOpen(true),
+                },
+              ]}
+            />
+          </>
+        )}
+      </CaseHeader>
+
+      {deleteError && (
+        <div className="toast show mixed" role="alert">
+          ⚠ {deleteError}
+        </div>
+      )}
+
+      <div className="case-layout">
+        <CaseSectionNav
+          activeSection={activeSection}
+          statuses={caseSectionStatuses({
+            documentCount: documents.length,
+            approvedCount: approvedDocuments.length,
+            hasInFlightDocument: caseHasInFlightDocument,
+            flaggedCount: flaggedDocuments.length,
+            analysisReady,
+            analysisOverview,
+            risk,
+            additionalDocumentCount: additionalDocuments
+              ? additionalDocuments.items.length
+              : supportingDocumentRecommendations.length,
+          })}
+          onSelect={selectSection}
+        />
+
+        <div className="case-content">
+          {activeSection === 'documents' && (
+            <div className="upload-view">
+              <section className="upload-main">
+                <h2 className="section-title">Upload supporting documents</h2>
+
+                <p className="sub">
+                  Accepted files are logged and assigned a document ID for the
+                  investigation record.
+                </p>
+
+                <DropZone onFiles={handleFiles} disabled={isSubmitting} />
+
+                {selectedFiles.length > 0 && (
+                  <>
+                    <div className="section-label">
+                      <span>Selected files</span>
+                      <span>{selectedFiles.length} selected</span>
+                    </div>
+
+                    <div className="file-list">
+                      {selectedFiles.map((file, index) => {
+                        const rejection = rejections.find(
+                          (item) => item.file === file,
+                        );
+
+                        return (
+                          <FileRow
+                            key={`${file.name}-${index}`}
+                            file={file}
+                            result={resultByFilename.get(file.name)}
+                            rejected={
+                              rejection
+                                ? describeIssue(rejection.issue)
+                                : undefined
+                            }
+                            isUploading={isSubmitting}
+                            onRemove={() => removeFile(index)}
+                          />
+                        );
+                      })}
+                    </div>
+
+                    <div className="action-bar">
+                      <span className="count">
+                        {hasOutcome
+                          ? `${completedCount} / ${selectedFiles.length} processed`
+                          : `${selectedFiles.length} file${
+                              selectedFiles.length > 1 ? 's' : ''
+                            } selected`}
+                      </span>
+
+                      <button
+                        type="button"
+                        className="upload-btn"
+                        disabled={isSubmitting || selectedFiles.length === 0}
+                        onClick={() => {
+                          void handleSubmit();
+                        }}
+                      >
+                        {isSubmitting
+                          ? 'Uploading…'
+                          : hasOutcome
+                            ? 'Upload again'
+                            : `Upload ${selectedFiles.length} file${
+                                selectedFiles.length > 1 ? 's' : ''
+                              }`}
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {selectedFiles.length === 0 && !isSubmitting && (
+                  <div className="empty">
+                    No files selected yet — drag files above or click browse
+                  </div>
+                )}
+
+                {countError && (
+                  <div className="toast show mixed">⚠ {countError}</div>
+                )}
+
+                {error && (
+                  <div className="toast show mixed">⚠ {error}</div>
+                )}
+
+                {justSubmitted && hasOutcome && !error && !isSubmitting && (
+                  <div
+                    className={`toast show ${
+                      failedCount > 0 ? 'mixed' : 'all-ok'
+                    }`}
+                  >
+                    <span>{failedCount > 0 ? '⚠' : '✓'}</span>
+
+                    <span>
+                      <b>
+                        {successfulCount} of {selectedFiles.length} documents
+                        uploaded.
+                      </b>{' '}
+                      {failedCount > 0
+                        ? `${failedCount} need attention above.`
+                        : 'All documents uploaded successfully.'}
+                    </span>
+                  </div>
+                )}
+
+                <DocumentListPanel
+                  handleCancelDocument={handleCancelDocument}
+                  handleRetryDocument={handleRetryDocument}
+                  allExtractedSelected={allExtractedSelected}
+                  approveError={approveError}
+                  approvedDocuments={approvedDocuments}
+                  cancelActionError={cancelActionError}
+                  cancellingDocumentId={cancellingDocumentId}
+                  caseMatches={caseMatches}
+                  clearDocumentSelection={clearDocumentSelection}
+                  documents={documents}
+                  eligibleForApprovalCount={eligibleForApprovalCount}
+                  extractedDocuments={extractedDocuments}
+                  handleApproveSelected={handleApproveSelected}
+                  handleSelectAllEligible={handleSelectAllEligible}
+                  isApprovingSelected={isApprovingSelected}
+                  onOpenDocument={onOpenDocument}
+                  openMoveDialog={openMoveDialog}
+                  retryActionError={retryActionError}
+                  retryingDocumentId={retryingDocumentId}
+                  selectedApprovableCount={selectedApprovableCount}
+                  selectedDocumentIds={selectedDocumentIds}
+                  selectedExtractedDocuments={selectedExtractedDocuments}
+                  selectedMovableOrDeletableCount={selectedMovableOrDeletableCount}
+                  setDocumentsToDelete={setDocumentsToDelete}
+                  setSelectedDocumentIds={setSelectedDocumentIds}
+                  toggleDocumentSelected={toggleDocumentSelected}
+                  wsConnected={wsConnected}
+                />
+              </section>
+
+              <RequirementsSidebar
+                fulfilledRequirements={fulfilledRequirements}
+                idDocumentCoverage={idDocumentCoverage}
+                identityNames={identityNames}
+                proofOfAddressCoverage={proofOfAddressCoverage}
+              />
+            </div>
           )}
 
-            <DocumentListPanel
-              handleCancelDocument={handleCancelDocument}
-              handleRetryDocument={handleRetryDocument}
-              allExtractedSelected={allExtractedSelected}
-              approveError={approveError}
-              approvedDocuments={approvedDocuments}
-              cancelActionError={cancelActionError}
-              cancellingDocumentId={cancellingDocumentId}
+          {activeSection === 'flagged' && (
+            <FlaggedItemsCard
+              caseMatchNeedsReview={caseMatchNeedsReview}
               caseMatches={caseMatches}
-              clearDocumentSelection={clearDocumentSelection}
-              documents={documents}
-              eligibleForApprovalCount={eligibleForApprovalCount}
-              extractedDocuments={extractedDocuments}
-              handleApproveSelected={handleApproveSelected}
-              handleSelectAllEligible={handleSelectAllEligible}
-              isApprovingSelected={isApprovingSelected}
+              flaggedDocuments={flaggedDocuments}
               onOpenDocument={onOpenDocument}
-              openMoveDialog={openMoveDialog}
-              retryActionError={retryActionError}
-              retryingDocumentId={retryingDocumentId}
-              selectedApprovableCount={selectedApprovableCount}
-              selectedDocumentIds={selectedDocumentIds}
-              selectedExtractedDocuments={selectedExtractedDocuments}
-              selectedMovableOrDeletableCount={selectedMovableOrDeletableCount}
-              setDocumentsToDelete={setDocumentsToDelete}
-              setSelectedDocumentIds={setSelectedDocumentIds}
-              toggleDocumentSelected={toggleDocumentSelected}
-              wsConnected={wsConnected}
             />
+          )}
 
+          {activeSection === 'risk' && <CaseRiskCard risk={risk} />}
 
+          {activeSection === 'analysis' && (
+            <CaseAnalysisCard caseId={selectedCase.id} analysisReady={analysisReady} overview={analysisOverview} />
+          )}
 
-          <UploadSummaryCards
-            analysisOverview={analysisOverview}
-            analysisReady={analysisReady}
-            caseId={selectedCase.id}
-            caseMatchNeedsReview={caseMatchNeedsReview}
-            caseMatches={caseMatches}
-            flaggedDocuments={flaggedDocuments}
-            onOpenDocument={onOpenDocument}
-            risk={risk}
-            additionalDocuments={additionalDocuments}
-            supportingDocumentRecommendations={supportingDocumentRecommendations}
-          />
-        </section>
+          {/* Both come from the latest complete case analysis, so risk is set exactly when one exists. */}
+          {activeSection === 'additional' && (
+            <AdditionalDocumentsCard
+              additionalDocuments={additionalDocuments}
+              legacyRecommendations={supportingDocumentRecommendations}
+              analysed={risk !== null}
+            />
+          )}
 
-        <RequirementsSidebar
-          fulfilledRequirements={fulfilledRequirements}
-          idDocumentCoverage={idDocumentCoverage}
-          identityNames={identityNames}
-          proofOfAddressCoverage={proofOfAddressCoverage}
-        />
+          {activeSection === 'audit' && <AuditTrailCard />}
+        </div>
       </div>
 
       {caseDeleteOpen && (

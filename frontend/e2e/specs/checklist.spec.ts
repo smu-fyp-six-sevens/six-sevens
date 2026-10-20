@@ -71,7 +71,7 @@ test.describe('Classify optional documents @sprint2 @SCRUM-114', () => {
       await expect(requirement(additionalList(page), label)).not.toHaveClass(/fulfilled/);
     }
     await page.goto('/cases');
-    await expect(page.locator('.case-card').filter({ hasText: 'Anchorpoint' })).toContainText('Ready for review');
+    await expect(page.locator('.case-row').filter({ hasText: 'Anchorpoint' })).toContainText('Ready for review');
   });
 
   test('DI-033 uploaded optional documents are mapped to their optional requirement @DI-033', async ({ page, backend }) => {

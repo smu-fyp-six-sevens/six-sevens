@@ -485,6 +485,12 @@
   border-top: 1px solid var(--line);
 }
 
+/* The header already draws the dividing line; a second border here showed as an empty strip. */
+.summary-card-header + .flagged-list {
+  border-top: none;
+  margin-top: -14px;
+}
+
 .flagged-item {
   display: flex;
   align-items: center;
