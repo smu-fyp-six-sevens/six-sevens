@@ -128,7 +128,7 @@ uploaded → queued → processing → extracting → analyzed ──approve─�
 
 | Table | Holds |
 |---|---|
-| `cases` | company name, GreenLink ID, `submission_finalized`, dev flag. `recommended_additional_documents` is always empty; the API reports the missing checklist types under that name |
+| `cases` | company name, GreenLink ID, `submission_finalized`, dev flag. `recommended_additional_documents` (jsonb) holds `[]` until a case is analysed, then the whole `additional_documents` result of its latest complete run; the case summary returns it as `additional_documents`. The summary's `missing_requirements` (the checklist types no accepted document covers yet) is computed on every read, not stored |
 | `documents` | one row per file: status, type, confidences, routing, requirements fulfilled, file metadata (read only by the metadata checks) |
 | `extracted_fields` | one row per field per document |
 | `langgraph_trace` | one JSON trace per document: pipeline steps and the **full detection report** |
@@ -183,7 +183,7 @@ Every 60 seconds a summary of Realtime and WebSocket traffic (events received, i
 
 **Built:** upload and queue; classify and extract with the reclassify loop; officer review tools; requirements checklist; case-match; the Detection Agent with 10 checks and on-demand single checks; per-document flags; the case analysis (deterministic and agent cross-document findings, score, outlook, additional documents, summary); live WebSocket updates; cost logging; a manual Cloud Run deploy workflow.
 
-**Not built:** the Output Aggregator; automatic case analysis when all documents are scanned; the 5-service Pub/Sub split; case-level flags; an officer review flow for flags (the `status` and `reviewed_by` columns exist, unused); persisting recommended documents to `cases.recommended_additional_documents`; Prometheus and Grafana. Open items are in `PENDING_WORK.md`.
+**Not built:** the Output Aggregator; automatic case analysis when all documents are scanned; the 5-service Pub/Sub split; case-level flags; an officer review flow for flags (the `status` and `reviewed_by` columns exist, unused); Prometheus and Grafana. Open items are in `PENDING_WORK.md`.
 
 ## 10. Known rough edges
 

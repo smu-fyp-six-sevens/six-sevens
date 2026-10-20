@@ -12,7 +12,7 @@ The per-case analysis is built (`backend/app/case_pipeline/`); `HOW_IT_WORKS.md`
 | `external_validation/` | Not part of this module. Runs per document; its findings reach the agent through each document's detection report. |
 | `cross_document/deterministic.py` | Part of this module. Comparisons that need no judgement run first on every analysis, one finding per difference, and are given to the agent as facts. |
 | `case_risk.py` | The only source of the score (deterministic). |
-| `additional_documents.py`, `supporting_documents.py` | Rule-based recommendations merged with the agent's requests into one list. Planned: they also feed the agent, and what the agent concludes is saved to `cases.recommended_additional_documents`. |
+| `additional_documents.py`, `supporting_documents.py` | Rule-based recommendations merged with the agent's requests into one list. The merged list is stored on the case (`cases.recommended_additional_documents`) when a run completes and is still the newest (the run's own result no longer carries it). Planned: the rule-based recommendations also feed the agent. |
 
 ## Step 0: per-case trigger (not built)
 

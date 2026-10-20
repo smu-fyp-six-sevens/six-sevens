@@ -22,7 +22,6 @@ def _make_case(
         company_name=company_name,
         status="open",
         submission_finalized=False,
-        recommended_additional_documents=[],
         created_at="2026-08-26T00:00:00Z",
         updated_at="2026-08-26T00:00:00Z",
     )

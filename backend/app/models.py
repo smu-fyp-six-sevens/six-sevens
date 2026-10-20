@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .config import settings
 from .holder import holder_kind
@@ -235,7 +235,8 @@ class CaseRecord(BaseModel):
     status: str = "open"
     submission_finalized: bool = False
     finalized_at: datetime | None = None
-    recommended_additional_documents: list = Field(default_factory=list)
+    # The list of documents to request, read from the recommended_additional_documents column (see the validator); only the case summary returns it.
+    additional_documents: AdditionalDocuments | None = Field(default=None, exclude=True)
     created_at: datetime
     updated_at: datetime
     # Set automatically at creation from settings.IS_CLOUD_DEPLOYMENT (never
@@ -243,6 +244,18 @@ class CaseRecord(BaseModel):
     # deployment, hidden from the cloud case queue during UAT. See
     # case_repository.create_case / list_cases.
     dev: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _split_stored_additional_documents(cls, data):
+        """
+        The recommended_additional_documents column holds [] until a case is analysed, then the analysis's
+        whole additional-documents result (an object). It is not a field: callers see that object as additional_documents.
+        """
+        raw = data.get("recommended_additional_documents") if isinstance(data, dict) else None
+        if isinstance(raw, dict):
+            data = {**data, "additional_documents": raw or None}
+        return data
 
 
 class CaseDocumentsStatus(str, Enum):
@@ -428,6 +441,9 @@ class AdditionalDocuments(BaseModel):
     best_case_level: str | None = None
 
 
+CaseRecord.model_rebuild()  # now that AdditionalDocuments exists
+
+
 class CaseAnalysisOverview(BaseModel):
     """The latest per-case analysis in brief; the full result is GET /cases/{id}/analysis."""
 
@@ -441,17 +457,15 @@ class CaseAnalysisOverview(BaseModel):
 
 class CaseSummary(CaseRecord):
     """
-    documents_status and fulfilled_requirements are both computed live from
-    the documents table on every read, never stored — see case_service.py.
-    recommended_additional_documents is repurposed here as the computed
-    "still missing" list (the checklist requirements no accepted document
-    has fulfilled yet), overriding whatever's in the underlying (always
-    empty — nothing ever wrote to it) cases.recommended_additional_documents
-    column.
+    documents_status, fulfilled_requirements and missing_requirements are all
+    computed live from the documents table on every read, never stored — see
+    case_service.py.
     """
 
     documents_status: CaseDocumentsStatus
     fulfilled_requirements: list[str] = Field(default_factory=list)
+    # The checklist requirements no accepted document has fulfilled yet.
+    missing_requirements: list[str] = Field(default_factory=list)
     proof_of_address_coverage: ProofOfAddressCoverage = Field(
         default_factory=lambda: ProofOfAddressCoverage(covered=0, total=0)
     )
@@ -461,12 +475,12 @@ class CaseSummary(CaseRecord):
     # None when the documents' detection reports couldn't be loaded.
     risk: CaseRisk | None = None
     # Further evidence to request from the client; empty when nothing in the
-    # case needs any. Unlike recommended_additional_documents (missing
-    # checklist items), these come from what the documents themselves show.
+    # case needs any. Unlike missing_requirements (missing checklist items),
+    # these come from what the documents themselves show.
     supporting_document_recommendations: list[SupportingDocumentRecommendation] = Field(
         default_factory=list
     )
-    # The same requests merged with the agent's, in one list; None for runs from before it existed.
+    # The checklist requests merged with the agent's, in one list; None before the case is analysed.
     additional_documents: AdditionalDocuments | None = None
     # Every approved document has been scanned, so the case analysis can be run.
     analysis_ready: bool = False

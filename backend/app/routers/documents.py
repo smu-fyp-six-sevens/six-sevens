@@ -834,7 +834,6 @@ async def retry_document(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Document's state changed; refetch and try again.",
             )
-        # update_status can't clear the previous failure_reason (known; see PENDING_WORK.md).
         await document_queue.enqueue(document_id)
 
     refreshed = await asyncio.to_thread(document_repository.get_document, document_id)

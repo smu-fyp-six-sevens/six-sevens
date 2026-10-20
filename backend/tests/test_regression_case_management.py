@@ -33,8 +33,7 @@ _CREATED = datetime(2026, 8, 26, tzinfo=timezone.utc)
 def _case(company_name: str = "IRONCLAD SECURITY") -> CaseRecord:
     return CaseRecord(
         id="case-1", greenlink_case_id="GLDB-01", company_name=company_name, status="open",
-        submission_finalized=False, recommended_additional_documents=[],
-        created_at=_CREATED, updated_at=_CREATED,
+        submission_finalized=False, created_at=_CREATED, updated_at=_CREATED,
     )
 
 

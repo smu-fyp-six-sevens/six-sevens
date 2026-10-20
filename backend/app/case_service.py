@@ -218,8 +218,6 @@ def build_summary(
     unmatched_names = compute_unmatched_proof_of_address_names(documents)
     id_covered, id_total = compute_id_document_identity_progress(documents)
     id_missing_side = compute_id_document_missing_side(documents)
-    data = case.model_dump()
-    data["recommended_additional_documents"] = missing
     overview: CaseAnalysisOverview | None = None
     if analysis is not None:
         if reports is not None:
@@ -231,9 +229,10 @@ def build_summary(
     if completed is None and analysis is not None and analysis.status == "complete":
         completed = analysis
     return CaseSummary(
-        **data,
+        **case.model_dump(),
         documents_status=compute_documents_status(documents),
         fulfilled_requirements=fulfilled,
+        missing_requirements=missing,
         proof_of_address_coverage=ProofOfAddressCoverage(
             covered=covered, total=total, unmatched_names=unmatched_names
         ),
@@ -242,7 +241,7 @@ def build_summary(
         ),
         risk=completed.risk if completed else None,
         supporting_document_recommendations=completed.supporting_documents if completed else [],
-        additional_documents=completed.additional_documents if completed else None,
+        additional_documents=case.additional_documents,
         analysis_ready=is_ready_for_analysis(documents),
         analysis=overview,
     )

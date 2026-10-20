@@ -54,12 +54,12 @@ def test_create_document_inserts_expected_row_and_returns_record() -> None:
         assert inserted_row["retry_count"] == 0
 
 
-def test_update_status_sends_only_status_when_no_optional_fields() -> None:
+def test_update_status_sends_only_the_status_and_a_cleared_reason_when_no_optional_fields() -> None:
     with patch("app.document_repository.supabase_client") as mock_client:
         document_repository.update_status("doc-1", DocumentStatus.PROCESSING)
 
         update_payload = mock_client.table.return_value.update.call_args[0][0]
-        assert update_payload == {"status": "processing"}
+        assert update_payload == {"status": "processing", "failure_reason": None}
         mock_client.table.return_value.update.return_value.eq.assert_called_once_with(
             "id", "doc-1"
         )
@@ -150,6 +150,25 @@ def test_update_status_includes_every_optional_field_when_given() -> None:
             "failure_reason": "boom",
             "document_type": "payslip",
         }
+
+
+@pytest.mark.parametrize(
+    "status", [s for s in DocumentStatus if s != DocumentStatus.FAILED], ids=lambda s: s.value
+)
+def test_update_status_clears_the_failure_reason_for_any_status_but_failed(status: DocumentStatus) -> None:
+    with patch("app.document_repository.supabase_client") as mock_client:
+        document_repository.update_status("doc-1", status)
+
+        update_payload = mock_client.table.return_value.update.call_args[0][0]
+        assert update_payload == {"status": status.value, "failure_reason": None}
+
+
+def test_update_status_to_failed_without_a_reason_leaves_the_stored_reason_alone() -> None:
+    with patch("app.document_repository.supabase_client") as mock_client:
+        document_repository.update_status("doc-1", DocumentStatus.FAILED)
+
+        update_payload = mock_client.table.return_value.update.call_args[0][0]
+        assert update_payload == {"status": "failed"}
 
 
 def test_approve_document_returns_the_updated_row_and_does_not_resync_the_case() -> None:

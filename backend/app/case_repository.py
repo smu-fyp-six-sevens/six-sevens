@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 
 from .config import settings
-from .models import CaseRecord
+from .models import AdditionalDocuments, CaseRecord
 from .supabase_client import service_supabase_client, supabase_client
 from .supabase_rows import row as _row
 
@@ -84,6 +84,12 @@ def delete_case(case_id: str) -> None:
     result = client.table("cases").delete().eq("id", case_id).execute()
     if not result.data:
         raise RuntimeError(f"Case {case_id} was not deleted")
+
+
+def set_recommended_additional_documents(case_id: str, additional: AdditionalDocuments | None) -> None:
+    """Stores the latest complete analysis's whole list of documents to request on the case (jsonb); [] clears it."""
+    value = additional.model_dump(mode="json") if additional else []
+    supabase_client.table("cases").update({"recommended_additional_documents": value}).eq("id", case_id).execute()
 
 
 def set_submission_finalized(case_id: str, finalized: bool) -> None:

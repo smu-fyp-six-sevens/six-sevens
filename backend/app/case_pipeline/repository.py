@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from ..models import AdditionalDocuments, CaseRisk, SupportingDocumentRecommendation
+from ..models import CaseRisk, SupportingDocumentRecommendation
 from ..supabase_client import supabase_client
 from ..supabase_rows import row as _row
 from .models import AnalysisAudit, CaseAnalysis, CrossDocFinding, RiskOutlook
@@ -15,15 +15,14 @@ _CHUNK = 100
 # What a case list needs from a run: no trace, outlook or audit, which are large and only read for one case.
 _LIST_COLUMNS = (
     "run_id, case_id, status, fingerprint, started_at, finished_at, error, findings:result->findings, "
-    "risk:result->risk, supporting_documents:result->supporting_documents, "
-    "additional_documents:result->additional_documents"
+    "risk:result->risk, supporting_documents:result->supporting_documents"
 )
 
 
 def _to_analysis(row: dict) -> CaseAnalysis:
     result: dict[str, Any] = row.get("result") or {}
     if "findings" in row:  # a list read selects only these keys out of result
-        result = {key: row.get(key) for key in ("findings", "risk", "supporting_documents", "additional_documents")}
+        result = {key: row.get(key) for key in ("findings", "risk", "supporting_documents")}
     return CaseAnalysis(
         run_id=row["run_id"],
         case_id=row["case_id"],
@@ -37,7 +36,6 @@ def _to_analysis(row: dict) -> CaseAnalysis:
         summary=result.get("summary"),
         risk=CaseRisk(**result["risk"]) if result.get("risk") else None,
         supporting_documents=[SupportingDocumentRecommendation(**s) for s in result.get("supporting_documents") or []],
-        additional_documents=AdditionalDocuments(**result["additional_documents"]) if result.get("additional_documents") else None,
         consistent_checks=[str(c) for c in result.get("consistent_checks") or []],
         audit=AnalysisAudit(**(result.get("audit") or {})),
         trace=row.get("trace") or [],
@@ -80,7 +78,6 @@ def finish_run(analysis: CaseAnalysis) -> bool:
         "summary": analysis.summary,
         "risk": analysis.risk.model_dump(mode="json") if analysis.risk else None,
         "supporting_documents": [s.model_dump(mode="json") for s in analysis.supporting_documents],
-        "additional_documents": analysis.additional_documents.model_dump(mode="json") if analysis.additional_documents else None,
         "consistent_checks": analysis.consistent_checks,
         "audit": analysis.audit.model_dump(mode="json"),
     }

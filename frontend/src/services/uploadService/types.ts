@@ -161,7 +161,8 @@ export interface RecommendationItem {
 // Mirrors the subset of CaseSummary in backend/app/models.py this page needs.
 export interface CaseRequirementCoverage {
   fulfilled_requirements: string[];
-  recommended_additional_documents: string[];
+  // The checklist requirements no accepted document has fulfilled yet.
+  missing_requirements: string[];
   // Identified individuals on the case with an accepted ID document.
   proof_of_address_coverage: { covered: number; total: number; unmatched_names: string[] };
   // How many of the case's identified individuals (grouped the same way as proof_of_address_coverage.

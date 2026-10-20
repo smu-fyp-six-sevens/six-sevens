@@ -146,13 +146,10 @@ async def _rerun_extraction(document_id: str) -> None:
         )
         return
 
-    # failure_reason="" clears a stale reason left by whatever FAILED run
-    # this rerun is recovering from (update_status skips None, not "").
     await asyncio.to_thread(
         document_repository.update_status,
         document_id,
         DocumentStatus.ANALYZED,
         document_type=document_type,
-        failure_reason="",
     )
     logger.info("Document %s: langgraph extraction rerun complete as %s", document_id, document_type)

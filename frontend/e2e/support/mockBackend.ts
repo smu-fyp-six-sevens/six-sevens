@@ -69,7 +69,7 @@ export interface CaseRow {
   status: string;
   submission_finalized: boolean;
   finalized_at: string | null;
-  recommended_additional_documents: string[];
+  missing_requirements: string[];
   created_at: string;
   updated_at: string;
   dev: boolean;
@@ -129,7 +129,7 @@ export function makeCase(overrides: Partial<CaseRow> = {}): CaseRow {
     status: 'open',
     submission_finalized: false,
     finalized_at: null,
-    recommended_additional_documents: [],
+    missing_requirements: [],
     created_at: ISO,
     updated_at: ISO,
     dev: true,

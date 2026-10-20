@@ -446,6 +446,19 @@ async def test_a_clean_image_is_not_flagged_for_tampering(ai, store):
     assert "image_tampering_tool" in consulted(report, LAYOUT)["tools_called"]
 
 
+async def test_a_rerun_clears_the_error_an_earlier_attempt_left(ai, store):
+    document_id = store.add("C020_NOA.pdf", "notice_of_assessment", id_card_pdf())
+    ai.specialists[LAYOUT] = Specialist(tools=["image_tampering_tool"])
+    trace.record(document_id, "detection_error", error="Cancelled by loan officer")
+
+    await run_detection(document_id)
+
+    stored = trace.get(document_id)
+    assert stored is not None
+    assert stored["detection_error"] is None
+    assert stored["detection_report"]["verdict"]
+
+
 # --- SCRUM-63 Text overlay -----------------------------------------------------------
 
 

@@ -12,7 +12,6 @@ def _make_case(case_id: str = "case-1", greenlink_case_id: str = "GLDB-1") -> Ca
         greenlink_case_id=greenlink_case_id,
         status="open",
         submission_finalized=False,
-        recommended_additional_documents=[],
         created_at="2026-08-26T00:00:00Z",
         updated_at="2026-08-26T00:00:00Z",
     )

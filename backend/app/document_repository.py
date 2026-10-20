@@ -104,6 +104,8 @@ def update_status(
     expected_current_statuses: list[DocumentStatus] | None = None,
 ) -> bool:
     """
+    A failure_reason belongs to a failed run: any other status clears it, FAILED sets it (or keeps the old one if none is given).
+
     expected_current_statuses turns this into an atomic compare-and-swap:
     the WHERE clause requires the row's current status to still be one of
     these, so a caller that read a document's status and now wants to act
@@ -123,7 +125,9 @@ def update_status(
         update["processing_started_at"] = processing_started_at.isoformat()
     if retry_count is not None:
         update["retry_count"] = retry_count
-    if failure_reason is not None:
+    if status != DocumentStatus.FAILED:
+        update["failure_reason"] = None
+    elif failure_reason is not None:
         update["failure_reason"] = failure_reason
     if document_type is not None:
         update["document_type"] = document_type

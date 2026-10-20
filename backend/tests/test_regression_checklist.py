@@ -82,7 +82,7 @@ def test_checklist_recomputed_from_real_documents_matches_production(name):
     summary = build_summary(case, _officer_confirmed(documents))
 
     assert set(summary.fulfilled_requirements) == set(captured["fulfilled_requirements"])
-    assert summary.recommended_additional_documents == captured["recommended_additional_documents"]
+    assert summary.missing_requirements == captured["missing_requirements"]
     assert summary.proof_of_address_coverage.model_dump() == captured["proof_of_address_coverage"]
     assert summary.id_document_coverage.model_dump() == captured["id_document_coverage"]
 
@@ -123,7 +123,7 @@ def test_missing_optional_documents_do_not_make_the_case_incomplete():
 
     summary = build_summary(case, no_optional)
 
-    assert summary.recommended_additional_documents == []
+    assert summary.missing_requirements == []
     assert set(REQUIRED_DOCUMENT_TYPES) <= set(summary.fulfilled_requirements)
     assert not set(ADDITIONAL_DOCUMENT_TYPES) & set(summary.fulfilled_requirements)
     assert summary.documents_status == CaseDocumentsStatus.ANALYZED
@@ -210,7 +210,7 @@ def test_documents_from_another_case_do_not_fulfil_this_case():
     # (document_repository.list_documents(case_id=...)); Harbor Light's
     # missing items stay missing even though Anchorpoint has them.
     summary = build_summary(harbor_case, harbor_documents)
-    assert "bank_statement" in summary.recommended_additional_documents
+    assert "bank_statement" in summary.missing_requirements
 
 
 @pytest.mark.sprint2
@@ -220,8 +220,8 @@ def test_fulfilled_requirements_are_never_also_listed_as_missing():
         case, documents, _ = _load(name)
         summary = build_summary(case, documents)
 
-        assert not set(summary.fulfilled_requirements) & set(summary.recommended_additional_documents)
-        assert set(summary.recommended_additional_documents) == (
+        assert not set(summary.fulfilled_requirements) & set(summary.missing_requirements)
+        assert set(summary.missing_requirements) == (
             set(REQUIRED_DOCUMENT_TYPES) - set(summary.fulfilled_requirements)
         )
 
@@ -236,4 +236,4 @@ def test_only_accepted_documents_fulfil_requirements():
     summary = build_summary(case, documents)
 
     assert "certificate_of_incorporation" not in summary.fulfilled_requirements
-    assert "certificate_of_incorporation" in summary.recommended_additional_documents
+    assert "certificate_of_incorporation" in summary.missing_requirements

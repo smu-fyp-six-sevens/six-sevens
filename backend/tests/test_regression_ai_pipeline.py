@@ -162,7 +162,10 @@ class FakeStore:
         self.statuses[document_id].append(document.status.value)
         if changes.get("document_type"):
             document.document_type = changes["document_type"]
-        if changes.get("failure_reason") is not None:
+        # The real repository's rule: a reason belongs to a failed run.
+        if document.status != DocumentStatus.FAILED:
+            document.failure_reason = None
+        elif changes.get("failure_reason") is not None:
             document.failure_reason = changes["failure_reason"]
 
     def record_classification(self, document_id, **recorded):
@@ -606,6 +609,17 @@ async def test_extraction_rejecting_an_officer_chosen_type_still_fails_it(ai, st
     document = store.documents[document_id]
     assert document.status == DocumentStatus.FAILED
     assert "not a payslip" in document.failure_reason
+
+
+async def test_a_rerun_that_succeeds_clears_the_reason_an_earlier_failure_left(ai, store, monkeypatch):
+    document_id = _officer_set_type(store, monkeypatch, "C067_BudgetProposal.pdf", BUDGET_PROPOSAL_TEXT, "unrecognised")
+    store.documents[document_id].failure_reason = "Extraction output could not be used: cut off"
+    ai.reply("extract", extraction({"document_title": ("Proposal Budget", 0.95)}))
+
+    await pipeline.rerun_extraction(document_id)
+
+    assert store.documents[document_id].status == DocumentStatus.ANALYZED
+    assert store.documents[document_id].failure_reason is None
 
 
 def test_a_passing_mention_of_a_loan_is_not_a_loan_document():

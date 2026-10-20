@@ -1,14 +1,13 @@
 # Pending work
 
-Open product and platform work only. Code smells and optimisations are in `REFACTORING_AUDIT.md`; test work is in `backend_tests.md`; detection bugs are in `FRAUD_DETECTION_MAP.md` §6. The roadmap (automatic case analysis, the 5-service Pub/Sub split) is in `CLAUDE.md`'s "Future Direction". Updated 2026-10-19.
+Open product and platform work only. Code smells and optimisations are in `REFACTORING_AUDIT.md`; test work is in `backend_tests.md`; detection bugs are in `FRAUD_DETECTION_MAP.md` §6. The roadmap (automatic case analysis, the 5-service Pub/Sub split) is in `CLAUDE.md`'s "Future Direction". Updated 2026-10-20.
 
 ## Decided, not started
 
-- **Recommended additional documents.** The rule-based recommendations (`risk/supporting_documents.py`) should feed the agent, and what the agent concludes should be saved to `cases.recommended_additional_documents`. Today that column is always empty and the API reports the missing checklist types under the same name; resolve the naming when this is built.
-- **Case-level flags.** Cross-document and identity findings are deliberately not in the per-document `flags` table. They need their own module.
+- **Case-level flags.** Cross-document and identity findings are deliberately not in the per-document `flags` table. Today they exist only inside each analysis run's JSON (`case_analysis_runs.result.findings`, with the deterministic `xd-det-N` ones), so there is no row per finding, no status and no officer dismissal. A case-level flags table and module would give them that.
 - **Automatic case analysis.** The officer clicks it. The gate on every document completion, supersede with a run-id fence, debounce and re-run cap (`CROSS_DOCUMENT_AND_RISK_PLAN.md`, Step 0) are not built.
 - **Guard against repeated runs.** Each "Run again" spends about 12k tokens even when the documents are unchanged. Skipping a run whose input fingerprint matches the last complete run would stop that, but changes what the button does.
-- **Officer review of flags.** The `flags` table has `status`, `reviewed_by` and `reviewed_at`; nothing reads or writes them, and the frontend doesn't show flags.
+- **Officer review of flags.** Detection writes each approved finding to `flags` with status `open`. The `status`, `reviewed_by` and `reviewed_at` columns exist so an officer can confirm or dismiss a flag, but no endpoint reads or changes them and the frontend never shows the table (it shows the detection report and the analysis findings instead). Building it needs an endpoint, a UI, and a decision on how a dismissal affects the score.
 - **Flags for older documents.** Flags are written when a detection run finishes. Documents detected before the table was wired have a report but no flag rows, and approved documents can't re-run detection.
 - **Install `exiftool` locally.** Without it the metadata check and the AI-provenance part of the AI-generation check report "could not run", so they never contribute to a score. Optional local fixes: a startup warning when it is missing, a PyMuPDF fallback for basic metadata, and re-reading the file when the stored record is a failure.
 
@@ -26,7 +25,7 @@ Open product and platform work only. Code smells and optimisations are in `REFAC
 - **Extraction repair node.** Only the classifier has a repair step (deterministic cleanup, one Haiku re-ask, then manual review); extraction has none. Unchecked whether that is still true in the code.
 - **LangGraph Store** (learning from officer corrections): last phase, not started.
 - **Very long bank statements** can still overflow the extraction cap (`_EXTRACTION_MAX_TOKENS` 16,000). An overflow now fails the document cleanly with the complete fields kept; chunked transaction extraction would fix it properly.
-- **Detection prompts don't cache.** The specialists run on Haiku, whose minimum cacheable prompt is longer than theirs, so their `cache_control` markers do nothing. Lengthen the shared prefix or accept it.
+- **Detection specialist prompts don't cache.** Anthropic caches a prompt prefix only above a minimum length (about 4,096 tokens on Haiku 4.5, 1,024 on Sonnet; check the current docs). The specialists run on Haiku and their prompt plus tool definitions is shorter, so their `cache_control` markers are silently ignored. Padding the prefix would cost more than it saves; accept it unless the `perf` log shows a large Haiku input bill.
 - **Vertical text.** `text_overlay.py` skips vertical text by an aspect-ratio guess because `_Line` records no direction. Extracting the direction from PyMuPDF would replace the guess.
 
 ## Case pipeline (cross-document analysis and risk outlook)
@@ -64,6 +63,4 @@ Not started; no urgency until the Cloud Native award work picks up.
 
 ## Small known gaps
 
-- `document_repository.update_status` writes only fields passed as non-`None`, so it can't clear a stale `failure_reason`: a document that fails and later succeeds on retry still shows its old reason. Cosmetic.
-- The same shape in the detection trace: a `detection_error` from a failed run isn't cleared when a later run succeeds (a report takes priority). An officer who re-triggers a crashed run and gets a second failure won't see it is new if an old report also exists.
 - `submission_finalized` is remembered per process (`case_service._synced_finalized`) so an unchanged value isn't rewritten. With more than one backend instance, or a hand edit in the database, the stored value is corrected on the next change in the computed answer, not before.

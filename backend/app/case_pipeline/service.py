@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from .. import document_repository, query_stats
+from .. import case_repository, document_repository, query_stats
 from ..config import settings
 from ..langgraph import trace as langgraph_trace
 from ..models import DocumentRecord
@@ -171,14 +171,22 @@ async def _execute(
         end_run(run_token)
         trace.save()
         try:
-            published = await asyncio.to_thread(repository.finish_run, analysis)
-            if published and analysis.status == "complete":
-                # The case list reads the score from here rather than opening every run.
-                await asyncio.to_thread(risk_store.save, case_id, analysis.risk)
+            await _store_result(analysis)
         except Exception:
             logger.exception("Failed to store the case analysis result for case %s", case_id)
         state.running_tasks.pop(case_id, None)
         await _push_snapshot(case_id)
+
+
+async def _store_result(analysis: CaseAnalysis) -> None:
+    """Saves a finished run; only the case's newest complete run also updates the case's score and requested documents."""
+    published = await asyncio.to_thread(repository.finish_run, analysis)
+    if published and analysis.status == "complete":
+        # The case list reads the score from here rather than opening every run.
+        await asyncio.to_thread(risk_store.save, analysis.case_id, analysis.risk)
+        await asyncio.to_thread(
+            case_repository.set_recommended_additional_documents, analysis.case_id, analysis.additional_documents
+        )
 
 
 async def _push_snapshot(case_id: str) -> None:
