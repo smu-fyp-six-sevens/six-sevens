@@ -47,7 +47,7 @@ test.describe('Classify optional documents @sprint2 @SCRUM-114', () => {
 
     await expect(sidebar(page).getByText('Required documents')).toBeVisible();
     await expect(sidebar(page).getByText('Present in every case')).toBeVisible();
-    await expect(sidebar(page).getByText('Additional documents')).toBeVisible();
+    await expect(sidebar(page).getByText('Additional Documents')).toBeVisible();
     await expect(sidebar(page).getByText('May be required depending on the case')).toBeVisible();
 
     await expect(requiredList(page).locator(':scope > li')).toHaveCount(REQUIRED.length);

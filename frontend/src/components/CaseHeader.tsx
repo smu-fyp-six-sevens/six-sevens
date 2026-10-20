@@ -29,7 +29,7 @@ export function casePath(caseRecord: CaseRecord): string {
   return `/cases/${caseRecord.caseNumber ?? caseRecord.id}`;
 }
 
-export const caseQueueCrumb: Breadcrumb = { label: 'Case queue', to: '/cases' };
+export const caseQueueCrumb: Breadcrumb = { label: 'Case Queue', to: '/cases' };
 
 // The case number: click it to switch to any other case.
 export function caseCrumb(
@@ -39,13 +39,13 @@ export function caseCrumb(
 ): Breadcrumb {
   return {
     label: caseNumberLabel(caseRecord),
-    to: casePath(caseRecord),
+    to: `${casePath(caseRecord)}?section=summary`,
     current,
     menuLabel: 'switch case',
     loadMenu: () =>
       cases.map((item) => ({
         key: item.id,
-        to: casePath(item),
+        to: `${casePath(item)}?section=summary`,
         tag: caseNumberLabel(item),
         label: item.applicant,
         current: item.id === caseRecord.id,
@@ -73,7 +73,6 @@ export function documentCrumb(caseRecord: CaseRecord, documentId: string, filena
 export function CaseTitle({ caseRecord }: { caseRecord: CaseRecord }) {
   return (
     <div className="case-title">
-      <span className="case-id-tag">{caseLabel(caseRecord)}</span>
       <h1>{caseRecord.applicant}</h1>
     </div>
   );

@@ -16,11 +16,12 @@ import { AdditionalDocumentsCard } from './upload/AdditionalDocumentsCard';
 import { AuditTrailCard } from './upload/AuditTrailCard';
 import { CaseAnalysisCard } from './upload/CaseAnalysisCard';
 import { CaseRiskCard } from './upload/CaseRiskCard';
+import { CaseOverview } from './upload/CaseOverview';
 import { CaseSectionNav } from './upload/CaseSectionNav';
 import { caseSectionStatuses, isCaseSection, type CaseSection } from './upload/caseSections';
 import { FlaggedItemsCard } from './upload/FlaggedItemsCard';
 import AppHeader from '../components/AppHeader';
-import CaseHeader, { CaseTitle, caseCrumb, caseLabel, caseQueueCrumb } from '../components/CaseHeader';
+import CaseHeader, { CaseTitle, caseCrumb, caseQueueCrumb } from '../components/CaseHeader';
 import { useCases } from '../casesContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DropZone from '../components/DropZone';
@@ -185,7 +186,6 @@ export default function UploadPage({
           <div className="case-title-editing">
             <label htmlFor="case-company-name" className="sr-only">Company name</label>
             <div className="case-title">
-              <span className="case-id-tag">{caseLabel(selectedCase)}</span>
               <input
                 id="case-company-name"
                 type="text"
@@ -263,6 +263,20 @@ export default function UploadPage({
         />
 
         <div className="case-content">
+          {activeSection === 'summary' && (
+            <CaseOverview
+              documents={documents}
+              flaggedDocuments={flaggedDocuments}
+              approvedDocuments={approvedDocuments}
+              caseMatches={caseMatches}
+              risk={risk}
+              analysisReady={analysisReady}
+              analysisOverview={analysisOverview}
+              snapshotLoaded={snapshotLoaded}
+              onSelectSection={selectSection}
+            />
+          )}
+
           {activeSection === 'documents' && (
             <div className="upload-view">
               <section className="upload-main">

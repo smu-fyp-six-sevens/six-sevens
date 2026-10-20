@@ -10,14 +10,13 @@ export type CaseSection =
   | 'audit';
 
 export const CASE_SECTIONS: { id: CaseSection; label: string; icon: string }[] = [
-  // Placeholder: the section is empty for now.
-  { id: 'summary', label: 'Case summary', icon: '◫' },
+  { id: 'summary', label: 'Case Summary', icon: '◫' },
   { id: 'documents', label: 'Documents', icon: '▤' },
-  { id: 'flagged', label: 'Flagged items', icon: '△' },
-  { id: 'analysis', label: 'Case analysis', icon: '◇' },
-  { id: 'risk', label: 'Risk summary', icon: '▥' },
-  { id: 'additional', label: 'Additional documents', icon: '⊕' },
-  { id: 'audit', label: 'Audit trail', icon: '◴' },
+  { id: 'flagged', label: 'Flagged Items', icon: '△' },
+  { id: 'analysis', label: 'Case Analysis', icon: '◇' },
+  { id: 'risk', label: 'Risk Summary', icon: '▥' },
+  { id: 'additional', label: 'Additional Documents', icon: '⊕' },
+  { id: 'audit', label: 'Audit Trail', icon: '◴' },
 ];
 
 export function isCaseSection(value: string | null): value is CaseSection {
@@ -55,51 +54,51 @@ export function caseSectionStatuses({
 
   const documents: SectionStatus =
     documentCount === 0
-      ? { tone: 'idle', text: 'None uploaded' }
+      ? { tone: 'idle', text: 'None Uploaded' }
       : hasInFlightDocument
-        ? { tone: 'progress', text: `Processing · ${approvedCount}/${documentCount} approved` }
+        ? { tone: 'progress', text: `Processing · ${approvedCount}/${documentCount} Approved` }
         : approvedCount < documentCount
-          ? { tone: 'action', text: `${approvedCount}/${documentCount} approved` }
-          : { tone: 'done', text: `All ${documentCount} approved` };
+          ? { tone: 'action', text: `${approvedCount}/${documentCount} Approved` }
+          : { tone: 'done', text: `All ${documentCount} Approved` };
 
   const flagged: SectionStatus =
     flaggedCount > 0
-      ? { tone: 'action', text: `${flaggedCount} to review` }
+      ? { tone: 'action', text: `${flaggedCount} To Review` }
       : documentCount === 0
-        ? { tone: 'idle', text: 'Nothing yet' }
-        : { tone: 'done', text: 'None flagged' };
+        ? { tone: 'idle', text: 'Nothing Yet' }
+        : { tone: 'done', text: 'None Flagged' };
 
   const analysis: SectionStatus = !analysisOverview
     ? analysisReady
-      ? { tone: 'action', text: 'Ready to run' }
-      : { tone: 'idle', text: 'Not ready' }
+      ? { tone: 'action', text: 'Ready to Run' }
+      : { tone: 'idle', text: 'Not Ready' }
     : analysisOverview.status === 'running'
       ? { tone: 'progress', text: 'Running' }
       : analysisOverview.status === 'failed'
-        ? { tone: 'error', text: 'Did not finish' }
+        ? { tone: 'error', text: 'Did Not Finish' }
         : analysisOverview.stale || analysisOverview.status === 'superseded'
-          ? { tone: 'action', text: 'Out of date' }
-          : { tone: 'done', text: plural(analysisOverview.finding_count, 'finding') };
+          ? { tone: 'action', text: 'Out of Date' }
+          : { tone: 'done', text: plural(analysisOverview.finding_count, 'Finding') };
 
   const riskStatus: SectionStatus = !risk
-    ? { tone: 'idle', text: 'Not scored' }
+    ? { tone: 'idle', text: 'Not Scored' }
     : risk.state === 'scored' && risk.level
       ? {
           tone: `risk-${risk.level.toLowerCase() as Lowercase<CaseRiskLevel>}`,
           text: risk.score != null ? `${risk.level} · ${risk.score}` : risk.level,
         }
       : risk.state === 'failed'
-        ? { tone: 'error', text: 'Detection failed' }
+        ? { tone: 'error', text: 'Detection Failed' }
         : risk.state === 'pending'
-          ? { tone: 'progress', text: `${risk.documents_scanned}/${risk.documents_total} scanned` }
-          : { tone: 'idle', text: 'Not scored' };
+          ? { tone: 'progress', text: `${risk.documents_scanned}/${risk.documents_total} Scanned` }
+          : { tone: 'idle', text: 'Not Scored' };
 
   // Like the card, the requests only exist once a case analysis has scored the case.
   const additional: SectionStatus = !risk
-    ? { tone: 'idle', text: 'Not checked' }
+    ? { tone: 'idle', text: 'Not Checked' }
     : additionalDocumentCount > 0
-      ? { tone: 'action', text: `${additionalDocumentCount} to request` }
-      : { tone: 'done', text: 'None needed' };
+      ? { tone: 'action', text: `${additionalDocumentCount} To Request` }
+      : { tone: 'done', text: 'None Needed' };
 
   return { documents, flagged, analysis, risk: riskStatus, additional };
 }

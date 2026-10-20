@@ -45,7 +45,7 @@ async function searchQueue(page: Page, query: string) {
 }
 // The case page shows one section at a time; pick it from the left-hand nav.
 const openSection = (page: Page, label: string) =>
-  page.getByRole('navigation', { name: 'Case sections' }).getByRole('button', { name: new RegExp(`^${label}`) }).click();
+  page.getByRole('navigation', { name: 'Case sections' }).getByRole('button', { name: new RegExp(`^${label}`, 'i') }).click();
 
 test.describe('View cases @sprint2 @SCRUM-78', () => {
   test('CM-001 cases can be searched by company name or case ID @CM-001', async ({ page, backend }) => {
@@ -155,9 +155,22 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
 
     await page.getByRole('button', { name: `Open case ${harbor.greenlink_case_id}, ${harbor.company_name}` }).click();
 
-    await expect(page.locator('.case-title')).toContainText(harbor.greenlink_case_id);
     await expect(page.locator('.case-title')).toContainText(harbor.company_name!);
-    await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Case queue' })).toBeVisible();
+    const breadcrumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
+    await expect(breadcrumbs).toContainText(harbor.greenlink_case_id);
+    await expect(breadcrumbs.getByRole('link', { name: 'Case Queue' })).toBeVisible();
+  });
+
+  test('selecting a case from the breadcrumb dropdown opens its summary @CM-005', async ({ page, backend }) => {
+    const { harbor } = seedQueue(backend);
+    await page.goto(`/cases/${harbor.greenlink_case_id}`);
+
+    const breadcrumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
+    await breadcrumbs.getByRole('button', { name: new RegExp(`${harbor.greenlink_case_id}: switch case`) }).click();
+    await page.getByRole('menuitem', { name: harbor.company_name! }).click();
+
+    await expect(page.getByRole('main', { name: 'Case summary dashboard' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Case sections' }).getByRole('button', { name: /^Case Summary/i })).toHaveAttribute('aria-current', 'page');
   });
 
   test('CM-006 case details show only the selected case\'s information @CM-006', async ({ page, backend }) => {
@@ -637,7 +650,7 @@ test.describe('Update case @sprint3 @SCRUM-116', () => {
 
     await renameCase(page, ironclad.greenlink_case_id, NEW_NAME);
     await expect(caseHeader(page)).toContainText(NEW_NAME);
-    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Case queue' }).click();
+    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Case Queue' }).click();
 
     await expect(caseCards(page).filter({ hasText: 'GLDB-01' })).toContainText(NEW_NAME);
   });
@@ -647,7 +660,7 @@ test.describe('Update case @sprint3 @SCRUM-116', () => {
 
     await renameCase(page, ironclad.greenlink_case_id, NEW_NAME);
     await expect(caseHeader(page)).toContainText(NEW_NAME);
-    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Case queue' }).click();
+    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Case Queue' }).click();
     await page.getByRole('button', { name: `Open case GLDB-01, ${NEW_NAME}` }).click();
 
     await expect(caseHeader(page)).toContainText(NEW_NAME);

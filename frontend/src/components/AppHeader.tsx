@@ -8,7 +8,7 @@ import { caseNumberLabel, findExactCase, matchesCaseQuery } from '../utils/caseS
 import BrandLink from './BrandLink';
 
 const NAV_LINKS = [
-  { to: '/cases', label: 'Case queue' },
+  { to: '/cases', label: 'Case Queue' },
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/settings', label: 'Settings' },
 ];
