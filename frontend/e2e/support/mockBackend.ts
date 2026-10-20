@@ -262,7 +262,9 @@ export class MockBackend {
     if (method === 'POST' && path === '/auth/login') {
       const { username, password } = (body ?? {}) as { username?: string; password?: string };
       if (username === this.credentials.username && password === this.credentials.password) {
-        return json({ token: 'test-token' });
+        // Shaped like the real token: base64url({"sub": username}) + "." + signature.
+        const payload = Buffer.from(JSON.stringify({ sub: username })).toString('base64url');
+        return json({ token: `${payload}.test-signature`, username });
       }
       return json({ detail: 'Invalid username or password' }, 401);
     }

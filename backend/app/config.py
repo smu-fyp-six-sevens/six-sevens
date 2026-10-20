@@ -15,16 +15,29 @@ def _env(name: str, default: str = "") -> str:
     return os.environ.get(name, default).strip()
 
 
+def _users(raw: str) -> dict[str, str]:
+    """AUTH_USERS: "alice:password1;bob:password2". A malformed entry stops the app at start-up."""
+    users: dict[str, str] = {}
+    for entry in raw.split(";"):
+        if not entry.strip():
+            continue
+        name, separator, password = entry.partition(":")
+        name, password = name.strip(), password.strip()
+        if not separator or not name or not password:
+            raise ValueError('AUTH_USERS must look like "alice:password1;bob:password2"')
+        users[name] = password
+    return users
+
+
 class Settings:
     """
     Centralised config. All values come from environment variables so
     nothing sensitive (API keys, service role key) is hardcoded.
     """
-    # Shared-credential auth for the public demo (see app/auth.py).
+    # Every account that can log in, in one place (see app/auth.py).
     # AUTH_SECRET_KEY signs bearer tokens — must be a real random value in
     # any deployed environment; the "" default is only safe for local dev.
-    AUTH_USERNAME: str = _env("AUTH_USERNAME")
-    AUTH_PASSWORD: str = _env("AUTH_PASSWORD")
+    AUTH_USERS: dict[str, str] = _users(_env("AUTH_USERS"))
     AUTH_SECRET_KEY: str = _env("AUTH_SECRET_KEY")
 
     # Source of truth for "is this process the cloud deployment or local

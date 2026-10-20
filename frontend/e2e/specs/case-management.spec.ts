@@ -652,6 +652,29 @@ test.describe('Update case @sprint3 @SCRUM-116', () => {
     });
   });
 
+  test.describe('who is signed in', () => {
+    test.use({ loggedIn: false });
+
+    for (const [username, shown] of [
+      ['greenlink-tester', 'Loan Officer · J. Tan'],
+      ['demo', 'Loan Officer · K. Lim'],
+      ['bob', 'Loan Officer · B. Smith'],
+      ['carol', 'Loan Officer · C. Wong'],
+      ['someone-new', 'Loan Officer · someone-new'],
+    ] as const) {
+      test(`the header names ${username} as "${shown}"`, async ({ page, backend }) => {
+        backend.credentials = { username, password: 'pw' };
+        await page.goto('/login');
+        await page.getByLabel('Username').fill(username);
+        await page.getByLabel('Password').fill('pw');
+        await page.getByRole('button', { name: /Sign in/ }).click();
+
+        await expect(page).toHaveURL('/cases');
+        await expect(page.locator('.officer-tag')).toContainText(shown);
+      });
+    }
+  });
+
   for (const [id, value] of [['CM-020', ''], ['CM-021', '   ']] as const) {
     test(`${id} a ${value ? 'blank' : 'empty'} company name is not saved @${id}`, async ({ page, backend }) => {
       const ironclad = seedIronclad(backend);

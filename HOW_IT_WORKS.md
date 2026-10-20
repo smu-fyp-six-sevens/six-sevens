@@ -29,7 +29,7 @@ Everything runs in **one process**. The 5-service Pub/Sub split in `CLAUDE.md` i
 ## 3. End to end: following one case
 
 ### Step 0: Login
-One shared username and password (`AUTH_USERNAME` / `AUTH_PASSWORD`). `POST /auth/login` returns a signed token that every other call sends. A browser WebSocket can't send headers, so the frontend first asks for a one-time ticket (`POST /ws/tickets`) and puts it in the WebSocket URL.
+A few named accounts, all in one setting: `AUTH_USERS=alice:password1;bob:password2` (no roles; a password can't contain `;`, `,`, `$` or `#`). `POST /auth/login` returns a signed token carrying the username, which every other call sends; a handler that declares `user: CurrentUser` learns who is acting. A browser WebSocket can't send headers, so the frontend first asks for a one-time ticket (`POST /ws/tickets`) and puts it in the WebSocket URL.
 
 ### Step 1: Creating a case
 A row in `cases`. A database trigger assigns the readable ID (`GLDB-<n>`), skipping any already taken. Cases made locally are `dev = true` so they stay out of the cloud demo's list.
@@ -143,7 +143,7 @@ Deleting a document removes its fields, flags, trace and file; deleting a case r
 
 ## 7. Configuration
 
-Required: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `ANTHROPIC_API_KEY`, `AUTH_USERNAME`, `AUTH_PASSWORD`, `AUTH_SECRET_KEY`.
+Required: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `ANTHROPIC_API_KEY`, `AUTH_USERS`, `AUTH_SECRET_KEY`.
 
 | Variable | Default | Effect |
 |---|---|---|

@@ -51,7 +51,7 @@ def capture(greenlink_case_id: str, name: str) -> Path:
         raise SystemExit(f"No case with greenlink_case_id {greenlink_case_id}")
     case_id = matches[0].id
 
-    app.dependency_overrides[require_auth] = lambda: None
+    app.dependency_overrides[require_auth] = lambda: "capture-script"
     with TestClient(app) as client:
         case = client.get(f"/cases/{case_id}")
         case.raise_for_status()

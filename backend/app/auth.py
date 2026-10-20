@@ -1,12 +1,11 @@
 """
-Shared-credential auth: one username/password (env-configured), gating
-every route except /health and /auth/login. Not a real multi-user auth
-system by design — this is a public demo deployment for external
-stakeholders to view, not a product with accounts, so a single signed
-bearer token is enough to keep it from being wide open.
+A few named accounts (env-configured), gating every route except /health and
+/auth/login. The signed-in username travels in the bearer token and is what the
+audit trail records as the actor. No roles, resets or lockouts by design: this is
+a small demo deployment, not a product with an account system.
 
 Token = base64url(payload_json) + "." + base64url(hmac_sha256(secret, payload_b64)),
-where payload is just {"exp": <unix_ts>}. Verified via constant-time
+where payload is {"sub": <username>, "exp": <unix_ts>}. Verified via constant-time
 comparison; no external JWT dependency needed for something this small.
 """
 from __future__ import annotations
@@ -17,12 +16,13 @@ import hmac
 import json
 import secrets
 import time
+from typing import Annotated
 
-from fastapi import Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 
 from .config import settings
 
-TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days — shared demo credential, not a per-user session
+TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days
 
 # Short-lived, single-use tickets for the case status WebSocket (see
 # routers/ws.py) — a browser's native WebSocket API can't set a custom
@@ -54,35 +54,43 @@ def _sign(payload_b64: str) -> str:
     return _b64encode(digest)
 
 
-def create_token() -> str:
-    payload = json.dumps({"exp": int(time.time()) + TOKEN_TTL_SECONDS}).encode("utf-8")
+def create_token(username: str) -> str:
+    payload = json.dumps({"sub": username, "exp": int(time.time()) + TOKEN_TTL_SECONDS}).encode("utf-8")
     payload_b64 = _b64encode(payload)
     return f"{payload_b64}.{_sign(payload_b64)}"
 
 
-def verify_credentials(username: str, password: str) -> bool:
-    # compare_digest on both to avoid leaking which of the two was wrong via timing
-    valid_user = hmac.compare_digest(username, settings.AUTH_USERNAME)
-    valid_pass = hmac.compare_digest(password, settings.AUTH_PASSWORD)
-    return valid_user and valid_pass
+def verify_credentials(username: str, password: str) -> str | None:
+    """The matching account's username, or None. Checks every account so timing doesn't reveal which names exist."""
+    matched = None
+    for name, expected in settings.AUTH_USERS.items():
+        user_ok = hmac.compare_digest(username.encode("utf-8"), name.encode("utf-8"))
+        password_ok = hmac.compare_digest(password.encode("utf-8"), expected.encode("utf-8"))
+        if user_ok and password_ok:
+            matched = name
+    return matched
 
 
-def _verify_token(token: str) -> bool:
+def _verify_token(token: str) -> str | None:
+    """The username the token was issued to, or None if it is forged, expired or has no username."""
     try:
         payload_b64, sig = token.split(".", 1)
     except ValueError:
-        return False
+        return None
 
     if not hmac.compare_digest(sig, _sign(payload_b64)):
-        return False
+        return None
 
     try:
         payload = json.loads(_b64decode(payload_b64))
         exp = int(payload["exp"])
+        username = payload["sub"]
     except (ValueError, KeyError, TypeError):
-        return False
+        return None
 
-    return time.time() < exp
+    if not isinstance(username, str) or not username or time.time() >= exp:
+        return None
+    return username
 
 
 def create_ws_ticket() -> str:
@@ -110,7 +118,8 @@ def consume_ws_ticket(ticket: str) -> bool:
     return time.time() < expires_at
 
 
-def require_auth(authorization: str | None = Header(default=None)) -> None:
+def require_auth(authorization: str | None = Header(default=None)) -> str:
+    """Rejects a request without a valid token; returns the signed-in username."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -118,8 +127,14 @@ def require_auth(authorization: str | None = Header(default=None)) -> None:
         )
 
     token = authorization.removeprefix("Bearer ").strip()
-    if not _verify_token(token):
+    username = _verify_token(token)
+    if username is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
         )
+    return username
+
+
+# A handler takes `user: CurrentUser` to learn who is acting; the actor is always read from the token.
+CurrentUser = Annotated[str, Depends(require_auth)]

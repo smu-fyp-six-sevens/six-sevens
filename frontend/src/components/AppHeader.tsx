@@ -1,4 +1,5 @@
-import { clearToken } from '../lib/api';
+import { clearToken, getUsername } from '../lib/api';
+import { officerLabel } from '../lib/officers';
 import BrandLink from './BrandLink';
 
 export default function AppHeader() {
@@ -6,7 +7,7 @@ export default function AppHeader() {
     <header className="app-header">
       <BrandLink />
       <div className="officer-tag">
-        Loan Officer · J. Tan
+        {officerLabel(getUsername())}
         <button
           type="button"
           className="signout-btn"

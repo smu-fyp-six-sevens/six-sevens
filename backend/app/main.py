@@ -6,7 +6,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from . import auth, health, query_stats, realtime_listener, telemetry
+from . import audit, auth, health, query_stats, realtime_listener, telemetry
 from .config import settings
 from .fraud_detection.external_validation.registry_lookups import land_use
 from .health import check_db_connection
@@ -32,6 +32,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if not settings.AUTH_USERS:
+        logger.warning("AUTH_USERS is not set, so nobody can log in. Set it in backend/.env")
     document_queue.start()
     try:
         await asyncio.to_thread(check_db_connection)
@@ -114,16 +116,21 @@ class LoginRequest(BaseModel):
 
 class LoginResponse(BaseModel):
     token: str
+    username: str
 
 
 @app.post("/auth/login", response_model=LoginResponse)
 def login(body: LoginRequest) -> LoginResponse:
-    if not auth.verify_credentials(body.username, body.password):
+    username = auth.verify_credentials(body.username, body.password)
+    if username is None:
+        # The attempted name is recorded; never the password.
+        audit.record("auth.login", body.username[:100], outcome="failed")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
         )
-    return LoginResponse(token=auth.create_token())
+    audit.record("auth.login", username)
+    return LoginResponse(token=auth.create_token(username), username=username)
 
 
 @app.get("/message")

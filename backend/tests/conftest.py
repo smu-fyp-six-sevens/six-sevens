@@ -6,6 +6,7 @@ import pytest
 from app.auth import require_auth
 from app.main import app
 
+TEST_USER = "test-user"  # who the bypassed login says is acting
 PDF_DOC_ID = "C001_CertIncumbency"
 IMAGE_DOC_ID = "ocbc_sample"
 
@@ -49,9 +50,19 @@ def _bypass_auth():
     credential login gate itself, so bypass it here by default. test_auth.py
     clears this override locally to test the real login/token flow.
     """
-    app.dependency_overrides[require_auth] = lambda: None
+    app.dependency_overrides[require_auth] = lambda: TEST_USER
     yield
     app.dependency_overrides.pop(require_auth, None)
+
+
+@pytest.fixture(autouse=True)
+def audit_events(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
+    """Audit rows written during a test, in order; nothing reaches the database."""
+    from app import audit
+
+    rows: list[dict] = []
+    monkeypatch.setattr(audit, "_insert", rows.append)
+    return rows
 
 
 class _BlockedSupabaseAccess:

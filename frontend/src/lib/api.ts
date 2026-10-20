@@ -19,6 +19,21 @@ export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
 }
 
+// Who the backend issued the token to (the "sub" in its payload), or null when there is no
+// token or it isn't one of ours. Display only: the backend reads the token itself.
+export function getUsername(): string | null {
+  try {
+    const payload = getToken()?.split('.')[0];
+    if (!payload) return null;
+
+    const { sub } = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+
+    return typeof sub === 'string' && sub ? sub : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function authFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = getToken();
   const headers = new Headers(options.headers);
