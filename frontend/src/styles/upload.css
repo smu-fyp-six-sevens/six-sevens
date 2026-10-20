@@ -282,12 +282,430 @@
 }
 
 .shell--upload {
-  width: min(1040px, calc(100% - 40px));
+  width: calc(100% - 48px);
+}
+
+/* Case page: section nav on the left, one section shown at a time. */
+.case-layout {
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  margin-top: 24px;
+  gap: 36px;
+  align-items: start;
+}
+
+.case-nav {
+  position: sticky;
+  top: calc(var(--topbar-height) + 24px);
+}
+
+.case-nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.case-nav-item {
+  width: 100%;
+  /* Same height whether or not the item has a status line under its label. */
+  min-height: 61px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.case-nav-item:hover {
+  background: rgba(61, 90, 128, 0.08);
+}
+
+.case-nav-item:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 1px;
+}
+
+.case-nav-item.active {
+  background: rgba(61, 90, 128, 0.14);
+  color: var(--steel-dark);
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--steel);
+}
+
+.case-nav-icon {
+  width: 16px;
+  align-self: flex-start;
+  margin-top: 1px;
+  flex-shrink: 0;
+  text-align: center;
+  color: var(--ink-soft);
+}
+
+/* Without a status line the label is one line, so the icon centres on it. */
+.case-nav-item:not(:has(.case-nav-status)) .case-nav-icon {
+  align-self: center;
+  margin-top: 0;
+}
+
+.case-nav-item.active .case-nav-icon {
+  color: var(--steel);
+}
+
+.case-nav-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.case-nav-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.case-nav-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--line);
+}
+
+.case-nav-dot--done {
+  background: var(--teal);
+}
+
+.case-nav-dot--action {
+  background: var(--amber);
+}
+
+.case-nav-dot--progress {
+  background: var(--steel);
+  animation: case-nav-pulse 1.4s ease-in-out infinite;
+}
+
+.case-nav-dot--error {
+  background: var(--red);
+}
+
+/* Same hues as .risk-badge--* in case-summary.css. */
+.case-nav-dot--risk-low {
+  background: #e8a27e;
+}
+
+.case-nav-dot--risk-medium {
+  background: #d9703f;
+}
+
+.case-nav-dot--risk-high {
+  background: #c4442a;
+}
+
+.case-nav-dot--risk-critical {
+  background: #7f1414;
+}
+
+@keyframes case-nav-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .case-nav-dot--progress {
+    animation: none;
+  }
+}
+
+.case-content {
+  min-width: 0;
+}
+
+/* Same columns as .case-layout: the breadcrumbs sit over the section nav and the
+   case number + company name (the page title) start in line with each section's heading. */
+.case-header {
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  column-gap: 36px;
+  align-items: start;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* Breadcrumbs (components/Breadcrumbs.tsx): the case number and filename are switchers that list
+   the other items at their level. Offset to sit on the company name's first line. */
+.breadcrumbs {
+  min-width: 0;
+  margin-top: 7px;
+}
+
+.breadcrumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.breadcrumbs ol > li {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.breadcrumbs ol > li + li::before {
+  content: '›';
+  padding: 0 4px;
+  color: var(--ink-soft);
+  font-size: 15px;
+}
+
+.breadcrumb-link,
+.breadcrumb-current,
+.breadcrumb-switcher {
+  padding: 3px 5px;
+  border-radius: 5px;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.breadcrumb-link {
+  text-decoration: none;
+}
+
+.breadcrumb-link:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.breadcrumb-current,
+.breadcrumb-switcher--current {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.breadcrumb-current {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Shrinks (rather than capping at 100%) so a long filename leaves room for the › before it. */
+.breadcrumb-menu {
+  position: relative;
+  display: inline-flex;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.breadcrumb-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 0.12s, color 0.12s;
+}
+
+.breadcrumb-switcher:hover,
+.breadcrumb-switcher[aria-expanded='true'] {
+  background: rgba(61, 90, 128, 0.1);
+  color: var(--ink);
+}
+
+.breadcrumb-switcher-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.breadcrumb-caret {
+  flex-shrink: 0;
+  transition: transform 0.12s;
+}
+
+.breadcrumb-switcher[aria-expanded='true'] .breadcrumb-caret {
+  transform: rotate(180deg);
+}
+
+.breadcrumb-link:focus-visible,
+.breadcrumb-switcher:focus-visible,
+.breadcrumb-list-item:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 1px;
+}
+
+.breadcrumb-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 25;
+  width: 340px;
+  max-width: calc(100vw - 24px);
+  max-height: min(360px, 60vh);
+  overflow-y: auto;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(18, 32, 61, 0.16);
+}
+
+.breadcrumb-list-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.breadcrumb-list-item:hover,
+.breadcrumb-list-item:focus-visible {
+  background: rgba(61, 90, 128, 0.1);
+}
+
+.breadcrumb-list-item[aria-current='page'] {
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--steel);
+}
+
+.breadcrumb-list-tag {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--steel-dark);
+}
+
+.breadcrumb-list-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.breadcrumb-list-note {
+  padding: 8px 10px;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+
+
+.case-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.case-title-editing {
+  flex: 1;
+  min-width: 0;
+}
+
+.case-title {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.case-id-tag {
+  flex-shrink: 0;
+  /* Centres the tag on the 28px name's first line. */
+  margin-top: 6px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: rgba(18, 32, 61, 0.04);
+  color: var(--ink-soft);
+  font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.case-title h1 {
+  font-size: 28px;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.case-title .add-field-form-actions {
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.case-title-input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0 8px;
+  /* Cancels the border so switching to edit mode doesn't shift the page. */
+  margin: -1px 0;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.case-title-input:focus {
+  outline: none;
+  border-color: #6b7280;
+  box-shadow: 0 0 0 2px rgba(107, 114, 128, 0.12);
+}
+
+.case-title-editing .add-field-error {
+  margin: 6px 0 0;
+}
+
+.section-title {
+  font-size: 19px;
+  line-height: 1.3;
+  margin: 0 0 4px;
+}
+
+.case-content > .summary-card:first-child {
+  margin-top: 0;
 }
 
 .upload-view {
   display: grid;
-  grid-template-columns: 1fr 240px;
+  grid-template-columns: 1fr 280px;
   gap: 32px;
   align-items: start;
 }
@@ -298,7 +716,7 @@
 
 .upload-sidebar {
   position: sticky;
-  top: 24px;
+  top: calc(var(--topbar-height) + 24px);
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 9px;
@@ -372,6 +790,46 @@
 }
 
 @media (max-width: 860px) {
+  .case-layout {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .case-header {
+    grid-template-columns: 1fr;
+    row-gap: 12px;
+  }
+
+  .breadcrumbs {
+    margin-top: 0;
+  }
+
+  .case-id-tag {
+    margin-top: 3px;
+  }
+
+  .case-title h1,
+  .case-title-input {
+    font-size: 22px;
+  }
+
+  .case-nav {
+    position: static;
+    overflow-x: auto;
+  }
+
+  .case-nav ul {
+    flex-direction: row;
+  }
+
+  .case-nav-item {
+    white-space: nowrap;
+  }
+
+  .case-nav-item.active {
+    box-shadow: inset 0 -2px 0 var(--steel);
+  }
+
   .upload-view {
     grid-template-columns: 1fr;
   }
@@ -635,34 +1093,32 @@
 }
 
 @media (max-width: 620px) {
-  .shell {
+  .shell,
+  .shell--queue,
+  .shell--upload {
     width: min(100% - 24px, 760px);
     padding-top: 20px;
   }
 
+  /* Matches the shell's smaller top padding. */
   .app-header {
-    align-items: flex-start;
+    margin-top: -20px;
+    padding-left: 12px;
+    padding-right: 12px;
     gap: 12px;
   }
 
-  .officer-tag {
-    text-align: right;
+  .brand {
+    font-size: 16px;
   }
 
-  .search-row {
-    flex-direction: column;
+  /* Sign out stays; the officer name doesn't fit beside the brand. */
+  .officer-name {
+    display: none;
   }
 
   .go-btn {
     min-height: 42px;
-  }
-
-  .case-card {
-    align-items: flex-start;
-  }
-
-  .case-id {
-    margin-top: 1px;
   }
 
   .file-row {

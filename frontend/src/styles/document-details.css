@@ -2,8 +2,10 @@
    Document Details Page
    ========================================================= */
 
-.document-details-page {
-  width: min(760px, calc(100% - 40px));
+/* There's no section nav here, so the content is centred under the shared case header. */
+.document-details-body {
+  max-width: 1040px;
+  margin: 24px auto 0;
 }
 
 .document-details-intro {
@@ -22,13 +24,6 @@
   flex-shrink: 0;
   align-items: center;
   gap: 10px;
-}
-
-.document-details-intro h1 {
-  margin: 6px 0 6px;
-  color: #17294d;
-  font-size: 28px;
-  line-height: 1.2;
 }
 
 .document-details-intro .sub {
@@ -313,25 +308,6 @@
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-}
-
-.case-header-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 6px;
-}
-
-.case-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.case-header-row .eyebrow {
-  margin-bottom: 0;
 }
 
 .add-field-button:hover {
@@ -645,6 +621,23 @@
   color: var(--ink-soft);
   font-size: 16px;
   line-height: 1.5;
+  /* Company names and filenames can be one long unbroken string. */
+  overflow-wrap: anywhere;
+}
+
+/* A native select is as wide as its longest option, so long company names would overflow. */
+.confirm-dialog select {
+  width: 100%;
+  max-width: 100%;
+  margin-top: 16px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  text-overflow: ellipsis;
 }
 
 .confirm-dialog-actions {

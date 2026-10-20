@@ -15,6 +15,14 @@ export async function deleteDocument(documentId: string): Promise<void> {
   await assertOk(response, 'Failed to delete document');
 }
 
+export async function listCaseDocuments(caseId: string): Promise<DocumentRecord[]> {
+  const response = await authFetch(`/documents?case_id=${encodeURIComponent(caseId)}`);
+
+  await assertOk(response, 'Failed to list documents');
+
+  return (await response.json()) as DocumentRecord[];
+}
+
 export async function getDocument(documentId: string): Promise<DocumentRecord> {
   const response = await authFetch(`/documents/${documentId}`);
 

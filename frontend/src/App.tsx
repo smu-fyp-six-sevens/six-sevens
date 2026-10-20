@@ -10,12 +10,15 @@ import {
 
 import CaseQueuePage from './pages/CaseQueuePage';
 import CreateCasePage from './pages/CreateCasePage';
+import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
 import NotFoundState from './components/NotFoundState';
+import { CasesContext } from './casesContext';
 
 // Loaded on first visit to keep the initial bundle small.
 const UploadPage = lazy(() => import('./pages/UploadPage'));
 const DocumentDetailsPage = lazy(() => import('./pages/DocumentDetailsPage'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 import { authFetch, getToken } from './lib/api';
 import type { CaseRisk, CaseRiskLevel } from './services/uploadService';
 
@@ -23,12 +26,13 @@ export interface CaseRecord {
   id: string;
   caseNumber?: string | null;
   applicant: string;
-  type: string;
   status: string;
   caseStatus: string;
   created_at?: string | null;
   // Only set once the case has been scored (see backend/app/case_risk.py).
   riskLevel?: CaseRiskLevel | null;
+  riskScore?: number | null;
+  riskDescription?: string | null;
 }
 
 function mapStatus(status: string): string {
@@ -116,7 +120,6 @@ function CaseDetailsRoute({
   return (
     <UploadPage
       selectedCase={selectedCase}
-      onBack={() => navigate('/cases')}
       onOpenDocument={(documentId) =>
         navigate(
           `/cases/${selectedCase.caseNumber ?? selectedCase.id}/documents/${documentId}`
@@ -163,11 +166,6 @@ function DocumentDetailsRoute({
     <DocumentDetailsPage
       selectedCase={selectedCase}
       documentId={documentId}
-      onBack={() =>
-        navigate(
-          `/cases/${selectedCase.caseNumber ?? selectedCase.id}`
-        )
-      }
       onDocumentDeleted={() =>
         navigate(
           `/cases/${selectedCase.caseNumber ?? selectedCase.id}`
@@ -257,13 +255,14 @@ export default function App() {
           id: item.id,
           caseNumber: item.greenlink_case_id ?? null,
           applicant: item.company_name ?? 'Unnamed company',
-          type: 'Corporate Loan',
           status: mapStatus(
             item.documents_status ?? item.status ?? 'open'
           ),
           caseStatus: item.status ?? 'open',
           created_at: item.created_at ?? null,
           riskLevel: item.risk?.state === 'scored' ? item.risk.level : null,
+          riskScore: item.risk?.state === 'scored' ? item.risk.score : null,
+          riskDescription: item.risk?.state === 'scored' ? item.risk.reasons?.[0] ?? null : null,
         }))
       );
     } catch (err) {
@@ -295,6 +294,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <CasesContext.Provider value={cases}>
       <Suspense fallback={<p className="loading">Loading…</p>}>
       <Routes>
         <Route
@@ -374,6 +374,24 @@ export default function App() {
         />
 
         <Route
+          path="/dashboard"
+          element={
+            <RequireAuth isAuthed={isAuthed}>
+              <DashboardPage cases={cases} isLoading={isLoading} />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/settings"
+          element={
+            <RequireAuth isAuthed={isAuthed}>
+              <SettingsPage />
+            </RequireAuth>
+          }
+        />
+
+        <Route
           path="/create-case"
           element={
             <RequireAuth isAuthed={isAuthed}>
@@ -391,6 +409,7 @@ export default function App() {
         />
       </Routes>
       </Suspense>
+      </CasesContext.Provider>
     </BrowserRouter>
   );
 }

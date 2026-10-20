@@ -35,8 +35,17 @@ function seedQueue(backend: MockBackend) {
   return { harbor, meridian, platinum };
 }
 
-const caseCards = (page: Page) => page.locator('.case-card');
-const searchBox = (page: Page) => page.getByRole('textbox', { name: 'Search case number or applicant' });
+const caseCards = (page: Page) => page.locator('.case-row');
+const searchBox = (page: Page) => page.getByRole('combobox', { name: 'Search case number or company name' });
+const searchOptions = (page: Page) => page.getByRole('listbox').getByRole('option');
+// Enter without picking a suggestion lists every match in the queue (/cases?q=…).
+async function searchQueue(page: Page, query: string) {
+  await searchBox(page).fill(query);
+  await searchBox(page).press('Enter');
+}
+// The case page shows one section at a time; pick it from the left-hand nav.
+const openSection = (page: Page, label: string) =>
+  page.getByRole('navigation', { name: 'Case sections' }).getByRole('button', { name: new RegExp(`^${label}`) }).click();
 
 test.describe('View cases @sprint2 @SCRUM-78', () => {
   test('CM-001 cases can be searched by company name or case ID @CM-001', async ({ page, backend }) => {
@@ -44,28 +53,38 @@ test.describe('View cases @sprint2 @SCRUM-78', () => {
     await page.goto('/cases');
     await expect(caseCards(page)).toHaveCount(3);
 
+    // The header search suggests matching cases as you type...
     await searchBox(page).fill('meridian');
-    await expect(caseCards(page)).toHaveCount(1);
-    await expect(caseCards(page)).toContainText(meridian.company_name!);
+    await expect(searchOptions(page).filter({ hasText: meridian.company_name! })).toHaveCount(1);
 
     await searchBox(page).fill(harbor.greenlink_case_id);
+    await expect(searchOptions(page).filter({ hasText: harbor.company_name! })).toHaveCount(1);
+
+    // ...and picking one opens it.
+    await searchOptions(page).filter({ hasText: harbor.company_name! }).click();
+    await expect(page.locator('.case-title')).toContainText(harbor.company_name!);
+
+    // "See all results" filters the queue.
+    await page.goto('/cases');
+    await searchBox(page).fill('meridian');
+    await searchOptions(page).filter({ hasText: /See all/ }).click();
     await expect(caseCards(page)).toHaveCount(1);
-    await expect(caseCards(page)).toContainText(harbor.company_name!);
+    await expect(caseCards(page)).toContainText(meridian.company_name!);
   });
 
   test('CM-002 only cases matching the search are displayed @CM-002', async ({ page, backend }) => {
     seedQueue(backend);
     await page.goto('/cases');
 
-    await searchBox(page).fill('pte ltd');
+    await searchQueue(page, 'pte ltd');
     await expect(caseCards(page)).toHaveCount(3);
 
-    await searchBox(page).fill('fitness');
+    await searchQueue(page, 'fitness');
     await expect(caseCards(page)).toHaveCount(1);
     await expect(caseCards(page)).toContainText('Platinum Fitness Group Pte Ltd');
     await expect(page.getByText('Assigned to you (1)')).toBeVisible();
 
-    await searchBox(page).fill('GLDB-0000');
+    await searchQueue(page, 'GLDB-0000');
     await expect(caseCards(page)).toHaveCount(0);
     await expect(page.getByText('No case matches "GLDB-0000"')).toBeVisible();
   });
@@ -84,15 +103,15 @@ test.describe('View cases @sprint2 @SCRUM-78', () => {
     seedQueue(backend);
     await page.goto('/cases');
 
-    await page.locator('.status-chip', { hasText: 'Ready for review' }).click();
+    await page.locator('.status-filter', { hasText: 'Ready for review' }).click();
     await expect(caseCards(page)).toHaveCount(1);
     await expect(caseCards(page)).toContainText('Harbor Light Shipping Pte Ltd');
 
-    await page.locator('.status-chip', { hasText: 'In progress' }).click();
+    await page.locator('.status-filter', { hasText: 'In progress' }).click();
     await expect(caseCards(page)).toHaveCount(2);
 
-    await page.locator('.status-chip', { hasText: 'Ready for review' }).click();
-    await page.locator('.status-chip', { hasText: 'In progress' }).click();
+    await page.locator('.status-filter', { hasText: 'Ready for review' }).click();
+    await page.locator('.status-filter', { hasText: 'In progress' }).click();
     await expect(caseCards(page)).toHaveCount(3);
   });
 
@@ -101,7 +120,7 @@ test.describe('View cases @sprint2 @SCRUM-78', () => {
     backend.cases.push(makeCase({ id: 'case-failed', greenlink_case_id: 'GLDB-1099', company_name: 'Failing Co Pte Ltd', documents_status: 'failed' }));
     await page.goto('/cases');
 
-    await page.locator('.status-chip', { hasText: 'Documents failed' }).click();
+    await page.locator('.status-filter', { hasText: 'Documents failed' }).click();
 
     await expect(caseCards(page)).toHaveCount(1);
     await expect(caseCards(page)).toContainText('Failing Co Pte Ltd');
@@ -112,7 +131,7 @@ test.describe('View cases @sprint2 @SCRUM-78', () => {
     backend.cases.push(makeCase({ id: 'case-stuck', greenlink_case_id: 'GLDB-1100', company_name: 'Stuck Co Pte Ltd', documents_status: 'stuck' }));
     await page.goto('/cases');
 
-    await page.locator('.status-chip', { hasText: 'Processing stuck' }).click();
+    await page.locator('.status-filter', { hasText: 'Processing stuck' }).click();
 
     await expect(caseCards(page)).toHaveCount(1);
     await expect(caseCards(page)).toContainText('Stuck Co Pte Ltd');
@@ -122,7 +141,7 @@ test.describe('View cases @sprint2 @SCRUM-78', () => {
     const { platinum } = seedQueue(backend);
     await page.goto('/cases');
 
-    await page.locator('.status-chip', { hasText: 'Documents pending' }).click();
+    await page.locator('.status-filter', { hasText: 'Documents pending' }).click();
 
     await expect(caseCards(page)).toHaveCount(1);
     await expect(caseCards(page)).toContainText(platinum.company_name!);
@@ -136,9 +155,9 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
 
     await page.getByRole('button', { name: `Open case ${harbor.greenlink_case_id}, ${harbor.company_name}` }).click();
 
-    await expect(page.locator('.eyebrow')).toContainText(`Case #${harbor.greenlink_case_id}`);
-    await expect(page.locator('.eyebrow')).toContainText(harbor.company_name!);
-    await expect(page.getByRole('button', { name: '← Back to case queue' })).toBeVisible();
+    await expect(page.locator('.case-title')).toContainText(harbor.greenlink_case_id);
+    await expect(page.locator('.case-title')).toContainText(harbor.company_name!);
+    await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Case queue' })).toBeVisible();
   });
 
   test('CM-006 case details show only the selected case\'s information @CM-006', async ({ page, backend }) => {
@@ -150,8 +169,8 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
 
     await page.goto(`/cases/${harbor.greenlink_case_id}`);
 
-    await expect(page.locator('.eyebrow')).toContainText(harbor.company_name!);
-    await expect(page.locator('.eyebrow')).not.toContainText(meridian.company_name!);
+    await expect(page.locator('.case-title')).toContainText(harbor.company_name!);
+    await expect(page.locator('.case-title')).not.toContainText(meridian.company_name!);
     const table = page.locator('.documents-table');
     await expect(table.getByText('C014_CertIncumbency.pdf')).toBeVisible();
     await expect(page.getByText('C067_NOA.pdf')).toHaveCount(0);
@@ -160,6 +179,7 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
   test('CM-007 the customer risk summary is accessible from case details @CM-007', async ({ page, backend }) => {
     const { harbor } = seedQueue(backend);
     await page.goto(`/cases/${harbor.greenlink_case_id}`);
+    await openSection(page, 'Risk summary');
 
     const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
     await expect(section).toBeVisible();
@@ -174,6 +194,7 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     });
     backend.cases.push(harbor);
     await page.goto(`/cases/${harbor.greenlink_case_id}`);
+    await openSection(page, 'Risk summary');
 
     const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
     await expect(section).toContainText('2 of 3 documents scanned.');
@@ -241,6 +262,7 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     });
     backend.cases.push(harbor);
     await page.goto(`/cases/${harbor.greenlink_case_id}`);
+    await openSection(page, 'Risk summary');
 
     const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
     await expect(section.locator('.risk-badge')).toHaveText('High risk');
@@ -297,6 +319,7 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     );
 
     await page.goto(`/cases/${harbor.greenlink_case_id}`);
+    await openSection(page, 'Flagged items');
 
     const flagged = page.locator('.summary-card', {
       has: page.getByRole('heading', { name: 'Flagged Items for Manual Review' }),
@@ -312,6 +335,7 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
   test('CM-009 the case audit trail is accessible from case details @CM-009', async ({ page, backend }) => {
     const { harbor } = seedQueue(backend);
     await page.goto(`/cases/${harbor.greenlink_case_id}`);
+    await openSection(page, 'Audit trail');
 
     const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Case Audit Trail' }) });
     await expect(section).toBeVisible();
@@ -322,6 +346,7 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
   test('a case with nothing needing further evidence recommends no documents', async ({ page, backend }) => {
     const { harbor } = seedQueue(backend);
     await page.goto(`/cases/${harbor.greenlink_case_id}`);
+    await openSection(page, 'Additional documents');
 
     const section = page.locator('.summary-card', {
       has: page.getByRole('heading', { name: 'Additional Documents' }),
@@ -354,6 +379,7 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     });
     backend.cases.push(harbor);
     await page.goto(`/cases/${harbor.greenlink_case_id}`);
+    await openSection(page, 'Additional documents');
 
     const section = page.locator('.summary-card', {
       has: page.getByRole('heading', { name: 'Additional Documents' }),
@@ -430,6 +456,7 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     });
     backend.cases.push(harbor);
     await page.goto(`/cases/${harbor.greenlink_case_id}`);
+    await openSection(page, 'Additional documents');
 
     const section = page.locator('.summary-card', {
       has: page.getByRole('heading', { name: 'Additional Documents' }),
@@ -454,9 +481,9 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
 test.describe('Create case @sprint2 @SCRUM-96', () => {
   async function createCase(page: Page, companyName: string) {
     await page.goto('/cases');
-    await page.getByRole('button', { name: '+ Create new case' }).click();
+    await page.getByRole('button', { name: 'New case' }).click();
     await expect(page.getByRole('heading', { name: 'Create Case' })).toBeVisible();
-    await page.getByLabel(/company name/i).fill(companyName);
+    await page.getByLabel(/^company name/i).fill(companyName);
     await page.getByRole('button', { name: 'Create Case' }).click();
     await expect(page).toHaveURL('/cases');
   }
@@ -486,7 +513,7 @@ test.describe('Create case @sprint2 @SCRUM-96', () => {
     seedQueue(backend);
     await page.goto('/create-case');
 
-    const input = page.getByLabel(/company name/i);
+    const input = page.getByLabel(/^company name/i);
     await input.pressSequentially('A'.repeat(101));
 
     await expect(input).toHaveValue('A'.repeat(100));
@@ -511,7 +538,7 @@ test.describe('Create case @sprint2 @SCRUM-96', () => {
 
     const newCard = caseCards(page).filter({ hasText: 'Ironclad Security Services Pte Ltd' });
     await expect(newCard).toHaveCount(1);
-    const newId = (await newCard.locator('.case-id').innerText()).trim();
+    const newId = (await newCard.locator('.case-row-id').innerText()).trim();
     expect(newId).toMatch(/^GLDB-\d+$/);
     expect(existing).not.toContain(newId);
   });
@@ -520,11 +547,11 @@ test.describe('Create case @sprint2 @SCRUM-96', () => {
     seedQueue(backend);
 
     await createCase(page, 'Ironclad Security Services Pte Ltd');
-    await caseCards(page).filter({ hasText: 'Ironclad Security Services Pte Ltd' }).locator('.case-card-open').click();
+    await caseCards(page).filter({ hasText: 'Ironclad Security Services Pte Ltd' }).locator('.case-row-open').click();
 
-    await expect(page.locator('.eyebrow')).toContainText('Ironclad Security Services Pte Ltd');
+    await expect(page.locator('.case-title')).toContainText('Ironclad Security Services Pte Ltd');
     await page.reload();
-    await expect(page.locator('.eyebrow')).toContainText('Ironclad Security Services Pte Ltd');
+    await expect(page.locator('.case-title')).toContainText('Ironclad Security Services Pte Ltd');
   });
 
   test('CM-013 a newly created case appears in the queue and can be found by its case ID @CM-013', async ({ page, backend }) => {
@@ -534,8 +561,7 @@ test.describe('Create case @sprint2 @SCRUM-96', () => {
 
     const created = backend.cases.find((c) => c.company_name === 'Ironclad Security Services Pte Ltd')!;
     await searchBox(page).fill(created.greenlink_case_id);
-    await expect(caseCards(page)).toHaveCount(1);
-    await expect(caseCards(page)).toContainText('Ironclad Security Services Pte Ltd');
+    await expect(searchOptions(page).filter({ hasText: created.greenlink_case_id })).toContainText('Ironclad Security Services Pte Ltd');
   });
 });
 
@@ -557,7 +583,7 @@ function seedIronclad(backend: MockBackend) {
 }
 
 const NEW_NAME = 'IRONCLAD SECURITY SERVICES PTE LTD';
-const caseHeader = (page: Page) => page.locator('.eyebrow');
+const caseHeader = (page: Page) => page.locator('.case-title');
 const companyNameInput = (page: Page) => page.locator('#case-company-name');
 const saveCase = (page: Page) => page.getByRole('button', { name: 'Save', exact: true }).click();
 
@@ -611,7 +637,7 @@ test.describe('Update case @sprint3 @SCRUM-116', () => {
 
     await renameCase(page, ironclad.greenlink_case_id, NEW_NAME);
     await expect(caseHeader(page)).toContainText(NEW_NAME);
-    await page.getByRole('button', { name: '← Back to case queue' }).click();
+    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Case queue' }).click();
 
     await expect(caseCards(page).filter({ hasText: 'GLDB-01' })).toContainText(NEW_NAME);
   });
@@ -621,7 +647,7 @@ test.describe('Update case @sprint3 @SCRUM-116', () => {
 
     await renameCase(page, ironclad.greenlink_case_id, NEW_NAME);
     await expect(caseHeader(page)).toContainText(NEW_NAME);
-    await page.getByRole('button', { name: '← Back to case queue' }).click();
+    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Case queue' }).click();
     await page.getByRole('button', { name: `Open case GLDB-01, ${NEW_NAME}` }).click();
 
     await expect(caseHeader(page)).toContainText(NEW_NAME);

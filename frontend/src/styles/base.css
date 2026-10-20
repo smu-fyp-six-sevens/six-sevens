@@ -12,6 +12,7 @@
   --line: #dad5c9;
   --ink-soft: #5b6478;
   --mono: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
+  --topbar-height: 64px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
   color: var(--ink);
   background: var(--paper);
@@ -36,6 +37,8 @@ body {
   min-height: 100vh;
   background: var(--paper);
   color: var(--ink);
+  /* The top bar stretches past the centred page column to the window edges. */
+  overflow-x: clip;
 }
 
 button,
@@ -54,30 +57,165 @@ button {
 }
 
 .app-header {
-  display: flex;
-  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  /* Brand | nav (centred on the page) | search and sign-out. The equal outer columns keep the nav centred. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  margin-bottom: 22px;
+  gap: 24px;
+  height: var(--topbar-height);
+  /* Full window width from inside the centred .shell; the top margin cancels the shell's padding. */
+  margin: -32px calc(50% - 50vw) 28px;
+  padding: 0 24px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+
+.app-header > .brand-link {
+  justify-self: start;
+}
+
+.app-header-right {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 20px;
+  min-width: 0;
+}
+
+.app-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.app-nav-link {
+  padding: 7px 12px;
+  border-radius: 6px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.12s;
+}
+
+.app-nav-link:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 6px;
+  text-decoration-thickness: 1.5px;
+}
+
+.app-nav-link:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(61, 90, 128, 0.2);
+}
+
+.header-search {
+  flex: 0 1 300px;
+  min-width: 160px;
+}
+
+.header-search .search-box {
+  padding: 7px 12px;
+}
+
+.header-search .search-box input {
+  font-size: 13.5px;
+}
+
+.header-search {
+  position: relative;
+}
+
+.header-search-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  /* Wider than the search box so company names have room; anchored to its right edge. */
+  width: max(100%, 380px);
+  max-width: calc(100vw - 24px);
+  z-index: 30;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(18, 32, 61, 0.16);
+}
+
+.header-search-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.header-search-option[aria-selected='true'] {
+  background: rgba(61, 90, 128, 0.1);
+}
+
+.header-search-number {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--steel-dark);
+}
+
+/* Long company names are cut to one line; the full name is in the title tooltip. */
+.header-search-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.header-search-all {
+  margin-top: 4px;
+  border-top: 1px solid #ece8de;
+  border-radius: 0 0 6px 6px;
+  color: var(--steel);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.header-search-empty {
+  padding: 9px 10px;
+  font-size: 13.5px;
+  color: var(--ink-soft);
 }
 
 .brand {
-  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
 }
 
-.brand span {
+.brand-text span {
   color: var(--steel);
 }
 
+
 .signout-btn {
-  padding: 5px 12px;
+  padding: 7px 14px;
   border: none;
   border-radius: 6px;
   background: var(--red);
   color: #ffffff;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1.2;
   cursor: pointer;
@@ -109,12 +247,69 @@ button {
 }
 
 .officer-tag {
-  font-size: 12px;
+  flex-shrink: 0;
+  font-size: 13px;
   color: var(--ink-soft);
   font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 24px;
+}
+
+/* The officer name goes first; then the header becomes two rows with the search on the second
+   (three on phones, where the nav gets its own row too). */
+@media (max-width: 1240px) {
+  .officer-name {
+    display: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .app-header {
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas:
+      'brand nav officer'
+      'search search search';
+    height: auto;
+    row-gap: 10px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .app-header-right {
+    display: contents;
+  }
+
+  .app-header > .brand-link {
+    grid-area: brand;
+  }
+
+  .app-nav {
+    grid-area: nav;
+    justify-self: center;
+  }
+
+  .officer-tag {
+    grid-area: officer;
+  }
+
+  .header-search {
+    grid-area: search;
+  }
+}
+
+@media (max-width: 620px) {
+  .app-header {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      'brand officer'
+      'nav nav'
+      'search search';
+  }
+
+  .app-nav {
+    justify-self: start;
+  }
 }
 
 .eyebrow,
@@ -131,7 +326,7 @@ button {
 }
 
 h1 {
-  font-size: 21px;
+  font-size: 25px;
   line-height: 1.2;
   margin: 0 0 4px;
   letter-spacing: -0.01em;
@@ -139,6 +334,6 @@ h1 {
 
 .sub {
   color: var(--ink-soft);
-  font-size: 13.5px;
+  font-size: 14.5px;
   margin: 0 0 28px;
 }

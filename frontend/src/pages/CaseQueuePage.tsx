@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import AppHeader from '../components/AppHeader';
-import CaseCard from '../components/CaseCard';
+import CaseRow from '../components/CaseRow';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { deleteCase } from '../services/uploadService';
 import type { CaseRecord } from '../App';
+import { caseStatusTone } from '../utils/caseStatusTone';
+import { caseNumberLabel, matchesCaseQuery } from '../utils/caseSearch';
 
 interface CaseQueuePageProps {
   cases: CaseRecord[];
@@ -15,16 +18,6 @@ interface CaseQueuePageProps {
   onCaseUpdated: (caseId: string, companyName: string) => void;
   onCaseDeleted: (caseId: string) => void;
 }
-
-// One colour per status label (see mapStatus in App.tsx); anything else
-// falls back to neutral.
-const STATUS_CHIP_CLASS: Record<string, string> = {
-  'Ready for review': 'status-chip--green',
-  'In progress': 'status-chip--blue',
-  'Documents failed': 'status-chip--red',
-  'Processing stuck': 'status-chip--amber',
-  'Documents pending': 'status-chip--grey',
-};
 
 const PREFS_STORAGE_KEY = 'caseQueue.prefs';
 
@@ -68,10 +61,6 @@ function savePrefs(prefs: QueuePrefs) {
   }
 }
 
-function displayCaseNumber(caseRecord: CaseRecord): string {
-  return caseRecord.caseNumber || caseRecord.id;
-}
-
 // Unscored cases (riskLevel null) rank below Low.
 const RISK_RANK: Record<string, number> = { Critical: 4, High: 3, Medium: 2, Low: 1 };
 
@@ -97,7 +86,9 @@ export default function CaseQueuePage({
   onCaseUpdated,
   onCaseDeleted,
 }: CaseQueuePageProps) {
-  const [search, setSearch] = useState('');
+  // Set by the header search's "See all results" (see AppHeader).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const search = searchParams.get('q') ?? '';
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deletingCaseId, setDeletingCaseId] = useState<string | null>(null);
   const [caseToDelete, setCaseToDelete] = useState<CaseRecord | null>(null);
@@ -120,6 +111,12 @@ export default function CaseQueuePage({
       .filter(Boolean);
 
     return Array.from(new Set(statuses));
+  }, [cases]);
+
+  const statusCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of cases) counts.set(item.status, (counts.get(item.status) ?? 0) + 1);
+    return counts;
   }, [cases]);
 
   // A saved status no case has right now (e.g. nothing is "stuck" today)
@@ -146,10 +143,7 @@ export default function CaseQueuePage({
     const query = search.trim().toLowerCase();
 
     const filteredCases = cases.filter((item) => {
-      const matchesSearch =
-        !query ||
-        [displayCaseNumber(item), item.applicant]
-          .some((value) => value.toLowerCase().includes(query));
+      const matchesSearch = matchesCaseQuery(item, query);
 
       // No chip active = no status filter; otherwise a case matches if its
       // status is any of the active ones.
@@ -177,23 +171,6 @@ export default function CaseQueuePage({
     });
   }, [cases, search, activeStatuses, sortOrder, riskFirst]);
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const query = search.trim().toLowerCase();
-
-    if (!query) return;
-
-    const exact = cases.find((item) =>
-      [displayCaseNumber(item), item.id]
-        .some((value) => value.toLowerCase() === query),
-    );
-
-    if (exact) {
-      onOpenCase(exact);
-    }
-  }
-
   async function confirmDeleteCase() {
     if (!caseToDelete) return;
 
@@ -214,7 +191,7 @@ export default function CaseQueuePage({
   }
 
   return (
-    <main className="shell">
+    <main className="shell shell--queue">
       <AppHeader />
 
       <section className="queue-view">
@@ -229,136 +206,169 @@ export default function CaseQueuePage({
             className="create-case-btn"
             onClick={onCreateCase}
           >
-            + Create new case
+            <span aria-hidden="true">+ </span>New case
           </button>
         </div>
 
         <p className="sub">
-          Search by case number or applicant, or pick from your assigned cases below.
+          Pick from your assigned cases below, or search by case number or company name above.
         </p>
 
-        <form className="search-row" onSubmit={handleSubmit}>
-          <label className="search-box">
-            <span aria-hidden="true">⌕</span>
+        <div className="queue-layout">
+          <aside className="queue-sidebar" aria-label="Filter and sort cases">
+            <div className="queue-sidebar-group">
+              <span className="filter-label">Status</span>
 
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Enter case number, e.g. GLDB-22841"
-              aria-label="Search case number or applicant"
-            />
-          </label>
-
-          <button className="go-btn" type="submit">
-            Go
-          </button>
-        </form>
-
-        <div className="queue-filters">
-          <div className="queue-filters-main">
-            <span className="filter-label">Filter by status</span>
-
-            <div className="status-chips">
-              {statusOptions.map((status) => {
-                const isActive = activeStatuses.has(status);
-
-                return (
+              <ul className="queue-filter-list">
+                <li>
                   <button
-                    key={status}
                     type="button"
-                    aria-pressed={isActive}
-                    className={`status-chip ${
-                      STATUS_CHIP_CLASS[status] ?? 'status-chip--grey'
-                    } ${isActive ? 'status-chip--active' : ''}`}
-                    onClick={() => toggleStatus(status)}
+                    aria-pressed={activeStatuses.size === 0}
+                    className="queue-filter"
+                    onClick={() => setSavedStatuses(new Set())}
                   >
-                    {status}
+                    <span className="queue-filter-label">All cases</span>
+                    <span className="queue-filter-count">{cases.length}</span>
                   </button>
-                );
-              })}
+                </li>
+
+                {statusOptions.map((status) => (
+                  <li key={status}>
+                    <button
+                      type="button"
+                      aria-pressed={activeStatuses.has(status)}
+                      className="queue-filter status-filter"
+                      onClick={() => toggleStatus(status)}
+                    >
+                      <span className={`case-status-dot case-status-dot--${caseStatusTone(status)}`} aria-hidden="true" />
+                      <span className="queue-filter-label">{status}</span>
+                      <span className="queue-filter-count">{statusCounts.get(status) ?? 0}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
-          </div>
 
-          <div className="queue-filters-sort">
-            <span className="filter-label">Creation date</span>
+            <div className="queue-sidebar-group">
+              <span className="filter-label">Sort</span>
 
-            <button
-              type="button"
-              className="sort-toggle-btn"
-              aria-label={
-                sortOrder === 'asc'
-                  ? 'Sorted by creation date, oldest first. Click for newest first.'
-                  : 'Sorted by creation date, newest first. Click for oldest first.'
-              }
-              onClick={() =>
-                setSortOrder((current) => (current === 'asc' ? 'desc' : 'asc'))
-              }
-            >
-              {sortOrder === 'asc' ? 'Oldest first' : 'Newest first'}
-              <span className="sort-toggle-arrow" aria-hidden="true">
-                {sortOrder === 'asc' ? '↑' : '↓'}
-              </span>
-            </button>
+              <ul className="queue-filter-list">
+                <li>
+                  <button
+                    type="button"
+                    className="queue-filter"
+                    aria-label={
+                      sortOrder === 'asc'
+                        ? 'Sorted by creation date, oldest first. Click for newest first.'
+                        : 'Sorted by creation date, newest first. Click for oldest first.'
+                    }
+                    onClick={() =>
+                      setSortOrder((current) => (current === 'asc' ? 'desc' : 'asc'))
+                    }
+                  >
+                    <span className="queue-filter-label">
+                      {sortOrder === 'asc' ? 'Oldest first' : 'Newest first'}
+                    </span>
+                    <span className="sort-toggle-arrow" aria-hidden="true">
+                      {sortOrder === 'asc' ? '↑' : '↓'}
+                    </span>
+                  </button>
+                </li>
 
-            <button
-              type="button"
-              className={`sort-toggle-btn ${riskFirst ? 'sort-toggle-btn--active' : ''}`}
-              aria-pressed={riskFirst}
-              onClick={() => setRiskFirst((current) => !current)}
-            >
-              Highest risk first
-            </button>
+                <li>
+                  <button
+                    type="button"
+                    className="queue-filter"
+                    aria-pressed={riskFirst}
+                    onClick={() => setRiskFirst((current) => !current)}
+                  >
+                    <span className="queue-filter-label">Highest risk first</span>
+                  </button>
+                </li>
+              </ul>
+            </div>
+          </aside>
+
+          <div className="queue-main">
+            <div className="queue-label">
+              <span>Assigned to you ({matches.length})</span>
+
+              {search && (
+                <span className="queue-search-chip">
+                  <span className="queue-search-chip-text">Matching “{search}”</span>
+                  <button
+                    type="button"
+                    aria-label="Clear search"
+                    onClick={() => {
+                      const params = new URLSearchParams(searchParams);
+                      params.delete('q');
+                      setSearchParams(params, { replace: true });
+                    }}
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+            </div>
+
+            {deleteError && (
+              <div className="toast show mixed" role="alert">
+                ⚠ {deleteError}
+              </div>
+            )}
+
+            {isLoading ? (
+              <div className="no-results">
+                Loading cases…
+              </div>
+            ) : error ? (
+              <div className="no-results">
+                <div>{error}</div>
+
+                <button
+                  type="button"
+                  className="go-btn queue-retry"
+                  onClick={onRetry}
+                >
+                  Retry
+                </button>
+              </div>
+            ) : matches.length > 0 ? (
+              <div className="case-table">
+                <div className="case-table-head" aria-hidden="true">
+                  <span>Case</span>
+                  <span>Company name</span>
+                  <span>Status</span>
+                  <span className="case-table-head-center">Risk</span>
+                  <span className="case-table-head-center">Created</span>
+                </div>
+
+                <ul className="case-table-body">
+                  {matches.map((caseRecord) => (
+                    <CaseRow
+                      key={caseRecord.id}
+                      caseRecord={caseRecord}
+                      onOpen={onOpenCase}
+                      onDelete={setCaseToDelete}
+                      onCaseUpdated={onCaseUpdated}
+                      isDeleting={deletingCaseId === caseRecord.id}
+                    />
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <div className="no-results">
+                No case matches "{search}". Check the case number and try again.
+              </div>
+            )}
           </div>
         </div>
-
-        <div className="queue-label">
-          Assigned to you ({matches.length})
-        </div>
-
-        {deleteError && (
-          <div className="toast show mixed" role="alert">
-            ⚠ {deleteError}
-          </div>
-        )}
-
-        {isLoading ? (
-          <div className="no-results">
-            Loading cases…
-          </div>
-        ) : error ? (
-          <div className="no-results">
-            <div>{error}</div>
-
-            <button
-              type="button"
-              className="go-btn queue-retry"
-              onClick={onRetry}
-            >
-              Retry
-            </button>
-          </div>
-        ) : matches.length > 0 ? (
-          matches.map((caseRecord) => (
-            <CaseCard
-              key={caseRecord.id}
-              caseRecord={caseRecord}
-              onOpen={onOpenCase}
-              onDelete={setCaseToDelete}
-              onCaseUpdated={onCaseUpdated}
-              isDeleting={deletingCaseId === caseRecord.id}
-            />
-          ))
-        ) : (
-          <div className="no-results">
-            No case matches "{search}". Check the case number and try again.
-          </div>
-        )}
       </section>
 
       {caseToDelete && (
         <ConfirmDialog
           title="Delete this case?"
-          message={`Case ${displayCaseNumber(caseToDelete)} (${caseToDelete.applicant}) and its documents will be removed and cannot be recovered.`}
+          message={`Case ${caseNumberLabel(caseToDelete)} (${caseToDelete.applicant}) and its documents will be removed and cannot be recovered.`}
           isConfirming={deletingCaseId === caseToDelete.id}
           onCancel={() => {
             if (deletingCaseId === null) setCaseToDelete(null);

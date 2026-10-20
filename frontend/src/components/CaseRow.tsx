@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { CaseRecord } from '../App';
 import KebabMenu from './KebabMenu';
+import { caseStatusTone } from '../utils/caseStatusTone';
 import { updateCase } from '../services/uploadService';
 import { MAX_COMPANY_NAME_LENGTH, validateCompanyName } from '../utils/caseValidation';
 
-interface CaseCardProps {
+interface CaseRowProps {
   caseRecord: CaseRecord;
   onOpen: (caseRecord: CaseRecord) => void;
   onDelete: (caseRecord: CaseRecord) => void;
@@ -12,23 +13,8 @@ interface CaseCardProps {
   isDeleting: boolean;
 }
 
-const CASE_ID_CLASS: Record<string, string> = {
-  'Ready for review': 'case-id--green',
-  'In progress': 'case-id--blue',
-  'Documents failed': 'case-id--red',
-  'Processing stuck': 'case-id--amber',
-  'Documents pending': 'case-id--grey',
-};
-
-function caseCardColorClass(status: string): string {
-  const idClass = CASE_ID_CLASS[status] ?? 'case-id--grey';
-  return idClass.replace('case-id--', 'case-card--');
-}
-
 function formatCreationDate(caseRecord: CaseRecord): string {
-  const createdAt = (caseRecord as CaseRecord & {
-    created_at?: string | null;
-  }).created_at;
+  const createdAt = caseRecord.created_at;
 
   if (!createdAt) {
     return '—';
@@ -47,15 +33,15 @@ function formatCreationDate(caseRecord: CaseRecord): string {
   });
 }
 
-export default function CaseCard({
+export default function CaseRow({
   caseRecord,
   onOpen,
   onDelete,
   onCaseUpdated,
   isDeleting,
-}: CaseCardProps) {
+}: CaseRowProps) {
   const caseLabel = caseRecord.caseNumber || caseRecord.id;
-  const cardColorClass = caseCardColorClass(caseRecord.status);
+  const tone = caseStatusTone(caseRecord.status);
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState(caseRecord.applicant);
   const [isSaving, setIsSaving] = useState(false);
@@ -101,16 +87,10 @@ export default function CaseCard({
 
   if (isEditing) {
     return (
-      <div className={`case-card ${cardColorClass}`}>
-        <span
-          className={`case-id ${
-            CASE_ID_CLASS[caseRecord.status] ?? 'case-id--grey'
-          }`}
-        >
-          {caseRecord.caseNumber}
-        </span>
+      <li className="case-row case-row--editing">
+        <span className="case-row-id">{caseLabel}</span>
 
-        <span className="case-main case-main--editing">
+        <span className="case-row-edit">
           <input
             type="text"
             className="case-name-input"
@@ -137,46 +117,38 @@ export default function CaseCard({
             {isSaving ? 'Saving…' : 'Save'}
           </button>
         </span>
-      </div>
+      </li>
     );
   }
 
   return (
-    <div className={`case-card ${cardColorClass}`}>
+    <li className="case-row">
       <button
         type="button"
-        className="case-card-open"
+        className="case-row-open"
         onClick={() => onOpen(caseRecord)}
         aria-label={`Open case ${caseLabel}, ${caseRecord.applicant}`}
       >
-        <span
-          className={`case-id ${
-            CASE_ID_CLASS[caseRecord.status] ?? 'case-id--grey'
-          }`}
-        >
-          {caseRecord.caseNumber}
+        <span className="case-row-id">{caseLabel}</span>
+
+        <span className="case-row-name">{caseRecord.applicant}</span>
+
+        <span className="case-row-status">
+          <span className={`case-status-dot case-status-dot--${tone}`} aria-hidden="true" />
+          {caseRecord.status}
         </span>
 
-        <span className="case-main">
-          <span className="case-name">
-            {caseRecord.applicant}
-          </span>
-
-          <span className="case-sub">
-            {caseRecord.type} · {caseRecord.status}
-            {caseRecord.riskLevel && (
-              <span
-                className={`risk-badge risk-badge--${caseRecord.riskLevel.toLowerCase()}`}
-              >
-                {caseRecord.riskLevel} risk
-              </span>
-            )}
-          </span>
-
-          <span className="case-created">
-            Created: {formatCreationDate(caseRecord)}
-          </span>
+        <span className="case-row-risk">
+          {caseRecord.riskLevel ? (
+            <span className={`risk-badge risk-badge--${caseRecord.riskLevel.toLowerCase()}`}>
+              {caseRecord.riskLevel}
+            </span>
+          ) : (
+            <span className="risk-badge risk-badge--none" title="Not scored yet">Not assessed</span>
+          )}
         </span>
+
+        <span className="case-row-created">{formatCreationDate(caseRecord)}</span>
       </button>
 
       <KebabMenu
@@ -197,6 +169,6 @@ export default function CaseCard({
           },
         ]}
       />
-    </div>
+    </li>
   );
 }
