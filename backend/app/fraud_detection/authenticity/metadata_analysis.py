@@ -75,7 +75,16 @@ _PROVENANCE_ALIASES: dict[str, tuple[str, ...]] = {
     "edit_history_actions": ("HistoryAction",),
 }
 
-_ALL_ALIASES: dict[str, tuple[str, ...]] = {**_FIELD_ALIASES, **_PROVENANCE_ALIASES}
+# Free-text descriptive fields. No rule inspects them: they are read out for the specialist to judge
+# (a subject of "modified copy" says more than any pattern could). Like the provenance fields, they are
+# not among the core six, so their absence never changes whether the check can assess a document.
+_DESCRIPTIVE_ALIASES: dict[str, tuple[str, ...]] = {
+    "subject": ("Subject",),
+    "title": ("Title",),
+}
+DESCRIPTIVE_METADATA_FIELDS: tuple[str, ...] = tuple(_DESCRIPTIVE_ALIASES)
+
+_ALL_ALIASES: dict[str, tuple[str, ...]] = {**_FIELD_ALIASES, **_PROVENANCE_ALIASES, **_DESCRIPTIVE_ALIASES}
 
 # PDF 1.0 shipped in 1993, so nothing genuine predates it. Anything earlier
 # is a fabricated or corrupted value rather than an old document.

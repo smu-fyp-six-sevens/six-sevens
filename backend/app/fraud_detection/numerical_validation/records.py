@@ -147,21 +147,30 @@ def _check_cr_limit_vs_balance(*, accounts: Any) -> CheckResult:
 
 
 @check(code="CR.AGGREGATE_SUM", applies=("credit_report",))
-def _check_cr_aggregate_sum(*, accounts: Any, total_outstanding_balance: Num | None = None) -> CheckResult:
-    """Account balances must add up to the stated total outstanding balance."""
-    if total_outstanding_balance is None:
+def _check_cr_aggregate_sum(
+    *, accounts: Any, total_outstanding_balance: Num | None = None,
+    total_outstanding_balance_secured: Num | None = None, total_outstanding_balance_unsecured: Num | None = None,
+) -> CheckResult:
+    """The open accounts' balances must add up to the stated total (secured plus unsecured when the report splits them)."""
+    if total_outstanding_balance_secured is not None and total_outstanding_balance_unsecured is not None:
+        stated = total_outstanding_balance_secured + total_outstanding_balance_unsecured
+    elif total_outstanding_balance is not None:
+        stated = total_outstanding_balance
+    else:
         return [], skipped(reason="Required field(s) not extracted: total_outstanding_balance")
-    balances = [_field_number(r, "current_balance") for r in _rows(accounts)]
+    # A closed account's figure is an overdue balance, not part of the current outstanding total.
+    open_rows = [r for r in _rows(accounts) if not r.get("date_closed")]
+    balances = [_field_number(r, "current_balance") for r in open_rows]
     numeric_balances = [b for b in balances if b is not None]
     if not balances or len(numeric_balances) != len(balances):
         return [], skipped(reason="account balances not all readable")
     total = sum(numeric_balances)
-    if abs(total - total_outstanding_balance) > max(_MONEY_TOLERANCE, abs(total) * 0.01):
+    if abs(total - stated) > max(_MONEY_TOLERANCE, abs(total) * 0.01):
         return [_finding(
             "CR.AGGREGATE_SUM", "impossible",
-            f"Account balances sum to {_money(total)}, but the stated total outstanding balance is "
-            f"{_money(total_outstanding_balance)}",
-            field="total_outstanding_balance", stated=_money(total_outstanding_balance), expected=_money(total),
+            f"Open account balances sum to {_money(total)}, but the stated total outstanding balance is "
+            f"{_money(stated)}",
+            field="total_outstanding_balance", stated=_money(stated), expected=_money(total),
         )], None
     return [], None
 

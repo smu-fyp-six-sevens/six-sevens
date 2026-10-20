@@ -380,3 +380,95 @@ def test_underlined_instruction_sentence_is_not_flagged() -> None:
         page.draw_line((40, 60 + 3 * 18 + 1.5), (40 + width, 60 + 3 * 18 + 1.5), width=0.6)
 
     assert _flagged_texts(_pdf_bytes(build)) == []
+
+
+# --- numbers the column peers cannot judge ------------------------------------------------------
+
+
+def _runs(data: bytes) -> list:
+    doc = pymupdf.open(stream=data, filetype="pdf")
+    try:
+        return _build_runs([span for span in _extract_spans(doc) if fc._is_assessable(span)])
+    finally:
+        doc.close()
+
+
+_PAYSLIP_ROWS = [
+    ("Basic salary", "3,290.00"), ("Allowances", "630.00"), ("Overtime", "140.00"),
+    ("Total earnings", "4,020.00"), ("Employee contribution", "-658.00"),
+    ("Other deductions", "-55.96"), ("Total deductions", "713.96"),
+]
+
+
+def _payslip_pdf(*, courier: str | None = None) -> bytes:
+    """Right-aligned amounts; a tampered one is redrawn at its left origin, so it ends further right."""
+
+    def build(doc):
+        page = doc.new_page(width=400, height=300)
+        for i, (label, amount) in enumerate(_PAYSLIP_ROWS):
+            y = 80 + i * 18
+            font = "hebo" if label.startswith("Total") else "helv"
+            page.insert_text((40, y), label, fontsize=9, fontname=font)
+            left = 360 - pymupdf.get_text_length(amount, font, 9)
+            page.insert_text((left, y), amount, fontsize=9, fontname="cour" if amount == courier else font)
+
+    return _pdf_bytes(build)
+
+
+def _capital_pdf(value_size: float) -> bytes:
+    """A one-row table: no column to compare the value with, only its row."""
+
+    def build(doc):
+        page = doc.new_page(width=560, height=200)
+        for x, head, cell in (
+            (40, "Issued Share Capital", "500,000.00"), (170, "Number of Shares", "500,000.0"),
+            (300, "Currency", "SINGAPORE, DOLLARS"), (430, "Share Type", "ORDINARY"),
+        ):
+            page.insert_text((x, 60), head, fontsize=8, fontname="hebo")
+            size = value_size if cell == "500,000.00" else 8
+            page.insert_text((x, 90), cell, fontsize=size, fontname="helv")
+
+    return _pdf_bytes(build)
+
+
+def test_a_right_aligned_number_in_another_typeface_is_flagged_though_it_left_its_column() -> None:
+    assert "4,020.00" in _flagged_texts(_payslip_pdf(courier="4,020.00"))
+
+
+def test_a_lone_table_value_in_a_larger_size_is_flagged_against_its_row() -> None:
+    assert "500,000.00" in _flagged_texts(_capital_pdf(value_size=10.8))
+
+
+def test_a_table_value_in_its_rows_own_size_is_not_flagged_by_the_row_check() -> None:
+    assert fc._row_deviations(_runs(_capital_pdf(value_size=8))) == []
+
+
+def test_a_larger_size_that_recurs_in_the_document_is_a_tier_not_a_deviation() -> None:
+    def build(doc):
+        page = doc.new_page(width=400, height=200)
+        for i, amount in enumerate(["1,200.00", "3,400.00", "5,600.00"]):
+            y = 60 + i * 20
+            page.insert_text((40, y), "Account", fontsize=8, fontname="helv")
+            page.insert_text((120, y), "Balance", fontsize=8, fontname="helv")
+            page.insert_text((200, y), amount, fontsize=11, fontname="helv")
+
+    assert fc._row_deviations(_runs(_pdf_bytes(build))) == []
+
+
+def test_numbers_split_between_two_typefaces_have_no_foreign_one() -> None:
+    def build(doc):
+        page = doc.new_page(width=400, height=200)
+        for i, amount in enumerate(["1,200.00", "3,400.00", "5,600.00", "7,800.00", "9,000.00", "2,100.00"]):
+            page.insert_text((40, 60 + i * 18), f"Item {i}", fontsize=9, fontname="helv")
+            page.insert_text((250, 60 + i * 18), amount, fontsize=9, fontname="cour" if i % 2 else "helv")
+
+    assert fc._foreign_font_deviations(_runs(_pdf_bytes(build))) == []
+
+
+def test_too_few_numbers_to_know_the_documents_typeface_flag_nothing() -> None:
+    def build(doc):
+        page = doc.new_page(width=400, height=200)
+        for i, (amount, font) in enumerate([("1,200.00", "helv"), ("3,400.00", "helv"), ("5,600.00", "cour")]):
+            page.insert_text((40, 60 + i * 18), amount, fontsize=9, fontname=font)
+
+    assert fc._foreign_font_deviations(_runs(_pdf_bytes(build))) == []

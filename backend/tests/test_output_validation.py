@@ -465,3 +465,68 @@ async def test_a_tool_that_hangs_ends_as_unable_to_assess() -> None:
         out = await asyncio.wait_for(graph.compile().ainvoke({"messages": [call], "document_id": "d"}), timeout=5)
     result = json.loads(out["messages"][-1].content)
     assert result["unable_to_assess"] is True and "timeout" in result["reason"].lower()
+
+
+def test_a_failed_call_that_the_specialist_redid_successfully_is_not_unassessed() -> None:
+    failed = ToolMessage(content="boom", tool_call_id="call-1", name="numerical_checks_tool", status="error")
+    redone = ToolMessage(
+        content=json.dumps({"tool": "numerical_checks_tool", "findings": []}), tool_call_id="call-2",
+        name="numerical_checks_tool",
+    )
+
+    report = _collect(failed, redone)
+
+    assert report["unable_to_assess"] == []
+
+
+def test_a_failed_call_that_was_not_redone_stays_unassessed_without_internal_markers() -> None:
+    failed = ToolMessage(content="boom", tool_call_id="call-1", name="numerical_checks_tool", status="error")
+
+    report = _collect(failed)
+
+    assert [u["tool"] for u in report["unable_to_assess"]] == ["numerical_checks_tool"]
+    assert all("_failed_call" not in u for u in report["unable_to_assess"])
+
+
+# --- a hard breach cannot be dismissed ----------------------------------------------------------------
+
+
+def _assess(finding: dict, *, dismiss: bool, severity: str = "low") -> dict:
+    final = AIMessage(content=json.dumps({"summary": "s", "assessments": [
+        {"finding_id": finding["id"], "severity": severity, "dismiss": dismiss, "rationale": "Looks like an extraction error."},
+    ]}))
+    return _collect(_tool(json.dumps({"tool": "numerical_checks_tool", "findings": [finding]})), final=final)
+
+
+IMPOSSIBLE = {"id": "numerical_checks_tool-1", "summary": "Net pay 5,462.04, expected 3,462.04", "severity_hint": "impossible", "needs_review": False}
+
+
+def test_an_impossible_finding_cannot_be_dismissed_and_stays_for_the_officer() -> None:
+    report = _assess(IMPOSSIBLE, dismiss=True)
+
+    [kept] = report["findings"]
+    assert report["dismissed"] == []
+    assert kept["severity"] == "high" and kept["ai_accepted"] is False
+    assert kept["rationale"].startswith("Not dismissed: the check shows this value is impossible.")
+    assert "extraction error" in kept["rationale"]
+
+
+def test_an_impossible_finding_the_specialist_explains_is_kept_as_rated() -> None:
+    report = _assess(IMPOSSIBLE, dismiss=False, severity="medium")
+
+    [kept] = report["findings"]
+    assert kept["severity"] == "medium" and kept["ai_accepted"] is True
+
+
+def test_an_impossible_finding_that_needs_review_can_still_be_dismissed() -> None:
+    report = _assess({**IMPOSSIBLE, "needs_review": True}, dismiss=True)
+
+    assert report["findings"] == []
+    assert [d["id"] for d in report["dismissed"]] == ["numerical_checks_tool-1"]
+
+
+def test_a_finding_that_is_only_a_signal_can_still_be_dismissed() -> None:
+    report = _assess({**IMPOSSIBLE, "severity_hint": "signal"}, dismiss=True)
+
+    assert report["findings"] == []
+    assert len(report["dismissed"]) == 1

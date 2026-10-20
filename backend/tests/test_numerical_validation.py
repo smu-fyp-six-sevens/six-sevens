@@ -1168,3 +1168,46 @@ _NOT_FLAGGED = [
 def test_rule_does_not_flag(check_code, document_type, fields) -> None:
     result = _run(fields, document_type=document_type)
     assert _codes(result, check_code) == []
+
+
+# --- credit report: the stated total is the open accounts, secured plus unsecured ---------------------
+
+_CBR_ACCOUNTS = [
+    {"current_balance": 147268.93, "date_closed": None},
+    {"current_balance": 1654615.53, "date_closed": None},
+    {"current_balance": 7574.31, "date_closed": None},
+    {"current_balance": 84991.66, "date_closed": "16/06/2026"},
+]
+
+
+def _aggregate_findings(*fields: ExtractedField) -> list:
+    return [f for f in run_numerical_checks("credit_report", list(fields), _auto_bindings(list(fields))).findings
+            if f.check_code == "CR.AGGREGATE_SUM"]
+
+
+def test_the_split_totals_match_the_open_accounts_and_a_closed_accounts_overdue_balance_is_left_out() -> None:
+    assert _aggregate_findings(
+        _field("accounts", _CBR_ACCOUNTS),
+        _field("total_outstanding_balance_secured", "1801884.46"),
+        _field("total_outstanding_balance_unsecured", "7574.31"),
+    ) == []
+
+
+def test_split_totals_that_do_not_match_the_open_accounts_are_flagged() -> None:
+    findings = _aggregate_findings(
+        _field("accounts", _CBR_ACCOUNTS),
+        _field("total_outstanding_balance_secured", "1801884.46"),
+        _field("total_outstanding_balance_unsecured", "107574.31"),
+    )
+
+    assert [f.expected for f in findings] == ["1,809,458.77"]
+
+
+def test_a_single_stated_total_is_compared_with_the_open_accounts() -> None:
+    assert _aggregate_findings(_field("accounts", _CBR_ACCOUNTS), _field("total_outstanding_balance", "1809458.77")) == []
+
+
+def test_only_one_of_the_split_totals_is_not_compared() -> None:
+    assert _aggregate_findings(
+        _field("accounts", _CBR_ACCOUNTS), _field("total_outstanding_balance_secured", "1801884.46"),
+    ) == []

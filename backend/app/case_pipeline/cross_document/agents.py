@@ -36,7 +36,7 @@ from .tools import COMPUTED_TOOLS, CROSS_DOCUMENT_TOOLS, build_tools
 
 logger = logging.getLogger("classifier_pipeline.case_pipeline.agents")
 
-PROMPT_VERSION = "cross-doc-v6"
+PROMPT_VERSION = "cross-doc-v7"
 MAX_HYPOTHESES = 3
 MAX_CHECKS_PER_HYPOTHESIS = 4
 # One call to plan and one to judge. Nothing here loops or retries a call; this is the ceiling that
@@ -77,8 +77,8 @@ Tools you may plan checks with (use these document names exactly):
 """
 
 _PLAN_INSTRUCTIONS = """Propose AT MOST {limit} hypotheses, and only strong ones: a specific, checkable way these documents may be inconsistent or implausible together (for example: what the company says it does against how its money moves; stated scale against capital or how long the company has existed; dates that cannot all be true; money going round in a circle; an address or identity that changes between documents; a source of wealth the evidence does not support). Propose fewer, or none, when nothing looks off.
-Every hypothesis must be about how documents relate to each other: it has to involve at least two documents, or rest on a computed measure over one (transaction totals, monthly flow, counterparties). A single document's own figures merely looking unusual is not a hypothesis here.
-Never restate a per-document detection finding listed below, or a difference listed under "Checks already run by code", even in other words (for example an identifier missing from a register, or a company name that differs). You may use those facts to reason about something else. Also skip anything that needs documents we do not have, weak or generic worries, and anything that touches rule 1.
+Every hypothesis must be about how documents relate to each other: it has to involve at least two documents, or rest on a computed measure over one (transaction totals, monthly flow, counterparties). A single document's own figures merely looking unusual is not a hypothesis here, with one exception: under a finding, a `lead:` line names the document that should carry the same figure. Test the figure against that document (read both, cite both); that is a hypothesis, restating the finding is not.
+Never restate a per-document detection finding listed below, or a difference listed under "Checks already run by code", even in other words (for example an identifier missing from a register, or a company name that differs). You may use those facts to reason about something else, and take the `lead:` lines first: each is a figure that looked wrong on one document, with the document to test it against. Also skip anything that needs documents we do not have, weak or generic worries, and anything that touches rule 1.
 
 Payment patterns (the same payee and amount repeated, a different card on almost every card payment, a recurring amount that moves) are hypotheses to test with find_repeated_transactions, card_usage_tool and recurring_payment_amounts, never findings by themselves: a repeated payment may be a standing order. Test them against the rest of the case (a lease, a loan schedule, another statement).
 

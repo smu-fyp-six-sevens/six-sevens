@@ -485,3 +485,35 @@ async def test_metadata_tool_reports_what_it_saw_when_there_are_no_anomalies() -
     assert observed["present"]["author"] == "A. Tan"
     assert "creator" in observed["absent"]
     assert "created equals modified" in observed["note"]
+
+
+def test_a_binding_without_a_field_is_skipped_and_reported_instead_of_rejecting_the_whole_call() -> None:
+    from app.langgraph.detection.field_checks.bindings import binding_problems, to_bindings
+
+    args = [
+        BindingArg(role="total_assets", field="closing"),
+        BindingArg.model_validate({"row": 14, "role": "expense_line"}),
+        BindingArg(field="orphan"),
+    ]
+
+    assert [b.role for b in to_bindings(args)] == ["total_assets"]
+    assert binding_problems(args) == [
+        "binding 1 was skipped: it has no field (row 14)",
+        "binding 2 was skipped: it has no role",
+    ]
+    assert binding_problems(None) == []
+
+
+async def test_metadata_tool_shows_the_subject_and_title_for_the_specialist_to_judge() -> None:
+    raw = {
+        "Author": "A. Tan", "Producer": "ReportLab PDF Library", "FileType": "PDF", "Subject": "modified copy",
+        "Title": "edited_final_v2", "CreateDate": "2026:08:31 10:00:00", "ModifyDate": "2026:08:31 10:00:00",
+    }
+    with patch.object(tools, "_document_with_metadata", AsyncMock(return_value=_document(metadata=raw, document_type="company_constitution"))):
+        output = await tools.metadata_tool.ainvoke({"document_id": "doc-1"})
+
+    observed = output["observed_metadata"]
+    assert observed["present"]["subject"] == "modified copy" and observed["present"]["title"] == "edited_final_v2"
+    assert "subject" not in observed["absent"] and "title" not in observed["absent"]
+    assert "subject modified copy" in observed["note"]
+    assert output["findings"] == []  # read out for the specialist; no rule inspects them

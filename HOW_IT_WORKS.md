@@ -54,9 +54,9 @@ The case page also shows the **requirements checklist** (required types, proof o
 ### Step 5: The Detection Agent (`approved` → `detecting` → `detected`)
 Approval starts detection in the background, **two runs at a time** (`DETECTION_CONCURRENCY`); the rest wait, shown as "Approved".
 
-1. **Load context.** The document and its fields are fetched once and shared by every tool in the run.
-2. **Lead plans (Sonnet).** One brief per specialist.
-3. **Three specialists in parallel (Haiku).** Each picks which of its tools to run, at most 3 tool rounds:
+1. **Load context.** The document and its fields are fetched once and shared by every tool in the run. The file's contents are read too (`fraud_detection/shared/file_facts.py`): its kind, page count, whether a PDF has selectable text, and the size of each distinct embedded image.
+2. **Lead plans (Sonnet).** One brief per specialist. The lead sees those file facts and says which checks do not apply.
+3. **Three specialists in parallel (Haiku).** Each picks which of its tools to run, at most 3 tool rounds. Each is shown the file's contents and told what its tools need (image manipulation compares images with each other, so it needs at least two; image tampering needs embedded images; AI generation scores photographs and scans of at least 128 px, not logos; the font check needs selectable text). It is guidance, not a fixed list: the specialist still decides, and is told to run a tool anyway when the contents are unclear:
 
 | Specialist | Tools (plain code) | Looks for |
 |---|---|---|
@@ -65,8 +65,13 @@ Approval starts detection in the background, **two runs at a time** (`DETECTION_
 | **Digital Authenticity** | metadata, AI generation | editing software in the metadata, modified-after-created dates, AI-generated images |
 
    A tool returns *candidate* findings. The specialist gives each a severity or dismisses it as a false positive; it cannot invent findings or change a tool's facts.
+
+   - **A hard breach cannot be dismissed.** A finding a check marked `impossible` (an arithmetic that cannot hold, an identifier absent from its register) with confident extraction stays on the report as high, marked not approved by the specialist, with the specialist's note. A finding that needs review, or is only a signal, can still be dismissed.
+   - **Font check.** Besides comparing a piece of text with the neighbours in its column, it compares a number with the other cells in its row (a lone table value has no column) and flags a number in a typeface no other number uses. Both fire only for a style that at most two runs in the document use, so a legitimate repeated style is not flagged.
+   - **Metadata.** Subject and title are read out for the specialist to judge. No rule inspects them, and they do not affect whether the check can assess a document. A specialist can mention them in its summary but cannot create a scored finding.
+   - **Tool time limits** count the time a tool works, not the time its job waits for the single CPU worker; a wait has its own cap (`CPU_QUEUE_TIMEOUT_SECONDS`).
 4. **Lead reviews**, and may request one second look from another specialist.
-5. **Merge (code).** One report with a verdict: `flagged`, `inconclusive` or `clean`.
+5. **Merge (code).** One report with a verdict: `flagged`, `inconclusive` or `clean`. When a second look dismisses a finding the first pass kept, the later view stands: the finding is removed from the report, the flags and the score (the dismissal stays visible under the specialist). A check that failed and then ran in a retry or the second look is not listed as unable to assess.
 6. **Save.** The report is written to the document's trace, then the findings a specialist **approved** are written to `flags`, then the document becomes `detected`.
 
 **Flags** are written by code, never by the model. A finding becomes a flag only if a specialist assessed it and did not dismiss it, and it is a per-document finding. Unassessed findings stay in the trace and still count towards the score as "unreviewed". Case-level findings are not flags. A retry replaces the document's open flags. Each flag's UUID is stamped on the finding, so the report, the `flags` row and `risk_scores.flag_ids` name the same id.
@@ -78,7 +83,7 @@ When every approved document is `detected`, the officer clicks **Run case analys
 
 1. **Deterministic comparisons (code).** Company name, address, UEN, and a person's ID number, name and details (date of birth, race, sex, nationality) across documents. A person is compared against every document that names them, not just the NRIC. Each difference is its own finding (`xd-det-N`), written as one plain sentence naming the documents by type, and merged by value so one wrong ID on three documents is one row. Differences in ID, UEN or date of birth are high; the rest are medium. Checks that agreed are listed as "checked and consistent". The protected details are compared only here, in code, and never shown to any model.
 2. **Dossier (code).** A digest of each approved document's fields, derived transaction facts and detection findings. A person's protected attributes are **removed**. The code-found differences are added as established facts, grouped by value (at most 5,000 characters), with the instruction not to restate them. The planner's whole input is capped at 30,000 characters.
-3. **Plan (one Sonnet call, forced structured output).** At most 3 hypotheses, each with up to 4 checks and one refutation probe. A hypothesis that touches a protected attribute, or concerns one document with nothing computed behind it, is dropped before any check runs.
+3. **Plan (one Sonnet call, forced structured output).** Where a detection finding's figure should also appear on another document in the case, the dossier adds a `lead:` line (`cross_document/leads.py`): a balance-sheet tax finding leads to the notice of assessment's tax payable and ECI, a payslip net pay finding to a salary credit in the bank statement. The planner takes the leads first and tests the figure against that document rather than restating the finding. At most 3 hypotheses, each with up to 4 checks and one refutation probe. A hypothesis that touches a protected attribute, or concerns one document with nothing computed behind it, is dropped before any check runs.
 4. **Run the checks (code, no model).** Read-only evidence tools. Statement rows printed as `20 JUN` take their year from the statement period.
 5. **Judge (one Sonnet call, forced structured output).** Writes for an officer: no tool names, flags or ref ids in its wording.
 6. **Verify (code).** A verdict stands only if every citation is a ref a tool issued in this run; a refutation probe ran that looked at something the claim does not already rest on (unless a comparison tool's own mismatch flag is cited); it cites two documents or one computed fact; nothing in it touches a protected attribute; and severity is capped at medium unless a tool returned a typed breach flag or a registry mismatch backs it. A verdict that only restates a code finding is dropped. Everything else is discarded and never shown or scored.
@@ -153,7 +158,8 @@ Required: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `AN
 | `DOCUMENT_MAX_MODEL_CALLS` | 24 | model calls one document's classify and extract run may make |
 | `DETECTION_MAX_MODEL_CALLS` | 30 | model calls one detection run may make; past it the verdict can't be clean |
 | `LLM_MAX_RETRIES`, `LLM_TIMEOUT_SECONDS` | 1, 300 | the Anthropic client's own retries (each is billed) and one request's time limit |
-| `TOOL_TIMEOUT_SECONDS`, `SLOW_TOOL_TIMEOUT_SECONDS` | 60, 120 | time limit per detection tool, including its wait for the CPU worker; the slow ones call a model or a registry |
+| `TOOL_TIMEOUT_SECONDS`, `SLOW_TOOL_TIMEOUT_SECONDS` | 60, 120 | time limit per detection tool, counted while it works (not while its job waits for the CPU worker); the slow ones call a model or a registry |
+| `CPU_QUEUE_TIMEOUT_SECONDS` | 300 | the most a tool waits for the CPU worker before it starts |
 | `CASE_ANALYSIS_ENABLED` | true | kill switch for the case analysis |
 | `LOG_HTTP_REQUESTS` | false | httpx's one line per Supabase call |
 | `LANGGRAPH_SONNET_MODEL`, `LANGGRAPH_HAIKU_MODEL` | `claude-sonnet-4-6`, `claude-haiku-4-5-20251001` | model overrides |

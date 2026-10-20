@@ -104,6 +104,8 @@ class Settings:
     # run time. The slow ones call a model or an outside registry.
     TOOL_TIMEOUT_SECONDS: float = float(os.environ.get("TOOL_TIMEOUT_SECONDS", "60"))
     SLOW_TOOL_TIMEOUT_SECONDS: float = float(os.environ.get("SLOW_TOOL_TIMEOUT_SECONDS", "120"))
+    # The most a tool waits for the CPU worker before it starts; its own limit only runs once it has started.
+    CPU_QUEUE_TIMEOUT_SECONDS: float = float(os.environ.get("CPU_QUEUE_TIMEOUT_SECONDS", "300"))
 
     # Below this, classification is routed to manual review regardless of
     # the guessed document_type (see langgraph/nodes._is_below_threshold).
