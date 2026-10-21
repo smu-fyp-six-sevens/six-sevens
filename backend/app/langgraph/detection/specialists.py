@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Annotated, Any, Required
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -158,7 +160,8 @@ When finished, reply with ONLY this JSON (no prose):
 Set "dismiss" to true and "severity" to null for a dismissed finding.
 Set "uncertain" to true when a finding is ambiguous, or a second opinion from a different specialist would help, and say why in "uncertainty_reason"."""
 
-_SPECIALIST_DYNAMIC_PROMPT = """Document type: {document_type}{side}
+_SPECIALIST_DYNAMIC_PROMPT = """Today's date: {today}
+Document type: {document_type}{side}
 File contents: {file_contents}
 Lead investigator's brief for you: {brief}"""
 
@@ -166,6 +169,12 @@ _SIDE_NOTE = {
     "front": "This is the front of the document. For an NRIC the address is printed on the back, so there is no address to look up.",
     "back": "This is the back of the document.",
 }
+
+
+def today_in_singapore() -> str:
+    """The date the bank is working on. Without it a model judges dates against its own
+    training cutoff, and calls a file created today "a future date"."""
+    return datetime.now(ZoneInfo("Asia/Singapore")).date().isoformat()
 
 
 def document_side(fields: list | None) -> str | None:
@@ -239,6 +248,7 @@ def _make_agent_node(spec: Specialist):
             static_text = _SPECIALIST_STATIC_PROMPT.format(title=spec.title, expertise=spec.expertise)
             side = document_side(await detection_tools.document_fields(state["document_id"]))
             dynamic_text = _SPECIALIST_DYNAMIC_PROMPT.format(
+                today=today_in_singapore(),
                 document_type=state.get("document_type") or "unknown",
                 side=f"\nDocument side: {_SIDE_NOTE[side]}" if side else "",
                 file_contents=render_file_facts(await detection_tools.file_facts(state["document_id"])),

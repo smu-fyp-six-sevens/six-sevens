@@ -43,7 +43,7 @@ from ... import run_context
 from ...llm_io import message_text, parse_json_object, validate
 from ...run_context import spend_model_call
 from ..detection_report import SCHEMA_VERSION
-from .specialists import SEVERITIES, SPECIALISTS, document_side, run_specialist
+from .specialists import SEVERITIES, SPECIALISTS, document_side, run_specialist, today_in_singapore
 from .. import trace
 from ... import document_repository, extracted_fields_repository, flags_repository, telemetry
 from ...config import settings
@@ -207,6 +207,7 @@ async def load_context_node(state: DetectionState) -> dict:
     # The tools read these too; priming means they don't fetch them again.
     detection_tools.prime(document_id, document=document, fields=fields if fields_loaded else None)
     context = {
+        "today": today_in_singapore(),
         "document_type": document.document_type or "unknown",
         "has_extracted_fields": bool(fields),
         "file_extension": os.path.splitext(document.filename or "")[1].lower(),
