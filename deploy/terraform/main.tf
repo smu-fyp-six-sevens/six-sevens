@@ -10,7 +10,8 @@ locals {
   placeholder_image = "us-docker.pkg.dev/cloudrun/container/hello"
 
   supabase   = ["SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY"]
-  registries = ["DATA_GOV_SG_API_KEY", "ONEMAP_API_TOKEN", "URA_API_KEY"]
+  # OneMap needs no token (ONEMAP_API_TOKEN is optional and not set in the cloud).
+  registries = ["DATA_GOV_SG_API_KEY", "URA_API_KEY"]
 
   common_env = {
     EVENT_TRANSPORT         = "pubsub"
@@ -77,6 +78,9 @@ locals {
 
 resource "google_project_service" "apis" {
   for_each = toset([
+    # These two must already be on before the first plan (README.md, one-time setup); listed so they stay on.
+    "cloudresourcemanager.googleapis.com",
+    "serviceusage.googleapis.com",
     "run.googleapis.com",
     "pubsub.googleapis.com",
     "artifactregistry.googleapis.com",

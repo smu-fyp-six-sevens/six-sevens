@@ -18,6 +18,8 @@ Terraform owns each service's configuration. Services are created on a placehold
 ```bash
 gcloud auth application-default login
 gcloud config set project <project-id>
+# Terraform needs these to read the project before it can enable anything else.
+gcloud services enable cloudresourcemanager.googleapis.com serviceusage.googleapis.com --project <project-id>
 
 # 1. A bucket for the state
 gcloud storage buckets create gs://<project-id>-tfstate --location asia-southeast1 --uniform-bucket-level-access
@@ -32,7 +34,8 @@ terraform apply
 # 4. Secret values (names in the secrets_to_fill output)
 printf '%s' "$VALUE" | gcloud secrets versions add anthropic-api-key --data-file=-
 #    ...and supabase-publishable-key, supabase-secret-key, auth-users, auth-secret-key,
-#    data-gov-sg-api-key, onemap-api-token, ura-api-key
+#    data-gov-sg-api-key, ura-api-key
+#    (or fill in and run set-secrets.ps1, git-ignored)
 
 # 5. GitHub: repository variables from the github_variables output
 terraform output github_variables

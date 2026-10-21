@@ -1182,14 +1182,16 @@ def test_move_document_success_pushes_both_case_snapshots() -> None:
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
         patch("app.routers.documents.case_service") as mock_case_service,
-        patch("app.routers.documents.broadcaster") as mock_broadcaster,
+        # The live push lives in app/snapshots.py and builds through case_service itself.
+        patch("app.snapshots.broadcaster") as mock_broadcaster,
+        patch("app.case_service.build_case_snapshot") as mock_build,
     ):
         mock_dep_repo.get_document.return_value = document
         mock_repo.get_document.return_value = moved
         mock_fields_repo.get_extracted_fields.return_value = []
         mock_case_service.get_case.return_value = _make_case(case_id="case-2")
         mock_case_service.missing_required_fields.return_value = []
-        mock_case_service.build_case_snapshot.side_effect = lambda case_id: {"case": {"id": case_id}}
+        mock_build.side_effect = lambda case_id: {"case": {"id": case_id}}
 
         response = client.post("/documents/doc-1/move", json={"case_id": "case-2"})
 
@@ -1200,7 +1202,7 @@ def test_move_document_success_pushes_both_case_snapshots() -> None:
     # needs resyncing from the router, since its own Realtime event (if any)
     # never carries this document's old case_id.
     mock_case_service.sync_submission_finalized.assert_called_once_with("case-1")
-    assert mock_case_service.build_case_snapshot.call_args_list == [call("case-1")]
+    assert mock_build.call_args_list == [call("case-1")]
     assert mock_broadcaster.publish.call_args_list == [
         call("case-1", {"case": {"id": "case-1"}}),
     ]
@@ -1517,7 +1519,7 @@ def test_rejected_document_can_still_be_deleted() -> None:
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.case_service"),
-        patch("app.routers.documents.broadcaster"),
+        patch("app.snapshots.broadcaster"),
     ):
         mock_dep_repo.get_document.return_value = document
 
@@ -1658,7 +1660,6 @@ def test_retyping_a_reviewed_document_clears_the_review() -> None:
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository"),
-        patch("app.routers.documents.langgraph_pipeline"),
     ):
         mock_dep_repo.get_document.return_value = document
         mock_repo.get_document.return_value = document
@@ -1678,7 +1679,6 @@ def test_confident_unrecognised_document_can_still_be_retyped() -> None:
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
-        patch("app.routers.documents.langgraph_pipeline"),
     ):
         mock_dep_repo.get_document.return_value = document
         mock_repo.get_document.return_value = document

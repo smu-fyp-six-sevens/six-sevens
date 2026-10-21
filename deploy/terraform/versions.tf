@@ -18,6 +18,10 @@ terraform {
 provider "google" {
   project = var.project_id
   region  = var.region
+  # Bill API calls to this project, not gcloud's own client project: the budget API refuses
+  # local user credentials without a quota project.
+  billing_project       = var.project_id
+  user_project_override = true
 }
 
 data "google_project" "this" {}
