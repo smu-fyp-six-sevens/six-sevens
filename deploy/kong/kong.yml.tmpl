@@ -1,0 +1,57 @@
+# Kong DB-less routes (CLOUD_ARCHITECTURE_PLAN.md section 7), rendered by render.sh at start.
+# ${API_URL}, ${AUDIT_URL}: upstreams (http://api:8000 locally, https://<service>.run.app on Cloud Run).
+# ${PRESERVE_HOST}: false on Cloud Run, which routes by Host. ${CORS_ORIGINS}: the frontend origins, quoted.
+_format_version: "3.0"
+
+services:
+  - name: api
+    url: ${API_URL}
+    # Long enough for the case WebSocket and slow uploads.
+    read_timeout: 3600000
+    write_timeout: 3600000
+    routes:
+      - name: api
+        paths: ["/"]
+        strip_path: false
+        preserve_host: ${PRESERVE_HOST}
+      - name: login
+        paths: ["/auth/login"]
+        strip_path: false
+        preserve_host: ${PRESERVE_HOST}
+        plugins:
+          - name: rate-limiting
+            config: { minute: 20, policy: local }
+      - name: upload
+        paths: ["/documents/upload-batch"]
+        strip_path: false
+        preserve_host: ${PRESERVE_HOST}
+        plugins:
+          - name: rate-limiting
+            config: { minute: 60, policy: local }
+      # Workers' push endpoints and every service's metrics are never reachable through the gateway.
+      - name: internal-only
+        paths: ["/push", "/metrics"]
+        plugins:
+          - name: request-termination
+            config: { status_code: 404, message: "Not found" }
+
+  - name: audit-metrics
+    url: ${AUDIT_URL}
+    routes:
+      - name: audit
+        paths: ["/audit"]
+        strip_path: false
+        preserve_host: ${PRESERVE_HOST}
+
+plugins:
+  - name: cors
+    config:
+      origins: [${CORS_ORIGINS}]
+      methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+      headers: [Authorization, Content-Type, X-Request-ID]
+      exposed_headers: [X-Request-ID]
+      credentials: true
+      max_age: 600
+  - name: correlation-id
+    config: { header_name: X-Request-ID, generator: uuid, echo_downstream: true }
+  - name: prometheus

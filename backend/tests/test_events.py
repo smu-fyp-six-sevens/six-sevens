@@ -174,3 +174,10 @@ async def test_an_officer_cancel_reverts_detection_to_approved(published_events)
     repo.revert_to_approved.assert_called_once_with("d")
     trace.record.assert_called_once_with("d", "detection_error", error="Cancelled by loan officer")
     assert [(e.type, e.outcome) for e in published_events] == [(types.DETECTION_FAILED, "cancelled")]
+
+
+def test_terraform_subscriptions_match_the_code() -> None:
+    from pathlib import Path
+
+    exported = Path(__file__).resolve().parents[2] / "deploy" / "terraform" / "subscriptions.json"
+    assert exported.read_text() == types.subscriptions_export(), "run: python -m app.events.types"

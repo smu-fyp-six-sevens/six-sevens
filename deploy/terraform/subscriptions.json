@@ -1,0 +1,14 @@
+{
+  "audit-metrics": {
+    "filter": ""
+  },
+  "case-worker": {
+    "filter": "attributes.type = \"case.analysis.requested\""
+  },
+  "detection-worker": {
+    "filter": "attributes.type = \"detection.cancel_requested\" OR attributes.type = \"detection.retry_requested\" OR attributes.type = \"document.approved\""
+  },
+  "doc-worker": {
+    "filter": "attributes.type = \"document.cancelled\" OR attributes.type = \"document.retry_requested\" OR attributes.type = \"document.retyped\" OR attributes.type = \"document.uploaded\""
+  }
+}

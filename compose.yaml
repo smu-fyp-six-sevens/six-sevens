@@ -1,0 +1,14 @@
+# The cloud split on one machine (CLOUD_ARCHITECTURE_PLAN.md section 18.2). Opt-in: daily development
+# stays `uvicorn app.main:app --reload` + `npm run dev`. Stop uvicorn first: Kong takes :8000.
+#
+#   docker compose up --build                     # emulator, Kong :8000, api, workers, audit-metrics
+#   docker compose --profile frontend up --build  # also the nginx build on :5173 (else use npm run dev)
+#
+# Settings come from backend/.env, as for uvicorn.
+include:
+  - deploy/compose/pubsub.yaml
+  - deploy/compose/api.yaml
+  - deploy/compose/workers.yaml
+  - deploy/compose/audit-metrics.yaml
+  - deploy/compose/kong.yaml
+  - deploy/compose/frontend.yaml

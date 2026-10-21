@@ -1,16 +1,18 @@
 import asyncio
 import importlib.util
 import logging
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from . import audit, auth, events, health, query_stats, realtime_listener, telemetry
+from . import audit, auth, events, health, metrics, query_stats, realtime_listener, telemetry
 from .config import settings
 from .events import bus, registry, types
 from .events import push as event_push
+from .events.envelope import request_id
 from .fraud_detection.external_validation.registry_lookups import land_use
 from .health import check_db_connection
 from .langgraph._anthropic import warm_up
@@ -102,17 +104,37 @@ telemetry.setup(app)
 @app.middleware("http")
 async def count_queries(request: Request, call_next):
     # Background work a handler starts opens its own scope, so it isn't counted here.
-    with query_stats.scope(f"{request.method} {query_stats.label_path(request.url.path)}"):
-        return await call_next(request)
+    request_id.set(request.headers.get("x-request-id"))
+    started = time.perf_counter()
+    status_code = 500
+    try:
+        with query_stats.scope(f"{request.method} {query_stats.label_path(request.url.path)}"):
+            response = await call_next(request)
+        status_code = response.status_code
+        return response
+    finally:
+        # The route template, never the raw path: ids and scanners' random paths would explode the series.
+        route = getattr(request.scope.get("route"), "path", None) or "unmatched"
+        if route != "/metrics":
+            metrics.http_requests.labels(request.method, route, str(status_code)).inc()
+            metrics.http_latency.labels(request.method, route).observe(time.perf_counter() - started)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
-    allow_origin_regex=settings.ALLOWED_ORIGIN_REGEX,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
+@app.get("/metrics", include_in_schema=False)
+def prometheus_metrics() -> Response:
+    """Scraped by the Managed Prometheus sidecar on the container's own port; Kong blocks it from outside."""
+    body, content_type = metrics.exposition()
+    return Response(content=body, media_type=content_type)
+
+if settings.CORS_IN_APP:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.ALLOWED_ORIGINS,
+        allow_origin_regex=settings.ALLOWED_ORIGIN_REGEX,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 _protected = [Depends(auth.bind_actor)]
 

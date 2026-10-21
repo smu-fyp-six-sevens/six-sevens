@@ -1,126 +1,129 @@
 name: Deploy to Cloud Run
 
-# Manual-only: pushing to this branch no longer auto-deploys, so you can
-# keep committing/iterating without touching the live Cloud Run services.
-# Deploy deliberately via the Actions tab -> "Deploy to Cloud Run" -> "Run
-# workflow" whenever you actually want the current branch state live.
+# Manual only (Actions tab -> "Deploy to Cloud Run" -> "Run workflow").
+# Terraform (deploy/terraform) owns each service's configuration; this only builds one image per role,
+# rolls it out, checks the gateway, and rolls every service back if the check fails.
 on:
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+  id-token: write # Workload Identity Federation
+
 env:
-  REGION: ${{ secrets.GCP_REGION || 'asia-southeast1' }}
-  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  REPO: app
-  BACKEND_SERVICE: fyp-backend
-  FRONTEND_SERVICE: fyp-frontend
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: ${{ vars.GCP_REGION || 'asia-southeast1' }}
+  REGISTRY: ${{ vars.GCP_REGION || 'asia-southeast1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/app
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - id: gcp-auth
-        uses: google-github-actions/auth@v2
+      - uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Configure Docker for Artifact Registry
+      - name: Log in to Artifact Registry
         run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
-      - name: Ensure Artifact Registry repo exists
-        run: |
-          gcloud artifacts repositories describe "$REPO" \
-            --project "$PROJECT_ID" --location "$REGION" \
-            || gcloud artifacts repositories create "$REPO" \
-                 --project "$PROJECT_ID" --location "$REGION" \
-                 --repository-format=docker \
-                 --description="Fraud detection app images"
-
-      - name: Build and push backend image
+      - name: Build and push the backend roles and Kong
         env:
           DOCKER_BUILDKIT: "1"
           # A build secret, so the key stays out of the image layers.
           DATA_GOV_SG_API_KEY: ${{ secrets.DATA_GOV_SG_API_KEY }}
         run: |
-          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/backend:${GITHUB_SHA}"
-          docker build -f backend/Dockerfile --target base \
-            --secret id=data_gov_sg_api_key,env=DATA_GOV_SG_API_KEY -t "$IMAGE" .
-          docker push "$IMAGE"
-          echo "BACKEND_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          # One runner, so the shared dependency layers are built once for every role.
+          for role in api doc-worker detection-worker case-worker audit-metrics; do
+            docker build -f backend/Dockerfile --target "$role" \
+              --secret id=data_gov_sg_api_key,env=DATA_GOV_SG_API_KEY \
+              -t "$REGISTRY/$role:$GITHUB_SHA" .
+            docker push "$REGISTRY/$role:$GITHUB_SHA"
+          done
+          docker build -f deploy/kong/Dockerfile -t "$REGISTRY/kong:$GITHUB_SHA" .
+          docker push "$REGISTRY/kong:$GITHUB_SHA"
 
-      - name: Deploy backend to Cloud Run
+      - name: Build and push the frontend against Kong
         run: |
-          # ALLOWED_ORIGIN_REGEX is computed here, not fetched after the
-          # frontend deploys: Cloud Run hands each service more than one
-          # valid hostname (e.g. both "SERVICE-xxxxx-as.a.run.app" and
-          # "SERVICE-xxxxx.asia-southeast1.run.app" resolve to the same
-          # service), so pinning CORS to one exact resolved URL is fragile —
-          # whichever format a browser happens to be on can fail. Matching
-          # on the stable service-name prefix instead covers every hostname
-          # Cloud Run might hand this service, and needs no re-wiring after
-          # the frontend exists.
-          gcloud run deploy "$BACKEND_SERVICE" \
-            --image "$BACKEND_IMAGE" \
-            --project "$PROJECT_ID" \
-            --region "$REGION" \
-            --platform managed \
-            --allow-unauthenticated \
-            --port 8000 \
-            --memory 2Gi \
-            --cpu 2 \
-            --timeout 3600 \
-            --set-env-vars "ALLOWED_ORIGIN_REGEX=^https://${FRONTEND_SERVICE}-.*\.run\.app\$" \
-            --set-env-vars "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" \
-            --set-env-vars "SUPABASE_PUBLISHABLE_KEY=${{ secrets.SUPABASE_PUBLISHABLE_KEY }}" \
-            --set-env-vars "SUPABASE_SECRET_KEY=${{ secrets.SUPABASE_SECRET_KEY }}" \
-            --set-env-vars "SUPABASE_STORAGE_BUCKET=${{ secrets.SUPABASE_STORAGE_BUCKET || 'documents' }}" \
-            --set-env-vars "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" \
-            --set-env-vars "AUTH_USERS=${{ secrets.AUTH_USERS }}" \
-            --set-env-vars "AUTH_SECRET_KEY=${{ secrets.AUTH_SECRET_KEY }}" \
-            --set-env-vars "DATA_GOV_SG_API_KEY=${{ secrets.DATA_GOV_SG_API_KEY }}" \
-            --set-env-vars "ONEMAP_API_TOKEN=${{ secrets.ONEMAP_API_TOKEN }}" \
-            --set-env-vars "URA_API_KEY=${{ secrets.URA_API_KEY }}" \
-            --set-env-vars "DEPLOYMENT_ENV=cloud"
+          KONG_URL=$(gcloud run services describe kong --region "$REGION" --format='value(status.url)')
+          docker build -f frontend/Dockerfile --build-arg VITE_API_URL="$KONG_URL" -t "$REGISTRY/frontend:$GITHUB_SHA" .
+          docker push "$REGISTRY/frontend:$GITHUB_SHA"
 
-      - name: Resolve backend URL
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Record the revisions now serving
         run: |
-          BACKEND_URL=$(gcloud run services describe "$BACKEND_SERVICE" \
-            --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')
-          echo "BACKEND_URL=$BACKEND_URL" >> "$GITHUB_ENV"
+          : > previous.txt
+          for svc in api doc-worker detection-worker case-worker audit-metrics kong frontend; do
+            rev=$(gcloud run services describe "$svc" --region "$REGION" --format='value(status.latestReadyRevisionName)')
+            echo "$svc $rev" >> previous.txt
+          done
+          cat previous.txt
 
-      - name: Build and push frontend image
+      - name: Roll out the new images
         run: |
-          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/frontend:${GITHUB_SHA}"
-          docker build -f frontend/Dockerfile --build-arg VITE_API_URL="$BACKEND_URL" \
-            -t "$IMAGE" .
-          docker push "$IMAGE"
-          echo "FRONTEND_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          # Workers and audit-metrics first, so the api never publishes to an older consumer.
+          pids=""
+          for svc in audit-metrics doc-worker detection-worker case-worker api kong frontend; do
+            # The backend roles also run the metrics sidecar, so name the app container.
+            container=""; case "$svc" in kong|frontend) ;; *) container="--container app" ;; esac
+            gcloud run services update "$svc" --region "$REGION" $container --image "$REGISTRY/$svc:$GITHUB_SHA" --quiet &
+            pids="$pids $!"
+          done
+          fail=0
+          for pid in $pids; do wait "$pid" || fail=1; done
+          exit $fail
 
-      - name: Deploy frontend to Cloud Run
+      - name: Check the gateway (no LLM, no database writes)
+        id: check
         run: |
-          gcloud run deploy "$FRONTEND_SERVICE" \
-            --image "$FRONTEND_IMAGE" \
-            --project "$PROJECT_ID" \
-            --region "$REGION" \
-            --platform managed \
-            --allow-unauthenticated \
-            --port 80 \
-            --memory 512Mi \
-            --cpu 1
+          KONG_URL=$(gcloud run services describe kong --region "$REGION" --format='value(status.url)')
+          FRONTEND_URL=$(gcloud run services describe frontend --region "$REGION" --format='value(status.url)')
+          WORKER_URL=$(gcloud run services describe detection-worker --region "$REGION" --format='value(status.url)')
+          expect() {  # expect <status> <method> <url> [curl args...]
+            want=$1; method=$2; url=$3; shift 3
+            got=$(curl -s -o /dev/null -w '%{http_code}' -X "$method" "$url" "$@")
+            echo "$method $url -> $got (want $want)"
+            [ "$got" = "$want" ]
+          }
+          expect 200 GET "$KONG_URL/healthz"
+          expect 401 GET "$KONG_URL/cases"
+          expect 401 GET "$KONG_URL/audit/events"
+          expect 404 POST "$KONG_URL/push/doc-worker"
+          expect 200 GET "$FRONTEND_URL/"
+          # Only Pub/Sub's identity may invoke a worker.
+          expect 403 POST "$WORKER_URL/push/detection-worker"
+          # The frontend origin passes CORS.
+          curl -s -o /dev/null -D - -X OPTIONS "$KONG_URL/cases" -H "Origin: $FRONTEND_URL" \
+            -H "Access-Control-Request-Method: GET" | grep -qi "access-control-allow-origin: $FRONTEND_URL"
 
-      - name: Print deployed URLs
+      - name: Roll back every service
+        if: failure()
         run: |
-          FRONTEND_URL=$(gcloud run services describe "$FRONTEND_SERVICE" \
-            --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')
+          while read -r svc rev; do
+            [ -n "$rev" ] && gcloud run services update-traffic "$svc" --region "$REGION" --to-revisions "$rev=100" --quiet
+          done < previous.txt
 
+      - name: Summary
+        if: success()
+        run: |
           {
-            echo "### Deployed"
-            echo "- Frontend: $FRONTEND_URL"
-            echo "- Backend: $BACKEND_URL"
+            echo "### Deployed $GITHUB_SHA"
+            echo "- Frontend: $(gcloud run services describe frontend --region "$REGION" --format='value(status.url)')"
+            echo "- API (Kong): $(gcloud run services describe kong --region "$REGION" --format='value(status.url)')"
           } >> "$GITHUB_STEP_SUMMARY"

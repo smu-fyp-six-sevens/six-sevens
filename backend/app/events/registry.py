@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Awaitable, Callable, Mapping
 
+from .. import metrics
 from .envelope import Event
 from .types import EVERY_TYPE, SUBSCRIPTIONS
 
@@ -30,19 +32,33 @@ def clear() -> None:
     _by_role.clear()
 
 
-def handlers_for(event_type: str, role: str | None = None) -> list[Handler]:
-    """The handlers for a type: of one role (a push), or of every installed role (in-process)."""
+def handlers_for(event_type: str, role: str | None = None) -> list[tuple[str, Handler]]:
+    """(role, handler) for a type: of one role (a push), or of every installed role (in-process)."""
     roles = [role] if role is not None else list(_by_role)
-    found: list[Handler] = []
+    found: list[tuple[str, Handler]] = []
     for name in roles:
         handlers = _by_role.get(name, {})
         handler = handlers.get(event_type) or handlers.get(EVERY_TYPE)
         if handler is not None:
-            found.append(handler)
+            found.append((name, handler))
     return found
+
+
+async def run_handler(role: str, handler: Handler, event: Event) -> None:
+    """Runs one handler, counting and timing it. Raises what the handler raises."""
+    # Audit stores every type; one label for it keeps the series few.
+    type_label = event.type if EVERY_TYPE not in SUBSCRIPTIONS[role] else EVERY_TYPE
+    started = time.perf_counter()
+    result = "error"
+    try:
+        await handler(event)
+        result = "ok"
+    finally:
+        metrics.events_handled.labels(role, type_label, result).inc()
+        metrics.handler_duration.labels(role, type_label).observe(time.perf_counter() - started)
 
 
 async def dispatch(role: str, event: Event) -> None:
     """Runs one role's handler for the event, if it has one. A type it does not handle is ignored."""
-    for handler in handlers_for(event.type, role):
-        await handler(event)
+    for name, handler in handlers_for(event.type, role):
+        await run_handler(name, handler, event)

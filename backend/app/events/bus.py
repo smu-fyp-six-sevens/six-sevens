@@ -4,6 +4,7 @@ import asyncio
 import logging
 from typing import Any
 
+from .. import metrics
 from ..config import settings
 from . import registry
 from .envelope import Event
@@ -18,10 +19,17 @@ _publisher: Any = None
 
 async def publish(event: Event) -> None:
     """Publishes one event; raises if it could not be. An event that triggers work is the action, so callers fail with it."""
-    if settings.EVENT_TRANSPORT == "pubsub":
-        await _publish_pubsub(event)
-    else:
-        _dispatch_in_process(event)
+    try:
+        if settings.EVENT_TRANSPORT == "pubsub":
+            await _publish_pubsub(event)
+        else:
+            _dispatch_in_process(event)
+    except Exception:
+        metrics.events_published.labels(event.type, "error").inc()
+        raise
+    metrics.events_published.labels(event.type, "ok").inc()
+    if event.duration_ms is not None:
+        metrics.stage_duration.labels(event.type, event.outcome).observe(event.duration_ms / 1000)
 
 
 async def record(event: Event) -> None:
@@ -40,15 +48,15 @@ def check_transport() -> None:
 
 
 def _dispatch_in_process(event: Event) -> None:
-    for handler in registry.handlers_for(event.type):
-        task = asyncio.create_task(_run(handler, event))
+    for role, handler in registry.handlers_for(event.type):
+        task = asyncio.create_task(_run(role, handler, event))
         _tasks.add(task)
         task.add_done_callback(_tasks.discard)
 
 
-async def _run(handler: registry.Handler, event: Event) -> None:
+async def _run(role: str, handler: registry.Handler, event: Event) -> None:
     try:
-        await handler(event)
+        await registry.run_handler(role, handler, event)
     except asyncio.CancelledError:
         pass
     except Exception:

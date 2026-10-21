@@ -9,7 +9,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   backend-ci:
@@ -122,49 +121,48 @@ jobs:
             frontend/test-results/
           retention-days: 14
 
-  publish-images:
-    name: Publish Docker images
-    needs:
-      - backend-ci
-      - frontend-ci
-    if: github.event_name == 'workflow_dispatch'
+  security:
+    # Non-blocking until the first findings are reviewed (CLOUD_ARCHITECTURE_PLAN.md section 6); then
+    # remove continue-on-error so a high-severity finding fails the build.
+    name: Security (Checkov, Snyk)
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - name: backend
-            dockerfile: backend/Dockerfile
-            image_name: six-sevens-backend
-          - name: frontend
-            dockerfile: frontend/Dockerfile
-            image_name: six-sevens-frontend
+    continue-on-error: true
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Set image repository
-        id: set-image-repo
-        run: echo "image_repo=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.image_name }}" >> "$GITHUB_OUTPUT"
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          python-version: '3.13'
 
-      - name: Build and push image
-        uses: docker/build-push-action@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
         with:
-          context: .
-          file: ${{ matrix.dockerfile }}
-          push: true
-          # GHCR often fails BuildKit attestation blobs with "unknown blob".
-          provenance: false
-          sbom: false
-          # Build secret for the backend image's zoning index (the frontend ignores it).
-          secrets: |
-            data_gov_sg_api_key=${{ secrets.DATA_GOV_SG_API_KEY }}
-          tags: |
-            ${{ steps.set-image-repo.outputs.image_repo }}:latest
-            ${{ steps.set-image-repo.outputs.image_repo }}:${{ github.sha }}
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Checkov (Terraform, Dockerfiles, workflows)
+        run: |
+          python -m pip install "checkov>=3.2,<4"
+          checkov -d deploy/terraform --framework terraform --compact --quiet
+          checkov --framework dockerfile -f backend/Dockerfile -f deploy/kong/Dockerfile -f frontend/Dockerfile --compact --quiet
+          checkov -d .github/workflows --framework github_actions --compact --quiet
+
+      - name: Snyk (Python and npm dependencies)
+        if: ${{ env.SNYK_TOKEN != '' }}
+        run: |
+          # Snyk reads installed packages for a requirements file, so install them first.
+          python -m pip install -r backend/requirements.txt
+          npx --yes snyk@1 test --file=backend/requirements.txt --package-manager=pip --severity-threshold=high
+          cd frontend && npm ci && npx --yes snyk@1 test --severity-threshold=high
+
+      - name: pip-audit and npm audit (when there is no Snyk token)
+        if: ${{ env.SNYK_TOKEN == '' }}
+        run: |
+          python -m pip install pip-audit
+          pip-audit -r backend/requirements.txt
+          cd frontend && npm ci && npm audit --audit-level=high

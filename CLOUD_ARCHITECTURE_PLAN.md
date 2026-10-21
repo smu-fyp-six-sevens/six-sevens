@@ -1,6 +1,8 @@
 # Cloud architecture plan
 
-Proposed 2026-10-20, updated 2026-10-21 (local dev, testing, recovery, resolved decisions). **Not started:** other work comes first; implementation is expected to begin in a few days. Replaces the five-service split in `CLAUDE.md` ("Architecture: Decoupling Requirement") and its "Kubernetes + ArgoCD rejected" line once agreed. Deadline: mid-November 2026.
+Proposed 2026-10-20, updated 2026-10-21. **Status: Stage 1 is built in code on the `microservices` branch (happy path; section 10 has what is done and what is not). Terraform has not been applied to GCP yet.** Replaces the five-service split in `CLAUDE.md` ("Architecture: Decoupling Requirement") and its "Kubernetes + ArgoCD rejected" line. Deadline: mid-November 2026.
+
+The demo is done and nothing uses the cloud deployment (every developer works locally), so the cloud environment is free to experiment on.
 
 One GCP project and one Supabase project, shared by local runs and the cloud. No separate staging environment (section 6, "Deploy and roll back").
 
@@ -175,14 +177,14 @@ Unchanged between stages: Supabase, Artifact Registry, the events and ownership,
 
 **Deploy and roll back (one project, no staging)**
 
-The live environment is the only cloud environment, so a deploy must be checked before it takes traffic and undone automatically if it fails:
-1. Deploy every changed service with `--no-traffic --tag sha-<short>`; record each service's current revision.
-2. Call `/healthz` on each tagged revision URL (workers with an identity token).
-3. Move traffic to the new revisions.
-4. Post-deploy check through Kong, with no LLM and no database writes: every route reaches the right upstream (an authenticated route answers 401, never 404 or 502), the WebSocket handshake reaches api, an unauthenticated POST to a worker is refused (OIDC works), CORS answers the real frontend origin.
-5. Any failure: `gcloud run services update-traffic --to-revisions=<recorded>=100` for every service, and the workflow fails.
+The cloud environment is the only one, so a deploy is checked and undone automatically if it fails (`.github/workflows/deploy.yml`):
+1. Build one image per role, Kong, and the frontend (pointed at Kong's URL); push them to Artifact Registry.
+2. Record the revision each service is serving.
+3. Roll out the new images, workers and audit-metrics first, then api, Kong and the frontend (`gcloud run services update --image`; Terraform owns everything else about a service).
+4. Check through Kong, with no LLM and no database writes: `/healthz` answers, an authenticated route answers 401 (never 404 or 502), `/push` and `/metrics` are blocked at the gateway, a worker refuses a POST without Pub/Sub's identity (403), CORS answers the frontend's origin, and the frontend serves.
+5. Any failure: every service goes back to its recorded revision (`gcloud run services update-traffic --to-revisions=<recorded>=100`) and the workflow fails.
 
-Do the first deploy early (step 1 of section 10, with just api and audit-metrics), so the one-time GCP wiring (section 18.4) is settled weeks before the demo. Do not deploy on demo day.
+Tagged no-traffic revisions were dropped for now: nothing depends on the cloud deployment, and they would need Pub/Sub and Kong to target the tag URLs.
 - **Terraform:** modules plus a separate `monitoring.tf`; the budget alert lives here too.
 
 **Security and identity**
@@ -198,32 +200,37 @@ Do the first deploy early (step 1 of section 10, with just api and audit-metrics
 
 ## 7. Gateway (Kong)
 
-Kong runs as a Cloud Run service in DB-less mode, with its routes in a `kong.yml` baked into the image. The file is rendered at container start from a template (`envsubst`) with the three upstream URLs and `preserve_host`, so local compose (`http://api:8080`) and Cloud Run (`https://api-….run.app`, `preserve_host: false`) share one route table. It listens on Cloud Run's `$PORT`, and its admin API is off. In Stage 2 it becomes the cluster's ingress controller and the same routes become Kubernetes resources.
+Kong runs as a Cloud Run service in DB-less mode (`deploy/kong/`). Its routes are rendered at container start from `kong.yml.tmpl` by `render.sh` (sed) with the two upstream URLs, `preserve_host` and the CORS origins, so local compose (`http://api:8000`) and Cloud Run (`https://api-<number>.<region>.run.app`, `preserve_host: false`) share one route table. It listens on Cloud Run's `$PORT`, and its admin API is off. In Stage 2 it becomes the cluster's ingress controller and the same routes become Kubernetes resources.
 
 | Path | Upstream |
 |---|---|
-| `/api/v1/upload*` | ingestion |
-| `/api/v1/audit*`, `/api/v1/dashboard*` | audit-metrics |
+| `/audit*` | audit-metrics |
+| `/auth/login` (20 a minute), `/documents/upload-batch` (60 a minute) | api, rate-limited |
+| `/push*`, `/metrics` | blocked (404): internal only |
 | everything else, including the WebSocket | api |
+
+There is no `/api/v1` prefix: the routes are the app's own. Ingestion is inside api, so upload goes to api.
 
 Plugins:
 - **CORS** with the real frontend origins, never `*` (a wildcard with credentials is rejected by browsers).
 - **Rate limiting** on login and upload (per Kong instance; Redis is not needed for that).
 - **Request id**, copied into events.
-- **Prometheus**, for gateway metrics.
+- **Prometheus**, for gateway metrics, on Kong's status port 8100 (not scraped on Cloud Run yet: the sidecar's default scrapes :8080).
 
 Rules and gotchas:
 - Workers are not behind Kong; Pub/Sub delivers to them.
 - Auth stays in each public service (the token check). Kong adds a layer and does not replace it.
-- Keep the three upstreams reachable by their `run.app` URLs and protected by the app token. Private upstreams would need Google identity tokens, which Kong does not mint on its own.
+- CORS is answered by Kong only: the app's own CORS is off behind it (`CORS_IN_APP=false`), since two sets of headers make browsers refuse the response.
+- Keep the upstreams reachable by their `run.app` URLs and protected by the app token. audit-metrics is therefore public, so its `/push` checks Pub/Sub's OIDC token in the app (`PUSH_AUDIENCE`). Private upstreams would need Google identity tokens, which Kong does not mint on its own.
 - Cloud Run routes by the `Host` header, so Kong must not forward the original host, and must use HTTPS to the upstream. This disappears on Kubernetes.
 - Kong is one more service to run (min 1 instance) and adds a hop, including for the WebSocket.
 - The frontend's `VITE_API_URL` points at Kong.
 
 ## 8. Observability (Prometheus and Grafana)
 
-- Every service exposes `/metrics` with `prometheus_client`; Kong's plugin metrics are exposed the same way.
-- Stage 1: each Cloud Run service runs Google's managed Prometheus sidecar, which scrapes `/metrics` into Google Managed Service for Prometheus. There is no Prometheus server to operate. Stage 2: the same managed service scrapes the pods directly.
+- Every service exposes `/metrics` with `prometheus_client` (`backend/app/metrics.py`): `http_requests_total` and `http_request_duration_seconds` by route template, `events_published_total`, `events_handled_total` and `event_handler_duration_seconds` by role and type, `stage_duration_seconds` by stage (the duration each end-of-run event carries), `llm_calls_total`, `llm_tokens_total` by kind, and `supabase_calls_total` by table. Kong's plugin metrics are on its status port.
+- Example queries: `sum by (route) (rate(http_requests_total[5m]))`; `histogram_quantile(0.95, sum by (le, stage) (rate(stage_duration_seconds_bucket[1h])))` (the 95th percentile per stage, which decision 1 watches); `sum(rate(llm_tokens_total[1h])) by (kind)`.
+- Stage 1: each backend Cloud Run service runs Google's managed Prometheus sidecar (`run.tf`, the `collector` container), which with no config scrapes `:8080/metrics` every 60 s into Google Managed Service for Prometheus. While CPU is idle between requests a scrape can be late, so short gaps appear. There is no Prometheus server to operate. Stage 2: the same managed service scrapes the pods directly.
 - Grafana reads from Managed Prometheus and the Cloud Monitoring data source. Host: Grafana Cloud free tier, or one small instance of our own (open decision 5).
 - OpenTelemetry traces continue to Cloud Trace (`telemetry.py`).
 
@@ -241,7 +248,7 @@ Grafana and the case dashboard stay separate:
 
 ## 9. Audit trail, dashboard, guardrails, evals
 
-- **Audit trail:** the event stream, persisted by audit-metrics. It survives deletion of cases and documents (no foreign keys), and nothing can edit it. The current `backend/app/audit.py` (direct insert, login only) is a draft that `events.publish()` replaces.
+- **Audit trail:** the event stream, persisted by audit-metrics. It survives deletion of cases and documents (no foreign keys), and nothing can edit it. Built: `backend/app/audit.py` stores every event (keyed by its id, so a redelivery is ignored) and `GET /audit/events` reads it.
 - **Dashboard:** read endpoints and Postgres views in audit-metrics: cases by stage, risk distribution, stuck or failed, and "needs attention". Time in a stage is the gap between two events.
 - **Guardrails (online):** library code inside the worker making the call (output validation, the bias screen).
 - **Evals (offline):** the nightly job runs the golden set and writes results to a table the dashboard reads.
@@ -264,6 +271,19 @@ Stage 1, about four weeks:
 | 10 | Optional: ingestion out of api | |
 
 If time runs short, drop Grafana polish first. Kong and the worker splits carry the decoupling story.
+
+**Status (2026-10-21), `microservices` branch, in code; not yet applied to GCP:**
+
+| Step | Done | Not done |
+|---|---|---|
+| 1 | Envelope, `events.publish()`, `EVENT_TRANSPORT`, `ROLE`, audit-metrics and `GET /audit/events`, officer actions and login audited (with Kong's request id), `/healthz`, graceful shutdown, `dev` flag removed | First cloud deploy |
+| 2 | `stage_duration_seconds` from the events | Reading the real 95th percentile once deployed |
+| 3 | detection-worker as handler plus push adapter; live results through Realtime | Database cancel flag (a cancel reaches a run only in the same process); shared rate budget |
+| 4 | doc-worker replaces the in-memory queue (`queue_service.py` removed) | |
+| 5 | case-worker; "already running" read from the database with a 15-minute limit | Heartbeat, `submission_finalized` debounce in the case-worker, the sweeper (section 16) |
+| 6 | Kong (local and cloud), Terraform (IAM per service, Secret Manager, Pub/Sub, Cloud Run, Workload Identity Federation, budget), one build per role to Artifact Registry, deploy with automatic rollback, Checkov and Snyk in CI (non-blocking until the first findings are reviewed), GHCR publishing removed | Cloud Scheduler (comes with the sweeper) |
+| 7 | `/metrics` in every service, the Managed Prometheus sidecar | Grafana dashboards (decision 5), Kong's metrics on Cloud Run |
+| 8-10 | | Not started |
 
 Stage 2 (after Stage 1, each step deployable on its own):
 1. GKE Autopilot module in Terraform; Helm chart with a values file per role.
@@ -330,6 +350,8 @@ Stateful and learning agents (separate plan), a parser sandbox service, Redis (u
 
 ## 16. Stuck work and recovery (a showcase item)
 
+**Deferred (2026-10-21):** the happy path comes first; this is the edge-case pass after it. Nothing below is built.
+
 Today "stuck" is only computed on read (`monitoring.is_stuck`) for the "Processing stuck" badge and the manual retry; nothing polls, and `detecting` is not covered. Pub/Sub redelivery already handles a worker that dies mid-request. Recovery covers what redelivery cannot: a publish lost after the database write, a message that went to the dead-letter topic, and a run that ended without reaching a final status.
 
 **Who does what**
@@ -379,11 +401,11 @@ cd backend && uvicorn app.main:app --reload    # http://localhost:8000
 cd frontend && npm run dev                     # http://localhost:5173
 ```
 
-Defaults: `EVENT_TRANSPORT=inprocess`, `ROLE=all`, `SWEEPER_ENABLED=false`. One process runs every role and calls handlers directly, so nothing needs Docker, Pub/Sub or Kong. The injection tool is available here only.
+Defaults: `EVENT_TRANSPORT=inprocess`, `ROLE=all`. One process runs every role and runs each event's handlers as background tasks, so nothing needs Docker, Pub/Sub or Kong. The injection tool is available here only.
 
 ### 18.2 The split, locally (opt-in, before a deploy)
 
-Layout: `compose.yaml` at the root `include:`s `deploy/compose/{pubsub,kong,api,workers,audit-metrics,frontend}.yaml`; Kong's template is `deploy/kong/kong.yml.tmpl`; `deploy/pubsub/init.py` creates the topic, subscriptions and dead-letter topic. It replaces today's `docker-compose.yml`. Settings come from the root `.env` as today; compose adds `EVENT_TRANSPORT=pubsub`, `PUBSUB_EMULATOR_HOST`, `GOOGLE_CLOUD_PROJECT=local`, `ROLE` per container.
+Layout: `compose.yaml` at the root `include:`s `deploy/compose/{pubsub,api,workers,audit-metrics,kong,frontend}.yaml`. `pubsub-init` runs `python -m app.events.emulator_setup` once, creating the topic, the dead-letter topic and one push subscription per role, then exits. Kong is built from `deploy/kong/`. Every backend container reads `backend/.env` (as uvicorn does); compose adds `EVENT_TRANSPORT=pubsub`, `PUBSUB_EMULATOR_HOST`, `GOOGLE_CLOUD_PROJECT=local` and `CORS_IN_APP=false`, and each image sets its own `ROLE`.
 
 ```bash
 docker compose up --build                 # stop uvicorn first: Kong takes :8000
@@ -394,30 +416,32 @@ cd frontend && npm run dev                # same UI, now through Kong
 |---|---|---|
 | `pubsub-emulator` + `pubsub-init` (exits) | Pub/Sub | 300 MB |
 | `kong` on :8000 | Kong on Cloud Run | 150 MB |
-| `api` (`ROLE=api`) | api | 700 MB |
-| `workers` (`ROLE=doc,detection,case`) | the three workers, as one container to save memory | 1.5-2 GB |
-| `audit-metrics` | audit-metrics | 200 MB |
+| `api` | api | 700 MB |
+| `workers` (`ROLE=doc-worker,detection-worker,case-worker`, the `detection-worker` image) | the three workers, as one container to save memory | 1.5-2 GB |
+| `audit-metrics` | audit-metrics | 700 MB (it imports the whole app) |
 
-About 3 GB in total. The code paths are the same as in the cloud (emulator, push, envelopes, Kong routes); only the process boundaries between the three workers are merged. Profiles:
-- `--profile frontend`: the nginx build on :5173 instead of `npm run dev`.
-- `--profile split`: one container per worker, as in the cloud (needs about 2 GB more; not needed for normal checks).
+About 3.5 GB in total. The code paths are the same as in the cloud (emulator, push, envelopes, Kong routes); each subscription still pushes to its own `/push/<role>`, only the process boundaries between the three workers are merged. `--profile frontend` adds the nginx build on :5173 instead of `npm run dev`.
 
-**Debug one role in the IDE:** `docker compose up --scale workers=0`, set `PUSH_ENDPOINT_DETECTION=http://host.docker.internal:8081/push` in `.env`, then run `ROLE=detection EVENT_TRANSPORT=pubsub PUBSUB_EMULATOR_HOST=localhost:8085 uvicorn app.main:app --port 8081` (similar for the other roles).
+**Debug the workers in the IDE:** `PUSH_HOST=host.docker.internal PUSH_PORT=8001 docker compose up --build --scale workers=0`, then from `backend/`: `ROLE=doc-worker,detection-worker,case-worker EVENT_TRANSPORT=pubsub PUBSUB_EMULATOR_HOST=localhost:8085 GOOGLE_CLOUD_PROJECT=local uvicorn app.main:app --port 8001` (in PowerShell, set each with `$env:NAME = "value"` first). One role alone works the same way with its own `ROLE`.
 
 **Walkthrough before a deploy** (real Supabase and Claude; costs a few calls):
 1. Create a case and upload one document: it reaches `analyzed`.
 2. Approve it: it reaches `detected`; the flags appear.
 3. Run case analysis: the score and summary appear.
-4. The audit trail lists the events in order with one Kong request id per action.
-5. `docker compose restart workers` during a detection run: the document still reaches `detected`.
+4. `GET /audit/events?case_id=<id>` lists the events in order, each officer action with Kong's request id.
+5. `docker compose restart workers` during a detection run: the interrupted run returns to `approved`, the failed push is redelivered, and the document still reaches `detected`.
 6. `docker compose stop audit-metrics`, act, start it again: the missed events appear.
-7. `python deploy/pubsub/publish.py --poison`: it ends in the dead-letter subscription and nothing else stalls.
+7. `docker compose run --rm pubsub-init python -m app.events.emulator_setup --poison`: it is retried, then lands in the `domain-events-dead-letter-pull` subscription, and nothing else stalls.
 
-Emulator limits: no OIDC tokens and no IAM, so push endpoints skip the token check when `PUBSUB_EMULATOR_HOST` is set. Check at build time whether the emulator honours subscription filters and dead-letter policies; if not, `init.py` creates unfiltered subscriptions (handlers ignore other types, section 3) and step 7 is checked in the cloud only.
+Emulator limits: no OIDC tokens and no IAM, so `/push` takes unsigned requests locally (`PUSH_AUDIENCE` is unset). If the emulator refuses subscription filters or dead-letter policies, `emulator_setup` creates the subscriptions without them and logs a warning: handlers ignore types they don't handle (section 3), and step 7 can then only be checked in the cloud.
 
 ### 18.3 Deploying
 
-Actions tab, "Deploy", Run workflow. It builds one image per role, deploys tagged revisions with no traffic, checks them, moves traffic, runs the post-deploy check through Kong, and rolls every service back if anything fails (section 6). Manual rollback: `gcloud run services update-traffic <service> --to-revisions=<revision>=100 --region asia-southeast1`. Logs: Cloud Logging, filtered by service; one request is followed through the audit trail by its Kong request id.
+First time: `deploy/terraform/README.md` (state bucket, `terraform apply`, secret values, the GitHub repository variables). After that: Actions tab, "Deploy to Cloud Run", Run workflow. It builds one image per role, Kong and the frontend, rolls them out, checks the gateway, and rolls every service back if the check fails (section 6). Manual rollback: `gcloud run services update-traffic <service> --to-revisions=<revision>=100 --region asia-southeast1`. Logs: Cloud Logging, filtered by service; one request is followed through the audit trail by its Kong request id.
+
+Configuration (sizes, scaling, environment, secrets) changes in Terraform, not in the workflow: edit `deploy/terraform/main.tf` and `terraform apply`. A changed event subscription: `python -m app.events.types` (rewrites `subscriptions.json`), then `terraform apply`.
+
+**Scale to zero and the idle period.** Every service defaults to 0 minimum instances. After its last request (for a worker, its last Pub/Sub push) Cloud Run keeps an idle instance for up to about 15 minutes (Google publishes no exact figure), then stops it. The next event then waits for a cold start, roughly 10-30 s here because of the LangGraph and OCR imports. Idle instances cost nothing with CPU idle (`cpu_idle`). For a demo, keep them warm with `min_instances = { api = 1, kong = 1, "doc-worker" = 1, "detection-worker" = 1 }` in `terraform.tfvars`.
 
 ### 18.4 What only the cloud shows, and how often it matters
 
@@ -428,7 +452,7 @@ Actions tab, "Deploy", Run workflow. It builds one image per role, deploys tagge
 | Service accounts, Secret Manager mounts, Workload Identity Federation | Terraform | Settled; touched when a secret or service is added |
 | Managed Prometheus sidecar | Configuration per service | Settled |
 | Work inside the push request, 600 s ack deadline | Design rule in the shared push adapter | Settled once in the adapter; every worker inherits it |
-| Cold starts | Behaviour | Min instances on demo day (section 6, Cost) |
+| Cold starts | Behaviour | After about 15 idle minutes; min instances on demo day (section 18.3) |
 | 60-minute WebSocket limit | Behaviour | Already handled: the client reconnects |
 
 Each of these fails loudly on the first deploy (404, 403, 502 or a redelivery loop), the post-deploy check catches it, and the rollback keeps the old revision serving. Fix and redeploy.
@@ -442,4 +466,6 @@ Each of these fails loudly on the first deploy (404, 403, 502 or a redelivery lo
 | The same message is processed again and again | The handler takes over 600 s or returns non-2xx; check its logs and the stage histogram |
 | Browser shows a CORS error | The frontend origin is missing from Kong's CORS plugin |
 | Live updates stop after an hour | The Cloud Run WebSocket limit; the client should reconnect by itself |
-| A document stays "Processing stuck" | Check the audit trail for `recovery.requested`; `recovery.exhausted` means it failed three times |
+| A document stays "Processing stuck" | No recovery yet (section 16): check the worker's logs and the dead-letter subscription, then retry it from the UI |
+| Kong returns 404 for `/push` or `/metrics` | Intended: they are internal only |
+| Events never reach a worker in compose | `pubsub-init` failed or ran before the emulator was up: `docker compose logs pubsub-init`, then `docker compose up pubsub-init` |

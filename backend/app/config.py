@@ -62,6 +62,12 @@ class Settings:
     EVENT_TRANSPORT: str = _env("EVENT_TRANSPORT", "inprocess").lower()
     PUBSUB_TOPIC: str = _env("PUBSUB_TOPIC", "domain-events")
     PUBSUB_PUBLISH_TIMEOUT_SECONDS: float = float(os.environ.get("PUBSUB_PUBLISH_TIMEOUT_SECONDS", "30"))
+    # When set, POST /push requires a Google OIDC token for this audience from PUSH_SERVICE_ACCOUNT.
+    # Needed on a public service (audit-metrics sits behind Kong); private workers are also guarded by Cloud Run IAM.
+    PUSH_AUDIENCE: str = _env("PUSH_AUDIENCE")
+    PUSH_SERVICE_ACCOUNT: str = _env("PUSH_SERVICE_ACCOUNT")
+    # Off behind Kong, which answers CORS itself; two sets of CORS headers make browsers refuse the response.
+    CORS_IN_APP: bool = os.environ.get("CORS_IN_APP", "true").lower() == "true"
     # A case analysis still "running" after this long was interrupted (no heartbeat yet).
     CASE_ANALYSIS_TIMEOUT_SECONDS: int = int(os.environ.get("CASE_ANALYSIS_TIMEOUT_SECONDS", "900"))
 

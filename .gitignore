@@ -30,3 +30,9 @@ frontend/playwright-report/
 frontend/test-results/
 
 .ruff_cache/
+
+# Terraform
+deploy/terraform/.terraform/
+deploy/terraform/.terraform.lock.hcl.bak
+deploy/terraform/*.tfstate*
+deploy/terraform/terraform.tfvars

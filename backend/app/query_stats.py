@@ -25,6 +25,8 @@ from typing import Any, Iterator
 import httpx
 from langchain_core.callbacks import AsyncCallbackHandler
 
+from . import metrics
+
 logger = logging.getLogger("perf")
 
 REPORT_INTERVAL_SECONDS = 60
@@ -128,7 +130,9 @@ def _call_label(request: httpx.Request) -> str:
 
 
 def _on_request(request: httpx.Request) -> None:
-    _active().add_call(_call_label(request))
+    label = _call_label(request)
+    _active().add_call(label)
+    metrics.supabase_calls.labels(label.split(" ", 1)[-1]).inc()
     request.extensions["query_stats_started"] = time.perf_counter()
 
 
@@ -160,6 +164,7 @@ class _LLMUsage(AsyncCallbackHandler):
                     details.get("ephemeral_5m_input_tokens", 0) + details.get("ephemeral_1h_input_tokens", 0),
                 )
         _active().add_llm(input_tokens, output_tokens, cache_read, cache_write)
+        metrics.record_llm(input_tokens, output_tokens, cache_read, cache_write)
 
 
 llm_callback = _LLMUsage()

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Any, Literal
 
@@ -63,8 +64,15 @@ class Event(BaseModel):
         )
 
 
+# Kong's X-Request-ID for the current request (main.py sets it), so one request can be followed through the trail.
+request_id: ContextVar[str | None] = ContextVar("request_id", default=None)
+
+
 def officer_event(type: str, **fields: Any) -> Event:
     """An event caused by the signed-in officer of this request, or by the system when there is none."""
+    rid = request_id.get()
+    if rid is not None:
+        fields["detail"] = {**fields.get("detail", {}), "request_id": rid}
     actor = current_actor()
     if actor is None:
         return Event(type=type, **fields)

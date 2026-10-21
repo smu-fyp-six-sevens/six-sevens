@@ -37,3 +37,6 @@ opentelemetry-exporter-gcp-trace>=1.7,<2.0
 
 # Domain events between services (app/events); imported only with EVENT_TRANSPORT=pubsub.
 google-cloud-pubsub>=2.21,<3.0
+
+# GET /metrics on every service (app/metrics.py), scraped by Managed Prometheus.
+prometheus-client>=0.20,<1.0

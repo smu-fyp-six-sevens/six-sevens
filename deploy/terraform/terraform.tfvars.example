@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars (git-ignored) and fill in.
+project_id   = "your-gcp-project"
+github_repo  = "your-org/six-sevens"
+supabase_url = "https://your-project.supabase.co"
+
+# Optional
+# region          = "asia-southeast1"
+# billing_account = "000000-000000-000000"
+# min_instances   = { api = 1, kong = 1, "doc-worker" = 1, "detection-worker" = 1 }  # demo day

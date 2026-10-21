@@ -1,19 +1,22 @@
 """
 The push adapter: Pub/Sub delivers each subscription's messages to POST /push/{role}. The work runs inside
 the request (Cloud Run gives no CPU outside one). 2xx acks; anything else is redelivered and, after the
-subscription's maximum attempts, dead-lettered. Not behind the app's login: in the cloud only the Pub/Sub
-service account may invoke a worker (Cloud Run IAM checks its OIDC token); the local emulator sends none.
+subscription's maximum attempts, dead-lettered. Not behind the app's login: Pub/Sub signs each push with an
+OIDC token, checked here when PUSH_AUDIENCE is set and by Cloud Run IAM on private workers. The local
+emulator sends none.
 """
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
 import logging
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, Header, HTTPException, Response, status
 from pydantic import BaseModel, Field, ValidationError
 
+from ..config import settings
 from . import registry
 from .envelope import Event
 
@@ -33,8 +36,29 @@ class _PushBody(BaseModel):
     subscription: str | None = None
 
 
+def _verify_push_token(authorization: str | None) -> None:
+    """Raises 401 unless the request carries Pub/Sub's OIDC token for our audience and service account."""
+    from google.auth.transport import requests as google_requests
+    from google.oauth2 import id_token
+
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing push token")
+    try:
+        claims = id_token.verify_oauth2_token(
+            authorization.removeprefix("Bearer ").strip(), google_requests.Request(), audience=settings.PUSH_AUDIENCE
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid push token") from exc
+    if settings.PUSH_SERVICE_ACCOUNT and (
+        claims.get("email") != settings.PUSH_SERVICE_ACCOUNT or not claims.get("email_verified")
+    ):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Push token from the wrong account")
+
+
 @router.post("/push/{role}", status_code=status.HTTP_204_NO_CONTENT)
-async def receive(role: str, body: _PushBody) -> Response:
+async def receive(role: str, body: _PushBody, authorization: str | None = Header(default=None)) -> Response:
+    if settings.PUSH_AUDIENCE:
+        await asyncio.to_thread(_verify_push_token, authorization)
     if role not in registry.installed_roles():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"This service does not run {role}")
     try:
