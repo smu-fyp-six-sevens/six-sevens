@@ -80,9 +80,10 @@ jobs:
           # Workers and audit-metrics first, so the api never publishes to an older consumer.
           pids=""
           for svc in audit-metrics doc-worker detection-worker case-worker api kong frontend; do
-            # The backend roles also run the metrics sidecar, so name the app container.
+            # The backend roles also run the metrics sidecar, so name the app container. Every flag after
+            # --container belongs to that container, so the service-wide ones (--quiet) go before it.
             container=""; case "$svc" in kong|frontend) ;; *) container="--container app" ;; esac
-            gcloud run services update "$svc" --region "$REGION" $container --image "$REGISTRY/$svc:$GITHUB_SHA" --quiet &
+            gcloud run services update "$svc" --region "$REGION" --quiet $container --image "$REGISTRY/$svc:$GITHUB_SHA" &
             pids="$pids $!"
           done
           fail=0
