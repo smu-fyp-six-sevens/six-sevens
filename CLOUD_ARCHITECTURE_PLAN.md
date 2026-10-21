@@ -178,9 +178,9 @@ Unchanged between stages: Supabase, Artifact Registry, the events and ownership,
 **Deploy and roll back (one project, no staging)**
 
 The cloud environment is the only one, so a deploy is checked and undone automatically if it fails (`.github/workflows/deploy.yml`):
-1. Build one image per role, Kong, and the frontend (pointed at Kong's URL); push them to Artifact Registry.
+1. Build one image per role, Kong, and the frontend (pointed at Kong's URL); push them to Artifact Registry. An image the commit already has is skipped; otherwise unchanged layers come from a registry build cache. Each job mints one Google access token at its start (Workload Identity Federation) and gives it to gcloud and Docker.
 2. Record the revision each service is serving.
-3. Roll out the new images, workers and audit-metrics first, then api, Kong and the frontend (`gcloud run services update --image`; Terraform owns everything else about a service).
+3. Roll out the new images, workers and audit-metrics first, then api, Kong and the frontend (`gcloud run services update --image`, then `update-traffic --to-latest`, since an earlier rollback leaves traffic pinned; Terraform owns everything else about a service).
 4. Check through Kong, with no LLM and no database writes: `/health` answers (not `/healthz`: Cloud Run's front end reserves paths ending in `z` and returns its own 404; `/healthz` stays for Kubernetes in Stage 2), an authenticated route answers 401 (never 404 or 502), `/push` and `/metrics` are blocked at the gateway, a worker refuses a POST without Pub/Sub's identity (403), CORS answers the frontend's origin, and the frontend serves.
 5. Any failure: every service goes back to its recorded revision (`gcloud run services update-traffic --to-revisions=<recorded>=100`) and the workflow fails.
 
@@ -458,6 +458,8 @@ Configuration (sizes, scaling, environment, secrets) changes in Terraform, not i
 Each of these fails loudly on the first deploy (404, 403, 502 or a redelivery loop), the post-deploy check catches it, and the rollback keeps the old revision serving. Fix and redeploy.
 
 ### 18.5 Troubleshooting
+
+Problems met while setting up and deploying (login consent, quota project, imports, secrets, `--container` flags, `/healthz`, token timeouts, pinned traffic) and their fixes are in `deploy/terraform/README.md`, "Problems met". The deploy status, the checks after a deploy and the clean-up list are there too.
 
 | Symptom | Likely cause |
 |---|---|
