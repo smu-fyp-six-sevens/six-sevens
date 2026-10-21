@@ -181,7 +181,7 @@ The cloud environment is the only one, so a deploy is checked and undone automat
 1. Build one image per role, Kong, and the frontend (pointed at Kong's URL); push them to Artifact Registry.
 2. Record the revision each service is serving.
 3. Roll out the new images, workers and audit-metrics first, then api, Kong and the frontend (`gcloud run services update --image`; Terraform owns everything else about a service).
-4. Check through Kong, with no LLM and no database writes: `/healthz` answers, an authenticated route answers 401 (never 404 or 502), `/push` and `/metrics` are blocked at the gateway, a worker refuses a POST without Pub/Sub's identity (403), CORS answers the frontend's origin, and the frontend serves.
+4. Check through Kong, with no LLM and no database writes: `/health` answers (not `/healthz`: Cloud Run's front end reserves paths ending in `z` and returns its own 404; `/healthz` stays for Kubernetes in Stage 2), an authenticated route answers 401 (never 404 or 502), `/push` and `/metrics` are blocked at the gateway, a worker refuses a POST without Pub/Sub's identity (403), CORS answers the frontend's origin, and the frontend serves.
 5. Any failure: every service goes back to its recorded revision (`gcloud run services update-traffic --to-revisions=<recorded>=100`) and the workflow fails.
 
 Tagged no-traffic revisions were dropped for now: nothing depends on the cloud deployment, and they would need Pub/Sub and Kong to target the tag URLs.
@@ -468,4 +468,5 @@ Each of these fails loudly on the first deploy (404, 403, 502 or a redelivery lo
 | Live updates stop after an hour | The Cloud Run WebSocket limit; the client should reconnect by itself |
 | A document stays "Processing stuck" | No recovery yet (section 16): check the worker's logs and the dead-letter subscription, then retry it from the UI |
 | Kong returns 404 for `/push` or `/metrics` | Intended: they are internal only |
+| Google's own HTML 404 for `/healthz` on any Cloud Run URL | Cloud Run reserves paths ending in `z`; use `/health` |
 | Events never reach a worker in compose | `pubsub-init` failed or ran before the emulator was up: `docker compose logs pubsub-init`, then `docker compose up pubsub-init` |

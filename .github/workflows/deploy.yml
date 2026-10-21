@@ -31,27 +31,35 @@ jobs:
       - name: Log in to Artifact Registry
         run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
-      - name: Build and push the backend roles and Kong
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push every image
         env:
-          DOCKER_BUILDKIT: "1"
           # A build secret, so the key stays out of the image layers.
           DATA_GOV_SG_API_KEY: ${{ secrets.DATA_GOV_SG_API_KEY }}
         run: |
-          # One runner, so the shared dependency layers are built once for every role.
-          for role in api doc-worker detection-worker case-worker audit-metrics; do
-            docker build -f backend/Dockerfile --target "$role" \
-              --secret id=data_gov_sg_api_key,env=DATA_GOV_SG_API_KEY \
-              -t "$REGISTRY/$role:$GITHUB_SHA" .
-            docker push "$REGISTRY/$role:$GITHUB_SHA"
-          done
-          docker build -f deploy/kong/Dockerfile -t "$REGISTRY/kong:$GITHUB_SHA" .
-          docker push "$REGISTRY/kong:$GITHUB_SHA"
-
-      - name: Build and push the frontend against Kong
-        run: |
           KONG_URL=$(gcloud run services describe kong --region "$REGION" --format='value(status.url)')
-          docker build -f frontend/Dockerfile --build-arg VITE_API_URL="$KONG_URL" -t "$REGISTRY/frontend:$GITHUB_SHA" .
-          docker push "$REGISTRY/frontend:$GITHUB_SHA"
+          # build <image> <dockerfile> [buildx args...]: skipped when this commit's image already exists
+          # (a rerun), otherwise unchanged layers come from the cache kept in Artifact Registry.
+          build() {
+            image=$1; file=$2; shift 2
+            if gcloud artifacts docker images describe "$REGISTRY/$image:$GITHUB_SHA" >/dev/null 2>&1; then
+              echo "$image:$GITHUB_SHA is already built; skipping"
+              return
+            fi
+            docker buildx build -f "$file" "$@" \
+              --cache-from "type=registry,ref=$REGISTRY/buildcache:$image" \
+              --cache-to "type=registry,ref=$REGISTRY/buildcache:$image,mode=max,image-manifest=true,oci-mediatypes=true" \
+              -t "$REGISTRY/$image:$GITHUB_SHA" --push .
+          }
+          for role in api doc-worker detection-worker case-worker audit-metrics; do
+            # Every role shares the dependency layers, so each may also start from api's cache.
+            build "$role" backend/Dockerfile --target "$role" \
+              --cache-from "type=registry,ref=$REGISTRY/buildcache:api" \
+              --secret id=data_gov_sg_api_key,env=DATA_GOV_SG_API_KEY
+          done
+          build kong deploy/kong/Dockerfile
+          build frontend frontend/Dockerfile --build-arg VITE_API_URL="$KONG_URL"
 
   deploy:
     needs: build
@@ -102,7 +110,8 @@ jobs:
             echo "$method $url -> $got (want $want)"
             [ "$got" = "$want" ]
           }
-          expect 200 GET "$KONG_URL/healthz"
+          # /health, not /healthz: Cloud Run's front end reserves paths ending in "z" and answers them itself.
+          expect 200 GET "$KONG_URL/health"
           expect 401 GET "$KONG_URL/cases"
           expect 401 GET "$KONG_URL/audit/events"
           expect 404 POST "$KONG_URL/push/doc-worker"
