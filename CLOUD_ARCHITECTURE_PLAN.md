@@ -1,6 +1,8 @@
 # Cloud architecture plan
 
-Proposed 2026-10-20. **Not started:** other work comes first; implementation is expected to begin in a few days. Replaces the five-service split in `CLAUDE.md` ("Architecture: Decoupling Requirement") and its "Kubernetes + ArgoCD rejected" line once agreed. Deadline: mid-November 2026.
+Proposed 2026-10-20, updated 2026-10-21 (local dev, testing, recovery, resolved decisions). **Not started:** other work comes first; implementation is expected to begin in a few days. Replaces the five-service split in `CLAUDE.md` ("Architecture: Decoupling Requirement") and its "Kubernetes + ArgoCD rejected" line once agreed. Deadline: mid-November 2026.
+
+One GCP project and one Supabase project, shared by local runs and the cloud. No separate staging environment (section 6, "Deploy and roll back").
 
 Two stages, one design:
 - **Stage 1 (by mid-November): Cloud Run.** Everything in this plan, on Cloud Run.
@@ -44,7 +46,9 @@ Also:
 - **Kong** is the single entry point (section 7), a service of its own in front of api, ingestion and audit-metrics only.
 - **Frontend:** a static build served by nginx in a container (as today), its `VITE_API_URL` pointing at Kong. A Cloud Storage bucket behind a CDN is a later optimisation and needs a load balancer, so it is not part of Stage 1.
 - **Eval job:** a nightly Cloud Run Job (a Kubernetes CronJob in Stage 2). Not a service.
-- **Dev injection tool:** `routers/injection.py` is mounted in the production API today. It leaves the production image.
+- **Sweeper job:** a Cloud Run Job run every 2 minutes by Cloud Scheduler (a CronJob in Stage 2). Finds stuck work and asks its owner to recover it (section 16). Reads only; writes nothing but events.
+- **Dev injection tool:** `routers/injection.py` is mounted in the production API today. It leaves every image and is mounted only in the in-process (uvicorn) mode.
+- **Case match** stays in api. It is computed on read (snapshots and the case-match endpoints) and writes nothing, so it reruns whenever a snapshot is rebuilt after extraction.
 - **Ingestion** can run inside api first (same code, one role switch) and be split out last.
 - **Live updates** (Realtime listener, broadcaster, WebSocket) live in api. If socket load ever needs its own scaling, it becomes a role of its own.
 
@@ -67,7 +71,7 @@ Also:
 
 One topic, `domain-events`, with a dead-letter topic. Each subscription filters on the `type` attribute. A message carries ids only, never document content; Supabase holds the state.
 
-Envelope (it is also the `audit_events` row, `backend/sql/audit_events.sql`):
+Envelope (it is also the `audit_events` row):
 
 ```
 { event_id, type, occurred_at, actor_type: user|agent|system, actor,
@@ -87,9 +91,12 @@ Envelope (it is also the `audit_events` row, `backend/sql/audit_events.sql`):
 | `case.analysis.requested` | api | case-worker |
 | `case.analysis.completed` | case-worker | audit-metrics |
 | `case.created / renamed / deleted`, `document.deleted / moved`, `document.field_edited`, `document.type_corrected`, `auth.login` | api (and ingestion for uploads) | audit-metrics |
+| `recovery.requested` (`detail.stage`, `detail.attempt`) | sweeper | the worker owning that stage |
+| `document.recovered`, `recovery.exhausted` | the owning worker | audit-metrics |
 
 Rules:
 - At-least-once delivery, so every handler must tolerate a repeat. Status changes are compare-and-swap (`expected_current_statuses`), which the code already has.
+- A handler acks and ignores a type it does not handle, so a missing subscription filter (the local emulator) never breaks it.
 - A human action that is also a trigger (approve, retype, request analysis) fails with a 502 if the publish fails. The event is the action.
 - Staleness of a case analysis stays computed on read (fingerprint), not an event.
 - Kong's request id is copied into the event's `detail`, so one request can be followed through the audit trail.
@@ -104,6 +111,7 @@ Rules:
 | `documents`: `approved` to `detecting` to `detected`; `flags`; detection part of `langgraph_trace` | detection-worker |
 | `case_analysis_runs`, `risk_scores`, `cases.submission_finalized` | case-worker |
 | `audit_events` | audit-metrics only (service role: insert and select) |
+| Recovery of a stuck stage (status reset, retry count, `failed`) | the worker owning that stage; the sweeper only publishes |
 
 The classify and extract trace and the detection trace share one `langgraph_trace` row per document. The stages run one after another per document, so writes do not overlap; confirm when splitting.
 
@@ -117,9 +125,11 @@ The classify and extract trace and the detection trace share one `langgraph_trac
 | Workers push snapshots through the in-process broadcaster | Add `langgraph_trace` and `case_analysis_runs` to the Realtime publication; each api instance pushes on change |
 | `submission_finalized` debounce: per-process timers | Moves to the case-worker, event driven |
 | Anthropic limit: per-process semaphores | A budget of max instances times concurrency per worker (or a Cloud Tasks concurrency cap); a shared limiter later (`PENDING_WORK.md`). Redis is not needed for this |
-| Stuck-document monitor | Also re-publishes the event for a document stuck between steps (covers a crash between the database write and the publish) |
-| `routers/injection.py` in the API | Removed from the production image |
-| Calls such as `queue.enqueue` and `sync_submission_finalized` | `events.publish()`, which calls the handlers in-process in dev and tests, so local running and the test suite stay as they are |
+| Stuck documents: computed on read for the "Processing stuck" badge and manual retry; nothing acts on them, `detecting` is not covered | The sweeper job and owner-side recovery (section 16) |
+| `routers/injection.py` in the API | Mounted only when `EVENT_TRANSPORT=inprocess`; not copied into any image |
+| Calls such as `queue.enqueue` and `sync_submission_finalized` | `events.publish()`. `EVENT_TRANSPORT=inprocess` (the default) calls the handlers in the same process, so `uvicorn` + `npm run dev` and the test suite stay as they are; `pubsub` publishes to Pub/Sub (or the emulator when `PUBSUB_EMULATOR_HOST` is set) |
+| One process holds every role | `ROLE` selects what a process mounts: `all` (default, uvicorn), one role (cloud), or a comma list such as `doc,detection,case` (local compose, to save memory) |
+| `cases.dev` flag and `IS_CLOUD_DEPLOYMENT` filtering (UAT only) | Removed from the code; the column can be dropped later. Local and cloud cases share one list |
 | Token and cost counts only logged (`query_stats.py`); no `/metrics` | `prometheus_client` in every service (section 8) |
 | Work arrives through one transport | **Handler plus adapters:** each worker is a `handle(event)` function with two thin adapters, an HTTP push endpoint (Stage 1) and a pull subscriber (Stage 2) |
 | No health endpoints, no shutdown handling | `/healthz` for liveness and readiness; on SIGTERM finish the current run or hand it back. Cloud Run benefits now; Kubernetes requires both |
@@ -132,7 +142,7 @@ The classify and extract trace and the detection trace share one `langgraph_trac
 |---|---|---|
 | A role | Cloud Run service | Deployment and Service per role |
 | Scaling | Cloud Run autoscaling; min instances | HPA, or KEDA on Pub/Sub backlog (KEDA also gives scale to zero) |
-| Event delivery | Pub/Sub push with OIDC to private services; ack deadline capped at 10 minutes | Workers pull and extend the lease, so long detection runs are no problem |
+| Event delivery | Pub/Sub push with OIDC to private services; ack deadline 600 s (the maximum), Cloud Run request timeout 600 s; work happens inside the push request, never in a background task (no CPU outside a request) | Workers pull and extend the lease, so long detection runs are no problem |
 | Gateway | Kong as a Cloud Run service (`Host` header gotcha, section 7) | Kong ingress controller, routes as Kubernetes resources |
 | Metrics | Managed Prometheus sidecar | Managed Prometheus scraping the pods |
 | Deploy | `gcloud run deploy` from a GitHub Actions matrix | Helm chart (one chart, a values file per role) deployed by Argo CD |
@@ -161,6 +171,18 @@ Unchanged between stages: Supabase, Artifact Registry, the events and ownership,
 - **Security:** Snyk on dependencies (Python and npm) and on each image, failing on high severity; Checkov on Terraform, Dockerfiles, workflows and, in Stage 2, the Helm charts. Public Cloud Run services will trigger Checkov's unauthenticated-access finding; suppress it with a written reason. Checking needed: Snyk's handling of our `pyproject.toml` dependencies may require an exported requirements file; `pip-audit`, `npm audit` and Trivy are account-free fallbacks.
 - **Build:** one image per role from the Dockerfile targets, pushed once to Artifact Registry.
 - **Deploy:** a reusable workflow called with a matrix over the roles (Stage 1); Argo CD syncing the Helm chart (Stage 2). Authenticate with Workload Identity Federation, replacing the long-lived `GCP_SA_KEY`.
+- **Tests never call Anthropic or Supabase.** Both are stubbed (the existing `conftest.py` already refuses real calls); see section 17.
+
+**Deploy and roll back (one project, no staging)**
+
+The live environment is the only cloud environment, so a deploy must be checked before it takes traffic and undone automatically if it fails:
+1. Deploy every changed service with `--no-traffic --tag sha-<short>`; record each service's current revision.
+2. Call `/healthz` on each tagged revision URL (workers with an identity token).
+3. Move traffic to the new revisions.
+4. Post-deploy check through Kong, with no LLM and no database writes: every route reaches the right upstream (an authenticated route answers 401, never 404 or 502), the WebSocket handshake reaches api, an unauthenticated POST to a worker is refused (OIDC works), CORS answers the real frontend origin.
+5. Any failure: `gcloud run services update-traffic --to-revisions=<recorded>=100` for every service, and the workflow fails.
+
+Do the first deploy early (step 1 of section 10, with just api and audit-metrics), so the one-time GCP wiring (section 18.4) is settled weeks before the demo. Do not deploy on demo day.
 - **Terraform:** modules plus a separate `monitoring.tf`; the budget alert lives here too.
 
 **Security and identity**
@@ -172,11 +194,11 @@ Unchanged between stages: Supabase, Artifact Registry, the events and ownership,
 - A budget alert at 50% and 90%, since LLM calls and always-on instances are what cost money.
 - Stage 2 adds a cluster fee (Autopilot has a free zonal tier) and the operations time for Helm and Argo CD.
 
-**Local:** a root compose file that `include:`s one file per role, plus Kong.
+**Local:** unchanged `uvicorn` + `npm run dev` by default (in-process events, every role in one process); an opt-in compose stack with the Pub/Sub emulator and Kong for checking the split. See section 18.
 
 ## 7. Gateway (Kong)
 
-Kong runs as a Cloud Run service in DB-less mode, with its routes in a `kong.yml` baked into the image. It listens on Cloud Run's `$PORT`, and its admin API is off. In Stage 2 it becomes the cluster's ingress controller and the same routes become Kubernetes resources.
+Kong runs as a Cloud Run service in DB-less mode, with its routes in a `kong.yml` baked into the image. The file is rendered at container start from a template (`envsubst`) with the three upstream URLs and `preserve_host`, so local compose (`http://api:8080`) and Cloud Run (`https://api-….run.app`, `preserve_host: false`) share one route table. It listens on Cloud Run's `$PORT`, and its admin API is off. In Stage 2 it becomes the cluster's ingress controller and the same routes become Kubernetes resources.
 
 | Path | Upstream |
 |---|---|
@@ -210,7 +232,7 @@ What to measure:
 - Stage durations as histograms (the same timings the events record).
 - Queue depth per subscription, from the Pub/Sub backlog metric in Cloud Monitoring (also the scaling signal in Stage 2).
 - Tokens, cache hits and cost per unit of work (today only logged by `query_stats.py`).
-- Stuck-document count, as a gauge.
+- Stuck work as a gauge per stage, and recoveries and exhausted recoveries as counters (section 16).
 - Label by service and stage, never by document or case id (cardinality).
 
 Grafana and the case dashboard stay separate:
@@ -230,12 +252,12 @@ Stage 1, about four weeks:
 
 | Step | Deliverable | Can stop here? |
 |---|---|---|
-| 1 | Event envelope, `events.publish()`, audit-metrics, api commands publish events, login and human actions audited; `/healthz` and SIGTERM handling | Yes: audit trail works |
-| 2 | Per-stage measurement from the `perf` logs; decide open decision 1 | |
+| 1 | Event envelope, `events.publish()` with `EVENT_TRANSPORT`, `ROLE`, audit-metrics, api commands publish events, login and human actions audited; `/healthz` and SIGTERM handling; remove the `dev` flag; compose skeleton (emulator, api, audit-metrics); first cloud deploy of api and audit-metrics | Yes: audit trail works |
+| 2 | Per-stage duration histograms from the events, to confirm the push choice (section 11, decision 1) | |
 | 3 | detection-worker on Pub/Sub, as handler plus adapters (blockers: cancel flag, live pushes, rate budget) | Yes: first real split |
-| 4 | doc-worker on Pub/Sub (replaces the queue; stuck monitor re-publishes) | Yes |
-| 5 | case-worker (running guard, debounce) | Yes |
-| 6 | Kong; Terraform with IAM per service, Secret Manager, budget alert; one image build to Artifact Registry; CI matrix with Snyk and Checkov; Workload Identity Federation | |
+| 4 | doc-worker on Pub/Sub (replaces the queue) | Yes |
+| 5 | case-worker (running guard with heartbeat, debounce); sweeper job and owner-side recovery (section 16) | Yes |
+| 6 | Kong (template, local and cloud); Terraform with IAM per service, Secret Manager, Scheduler, budget alert; one image build to Artifact Registry; CI matrix with Snyk and Checkov; deploy with tagged revisions and automatic rollback; Workload Identity Federation | |
 | 7 | `/metrics` in every service, sidecars, Grafana dashboards | Yes: observability works |
 | 8 | Case dashboard, eval job, guardrail checks | |
 | 9 | Failure tests, docs, buffer | |
@@ -254,9 +276,19 @@ Stage 2 (after Stage 1, each step deployable on its own):
 
 Locked (changing them later touches every service): the event envelope and type names, one topic with filtered subscriptions, the ownership table, a Dockerfile target per role, Kong as the single entry point, handler plus adapters for workers.
 
+Resolved 2026-10-21:
+- **Push dispatch for Stage 1.** Detection takes about 1-2 minutes per document, well inside the 600 s ack deadline. Revisit only if the measured 95th percentile of any stage passes 8 minutes (then a lease-extending pull subscriber, or Cloud Tasks). Stage 2 pulls anyway.
+- **Ingestion inside api** first.
+- **One GCP project, one Supabase project**, no staging; tagged revisions and automatic rollback instead (section 6).
+- **`dev` flag removed**; it existed only for UAT.
+- **Local default stays `uvicorn` + `npm run dev`** for every developer; compose is opt-in.
+- **Tests stub Anthropic and Supabase**, CI included (section 17).
+- **Injection tool** only in uvicorn mode.
+- **Case match** stays in api (computed on read).
+
 Open:
-1. **Push or lease-extending dispatch (Stage 1).** Get the 95th-percentile detection time. Over about 8 minutes, use a pull subscription that extends its lease, or Cloud Tasks (also gives a global concurrency cap and a delayed, de-duplicated dispatch for the case-analysis debounce). Stage 2 pulls anyway.
-2. **Ingestion separate or inside api.** Inside api first.
+1. ~~Push or lease-extending dispatch~~ (resolved: push).
+2. ~~Ingestion separate or inside api~~ (resolved: inside api).
 3. **Supervisor check:** does Stage 1 on Cloud Run count as "genuinely decoupled" for the Cloud Native award, or is Kubernetes expected? (`CLAUDE.md` records "EC2 or Cloud Run, it doesn't matter".) This decides whether Stage 2 moves earlier.
 4. **Automatic case analysis** before November, which decides how much the case-worker's gate needs.
 5. **Where Grafana runs:** Grafana Cloud free tier, or one small instance of our own.
@@ -265,12 +297,14 @@ Open:
 
 ## 12. Risks
 
-- **Dual write:** database updated, publish lost. Mitigated by the stuck-document re-publish.
+- **Dual write:** database updated, publish lost. Mitigated by the sweeper (section 16).
 - **Duplicate delivery and the ack deadline:** idempotent handlers, compare-and-swap status changes.
 - **Supabase Realtime** carries all live updates; check its limits under load.
 - **Kong** is a new single entry point: a misrouted `Host` header or a bad CORS rule breaks the whole frontend. Test the config locally with compose first.
 - **Min-instance cost** during the demo (Kong, api, two workers).
 - **Metric cardinality:** an id used as a label would overwhelm Prometheus.
+- **One environment:** a bad deploy hits the live system. Mitigated by tagged revisions, the post-deploy check and automatic rollback (section 6).
+- **Shared Supabase:** local runs and the cloud see each other's cases, Realtime changes and stuck documents. Anything that scans the whole database must run in one place only: the sweeper runs only in the cloud (a local run must name a case, section 16). A local process killed mid-run is recovered by the cloud sweeper, which is acceptable.
 - **Scope:** Stage 2 in the same four weeks would put too much new surface in play. Keep it after Stage 1 unless open decision 3 says otherwise.
 
 ## 13. Failure tests (deliverable for the submission)
@@ -279,6 +313,7 @@ Open:
 - Flood uploads: the platform scales out, and the queue drains.
 - Stop audit-metrics: events wait, then catch up.
 - A poison message goes to the dead-letter topic and does not block the queue.
+- Lost publish: set a document to `queued` without publishing; the sweeper recovers it within one sweep plus the threshold, and the audit trail shows `recovery.requested` then `document.recovered`.
 - Stage 2: the same four as Litmus experiments (pod failure, load against the autoscaler).
 
 ## 14. Borrowed from the reference material
@@ -292,3 +327,119 @@ Not taken: 15 services (the reference suits many unrelated ML jobs), wildcard CO
 ## 15. Out of scope here
 
 Stateful and learning agents (separate plan), a parser sandbox service, Redis (until a measured need), an OutSystems integration (to confirm with the sponsor).
+
+## 16. Stuck work and recovery (a showcase item)
+
+Today "stuck" is only computed on read (`monitoring.is_stuck`) for the "Processing stuck" badge and the manual retry; nothing polls, and `detecting` is not covered. Pub/Sub redelivery already handles a worker that dies mid-request. Recovery covers what redelivery cannot: a publish lost after the database write, a message that went to the dead-letter topic, and a run that ended without reaching a final status.
+
+**Who does what**
+- **Sweeper** (Cloud Run Job, every 2 minutes): reads in-flight documents and running analysis rows, and for each one past its threshold publishes `recovery.requested` with the stage and the next attempt number (the count of earlier `recovery.requested` events for it in `audit_events`). It writes no state.
+- **Owning worker** handles `recovery.requested` for its stage: compare-and-swap the status back to the stage's start (only if it is still the stuck status), run the stage, publish `document.recovered`. Past `MAX_RECOVERY_ATTEMPTS` (3) it publishes `recovery.exhausted` and marks the work failed the way it does today (`failed` for the document pipeline; back to `approved` with the error for detection; a failed run for case analysis).
+
+| Stage (status) | Owner | Threshold |
+|---|---|---|
+| `uploaded`, `queued` (publish lost) | doc-worker | 5 min |
+| `processing`, `extracting` | doc-worker | 15 min |
+| `detecting` | detection-worker | 15 min (runs take 1-2 min; past the 600 s ack deadline, so it never races a redelivery) |
+| case analysis `running` | case-worker | heartbeat older than 3 min (needs a `heartbeat_at` column on `case_analysis_runs`: a database change, ask first) |
+
+`is_stuck` stays the single definition (extended to `detecting`), shared by the sweeper, the badge and the manual retry.
+
+**How it is shown**
+- Audit trail: `recovery.requested`, `document.recovered`, `recovery.exhausted`, with the attempt number.
+- Case dashboard: "stuck now" and "recovered in the last 24 h" panels.
+- Grafana: stuck gauge per stage; recovery and exhaustion counters.
+- UI: the "Processing stuck" badge appears, then clears without anyone acting.
+- Failure tests (section 13): kill a worker mid-run (redelivery), and a lost publish (sweeper).
+
+**Local:** the sweeper is off in uvicorn mode (`SWEEPER_ENABLED=false`) and absent from compose by default, because the database is shared and a local sweeper would pick up cloud documents. To demonstrate locally, run it once against one case: `python -m app.sweeper --once --case <case_id>`.
+
+## 17. Testing (no Anthropic, no Supabase)
+
+Every automated test stubs Claude and Supabase; `conftest.py` already refuses real calls, and the new layers keep that rule.
+
+| Layer | What it proves | How |
+|---|---|---|
+| Existing pytest | Behaviour of every role | Unchanged; `EVENT_TRANSPORT=inprocess` |
+| Handler tests | Each worker's `handle(event)`: right status changes, idempotent on a repeat, ignores other types | Fake repositories, a fake publisher that records envelopes |
+| Push adapter tests | Pub/Sub push body decoded (base64 data, attributes); 2xx on success or duplicate; non-2xx on a malformed message, so it is retried and then dead-lettered | FastAPI `TestClient` per role |
+| Event-flow test | The whole chain across roles: upload, analyzed, approve, detected, analysis completed; the audit sequence; duplicate delivery; recovery after a simulated crash; sweeper recovery | An in-memory bus routes each published envelope to the matching role's push adapter; fake repositories, stub LLM replies |
+| Subscription contract | Every published type has a consumer (or is audit-only); Terraform's filters match the handlers | One source of truth (`events/types.py`) exported to the JSON Terraform reads |
+| Kong config test (CI) | Routes, CORS, request id, rate limiting, WebSocket upgrade | The rendered `kong.yml` in a Kong container in front of three stub upstreams that echo their name; no app |
+| Frontend | UI regressions | Playwright against the mocked backend, as today |
+
+Not automated tests (real Supabase and Claude, run by hand or after a deploy): the compose walkthrough (section 18.2) and the post-deploy check (section 6).
+
+## 18. Running it
+
+### 18.1 Daily development (everyone, unchanged)
+
+```bash
+cd backend && uvicorn app.main:app --reload    # http://localhost:8000
+cd frontend && npm run dev                     # http://localhost:5173
+```
+
+Defaults: `EVENT_TRANSPORT=inprocess`, `ROLE=all`, `SWEEPER_ENABLED=false`. One process runs every role and calls handlers directly, so nothing needs Docker, Pub/Sub or Kong. The injection tool is available here only.
+
+### 18.2 The split, locally (opt-in, before a deploy)
+
+Layout: `compose.yaml` at the root `include:`s `deploy/compose/{pubsub,kong,api,workers,audit-metrics,frontend}.yaml`; Kong's template is `deploy/kong/kong.yml.tmpl`; `deploy/pubsub/init.py` creates the topic, subscriptions and dead-letter topic. It replaces today's `docker-compose.yml`. Settings come from the root `.env` as today; compose adds `EVENT_TRANSPORT=pubsub`, `PUBSUB_EMULATOR_HOST`, `GOOGLE_CLOUD_PROJECT=local`, `ROLE` per container.
+
+```bash
+docker compose up --build                 # stop uvicorn first: Kong takes :8000
+cd frontend && npm run dev                # same UI, now through Kong
+```
+
+| Container | Stands in for | Memory (rough) |
+|---|---|---|
+| `pubsub-emulator` + `pubsub-init` (exits) | Pub/Sub | 300 MB |
+| `kong` on :8000 | Kong on Cloud Run | 150 MB |
+| `api` (`ROLE=api`) | api | 700 MB |
+| `workers` (`ROLE=doc,detection,case`) | the three workers, as one container to save memory | 1.5-2 GB |
+| `audit-metrics` | audit-metrics | 200 MB |
+
+About 3 GB in total. The code paths are the same as in the cloud (emulator, push, envelopes, Kong routes); only the process boundaries between the three workers are merged. Profiles:
+- `--profile frontend`: the nginx build on :5173 instead of `npm run dev`.
+- `--profile split`: one container per worker, as in the cloud (needs about 2 GB more; not needed for normal checks).
+
+**Debug one role in the IDE:** `docker compose up --scale workers=0`, set `PUSH_ENDPOINT_DETECTION=http://host.docker.internal:8081/push` in `.env`, then run `ROLE=detection EVENT_TRANSPORT=pubsub PUBSUB_EMULATOR_HOST=localhost:8085 uvicorn app.main:app --port 8081` (similar for the other roles).
+
+**Walkthrough before a deploy** (real Supabase and Claude; costs a few calls):
+1. Create a case and upload one document: it reaches `analyzed`.
+2. Approve it: it reaches `detected`; the flags appear.
+3. Run case analysis: the score and summary appear.
+4. The audit trail lists the events in order with one Kong request id per action.
+5. `docker compose restart workers` during a detection run: the document still reaches `detected`.
+6. `docker compose stop audit-metrics`, act, start it again: the missed events appear.
+7. `python deploy/pubsub/publish.py --poison`: it ends in the dead-letter subscription and nothing else stalls.
+
+Emulator limits: no OIDC tokens and no IAM, so push endpoints skip the token check when `PUBSUB_EMULATOR_HOST` is set. Check at build time whether the emulator honours subscription filters and dead-letter policies; if not, `init.py` creates unfiltered subscriptions (handlers ignore other types, section 3) and step 7 is checked in the cloud only.
+
+### 18.3 Deploying
+
+Actions tab, "Deploy", Run workflow. It builds one image per role, deploys tagged revisions with no traffic, checks them, moves traffic, runs the post-deploy check through Kong, and rolls every service back if anything fails (section 6). Manual rollback: `gcloud run services update-traffic <service> --to-revisions=<revision>=100 --region asia-southeast1`. Logs: Cloud Logging, filtered by service; one request is followed through the audit trail by its Kong request id.
+
+### 18.4 What only the cloud shows, and how often it matters
+
+| Item | Kind | After the first working deploy |
+|---|---|---|
+| Kong `Host` header and HTTPS to `run.app` | Configuration in the template | Settled; touched again only when an upstream is added |
+| OIDC on push subscriptions, Pub/Sub invoker role | Terraform | Settled; a new worker copies the pattern |
+| Service accounts, Secret Manager mounts, Workload Identity Federation | Terraform | Settled; touched when a secret or service is added |
+| Managed Prometheus sidecar | Configuration per service | Settled |
+| Work inside the push request, 600 s ack deadline | Design rule in the shared push adapter | Settled once in the adapter; every worker inherits it |
+| Cold starts | Behaviour | Min instances on demo day (section 6, Cost) |
+| 60-minute WebSocket limit | Behaviour | Already handled: the client reconnects |
+
+Each of these fails loudly on the first deploy (404, 403, 502 or a redelivery loop), the post-deploy check catches it, and the rollback keeps the old revision serving. Fix and redeploy.
+
+### 18.5 Troubleshooting
+
+| Symptom | Likely cause |
+|---|---|
+| Every request through Kong returns 404 from Google | Kong forwards the original `Host`; set `preserve_host: false` |
+| A worker never receives messages; Pub/Sub shows 403 | The push service account lacks `roles/run.invoker` on that worker |
+| The same message is processed again and again | The handler takes over 600 s or returns non-2xx; check its logs and the stage histogram |
+| Browser shows a CORS error | The frontend origin is missing from Kong's CORS plugin |
+| Live updates stop after an hour | The Cloud Run WebSocket limit; the client should reconnect by itself |
+| A document stays "Processing stuck" | Check the audit trail for `recovery.requested`; `recovery.exhausted` means it failed three times |

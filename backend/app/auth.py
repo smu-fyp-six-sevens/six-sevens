@@ -16,6 +16,7 @@ import hmac
 import json
 import secrets
 import time
+from contextvars import ContextVar
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, status
@@ -138,3 +139,16 @@ def require_auth(authorization: str | None = Header(default=None)) -> str:
 
 # A handler takes `user: CurrentUser` to learn who is acting; the actor is always read from the token.
 CurrentUser = Annotated[str, Depends(require_auth)]
+
+# The signed-in officer for the current request, so events record who acted without every handler passing it.
+_actor: ContextVar[str | None] = ContextVar("actor", default=None)
+
+
+async def bind_actor(user: CurrentUser) -> str:
+    """Router-level dependency: require_auth, then remember the user. Async, so the value reaches the handler."""
+    _actor.set(user)
+    return user
+
+
+def current_actor() -> str | None:
+    return _actor.get()

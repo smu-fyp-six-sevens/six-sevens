@@ -1,6 +1,6 @@
 # Pending work
 
-Open product and platform work only. Code smells and optimisations are in `REFACTORING_AUDIT.md`; test work is in `backend_tests.md`; detection bugs are in `FRAUD_DETECTION_MAP.md` §6. The roadmap (automatic case analysis, the 5-service Pub/Sub split) is in `CLAUDE.md`'s "Future Direction". Updated 2026-10-21.
+Open product and platform work only. Code smells and optimisations are in `REFACTORING_AUDIT.md`; test work is in `backend_tests.md`; detection bugs are in `FRAUD_DETECTION_MAP.md` §6. The roadmap (automatic case analysis, the cloud split) is in `CLAUDE.md`'s "Future Direction"; the cloud design is `CLOUD_ARCHITECTURE_PLAN.md`. Updated 2026-10-21.
 
 ## Decided, not started
 
@@ -56,7 +56,7 @@ Budgets are in `HOW_IT_WORKS.md` §8; read them off the `perf` log lines. Query-
 
 ## Architecture (Kong / Prometheus / Grafana)
 
-Not started; no urgency until the Cloud Native award work picks up.
+Not started. Designed in `CLOUD_ARCHITECTURE_PLAN.md` (Kong in section 7, Prometheus and Grafana in section 8); implementation was expected to begin a few days after 2026-10-20. The points below are what the code needs for it.
 
 - **Kong API gateway** would sit in front of whatever service boundaries exist and can add value (auth, rate limiting, routing) even before a real split. Today's boundary crossings are direct Python calls (`case_service.sync_submission_finalized`, `document_repository.get_document`, `queue_service.enqueue`), not events or API calls; replacing them is the actual work.
 - **Prometheus `/metrics`:** no app-level endpoint yet (LLM token usage and cost per document, classify and extract latency, queue depth, stuck-document count). Gateway metrics would come free from Kong's plugin.

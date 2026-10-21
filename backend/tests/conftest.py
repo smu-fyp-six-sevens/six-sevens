@@ -56,13 +56,13 @@ def _bypass_auth():
 
 
 @pytest.fixture(autouse=True)
-def audit_events(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
-    """Audit rows written during a test, in order; nothing reaches the database."""
-    from app import audit
+def published_events(monkeypatch: pytest.MonkeyPatch) -> list:
+    """Events published during a test, in order. No handler runs: a test that wants one calls it directly."""
+    from app.events import bus
 
-    rows: list[dict] = []
-    monkeypatch.setattr(audit, "_insert", rows.append)
-    return rows
+    events: list = []
+    monkeypatch.setattr(bus, "_dispatch_in_process", events.append)
+    return events
 
 
 class _BlockedSupabaseAccess:
@@ -295,7 +295,7 @@ _EXISTING_REGRESSION_TESTS: dict[str, list[tuple[str, str, str]]] = {
     "test_documents.py::test_upload_batch_rejects_too_many_files": [("sprint1", "SCRUM-6", "DI-004")],
     "test_ingestion.py::test_ingest_rejects_unsupported_type": [("sprint1", "SCRUM-6", "DI-008")],
     # SCRUM-17 Auto-trigger classification: stored document is queued (MA-001)
-    "test_queue_service.py::test_enqueue_marks_queued_and_puts_document_id_on_queue": [
+    "test_documents.py::test_upload_batch_marks_queued_and_publishes_uploaded": [
         ("sprint1", "SCRUM-17", "MA-001"),
     ],
     # Document generation, the mastersheet and fraud injection (TD-001 – TD-006,

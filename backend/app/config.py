@@ -15,6 +15,20 @@ def _env(name: str, default: str = "") -> str:
     return os.environ.get(name, default).strip()
 
 
+ALL_ROLES = ("api", "doc-worker", "detection-worker", "case-worker", "audit-metrics")
+
+
+def _roles(raw: str) -> frozenset[str]:
+    """ROLE: "all" (one process runs everything), one role, or a comma list. An unknown role stops the app."""
+    names = {name.strip() for name in raw.split(",") if name.strip()} or {"all"}
+    if "all" in names:
+        return frozenset(ALL_ROLES)
+    unknown = names - set(ALL_ROLES)
+    if unknown:
+        raise ValueError(f"Unknown ROLE {sorted(unknown)}; expected 'all' or some of {list(ALL_ROLES)}")
+    return frozenset(names)
+
+
 def _users(raw: str) -> dict[str, str]:
     """AUTH_USERS: "alice:password1;bob:password2". A malformed entry stops the app at start-up."""
     users: dict[str, str] = {}
@@ -40,12 +54,16 @@ class Settings:
     AUTH_USERS: dict[str, str] = _users(_env("AUTH_USERS"))
     AUTH_SECRET_KEY: str = _env("AUTH_SECRET_KEY")
 
-    # Source of truth for "is this process the cloud deployment or local
-    # dev" — local and cloud currently share one Supabase project, so this
-    # drives case_repository's dev flag and the queue's dev-case filtering.
-    # Set to "cloud" only by the Cloud Run deploy workflow.
-    DEPLOYMENT_ENV: str = _env("DEPLOYMENT_ENV", "dev")
-    IS_CLOUD_DEPLOYMENT: bool = DEPLOYMENT_ENV.lower() == "cloud"
+    # --- Services and events (CLOUD_ARCHITECTURE_PLAN.md) ---
+    # Which roles this process runs; the default runs all of them, as uvicorn always has.
+    ROLES: frozenset[str] = _roles(_env("ROLE", "all"))
+    # "inprocess" calls handlers in this process; "pubsub" publishes to Pub/Sub (or the emulator
+    # when PUBSUB_EMULATOR_HOST is set) and workers receive events on POST /push.
+    EVENT_TRANSPORT: str = _env("EVENT_TRANSPORT", "inprocess").lower()
+    PUBSUB_TOPIC: str = _env("PUBSUB_TOPIC", "domain-events")
+    PUBSUB_PUBLISH_TIMEOUT_SECONDS: float = float(os.environ.get("PUBSUB_PUBLISH_TIMEOUT_SECONDS", "30"))
+    # A case analysis still "running" after this long was interrupted (no heartbeat yet).
+    CASE_ANALYSIS_TIMEOUT_SECONDS: int = int(os.environ.get("CASE_ANALYSIS_TIMEOUT_SECONDS", "900"))
 
     # Comma-separated list of exact origins the frontend is served from, in
     # addition to local dev.
@@ -82,8 +100,7 @@ class Settings:
     # re-classification attempt before routing to manual review.
     MAX_RECLASSIFICATION_ATTEMPTS: int = 1
 
-    # Concurrent documents processed by the in-memory queue worker pool
-    # (queue_service.py) — bounded by Anthropic rate limits, not local resources.
+    # Documents one doc-worker process runs at once (workers/documents.py) — bounded by Anthropic rate limits.
     QUEUE_WORKER_CONCURRENCY: int = int(os.environ.get("QUEUE_WORKER_CONCURRENCY", "4"))
 
     # Threads for PDF/OCR/forensic work (cpu_pool.py). 1 = PyMuPDF only ever runs on one thread.

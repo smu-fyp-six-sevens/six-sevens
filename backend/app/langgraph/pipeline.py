@@ -2,8 +2,8 @@
 Public entry points for the document pipeline: process_document (the full
 classify -> extract graph) and rerun_extraction (extraction only, after an
 officer corrects the document type). Both always leave the document at
-ANALYZED or FAILED and never raise, so queue_service's worker loop and the
-router's background task don't need their own retry/fallback logic.
+ANALYZED or FAILED and never raise, so the doc-worker (workers/documents.py)
+doesn't need its own retry/fallback logic.
 """
 
 from __future__ import annotations

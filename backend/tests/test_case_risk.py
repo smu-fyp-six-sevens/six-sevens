@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from datetime import datetime, timezone
+from unittest.mock import patch
 
 import pytest
 
@@ -443,18 +444,18 @@ def test_case_summary_keeps_the_last_complete_risk_while_a_rerun_is_going() -> N
         trace.get_detection_states.return_value = ({"doc": _report()}, set())
         analyses.get_latest_many.return_value = {"case-1": _analysis(None, status="running")}
         analyses.get_latest_complete.return_value = _analysis(risk)
-        # A run only reads as running while this process still has its task.
-        live_task = MagicMock()
-        live_task.done.return_value = False
-        with patch.dict("app.case_pipeline.state.running_tasks", {"case-1": live_task}):
-            summary = case_service.get_case_summary("case-1")
+        # A run reads as running only within the time limit after it started.
+        running = _analysis(None, status="running")
+        running.started_at = datetime.now(timezone.utc)
+        analyses.get_latest_many.return_value = {"case-1": running}
+        summary = case_service.get_case_summary("case-1")
 
     assert summary is not None and summary.risk is not None
     assert summary.risk.level == "High"
     assert summary.analysis is not None and summary.analysis.status == "running"
 
 
-def test_a_running_analysis_with_no_live_task_reads_as_interrupted() -> None:
+def test_a_running_analysis_past_its_time_limit_reads_as_interrupted() -> None:
     risk = compute_case_risk([_document("doc")], {"doc": _report(_finding("high", "font_consistency_tool"))}, set())
     with (
         patch("app.case_service.case_repository") as case_repo,

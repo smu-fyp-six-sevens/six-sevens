@@ -1,4 +1,5 @@
 import asyncio
+import importlib.util
 import logging
 from contextlib import asynccontextmanager
 
@@ -6,13 +7,18 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from . import audit, auth, health, query_stats, realtime_listener, telemetry
+from . import audit, auth, events, health, query_stats, realtime_listener, telemetry
 from .config import settings
+from .events import bus, registry, types
+from .events import push as event_push
 from .fraud_detection.external_validation.registry_lookups import land_use
 from .health import check_db_connection
 from .langgraph._anthropic import warm_up
-from .queue_service import document_queue
-from .routers import injection, cases, detection, documents, monitoring, upload, ws
+from .routers import audit as audit_router
+from .routers import cases, detection, documents, monitoring, upload, ws
+from .workers import cases as case_worker
+from .workers import detection as detection_worker
+from .workers import documents as doc_worker
 
 # No handler was ever configured for this app's own loggers, so INFO-level
 # calls (pipeline/detection progress) were silently dropped — only
@@ -29,12 +35,28 @@ if not settings.LOG_HTTP_REQUESTS:
 
 logger = logging.getLogger(__name__)
 
+bus.check_transport()
+ROLES = settings.ROLES
+IN_PROCESS = settings.EVENT_TRANSPORT == "inprocess"
+_HANDLERS = {
+    "doc-worker": doc_worker.HANDLERS,
+    "detection-worker": detection_worker.HANDLERS,
+    "case-worker": case_worker.HANDLERS,
+    "audit-metrics": audit.HANDLERS,
+}
+_CALLS_CLAUDE = {"doc-worker", "detection-worker", "case-worker"}
+
+registry.clear()
+for _role, _handlers in _HANDLERS.items():
+    if _role in ROLES:
+        registry.install(_role, _handlers)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if not settings.AUTH_USERS:
+    logger.info("Starting roles %s with %s events", sorted(ROLES), settings.EVENT_TRANSPORT)
+    if "api" in ROLES and not settings.AUTH_USERS:
         logger.warning("AUTH_USERS is not set, so nobody can log in. Set it in backend/.env")
-    document_queue.start()
     try:
         await asyncio.to_thread(check_db_connection)
         logger.info("Database connectivity check passed at startup")
@@ -43,31 +65,34 @@ async def lifespan(app: FastAPI):
         # crash-loop the whole app. GET /health/db surfaces ongoing status.
         logger.exception("Database connectivity check failed at startup — continuing anyway")
 
-    try:
-        await realtime_listener.start()
-    except Exception:
-        # Also non-fatal, same reasoning as above — the case status
-        # WebSocket degrades to "never pushes anything beyond the initial
-        # snapshot on connect" rather than taking the whole app down, e.g.
-        # if SUPABASE_SECRET_KEY isn't configured in a given environment yet.
-        logger.exception("Realtime listener failed to start — continuing anyway")
+    if "api" in ROLES:
+        try:
+            await realtime_listener.start()
+        except Exception:
+            # Also non-fatal: the case status WebSocket then pushes nothing beyond the initial snapshot.
+            logger.exception("Realtime listener failed to start — continuing anyway")
 
-    try:
-        await asyncio.to_thread(land_use.log_startup_status)
-    except Exception:
-        logger.exception("Could not read the land-use index status — continuing anyway")
+    if "detection-worker" in ROLES:
+        try:
+            await asyncio.to_thread(land_use.log_startup_status)
+        except Exception:
+            logger.exception("Could not read the land-use index status — continuing anyway")
 
-    try:
-        await asyncio.to_thread(warm_up)
-    except Exception:
-        logger.exception("Claude client warm-up failed — continuing anyway")
+    if ROLES & _CALLS_CLAUDE:
+        try:
+            await asyncio.to_thread(warm_up)
+        except Exception:
+            logger.exception("Claude client warm-up failed — continuing anyway")
 
     reporter = asyncio.create_task(query_stats.run_reporter())
 
     yield
 
+    # SIGTERM: uvicorn stops taking requests and waits for those in flight (a push's work runs inside one).
     reporter.cancel()
-    await realtime_listener.stop()
+    await bus.shutdown()
+    if "api" in ROLES:
+        await realtime_listener.stop()
 
 
 app = FastAPI(title="fyp API", lifespan=lifespan)
@@ -89,24 +114,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_protected = [Depends(auth.require_auth)]
+_protected = [Depends(auth.bind_actor)]
 
-# Not in _protected: /health, /health/db (see app/health.py — a Cloud Run
-# liveness/readiness probe can't carry an Authorization header) and
-# /auth/login below (it's what issues the token in the first place).
+# Not in _protected: /health, /healthz, /health/db (a probe can't carry an Authorization header),
+# /auth/login (it issues the token) and /push (Cloud Run IAM guards it).
 app.include_router(health.router)
-app.include_router(cases.router, dependencies=_protected)
-app.include_router(upload.router, dependencies=_protected)
-app.include_router(documents.router, dependencies=_protected)
-app.include_router(monitoring.router, dependencies=_protected)
-app.include_router(detection.router, dependencies=_protected)
-app.include_router(detection.cases_router, dependencies=_protected)
-app.include_router(injection.router, dependencies=_protected)
-# Not in _protected as a whole: the WebSocket route can't carry an
-# Authorization header from the browser, so it checks its own short-lived
-# ticket query param instead (see routers/ws.py) — its sibling POST
-# /ws/tickets route applies require_auth itself, directly on that route.
-app.include_router(ws.router)
+
+if "api" in ROLES:
+    app.include_router(cases.router, dependencies=_protected)
+    app.include_router(upload.router, dependencies=_protected)
+    app.include_router(documents.router, dependencies=_protected)
+    app.include_router(monitoring.router, dependencies=_protected)
+    app.include_router(detection.router, dependencies=_protected)
+    app.include_router(detection.cases_router, dependencies=_protected)
+    # The WebSocket can't carry an Authorization header, so it checks its own short-lived ticket (routers/ws.py).
+    app.include_router(ws.router)
+
+    if IN_PROCESS and importlib.util.find_spec("app.injection") is not None:
+        # Dev-only fraud injection: uvicorn mode only; the images leave it out.
+        from .routers import injection
+
+        app.include_router(injection.router, dependencies=_protected)
+
+if "audit-metrics" in ROLES:
+    app.include_router(audit_router.router, dependencies=_protected)
+
+if not IN_PROCESS and registry.installed_roles():
+    app.include_router(event_push.router)
 
 
 class LoginRequest(BaseModel):
@@ -119,18 +153,22 @@ class LoginResponse(BaseModel):
     username: str
 
 
-@app.post("/auth/login", response_model=LoginResponse)
-def login(body: LoginRequest) -> LoginResponse:
-    username = auth.verify_credentials(body.username, body.password)
-    if username is None:
-        # The attempted name is recorded; never the password.
-        audit.record("auth.login", body.username[:100], outcome="failed")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password",
-        )
-    audit.record("auth.login", username)
-    return LoginResponse(token=auth.create_token(username), username=username)
+if "api" in ROLES:
+
+    @app.post("/auth/login", response_model=LoginResponse)
+    async def login(body: LoginRequest) -> LoginResponse:
+        username = auth.verify_credentials(body.username, body.password)
+        if username is None:
+            # The attempted name is recorded; never the password.
+            await events.record(events.Event(
+                type=types.AUTH_LOGIN, actor_type="user", actor=body.username[:100], outcome="failed",
+            ))
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid username or password",
+            )
+        await events.record(events.Event(type=types.AUTH_LOGIN, actor_type="user", actor=username))
+        return LoginResponse(token=auth.create_token(username), username=username)
 
 
 @app.get("/message")

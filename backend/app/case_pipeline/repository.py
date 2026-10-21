@@ -64,6 +64,18 @@ def latest_run_id(case_id: str) -> str | None:
     return _row(rows[0])["run_id"] if rows else None
 
 
+def latest_run_state(case_id: str) -> tuple[str, datetime] | None:
+    """The newest run's status and start, without its large result and trace."""
+    rows = (
+        supabase_client.table(_TABLE).select("status, started_at").eq("case_id", case_id)
+        .order("started_at", desc=True).limit(1).execute().data
+    )
+    if not rows:
+        return None
+    row = _row(rows[0])
+    return str(row["status"]), datetime.fromisoformat(str(row["started_at"]))
+
+
 def finish_run(analysis: CaseAnalysis) -> bool:
     """
     Writes a run's outcome only while it is still the case's newest run.

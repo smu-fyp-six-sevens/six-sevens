@@ -20,7 +20,7 @@ openpyxl>=3.1
 pandas>=2.1
 
 # LangGraph pipeline (backend/app/langgraph) — imported unconditionally by
-# main.py (via queue_service -> langgraph.pipeline -> langgraph.graph), so
+# main.py (via workers -> langgraph.pipeline -> langgraph.graph), so
 # these are hard runtime dependencies, not optional.
 langgraph>=1.2,<2.0
 langchain-anthropic>=1.7,<2.0
@@ -34,3 +34,6 @@ opentelemetry-api>=1.27,<2.0
 opentelemetry-sdk>=1.27,<2.0
 opentelemetry-instrumentation-fastapi>=0.48b0
 opentelemetry-exporter-gcp-trace>=1.7,<2.0
+
+# Domain events between services (app/events); imported only with EVENT_TRANSPORT=pubsub.
+google-cloud-pubsub>=2.21,<3.0

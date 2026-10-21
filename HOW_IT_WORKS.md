@@ -22,7 +22,7 @@ A loan officer creates a **case** for a company applying for a loan and uploads 
 | **Live updates** | Supabase Realtime tells the backend a row changed; the backend pushes a case snapshot over a WebSocket | `realtime_listener.py`, `case_broadcaster.py`, `routers/ws.py` |
 | **Cost logging** | One `perf` log line per unit of work | `query_stats.py` |
 
-Everything runs in **one process**. The 5-service Pub/Sub split in `CLAUDE.md` is not built, and the queue is a list in memory, so queued work is lost on restart.
+Everything runs in **one process**. The cloud split in `CLOUD_ARCHITECTURE_PLAN.md` is not built, and the queue is a list in memory, so queued work is lost on restart.
 
 ---
 
@@ -189,7 +189,7 @@ Every 60 seconds a summary of Realtime and WebSocket traffic (events received, i
 
 **Built:** upload and queue; classify and extract with the reclassify loop; officer review tools; requirements checklist; case-match; the Detection Agent with 10 checks and on-demand single checks; per-document flags; the case analysis (deterministic and agent cross-document findings, score, outlook, additional documents, summary); live WebSocket updates; cost logging; a manual Cloud Run deploy workflow.
 
-**Not built:** the Output Aggregator; automatic case analysis when all documents are scanned; the 5-service Pub/Sub split; case-level flags; an officer review flow for flags (the `status` and `reviewed_by` columns exist, unused); Prometheus and Grafana. Open items are in `PENDING_WORK.md`.
+**Not built:** the Output Aggregator; automatic case analysis when all documents are scanned; the cloud split (`CLOUD_ARCHITECTURE_PLAN.md`); case-level flags; an officer review flow for flags (the `status` and `reviewed_by` columns exist, unused); Prometheus and Grafana. Open items are in `PENDING_WORK.md`.
 
 ## 10. Known rough edges
 
