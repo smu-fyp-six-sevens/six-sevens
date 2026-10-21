@@ -5,3 +5,4 @@ export * from './caseMatch';
 export * from './cases';
 export * from './documents';
 export * from './detection';
+export * from './notes';

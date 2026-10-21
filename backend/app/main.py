@@ -12,7 +12,7 @@ from .fraud_detection.external_validation.registry_lookups import land_use
 from .health import check_db_connection
 from .langgraph._anthropic import warm_up
 from .queue_service import document_queue
-from .routers import injection, cases, detection, documents, monitoring, upload, ws
+from .routers import injection, cases, detection, documents, monitoring, notes, upload, ws
 
 # No handler was ever configured for this app's own loggers, so INFO-level
 # calls (pipeline/detection progress) were silently dropped — only
@@ -101,6 +101,7 @@ app.include_router(documents.router, dependencies=_protected)
 app.include_router(monitoring.router, dependencies=_protected)
 app.include_router(detection.router, dependencies=_protected)
 app.include_router(detection.cases_router, dependencies=_protected)
+app.include_router(notes.router, dependencies=_protected)
 app.include_router(injection.router, dependencies=_protected)
 # Not in _protected as a whole: the WebSocket route can't carry an
 # Authorization header from the browser, so it checks its own short-lived

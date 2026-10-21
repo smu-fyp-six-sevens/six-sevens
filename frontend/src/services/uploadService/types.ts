@@ -373,3 +373,17 @@ export interface CaseAnalysisTraceStep {
   at: number;
   [key: string]: unknown;
 }
+
+// Mirrors CaseNote in backend/app/models.py. parent_id marks a reply; edited_at is set once its author edits it;
+// deleted_at marks a deleted note kept (text erased) as a placeholder above its replies.
+export interface CaseNote {
+  id: string;
+  case_id: string;
+  document_id: string | null;
+  parent_id: string | null;
+  author: string;
+  body: string;
+  created_at: string;
+  edited_at: string | null;
+  deleted_at: string | null;
+}

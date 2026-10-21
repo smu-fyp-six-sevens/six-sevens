@@ -20,6 +20,7 @@ import { CaseOverview } from './upload/CaseOverview';
 import { CaseSectionNav } from './upload/CaseSectionNav';
 import { caseSectionStatuses, isCaseSection, type CaseSection } from './upload/caseSections';
 import { FlaggedItemsCard } from './upload/FlaggedItemsCard';
+import { NotesCard } from '../components/NotesCard';
 import AppHeader from '../components/AppHeader';
 import CaseHeader, { CaseTitle, caseCrumb, caseQueueCrumb } from '../components/CaseHeader';
 import { useCases } from '../casesContext';
@@ -445,6 +446,8 @@ export default function UploadPage({
               analysed={risk !== null}
             />
           )}
+
+          {activeSection === 'notes' && <NotesCard caseId={selectedCase.id} caseNumber={selectedCase.caseNumber} documents={documents} />}
 
           {activeSection === 'audit' && <AuditTrailCard />}
         </div>
