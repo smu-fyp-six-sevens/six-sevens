@@ -15,10 +15,25 @@ export interface Breadcrumb {
   to: string;
   // The page you're on (or the item it belongs to): bold, and not a link.
   current?: boolean;
-  // Makes the crumb a switcher: clicking it lists the other items at its level (e.g. every
-  // case) to jump between. Called when the list opens, so it can fetch.
+  // Makes the crumb a switcher: hovering it (or clicking its caret) lists the other items at its
+  // level (e.g. every case) to jump between, while its label still links back to `to`. Called when
+  // the list opens, so it can fetch.
   loadMenu?: () => BreadcrumbMenuItem[] | Promise<BreadcrumbMenuItem[]>;
   menuLabel?: string;
+}
+
+// Hover opens the list after a short pause (so passing over the bar doesn't flash it) and closes it
+// shortly after the pointer leaves (so it can travel into the list). Only on devices that can hover.
+const HOVER_OPEN_MS = 180;
+const HOVER_CLOSE_MS = 250;
+const canHover = () => typeof window !== 'undefined' && window.matchMedia?.('(hover: hover)').matches;
+
+function CaretIcon() {
+  return (
+    <svg className="breadcrumb-caret" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
+      <path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
 }
 
 function CrumbMenu({ crumb }: { crumb: Breadcrumb }) {
@@ -28,6 +43,46 @@ function CrumbMenu({ crumb }: { crumb: Breadcrumb }) {
   const rootRef = useRef<HTMLSpanElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const menuId = useId();
+  // Opened by hovering: it closes when the pointer leaves, and doesn't take keyboard focus.
+  // A click pins it open until the next click outside or Escape.
+  const openedByHoverRef = useRef(false);
+  const hoverTimerRef = useRef<number | undefined>(undefined);
+
+  useEffect(() => () => window.clearTimeout(hoverTimerRef.current), []);
+
+  function handlePointerEnter() {
+    window.clearTimeout(hoverTimerRef.current);
+    if (open || !canHover()) return;
+    hoverTimerRef.current = window.setTimeout(() => {
+      openedByHoverRef.current = true;
+      setOpen(true);
+    }, HOVER_OPEN_MS);
+  }
+
+  function handlePointerLeave() {
+    window.clearTimeout(hoverTimerRef.current);
+    if (!openedByHoverRef.current) return;
+    hoverTimerRef.current = window.setTimeout(() => setOpen(false), HOVER_CLOSE_MS);
+  }
+
+  function handleToggleClick() {
+    window.clearTimeout(hoverTimerRef.current);
+    if (open && openedByHoverRef.current) {
+      // Already showing from the hover: the click pins it (and moves focus into it) rather than closing it.
+      openedByHoverRef.current = false;
+      focusCurrentItem();
+      return;
+    }
+    openedByHoverRef.current = false;
+    setOpen((current) => !current);
+  }
+
+  function focusCurrentItem() {
+    const links = listRef.current?.querySelectorAll<HTMLAnchorElement>('a');
+    const target = listRef.current?.querySelector<HTMLAnchorElement>('a[aria-current="page"]') ?? links?.[0];
+    target?.focus();
+    target?.scrollIntoView({ block: 'nearest' });
+  }
   // Read through a ref so a parent re-render (a new crumb object) doesn't reload an open list.
   const loadMenuRef = useRef(crumb.loadMenu);
   loadMenuRef.current = crumb.loadMenu;
@@ -62,18 +117,21 @@ function CrumbMenu({ crumb }: { crumb: Breadcrumb }) {
     return () => document.removeEventListener('mousedown', onPointerDown);
   }, [open]);
 
-  // Start on the current item (scrolled into view), or the first one.
+  // Opened by click or keyboard: start on the current item (scrolled into view), or the first one.
+  // Opened by hover: only scroll it into view, so focus stays where it was.
   useEffect(() => {
     if (!open || !items) return;
-    const links = listRef.current?.querySelectorAll<HTMLAnchorElement>('a');
-    const target = listRef.current?.querySelector<HTMLAnchorElement>('a[aria-current="page"]') ?? links?.[0];
-    target?.focus();
-    target?.scrollIntoView({ block: 'nearest' });
+    if (openedByHoverRef.current) {
+      listRef.current?.querySelector('a[aria-current="page"]')?.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    focusCurrentItem();
   }, [open, items]);
 
   function handleKeyDown(event: React.KeyboardEvent) {
     if (event.key === 'Escape') {
       setOpen(false);
+      openedByHoverRef.current = false;
       rootRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
       return;
     }
@@ -88,23 +146,48 @@ function CrumbMenu({ crumb }: { crumb: Breadcrumb }) {
   }
 
   return (
-    <span className="breadcrumb-menu" ref={rootRef} onKeyDown={handleKeyDown}>
-      <button
-        type="button"
-        className={`breadcrumb-switcher${crumb.current ? ' breadcrumb-switcher--current' : ''}`}
-        aria-label={crumb.menuLabel ? `${crumb.label}: ${crumb.menuLabel}` : crumb.label}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        aria-current={crumb.current ? 'page' : undefined}
-        title={crumb.label}
-        onClick={() => setOpen((current) => !current)}
-      >
-        <span className="breadcrumb-switcher-label">{crumb.label}</span>
-        <svg className="breadcrumb-caret" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
-          <path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
+    <span
+      className="breadcrumb-menu"
+      ref={rootRef}
+      onKeyDown={handleKeyDown}
+      onMouseEnter={handlePointerEnter}
+      onMouseLeave={handlePointerLeave}
+    >
+      {crumb.current ? (
+        // The page you're on: the label has nowhere to go, so the whole crumb opens the list.
+        <button
+          type="button"
+          className="breadcrumb-switcher breadcrumb-switcher--current"
+          aria-label={crumb.menuLabel ? `${crumb.label}: ${crumb.menuLabel}` : crumb.label}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-controls={open ? menuId : undefined}
+          aria-current="page"
+          title={crumb.label}
+          onClick={handleToggleClick}
+        >
+          <span className="breadcrumb-switcher-label">{crumb.label}</span>
+          <CaretIcon />
+        </button>
+      ) : (
+        // Above the page you're on: the label goes back to it, the caret opens the list.
+        <span className={`breadcrumb-split${open ? ' breadcrumb-split--open' : ''}`}>
+          <Link to={crumb.to} className="breadcrumb-split-link" title={crumb.label}>
+            {crumb.label}
+          </Link>
+          <button
+            type="button"
+            className="breadcrumb-split-caret"
+            aria-label={crumb.menuLabel ? `${crumb.label}: ${crumb.menuLabel}` : `Other items like ${crumb.label}`}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            aria-controls={open ? menuId : undefined}
+            onClick={handleToggleClick}
+          >
+            <CaretIcon />
+          </button>
+        </span>
+      )}
 
       {open && (
         <ul id={menuId} role="menu" className="breadcrumb-list" ref={listRef}>

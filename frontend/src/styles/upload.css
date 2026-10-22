@@ -550,6 +550,64 @@
   transform: rotate(180deg);
 }
 
+/* A crumb above the current page: its label links back, its caret opens the switcher list. */
+.breadcrumb-split {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  border-radius: 5px;
+  transition: background-color 0.12s;
+}
+
+.breadcrumb-split:hover,
+.breadcrumb-split--open {
+  background: rgba(61, 90, 128, 0.1);
+}
+
+.breadcrumb-split-link,
+.breadcrumb-split-caret {
+  padding: 3px 5px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.breadcrumb-split-link {
+  min-width: 0;
+  overflow: hidden;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  border-radius: 5px 0 0 5px;
+}
+
+.breadcrumb-split-link:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.breadcrumb-split-caret {
+  display: inline-flex;
+  align-items: center;
+  padding-left: 2px;
+  border-radius: 0 5px 5px 0;
+  cursor: pointer;
+}
+
+.breadcrumb-split:hover .breadcrumb-split-caret,
+.breadcrumb-split--open .breadcrumb-split-caret {
+  color: var(--ink);
+}
+
+.breadcrumb-split--open .breadcrumb-caret {
+  transform: rotate(180deg);
+}
+
+.breadcrumb-split-link:focus-visible,
+.breadcrumb-split-caret:focus-visible,
 .breadcrumb-link:focus-visible,
 .breadcrumb-switcher:focus-visible,
 .breadcrumb-list-item:focus-visible {

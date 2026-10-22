@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from 'react';
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type { DocumentRecord, DocumentCaseMatch, CaseMatchComparison, DocumentDetectionStage } from '../../services/uploadService';
 import {
   CLASSIFICATION_CONFIDENCE_THRESHOLD,
@@ -41,6 +41,7 @@ export function DocumentSummaryCard({
   failureReason,
   handleSaveType,
   hasDetectionReport,
+  headerActions,
   isSavingType,
   isUnconfirmedUnrecognised,
   lowClassificationConfidence,
@@ -49,6 +50,8 @@ export function DocumentSummaryCard({
   typeError,
 }: {
   canCorrectType: boolean;
+  // Shown beside the status, e.g. the document's actions menu.
+  headerActions?: ReactNode;
   caseMatch: DocumentCaseMatch | null;
   caseMatchMismatches: CaseMatchComparison[];
   chosenType: string;
@@ -89,14 +92,17 @@ export function DocumentSummaryCard({
               </div>
             </div>
 
-            <div
-              className={`document-status ${tone ? STATUS_CLASSES[tone].wrapper : ''}`}
-            >
-              <span
-                className={`status-dot ${tone ? STATUS_CLASSES[tone].dot : ''}`}
-              />
-              {isDocumentStuckProcessing(document) ? `${statusDisplay.label} (Stuck)` : statusDisplay.label}
-              {statusDisplay.inProgress && '…'}
+            <div className="document-header-side">
+              <div
+                className={`document-status ${tone ? STATUS_CLASSES[tone].wrapper : ''}`}
+              >
+                <span
+                  className={`status-dot ${tone ? STATUS_CLASSES[tone].dot : ''}`}
+                />
+                {isDocumentStuckProcessing(document) ? `${statusDisplay.label} (Stuck)` : statusDisplay.label}
+                {statusDisplay.inProgress && '…'}
+              </div>
+              {headerActions}
             </div>
           </div>
 
