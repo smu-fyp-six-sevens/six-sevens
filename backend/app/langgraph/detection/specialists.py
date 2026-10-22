@@ -109,13 +109,17 @@ SPECIALISTS: dict[str, Specialist] = {
             "External validation (the document's facts against outside references): live ACRA company "
             "records (the UEN exists, name, status, incorporation date, registered address), OneMap and "
             "HDB addresses, and published tables such as CPF rates, the GST rate, IRAS tax rules, a "
-            "bank's published identifiers and the public holidays for GIRO dates. Each tool decides "
+            "bank's published identifiers and the public holidays for GIRO dates. Pages of a multi-page "
+            "document (page consistency): page numbers with gaps or repeats, a balance carried forward that the "
+            "next page doesn't bring forward, a page whose account number or holder differs, a page of another "
+            "size or a scan among digital pages, and duplicated pages. Each tool decides "
             "internally which of its checks apply to this document's type; you only supply the "
             "bindings, from the field list and the check menus."
         ),
         tools=(
             detection_tools.spelling_tool,
             detection_tools.date_consistency_tool,
+            detection_tools.page_consistency_tool,
             numerical_checks_tool,
             external_validation_tool,
         ),

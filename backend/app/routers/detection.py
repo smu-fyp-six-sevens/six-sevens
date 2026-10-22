@@ -40,6 +40,8 @@ from ..fraud_detection.dates.date_anomalies import (
     DateAnomalyResult,
     check_date_anomalies,
 )
+from ..fraud_detection.pages import check_page_consistency
+from ..fraud_detection.pages.models import PageConsistencyResult
 from ..fraud_detection.spelling.spelling_anomaly import SpellingAnomalyResult, check_spelling_anomalies
 from ..fraud_detection.external_validation.runner import ExternalValidationResult, run_external_validation
 
@@ -276,6 +278,21 @@ async def get_spelling_anomaly(
         document_id, file_bytes, document.filename, extracted_fields
     )
     await _record_result(document_id, "check_spelling_anomaly", result, result.anomalies)
+    return result
+
+
+@router.get(
+    "/{document_id}/detection/page-consistency", response_model=PageConsistencyResult
+)
+async def get_page_consistency(
+    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
+) -> PageConsistencyResult:
+    """On-demand cross-page consistency (fraud_detection/pages), like the spelling check above: a pure
+    read/compute, nothing written to the database."""
+    file_bytes = await _download_document_bytes(document)
+    extracted_fields = await _fetch_extracted_fields(document_id)
+    result = await check_page_consistency(document_id, file_bytes, document.filename, extracted_fields)
+    await _record_result(document_id, "check_page_consistency", result, result.findings)
     return result
 
 

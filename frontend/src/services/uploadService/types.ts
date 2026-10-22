@@ -253,6 +253,7 @@ export type IndividualCheckId =
   | 'spelling-anomaly'
   | 'numerical-validation'
   | 'date-anomalies'
+  | 'page-consistency'
   | 'company-name-consistency'
   | 'external-validation'
   | 'metadata-anomaly'
