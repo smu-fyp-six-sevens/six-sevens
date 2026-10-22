@@ -107,6 +107,18 @@ export interface DocumentRow {
   metadata: Record<string, unknown> | null;
 }
 
+export interface NoteRow {
+  id: string;
+  case_id: string;
+  document_id: string | null;
+  parent_id: string | null;
+  author: string;
+  body: string;
+  created_at: string;
+  edited_at: string | null;
+  deleted_at: string | null;
+}
+
 export interface UploadOutcome {
   success: boolean;
   error?: string;
@@ -193,6 +205,8 @@ export class MockBackend {
   detectionReports: Record<string, unknown> = {};
   /** LangGraph pipeline trace per document id (GET .../langgraph-trace); none = 404. */
   traces: Record<string, unknown> = {};
+  /** Notes on cases and documents (GET/POST /cases/:id/notes), signed by the logged-in officer. */
+  notes: NoteRow[] = [];
   /** Per-filename upload results; files not listed here upload successfully. */
   uploadOutcomes: Record<string, UploadOutcome> = {};
   /** When set, upload-batch waits for this before answering (to observe "Uploading"). */
@@ -300,6 +314,60 @@ export class MockBackend {
         this.cases = this.cases.filter((c) => c.id !== found.id);
         return route.fulfill({ status: 204, headers: corsHeaders() });
       }
+    }
+    const notesMatch = path.match(/^\/cases\/([^/]+)\/notes$/);
+    if (notesMatch) {
+      const caseId = notesMatch[1];
+      if (method === 'GET') return json(this.notes.filter((n) => n.case_id === caseId));
+      if (method === 'POST') {
+        const { body: text, document_id, parent_id } = body as {
+          body: string;
+          document_id: string | null;
+          parent_id: string | null;
+        };
+        const parent = parent_id ? this.notes.find((n) => n.id === parent_id) : undefined;
+        if (parent?.deleted_at) return json({ detail: 'This note was deleted.' }, 409);
+        const note: NoteRow = {
+          id: `note-${this.notes.length + 1}`,
+          case_id: caseId,
+          // Like the backend: a reply belongs to its note's document.
+          document_id: parent ? parent.document_id : document_id,
+          parent_id: parent_id ?? null,
+          author: this.credentials.username,
+          body: text.trim(),
+          created_at: new Date().toISOString(),
+          edited_at: null,
+          deleted_at: null,
+        };
+        this.notes.push(note);
+        return json(note, 201);
+      }
+    }
+    const noteMatch = path.match(/^\/cases\/([^/]+)\/notes\/([^/]+)$/);
+    if (noteMatch && (method === 'PATCH' || method === 'DELETE')) {
+      const note = this.notes.find((n) => n.id === noteMatch[2] && n.case_id === noteMatch[1]);
+      if (!note) return json({ detail: 'Note not found in this case' }, 404);
+      // Like the backend: only the officer who wrote a note can change it.
+      if (note.author !== this.credentials.username) return json({ detail: 'Only the officer who wrote a note can change it.' }, 403);
+      if (note.deleted_at) return json({ detail: 'This note was already deleted.' }, 409);
+      if (method === 'PATCH') {
+        note.body = (body as { body: string }).body.trim();
+        note.edited_at = new Date().toISOString();
+        return json(note);
+      }
+      // Like the backend: replies stay. A note with replies becomes a placeholder, which goes with its last reply.
+      const replies = (id: string) => this.notes.filter((n) => n.parent_id === id);
+      if (note.parent_id === null && replies(note.id).length > 0) {
+        note.body = '(deleted)';
+        note.deleted_at = new Date().toISOString();
+      } else {
+        this.notes = this.notes.filter((n) => n.id !== note.id);
+        const parent = this.notes.find((n) => n.id === note.parent_id);
+        if (parent?.deleted_at && replies(parent.id).length === 0) {
+          this.notes = this.notes.filter((n) => n.id !== parent.id);
+        }
+      }
+      return route.fulfill({ status: 204, headers: corsHeaders() });
     }
 
     // --- documents --------------------------------------------------------

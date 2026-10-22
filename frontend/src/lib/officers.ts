@@ -7,8 +7,12 @@ const OFFICER_NAMES: Record<string, string> = {
   'carol': 'C. Wong',
 };
 
+export function officerName(username: string): string {
+  return OFFICER_NAMES[username] ?? username;
+}
+
 export function officerLabel(username: string | null): string {
   if (!username) return 'Loan Officer';
 
-  return `Loan Officer · ${OFFICER_NAMES[username] ?? username}`;
+  return `Loan Officer · ${officerName(username)}`;
 }

@@ -25,6 +25,7 @@ import { describeFailureReason } from './document-details/formatters';
 import { DocumentSummaryCard } from './document-details/DocumentSummaryCard';
 import { ExtractedInformationCard } from './document-details/ExtractedInformationCard';
 import { ManualReviewCard } from './document-details/ManualReviewCard';
+import { NotesCard } from '../components/NotesCard';
 import { useDetection } from './document-details/useDetection';
 import { useDocumentActions } from './document-details/useDocumentActions';
 import { useDocumentCaseMatch } from './document-details/useDocumentCaseMatch';
@@ -385,6 +386,20 @@ export default function DocumentDetailsPage({
             ⚠ {deleteDocumentError}
           </div>
         )}
+
+        {/* Notes: open on a locked document too, since a note never edits the document. */}
+
+        <NotesCard
+          caseId={selectedCase.id}
+          caseNumber={selectedCase.caseNumber}
+          documents={[{ id: document.id, filename: document.filename }]}
+          documentId={document.id}
+          lockedNotice={
+            isLocked
+              ? `Document ${isApproved ? 'approved' : 'rejected'} and locked · notes don't change it`
+              : undefined
+          }
+        />
 
         {/* Document summary */}
 
