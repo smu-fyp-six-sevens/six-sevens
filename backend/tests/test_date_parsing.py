@@ -19,7 +19,7 @@ from app.fraud_detection.dates.date_parsing import DateParts, date_in_period, pa
     "23rd Aug 2026", "23rd August, 2026", "23RD AUGUST, 2026", "Aug 23, 2026", "August 23rd, 2026",
     "August 23 2026", "2026 Aug 23",
     # weekdays and legal wording
-    "Sunday, 23 August 2026", "Sun 23 Aug 2026", "the 23rd day of August 2026", "23 day of August 2026",
+    "Sunday, 23 August 2026", "Sun 23 Aug 2026", "the 23rd day of August 2026", "23 day of August 2026", "Dated this 23 day of August 2026",
     # a trailing time
     "23 Aug 2026 08:12:17", "23/08/2026 2:30 PM", "2026-08-23T10:15:00Z", "2026-08-23T10:15:00+08:00",
     "2026-08-23 10:15 SGT", "23 Aug 2026, 10.30am",

@@ -3,7 +3,49 @@ import { createPortal } from 'react-dom';
 import { arrayTableColumns, formatCellValue } from './fieldDisplay';
 import { humanizeFieldKey } from '../../utils/fieldLabels';
 
-// Modal for viewing or editing an array of rows; portal-rendered.
+// Matches the width at which the document page shows the preview beside the fields (document-details.css).
+const SIDE_BY_SIDE_QUERY = '(min-width: 1101px)';
+
+interface DockBox {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+// While the document page shows its preview side by side, the box the editor docks into: the fields
+// column's width, and the preview's top and bottom. It then sits as a mirror of the preview instead of
+// covering it, so rows can be checked against the document as they're edited. Re-measured on scroll,
+// since the preview only settles at its sticky position once the page has scrolled.
+function usePreviewDockBox(): DockBox | null {
+  const [box, setBox] = useState<DockBox | null>(null);
+
+  useEffect(() => {
+    function measure() {
+      const pane = document.querySelector('.document-preview-pane');
+      const fields = document.querySelector('.document-details-main');
+      if (!pane || !fields || !window.matchMedia(SIDE_BY_SIDE_QUERY).matches) {
+        setBox(null);
+        return;
+      }
+      const paneRect = pane.getBoundingClientRect();
+      const fieldsRect = fields.getBoundingClientRect();
+      setBox({ left: fieldsRect.left, right: fieldsRect.right, top: paneRect.top, bottom: paneRect.bottom });
+    }
+    measure();
+    window.addEventListener('resize', measure);
+    window.addEventListener('scroll', measure, { passive: true });
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure);
+    };
+  }, []);
+
+  return box;
+}
+
+// Modal for viewing or editing an array of rows; portal-rendered. Beside an open document preview it
+// docks over the fields column only, leaving the preview visible and scrollable.
 export function ArrayFieldModal({
   title,
   columns,
@@ -20,6 +62,19 @@ export function ArrayFieldModal({
   onSave?: (rows: Record<string, unknown>[]) => void;
 }) {
   const [rows, setRows] = useState(initialRows);
+  const dock = usePreviewDockBox();
+  const docked = dock !== null;
+  // The backdrop starts at the fields column (so the preview stays clickable) and runs to the viewport's
+  // right edge; its padding places the editor exactly over the column, level with the preview.
+  const dockStyle = dock
+    ? {
+        left: dock.left,
+        paddingTop: dock.top,
+        paddingBottom: Math.max(0, document.documentElement.clientHeight - dock.bottom),
+        paddingLeft: 0,
+        paddingRight: Math.max(0, document.documentElement.clientWidth - dock.right),
+      }
+    : undefined;
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -46,11 +101,16 @@ export function ArrayFieldModal({
   }
 
   return createPortal(
-    <div className="array-modal-backdrop" onClick={onClose}>
+    <div
+      className={`array-modal-backdrop${docked ? ' array-modal-backdrop--docked' : ''}`}
+      style={dockStyle}
+      onClick={onClose}
+    >
       <div
         className="array-modal"
         role="dialog"
-        aria-modal="true"
+        // Docked, the preview beside it stays usable, so the page isn't modal.
+        aria-modal={!docked}
         aria-label={title}
         onClick={(event) => event.stopPropagation()}
       >
