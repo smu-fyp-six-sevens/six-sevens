@@ -425,6 +425,11 @@ export class MockBackend {
         document.status = 'cancelled';
         return json(document);
       }
+      // A signed Storage URL for the file. The document page's side-by-side preview asks for one
+      // (?inline=true) as soon as it loads; about:blank renders an empty preview without another request.
+      if (method === 'GET' && rest === '/download') {
+        return json({ document_id: documentId, signed_url: 'about:blank', expires_in: 3600 });
+      }
       if (method === 'GET' && rest === '/detection/case-match') {
         const result = this.caseMatch[document.case_id ?? ''] as
           | { documents?: { document_id: string }[] }
