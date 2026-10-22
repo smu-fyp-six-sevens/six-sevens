@@ -30,12 +30,16 @@ jobs:
         with:
           python-version: '3.13'
 
+      # Cached between runs, so apt-get update (the slow part) only runs when the cache is empty.
       - name: Install exiftool (the metadata and AI-provenance tests need it)
+        uses: awalsh128/cache-apt-pkgs-action@v1.4.3
+        with:
+          packages: libimage-exiftool-perl
+          version: 1.0
+
+      - name: Check exiftool
         working-directory: .
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libimage-exiftool-perl
-          exiftool -ver
+        run: exiftool -ver
 
       - name: Install backend dependencies
         run: |
@@ -82,6 +86,11 @@ jobs:
     # instead of a second job repeating checkout/setup-node/npm ci.
     name: Frontend CI
     runs-on: ubuntu-latest
+    # Chromium and its system libraries come with the image, so there is no browser install step. The tag must
+    # match @playwright/test in frontend/package-lock.json; bump both together.
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --user 1001
     defaults:
       run:
         working-directory: frontend
@@ -104,9 +113,6 @@ jobs:
 
       - name: Build frontend
         run: npm run build
-
-      - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
 
       - name: Run regression tests
         run: npm run test:e2e
