@@ -5,6 +5,7 @@
 # creates billing_export.costs, a view with stable column names, which the Cost dashboard's "Billed" row reads.
 
 resource "google_bigquery_dataset" "billing" {
+  #checkov:skip=CKV_GCP_81:Google-managed encryption; billing lines are not sensitive enough to justify a KMS key.
   dataset_id    = "billing_export"
   friendly_name = "Cloud Billing export"
   description   = "Standard usage cost export, written by Cloud Billing; read by Grafana through the costs view."
@@ -23,6 +24,8 @@ resource "google_bigquery_dataset_iam_member" "grafana_reader" {
 }
 
 resource "google_bigquery_table" "costs" {
+  #checkov:skip=CKV_GCP_80:A view holds no data of its own.
+  #checkov:skip=CKV_GCP_121:A view, recreated from its query; protection would block changing billing_export_table.
   count               = var.billing_export_table == "" ? 0 : 1
   dataset_id          = google_bigquery_dataset.billing.dataset_id
   table_id            = "costs"

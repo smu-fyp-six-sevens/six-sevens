@@ -26,9 +26,9 @@ logger = logging.getLogger("classifier_pipeline.langgraph.detection.tool_timeout
 
 # These call a model or an outside registry.
 _SLOW_TOOLS = frozenset({"ai_generation_tool", "numerical_checks_tool", "external_validation_tool"})
-# The wrappers guard_tool made, held weakly. Not tool ids: Python reuses the id of a collected object, so a new
-# tool could look already guarded and run with no limit.
-_limited: weakref.WeakSet = weakref.WeakSet()
+# Each wrapper guard_tool made -> the coroutine it limits, so guarding again (or guarding a copy) re-wraps the
+# original instead of stacking limits or keeping a stale one. Not tool ids: Python reuses them after collection.
+_originals: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
 
 def timeout_for(tool_name: str) -> float:
@@ -77,8 +77,9 @@ def guard_tool(tool: BaseTool) -> BaseTool:
     if not isinstance(tool, StructuredTool):
         return tool
     original = tool.coroutine
-    if original is None or original in _limited:
+    if original is None:
         return tool
+    original = _originals.get(original, original)
     seconds = timeout_for(tool.name)
 
     @functools.wraps(original)
@@ -101,5 +102,5 @@ def guard_tool(tool: BaseTool) -> BaseTool:
             return _result(tool.name, [], unable=reason)
 
     tool.coroutine = limited
-    _limited.add(limited)
+    _originals[limited] = original
     return tool

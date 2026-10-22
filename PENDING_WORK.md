@@ -101,6 +101,7 @@ Built on the `microservices` branch (2026-10-22): Kong, `/metrics` in every serv
 
 ## Small known gaps
 
+- **Checkov's Dockerfile findings (security job, non-blocking).** All four images fail CKV_DOCKER_2 (no `HEALTHCHECK`) and CKV_DOCKER_3 (no `USER`). Cloud Run ignores `HEALTHCHECK` (it uses its own probes), so skip that one with a reason. For `USER`: Grafana and Kong's base images already run as non-root, so add `USER grafana` / `USER kong` explicitly; the backend (and the nginx frontend, which would need `nginx-unprivileged` or a non-80 port) runs as root and should get its own user. Rebuild and redeploy to check. Then remove `continue-on-error` from the security job. The Terraform findings were reviewed on 2026-10-22: customer-managed keys, the view's deletion protection and the GitHub OIDC branch pin are skipped inline with reasons.
 - **Frontend type errors CI doesn't catch.** `tsc` fails on `frontend/src/pages/upload/CaseOverview.tsx:72`, a teammate's case-summary code from commit `d1529ee`. A finding's severity can be `info`, but the sort table lists only high, medium and low; adding `info: 3` fixes it. CI runs lint and build (Vite doesn't type-check) but not `tsc --noEmit`, so add that step to the frontend job.
 
 - `submission_finalized` is remembered per process (`case_service._synced_finalized`) so an unchanged value isn't rewritten. With more than one backend instance, or a hand edit in the database, the stored value is corrected on the next change in the computed answer, not before.

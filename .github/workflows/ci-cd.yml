@@ -145,15 +145,24 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Checkov (Terraform, Dockerfiles, workflows)
-        run: |
-          python -m pip install "checkov>=3.2,<4"
-          checkov -d deploy/terraform --framework terraform --compact --quiet
-          checkov --framework dockerfile -f backend/Dockerfile -f deploy/kong/Dockerfile -f frontend/Dockerfile --compact --quiet
-          checkov -d .github/workflows --framework github_actions --compact --quiet
+      # One step per scan, so findings in one don't stop the others from running.
+      - name: Install Checkov
+        run: python -m pip install "checkov>=3.2,<4"
+
+      - name: Checkov (Terraform)
+        if: ${{ !cancelled() }}
+        run: checkov -d deploy/terraform --framework terraform --compact --quiet
+
+      - name: Checkov (Dockerfiles)
+        if: ${{ !cancelled() }}
+        run: checkov --framework dockerfile -f backend/Dockerfile -f deploy/kong/Dockerfile -f deploy/grafana/Dockerfile -f frontend/Dockerfile --compact --quiet
+
+      - name: Checkov (workflows)
+        if: ${{ !cancelled() }}
+        run: checkov -d .github/workflows --framework github_actions --compact --quiet
 
       - name: Snyk (Python and npm dependencies)
-        if: ${{ env.SNYK_TOKEN != '' }}
+        if: ${{ !cancelled() && env.SNYK_TOKEN != '' }}
         run: |
           # Snyk reads installed packages for a requirements file, so install them first.
           python -m pip install -r backend/requirements.txt
@@ -161,7 +170,7 @@ jobs:
           cd frontend && npm ci && npx --yes snyk@1 test --severity-threshold=high
 
       - name: pip-audit and npm audit (when there is no Snyk token)
-        if: ${{ env.SNYK_TOKEN == '' }}
+        if: ${{ !cancelled() && env.SNYK_TOKEN == '' }}
         run: |
           python -m pip install pip-audit
           pip-audit -r backend/requirements.txt

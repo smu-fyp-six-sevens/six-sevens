@@ -6,12 +6,14 @@ locals {
 }
 
 resource "google_pubsub_topic" "events" {
+  #checkov:skip=CKV_GCP_83:Google-managed encryption; events carry ids and statuses, not document contents.
   name                       = "domain-events"
   message_retention_duration = "604800s"
   depends_on                 = [google_project_service.apis]
 }
 
 resource "google_pubsub_topic" "dead_letter" {
+  #checkov:skip=CKV_GCP_83:Google-managed encryption; same events as domain-events.
   name                       = "domain-events-dead-letter"
   message_retention_duration = "604800s"
   depends_on                 = [google_project_service.apis]

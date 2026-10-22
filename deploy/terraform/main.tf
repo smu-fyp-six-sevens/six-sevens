@@ -103,6 +103,7 @@ resource "google_project_service" "apis" {
 }
 
 resource "google_artifact_registry_repository" "app" {
+  #checkov:skip=CKV_GCP_84:Google-managed encryption; images hold code, no secrets or documents.
   location      = var.region
   repository_id = "app"
   format        = "DOCKER"
