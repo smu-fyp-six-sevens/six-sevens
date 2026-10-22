@@ -48,6 +48,23 @@ def _run_scheduled_sync(case_id: str) -> None:
     _sync_case_now(case_id)
 
 
+def has_pending_syncs() -> bool:
+    return bool(_sync_timers)
+
+
+def flush_pending_syncs() -> None:
+    """
+    Runs every scheduled refresh now. Called before a request or push returns: Cloud Run throttles CPU
+    once nothing is in flight, so a timer left behind could stall until the instance's next request.
+    """
+    with _sync_lock:
+        pending = list(_sync_timers.items())
+        _sync_timers.clear()
+    for case_id, timer in pending:
+        timer.cancel()
+        _sync_case_now(case_id)
+
+
 def _sync_case_now(case_id: str | None) -> None:
     """
     Best-effort refresh of the case-level submission_finalized cache after a

@@ -8,8 +8,9 @@ from pydantic import BaseModel
 
 from ..langgraph import trace as langgraph_trace
 from ..langgraph.detection_report import read_report
-from ..models import DocumentRecord
-from .. import case_service, document_repository, extracted_fields_repository, storage_service
+from ..models import DocumentRecord, DocumentStatus
+from .. import case_service, document_repository, events, extracted_fields_repository, storage_service
+from ..events import officer_event, types
 from ..cpu_pool import run_cpu
 from . import documents as documents_router
 from ._dependencies import get_document_or_404, get_document_with_metadata_or_404, to_thread_or_502
@@ -103,7 +104,7 @@ async def _check_detection_has_run(document_id: str, document: DocumentRecord) -
     Gate for the individual on-demand checks below: a loan officer can run
     one specific check manually, but only after the full Lead Investigator
     pass (triggered automatically on approval — see
-    routers/documents.py's _launch_detection) has completed at least once
+    workers/detection.py) has completed at least once
     for this document — never the other way round. Checked by looking for
     a stored detection_report on the document's langgraph trace (same
     signal GET .../detection/report uses).
@@ -306,18 +307,18 @@ async def cancel_document_detection(
     Interrupts an in-flight detection run — the Detection panel's Cancel
     action while a document reads "Scanning"/"Detecting". Only takes effect
     at the graph's next await point (an Anthropic call already in flight
-    still completes) — see routers/documents.py's _run_detection_task.
-    The cancellation is then recorded the same way a crash is, so
-    GET .../detection/report and retry_document_detection below both
-    already know how to handle it.
+    still completes) — see workers/detection.py. The cancellation is then
+    recorded the same way a crash is, so GET .../detection/report and
+    retry_document_detection below both already know how to handle it.
     """
-    task = documents_router._detection_tasks.get(document_id)
-    if task is None or task.done():
+    if document.status != DocumentStatus.DETECTING:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="No detection run is currently in progress for this document.",
         )
-    task.cancel()
+    await events.publish(officer_event(
+        types.DETECTION_CANCEL_REQUESTED, document_id=document_id, case_id=document.case_id,
+    ))
     return {"status": "cancelling"}
 
 
@@ -338,8 +339,7 @@ async def retry_document_detection(
             status_code=status.HTTP_409_CONFLICT,
             detail="Detection doesn't run on documents with no type.",
         )
-    existing = documents_router._detection_tasks.get(document_id)
-    if existing is not None and not existing.done():
+    if document.status == DocumentStatus.DETECTING:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Detection is already running for this document.",
@@ -352,7 +352,10 @@ async def retry_document_detection(
             status_code=status.HTTP_409_CONFLICT,
             detail="Detection can only be retried after a cancelled or failed run.",
         )
-    documents_router._launch_detection(document_id, document.case_id)
+    await events.publish(officer_event(
+        types.DETECTION_RETRY_REQUESTED, document_id=document_id, case_id=document.case_id,
+        detail={"document_type": document.document_type},
+    ))
     return {"status": "retrying"}
 
 

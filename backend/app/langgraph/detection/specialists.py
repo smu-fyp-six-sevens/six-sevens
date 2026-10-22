@@ -25,7 +25,7 @@ from . import tools as detection_tools
 from .tool_timeout import guard_tool
 from .field_checks import external_validation_tool, numerical_checks_tool
 from ...config import settings
-from ... import telemetry
+from ... import metrics, telemetry
 from ...fraud_detection.shared.field_catalogue import render_field_catalogue
 from ...fraud_detection.shared.file_facts import render_file_facts
 from ...fraud_detection.numerical_validation.runner import render_check_roles
@@ -346,10 +346,15 @@ def _collect_node(state: SpecialistState) -> dict:
         result = _read_tool_message(message)
         if result is None:
             tool_name = message.name or "unknown"
+            metrics.detection_tool_calls.labels(tool_name, "error").inc()
             unable.append({"tool": tool_name, "reason": f"Tool error: {message_text(message.content)[:200]}", "_failed_call": tool_name})
             last_call_failed[tool_name] = True
             continue
         tool_key = result.tool or message.name or "unknown"
+        metrics.detection_tool_calls.labels(tool_key, (
+            "unable" if result.unable_to_assess else "nothing_to_check" if result.nothing_to_check
+            else "findings" if result.findings else "clean"
+        )).inc()
         last_call_failed[tool_key] = bool(result.unable_to_assess)
         if result.unable_to_assess:
             unable.append({"tool": result.tool, "reason": result.reason, "_failed_call": tool_key})

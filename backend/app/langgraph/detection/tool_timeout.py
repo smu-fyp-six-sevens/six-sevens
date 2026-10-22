@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import logging
+import weakref
 
 from langchain_core.tools import BaseTool, StructuredTool
 
@@ -25,7 +26,9 @@ logger = logging.getLogger("classifier_pipeline.langgraph.detection.tool_timeout
 
 # These call a model or an outside registry.
 _SLOW_TOOLS = frozenset({"ai_generation_tool", "numerical_checks_tool", "external_validation_tool"})
-_guarded: set[int] = set()
+# Each wrapper guard_tool made -> the coroutine it limits, so guarding again (or guarding a copy) re-wraps the
+# original instead of stacking limits or keeping a stale one. Not tool ids: Python reuses them after collection.
+_originals: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
 
 def timeout_for(tool_name: str) -> float:
@@ -74,8 +77,9 @@ def guard_tool(tool: BaseTool) -> BaseTool:
     if not isinstance(tool, StructuredTool):
         return tool
     original = tool.coroutine
-    if original is None or id(tool) in _guarded:
+    if original is None:
         return tool
+    original = _originals.get(original, original)
     seconds = timeout_for(tool.name)
 
     @functools.wraps(original)
@@ -98,5 +102,5 @@ def guard_tool(tool: BaseTool) -> BaseTool:
             return _result(tool.name, [], unable=reason)
 
     tool.coroutine = limited
-    _guarded.add(id(tool))
+    _originals[limited] = original
     return tool

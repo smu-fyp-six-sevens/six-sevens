@@ -25,6 +25,8 @@ from typing import Any, Iterator
 import httpx
 from langchain_core.callbacks import AsyncCallbackHandler
 
+from . import metrics, pricing, telemetry
+
 logger = logging.getLogger("perf")
 
 REPORT_INTERVAL_SECONDS = 60
@@ -41,6 +43,7 @@ class _Scope:
         self.llm_output_tokens = 0
         self.llm_cache_read = 0
         self.llm_cache_write = 0
+        self.llm_cost_usd = 0.0
         self._lock = threading.Lock()  # to_thread calls in one scope can run concurrently
 
     def add_call(self, label: str) -> None:
@@ -51,13 +54,16 @@ class _Scope:
         with self._lock:
             self.db_seconds += seconds
 
-    def add_llm(self, input_tokens: int, output_tokens: int, cache_read: int = 0, cache_write: int = 0) -> None:
+    def add_llm(
+        self, input_tokens: int, output_tokens: int, cache_read: int = 0, cache_write: int = 0, cost_usd: float = 0.0,
+    ) -> None:
         with self._lock:
             self.llm_calls += 1
             self.llm_input_tokens += input_tokens
             self.llm_output_tokens += output_tokens
             self.llm_cache_read += cache_read
             self.llm_cache_write += cache_write
+            self.llm_cost_usd += cost_usd
 
     def summary(self) -> str:
         with self._lock:
@@ -69,12 +75,21 @@ class _Scope:
             if self.llm_calls:
                 parts.append(
                     f"{self.llm_calls} claude ({self.llm_input_tokens} in / {self.llm_output_tokens} out tokens; "
-                    f"cache read {self.llm_cache_read} / write {self.llm_cache_write})"
+                    f"cache read {self.llm_cache_read} / write {self.llm_cache_write}; ${self.llm_cost_usd:.4f})"
                 )
             return " | ".join(parts)
 
     def is_empty(self) -> bool:
         return not self.calls and not self.llm_calls
+
+    def llm_detail(self) -> dict[str, float | int]:
+        """This unit's Claude usage for its end-of-run event, so the audit trail carries cost per document and case."""
+        with self._lock:
+            return {
+                "llm_cost_usd": round(self.llm_cost_usd, 6), "llm_calls": self.llm_calls,
+                "llm_input_tokens": self.llm_input_tokens, "llm_output_tokens": self.llm_output_tokens,
+                "llm_cache_read_tokens": self.llm_cache_read, "llm_cache_write_tokens": self.llm_cache_write,
+            }
 
 
 _current: contextvars.ContextVar[_Scope | None] = contextvars.ContextVar("query_scope", default=None)
@@ -91,7 +106,8 @@ def label_path(path: str) -> str:
 
 
 @contextmanager
-def scope(name: str) -> Iterator[_Scope]:
+def scope(name: str, work: str | None = None) -> Iterator[_Scope]:
+    """`work` (a fixed kind, e.g. "detection") also records the unit's Claude cost and calls as metrics."""
     current = _Scope(name)
     token = _current.set(current)
     started = time.perf_counter()
@@ -99,6 +115,11 @@ def scope(name: str) -> Iterator[_Scope]:
         yield current
     finally:
         _current.reset(token)
+        if work is not None:
+            metrics.record_work(
+                work, current.llm_cost_usd, current.llm_calls,
+                current.llm_input_tokens, current.llm_cache_read,
+            )
         if not current.is_empty():
             logger.info("%s -> %s, %.0fms total", name, current.summary(), (time.perf_counter() - started) * 1000)
 
@@ -128,7 +149,9 @@ def _call_label(request: httpx.Request) -> str:
 
 
 def _on_request(request: httpx.Request) -> None:
-    _active().add_call(_call_label(request))
+    label = _call_label(request)
+    _active().add_call(label)
+    metrics.supabase_calls.labels(label.split(" ", 1)[-1]).inc()
     request.extensions["query_stats_started"] = time.perf_counter()
 
 
@@ -145,21 +168,30 @@ HTTPX_EVENT_HOOKS: dict[str, list[Any]] = {"request": [_on_request], "response":
 
 
 class _LLMUsage(AsyncCallbackHandler):
-    async def on_llm_end(self, response, **kwargs: Any) -> None:
-        input_tokens = output_tokens = cache_read = cache_write = 0
+    """Counts each call into the current scope and the metrics, labelled by agent (telemetry.current_agent)."""
+
+    def __init__(self) -> None:
+        self._started: dict[Any, tuple[float, str]] = {}  # run_id -> (start time, agent)
+
+    async def on_chat_model_start(self, serialized: Any, messages: Any, *, run_id: Any, **kwargs: Any) -> None:
+        self._started[run_id] = (time.perf_counter(), telemetry.current_agent())
+
+    async def on_llm_end(self, response, *, run_id: Any = None, **kwargs: Any) -> None:
+        started, agent = self._started.pop(run_id, (None, telemetry.current_agent()))
+        seconds = time.perf_counter() - started if started is not None else None
         for generations in response.generations:
             for generation in generations:
-                usage = getattr(getattr(generation, "message", None), "usage_metadata", None) or {}
-                details = usage.get("input_token_details") or {}
-                input_tokens += usage.get("input_tokens", 0)
-                output_tokens += usage.get("output_tokens", 0)
-                cache_read += details.get("cache_read", 0)
-                # The API may report a write only under its per-lifetime keys, leaving the total at 0.
-                cache_write += max(
-                    details.get("cache_creation", 0),
-                    details.get("ephemeral_5m_input_tokens", 0) + details.get("ephemeral_1h_input_tokens", 0),
+                used = pricing.usage(getattr(generation, "message", None))
+                if used is None:
+                    continue
+                cost = metrics.record_llm(
+                    agent, used.model, used.uncached_input, used.output, used.cache_read, used.cache_write, seconds,
                 )
-        _active().add_llm(input_tokens, output_tokens, cache_read, cache_write)
+                _active().add_llm(used.total_input, used.output, used.cache_read, used.cache_write, cost)
+
+    async def on_llm_error(self, error: BaseException, *, run_id: Any = None, **kwargs: Any) -> None:
+        _, agent = self._started.pop(run_id, (None, telemetry.current_agent()))
+        metrics.llm_calls.labels(agent, "unknown", "error").inc()
 
 
 llm_callback = _LLMUsage()

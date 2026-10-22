@@ -16,6 +16,7 @@ import hmac
 import json
 import secrets
 import time
+from contextvars import ContextVar
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, status
@@ -32,11 +33,12 @@ TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days
 # token mints one of these via POST /ws/tickets (normal Authorization-header
 # auth) and puts only this in the WS URL instead — 10 seconds is generous for
 # "mint it, then immediately open the socket" but tight enough that a leaked
-# log line is worthless by the time anyone reads it. In-memory is fine: it
-# only has to survive the few seconds between minting and the handshake, and
-# doesn't need to survive a process restart.
+# log line is worthless by the time anyone reads it. Signed, not stored, so any
+# api instance accepts a ticket another minted (api can scale out). Single use
+# per instance: a replay within the 10 s reaching a second instance would pass.
 WS_TICKET_TTL_SECONDS = 10
-_ws_tickets: dict[str, float] = {}
+_WS_PURPOSE = "ws"
+_used_ws_tickets: dict[str, float] = {}  # nonce -> expiry, so a ticket can't be reused on this instance
 
 
 def _b64encode(data: bytes) -> str:
@@ -95,27 +97,36 @@ def _verify_token(token: str) -> str | None:
 
 def create_ws_ticket() -> str:
     """
-    Called from POST /ws/tickets, which sits behind require_auth — only
-    reachable with a valid bearer token already. Returns a random opaque
-    ticket, not tied to that token in any way beyond "someone with a valid
-    token asked for one" (no need to track which user/token minted it, since
-    this app has no concept of separate users).
+    Called from POST /ws/tickets, which sits behind require_auth — only reachable with a valid bearer
+    token already. Signed like the login token but with its own purpose, so neither works as the other.
     """
-    ticket = secrets.token_urlsafe(32)
-    _ws_tickets[ticket] = time.time() + WS_TICKET_TTL_SECONDS
-    return ticket
+    payload = json.dumps({
+        "purpose": _WS_PURPOSE, "nonce": secrets.token_urlsafe(16), "exp": time.time() + WS_TICKET_TTL_SECONDS,
+    }).encode("utf-8")
+    payload_b64 = _b64encode(payload)
+    return f"{payload_b64}.{_sign(payload_b64)}"
 
 
 def consume_ws_ticket(ticket: str) -> bool:
-    """
-    Single-use by construction: whether this returns True or False, the
-    ticket is removed, so a captured ticket (e.g. via a log line) can't be
-    replayed even within its own TTL window.
-    """
-    expires_at = _ws_tickets.pop(ticket, None)
-    if expires_at is None:
+    """True for a genuine, unexpired ticket not yet used on this instance."""
+    try:
+        payload_b64, sig = ticket.split(".", 1)
+        if not hmac.compare_digest(sig, _sign(payload_b64)):
+            return False
+        payload = json.loads(_b64decode(payload_b64))
+        nonce, expires_at = str(payload["nonce"]), float(payload["exp"])
+        if payload.get("purpose") != _WS_PURPOSE:
+            return False
+    except (ValueError, KeyError, TypeError):
         return False
-    return time.time() < expires_at
+    now = time.time()
+    for used, expiry in list(_used_ws_tickets.items()):
+        if expiry <= now:
+            _used_ws_tickets.pop(used, None)
+    if now >= expires_at or nonce in _used_ws_tickets:
+        return False
+    _used_ws_tickets[nonce] = expires_at
+    return True
 
 
 def require_auth(authorization: str | None = Header(default=None)) -> str:
@@ -138,3 +149,16 @@ def require_auth(authorization: str | None = Header(default=None)) -> str:
 
 # A handler takes `user: CurrentUser` to learn who is acting; the actor is always read from the token.
 CurrentUser = Annotated[str, Depends(require_auth)]
+
+# The signed-in officer for the current request, so events record who acted without every handler passing it.
+_actor: ContextVar[str | None] = ContextVar("actor", default=None)
+
+
+async def bind_actor(user: CurrentUser) -> str:
+    """Router-level dependency: require_auth, then remember the user. Async, so the value reaches the handler."""
+    _actor.set(user)
+    return user
+
+
+def current_actor() -> str | None:
+    return _actor.get()

@@ -12,7 +12,6 @@ from .case_pipeline import repository as analysis_repository, state as analysis_
 from .case_pipeline.models import CaseAnalysis
 from .case_pipeline.readiness import is_ready_for_analysis
 from .case_pipeline.risk import store as risk_store
-from .config import settings
 from .langgraph import trace as langgraph_trace
 from .langgraph.extraction_prompts import EXTRACTION_SCHEMAS
 
@@ -501,7 +500,7 @@ def list_case_summaries() -> list[CaseListItem]:
     the latest saved scores), not one per case. The score is whatever the
     case's last analysis run saved; nothing is recomputed here.
     """
-    cases = case_repository.list_cases(include_dev=not settings.IS_CLOUD_DEPLOYMENT)
+    cases = case_repository.list_cases()
     documents_by_case: dict[str, list[DocumentRecord]] = defaultdict(list)
     for doc in document_repository.list_documents(include_fields=False):
         if doc.case_id is not None:

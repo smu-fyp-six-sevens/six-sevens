@@ -2,6 +2,7 @@ import { assertOk } from './request';
 import { authFetch } from '../../lib/api';
 import type {
   CaseAnalysis,
+  CaseCost,
   CaseOption,
   UpdatedCase,
 } from './types';
@@ -39,6 +40,15 @@ export async function runCaseAnalysis(caseId: string): Promise<CaseAnalysis> {
   await assertOk(response, 'Failed to start the case analysis');
 
   return (await response.json()) as CaseAnalysis;
+}
+
+// Claude spend recorded in the audit trail for this case's runs (served by audit-metrics).
+export async function getCaseCost(caseId: string): Promise<CaseCost> {
+  const response = await authFetch(`/audit/cases/${caseId}/cost`);
+
+  await assertOk(response, 'Failed to fetch the case cost');
+
+  return (await response.json()) as CaseCost;
 }
 
 export async function getCaseAnalysis(caseId: string): Promise<CaseAnalysis | null> {

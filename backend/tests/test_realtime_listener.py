@@ -182,7 +182,7 @@ async def test_an_event_that_names_no_case_delivers_nothing(payload) -> None:
 
 
 @pytest.mark.asyncio
-async def test_start_subscribes_to_documents_and_cases_changes() -> None:
+async def test_start_subscribes_to_documents_cases_and_analysis_changes() -> None:
     mock_channel = MagicMock()
     mock_channel.subscribe = AsyncMock()
     mock_client = MagicMock()
@@ -194,11 +194,11 @@ async def test_start_subscribes_to_documents_and_cases_changes() -> None:
     ):
         await realtime_listener.start()
 
-    mock_client.channel.assert_called_once_with("case-status-changes")
-    assert mock_channel.on_postgres_changes.call_count == 2
+    # case_analysis_runs has its own channel, so a table missing from the publication can't break the main one.
+    assert [c.args[0] for c in mock_client.channel.call_args_list] == ["case-status-changes", "case-analysis-changes"]
     tables = {call.kwargs["table"] for call in mock_channel.on_postgres_changes.call_args_list}
-    assert tables == {"documents", "cases"}
-    mock_channel.subscribe.assert_awaited_once()
+    assert tables == {"documents", "cases", "case_analysis_runs"}
+    assert mock_channel.subscribe.await_count == 2
     assert realtime_listener._client is mock_client
     assert realtime_listener._channel is mock_channel
 

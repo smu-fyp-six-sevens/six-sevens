@@ -1,0 +1,16 @@
+**/.env
+**/.env.*
+**/.venv
+**/venv
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.coverage
+.git
+frontend/dist
+frontend/playwright-report
+frontend/test-results
+backend/documents_generated
+backend/data
+deploy/terraform/.terraform

@@ -41,7 +41,8 @@ from app.langgraph import nodes, pipeline, text_cache, trace
 from app.langgraph.extract import _EXTRACTION_MAX_TOKENS
 from app.langgraph.extraction_prompts import EXTRACTION_SCHEMAS
 from app.models import DocumentRecord, DocumentStatus
-from app.queue_service import DocumentQueue
+from app.events import Event, types
+from app.workers import documents as doc_worker
 
 FIXTURES = Path(__file__).parent / "fixtures" / "regression"
 ANCHORPOINT = json.loads((FIXTURES / "anchorpoint.json").read_text())
@@ -158,6 +159,9 @@ class FakeStore:
 
     def update_status(self, document_id, status, **changes):
         document = self.documents[document_id]
+        expected = changes.get("expected_current_statuses")
+        if expected is not None and document.status not in expected:
+            return False
         document.status = DocumentStatus(status)
         self.statuses[document_id].append(document.status.value)
         if changes.get("document_type"):
@@ -167,6 +171,7 @@ class FakeStore:
             document.failure_reason = None
         elif changes.get("failure_reason") is not None:
             document.failure_reason = changes["failure_reason"]
+        return True
 
     def record_classification(self, document_id, **recorded):
         self.classifications[document_id] = recorded
@@ -220,7 +225,7 @@ def ai(monkeypatch) -> Script:
 @pytest.fixture
 def store(monkeypatch) -> FakeStore:
     fake = FakeStore()
-    for target in ("app.langgraph.nodes.document_repository", "app.queue_service.document_repository"):
+    for target in ("app.langgraph.nodes.document_repository", "app.workers.documents.document_repository"):
         monkeypatch.setattr(target, fake)
     monkeypatch.setattr("app.langgraph.nodes.extracted_fields_repository", fake)
     monkeypatch.setattr("app.langgraph.nodes.storage_service", fake)
@@ -231,8 +236,8 @@ def store(monkeypatch) -> FakeStore:
 
 
 async def run(document_id: str) -> None:
-    """Dequeue and process one document, exactly as the queue worker does."""
-    await DocumentQueue()._process_document(document_id, dequeued_at=time.monotonic())
+    """Process one uploaded document, exactly as the doc-worker does on its event."""
+    await doc_worker.on_queued(Event(type=types.DOCUMENT_UPLOADED, document_id=document_id))
 
 
 def steps(document_id: str) -> list[str]:
@@ -252,8 +257,8 @@ async def test_a_queued_document_is_handed_to_the_classifier_within_one_second(a
     async def classifier(doc_id):
         handed_off.append((doc_id, time.monotonic() - dequeued_at))
 
-    monkeypatch.setattr("app.queue_service.langgraph_pipeline.process_document", classifier)
-    await DocumentQueue()._process_document(document_id, dequeued_at=dequeued_at)
+    monkeypatch.setattr("app.workers.documents.langgraph_pipeline.process_document", classifier)
+    await doc_worker.on_queued(Event(type=types.DOCUMENT_UPLOADED, document_id=document_id))
 
     assert store.statuses[document_id] == ["processing"]
     assert store.documents[document_id].status == DocumentStatus.PROCESSING
