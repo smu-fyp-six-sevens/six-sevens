@@ -51,10 +51,14 @@ async def run(document_id: str, case_id: str | None) -> None:
         ))
     outcome: Outcome = "success"
     detail: dict[str, Any] = {}
+    usage: dict[str, float | int] = {}
     try:
         async with _slots:
-            with query_stats.scope(f"detection doc={document_id[:8]}", work="detection"):
-                result = await run_detection(document_id)
+            with query_stats.scope(f"detection doc={document_id[:8]}", work="detection") as unit:
+                try:
+                    result = await run_detection(document_id)
+                finally:
+                    usage = unit.llm_detail()
         detail = {"verdict": result.get("verdict"), "findings": len(result.get("findings") or [])}
         metrics.detection_verdicts.labels(str(detail["verdict"] or "none")).inc()
     except asyncio.CancelledError:
@@ -80,7 +84,7 @@ async def run(document_id: str, case_id: str | None) -> None:
     await events.record(Event(
         type=types.DOCUMENT_DETECTED if outcome == "success" else types.DETECTION_FAILED,
         actor_type="agent", actor=_ACTOR, case_id=case_id, document_id=document_id,
-        outcome=outcome, detail=detail, **timer.fields(),
+        outcome=outcome, detail={**detail, "run": "detection", **usage}, **timer.fields(),
     ))
 
 

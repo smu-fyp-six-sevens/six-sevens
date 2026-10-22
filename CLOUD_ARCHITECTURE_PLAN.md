@@ -165,8 +165,6 @@ Unchanged between stages: Supabase, Artifact Registry, the events and ownership,
 | Cloud DNS, CDN, load balancer | Optional. Only for a custom domain or the static-site CDN option; Kong is the API entry point |
 | Artifact Registry | Yes, the only image registry. `ci-cd.yml` currently also publishes to GitHub's registry and `deploy.yml` builds separately; unify to one build per role |
 | Supabase Auth | Not in November. The interim login is `AUTH_USERS` (documented limitation). Later, Supabase Auth JWTs can be verified at Kong and the audit actor read from the token (open decision 6) |
-| Stripe, OpenAI | Not relevant (no payments; we use Anthropic) |
-| OutSystems | Likely the bank's front-end platform; treat as an outside consumer of our API. Not built; confirm with the sponsor |
 | Region | `asia-southeast1` (already the deploy default); check Supabase is in the same region |
 
 **Delivery pipeline** (GitHub Actions)
@@ -262,7 +260,9 @@ Rules and gotchas:
     - Cloud Run, estimated from vCPU-seconds, GiB-seconds and requests at tier-2 request-based prices; the prices are editable boxes on the dashboard.
     - Pub/Sub, from billable bytes.
     - Free-tier usage.
-    - Exact billed cost stays in Billing → Reports (or the BigQuery billing export, not set up).
+    - **Billed by Google:** a top row from Cloud Billing's export to BigQuery (`deploy/terraform/billing.tf`, the `billing_export.costs` view, Grafana's BigQuery plugin). It's hours behind and needs a billing admin to turn the export on.
+- **Alerts** (`monitoring.tf`, emailed to `alert_email`): dead letters, API 5xx above 5%, daily Claude spend, and recovery given up.
+- **Cost per document and case** is in the audit trail, not in metrics: each end-of-run event carries `detail.llm_cost_usd` and the token counts, and `GET /audit/cases/{id}/cost` adds them up.
 - **Traces (OpenTelemetry, `telemetry.py`).** On in the cloud (`OTEL_ENABLED=true` in Terraform) and sent to Cloud Trace, one service name each (`K_SERVICE`).
   - `events.publish` puts the W3C `traceparent` on each Pub/Sub message and the push adapter continues it, so an upload is one trace across api, doc-worker and detection-worker. Each handler run is a `handle <role> <type>` span.
   - Claude spans carry model, tokens and cost.
@@ -371,17 +371,28 @@ Open:
 - Lost publish: set a document to `queued` without publishing; the sweeper recovers it within one sweep plus the threshold, and the audit trail shows `recovery.requested` then `document.recovered`.
 - Stage 2: the same four as Litmus experiments (pod failure, load against the autoscaler).
 
-## 14. Borrowed from the reference material
+## 14. Design choices worth stating
 
-From `SMU-IS/agentic-ai-trading-be`: API and worker as separate processes of one codebase; Kong with one path prefix per service; a notification service (our live updates) and a metrics tracker (audit-metrics and Grafana); stage timestamps (our event gaps); a reusable workflow with thin callers; Helm chart with a values file per service and Argo CD-style deploys (Stage 2); Terraform layout with `monitoring.tf`; per-role compose files; chaos tests (pod failure, load).
+**What we chose:**
+- API and workers are separate processes of one codebase (`ROLE`).
+- Kong is the only entry point, with one path prefix per service.
+- Live updates and a metrics service (audit-metrics, Grafana) are their own concerns.
+- Stage timings come from the gaps between events.
+- Terraform is laid out by concern (`run.tf`, `pubsub.tf`, `monitoring.tf`, ...).
+- There's a compose file per role.
+- Failure tests: pod failure and load.
+- Stage 2: Helm with a values file per service, and Argo CD.
 
-From the architecture and pipeline diagrams: Artifact Registry, Terraform, Grafana and Prometheus, IAM, a billing view, Snyk and Checkov in CI, GKE with Argo CD (Stage 2).
-
-Not taken: 15 services (the reference suits many unrelated ML jobs), wildcard CORS with credentials, a gateway with no rate limiting, no healthchecks or resource limits, no lint or security scans in CI, Firestore, Cloud Storage for documents, Stripe, OpenAI.
+**What we deliberately avoided:**
+- A service per small job: six services split along real scaling and ownership lines are enough.
+- Wildcard CORS with credentials.
+- A gateway without rate limiting.
+- Services without health checks or resource limits.
+- CI without lint and security scans.
 
 ## 15. Out of scope here
 
-Stateful and learning agents (separate plan), a parser sandbox service, Redis (until a measured need), an OutSystems integration (to confirm with the sponsor).
+Stateful and learning agents (separate plan), a parser sandbox service, Redis (until a measured need).
 
 ## 16. Stuck work and recovery (a showcase item)
 

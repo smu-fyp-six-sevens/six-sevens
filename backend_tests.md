@@ -1,77 +1,136 @@
 # Tests: where we are and what's next
 
-Updated 2026-10-19. This comes from reading the tests, not from a full run: recent changes were checked by calling test functions directly, never with `pytest`. So the first job is a real run (below).
+Backend unit tests (`backend/tests`), Playwright (`frontend/e2e`), and the checks CI runs. Updated 2026-10-22 on the `microservices` branch.
 
-> **Note: all test documents are synthetic.** GLDB can't share real loan documents, so every fixture and generated document here, and in the manual test sets, is synthetic. That is a limitation of the whole system, not of this suite: real fraudsters' methods may differ from the ones we inject. It is recorded under the sponsor-confirmed facts in `CLAUDE.md`.
+This comes from reading every test file and measuring them with a static script (test counts, mocks, assertions). It does **not** come from a full run: `pytest` is run by you, and CI's coverage report wasn't read.
+
+> **All test documents are synthetic.** GLDB can't share real loan documents, so every fixture and generated document is synthetic. That limits the whole system, not just this suite: real fraudsters' methods may differ from the ones we inject (`CLAUDE.md`, sponsor-confirmed facts).
 
 ## 1. What you need to do next
 
-1. **Give the service role `DELETE` on the tables the backend now deletes from.** A test run reached the real database by accident (my direct-call runner lacked `conftest.py`'s network guard; it deleted nothing, because it used a case id that doesn't exist) and the database answered `permission denied for table case_analysis_runs` (42501). Until the privilege exists, **deleting a case will fail**. Run `grant delete on public.case_analysis_runs, public.flags, public.langgraph_trace to service_role;` in Supabase (it is harmless if the privilege is already there), and check `risk_scores` too, since the case delete touches it first. The README now lists the required privileges.
-2. **Run the full backend suite** (`pytest` in `backend/`) **and Playwright** (`npm run test:e2e` in `frontend/`). The tests in this file were changed in steps 1–6 below and checked only by calling them directly. Send me any failures and I'll fix them.
-3. **Commit and push**, then check that CI is green. The test changes from steps 1–6 are not committed yet.
-4. **Decide what to do with the six ignored test files** (about 140 tests that never run): delete them, move them out of `tests/`, or turn them back on. I'd move them out: today they look like coverage but aren't. They test the synthetic-data tool in `app/injection/`.
-5. **Optional:** install `exiftool` locally. Two tests in `test_ai_generation.py` are skipped without it. CI now installs it, so they run there; the other tests that deal with a missing exiftool fake its absence and are unaffected.
-6. **Optional:** change the Jira wording for SCRUM-109. The code is right: "confidences sum to 1" holds whenever there is at least one candidate.
+1. **Run the full backend suite** (`pytest` in `backend/`) **and Playwright** (`npm run test:e2e` in `frontend/`).
+   - The `microservices` work changed code that older tests exercise: event `detail` now carries cost, the debounce flush runs before each request returns, the approve route undoes an unpublished approval, and WebSocket tickets are signed.
+   - One test that compared `detail` exactly is already updated (`test_events.py`).
+   - Send me any failures.
+2. **Read the coverage table from the latest CI run.** In the CI job "Show coverage report (sorted by coverage, ascending)", the top rows are the least-covered modules. Paste them to me and I'll turn section 3 into facts.
+3. **Decide about the six ignored test files** (`conftest.collect_ignore`, about 137 tests that never run). They all test `app/injection/`, the synthetic-data tool, which no image ships any more. I'd move them out of `tests/`, next to the tool (for example `backend/app/injection/tests/`, run only by hand): today they look like coverage but aren't.
+4. **Optional:** install `exiftool` locally. Two `test_ai_generation.py` tests are skipped without it; CI installs it.
+
+**Fixed after your first run (2026-10-22):** `test_tool_timeout.py::test_a_job_that_runs_longer_than_the_limit_still_times_out` failed in the full suite. It was a real bug, not a flaky test. `tool_timeout.guard_tool` remembered which tools it had wrapped by `id()`. Python reuses a collected object's id, so a new tool could look already wrapped and run with **no time limit**. It now remembers the wrappers themselves in a `WeakSet`. The test functions pass repeatedly with forced garbage collection; rerun the suite to confirm.
+
+**Running tests outside pytest is unsafe.** `conftest.py` blocks every real Supabase call. Calling test functions directly (as I do, since I don't run pytest) skips that block. On 2026-10-22 that let a few WebSocket tests send failed *read* queries to the real database; nothing was written. Only fully mocked tests (`test_sweeper.py`, `test_pricing.py`) are safe to run that way.
 
 ## 2. How healthy is the suite?
 
-About 1,670 backend test functions in 80 files (many are parametrised, so they run as well over 2,000 cases), and 105 Playwright tests in 5 specs.
+**Backend:** 1,762 test functions in 87 files. 105 are parametrised, so the suite runs well over 2,000 cases. There are 3,695 plain `assert`s, 222 mock-call assertions and 972 patches. 6 files (about 137 tests) are ignored.
 
 | Group | Share | What to do |
 |---|---|---|
-| **Solid:** tests of the detection logic, the real-fixture `test_regression_*` files, case match, identifiers, company identity, cross-document checks, case risk, the external-call guard | about 65% | Keep |
-| **Brittle:** router and repository tests that check exactly which mock was called, so small refactors break them (about 60 tests use four or more `patch`es) | about 25% | Rewrite to check results instead (plan below) |
-| **Low value:** four "graph compiles" tests, two tests that only echo a mock, the ignored injection tests | about 10% | Merge, trim or decide |
+| **Solid:** the detection checks (layout 154 tests, numerical 84, image 51, metadata 37, fonts 35), the `test_regression_*` files on real fixtures, case match, identifiers, company identity, cross-document checks, case risk, the external-call guard, events and the sweeper | about 70% | Keep |
+| **Brittle:** router and repository tests that check exactly which mock was called, so a refactor breaks them even when behaviour is unchanged | about 20% | Rewrite to check results (step 7) |
+| **Low value or not running:** the ignored injection tests, and the remaining tests that only assert a mock was called | about 10% | Move, trim or rewrite |
 
-A few specific problems:
+**Where the brittleness is** (patches, mock-call assertions):
 
-- **Tests that prove little:** many of the repository and router tests still only assert that a mock was called (`test_document_repository`, `test_extracted_fields_repository`, `test_case_repository` and others). Step 7 below addresses this.
-- **Modules no test names:** `line_shifts.py` (the largest), `query_stats.py`, `vision_tool.py`, `telemetry.py`, `sg_reference/banks.py`, `giro.py`, `categories.py`, `cpu_pool.py`, `pdf_pages.py`, `supabase_rows.py`. Another test may cover them indirectly; a coverage run will tell. The same run should confirm the agent's checks in `cross_document/agents.py` and `verify.py`.
-- **Slowest file:** `test_ai_generation.py`, about 8 s (it was about 13 s; the shared test image is now cached). What's left is the detector itself.
-- **Noise:** some tests (for example in `test_ws`) log swallowed "real Supabase call" errors. They pass but are noisy.
+| File | Tests | Patches | Mock asserts | Tests with 4+ patches |
+|---|---|---|---|---|
+| `test_documents.py` | 74 | 192 | 47 | 15 |
+| `test_detection.py` | 29 | 94 | 19 | 15 |
+| `test_document_repository.py` | 31 | 60 | 37 | 1 |
+| `test_cases.py` | 19 | 40 | 11 | 0 |
+| `test_extracted_fields_repository.py` | 16 | 14 | 17 | 0 |
+| `test_case_service_repository.py` | 9 | 14 | 8 | 0 |
 
-## 3. Playwright: what's missing
+**16 tests assert only that a mock was called**, with no plain `assert`: in `test_extracted_fields_repository` (4), `test_document_repository` (2), `test_doc_worker` (2), `test_health` (2), `test_ws` (2), `test_classifier_extractor_output` (2), `test_supabase_client` (1) and `test_case_service_repository` (1). They pass as long as the code calls the mock, whatever it does with the result.
 
-Not covered by any spec: the case analysis card, login failure and the redirect when logged out, clicking **Cancel detection** (only that the button shows), detection error and retry, document retry or cancel during extraction, the move-documents dialog, websocket reconnect, and the **case-match triage chip** (a document from another company shows "Sent to manual review" while Approve stays enabled).
+**Noise:** some `test_ws` tests reach the snapshot code's trace reads, which the guard turns into logged "real Supabase call" errors. They pass, but the log looks like failures. Mock `langgraph_trace` in those tests too.
 
-Tests that prove less than they look like:
+## 3. Service code from the `microservices` work: what's tested
 
-- `DI-025` only checks a button is enabled; `CM-009` checks a placeholder.
-- `CM-026` sets the answer in the mock itself, so it tests the re-render, not the backend.
-- `DI-045` forces a case-match state the backend no longer produces for that document.
-- `FD-015`, `FD-017`, `FD-020` assert on the JSON fixture, not on the UI.
+| Code | Tested by | Gap |
+|---|---|---|
+| Event envelope, registry, in-process dispatch, the push adapter (role routing, malformed message 400, handler error not acked) | `test_events.py` | **Push token verification** (`_verify_push_token`): missing, invalid and wrong-account tokens should each give 401. Untested |
+| `subscriptions.json` matches the code; filters within Pub/Sub's 256 bytes | `test_events.py`, `test_sweeper.py` | |
+| Doc-worker and detection-worker runs, announcements, an officer cancel in the same process | `test_doc_worker.py`, `test_events.py` | |
+| Sweeper thresholds, attempt counting, owner routing, each owner's recovery, the cross-instance cancel watch | `test_sweeper.py` (11) | Sweeper's local `--once` mode |
+| Signed WebSocket tickets (forged, wrong purpose, single use, expiry) | `test_sweeper.py`, `test_ws.py` | |
+| Claude cost from usage, cache savings, the per-case cost summary | `test_pricing.py` | The `/audit/cases/{id}/cost` **route**, and `GET /audit/events` |
+| **Approve undoes an unpublished approval** | none | A test that makes `events.publish` fail on approve and asserts the document went back to analyzed |
+| **Trace propagation** (traceparent out on publish, continued on push; the agent label) | none (checked once by a scratch script) | Two small tests with OTel's in-memory exporter |
+| **`/metrics` and the LLM callback** (agent and model labels, cost, latency, work histograms) | none (checked once by a scratch script) | One test driving `query_stats.llm_callback` and reading the exposition |
+| `flush_pending_syncs` | none | One test: a scheduled refresh runs on flush, not later |
+| `emulator_setup.py` | none | Fine: a local dev tool, exercised by the compose walkthrough |
 
-Overlap to merge (keep every test ID as a tag): upload `DI-007/011/015`, `DI-008` into `DT-031`, `DI-002 – DI-006`, the three fill-UEN-and-save tests, `DI-032/034`, `CM-003/005`, `MA-005/007/009`, `CM-025/028/029`.
+**Infrastructure has no automated checks in CI.** All of these were checked by hand on 2026-10-22, but nothing stops a broken change from merging:
 
-Other notes: `mockBackend.ts` re-implements some backend rules, so it can drift from the real behaviour (two fixtures are kept in step by backend tests). `CM-024` shows the raw API error on the not-found page, a small UX leak. Selectors are CSS classes, with no `data-testid`. There are no frontend unit tests (no vitest), so helpers like `useCaseSnapshot` and `canApprove` are only tested through the browser.
+| Check | Command |
+|---|---|
+| Terraform format and validity | `terraform fmt -check` and `terraform init -backend=false && terraform validate` |
+| Kong's rendered config | build `deploy/kong`, render with sample env, `kong config parse` |
+| Compose files | `docker compose --profile observability --profile frontend config -q` |
+| Grafana dashboards | every PromQL query parses (`promtool` or a Prometheus container); provisioning loads (`/api/search` lists four dashboards) |
+| Images build | `docker build` per target (catches a broken Dockerfile before the deploy does) |
+| Frontend types | `npx tsc --noEmit`. Vite's build doesn't type-check, so `CaseOverview.tsx:72` fails today unnoticed (`PENDING_WORK.md`) |
 
-## 4. Decisions already made
+Checkov already scans the Terraform. The deploy workflow's gateway check is the post-deploy smoke test.
 
-- **Two company-name matchers, on purpose.** `identifiers.company_names_match` is lenient (legal suffix and `&` ignored, never typo-tolerant) and decides whether a document matches the case. `company_identity.cross_document_company_names_match` is strict ("A.B.C." differs from "ABC") and is a fraud signal across documents.
+## 4. Playwright
+
+107 tests in 5 specs:
+
+| Spec | Tests |
+|---|---|
+| `case-management` | 41 |
+| `upload` | 24 |
+| `document-review` | 17 |
+| `detection` | 15 |
+| `checklist` | 10 |
+
+They run the real frontend against `e2e/support/mockBackend.ts`; CI runs them on every push.
+
+**Not covered by any spec:**
+- the **case analysis card** ("Run analysis", running, result, out of date);
+- **clicking Cancel detection** (only that the button shows) and **Retry detection**;
+- **document retry and cancel** during extraction. The mock backend already answers `/retry` and `/cancel`, but no spec calls them;
+- **login failure and the redirect when logged out.** The mock answers a bad login with 401, but no spec tries one;
+- the move-documents dialog;
+- WebSocket reconnect;
+- the case-match triage chip (a document from another company shows "Sent to manual review" while Approve stays enabled).
+
+**Tests that prove less than they look like:**
+- **`CM-009`** checks that the Audit Trail card shows "No audit events available yet". That's a placeholder; the card isn't wired to `/audit/events` (`REFACTORING_AUDIT.md`, frontend 2.6). Rewrite it when the card is wired.
+- **`DI-025`** (one of its four tests) only checks that a button is enabled.
+- **`CM-026`** sets the checklist answer in the mock itself, so it tests the re-render, not the rule.
+- **`DI-045`** forces a case-match state the backend no longer produces for that document.
+- **`FD-015`, `FD-017` and `FD-020`** now check the panel's text. Their remaining checks on the JSON fixture are only preconditions, which is fine.
+
+**Overlap to merge** (keep every test ID as a tag): upload `DI-007/011/015`, `DI-008` into `DT-031`, `DI-002 – DI-006`, the three fill-UEN-and-save tests, `DI-032/034`, `CM-003/005`, `MA-005/007/009`, `CM-025/028/029`.
+
+**Structure:**
+- `mockBackend.ts` re-implements some backend rules, so it can drift. Two fixtures are kept in step by backend tests (`test_regression_fixtures.py`).
+- Selectors are CSS classes and roles; there are no `data-testid`s.
+- There are no frontend unit tests (no Vitest), so helpers like `useCaseSnapshot` and `canApprove` are only tested through the browser.
+- `/dashboard` is mock data, so there's nothing real to test there yet.
+
+## 5. Decisions already made
+
+- **Two company-name matchers, on purpose.**
+  - `identifiers.company_names_match` is lenient (it ignores legal suffixes and `&`, but is never typo-tolerant). It decides whether a document matches the case.
+  - `company_identity.cross_document_company_names_match` is strict ("A.B.C." differs from "ABC"). It's a fraud signal across documents.
 - **Case match is a triage check, not a fraud signal.** A document whose company or person isn't the case's goes to manual review, and the officer can still approve it. Comparing one person across documents is the case analysis's job.
 
-## 5. Plan
+## 6. Plan
 
-### Done (steps 1-6)
-
-Across 13 test files: 798 lines added, 1,146 removed (net 348 fewer), with no app code changed. Checked by calling the tests directly (about 1,900 cases pass; the failures that remain also fail without my changes and come from `exiftool`, the missing `ijson` package and fixtures my runner doesn't provide).
-
-| Step | What changed | Result |
-|---|---|---|
-| 1 | **Router tests:** one parametrised matrix in `test_detection.py` (502 on fetch failure, 404 not found, 409 before a full run, 409 untyped, storage 404 and 502) over 11 check endpoints; the same for nine `{document_id}` routes in `test_documents.py`. It also asserts nothing was written | 23 near-identical tests replaced by 8 parametrised ones that run as about 76 cases |
-| 2 | **Folded repeated cases:** 22 "is not flagged" metadata tests, 16 document-fulfilment tests, 14 prompt-content tests and three pairs in `test_langgraph.py` became tables with an id per case | Same checks in far fewer lines; the metadata cases also assert `unable_to_assess` is false |
-| 3 | **Graph tests:** the four "compiles" tests are now one test over all six graphs asserting their real node names; every `importorskip` is gone, so a broken langgraph install fails | |
-| 4 | **Supabase client tests:** kept, but tightened. One now proves the secret key (not the publishable one) is used; the "builds once" test now calls twice and proves the cache. I did not delete them because they check real behaviour | |
-| 5 | **Behaviour instead of mock calls:** `test_realtime_listener` now runs the real debounce and a real broadcaster and asserts what a viewer receives (a burst gives one snapshot; I broke the coalescing on purpose to confirm the test fails); `test_storage_service` runs on an in-memory bucket; the case-flag tests assert the stored flag; `test_health` asserts the query that ran | Fewer tests that can only fail when the implementation changes |
-| 6 | **SCRUM-70 scenarios ported:** the misspelt-company-name case (Harbor Light "SHIPING") and "cannot be dropped by the agent" now run in `test_cross_document_deterministic.py`; a spelling test confirms a company name printed on the document isn't a spelling finding | No skipped tests left from this item |
-
-### Still to do
+**Done:** steps 1–6 from 2026-10-19 (router matrices, folded cases, graph tests, Supabase client tests, behaviour over mock calls, SCRUM-70 scenarios), plus tests for the sweeper, recovery, signed tickets and cost (2026-10-22).
 
 | Step | Change | Why | Size |
 |---|---|---|---|
-| 7 | **Repository tests on an in-memory fake Supabase client**, asserting stored state instead of mock call chains | Makes refactors safe; the biggest brittleness left | L |
-| 8 | **Playwright:** the triage-chip test and a faithful `DI-045`; login failure and redirect; the analysis card; cancel and retry detection; merge the overlaps; add `data-testid`s | Fills the biggest UI gaps | M-L |
+| A | **Tests for the service-code gaps** in section 3: push token 401s, the approve rollback, trace propagation, the LLM callback and `/metrics`, `flush_pending_syncs`, the two `/audit` routes | The new cloud behaviour is otherwise checked only by hand | M |
+| B | **An infrastructure job in CI:** terraform fmt and validate, Kong config parse, compose config, dashboard PromQL and provisioning, image builds (the table in section 3) | These broke silently today; each was caught by hand | S-M |
+| C | **Move the injection tests** out of `tests/` (or turn them back on) | 137 tests that look like coverage but never run | S |
+| 7 | **Repository tests on an in-memory fake Supabase client,** asserting stored state instead of mock call chains. Start with `test_document_repository` and `test_extracted_fields_repository` (most mock asserts) | The biggest brittleness left | L |
+| 8 | **Playwright:** the case analysis card; cancel and retry for detection and documents (the mock already supports them); login failure and redirect; the triage chip and a faithful `DI-045`; merge the overlaps; add `data-testid`s | Fills the biggest UI gaps | M-L |
 | 9 | **Vitest** for the pure frontend helpers (`useCaseSnapshot`, `canApprove`) | Logic with no test below the browser | M |
-| 10 | **Coverage run** on the unreferenced modules, starting with `line_shifts.py` and the `cross_document` verify paths, then add tests where there are holes | Turns "no test names it" into facts | M |
+| 10 | **Read CI's coverage report,** then add tests where it shows holes (start with `query_stats`, `telemetry`, `vision_tool`, the `cross_document` tools, `case_pipeline/risk/summary`) | Turns "no test names it" into facts | M |
 
-Suggested order: 8, 7, 9, 10. Step 10 needs a coverage run from you first.
+**Suggested order:** B and C (small, and they protect deploys), A, then 8, 7, 9 and 10.

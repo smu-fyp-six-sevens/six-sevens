@@ -14,3 +14,14 @@ datasources:
     jsonData:
       timeInterval: 30s
       httpMethod: GET
+
+  # Billed cost from the Cloud Billing export (deploy/terraform/billing.tf), as Grafana's service account
+  # through the metadata server. Locally it has no credentials, so the "Billed" panels show an error.
+  - name: BigQuery
+    uid: bigquery
+    type: grafana-bigquery-datasource
+    editable: false
+    jsonData:
+      authenticationType: gce
+      defaultProject: ${GCP_PROJECT}
+      processingLocation: ${BIGQUERY_LOCATION}

@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from .. import case_repository, document_repository, events, query_stats
+from .. import case_repository, document_repository, events
 from ..config import settings
 from ..snapshots import push_case_snapshot
 from ..langgraph import trace as langgraph_trace
@@ -113,16 +113,9 @@ async def run_requested(case_id: str, run_id: str, fingerprint: str, started_at:
     analysis = CaseAnalysis(
         run_id=run_id, case_id=case_id, status="running", fingerprint=fingerprint, started_at=started_at,
     )
-    await _execute_scoped(analysis, documents, reports, failed_ids)
+    # The case-worker's scope counts this run's calls (workers/cases.py).
+    await _execute(analysis, documents, reports, failed_ids)
     return analysis
-
-
-async def _execute_scoped(
-    analysis: CaseAnalysis, documents: list[DocumentRecord], reports: dict[str, dict[str, Any]],
-    failed_ids: set[str],
-) -> None:
-    with query_stats.scope(f"case analysis case={analysis.case_id[:8]}", work="case_analysis"):
-        await _execute(analysis, documents, reports, failed_ids)
 
 
 async def _execute(

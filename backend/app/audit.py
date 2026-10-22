@@ -53,6 +53,44 @@ def latest_time(actions: list[str], document_id: str) -> datetime | None:
     return datetime.fromisoformat(str(_row(rows[0])["occurred_at"])) if rows else None
 
 
+# End-of-run events that carry a run's Claude usage (detail.llm_cost_usd and the token counts).
+_COSTED = [
+    types.DOCUMENT_ANALYZED, types.DOCUMENT_FAILED, types.DOCUMENT_DETECTED, types.DETECTION_FAILED,
+    types.CASE_ANALYSIS_COMPLETED,
+]
+
+
+def case_cost(case_id: str) -> dict:
+    """
+    A case's Claude spend from its audit trail: each costed run, a total per document, and the case total.
+    Runs from before the trail carried cost are absent. Sync: run on a worker thread.
+    """
+    rows = (
+        service_supabase_client().table(_TABLE).select("*").eq("case_id", case_id).in_("action", _COSTED)
+        .order("occurred_at").limit(1000).execute().data or []
+    )
+    runs = []
+    per_document: dict[str, float] = {}
+    for event in (Event.from_audit_row(_row(row)) for row in rows):
+        cost = event.detail.get("llm_cost_usd")
+        if cost is None:
+            continue
+        runs.append({
+            "occurred_at": event.occurred_at, "type": event.type, "run": event.detail.get("run"),
+            "document_id": event.document_id, "llm_cost_usd": cost, "llm_calls": event.detail.get("llm_calls"),
+            "llm_cache_read_tokens": event.detail.get("llm_cache_read_tokens"),
+        })
+        if event.document_id:
+            per_document[event.document_id] = per_document.get(event.document_id, 0.0) + float(cost)
+    total = sum(float(r["llm_cost_usd"]) for r in runs)
+    return {
+        "case_id": case_id, "total_usd": round(total, 6),
+        "documents_usd": {doc: round(usd, 6) for doc, usd in per_document.items()},
+        "case_analysis_usd": round(sum(float(r["llm_cost_usd"]) for r in runs if r["run"] == "case_analysis"), 6),
+        "runs": runs,
+    }
+
+
 def list_events(
     *, case_id: str | None = None, document_id: str | None = None, limit: int = 200
 ) -> list[Event]:

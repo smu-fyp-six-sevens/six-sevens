@@ -73,6 +73,15 @@ resource "google_cloud_run_v2_service" "grafana" {
         name  = "PROMETHEUS_URL"
         value = "http://localhost:9090"
       }
+      # The BigQuery data source (billing export) runs its queries in this project.
+      env {
+        name  = "GCP_PROJECT"
+        value = var.project_id
+      }
+      env {
+        name  = "BIGQUERY_LOCATION"
+        value = var.billing_export_location
+      }
       env {
         name = "GF_SECURITY_ADMIN_PASSWORD"
         value_source {

@@ -36,3 +36,31 @@ def test_unknown_model_costs_nothing():
 
 def test_message_without_usage():
     assert pricing.usage(AIMessage(content="")) is None
+
+
+def test_case_cost_adds_up_runs_per_document_and_case():
+    from unittest.mock import MagicMock, patch
+
+    from app import audit
+    from app.events import Event, types
+
+    def row(type: str, document_id: str | None, run: str, usd: float | None) -> dict:
+        detail = {"run": run} if usd is None else {"run": run, "llm_cost_usd": usd, "llm_calls": 2}
+        return Event(type=type, case_id="case-1", document_id=document_id, detail=detail).to_audit_row()
+
+    rows = [
+        row(types.DOCUMENT_ANALYZED, "doc-1", "document", 0.02),
+        row(types.DOCUMENT_DETECTED, "doc-1", "detection", 0.05),
+        row(types.DOCUMENT_ANALYZED, "doc-2", "document", 0.01),
+        row(types.DOCUMENT_ANALYZED, "doc-3", "document", None),  # from before events carried cost
+        row(types.CASE_ANALYSIS_COMPLETED, None, "case_analysis", 0.04),
+    ]
+    client = MagicMock()
+    client.table.return_value.select.return_value.eq.return_value.in_.return_value.order.return_value \
+        .limit.return_value.execute.return_value.data = rows
+    with patch("app.audit.service_supabase_client", return_value=client):
+        summary = audit.case_cost("case-1")
+    assert summary["total_usd"] == 0.12
+    assert summary["documents_usd"] == {"doc-1": 0.07, "doc-2": 0.01}
+    assert summary["case_analysis_usd"] == 0.04
+    assert len(summary["runs"]) == 4

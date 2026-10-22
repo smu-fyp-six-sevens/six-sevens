@@ -14,6 +14,7 @@ import { MoveDocumentsDialog } from './upload/MoveDocumentsDialog';
 import { RequirementsSidebar } from './upload/RequirementsSidebar';
 import { AdditionalDocumentsCard } from './upload/AdditionalDocumentsCard';
 import { AuditTrailCard } from './upload/AuditTrailCard';
+import { CaseCostCard } from './upload/CaseCostCard';
 import { CaseAnalysisCard } from './upload/CaseAnalysisCard';
 import { CaseRiskCard } from './upload/CaseRiskCard';
 import { CaseOverview } from './upload/CaseOverview';
@@ -447,6 +448,8 @@ export default function UploadPage({
           )}
 
           {activeSection === 'audit' && <AuditTrailCard />}
+
+          {activeSection === 'cost' && <CaseCostCard caseId={selectedCase.id} documents={documents} />}
         </div>
       </div>
 

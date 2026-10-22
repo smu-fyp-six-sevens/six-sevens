@@ -15,7 +15,7 @@ from . import extract, nodes, text_cache, trace
 from .graph import get_document_graph
 from ..config import settings
 from ..run_context import RunContext, run_context
-from .. import document_repository, query_stats, telemetry
+from .. import document_repository, telemetry
 from ..models import DocumentStatus
 
 logger = logging.getLogger("classifier_pipeline.langgraph.pipeline")
@@ -70,7 +70,8 @@ async def rerun_extraction(document_id: str) -> None:
     type (a confirmed-unchanged type has nothing new for Extraction to
     re-read; see that handler).
     """
-    with query_stats.scope(f"rerun extraction doc={document_id[:8]}", work="extraction_rerun"), telemetry.get_tracer().start_as_current_span("langgraph.rerun_extraction") as span:
+    # The doc-worker's scope counts this run's calls (workers/documents.py).
+    with telemetry.get_tracer().start_as_current_span("langgraph.rerun_extraction") as span:
         span.set_attribute("document_id", document_id)
         try:
             with run_context(settings.DOCUMENT_MAX_MODEL_CALLS) as run:

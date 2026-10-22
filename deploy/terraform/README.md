@@ -10,7 +10,8 @@ Creates everything the services need on GCP (CLOUD_ARCHITECTURE_PLAN.md sections
 | `run.tf` | Cloud Run: api, doc-worker, detection-worker, case-worker, audit-metrics and Kong (each with the Managed Prometheus sidecar), frontend |
 | `observability.tf` | Grafana on Cloud Run (with Google's Prometheus query proxy as a sidecar), its generated admin password, the scrape config for Kong's metrics |
 | `github.tf` | Workload Identity Federation for GitHub Actions and the deployer account |
-| `monitoring.tf` | the budget alert (when `billing_account` is set) |
+| `monitoring.tf` | the budget alert (when `billing_account` is set) and four alert policies emailed to `alert_email` |
+| `billing.tf` | the `billing_export` dataset for Cloud Billing's export, and the `costs` view Grafana reads |
 
 Terraform owns each service's configuration. Services are created on a placeholder image (Cloud Run's "Congratulations" page, which answers 200 on every path); the deploy workflow (`.github/workflows/deploy.yml`) rolls out the real images and Terraform ignores image changes.
 
@@ -27,7 +28,14 @@ Done:
 
 Whether the budget alert applies depends on your billing permissions (see below).
 
-**Pending: the observability change** (Grafana, Kong metrics, traces on). It needs Terraform before the next deploy; see the next section.
+**Pending: one apply and one deploy, for everything built on 2026-10-22.** That's Grafana and tracing, stuck-work recovery, the alerts, the billing dataset and per-case cost. In order:
+1. Add `alert_email` to `terraform.tfvars`.
+2. Run `terraform init -upgrade -backend-config="bucket=fyp-six-sevens-tfstate"`, then `terraform apply`. Expect the three worker subscriptions to be replaced and nothing else destroyed.
+3. Get the Grafana password with `terraform output -raw grafana_admin_password` (user `admin`), and confirm Google's alert email.
+4. Commit, push and deploy from `microservices`.
+5. Optional: a billing admin turns on the BigQuery export (below). Once its table exists, set `billing_export_table` and apply again.
+
+Code-only fixes made after an apply (for example the tool time-limit fix) need only a deploy, not another apply. Terraform changes only when a `.tf` file or `subscriptions.json` changes.
 
 ## Rolling out Grafana and tracing (once)
 
@@ -112,6 +120,52 @@ foreach ($s in "supabase-publishable-key","supabase-secret-key","anthropic-api-k
 
 **5. GitHub.** `terraform output github_variables`, then set `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_WIF_PROVIDER` and `GCP_DEPLOYER_SA` under Settings → Secrets and variables → Actions → **Variables** (not Secrets: the workflow reads `vars.*`). They are identifiers, not credentials: only a workflow in this repository can use them (the identity provider checks the repository). Keep `DATA_GOV_SG_API_KEY` as a repository **secret** (a build secret for the zoning index).
 
+## Alerts (once)
+
+Add `alert_email = "you@example.com"` to `terraform.tfvars` and run `terraform apply`. Google emails that address once to confirm the channel; until then nothing arrives. Four policies (`monitoring.tf`), in PromQL over the dashboards' metrics:
+
+| Alert | Fires when |
+|---|---|
+| Events dead-lettered | any event moved to the dead-letter topic in the last 10 minutes |
+| API 5xx above 5% | for 10 minutes, with some traffic |
+| Claude spend over N USD a day | the last 24 hours passed `alert_daily_claude_usd` (default 10) |
+| Stuck work could not be recovered | the sweeper gave up on something in the last 30 minutes |
+
+Each email links to the policy, whose documentation says which dashboard to open. Policies close themselves 30 minutes after the condition clears.
+
+## Billed cost in Grafana (once; needs a billing account admin)
+
+The Cost dashboard's live panels estimate Cloud Run and Pub/Sub from usage. Its top row, "Billed by Google", shows the actual invoice lines from Cloud Billing's export to BigQuery. Turning that on:
+
+1. **`terraform apply`.** This creates the dataset `billing_export` (location `US`) and gives Grafana read access.
+2. **Turn on the export (a billing account admin, in the console; there is no API for it).** Billing → the billing account → **Billing export** → **BigQuery export** → **Standard usage cost** → Edit settings. Pick project `fyp-six-sevens` and dataset `billing_export`, then save.
+3. **Wait for the first data.** It usually takes a few hours, and up to a day. The export then creates a table named like `gcp_billing_export_v1_0123AB_45CD67_89EF01`. Find it with `bq ls fyp-six-sevens:billing_export`, or in the BigQuery console.
+4. **Point Terraform at it.** Set `billing_export_table = "<that table name>"` in `terraform.tfvars` and run `terraform apply`. This creates the view `billing_export.costs`, which the dashboard reads.
+5. **Deploy**, so Grafana runs the image with the BigQuery plugin. The "Billed by Google" panels then fill in: this month's invoice after credits, cost by service and per day, and the top SKUs.
+
+Claude isn't billed through Google, so its cost on the dashboard is always the app's own count at Anthropic's list prices (`backend/app/pricing.py`). Your Anthropic console shows the invoice.
+
+## Claude cost per document and per case
+
+Metrics can't carry a document or case id, so per-item cost lives in the audit trail. Each end-of-run event stores its run's Claude usage in `detail`: `llm_cost_usd`, `llm_calls`, the token counts, and `run` (document, extraction_rerun, detection or case_analysis). The events are `document.analyzed` and `document.failed` (classify and extract), `document.detected` and `detection.failed`, and `case.analysis.completed`.
+
+- **In the app:** the case page's **Claude Cost** tab shows the case total, a cost per document and every run. It's a placeholder design, to be reworked.
+- **One case, totalled:** `GET <Kong URL>/audit/cases/<case_id>/cost` (with your token) returns:
+  - `total_usd`;
+  - `documents_usd` (per document: its classify, extract and detection runs added up);
+  - `case_analysis_usd`;
+  - every run with its cost.
+- **One document:** `GET <Kong URL>/audit/events?document_id=<id>`. Look at `detail.llm_cost_usd` on its end-of-run events.
+- **Across cases**, in the Supabase SQL editor:
+  ```sql
+  select case_id, round(sum((detail->>'llm_cost_usd')::numeric), 4) as usd, count(*) as runs
+  from audit_events where detail ? 'llm_cost_usd'
+  group by case_id order by usd desc;
+  ```
+- **Averages and spread** (no ids): Cost dashboard → "Avg per document / detection run / case analysis" and "Cost per unit of work, p50 / p95".
+
+Runs from before this change carry no cost; the endpoint just leaves them out.
+
 ## Deploying and checking a deploy
 
 Actions → **Deploy to Cloud Run** → Run workflow, choosing the branch to deploy (`microservices` until it is merged; the `deploy.yml` on `main` is the old single-service one).
@@ -144,7 +198,7 @@ A secret changed later reaches a service on its next revision (the next deploy, 
 ## Optional, any time
 
 - A `SNYK_TOKEN` repository secret makes CI use Snyk instead of `pip-audit` and `npm audit`.
-- **Exact billed cost.** The Cost dashboard estimates Cloud Run and Pub/Sub from usage. For the invoice figures, a billing admin can turn on Billing → Billing export → BigQuery (a Grafana BigQuery data source can read it later). Until then, use Billing → Reports.
+- **Billed cost** in Grafana: see "Billed cost in Grafana" above. Until it's on, use Billing → Reports.
 - **Cloud Run prices.** If they change, edit the price boxes at the top of the Cost dashboard, or their defaults in the dashboard JSON.
 - For a demo, `min_instances = { api = 1, kong = 1, "doc-worker" = 1, "detection-worker" = 1 }` in `terraform.tfvars`, then `terraform apply`, avoids cold starts (below).
 - To let only `main` deploy, add `assertion.ref == "refs/heads/main"` to the `attribute_condition` in `github.tf` (after merging).

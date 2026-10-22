@@ -7,7 +7,8 @@ export type CaseSection =
   | 'risk'
   | 'analysis'
   | 'additional'
-  | 'audit';
+  | 'audit'
+  | 'cost';
 
 export const CASE_SECTIONS: { id: CaseSection; label: string; icon: string }[] = [
   { id: 'summary', label: 'Case Summary', icon: '◫' },
@@ -17,6 +18,7 @@ export const CASE_SECTIONS: { id: CaseSection; label: string; icon: string }[] =
   { id: 'risk', label: 'Risk Summary', icon: '▥' },
   { id: 'additional', label: 'Additional Documents', icon: '⊕' },
   { id: 'audit', label: 'Audit Trail', icon: '◴' },
+  { id: 'cost', label: 'Claude Cost', icon: '$' },
 ];
 
 export function isCaseSection(value: string | null): value is CaseSection {

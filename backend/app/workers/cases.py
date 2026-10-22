@@ -6,7 +6,7 @@ import asyncio
 import logging
 from datetime import datetime
 
-from .. import events
+from .. import events, query_stats
 from ..case_pipeline import repository as analysis_repository
 from ..case_pipeline import service as analysis_service
 from ..events import Event, Stopwatch, types
@@ -23,10 +23,11 @@ async def on_analysis_requested(event: Event) -> None:
         logger.error("Case analysis event %s is missing its case or run id", event.event_id)
         return
     timer = Stopwatch()
-    analysis = await analysis_service.run_requested(
-        event.case_id, str(detail["run_id"]), str(detail.get("fingerprint") or ""),
-        datetime.fromisoformat(str(detail["started_at"])) if detail.get("started_at") else event.occurred_at,
-    )
+    with query_stats.scope(f"case analysis case={event.case_id[:8]}", work="case_analysis") as unit:
+        analysis = await analysis_service.run_requested(
+            event.case_id, str(detail["run_id"]), str(detail.get("fingerprint") or ""),
+            datetime.fromisoformat(str(detail["started_at"])) if detail.get("started_at") else event.occurred_at,
+        )
     complete = analysis.status == "complete"
     await events.record(Event(
         type=types.CASE_ANALYSIS_COMPLETED, actor_type="agent", actor=_ACTOR, case_id=event.case_id,
@@ -37,6 +38,8 @@ async def on_analysis_requested(event: Event) -> None:
             "risk_level": analysis.risk.level if analysis.risk else None,
             "findings": len(analysis.findings),
             "error": analysis.error,
+            "run": "case_analysis",
+            **unit.llm_detail(),
         },
         **timer.fields(),
     ))

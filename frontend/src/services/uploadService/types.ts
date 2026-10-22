@@ -373,3 +373,22 @@ export interface CaseAnalysisTraceStep {
   at: number;
   [key: string]: unknown;
 }
+
+// GET /audit/cases/{id}/cost: Claude spend at list price, from the audit trail's end-of-run events.
+export interface CaseCostRun {
+  occurred_at: string;
+  type: string;
+  run: 'document' | 'extraction_rerun' | 'detection' | 'case_analysis' | null;
+  document_id: string | null;
+  llm_cost_usd: number;
+  llm_calls: number | null;
+  llm_cache_read_tokens: number | null;
+}
+
+export interface CaseCost {
+  case_id: string;
+  total_usd: number;
+  documents_usd: Record<string, number>;
+  case_analysis_usd: number;
+  runs: CaseCostRun[];
+}

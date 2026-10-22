@@ -82,6 +82,15 @@ class _Scope:
     def is_empty(self) -> bool:
         return not self.calls and not self.llm_calls
 
+    def llm_detail(self) -> dict[str, float | int]:
+        """This unit's Claude usage for its end-of-run event, so the audit trail carries cost per document and case."""
+        with self._lock:
+            return {
+                "llm_cost_usd": round(self.llm_cost_usd, 6), "llm_calls": self.llm_calls,
+                "llm_input_tokens": self.llm_input_tokens, "llm_output_tokens": self.llm_output_tokens,
+                "llm_cache_read_tokens": self.llm_cache_read, "llm_cache_write_tokens": self.llm_cache_write,
+            }
+
 
 _current: contextvars.ContextVar[_Scope | None] = contextvars.ContextVar("query_scope", default=None)
 # Calls made outside any scope, reported periodically: mostly the trace writer threads, which outlive

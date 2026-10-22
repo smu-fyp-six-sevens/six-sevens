@@ -19,3 +19,13 @@ async def list_audit_events(
         detail="Failed to read the audit trail. Check Supabase table access.",
         log=("Failed to read audit events",),
     )
+
+
+@router.get("/cases/{case_id}/cost")
+async def get_case_cost(case_id: str) -> dict:
+    """Claude spend for one case at list price: per run, per document and in total, from the audit trail."""
+    return await to_thread_or_502(
+        audit.case_cost, case_id,
+        detail="Failed to read the audit trail. Check Supabase table access.",
+        log=("Failed to read the cost of case %s", case_id),
+    )

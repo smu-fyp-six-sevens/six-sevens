@@ -135,9 +135,11 @@ async def test_detection_run_announces_detected(published_events) -> None:
         await detection_worker.on_requested(Event(type=types.DOCUMENT_APPROVED, document_id="d", case_id="c"))
 
     push.assert_awaited_once_with("c")
-    assert [(e.type, e.outcome, e.detail) for e in published_events] == [
-        (types.DOCUMENT_DETECTED, "success", {"verdict": "clean", "findings": 0})
-    ]
+    assert [(e.type, e.outcome) for e in published_events] == [(types.DOCUMENT_DETECTED, "success")]
+    detail = published_events[0].detail
+    assert (detail["verdict"], detail["findings"], detail["run"]) == ("clean", 0, "detection")
+    # The run's Claude usage, so the audit trail carries cost per document.
+    assert detail["llm_cost_usd"] == 0 and detail["llm_calls"] == 0
 
 
 async def test_detection_failure_announces_failed(published_events) -> None:

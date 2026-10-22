@@ -96,6 +96,7 @@ resource "google_project_service" "apis" {
     "monitoring.googleapis.com",
     "cloudtrace.googleapis.com",
     "cloudscheduler.googleapis.com",
+    "bigquery.googleapis.com",
   ])
   service            = each.value
   disable_on_destroy = false

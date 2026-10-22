@@ -74,7 +74,8 @@ def _note_remote_cancel(document_id: str) -> None:
     metrics.cancels_seen_remotely.labels("document").inc()
 
 
-async def _run(document_id: str, work: Callable[[], Awaitable[None]], scope: str | None) -> None:
+async def _run(document_id: str, work: Callable[[], Awaitable[None]], label: str, kind: str = "document") -> None:
+    """`label` names the unit in the perf log; `kind` is its work label in the cost metrics."""
     task = asyncio.current_task()
     watcher: asyncio.Task | None = None
     if task is not None:
@@ -84,13 +85,14 @@ async def _run(document_id: str, work: Callable[[], Awaitable[None]], scope: str
             task, lambda: _cancelled_elsewhere(document_id), lambda: _note_remote_cancel(document_id),
         ))
     timer = Stopwatch()
+    usage: dict[str, float | int] = {}
     try:
         async with _slots:
-            if scope is None:
-                await work()
-            else:
-                with query_stats.scope(f"{scope} doc={document_id[:8]}", work="document"):
+            with query_stats.scope(f"{label} doc={document_id[:8]}", work=kind) as unit:
+                try:
                     await work()
+                finally:
+                    usage = unit.llm_detail()
     except asyncio.CancelledError:
         if document_id not in _officer_cancels:
             raise
@@ -112,22 +114,26 @@ async def _run(document_id: str, work: Callable[[], Awaitable[None]], scope: str
         _active.pop(document_id, None)
         if watcher is not None:
             watcher.cancel()
-    await _announce(document_id, timer)
+    await _announce(document_id, timer, {"run": kind, **usage})
 
 
-async def _announce(document_id: str, timer: Stopwatch) -> None:
-    """Publishes how the run ended (analyzed or failed); anything else, such as cancelled, was announced by its cause."""
+async def _announce(document_id: str, timer: Stopwatch, usage: dict) -> None:
+    """
+    Publishes how the run ended (analyzed or failed), with its Claude usage; anything else, such as cancelled,
+    was announced by its cause.
+    """
     document = await asyncio.to_thread(document_repository.get_document, document_id, include_fields=False)
     if document is None or document.status not in (DocumentStatus.ANALYZED, DocumentStatus.FAILED):
         return
     failed = document.status == DocumentStatus.FAILED
+    detail = (
+        {"document_type": document.document_type, "failure_reason": document.failure_reason} if failed
+        else {"document_type": document.document_type, "classification_confidence": document.classification_confidence}
+    )
     await events.record(Event(
         type=types.DOCUMENT_FAILED if failed else types.DOCUMENT_ANALYZED,
         actor_type="agent", actor=_ACTOR, case_id=document.case_id, document_id=document_id,
-        outcome="failed" if failed else "success",
-        detail={"document_type": document.document_type, "failure_reason": document.failure_reason} if failed
-        else {"document_type": document.document_type, "classification_confidence": document.classification_confidence},
-        **timer.fields(),
+        outcome="failed" if failed else "success", detail={**detail, **usage}, **timer.fields(),
     ))
 
 
@@ -144,7 +150,7 @@ async def on_retyped(event: Event) -> None:
     if event.document_id is None:
         return
     document_id = event.document_id
-    await _run(document_id, lambda: langgraph_pipeline.rerun_extraction(document_id), None)
+    await _run(document_id, lambda: langgraph_pipeline.rerun_extraction(document_id), "rerun extraction", "extraction_rerun")
 
 
 async def on_cancelled(event: Event) -> None:
