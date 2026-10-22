@@ -40,16 +40,23 @@ COPY backend/tests ./tests
 # --- what every role ships: no dev injection tool ---
 FROM deps AS runtime
 RUN rm -rf ./app/injection ./app/routers/injection.py ./document_templates ./documents_generated
+# Runs as a non-root user. It may write only ./data (the land-use index, built below) and its home (font caches).
+RUN useradd --create-home --uid 10001 app && mkdir -p ./data && chown app ./data
 ENV LAND_USE_RUNTIME_REBUILD=false
 ENV PORT=8000
 EXPOSE 8000
+# Cloud Run ignores this and uses its own probes; compose and docker ps show it.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s \
+    CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\", \"8000\")}/health', timeout=4)"
+USER app
 # Cloud Run sends SIGTERM and allows 10 s; in-flight requests (a push's work) get most of it.
 CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port \"$PORT\" --timeout-graceful-shutdown 8"]
 
 # The URA zoning index, for the roles that run detection.
 FROM runtime AS with-land-use
 ARG ALLOW_MISSING_LAND_USE=false
-RUN --mount=type=secret,id=data_gov_sg_api_key \
+# uid: secrets are mounted readable by root only, and this stage runs as app.
+RUN --mount=type=secret,id=data_gov_sg_api_key,uid=10001 \
     if [ -r /run/secrets/data_gov_sg_api_key ]; then export DATA_GOV_SG_API_KEY="$(cat /run/secrets/data_gov_sg_api_key)"; fi; \
     if python -c "from app.fraud_detection.external_validation.registry_lookups.land_use import cli; cli([])"; then :; \
     elif [ "$ALLOW_MISSING_LAND_USE" = "true" ]; then \

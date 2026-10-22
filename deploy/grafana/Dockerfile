@@ -18,3 +18,7 @@ ENV PROMETHEUS_URL=http://localhost:9090 \
     BIGQUERY_LOCATION=US
 
 EXPOSE 3000
+# Cloud Run ignores this and uses its own probes; compose and docker ps show it.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s CMD ["curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:3000/api/health"]
+# The base image's user, stated explicitly.
+USER grafana

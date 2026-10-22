@@ -161,13 +161,16 @@ jobs:
         if: ${{ !cancelled() }}
         run: checkov -d .github/workflows --framework github_actions --compact --quiet
 
-      - name: Snyk (Python and npm dependencies)
+      - name: Snyk (Python dependencies)
         if: ${{ !cancelled() && env.SNYK_TOKEN != '' }}
         run: |
           # Snyk reads installed packages for a requirements file, so install them first.
           python -m pip install -r backend/requirements.txt
           npx --yes snyk@1 test --file=backend/requirements.txt --package-manager=pip --severity-threshold=high
-          cd frontend && npm ci && npx --yes snyk@1 test --severity-threshold=high
+
+      - name: Snyk (npm dependencies)
+        if: ${{ !cancelled() && env.SNYK_TOKEN != '' }}
+        run: cd frontend && npm ci && npx --yes snyk@1 test --severity-threshold=high
 
       - name: pip-audit and npm audit (when there is no Snyk token)
         if: ${{ !cancelled() && env.SNYK_TOKEN == '' }}
