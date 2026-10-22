@@ -233,7 +233,15 @@ async def test_a_lead_reply_that_is_not_json_gives_default_briefs_and_no_second_
         plan = await detection_graph.lead_plan_node(state)  # type: ignore[arg-type]
         review = await detection_graph.lead_review_node(state)  # type: ignore[arg-type]
     assert all(plan["plan"]["briefs"].values())
-    assert review == {"lead_summary": ""}
+    assert review == {
+        "lead_summary": "",
+        "agent_decisions": [{
+            "agent": "lead_reviewer",
+            "decision_id": "review_0",
+            "decision": "no second look requested",
+            "confidence": 0.0,
+        }],
+    }
 
 
 def _risk() -> CaseRisk:
@@ -326,7 +334,15 @@ def test_contracts_carry_no_financial_amounts() -> None:
     from app import llm_contracts
 
     # Counters, and the classifier's own 0-to-1 confidence in its answer (clamped; unreadable becomes 0).
-    counters = {("ToolResult", "truncated"), ("ToolResult", "dropped_findings"), ("ClassifierReply", "confidence")}
+    counters = {
+        ("ToolResult", "truncated"),
+        ("ToolResult", "dropped_findings"),
+        ("ClassifierReply", "confidence"),
+        ("LeadPlan", "confidence"),
+        ("LeadReview", "confidence"),
+        ("AssessmentItem", "confidence"),
+        ("SpecialistAssessment", "confidence"),
+    }
     for name, model in vars(llm_contracts).items():
         if not (isinstance(model, type) and issubclass(model, BaseModel) and model is not BaseModel):
             continue

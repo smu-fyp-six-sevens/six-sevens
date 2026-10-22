@@ -109,6 +109,7 @@ def _finding(
         rationale=f"{why} Documents: {files}.",
         severity="high" if identity else "medium",
         category=FindingCategory.IDENTITY_ENTITY_CONFLICT if identity else FindingCategory.CROSS_DOCUMENT_VARIANCE,
+        confidence=1.0,
         citations=list(dict.fromkeys(citations)),
         document_ids=document_ids,
         breach_flags=[flag],

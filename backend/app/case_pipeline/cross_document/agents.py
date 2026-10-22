@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -34,9 +35,20 @@ from .bias import has_protected_text
 from .evidence import CaseContext, render_dossier
 from .tools import COMPUTED_TOOLS, CROSS_DOCUMENT_TOOLS, build_tools
 
+
+def _probability(value: Any) -> float:
+    """Return a finite model confidence in [0, 1], using zero for absent or invalid values."""
+    if isinstance(value, bool):
+        return 0.0
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return min(1.0, max(0.0, number)) if math.isfinite(number) else 0.0
+
 logger = logging.getLogger("classifier_pipeline.case_pipeline.agents")
 
-PROMPT_VERSION = "cross-doc-v7"
+PROMPT_VERSION = "cross-doc-v8-confidence"
 MAX_HYPOTHESES = 3
 MAX_CHECKS_PER_HYPOTHESIS = 4
 # One call to plan and one to judge. Nothing here loops or retries a call; this is the ceiling that
@@ -76,7 +88,7 @@ Tools you may plan checks with (use these document names exactly):
 {tools}
 """
 
-_PLAN_INSTRUCTIONS = """Propose AT MOST {limit} hypotheses, and only strong ones: a specific, checkable way these documents may be inconsistent or implausible together (for example: what the company says it does against how its money moves; stated scale against capital or how long the company has existed; dates that cannot all be true; money going round in a circle; an address or identity that changes between documents; a source of wealth the evidence does not support). Propose fewer, or none, when nothing looks off.
+_PLAN_INSTRUCTIONS = """Propose AT MOST {limit} hypotheses, and only strong ones: a specific, checkable way these documents may be inconsistent or implausible together (for example: what the company says it does against how its money moves; stated scale against capital or how long the company has existed; dates that cannot all be true; money going round in a circle; an address or identity that changes between documents; a source of wealth the evidence does not support). Propose fewer, or none, when nothing looks off. Include an overall confidence score from 0 to 1 for this planning decision, and a separate score for every proposed hypothesis, reflecting your confidence that it is worth testing.
 Every hypothesis must be about how documents relate to each other: it has to involve at least two documents, or rest on a computed measure over one (transaction totals, monthly flow, counterparties). A single document's own figures merely looking unusual is not a hypothesis here, with one exception: under a finding, a `lead:` line names the document that should carry the same figure. Test the figure against that document (read both, cite both); that is a hypothesis, restating the finding is not.
 Never restate a per-document detection finding listed below, or a difference listed under "Checks already run by code", even in other words (for example an identifier missing from a register, or a company name that differs). You may use those facts to reason about something else, and take the `lead:` lines first: each is a figure that looked wrong on one document, with the document to test it against. Also skip anything that needs documents we do not have, weak or generic worries, and anything that touches rule 1.
 
@@ -89,7 +101,7 @@ Submit your answer by calling submit_hypotheses.
 Documents:
 {dossier}"""
 
-_JUDGE_INSTRUCTIONS = """For each hypothesis decide whether it is conclusive: the evidence is sufficient to prove it AND the refutation check did not refute it. Suspicion, a plausible story, a missing document or an unavailable result is not conclusive. If unsure, it is not conclusive. A hypothesis that touches rule 1 is never conclusive. A claim about one document's own figures that no computed measure or second document supports is never conclusive here. A refutation check that merely restates the claim, or re-reads the fields it rests on, has not tested it: then the hypothesis is not conclusive.
+_JUDGE_INSTRUCTIONS = """For each hypothesis decide whether it is conclusive: the evidence is sufficient to prove it AND the refutation check did not refute it. Suspicion, a plausible story, a missing document or an unavailable result is not conclusive. If unsure, it is not conclusive. A hypothesis that touches rule 1 is never conclusive. A claim about one document's own figures that no computed measure or second document supports is never conclusive here. A refutation check that merely restates the claim, or re-reads the fields it rests on, has not tested it: then the hypothesis is not conclusive. Include a confidence score from 0 to 1 for every verdict, including inconclusive verdicts. Use 0 when confidence cannot be assessed.
 severity is low, medium or high and only matters when conclusive. category is behavioural_anomaly or unsupported_claim. citations are ref ids from the evidence below.
 summary, rationale and probe_summary are read by a loan officer: write plain sentences about the documents, and never name a tool, a flag (such as ADDRESS_MISMATCH) or a ref id in them; those belong only in citations. Say "cross-check", not "refutation check".
 Keep every field short: the reply has a hard length limit. For a hypothesis that is not conclusive, give a one-sentence summary and leave rationale, citations and probe_summary empty.
@@ -105,6 +117,7 @@ _PLAN_TOOL: dict[str, Any] = {
     "input_schema": {
         "type": "object",
         "properties": {
+            "confidence": {"type": "number", "minimum": 0, "maximum": 1},
             "hypotheses": {
                 "type": "array",
                 "maxItems": MAX_HYPOTHESES,
@@ -112,6 +125,7 @@ _PLAN_TOOL: dict[str, Any] = {
                     "type": "object",
                     "properties": {
                         "claim": {"type": "string", "description": "One sentence."},
+                        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
                         "documents": {"type": "array", "items": {"type": "string"}},
                         "proof": {"type": "string", "description": "What result would prove it."},
                         "refutation_document": {"type": "string"},
@@ -130,11 +144,11 @@ _PLAN_TOOL: dict[str, Any] = {
                             },
                         },
                     },
-                    "required": ["claim", "checks"],
+                    "required": ["claim", "confidence", "checks"],
                 },
             },
         },
-        "required": ["hypotheses"],
+        "required": ["confidence", "hypotheses"],
     },
 }
 
@@ -151,6 +165,7 @@ _VERDICT_TOOL: dict[str, Any] = {
                     "properties": {
                         "id": {"type": "string"},
                         "conclusive": {"type": "boolean"},
+                        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
                         "severity": {"type": "string", "enum": ["low", "medium", "high"]},
                         "category": {"type": "string", "enum": ["behavioural_anomaly", "unsupported_claim"]},
                         "summary": {"type": "string", "description": "One plain sentence for a loan officer."},
@@ -158,7 +173,7 @@ _VERDICT_TOOL: dict[str, Any] = {
                         "citations": {"type": "array", "items": {"type": "string"}},
                         "probe_summary": {"type": "string", "description": "What the refutation check returned."},
                     },
-                    "required": ["id", "conclusive", "summary"],
+                    "required": ["id", "conclusive", "confidence", "summary"],
                 },
             },
         },
@@ -218,10 +233,10 @@ def _planned_checks(raw: Any, tool_names: set[str], refutation_document: str | N
     return checks
 
 
-async def hypothesise(context: CaseContext) -> list[Hypothesis]:
-    """One call: at most three hypotheses, each with the checks to run."""
+async def hypothesise(context: CaseContext) -> tuple[list[Hypothesis], float]:
+    """One call: at most three hypotheses plus the planner's run-level confidence."""
     if not context.docs:
-        return []
+        return [], 0.0
     established = context.established[:MAX_ESTABLISHED_CHARS]
     dossier = render_dossier(context, max_chars=MAX_PLAN_INPUT_CHARS - len(established))
     if established:
@@ -245,12 +260,14 @@ async def hypothesise(context: CaseContext) -> list[Hypothesis]:
     via = "tool"
     if args is not None:
         items = args.get("hypotheses") or []
+        planner_confidence = _probability(args.get("confidence"))
     else:
         # The model answered in text despite the forced tool (or was cut off): read what is there.
         via = "text"
         reply = message_text(response.content)
         parsed = parse_json_object(reply) or {}
         items = parsed.get("hypotheses") or ([] if parsed else salvage_list(reply, "hypotheses"))
+        planner_confidence = _probability(parsed.get("confidence"))
     tool_names = {t.name for t in build_tools(context, [])}
 
     hypotheses: list[Hypothesis] = []
@@ -282,6 +299,7 @@ async def hypothesise(context: CaseContext) -> list[Hypothesis]:
         hypotheses.append(Hypothesis(
             id=f"h{index + 1}",
             claim=str(item["claim"])[:300],
+            confidence=_probability(item.get("confidence")),
             documents=[d for d in item.get("documents") or [] if isinstance(d, str) and d in context.docs],
             proof=str(item.get("proof") or "")[:300],
             refutation_document=refutation_document,
@@ -294,10 +312,11 @@ async def hypothesise(context: CaseContext) -> list[Hypothesis]:
         "hypotheses", dossier_chars=len(dossier), via=via,
         stop_reason=response.response_metadata.get("stop_reason"), usage=_usage(response),
         proposed=[h.model_dump() for h in hypotheses], dropped_for_bias=dropped_for_bias,
+        confidence=planner_confidence,
         dropped_for_scope=dropped_for_scope,
         raw=None if hypotheses or via == "tool" else message_text(response.content)[:600],
     )
-    return hypotheses
+    return hypotheses, planner_confidence
 
 
 async def gather_evidence(

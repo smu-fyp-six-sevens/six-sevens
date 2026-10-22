@@ -5,6 +5,7 @@ Two model calls in total. Only conclusive, verified findings leave it.
 
 from __future__ import annotations
 
+import math
 from typing import Any, Required, TypedDict, cast
 
 from langgraph.graph import END, StateGraph
@@ -19,6 +20,7 @@ from .verify import verify_verdict
 class AnalysisState(TypedDict, total=False):
     context: Required[CaseContext]
     hypotheses: list[Hypothesis]
+    planner_confidence: float
     evidence: dict[str, list[dict[str, Any]]]
     calls: dict[str, list[dict[str, Any]]]
     verdicts: dict[str, dict[str, Any]]
@@ -26,6 +28,7 @@ class AnalysisState(TypedDict, total=False):
     discarded: list[str]
     tool_calls: list[dict[str, Any]]
     consistent_checks: list[str]
+    agent_decisions: list[dict[str, Any]]
 
 
 def _consistent_line(context: CaseContext, call: dict[str, Any]) -> str | None:
@@ -52,7 +55,8 @@ def _consistent_line(context: CaseContext, call: dict[str, Any]) -> str | None:
 
 
 async def _plan_node(state: AnalysisState) -> dict:
-    return {"hypotheses": await hypothesise(state["context"])}
+    hypotheses, confidence = await hypothesise(state["context"])
+    return {"hypotheses": hypotheses, "planner_confidence": confidence}
 
 
 def _after_plan(state: AnalysisState) -> str:
@@ -69,6 +73,17 @@ async def _judge_node(state: AnalysisState) -> dict:
     return {"verdicts": verdicts}
 
 
+def _probability(value: Any) -> float:
+    """Bound confidence values before they are persisted in the run audit."""
+    if isinstance(value, bool):
+        return 0.0
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return min(1.0, max(0.0, number)) if math.isfinite(number) else 0.0
+
+
 def _finalise_node(state: AnalysisState) -> dict:
     context = state["context"]
     calls_by_hypothesis = state.get("calls") or {}
@@ -77,7 +92,21 @@ def _finalise_node(state: AnalysisState) -> dict:
     discarded: list[str] = []
     tool_calls: list[dict[str, Any]] = []
     consistent: list[str] = []
-    for hypothesis in state.get("hypotheses") or []:
+    agent_decisions: list[dict[str, Any]] = []
+    hypotheses = state.get("hypotheses") or []
+    agent_decisions.append({
+        "agent": "hypothesis_planner",
+        "decision_id": "plan",
+        "decision": f"proposed {len(hypotheses)} hypothesis(es)",
+        "confidence": _probability(state.get("planner_confidence")),
+    })
+    for hypothesis in hypotheses:
+        agent_decisions.append({
+            "agent": "hypothesis_planner",
+            "decision_id": hypothesis.id,
+            "decision": "proposed for evidence testing",
+            "confidence": hypothesis.confidence,
+        })
         calls = calls_by_hypothesis.get(hypothesis.id, [])
         tool_calls.extend({"hypothesis": hypothesis.id, **c} for c in calls)
         for call in calls:
@@ -85,6 +114,12 @@ def _finalise_node(state: AnalysisState) -> dict:
             if line and line not in consistent:
                 consistent.append(line)
         verdict = verdicts.get(hypothesis.id)
+        agent_decisions.append({
+            "agent": "hypothesis_judge",
+            "decision_id": hypothesis.id,
+            "decision": "conclusive" if verdict and verdict.get("conclusive") is True else "inconclusive",
+            "confidence": _probability(verdict.get("confidence")) if verdict else 0.0,
+        })
         if verdict is None:
             # Not the same as "not conclusive": the judge gave no verdict (a cut-off or non-JSON reply).
             finding, reason = None, "the judge returned no verdict for it (reply cut off or not JSON)"
@@ -99,7 +134,13 @@ def _finalise_node(state: AnalysisState) -> dict:
         else:
             # Kept only as a count and a reason in the run's audit, never against the case.
             discarded.append(reason)
-    return {"findings": findings, "discarded": discarded, "tool_calls": tool_calls, "consistent_checks": consistent}
+    return {
+        "findings": findings,
+        "discarded": discarded,
+        "tool_calls": tool_calls,
+        "consistent_checks": consistent,
+        "agent_decisions": agent_decisions,
+    }
 
 
 def build_cross_document_graph():

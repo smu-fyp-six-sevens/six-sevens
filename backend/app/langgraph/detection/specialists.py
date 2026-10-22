@@ -156,8 +156,9 @@ Severity scale: high = strong sign of tampering; medium = suspicious, needs a hu
 Dismiss = the finding is a false positive for this document. Dismissed findings are removed from the report the lead sees, so give a short rationale for each one.
 
 When finished, reply with ONLY this JSON (no prose):
-{{"summary": "<2-3 sentences>", "assessments": [{{"finding_id": "<id from a tool result>", "dismiss": false, "severity": "info|low|medium|high|null", "rationale": "<why>"}}], "uncertain": false, "uncertainty_reason": null}}
+{{"summary": "<2-3 sentences>", "confidence": <number from 0 to 1 for your overall assessment>, "assessments": [{{"finding_id": "<id from a tool result>", "dismiss": false, "severity": "info|low|medium|high|null", "rationale": "<why>", "confidence": <number from 0 to 1 for this assessment>}}], "uncertain": false, "uncertainty_reason": null}}
 Set "dismiss" to true and "severity" to null for a dismissed finding.
+Give a confidence score for every assessment, including dismissed findings. Use 0 when you cannot assess confidence; never omit a score.
 Set "uncertain" to true when a finding is ambiguous, or a second opinion from a different specialist would help, and say why in "uncertainty_reason"."""
 
 _SPECIALIST_DYNAMIC_PROMPT = """Today's date: {today}
@@ -392,6 +393,7 @@ def _collect_node(state: SpecialistState) -> dict:
                 "tool": finding.get("tool"),
                 "summary": finding["summary"],
                 "reason": assessed.rationale or "Dismissed as a false positive.",
+                "confidence": assessed.confidence,
             })
             continue
         rated = assessed.severity.lower() if assessed is not None else ""
@@ -410,6 +412,7 @@ def _collect_node(state: SpecialistState) -> dict:
             "severity": severity,
             "rationale": rationale,
             "ai_accepted": ai_accepted,
+            "confidence": assessed.confidence if assessed is not None else 0.0,
         })
 
     parsed_ok = assessment_status == "ok"
@@ -417,6 +420,7 @@ def _collect_node(state: SpecialistState) -> dict:
     complete = parsed_ok and bool(tools_called)
     report = {
         "specialist": state["specialist"],
+        "confidence": assessment.confidence,
         "brief": state.get("brief"),
         "tools_called": tools_called,
         "tool_calls": tool_calls,
