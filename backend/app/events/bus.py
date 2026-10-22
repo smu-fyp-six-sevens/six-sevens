@@ -4,7 +4,9 @@ import asyncio
 import logging
 from typing import Any
 
-from .. import metrics
+from opentelemetry.trace import SpanKind
+
+from .. import metrics, telemetry
 from ..config import settings
 from . import registry
 from .envelope import Event
@@ -20,10 +22,13 @@ _publisher: Any = None
 async def publish(event: Event) -> None:
     """Publishes one event; raises if it could not be. An event that triggers work is the action, so callers fail with it."""
     try:
-        if settings.EVENT_TRANSPORT == "pubsub":
-            await _publish_pubsub(event)
-        else:
-            _dispatch_in_process(event)
+        # In-process handlers inherit this span through the task's context; Pub/Sub ones through traceparent.
+        with telemetry.get_tracer().start_as_current_span(f"publish {event.type}", kind=SpanKind.PRODUCER) as span:
+            span.set_attribute("event.id", event.event_id)
+            if settings.EVENT_TRANSPORT == "pubsub":
+                await _publish_pubsub(event)
+            else:
+                _dispatch_in_process(event)
     except Exception:
         metrics.events_published.labels(event.type, "error").inc()
         raise
@@ -75,7 +80,7 @@ def _client() -> Any:
 async def _publish_pubsub(event: Event) -> None:
     client = _client()
     topic = client.topic_path(settings.GOOGLE_CLOUD_PROJECT, settings.PUBSUB_TOPIC)
-    future = client.publish(topic, event.model_dump_json().encode(), type=event.type)
+    future = client.publish(topic, event.model_dump_json().encode(), type=event.type, **telemetry.inject())
     await asyncio.to_thread(future.result, timeout=settings.PUBSUB_PUBLISH_TIMEOUT_SECONDS)
 
 

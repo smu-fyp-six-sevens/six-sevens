@@ -181,7 +181,7 @@ The cloud environment is the only one, so a deploy is checked and undone automat
 1. Build one image per role, Kong, and the frontend (pointed at Kong's URL); push them to Artifact Registry. An image the commit already has is skipped; otherwise unchanged layers come from a registry build cache. Each job mints one Google access token at its start (Workload Identity Federation) and gives it to gcloud and Docker.
 2. Record the revision each service is serving.
 3. Roll out the new images, workers and audit-metrics first, then api, Kong and the frontend (`gcloud run services update --image`, then `update-traffic --to-latest`, since an earlier rollback leaves traffic pinned; Terraform owns everything else about a service).
-4. Check through Kong, with no LLM and no database writes: `/health` answers (not `/healthz`: Cloud Run's front end reserves paths ending in `z` and returns its own 404; `/healthz` stays for Kubernetes in Stage 2), an authenticated route answers 401 (never 404 or 502), `/push` and `/metrics` are blocked at the gateway, a worker refuses a POST without Pub/Sub's identity (403), CORS answers the frontend's origin, and the frontend serves.
+4. Check through Kong, with no LLM and no database writes: `/health` answers (not `/healthz`: Cloud Run's front end reserves paths ending in `z` and returns its own 404; `/healthz` stays for Kubernetes in Stage 2), an authenticated route answers 401 (never 404 or 502), `/push` and `/metrics` are blocked at the gateway, a worker refuses a POST without Pub/Sub's identity (403), CORS answers the frontend's origin, the frontend serves, and Grafana answers `/api/health` but refuses a dashboard without a login.
 5. Any failure: every service goes back to its recorded revision (`gcloud run services update-traffic --to-revisions=<recorded>=100`) and the workflow fails.
 
 Tagged no-traffic revisions were dropped for now: nothing depends on the cloud deployment, and they would need Pub/Sub and Kong to target the tag URLs.
@@ -215,7 +215,7 @@ Plugins:
 - **CORS** with the real frontend origins, never `*` (a wildcard with credentials is rejected by browsers).
 - **Rate limiting** on login and upload (per Kong instance; Redis is not needed for that).
 - **Request id**, copied into events.
-- **Prometheus**, for gateway metrics, on Kong's status port 8100 (not scraped on Cloud Run yet: the sidecar's default scrapes :8080).
+- **Prometheus**, for gateway metrics (status codes, latency, bandwidth), on Kong's status port 8100. On Cloud Run, Kong's collector sidecar scrapes it with the config in `kong-gmp-config`.
 
 Rules and gotchas:
 - Workers are not behind Kong; Pub/Sub delivers to them.
@@ -228,11 +228,45 @@ Rules and gotchas:
 
 ## 8. Observability (Prometheus and Grafana)
 
-- Every service exposes `/metrics` with `prometheus_client` (`backend/app/metrics.py`): `http_requests_total` and `http_request_duration_seconds` by route template, `events_published_total`, `events_handled_total` and `event_handler_duration_seconds` by role and type, `stage_duration_seconds` by stage (the duration each end-of-run event carries), `llm_calls_total`, `llm_tokens_total` by kind, and `supabase_calls_total` by table. Kong's plugin metrics are on its status port.
-- Example queries: `sum by (route) (rate(http_requests_total[5m]))`; `histogram_quantile(0.95, sum by (le, stage) (rate(stage_duration_seconds_bucket[1h])))` (the 95th percentile per stage, which decision 1 watches); `sum(rate(llm_tokens_total[1h])) by (kind)`.
-- Stage 1: each backend Cloud Run service runs Google's managed Prometheus sidecar (`run.tf`, the `collector` container), which with no config scrapes `:8080/metrics` every 60 s into Google Managed Service for Prometheus. While CPU is idle between requests a scrape can be late, so short gaps appear. There is no Prometheus server to operate. Stage 2: the same managed service scrapes the pods directly.
-- Grafana reads from Managed Prometheus and the Cloud Monitoring data source. Host: Grafana Cloud free tier, or one small instance of our own (open decision 5).
-- OpenTelemetry traces continue to Cloud Trace (`telemetry.py`).
+**Built (2026-10-22).**
+
+- **Metrics.** Every service exposes `/metrics` with `prometheus_client` (`backend/app/metrics.py`):
+  - HTTP: `http_requests_total` and `http_request_duration_seconds`, by route template.
+  - Events: `events_published_total`, `events_handled_total` and `event_handler_duration_seconds`, by role and type.
+  - Stages: `stage_duration_seconds`, the duration each end-of-run event carries.
+  - Claude, by `agent` and `model`: `llm_calls_total` (ok and error), `llm_tokens_total` (input, output, cache_read, cache_write), `llm_cost_usd_total`, `llm_cache_savings_usd_total`, `llm_call_duration_seconds`. The agent is the span the call ran in (`telemetry.current_agent`), e.g. `detection.specialist.<name>` or `case_pipeline.hypothesise`. Cost is list price from `pricing.py`.
+  - Per unit of work (`work` = document, detection, case_analysis, extraction_rerun): `work_llm_cost_usd` and `work_llm_calls` histograms, plus input and cache-read token counters for the cache hit ratio.
+  - Detection: `detection_tool_calls_total` by tool and outcome (findings, clean, nothing_to_check, unable, error); `detection_verdicts_total`.
+  - Other: `llm_budget_exhausted_total`, `supabase_calls_total` by table, and `app_info` (roles and Cloud Run revision).
+- **Example queries:**
+  - `sum by (route) (rate(http_requests_total[5m]))`
+  - `histogram_quantile(0.95, sum by (le, stage) (rate(stage_duration_seconds_bucket[1h])))`: the 95th percentile per stage, which decision 1 watches.
+  - Cache hit ratio: `sum(rate(llm_tokens_total{kind="cache_read"}[1h])) / sum(rate(llm_tokens_total{kind=~"input|cache_.*"}[1h]))`
+- **Scraping.**
+  - **Cloud Run:** each backend service and Kong run Google's Managed Prometheus sidecar (the `collector` container). It scrapes `:8080/metrics` every 30 s and labels each series with the service name as `namespace`.
+    - Kong's sidecar instead reads a scrape config from Secret Manager (`kong-gmp-config`, port 8100).
+    - While CPU is idle between requests a scrape can be late, so short gaps appear.
+    - There is no Prometheus server to operate.
+  - **Stage 2:** the same managed service scrapes the pods.
+- **Grafana (decision 5: our own small Cloud Run service, `deploy/terraform/observability.tf`).**
+  - Google's Prometheus query proxy (`gke.gcr.io/prometheus-engine/frontend`) runs beside it as a sidecar and signs queries as Grafana's service account (`roles/monitoring.viewer`). So one Prometheus data source answers both our metrics and Cloud Monitoring's (Cloud Run, Pub/Sub), with no stored key.
+  - Dashboards and the data source are baked into the image (`deploy/grafana`). The instance is stateless, scales to zero and keeps max 1 instance (logins live in its SQLite).
+  - The admin password is generated by Terraform and stored in Secret Manager.
+- **Dashboards** (`deploy/grafana/dashboards`):
+  - **Services:** rates, errors, latency per service and Kong; instances, CPU, memory, cold starts; running revisions.
+  - **Pipeline:** events, handler failures, stage p50/p95, Pub/Sub backlog, oldest unacked message, push responses, dead letters, detection verdicts, Supabase calls.
+  - **Agents:** calls, tokens, latency and errors per agent; prompt cache hit ratio overall, per agent, model and work; cache reads vs writes; savings; calls per unit of work; tool outcomes; budget exhaustion.
+  - **Cost:** month to date by default.
+    - Claude spend by model and agent, cost per document, detection run and case analysis, and a projected month.
+    - Cloud Run, estimated from vCPU-seconds, GiB-seconds and requests at tier-2 request-based prices; the prices are editable boxes on the dashboard.
+    - Pub/Sub, from billable bytes.
+    - Free-tier usage.
+    - Exact billed cost stays in Billing → Reports (or the BigQuery billing export, not set up).
+- **Traces (OpenTelemetry, `telemetry.py`).** On in the cloud (`OTEL_ENABLED=true` in Terraform) and sent to Cloud Trace, one service name each (`K_SERVICE`).
+  - `events.publish` puts the W3C `traceparent` on each Pub/Sub message and the push adapter continues it, so an upload is one trace across api, doc-worker and detection-worker. Each handler run is a `handle <role> <type>` span.
+  - Claude spans carry model, tokens and cost.
+  - Locally, traces go to Jaeger over OTLP (the observability compose profile), or print to the console.
+- **Locally:** `docker compose --profile observability up prometheus grafana jaeger`. Prometheus scrapes the compose services and a plain `uvicorn` on :8000, with the same `namespace` labels, so the dashboards work unchanged; the Cloud Run and Pub/Sub panels stay empty.
 
 What to measure:
 - Request rate, latency and status per service, including Kong.
@@ -282,7 +316,7 @@ If time runs short, drop Grafana polish first. Kong and the worker splits carry 
 | 4 | doc-worker replaces the in-memory queue (`queue_service.py` removed) | |
 | 5 | case-worker; "already running" read from the database with a 15-minute limit | Heartbeat, `submission_finalized` debounce in the case-worker, the sweeper (section 16) |
 | 6 | Kong (local and cloud), Terraform (IAM per service, Secret Manager, Pub/Sub, Cloud Run, Workload Identity Federation, budget), one build per role to Artifact Registry, deploy with automatic rollback, Checkov and Snyk in CI (non-blocking until the first findings are reviewed), GHCR publishing removed | Cloud Scheduler (comes with the sweeper) |
-| 7 | `/metrics` in every service, the Managed Prometheus sidecar | Grafana dashboards (decision 5), Kong's metrics on Cloud Run |
+| 7 | `/metrics` in every service (Claude cost, cache and latency per agent; cost per unit of work; tool outcomes), the Managed Prometheus sidecar (Kong's too), Grafana on Cloud Run with four dashboards (section 8), traces joined across services through Pub/Sub | Stuck-work gauges (come with the sweeper) |
 | 8-10 | | Not started |
 
 Stage 2 (after Stage 1, each step deployable on its own):
@@ -311,7 +345,7 @@ Open:
 2. ~~Ingestion separate or inside api~~ (resolved: inside api).
 3. **Supervisor check:** does Stage 1 on Cloud Run count as "genuinely decoupled" for the Cloud Native award, or is Kubernetes expected? (`CLAUDE.md` records "EC2 or Cloud Run, it doesn't matter".) This decides whether Stage 2 moves earlier.
 4. **Automatic case analysis** before November, which decides how much the case-worker's gate needs.
-5. **Where Grafana runs:** Grafana Cloud free tier, or one small instance of our own.
+5. **Where Grafana runs:** resolved 2026-10-22: one small Cloud Run service of our own, with Google's query proxy as a sidecar (section 8). No stored key, scales to zero.
 6. **Login:** keep `AUTH_USERS` as a documented limitation, or move to Supabase Auth (touches login, token checks, WebSocket tickets, tests).
 7. **Snyk and our `pyproject.toml`:** confirm it works, or use the fallbacks.
 
@@ -433,11 +467,17 @@ About 3.5 GB in total. The code paths are the same as in the cloud (emulator, pu
 6. `docker compose stop audit-metrics`, act, start it again: the missed events appear.
 7. `docker compose run --rm pubsub-init python -m app.events.emulator_setup --poison`: it is retried, then lands in the `domain-events-dead-letter-pull` subscription, and nothing else stalls.
 
+**Dashboards and traces locally** (opt-in, about 400 MB): `docker compose --profile observability up prometheus grafana jaeger`.
+- It works alongside plain `uvicorn` (scraped as `namespace="uvicorn"`) or with the whole split (`docker compose --profile observability up --build`).
+- Grafana is on http://localhost:3000 (admin / admin), Prometheus on :9090 and Jaeger on :16686.
+- For traces, set `OTEL_ENABLED=true` and `OTEL_EXPORTER_OTLP_ENDPOINT` in `backend/.env`: `http://localhost:4318` for uvicorn, `http://jaeger:4318` for compose services.
+- To change a dashboard, edit it in Grafana, then export the JSON (Share → Export) into `deploy/grafana/dashboards/`.
+
 Emulator limits: no OIDC tokens and no IAM, so `/push` takes unsigned requests locally (`PUSH_AUDIENCE` is unset). If the emulator refuses subscription filters or dead-letter policies, `emulator_setup` creates the subscriptions without them and logs a warning: handlers ignore types they don't handle (section 3), and step 7 can then only be checked in the cloud.
 
 ### 18.3 Deploying
 
-First time: `deploy/terraform/README.md` (state bucket, `terraform apply`, secret values, the GitHub repository variables). After that: Actions tab, "Deploy to Cloud Run", Run workflow. It builds one image per role, Kong and the frontend, rolls them out, checks the gateway, and rolls every service back if the check fails (section 6). Manual rollback: `gcloud run services update-traffic <service> --to-revisions=<revision>=100 --region asia-southeast1`. Logs: Cloud Logging, filtered by service; one request is followed through the audit trail by its Kong request id.
+First time: `deploy/terraform/README.md` (state bucket, `terraform apply`, secret values, the GitHub repository variables). After that: Actions tab, "Deploy to Cloud Run", Run workflow. It builds one image per role, Kong, the frontend and Grafana, rolls them out, checks the gateway, and rolls every service back if the check fails (section 6). Manual rollback: `gcloud run services update-traffic <service> --to-revisions=<revision>=100 --region asia-southeast1`. Logs: Cloud Logging, filtered by service; one request is followed through the audit trail by its Kong request id.
 
 Configuration (sizes, scaling, environment, secrets) changes in Terraform, not in the workflow: edit `deploy/terraform/main.tf` and `terraform apply`. A changed event subscription: `python -m app.events.types` (rewrites `subscriptions.json`), then `terraform apply`.
 

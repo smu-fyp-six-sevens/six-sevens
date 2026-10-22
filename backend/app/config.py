@@ -171,7 +171,12 @@ class Settings:
     # Required for the Cloud Trace exporter; left unset -> traces print to
     # the console instead.
     GOOGLE_CLOUD_PROJECT: str = _env("GOOGLE_CLOUD_PROJECT", "")
-    OTEL_SERVICE_NAME: str = _env("OTEL_SERVICE_NAME", "six-sevens-backend")
+    # K_SERVICE / K_REVISION are set by Cloud Run, so each service's traces carry its own name.
+    OTEL_SERVICE_NAME: str = _env("OTEL_SERVICE_NAME", os.environ.get("K_SERVICE", "six-sevens-backend"))
+    SERVICE_REVISION: str = os.environ.get("K_REVISION", "local")
+    # Set to send traces over OTLP instead (e.g. http://jaeger:4318 in the local observability profile).
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = _env("OTEL_EXPORTER_OTLP_ENDPOINT")
+    OTEL_TRACES_SAMPLE_RATIO: float = float(os.environ.get("OTEL_TRACES_SAMPLE_RATIO", "1.0"))
 
     # --- Public registry lookups (fraud_detection/external_validation/registry_lookups) ---
     # Both optional: without them the anonymous limits apply, and a lookup

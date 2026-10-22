@@ -73,6 +73,7 @@ jobs:
           done
           build kong deploy/kong/Dockerfile
           build frontend frontend/Dockerfile --build-arg VITE_API_URL="$KONG_URL"
+          build grafana deploy/grafana/Dockerfile
 
   deploy:
     needs: build
@@ -98,7 +99,7 @@ jobs:
       - name: Record the revisions now serving
         run: |
           : > previous.txt
-          for svc in api doc-worker detection-worker case-worker audit-metrics kong frontend; do
+          for svc in api doc-worker detection-worker case-worker audit-metrics kong frontend grafana; do
             # The revision taking traffic, which after a rollback is not the newest one.
             rev=$(gcloud run services describe "$svc" --region "$REGION" --format='value(status.traffic[0].revisionName)')
             echo "$svc $rev" >> previous.txt
@@ -109,10 +110,14 @@ jobs:
         run: |
           # Workers and audit-metrics first, so the api never publishes to an older consumer.
           pids=""
-          for svc in audit-metrics doc-worker detection-worker case-worker api kong frontend; do
-            # The backend roles also run the metrics sidecar, so name the app container. Every flag after
-            # --container belongs to that container, so the service-wide ones (--quiet) go before it.
-            container=""; case "$svc" in kong|frontend) ;; *) container="--container app" ;; esac
+          for svc in audit-metrics doc-worker detection-worker case-worker api kong frontend grafana; do
+            # Services with a sidecar need the main container named. Every flag after --container belongs
+            # to that container, so the service-wide ones (--quiet) go before it.
+            case "$svc" in
+              frontend) container="" ;;
+              kong|grafana) container="--container $svc" ;;
+              *) container="--container app" ;;
+            esac
             # update keeps the traffic split as it is, and a rollback pins traffic to an old revision,
             # so traffic is moved to the new revision explicitly.
             {
@@ -147,6 +152,10 @@ jobs:
           expect 200 GET "$FRONTEND_URL/"
           # Only Pub/Sub's identity may invoke a worker.
           expect 403 POST "$WORKER_URL/push/detection-worker"
+          # Grafana is up and asks for a login.
+          GRAFANA_URL=$(gcloud run services describe grafana --region "$REGION" --format='value(status.url)')
+          expect 200 GET "$GRAFANA_URL/api/health"
+          expect 401 GET "$GRAFANA_URL/api/dashboards/uid/six-services"
           # The frontend origin passes CORS.
           curl -s -o /dev/null -D - -X OPTIONS "$KONG_URL/cases" -H "Origin: $FRONTEND_URL" \
             -H "Access-Control-Request-Method: GET" | grep -qi "access-control-allow-origin: $FRONTEND_URL"
@@ -165,4 +174,5 @@ jobs:
             echo "### Deployed $GITHUB_SHA"
             echo "- Frontend: $(gcloud run services describe frontend --region "$REGION" --format='value(status.url)')"
             echo "- API (Kong): $(gcloud run services describe kong --region "$REGION" --format='value(status.url)')"
+            echo "- Grafana: $(gcloud run services describe grafana --region "$REGION" --format='value(status.url)')"
           } >> "$GITHUB_STEP_SUMMARY"

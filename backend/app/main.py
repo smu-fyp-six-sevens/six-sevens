@@ -57,6 +57,7 @@ for _role, _handlers in _HANDLERS.items():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting roles %s with %s events", sorted(ROLES), settings.EVENT_TRANSPORT)
+    metrics.set_info(ROLES)
     if "api" in ROLES and not settings.AUTH_USERS:
         logger.warning("AUTH_USERS is not set, so nobody can log in. Set it in backend/.env")
     try:
@@ -95,6 +96,7 @@ async def lifespan(app: FastAPI):
     await bus.shutdown()
     if "api" in ROLES:
         await realtime_listener.stop()
+    await asyncio.to_thread(telemetry.shutdown)
 
 
 app = FastAPI(title="fyp API", lifespan=lifespan)

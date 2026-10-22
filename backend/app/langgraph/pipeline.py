@@ -70,7 +70,7 @@ async def rerun_extraction(document_id: str) -> None:
     type (a confirmed-unchanged type has nothing new for Extraction to
     re-read; see that handler).
     """
-    with query_stats.scope(f"rerun extraction doc={document_id[:8]}"),             telemetry.get_tracer().start_as_current_span("langgraph.rerun_extraction") as span:
+    with query_stats.scope(f"rerun extraction doc={document_id[:8]}", work="extraction_rerun"), telemetry.get_tracer().start_as_current_span("langgraph.rerun_extraction") as span:
         span.set_attribute("document_id", document_id)
         try:
             with run_context(settings.DOCUMENT_MAX_MODEL_CALLS) as run:

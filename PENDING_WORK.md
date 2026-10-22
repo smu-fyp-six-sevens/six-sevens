@@ -24,7 +24,7 @@ Open product and platform work only. Code smells and optimisations are in `REFAC
 - **Postgres checkpointing, pruning and time travel** are not built (every graph compiles with `checkpointer=False`). A crashed run fails the document and is retried from scratch; there is no replay or fork from an earlier step and no thread cleanup. Time travel is no longer needed for "fix the type and re-extract" (the officer correction already reruns extraction only), so it is now a debugging and audit aid. If built: `langgraph-checkpoint-postgres` on the transaction pooler (`prepare_threshold=None`), its own `langgraph` schema (or a second free Postgres via `LANGGRAPH_DATABASE_URL` if churn hurts), only the parent graph checkpoints, delete a document's thread when it finishes and sweep failed ones after a few days by `thread_id` (= `document_id`; the tables have no `created_at`). Keep PII and text out of state (re-ingest the stored file to replay), measure bytes per document (target well under ~50 MB), consider encrypting the serializer, and add a keep-alive for the Supabase free-tier inactivity pause before the November demo.
 - **CPU work runs on one thread.** PyMuPDF is not thread-safe, so all PDF and forensic checks share one worker (`CPU_WORKER_CONCURRENCY=1`). Raising `DETECTION_CONCURRENCY` (now 2) only overlaps the model and registry calls; a process pool would be the real fix. Tune it from the `perf` log lines once the rate limiter below exists.
 - **Per-provider rate limiting.** No shared Anthropic limiter across the 4 queue workers. Detection runs are capped at `DETECTION_CONCURRENCY` (2), one at `DETECTION_MAX_MODEL_CALLS` (30) and the case analysis at 6, but nothing bounds the total across the queue, detection and an analysis at once.
-- **Prometheus metrics.** Token and cache counts are logged per unit of work (`query_stats.py`) but not exported; blocked on the `/metrics` endpoint below.
+- **Prometheus metrics.** Done: token, cache and cost counts per agent and per unit of work are on `/metrics` and the Grafana agents and cost dashboards.
 - **Guardrails, evals and CI.** `injection_manifest.json` lists the defects planted in each generated `_F` file, so it can score detection per defect type (a case may upload the clean version, which has no `_F`; check the file names first). Synthetic companies always fail the ACRA check, so that finding fires on every generated case; it scores once per case (8 points) and counts the document as high. Golden-set nightly evals (classification accuracy, per-field extraction, escalation rate, cost per document, cache hit rate) from `documents_generated/` and a mocked-subset-per-PR check are not built. Also not built: specialist precision and recall scored on the forged documents from `injection/pdf.py` (keep the synthetic-to-real caveat).
 - **Extraction repair node.** Only the classifier has a repair step (deterministic cleanup, one Haiku re-ask, then manual review); extraction has none. Unchecked whether that is still true in the code.
 - **LangGraph Store** (learning from officer corrections): last phase, not started.
@@ -56,11 +56,9 @@ Budgets are in `HOW_IT_WORKS.md` §8; read them off the `perf` log lines. Query-
 
 ## Architecture (Kong / Prometheus / Grafana)
 
-Not started. Designed in `CLOUD_ARCHITECTURE_PLAN.md` (Kong in section 7, Prometheus and Grafana in section 8); implementation was expected to begin a few days after 2026-10-20. The points below are what the code needs for it.
-
-- **Kong API gateway** would sit in front of whatever service boundaries exist and can add value (auth, rate limiting, routing) even before a real split. Today's boundary crossings are direct Python calls (`case_service.sync_submission_finalized`, `document_repository.get_document`, `queue_service.enqueue`), not events or API calls; replacing them is the actual work.
-- **Prometheus `/metrics`:** no app-level endpoint yet (LLM token usage and cost per document, classify and extract latency, queue depth, stuck-document count). Gateway metrics would come free from Kong's plugin.
-- **Grafana** dashboards over both, once they exist; Cloud Trace can be a data source to surface the existing OpenTelemetry traces.
+Built on the `microservices` branch (2026-10-22): Kong, `/metrics` in every service, Grafana with four dashboards, and traces joined across services. See `CLOUD_ARCHITECTURE_PLAN.md` sections 7 and 8. Still open:
+- stuck-work gauges, which come with the sweeper (section 16);
+- alert rules (none yet; the budget alert is the only one).
 
 ## Frontend
 

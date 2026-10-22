@@ -6,6 +6,11 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 6.0"
     }
+    # Grafana's admin password.
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
   }
 
   # State lives in a GCS bucket created once by hand (see README.md here):

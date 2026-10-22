@@ -191,7 +191,19 @@ GET /cases -> 3 supabase (GET cases x1, GET documents x1, GET latest_risk_scores
 detection doc=a25f9fc4 -> 12 supabase (...) | 11 claude (26601 in / 3008 out tokens; cache read 0 / write 0), 43813ms total
 ```
 
-The same counts, plus request rates and latencies, events published and handled, and stage durations, are also on `GET /metrics` for Prometheus (`metrics.py`); labels are routes, event types and stages, never ids. Kong blocks `/metrics` from outside.
+The same counts are also on `GET /metrics` for Prometheus (`metrics.py`), together with:
+- request rates and latencies, events published and handled, and stage durations;
+- Claude calls, tokens, cost and latency per agent and model, with list prices from `pricing.py`;
+- cost and calls per unit of work, and detection tool outcomes.
+
+Labels are routes, event types, stages, agents and models, never ids. Kong blocks `/metrics` from outside. Grafana's four dashboards (services, pipeline, agents, cost) read these metrics (`deploy/grafana`, `CLOUD_ARCHITECTURE_PLAN.md` section 8).
+
+**Traces.** OpenTelemetry (`telemetry.py`) is off unless `OTEL_ENABLED=true`, which Terraform sets in the cloud. Spans go to:
+1. OTLP, when `OTEL_EXPORTER_OTLP_ENDPOINT` is set (Jaeger locally);
+2. otherwise Cloud Trace, when `GOOGLE_CLOUD_PROJECT` names a real project;
+3. otherwise the console.
+
+Each event's Pub/Sub message carries `traceparent`, so one upload is one trace across services. `OTEL_TRACES_SAMPLE_RATIO` (default 1.0) samples fewer.
 
 Every 60 seconds a summary of Realtime and WebSocket traffic (events received, ignored, merged, connects, pushes) and of calls made outside any unit of work is also logged. Rough budgets: case list 3 queries; a snapshot 5; approve 2; delete or add a field 6–7; detection about 12.
 
@@ -201,7 +213,7 @@ Every 60 seconds a summary of Realtime and WebSocket traffic (events received, i
 
 **Built:** upload and queue; classify and extract with the reclassify loop; officer review tools; requirements checklist; case-match; the Detection Agent with 10 checks and on-demand single checks; per-document flags; the case analysis (deterministic and agent cross-document findings, score, outlook, additional documents, summary); live WebSocket updates; cost logging; the service split (roles, domain events, Pub/Sub push, audit trail, `/metrics`), Kong, the compose stack, Terraform and the deploy workflow (`CLOUD_ARCHITECTURE_PLAN.md`; not yet applied to GCP).
 
-**Not built:** the Output Aggregator; automatic case analysis when all documents are scanned; recovery of stuck work (the sweeper, `CLOUD_ARCHITECTURE_PLAN.md` section 16); Grafana dashboards; case-level flags; an officer review flow for flags (the `status` and `reviewed_by` columns exist, unused). Open items are in `PENDING_WORK.md`.
+**Not built:** the Output Aggregator; automatic case analysis when all documents are scanned; recovery of stuck work (the sweeper, `CLOUD_ARCHITECTURE_PLAN.md` section 16); case-level flags; an officer review flow for flags (the `status` and `reviewed_by` columns exist, unused). Open items are in `PENDING_WORK.md`.
 
 ## 10. Known rough edges
 

@@ -6,7 +6,9 @@ import logging
 import time
 from collections.abc import Awaitable, Callable, Mapping
 
-from .. import metrics
+from opentelemetry.trace import SpanKind
+
+from .. import metrics, telemetry
 from .envelope import Event
 from .types import EVERY_TYPE, SUBSCRIPTIONS
 
@@ -51,7 +53,9 @@ async def run_handler(role: str, handler: Handler, event: Event) -> None:
     started = time.perf_counter()
     result = "error"
     try:
-        await handler(event)
+        with telemetry.get_tracer().start_as_current_span(f"handle {role} {type_label}", kind=SpanKind.CONSUMER) as span:
+            span.set_attribute("event.id", event.event_id)
+            await handler(event)
         result = "ok"
     finally:
         metrics.events_handled.labels(role, type_label, result).inc()

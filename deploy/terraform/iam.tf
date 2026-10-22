@@ -1,7 +1,7 @@
 # One service account per service, with only what it needs (CLOUD_ARCHITECTURE_PLAN.md section 6).
 
 resource "google_service_account" "role" {
-  for_each     = toset(concat(keys(local.roles), ["kong", "frontend"]))
+  for_each     = toset(concat(keys(local.roles), ["kong", "frontend", "grafana"]))
   account_id   = "run-${each.key}"
   display_name = "Cloud Run: ${each.key}"
 }
@@ -49,9 +49,9 @@ resource "google_project_iam_member" "trace" {
   member   = "serviceAccount:${google_service_account.role[each.key].email}"
 }
 
-# The Managed Prometheus sidecar writes metrics as the service's account.
+# The Managed Prometheus sidecar writes metrics as the service's account (Kong's too).
 resource "google_project_iam_member" "metric_writer" {
-  for_each = toset(keys(local.roles))
+  for_each = toset(concat(keys(local.roles), ["kong"]))
   project  = var.project_id
   role     = "roles/monitoring.metricWriter"
   member   = "serviceAccount:${google_service_account.role[each.key].email}"

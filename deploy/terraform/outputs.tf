@@ -7,6 +7,16 @@ output "frontend_url" {
   value = google_cloud_run_v2_service.frontend.uri
 }
 
+output "grafana_url" {
+  description = "Log in as admin with: terraform output -raw grafana_admin_password"
+  value       = google_cloud_run_v2_service.grafana.uri
+}
+
+output "grafana_admin_password" {
+  value     = random_password.grafana_admin.result
+  sensitive = true
+}
+
 output "registry" {
   value = local.registry
 }

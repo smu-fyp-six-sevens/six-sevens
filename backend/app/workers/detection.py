@@ -6,7 +6,7 @@ import asyncio
 import logging
 from typing import Any
 
-from .. import document_repository, events, query_stats
+from .. import document_repository, events, metrics, query_stats
 from ..config import settings
 from ..events import Event, Stopwatch, types
 from ..events.envelope import Outcome
@@ -34,9 +34,10 @@ async def run(document_id: str, case_id: str | None) -> None:
     detail: dict[str, Any] = {}
     try:
         async with _slots:
-            with query_stats.scope(f"detection doc={document_id[:8]}"):
+            with query_stats.scope(f"detection doc={document_id[:8]}", work="detection"):
                 result = await run_detection(document_id)
         detail = {"verdict": result.get("verdict"), "findings": len(result.get("findings") or [])}
+        metrics.detection_verdicts.labels(str(detail["verdict"] or "none")).inc()
     except asyncio.CancelledError:
         by_officer = document_id in _officer_cancels
         _officer_cancels.discard(document_id)

@@ -16,6 +16,7 @@ import logging
 from fastapi import APIRouter, Header, HTTPException, Response, status
 from pydantic import BaseModel, Field, ValidationError
 
+from .. import telemetry
 from ..config import settings
 from . import registry
 from .envelope import Event
@@ -66,5 +67,7 @@ async def receive(role: str, body: _PushBody, authorization: str | None = Header
     except (binascii.Error, ValueError, ValidationError) as exc:
         logger.error("Malformed push message %s on %s: %s", body.message.message_id, role, exc)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Malformed event") from exc
-    await registry.dispatch(role, event)
+    # The publisher's traceparent, so the work joins the trace of the request that caused it.
+    with telemetry.continued_from(body.message.attributes):
+        await registry.dispatch(role, event)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

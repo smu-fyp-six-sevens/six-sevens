@@ -121,7 +121,7 @@ async def _execute_scoped(
     analysis: CaseAnalysis, documents: list[DocumentRecord], reports: dict[str, dict[str, Any]],
     failed_ids: set[str],
 ) -> None:
-    with query_stats.scope(f"case analysis case={analysis.case_id[:8]}"):
+    with query_stats.scope(f"case analysis case={analysis.case_id[:8]}", work="case_analysis"):
         await _execute(analysis, documents, reports, failed_ids)
 
 

@@ -1,7 +1,7 @@
 locals {
   # Cloud Run's deterministic URL: known before the service exists, so the push audience and Kong's
   # upstreams can be set without a dependency cycle.
-  url = { for name in concat(keys(local.roles), ["kong", "frontend"]) :
+  url = { for name in concat(keys(local.roles), ["kong", "frontend", "grafana"]) :
   name => "https://${name}-${data.google_project.this.number}.${var.region}.run.app" }
 
   registry = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.app.repository_id}"
@@ -9,7 +9,7 @@ locals {
   # Terraform creates each service on this image; the deploy workflow then rolls out the real ones.
   placeholder_image = "us-docker.pkg.dev/cloudrun/container/hello"
 
-  supabase   = ["SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY"]
+  supabase = ["SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY"]
   # OneMap needs no token (ONEMAP_API_TOKEN is optional and not set in the cloud).
   registries = ["DATA_GOV_SG_API_KEY", "URA_API_KEY"]
 
@@ -18,6 +18,8 @@ locals {
     GOOGLE_CLOUD_PROJECT    = var.project_id
     SUPABASE_URL            = var.supabase_url
     SUPABASE_STORAGE_BUCKET = var.supabase_storage_bucket
+    # Traces to Cloud Trace, one service name each (K_SERVICE).
+    OTEL_ENABLED = "true"
   }
 
   # One entry per backend role (CLOUD_ARCHITECTURE_PLAN.md section 2).

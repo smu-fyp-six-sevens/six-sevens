@@ -3,6 +3,7 @@
 #
 #   docker compose up --build                     # emulator, Kong :8000, api, workers, audit-metrics
 #   docker compose --profile frontend up --build  # also the nginx build on :5173 (else use npm run dev)
+#   docker compose --profile observability up     # also Prometheus :9090, Grafana :3000, Jaeger :16686
 #
 # Settings come from backend/.env, as for uvicorn.
 include:
@@ -12,3 +13,4 @@ include:
   - deploy/compose/audit-metrics.yaml
   - deploy/compose/kong.yaml
   - deploy/compose/frontend.yaml
+  - deploy/compose/observability.yaml

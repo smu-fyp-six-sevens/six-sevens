@@ -73,7 +73,7 @@ async def _run(document_id: str, work: Callable[[], Awaitable[None]], scope: str
             if scope is None:
                 await work()
             else:
-                with query_stats.scope(f"{scope} doc={document_id[:8]}"):
+                with query_stats.scope(f"{scope} doc={document_id[:8]}", work="document"):
                     await work()
     except asyncio.CancelledError:
         if document_id not in _officer_cancels:

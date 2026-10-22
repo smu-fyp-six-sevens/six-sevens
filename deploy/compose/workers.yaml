@@ -19,6 +19,7 @@ services:
       EVENT_TRANSPORT: pubsub
       PUBSUB_EMULATOR_HOST: pubsub-emulator:8085
       GOOGLE_CLOUD_PROJECT: local
+      OTEL_SERVICE_NAME: workers
     depends_on:
       pubsub-init:
         condition: service_completed_successfully

@@ -13,6 +13,7 @@ services:
       PUBSUB_EMULATOR_HOST: pubsub-emulator:8085
       GOOGLE_CLOUD_PROJECT: local
       CORS_IN_APP: "false"
+      OTEL_SERVICE_NAME: audit-metrics
     depends_on:
       pubsub-init:
         condition: service_completed_successfully

@@ -1,0 +1,16 @@
+# One Prometheus data source for every dashboard. On Cloud Run it is Google's query proxy (a sidecar signing
+# requests as Grafana's service account) in front of Managed Prometheus, which also answers PromQL for Cloud
+# Monitoring metrics (Cloud Run, Pub/Sub). Locally it is the Prometheus in the observability profile.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: ${PROMETHEUS_URL}
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: 30s
+      httpMethod: GET

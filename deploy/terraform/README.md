@@ -7,7 +7,8 @@ Creates everything the services need on GCP (CLOUD_ARCHITECTURE_PLAN.md sections
 | `main.tf` | APIs, Artifact Registry, the role table (size, scaling, secrets, environment per service) |
 | `iam.tf` | a service account per service, Secret Manager secrets and who may read each, publish rights, metric writing, Pub/Sub's service agent |
 | `pubsub.tf` | `domain-events`, its dead-letter topic, one filtered push subscription per role (filters from `subscriptions.json`, exported by `python -m app.events.types`) |
-| `run.tf` | Cloud Run: api, doc-worker, detection-worker, case-worker, audit-metrics (each with the Managed Prometheus sidecar), Kong, frontend |
+| `run.tf` | Cloud Run: api, doc-worker, detection-worker, case-worker, audit-metrics and Kong (each with the Managed Prometheus sidecar), frontend |
+| `observability.tf` | Grafana on Cloud Run (with Google's Prometheus query proxy as a sidecar), its generated admin password, the scrape config for Kong's metrics |
 | `github.tf` | Workload Identity Federation for GitHub Actions and the deployer account |
 | `monitoring.tf` | the budget alert (when `billing_account` is set) |
 
@@ -19,7 +20,37 @@ Only the person running the cloud needs anything here. Teammates who run `uvicor
 
 Project `fyp-six-sevens` (number `1076848636975`), region `asia-southeast1`, repo `smu-fyp-six-sevens/six-sevens`, deploying from the `microservices` branch.
 
-Done: the state bucket, `terraform apply` (the existing `github-deployer` account and `app` repository were imported, not recreated), the secret values, the GitHub repository variables. Deploy runs so far have each failed on one of the problems in "Problems met" below, all fixed in the workflow; the run after the traffic fix had not happened yet. Whether the budget alert applies depends on your billing permissions (see below).
+Done:
+- the state bucket and `terraform apply` (the existing `github-deployer` account and `app` repository were imported, not recreated);
+- the secret values and the GitHub repository variables;
+- the first successful end-to-end deploy (2026-10-22), after each problem in "Problems met" below was fixed in the workflow.
+
+Whether the budget alert applies depends on your billing permissions (see below).
+
+**Pending: the observability change** (Grafana, Kong metrics, traces on). It needs Terraform before the next deploy; see the next section.
+
+## Rolling out Grafana and tracing (once)
+
+The deploy workflow now builds and checks a `grafana` service, so Terraform must create it first, or the deploy fails at "Record the revisions now serving".
+
+```powershell
+cd deploy/terraform
+# The proxy tag in grafana_proxy_image (variables.tf, v0.15.3-gke.0) existed on 2026-10-22. gke.gcr.io isn't Artifact
+# Registry, so `gcloud artifacts docker tags list` refuses it; list its tags with:
+#   curl.exe -s https://gke.gcr.io/v2/prometheus-engine/frontend/tags/list
+terraform init -upgrade -backend-config="bucket=<project-id>-tfstate"   # adds the random provider (Grafana's password)
+terraform apply
+terraform output -raw grafana_admin_password                         # log in as admin with this
+```
+
+Then commit, push and run the deploy. The run summary shows the Grafana URL.
+
+What the apply changes:
+- **New:** the `grafana` service, its account, the password secret, `kong-gmp-config`, and metric-writer and viewer roles.
+- **Kong:** its container gets a name and a collector sidecar.
+- **Every backend service:** gets `OTEL_ENABLED=true`.
+
+Expect a new revision of each service. The images stay as deployed: Terraform ignores image changes.
 
 ## One-time setup
 
@@ -83,7 +114,11 @@ When it succeeds, the run summary shows the frontend and API (Kong) URLs. Then:
 1. Open the frontend URL and log in with an `AUTH_USERS` account.
 2. Create a case, upload a document, approve it, and run the case analysis.
 3. `GET <Kong URL>/audit/events?case_id=<id>` with your token lists the events, each officer action with Kong's request id.
-4. Metrics: Cloud Console → Monitoring → Metrics Explorer → PromQL, e.g. `sum by (route) (rate(http_requests_total[5m]))`. Data appears a few minutes after the services get traffic.
+4. **Grafana:** open the Grafana URL and log in as `admin` with `terraform output -raw grafana_admin_password`. The "Six Sevens" folder holds four dashboards: Services, Pipeline, Agents (calls, cache hit ratio, latency, tool outcomes) and Cost.
+   - Data appears a few minutes after the services get traffic.
+   - The first page load after an idle period waits for Grafana's cold start.
+   - The same PromQL also works in Cloud Console → Monitoring → Metrics Explorer.
+5. **Traces:** Cloud Console → Trace → Trace explorer. One upload shows api, doc-worker and detection-worker spans in one trace. Claude spans carry the model, tokens and `llm.cost_usd`.
 
 A secret changed later reaches a service on its next revision (the next deploy, or `gcloud run services update <service> --region asia-southeast1`). Configuration (sizes, scaling, environment, secrets) changes here, with `terraform apply`, never in the workflow.
 
@@ -92,12 +127,13 @@ A secret changed later reaches a service on its next revision (the next deploy, 
 - Delete the old single-service deploy: `gcloud run services delete fyp-backend --region asia-southeast1`, and the same for `fyp-frontend`.
 - Delete the GitHub secrets the new workflow no longer reads: `GCP_SA_KEY`, `SUPABASE_*`, `ANTHROPIC_API_KEY`, `AUTH_*`, `ONEMAP_API_TOKEN`, `URA_API_KEY`, and any `GCP_PROJECT_ID` or `GCP_REGION` *secrets* (the variables of the same names stay). Keep `DATA_GOV_SG_API_KEY`.
 - Delete `set-secrets.ps1` if it still exists.
-- Optional: `docker image rm six-sevens/api:check six-sevens/kong:check` (local images built to check the Dockerfiles).
+- Optional: `docker image rm six-sevens/api:check six-sevens/kong:check six-sevens/grafana:check prom/prometheus:v3.1.0 hashicorp/terraform:1.9.8` (local images used to check the Dockerfiles, dashboards and Terraform).
 
 ## Optional, any time
 
 - A `SNYK_TOKEN` repository secret makes CI use Snyk instead of `pip-audit` and `npm audit`.
-- Decide where Grafana runs (Grafana Cloud free tier or one small instance; plan decision 5).
+- **Exact billed cost.** The Cost dashboard estimates Cloud Run and Pub/Sub from usage. For the invoice figures, a billing admin can turn on Billing → Billing export → BigQuery (a Grafana BigQuery data source can read it later). Until then, use Billing → Reports.
+- **Cloud Run prices.** If they change, edit the price boxes at the top of the Cost dashboard, or their defaults in the dashboard JSON.
 - For a demo, `min_instances = { api = 1, kong = 1, "doc-worker" = 1, "detection-worker" = 1 }` in `terraform.tfvars`, then `terraform apply`, avoids cold starts (below).
 - To let only `main` deploy, add `assertion.ref == "refs/heads/main"` to the `attribute_condition` in `github.tf` (after merging).
 
@@ -105,7 +141,7 @@ A secret changed later reaches a service on its next revision (the next deploy, 
 
 - **Scale to zero.** Every service defaults to 0 minimum instances. Cloud Run keeps an idle instance for up to about 15 minutes after its last request (for a worker, its last push; Google publishes no exact figure), then stops it; the next event waits for a cold start, roughly 10-30 s here because of the LangGraph and OCR imports. Idle instances cost nothing with CPU idle.
 - **api is capped at one instance** while WebSocket tickets are held in its memory.
-- **Public services** are api, audit-metrics, Kong and the frontend (each still checks the app's token). Workers can be invoked only by the `pubsub-push` account; audit-metrics' `/push` checks that account's OIDC token itself.
+- **Public services** are api, audit-metrics, Kong and the frontend (each still checks the app's token), and Grafana (its own login, anonymous access off). Workers can be invoked only by the `pubsub-push` account; audit-metrics' `/push` checks that account's OIDC token itself.
 - **The sidecar** (`gmp_sidecar_image`): with CPU idle between requests, scrapes can be delayed and short gaps appear.
 - **Provider billing project.** `versions.tf` sets `billing_project` and `user_project_override`, so API calls bill to this project rather than gcloud's own client project (the budget API refuses local user credentials otherwise).
 
@@ -124,3 +160,5 @@ A secret changed later reaches a service on its next revision (the next deploy, 
 | "Unable to retrieve Identity Pool subject token… upstream request timeout" | gcloud fetched a new GitHub token mid-run and GitHub's token service timed out | One access token per job (`token_format: access_token`, `create_credentials_file: false`) |
 | `/cases` answers 200 without a login; the "Congratulations" page | A rollback pinned traffic to the placeholder revision, and `services update` doesn't move traffic | The rollout runs `update-traffic --to-latest`; the check also requires `{"status":"ok"}` from `/health`; the rollback records the revision serving traffic |
 | A push fails "unauthorized"/"denied" late in a long build | The build job's token expired | Raise `access_token_lifetime` in the build job (now 1200s) |
+| Deploy fails at "Record the revisions" with `grafana` not found | The workflow expects the Grafana service, which Terraform creates | `terraform apply` first ("Rolling out Grafana and tracing") |
+| Grafana panels say "No data" for Cloud Run or Pub/Sub only | The query proxy can't read Cloud Monitoring | Check the `grafana` service's `prometheus` container logs; its account needs `roles/monitoring.viewer` (`observability.tf`) |

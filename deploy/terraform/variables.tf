@@ -48,6 +48,12 @@ variable "gmp_sidecar_image" {
   default     = "us-docker.pkg.dev/cloud-ops-agents-artifacts/cloud-run-gmp-sidecar/cloud-run-gmp-sidecar:1.2.0"
 }
 
+variable "grafana_proxy_image" {
+  description = "Google's Prometheus query proxy, beside Grafana; check the newest tag before applying."
+  type        = string
+  default     = "gke.gcr.io/prometheus-engine/frontend:v0.15.3-gke.0"
+}
+
 variable "billing_account" {
   description = "Billing account id for the budget alert; empty skips the budget."
   type        = string

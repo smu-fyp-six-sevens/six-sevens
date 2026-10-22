@@ -93,7 +93,9 @@ resource "google_cloud_run_v2_service" "kong" {
       max_instance_count = 2
     }
 
+    # The deploy workflow updates this one by name (`--container kong`).
     containers {
+      name  = "kong"
       image = local.placeholder_image
 
       ports {
@@ -123,11 +125,44 @@ resource "google_cloud_run_v2_service" "kong" {
         value = join(",", concat([local.url["frontend"], google_cloud_run_v2_service.frontend.uri], var.extra_frontend_origins))
       }
     }
+
+    # Managed Prometheus for Kong's own metrics, with the scrape config from observability.tf (port 8100).
+    dynamic "containers" {
+      for_each = var.metrics_sidecar ? [1] : []
+      content {
+        name  = "collector"
+        image = var.gmp_sidecar_image
+        resources {
+          limits   = { cpu = "500m", memory = "256Mi" }
+          cpu_idle = true
+        }
+        volume_mounts {
+          name       = "gmp-config"
+          mount_path = "/etc/rungmp"
+        }
+      }
+    }
+
+    dynamic "volumes" {
+      for_each = var.metrics_sidecar ? [1] : []
+      content {
+        name = "gmp-config"
+        secret {
+          secret = google_secret_manager_secret.kong_gmp_config.secret_id
+          items {
+            version = "latest"
+            path    = "config.yaml"
+          }
+        }
+      }
+    }
   }
 
   lifecycle {
     ignore_changes = [template[0].containers[0].image, client, client_version]
   }
+
+  depends_on = [google_secret_manager_secret_version.kong_gmp_config, google_secret_manager_secret_iam_member.kong_gmp_config]
 }
 
 resource "google_cloud_run_v2_service" "frontend" {
@@ -168,7 +203,11 @@ resource "google_cloud_run_v2_service" "frontend" {
 resource "google_cloud_run_v2_service_iam_member" "public" {
   for_each = merge(
     { for role, cfg in local.roles : role => google_cloud_run_v2_service.role[role].name if cfg.public },
-    { kong = google_cloud_run_v2_service.kong.name, frontend = google_cloud_run_v2_service.frontend.name },
+    {
+      kong     = google_cloud_run_v2_service.kong.name
+      frontend = google_cloud_run_v2_service.frontend.name
+      grafana  = google_cloud_run_v2_service.grafana.name # behind Grafana's own login
+    },
   )
   location = var.region
   name     = each.value
