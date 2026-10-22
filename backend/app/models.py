@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -515,6 +516,61 @@ class UpdateCaseRequest(BaseModel):
         if len(trimmed) > MAX_COMPANY_NAME_LENGTH:
             raise ValueError(f"company_name must be at most {MAX_COMPANY_NAME_LENGTH} characters")
         return trimmed
+
+
+MAX_NOTE_LENGTH = 4000
+
+
+class CaseNote(BaseModel):
+    """
+    A loan officer's note on a case, or on one of its documents (document_id). parent_id marks a
+    reply to an earlier note. Only its author can edit or delete it; edited_at shows it was edited.
+    A deleted note that has replies stays as a placeholder (deleted_at set, its text erased) so the
+    replies keep their place.
+    """
+
+    id: str
+    case_id: str
+    document_id: str | None = None
+    parent_id: str | None = None
+    author: str
+    body: str
+    created_at: datetime
+    edited_at: datetime | None = None
+    deleted_at: datetime | None = None
+
+
+def _note_body(value: str) -> str:
+    trimmed = value.strip()
+    if not trimmed:
+        raise ValueError("A note can't be empty")
+    if len(trimmed) > MAX_NOTE_LENGTH:
+        raise ValueError(f"A note must be at most {MAX_NOTE_LENGTH} characters")
+    return trimmed
+
+
+class CreateNoteRequest(BaseModel):
+    """A new note: on the whole case, on one of its documents, or a reply to an earlier note (parent_id)."""
+
+    body: str
+    document_id: UUID | None = None
+    parent_id: UUID | None = None
+
+    @field_validator("body")
+    @classmethod
+    def body_must_not_be_blank(cls, value: str) -> str:
+        return _note_body(value)
+
+
+class UpdateNoteRequest(BaseModel):
+    """A note's new text. Where the note sits (case, document, parent) never changes."""
+
+    body: str
+
+    @field_validator("body")
+    @classmethod
+    def body_must_not_be_blank(cls, value: str) -> str:
+        return _note_body(value)
 
 
 class DocumentRecord(BaseModel):

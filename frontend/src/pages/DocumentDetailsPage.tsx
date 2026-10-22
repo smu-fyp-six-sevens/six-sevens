@@ -5,6 +5,7 @@ import CaseHeader, { CaseTitle, caseCrumb, caseQueueCrumb, documentCrumb } from 
 import { useCases } from '../casesContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DocumentPreviewModal from '../components/DocumentPreviewModal';
+import DocumentPreviewPane, { ShowDocumentButton } from '../components/DocumentPreviewPane';
 import KebabMenu from '../components/KebabMenu';
 import {
   canCancelDocument,
@@ -24,6 +25,7 @@ import { describeFailureReason } from './document-details/formatters';
 import { DocumentSummaryCard } from './document-details/DocumentSummaryCard';
 import { ExtractedInformationCard } from './document-details/ExtractedInformationCard';
 import { ManualReviewCard } from './document-details/ManualReviewCard';
+import { NotesCard } from '../components/NotesCard';
 import { useDetection } from './document-details/useDetection';
 import { useDocumentActions } from './document-details/useDocumentActions';
 import { useDocumentCaseMatch } from './document-details/useDocumentCaseMatch';
@@ -40,6 +42,26 @@ const DetectionPanel = lazy(() =>
 const LangGraphTracePanel = lazy(() =>
   import('./document-details/LangGraphTracePanel').then((m) => ({ default: m.LangGraphTracePanel })),
 );
+
+// Whether the side-by-side preview is shown, remembered per browser. Storage can throw (private mode,
+// blocked site data), so it falls back to shown.
+const PREVIEW_PANE_STORAGE_KEY = 'documentDetails.previewPaneOpen';
+
+function loadPreviewPaneOpen(): boolean {
+  try {
+    return localStorage.getItem(PREVIEW_PANE_STORAGE_KEY) !== 'false';
+  } catch {
+    return true;
+  }
+}
+
+function savePreviewPaneOpen(open: boolean) {
+  try {
+    localStorage.setItem(PREVIEW_PANE_STORAGE_KEY, String(open));
+  } catch {
+    // Not remembering is fine: the toggle still works for this visit.
+  }
+}
 
 interface DocumentDetailsPageProps {
   selectedCase: CaseRecord;
@@ -65,6 +87,11 @@ export default function DocumentDetailsPage({
   } = useDocumentRecord(documentId);
   const caseMatch = useDocumentCaseMatch(documentId, document);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isPreviewPaneOpen, setIsPreviewPaneOpen] = useState(loadPreviewPaneOpen);
+  const togglePreviewPane = (open: boolean) => {
+    setIsPreviewPaneOpen(open);
+    savePreviewPaneOpen(open);
+  };
 
   const isApproved = hasBeenApproved(document?.status);
   // Approve and Reject are both final: the document is locked against field edits and type corrections.
@@ -336,49 +363,74 @@ export default function DocumentDetailsPage({
 
       {caseHeader}
 
-      <div className="document-details-body">
-        <div className="document-details-intro">
-          <div className="document-details-title-row">
-            <h2 className="section-title">Document details</h2>
-            <div className="document-details-title-actions">
-              <KebabMenu
-                label={isDeletingDocument ? 'Deleting document' : 'Document actions'}
-                disabled={isDeletingDocument}
-                items={[
-                  {
-                    id: 'preview',
-                    label: 'Preview document',
-                    onSelect: () => setIsPreviewOpen(true),
-                  },
-                  ...(!hasBeenApproved(document.status) && !isInFlight
-                    ? [
-                        {
-                          id: 'delete',
-                          label: isDeletingDocument ? 'Deleting…' : 'Delete document',
-                          danger: true,
-                          disabled: isDeletingDocument,
-                          onSelect: () => setDeleteConfirmOpen(true),
-                        },
-                      ]
-                    : []),
-                ]}
-              />
-            </div>
+      <div
+        className={`document-details-body document-details-body--split${
+          isPreviewPaneOpen ? '' : ' document-details-body--preview-hidden'
+        }`}
+      >
+        {/* The document on the left, kept in view while the fields on the right scroll, so each value
+            can be checked against the page. Hidden, "Show document" in the header brings it back. */}
+        <div className="document-details-split">
+        {isPreviewPaneOpen && (
+          <DocumentPreviewPane
+            documentId={document.id}
+            filename={document.filename}
+            onExpand={() => setIsPreviewOpen(true)}
+            onCollapse={() => togglePreviewPane(false)}
+          />
+        )}
+
+        <div className="document-details-main">
+        {deleteDocumentError && (
+          <div className="toast show mixed" role="alert">
+            ⚠ {deleteDocumentError}
           </div>
-          <p className="sub">
-            View extracted data and review any fields that require
-            manual correction.
-          </p>
-          {deleteDocumentError && (
-            <div className="toast show mixed" role="alert">
-              ⚠ {deleteDocumentError}
-            </div>
-          )}
-        </div>
+        )}
+
+        {/* Notes: open on a locked document too, since a note never edits the document. */}
+
+        <NotesCard
+          caseId={selectedCase.id}
+          caseNumber={selectedCase.caseNumber}
+          documents={[{ id: document.id, filename: document.filename }]}
+          documentId={document.id}
+          lockedNotice={
+            isLocked
+              ? `Document ${isApproved ? 'approved' : 'rejected'} and locked · notes don't change it`
+              : undefined
+          }
+        />
 
         {/* Document summary */}
 
         <DocumentSummaryCard
+          headerActions={
+            <>
+            {!isPreviewPaneOpen && <ShowDocumentButton onClick={() => togglePreviewPane(true)} />}
+            <KebabMenu
+              label={isDeletingDocument ? 'Deleting document' : 'Document actions'}
+              disabled={isDeletingDocument}
+              items={[
+                {
+                  id: 'preview',
+                  label: 'Full-screen preview',
+                  onSelect: () => setIsPreviewOpen(true),
+                },
+                ...(!hasBeenApproved(document.status) && !isInFlight
+                  ? [
+                      {
+                        id: 'delete',
+                        label: isDeletingDocument ? 'Deleting…' : 'Delete document',
+                        danger: true,
+                        disabled: isDeletingDocument,
+                        onSelect: () => setDeleteConfirmOpen(true),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+            </>
+          }
           canCorrectType={canCorrectType}
           caseMatch={caseMatch}
           caseMatchMismatches={caseMatchMismatches}
@@ -586,6 +638,8 @@ export default function DocumentDetailsPage({
               </div>
             </div>
           )}
+        </div>
+        </div>
       </div>
 
       {deleteConfirmOpen && document && (

@@ -17,7 +17,7 @@ from .fraud_detection.external_validation.registry_lookups import land_use
 from .health import check_db_connection
 from .langgraph._anthropic import warm_up
 from .routers import audit as audit_router
-from .routers import cases, detection, documents, monitoring, upload, ws
+from .routers import cases, detection, documents, monitoring, notes, upload, ws
 from .workers import cases as case_worker
 from .workers import detection as detection_worker
 from .workers import documents as doc_worker
@@ -155,6 +155,7 @@ if "api" in ROLES:
     app.include_router(monitoring.router, dependencies=_protected)
     app.include_router(detection.router, dependencies=_protected)
     app.include_router(detection.cases_router, dependencies=_protected)
+    app.include_router(notes.router, dependencies=_protected)
     # The WebSocket can't carry an Authorization header, so it checks its own short-lived ticket (routers/ws.py).
     app.include_router(ws.router)
 

@@ -5,7 +5,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 
-from . import extracted_fields_repository, storage_service
+from . import extracted_fields_repository, notes_repository, storage_service
 from .models import DocumentRecord, DocumentStatus
 from .supabase_client import service_supabase_client, supabase_client
 from .supabase_rows import row as _row
@@ -228,6 +228,7 @@ def move_documents(document_ids: list[str], case_id: str) -> None:
     supabase_client.table("documents").update({"case_id": case_id}).in_(
         "id", document_ids
     ).execute()
+    notes_repository.move_with_documents(document_ids, case_id)
 
 
 def move_document(document_id: str, case_id: str) -> None:
@@ -246,6 +247,7 @@ def move_document(document_id: str, case_id: str) -> None:
         .execute()
     )
     if result.data:
+        notes_repository.move_with_documents([document_id], case_id)
         _sync_case(case_id)
 
 
@@ -362,11 +364,11 @@ def update_metadata(document_id: str, metadata: dict) -> None:
 
 
 # Tables whose rows belong to one document, besides extracted_fields (which has its own helper).
-_DOCUMENT_CHILD_TABLES = ("flags", "langgraph_trace")
+_DOCUMENT_CHILD_TABLES = ("flags", "langgraph_trace", notes_repository.TABLE)
 
 
 def _delete_document_children(document_ids: list[str]) -> None:
-    """Removes what hangs off the documents: field rows, flags and the detection trace. Runs before the
+    """Removes what hangs off the documents: field rows, flags, notes and the detection trace. Runs before the
     documents delete, so a foreign key on any of them cannot block it, and works whether or not they cascade."""
     from .langgraph import trace
 
@@ -379,8 +381,8 @@ def _delete_document_children(document_ids: list[str]) -> None:
 
 def remove_document(document: DocumentRecord) -> None:
     """
-    Permanently removes a document: its extracted-field rows, flags and
-    trace, the stored file, and the documents row. The dependent rows go
+    Permanently removes a document: its extracted-field rows, flags, notes
+    and trace, the stored file, and the documents row. The dependent rows go
     first so a foreign key cannot block the documents delete.
 
     Storage deletion is best-effort. A missing object should not leave the

@@ -7,6 +7,7 @@ export type CaseSection =
   | 'risk'
   | 'analysis'
   | 'additional'
+  | 'notes'
   | 'audit'
   | 'cost';
 
@@ -17,6 +18,7 @@ export const CASE_SECTIONS: { id: CaseSection; label: string; icon: string }[] =
   { id: 'analysis', label: 'Case Analysis', icon: '◇' },
   { id: 'risk', label: 'Risk Summary', icon: '▥' },
   { id: 'additional', label: 'Additional Documents', icon: '⊕' },
+  { id: 'notes', label: 'Notes', icon: '✎' },
   { id: 'audit', label: 'Audit Trail', icon: '◴' },
   { id: 'cost', label: 'Claude Cost', icon: '$' },
 ];

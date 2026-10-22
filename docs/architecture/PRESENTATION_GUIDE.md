@@ -137,3 +137,60 @@ The UI updates live: Supabase Realtime tells api a row changed, and api pushes a
 - **Messaging:** 1 topic and 4 filtered push subscriptions, plus a dead-letter topic and a sweep every 2 minutes.
 - **Observability:** 4 Grafana dashboards and 4 alert policies.
 - **Tests:** about 1,760 backend test functions and 107 Playwright tests, run in CI on every push.
+
+## 10. The diagrams, page by page
+
+Colours mean the same on every page (legend on pages 1 and 2):
+- **purple** is Kong;
+- **blue** is a public service, reached through Kong;
+- **yellow** is a private worker;
+- **orange** is a Pub/Sub topic;
+- **green** is a data store;
+- **grey dashed** is an outside service.
+
+Dashed arrows are data reads and writes; solid arrows are requests and events.
+
+**Page 1: System architecture.** The main picture; start here.
+- **How to read it:**
+  - **Top row:** the officer's path in. Browser → frontend → Kong → the two public services, api and audit-metrics. audit-metrics receives every event (the audit trail) and publishes `recovery.requested` when it finds stuck work.
+  - **Middle:** the orange bar is the one Pub/Sub topic.
+  - **Below it:** the three private workers. Each two-headed arrow is labelled with the events a worker receives ("in") and the event it publishes back ("out"). Their arrow to Supabase has two heads too: they read and write it.
+  - **Around them:** Supabase on the left, Claude underneath, the dead-letter topic and public registries on the right. Cloud Scheduler drops a sweep tick onto the topic every 2 minutes.
+- **Point to make:** there's no arrow from one service to another. Everything goes through the topic or Supabase, which is what "decoupled" means here.
+
+**Page 2: GCP infrastructure.** Where everything runs.
+- **How to read it:**
+  - **Top band:** the management tools (Terraform, Grafana, IAM, billing, GitHub Actions).
+  - **Big box:** the GCP project in Singapore. The Cloud Run services sit in one row, with the Pub/Sub bar under them. Each service has its own arrow to the bar: api publishes; audit-metrics and the workers receive pushes and publish back. Below that are the other managed services: Artifact Registry, Secret Manager, Monitoring, BigQuery, Trace, IAM.
+  - **Right column:** Supabase (the workers read and write it), Anthropic (every worker's Claude calls) and the registries (detection-worker's lookups), all outside Google.
+  - **Images:** "an image per role" means five build targets of one Dockerfile, sharing every layer. Only detection-worker's image adds the land-use index.
+- **Point to make:** all of it is created by Terraform. Workers are private, there are no stored keys, and secrets are scoped per service (the Security note).
+
+**Page 3: Life of a document.** One document from upload to case score, as a sequence of 22 numbered steps.
+- **How to read it:** time runs top to bottom. Each column is a service, and each arrow is one step: an HTTP call, a published event, a push, or a database write.
+  - **Dashed arrows are live updates:** Supabase Realtime tells api a row changed, and api pushes a fresh snapshot to the officer over the WebSocket (steps 8-9 and 21-22).
+  - **Approving writes `approved` before publishing** (steps 11-12). If the publish fails, the status is put back.
+- **Point to make:** every step between services is an event, and one trace in Cloud Trace follows the whole chain.
+
+**Page 4: Stuck work recovery.** What happens when a run dies halfway.
+- **How to read it:** left to right.
+  1. Cloud Scheduler publishes a sweep every 2 minutes.
+  2. The sweeper (inside audit-metrics) reads Supabase for work past its time limit.
+  3. It publishes one `recovery.requested` event per stuck item, tagged with the worker that owns it.
+  4. It's the same `domain-events` topic, not a new one. Each worker's subscription filters on the `owner` attribute, so each event reaches only its owner, which resets and reruns the work. Case analysis is the exception: it's marked failed instead, because a rerun costs Claude calls and the officer decides.
+  5. Outcomes appear in the audit trail and on the dashboard, and an email goes out if recovery gives up after 3 tries.
+- **Point to make:** the system heals itself without a database change; the audit trail is its memory. The note lists the other failure cases (redelivery, cancel across instances, a failed publish).
+
+**Page 5: Observability and cost.** How we see what the system is doing and what it costs.
+- **How to read it:** left to right.
+  - **Left:** the sources. Every service and Kong expose `/metrics`, which the sidecar scrapes (a pull), and services send OpenTelemetry spans.
+  - **Middle:** where they're stored. Managed Prometheus in Cloud Monitoring, Cloud Trace, the BigQuery billing export, and `audit_events`.
+  - **Right:** where they're read. Grafana (four dashboards), email alert policies, and the app's Claude Cost tab. The tab reads through audit-metrics, which totals each run's cost from `audit_events`.
+  - **Arrows show which way the data flows,** and the label says who starts it.
+- **Point to make:** Claude cost is tracked per agent, per document and per case. Google's billed cost sits beside the live estimate.
+
+**Page 6: CI and deploy.** The delivery pipeline.
+- **How to read it:**
+  - **Top row:** CI runs on every push (lint, type checks, tests, Playwright, security scans).
+  - **Bottom row:** the deploy, run on demand. It authenticates without a stored key, builds 8 images (5 role targets of the one backend Dockerfile, plus Kong, frontend and Grafana), rolls them out workers first, then checks the gateway: pass finishes the deploy, fail rolls every service back.
+- **Point to make:** a broken deploy undoes itself, and the deploy only changes images; Terraform owns everything else.

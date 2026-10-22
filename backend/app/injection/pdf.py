@@ -454,6 +454,18 @@ _FONT_FACE_CANDIDATES: tuple[tuple[str, tuple[int, ...]], ...] = (
     ("/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf", (0,)),
     ("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", (0,)),
     ("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", (0,)),
+    # Windows: the same families. Without them no face loads there and every image edit falls back to
+    # PIL's 10pt default font, so a rewritten value is drawn far too small.
+    ("C:/Windows/Fonts/arial.ttf", (0,)),
+    ("C:/Windows/Fonts/arialbd.ttf", (0,)),
+    ("C:/Windows/Fonts/verdana.ttf", (0,)),
+    ("C:/Windows/Fonts/verdanab.ttf", (0,)),
+    ("C:/Windows/Fonts/tahoma.ttf", (0,)),
+    ("C:/Windows/Fonts/tahomabd.ttf", (0,)),
+    ("C:/Windows/Fonts/times.ttf", (0,)),
+    ("C:/Windows/Fonts/timesbd.ttf", (0,)),
+    ("C:/Windows/Fonts/cour.ttf", (0,)),
+    ("C:/Windows/Fonts/courbd.ttf", (0,)),
 )
 _SKIP_FACE_STYLE_TOKENS = (
     "italic",
