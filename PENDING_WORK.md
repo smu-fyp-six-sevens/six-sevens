@@ -56,9 +56,43 @@ Budgets are in `HOW_IT_WORKS.md` §8; read them off the `perf` log lines. Query-
 
 ## Architecture (Kong / Prometheus / Grafana)
 
-Built on the `microservices` branch (2026-10-22): Kong, `/metrics` in every service, Grafana with four dashboards, and traces joined across services. See `CLOUD_ARCHITECTURE_PLAN.md` sections 7 and 8. Still open:
-- stuck-work gauges, which come with the sweeper (section 16);
-- alert rules (none yet; the budget alert is the only one).
+Built on the `microservices` branch (2026-10-22): Kong, `/metrics` in every service, Grafana with four dashboards, traces joined across services, and stuck-work recovery with its gauges. See `CLOUD_ARCHITECTURE_PLAN.md` sections 7, 8 and 16. Still open:
+- **Alert rules.** There are none yet; the budget alert is the only one.
+- **Shared Anthropic rate budget across instances** (plan section 5).
+- **WebSocket ticket replay.** A ticket replayed within its 10 s on a *different* api instance would be accepted; each instance remembers only the tickets it has used. Closing that needs a shared store, which isn't worth it for a 10 s window.
+- **Recovery of work still in a dead-letter subscription.** The sweeper rescues the document behind it, but the dead-lettered message itself stays in `domain-events-dead-letter-pull` until someone reads it.
+
+### Tear down the old single-service deploy (kept running on purpose, 2026-10-22)
+
+`fyp-backend` and `fyp-frontend` (Cloud Run, `asia-southeast1`) are the deploy from before the split. They are kept up for now. While they run:
+- **They share the Supabase project.** A document handled through the old frontend is processed by the old code, which writes no audit events, doesn't appear in the new metrics or dashboards, and still applies the old `dev` case filtering. Don't use both at once, and never for a demo.
+- **`main`'s `deploy.yml` can still redeploy them** with the `GCP_SA_KEY` secret until `microservices` is merged. Keep that secret until the teardown below.
+- **Cost:** none while idle if they scale to zero. Check that no `minScale` of 1 or more appears in `gcloud run services describe fyp-backend --region asia-southeast1 --format="value(spec.template.metadata.annotations)"` (same for `fyp-frontend`).
+
+**Teardown, step by step** (PowerShell; each `delete` asks for confirmation):
+
+1. **Merge first.** Merge `microservices` into `main`, so `main`'s workflow is the new one and can't recreate the old services.
+2. **Check what exists:** `gcloud run services list --region asia-southeast1`. Expect the new services (api, doc-worker, detection-worker, case-worker, audit-metrics, kong, frontend, grafana) plus `fyp-backend` and `fyp-frontend`. Don't touch `frontend`, which is the new one.
+3. **Note the old service account** before deleting, for step 6: `gcloud run services describe fyp-backend --region asia-southeast1 --format="value(spec.template.spec.serviceAccountName)"`.
+4. **Delete the two services:**
+   ```powershell
+   gcloud run services delete fyp-backend --region asia-southeast1
+   gcloud run services delete fyp-frontend --region asia-southeast1
+   ```
+5. **Delete the GitHub secrets the new workflow doesn't read** (Settings → Secrets and variables → Actions → Secrets): `GCP_SA_KEY`, `SUPABASE_*`, `ANTHROPIC_API_KEY`, `AUTH_*`, `ONEMAP_API_TOKEN`, `URA_API_KEY`, and any `GCP_PROJECT_ID` or `GCP_REGION` *secrets*.
+   - Keep the *variables* `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_WIF_PROVIDER` and `GCP_DEPLOYER_SA`.
+   - Keep the secret `DATA_GOV_SG_API_KEY`.
+6. **Revoke the key behind `GCP_SA_KEY`.** Deleting the GitHub secret doesn't invalidate the key itself.
+   - Find its account: the `client_email` in that key's JSON, if you still have it, or the account from step 3.
+   - List its keys: `gcloud iam service-accounts keys list --iam-account <email> --managed-by user`.
+   - Delete each: `gcloud iam service-accounts keys delete <KEY_ID> --iam-account <email>`.
+   - If the account was used only by the old deploy (not `github-deployer` or a `run-*` account, which Terraform owns), delete it too: `gcloud iam service-accounts delete <email>`.
+7. **Old images.**
+   - Run `gcloud artifacts repositories list`. Keep `app`; delete any repository the old deploy used: `gcloud artifacts repositories delete <name> --location asia-southeast1`.
+   - Old GHCR packages: GitHub → the organisation or your profile → Packages → delete them.
+8. **Old secrets in Secret Manager:** `gcloud secrets list`. Keep every secret Terraform made (`terraform output secrets_to_fill`, plus `grafana-admin-password` and `kong-gmp-config`); delete any others with `gcloud secrets delete <name>`.
+9. **Drop the old `dev` column** (optional; a database change, so decide deliberately). Once the old backend is gone nothing writes or reads `cases.dev`, so it can be dropped in the Supabase dashboard.
+10. **Update the docs.** Remove this section, and tick the clean-up item in `deploy/terraform/README.md`.
 
 ## Frontend
 

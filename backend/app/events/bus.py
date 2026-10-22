@@ -8,7 +8,7 @@ from opentelemetry.trace import SpanKind
 
 from .. import metrics, telemetry
 from ..config import settings
-from . import registry
+from . import registry, types
 from .envelope import Event
 
 logger = logging.getLogger(__name__)
@@ -80,7 +80,12 @@ def _client() -> Any:
 async def _publish_pubsub(event: Event) -> None:
     client = _client()
     topic = client.topic_path(settings.GOOGLE_CLOUD_PROJECT, settings.PUBSUB_TOPIC)
-    future = client.publish(topic, event.model_dump_json().encode(), type=event.type, **telemetry.inject())
+    attributes = {"type": event.type, **telemetry.inject()}
+    owner = event.detail.get(types.OWNER_ATTRIBUTE)
+    if owner:
+        # Subscription filters route a recovery request to its owning worker only.
+        attributes[types.OWNER_ATTRIBUTE] = str(owner)
+    future = client.publish(topic, event.model_dump_json().encode(), **attributes)
     await asyncio.to_thread(future.result, timeout=settings.PUBSUB_PUBLISH_TIMEOUT_SECONDS)
 
 

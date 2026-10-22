@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
 
 from .. import events
+from ..case_pipeline import repository as analysis_repository
 from ..case_pipeline import service as analysis_service
 from ..events import Event, Stopwatch, types
+from . import recovery
 
 logger = logging.getLogger("classifier_pipeline.case_worker")
 
@@ -39,4 +42,22 @@ async def on_analysis_requested(event: Event) -> None:
     ))
 
 
-HANDLERS = {types.CASE_ANALYSIS_REQUESTED: on_analysis_requested}
+async def on_recovery_requested(event: Event) -> None:
+    """
+    The sweeper found a run still marked running past CASE_ANALYSIS_TIMEOUT_SECONDS. It is marked failed, not
+    rerun: a rerun costs Claude calls and is the officer's decision (the card offers "Run again").
+    """
+    run_id = event.detail.get("run_id")
+    if not recovery.is_for(event, _ACTOR) or not run_id:
+        return
+    failed = await asyncio.to_thread(
+        analysis_repository.fail_if_running, str(run_id), "The analysis stopped responding before it finished. Run it again.",
+    )
+    if failed:
+        await recovery.report(event, _ACTOR, types.RECOVERY_EXHAUSTED, "failed", reason="marked failed; not rerun automatically")
+
+
+HANDLERS = {
+    types.CASE_ANALYSIS_REQUESTED: on_analysis_requested,
+    types.RECOVERY_REQUESTED: on_recovery_requested,
+}

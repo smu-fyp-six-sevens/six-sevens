@@ -3,12 +3,12 @@
     "filter": ""
   },
   "case-worker": {
-    "filter": "attributes.type = \"case.analysis.requested\""
+    "filter": "attributes.type = \"case.analysis.requested\" OR attributes.owner = \"case-worker\""
   },
   "detection-worker": {
-    "filter": "attributes.type = \"detection.cancel_requested\" OR attributes.type = \"detection.retry_requested\" OR attributes.type = \"document.approved\""
+    "filter": "attributes.type = \"detection.cancel_requested\" OR attributes.type = \"detection.retry_requested\" OR attributes.type = \"document.approved\" OR attributes.owner = \"detection-worker\""
   },
   "doc-worker": {
-    "filter": "attributes.type = \"document.cancelled\" OR attributes.type = \"document.retry_requested\" OR attributes.type = \"document.retyped\" OR attributes.type = \"document.uploaded\""
+    "filter": "attributes.type = \"document.cancelled\" OR attributes.type = \"document.retry_requested\" OR attributes.type = \"document.retyped\" OR attributes.type = \"document.uploaded\" OR attributes.owner = \"doc-worker\""
   }
 }

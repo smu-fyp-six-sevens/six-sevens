@@ -29,8 +29,8 @@ locals {
       memory      = "1Gi"
       concurrency = 40
       timeout     = 3600
-      # WebSocket tickets are held in memory, so one instance until they are signed instead.
-      max       = 1
+      # WebSocket tickets are signed, and each instance has its own Realtime listener, so api scales out.
+      max       = 3
       public    = true
       publishes = true
       secrets   = concat(local.supabase, ["AUTH_USERS", "AUTH_SECRET_KEY"])
@@ -64,10 +64,12 @@ locals {
       timeout     = 60
       max         = 2
       # Public so Kong can reach it; its /push checks Pub/Sub's OIDC token itself.
-      public    = true
-      publishes = false
+      public = true
+      # It runs the sweeper (Cloud Scheduler's sweep.requested), which publishes recovery requests.
+      publishes = true
       secrets   = concat(local.supabase, ["AUTH_SECRET_KEY"])
       env = tomap({
+        SWEEPER_ENABLED      = "true"
         CORS_IN_APP          = "false"
         PUSH_AUDIENCE        = "https://audit-metrics-${data.google_project.this.number}.${var.region}.run.app"
         PUSH_SERVICE_ACCOUNT = "pubsub-push@${var.project_id}.iam.gserviceaccount.com"
@@ -93,6 +95,7 @@ resource "google_project_service" "apis" {
     "billingbudgets.googleapis.com",
     "monitoring.googleapis.com",
     "cloudtrace.googleapis.com",
+    "cloudscheduler.googleapis.com",
   ])
   service            = each.value
   disable_on_destroy = false

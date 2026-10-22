@@ -20,7 +20,8 @@ _by_role: dict[str, dict[str, Handler]] = {}
 
 
 def install(role: str, handlers: Mapping[str, Handler]) -> None:
-    unsubscribed = set(handlers) - SUBSCRIPTIONS[role]
+    # A role subscribed to every type may still handle some types specially (audit-metrics runs the sweep).
+    unsubscribed = set() if EVERY_TYPE in SUBSCRIPTIONS[role] else set(handlers) - SUBSCRIPTIONS[role]
     if unsubscribed:
         raise ValueError(f"{role} handles {sorted(unsubscribed)} but does not subscribe to them")
     _by_role[role] = dict(handlers)

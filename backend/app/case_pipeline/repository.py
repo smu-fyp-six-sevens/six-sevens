@@ -76,6 +76,26 @@ def latest_run_state(case_id: str) -> tuple[str, datetime] | None:
     return str(row["status"]), datetime.fromisoformat(str(row["started_at"]))
 
 
+def running_started_before(cutoff: datetime) -> list[tuple[str, str, datetime]]:
+    """(run_id, case_id, started_at) of runs still marked running that started before `cutoff`."""
+    rows = (
+        supabase_client.table(_TABLE).select("run_id, case_id, started_at").eq("status", "running")
+        .lt("started_at", cutoff.isoformat()).execute().data or []
+    )
+    return [
+        (str(r["run_id"]), str(r["case_id"]), datetime.fromisoformat(str(r["started_at"])))
+        for r in (_row(row) for row in rows)
+    ]
+
+
+def fail_if_running(run_id: str, error: str) -> bool:
+    """Marks a run failed only while it is still running (compare-and-swap); whether it was."""
+    result = supabase_client.table(_TABLE).update({
+        "status": "failed", "finished_at": datetime.now(timezone.utc).isoformat(), "error": error,
+    }).eq("run_id", run_id).eq("status", "running").execute()
+    return bool(result.data)
+
+
 def finish_run(analysis: CaseAnalysis) -> bool:
     """
     Writes a run's outcome only while it is still the case's newest run.

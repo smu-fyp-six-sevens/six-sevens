@@ -653,11 +653,19 @@ async def approve_document(
         skip = skips_detection(document)
         if skip:
             logger.info("Document %s approved with no type; detection skipped", document_id)
-        # The event is what starts detection, so a failed publish fails the approval with a 502.
-        await events.publish(officer_event(
-            types.DOCUMENT_APPROVED, document_id=document_id, case_id=document.case_id,
-            detail={"document_type": document.document_type, "skip_detection": skip},
-        ))
+        # The event is what starts detection, so a failed publish fails the approval with a 502, and the approval
+        # is undone: otherwise the document would sit approved with nothing ever scanning it.
+        try:
+            await events.publish(officer_event(
+                types.DOCUMENT_APPROVED, document_id=document_id, case_id=document.case_id,
+                detail={"document_type": document.document_type, "skip_detection": skip},
+            ))
+        except Exception:
+            await asyncio.to_thread(
+                document_repository.update_status, document_id, DocumentStatus.ANALYZED,
+                expected_current_statuses=[DocumentStatus.APPROVED],
+            )
+            raise
 
         return _present(approved, extracted_fields)
 

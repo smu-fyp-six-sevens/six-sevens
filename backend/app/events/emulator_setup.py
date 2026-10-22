@@ -90,7 +90,7 @@ def main() -> None:
             "topic": topic,
             "push_config": {"push_endpoint": _endpoint(role)},
             "ack_deadline_seconds": ACK_DEADLINE_SECONDS,
-            "filter": subscription_filter(subscribed),
+            "filter": subscription_filter(subscribed, role),
             "dead_letter_policy": {"dead_letter_topic": dead_letter, "max_delivery_attempts": MAX_DELIVERY_ATTEMPTS},
         }
         _create_subscription(subscriber, request)

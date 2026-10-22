@@ -6,7 +6,7 @@ Creates everything the services need on GCP (CLOUD_ARCHITECTURE_PLAN.md sections
 |---|---|
 | `main.tf` | APIs, Artifact Registry, the role table (size, scaling, secrets, environment per service) |
 | `iam.tf` | a service account per service, Secret Manager secrets and who may read each, publish rights, metric writing, Pub/Sub's service agent |
-| `pubsub.tf` | `domain-events`, its dead-letter topic, one filtered push subscription per role (filters from `subscriptions.json`, exported by `python -m app.events.types`) |
+| `pubsub.tf` | `domain-events`, its dead-letter topic, one filtered push subscription per role (filters from `subscriptions.json`, exported by `python -m app.events.types`), and the Cloud Scheduler job that publishes the sweeper's tick |
 | `run.tf` | Cloud Run: api, doc-worker, detection-worker, case-worker, audit-metrics and Kong (each with the Managed Prometheus sidecar), frontend |
 | `observability.tf` | Grafana on Cloud Run (with Google's Prometheus query proxy as a sidecar), its generated admin password, the scrape config for Kong's metrics |
 | `github.tf` | Workload Identity Federation for GitHub Actions and the deployer account |
@@ -51,6 +51,18 @@ What the apply changes:
 - **Every backend service:** gets `OTEL_ENABLED=true`.
 
 Expect a new revision of each service. The images stay as deployed: Terraform ignores image changes.
+
+## Rolling out stuck-work recovery (once, can go with the apply above)
+
+The same `terraform apply` also:
+- **Replaces the three worker subscriptions.** Their filters gained `attributes.owner`, and a Pub/Sub filter can't be edited, so Terraform destroys and recreates them. Messages waiting in them at that moment are dropped, so apply when nothing is processing. That's expected in the plan: 3 to destroy, 3 to add. Nothing else should be destroyed.
+- **Creates the Cloud Scheduler job `sweep`** (and enables its API).
+- **Sets `SWEEPER_ENABLED=true` on audit-metrics and lets it publish.**
+- **Raises api's maximum to 3 instances.** WebSocket tickets are now signed, so no instance needs another's memory.
+
+Then deploy as usual: the new code must be running before the scheduler's ticks mean anything. Ticks that arrive at the old code are stored as plain events, which is harmless.
+
+**To see it work:** Pipeline dashboard → "Stuck work and recovery", or `GET <Kong URL>/audit/events?case_id=<id>` for `recovery.requested`, `document.recovered` and `recovery.exhausted`. To test it, stop a detection mid-run (for example, deploy while one runs): within about 17 minutes the document is detected again without anyone acting.
 
 ## One-time setup
 
@@ -124,7 +136,7 @@ A secret changed later reaches a service on its next revision (the next deploy, 
 
 ## Clean-up after the first successful deploy
 
-- Delete the old single-service deploy: `gcloud run services delete fyp-backend --region asia-southeast1`, and the same for `fyp-frontend`.
+- Delete the old single-service deploy (`fyp-backend`, `fyp-frontend`). It's kept running for now; the full step-by-step teardown, including revoking the old key, is in `PENDING_WORK.md` under "Tear down the old single-service deploy".
 - Delete the GitHub secrets the new workflow no longer reads: `GCP_SA_KEY`, `SUPABASE_*`, `ANTHROPIC_API_KEY`, `AUTH_*`, `ONEMAP_API_TOKEN`, `URA_API_KEY`, and any `GCP_PROJECT_ID` or `GCP_REGION` *secrets* (the variables of the same names stay). Keep `DATA_GOV_SG_API_KEY`.
 - Delete `set-secrets.ps1` if it still exists.
 - Optional: `docker image rm six-sevens/api:check six-sevens/kong:check six-sevens/grafana:check prom/prometheus:v3.1.0 hashicorp/terraform:1.9.8` (local images used to check the Dockerfiles, dashboards and Terraform).
@@ -140,7 +152,8 @@ A secret changed later reaches a service on its next revision (the next deploy, 
 ## Notes
 
 - **Scale to zero.** Every service defaults to 0 minimum instances. Cloud Run keeps an idle instance for up to about 15 minutes after its last request (for a worker, its last push; Google publishes no exact figure), then stops it; the next event waits for a cold start, roughly 10-30 s here because of the LangGraph and OCR imports. Idle instances cost nothing with CPU idle.
-- **api is capped at one instance** while WebSocket tickets are held in its memory.
+- **api runs up to 3 instances.** WebSocket tickets are signed, and each instance has its own Realtime listener.
+- **The sweeper** runs in audit-metrics on Cloud Scheduler's `sweep.requested` (every 2 minutes). Pause it with `gcloud scheduler jobs pause sweep --location asia-southeast1`, and `resume` it the same way.
 - **Public services** are api, audit-metrics, Kong and the frontend (each still checks the app's token), and Grafana (its own login, anonymous access off). Workers can be invoked only by the `pubsub-push` account; audit-metrics' `/push` checks that account's OIDC token itself.
 - **The sidecar** (`gmp_sidecar_image`): with CPU idle between requests, scrapes can be delayed and short gaps appear.
 - **Provider billing project.** `versions.tf` sets `billing_project` and `user_project_override`, so API calls bill to this project rather than gcloud's own client project (the budget API refuses local user credentials otherwise).
@@ -161,4 +174,5 @@ A secret changed later reaches a service on its next revision (the next deploy, 
 | `/cases` answers 200 without a login; the "Congratulations" page | A rollback pinned traffic to the placeholder revision, and `services update` doesn't move traffic | The rollout runs `update-traffic --to-latest`; the check also requires `{"status":"ok"}` from `/health`; the rollback records the revision serving traffic |
 | A push fails "unauthorized"/"denied" late in a long build | The build job's token expired | Raise `access_token_lifetime` in the build job (now 1200s) |
 | Deploy fails at "Record the revisions" with `grafana` not found | The workflow expects the Grafana service, which Terraform creates | `terraform apply` first ("Rolling out Grafana and tracing") |
+| `terraform apply` wants to destroy and recreate a subscription | Its filter changed (filters are immutable) | Expected after an event-type change; apply when nothing is processing |
 | Grafana panels say "No data" for Cloud Run or Pub/Sub only | The query proxy can't read Cloud Monitoring | Check the `grafana` service's `prometheus` container logs; its account needs `roles/monitoring.viewer` (`observability.tf`) |

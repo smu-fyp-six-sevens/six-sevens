@@ -205,6 +205,13 @@ Labels are routes, event types, stages, agents and models, never ids. Kong block
 
 Each event's Pub/Sub message carries `traceparent`, so one upload is one trace across services. `OTEL_TRACES_SAMPLE_RATIO` (default 1.0) samples fewer.
 
+**Stuck work** (`sweeper.py`, `CLOUD_ARCHITECTURE_PLAN.md` section 16). In the cloud, Cloud Scheduler publishes `sweep.requested` every 2 minutes and audit-metrics runs the sweeper (`SWEEPER_ENABLED`; off locally, because the database is shared).
+- **What counts as stuck:** a document uploaded or queued for over 5 minutes (its event was lost), or processing, extracting or detecting for over 15 minutes (its run died); or a case analysis still running past `CASE_ANALYSIS_TIMEOUT_SECONDS`.
+- **What happens:** the sweeper publishes `recovery.requested` to the worker that owns the stage. That worker resets the status (compare-and-swap) and reruns it. After 3 attempts it fails the document (detection: back to approved with an error) and publishes `recovery.exhausted`. A stuck case analysis is marked failed, not rerun.
+- **Locally:** `python -m app.sweeper --once --case <id>` runs one pass for one case and does the recovery in the same process.
+- **Cancels:** a run checks every 5 seconds for a cancel made through another instance (Pub/Sub mode only).
+- **Approvals:** an approval whose event can't be published is undone.
+
 Every 60 seconds a summary of Realtime and WebSocket traffic (events received, ignored, merged, connects, pushes) and of calls made outside any unit of work is also logged. Rough budgets: case list 3 queries; a snapshot 5; approve 2; delete or add a field 6–7; detection about 12.
 
 ---
@@ -213,7 +220,7 @@ Every 60 seconds a summary of Realtime and WebSocket traffic (events received, i
 
 **Built:** upload and queue; classify and extract with the reclassify loop; officer review tools; requirements checklist; case-match; the Detection Agent with 10 checks and on-demand single checks; per-document flags; the case analysis (deterministic and agent cross-document findings, score, outlook, additional documents, summary); live WebSocket updates; cost logging; the service split (roles, domain events, Pub/Sub push, audit trail, `/metrics`), Kong, the compose stack, Terraform and the deploy workflow (`CLOUD_ARCHITECTURE_PLAN.md`; not yet applied to GCP).
 
-**Not built:** the Output Aggregator; automatic case analysis when all documents are scanned; recovery of stuck work (the sweeper, `CLOUD_ARCHITECTURE_PLAN.md` section 16); case-level flags; an officer review flow for flags (the `status` and `reviewed_by` columns exist, unused). Open items are in `PENDING_WORK.md`.
+**Not built:** the Output Aggregator; automatic case analysis when all documents are scanned; case-level flags; an officer review flow for flags (the `status` and `reviewed_by` columns exist, unused). Open items are in `PENDING_WORK.md`.
 
 ## 10. Known rough edges
 
@@ -221,7 +228,12 @@ Every 60 seconds a summary of Realtime and WebSocket traffic (events received, i
 - Detection specialists run on Haiku, whose minimum cacheable prompt is longer than their prompts, so caching there does nothing. It works for classification, extraction and the case analysis.
 - Re-running the analysis on unchanged documents spends the tokens again; nothing short-circuits an identical fingerprint.
 - The first requester of a burst of snapshot requests can wait for a follow-up build.
-- The split handles the happy path only, for now: if the publish fails after an approval is saved, the document stays approved with no detection and no retry; a cancel reaches a run only in the same process; WebSocket tickets live in the api's memory (so one api instance); the `submission_finalized` refresh runs on per-process timers; on-demand single checks run in the api process.
+- Known limits of the split:
+  - On-demand single checks run in the api process.
+  - A WebSocket ticket replayed within its 10 s on a second api instance would pass.
+  - There's no shared Anthropic rate budget across instances.
+
+  Stuck work, cancels across instances, unpublished approvals and signed tickets are handled (see "Stuck work" above).
 
 ---
 

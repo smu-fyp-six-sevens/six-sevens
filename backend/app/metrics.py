@@ -54,6 +54,11 @@ detection_verdicts = Counter("detection_verdicts_total", "Detection runs by verd
 
 supabase_calls = Counter("supabase_calls_total", "Supabase calls", ["target"])
 
+# Stuck work (sweeper.py): set on every sweep; owners count how each recovery ended.
+stuck_work = Gauge("stuck_work", "Work past its stage's limit at the last sweep", ["stage"])
+recoveries = Counter("recoveries_total", "Recovery outcomes", ["stage", "result"])  # requested, recovered, failed, exhausted
+cancels_seen_remotely = Counter("cancels_seen_remotely_total", "Cancels a run picked up by polling", ["work"])
+
 
 def set_info(roles: Iterable[str]) -> None:
     # K_REVISION is set by Cloud Run; it marks each deploy on the dashboards.

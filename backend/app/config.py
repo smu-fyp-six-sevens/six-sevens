@@ -68,8 +68,19 @@ class Settings:
     PUSH_SERVICE_ACCOUNT: str = _env("PUSH_SERVICE_ACCOUNT")
     # Off behind Kong, which answers CORS itself; two sets of CORS headers make browsers refuse the response.
     CORS_IN_APP: bool = os.environ.get("CORS_IN_APP", "true").lower() == "true"
-    # A case analysis still "running" after this long was interrupted (no heartbeat yet).
+    # A case analysis still "running" after this long was interrupted; the sweeper then marks it failed.
     CASE_ANALYSIS_TIMEOUT_SECONDS: int = int(os.environ.get("CASE_ANALYSIS_TIMEOUT_SECONDS", "900"))
+
+    # --- Stuck work and recovery (sweeper.py, CLOUD_ARCHITECTURE_PLAN.md section 16) ---
+    # Off by default: the database is shared, so a local process must never sweep cloud work. Terraform turns it on.
+    SWEEPER_ENABLED: bool = os.environ.get("SWEEPER_ENABLED", "false").lower() == "true"
+    # uploaded/queued past this means its event was lost; processing/extracting/detecting past the other means
+    # its run died (both well past the 600 s push deadline, so a recovery never races a live redelivery).
+    STUCK_WAITING_SECONDS: int = int(os.environ.get("STUCK_WAITING_SECONDS", "300"))
+    STUCK_RUNNING_SECONDS: int = int(os.environ.get("STUCK_RUNNING_SECONDS", "900"))
+    RECOVERY_MAX_ATTEMPTS: int = int(os.environ.get("RECOVERY_MAX_ATTEMPTS", "3"))
+    # How often a running pipeline or detection checks for a cancel made through another instance (pubsub only).
+    CANCEL_POLL_SECONDS: float = float(os.environ.get("CANCEL_POLL_SECONDS", "5"))
 
     # Comma-separated list of exact origins the frontend is served from, in
     # addition to local dev.

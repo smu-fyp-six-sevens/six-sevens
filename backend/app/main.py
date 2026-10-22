@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from . import audit, auth, events, health, metrics, query_stats, realtime_listener, telemetry
+from . import audit, auth, document_repository, events, health, metrics, query_stats, realtime_listener, sweeper, telemetry
 from .config import settings
 from .events import bus, registry, types
 from .events import push as event_push
@@ -44,7 +44,8 @@ _HANDLERS = {
     "doc-worker": doc_worker.HANDLERS,
     "detection-worker": detection_worker.HANDLERS,
     "case-worker": case_worker.HANDLERS,
-    "audit-metrics": audit.HANDLERS,
+    # The sweep tick is handled instead of stored (sweeper.on_sweep_requested).
+    "audit-metrics": {**audit.HANDLERS, types.SWEEP_REQUESTED: sweeper.on_sweep_requested},
 }
 _CALLS_CLAUDE = {"doc-worker", "detection-worker", "case-worker"}
 
@@ -112,6 +113,9 @@ async def count_queries(request: Request, call_next):
     try:
         with query_stats.scope(f"{request.method} {query_stats.label_path(request.url.path)}"):
             response = await call_next(request)
+            # A push's work runs inside its request, so this also covers the workers.
+            if document_repository.has_pending_syncs():
+                await asyncio.to_thread(document_repository.flush_pending_syncs)
         status_code = response.status_code
         return response
     finally:

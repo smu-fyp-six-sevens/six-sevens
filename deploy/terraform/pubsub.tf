@@ -49,6 +49,23 @@ resource "google_pubsub_subscription" "push" {
   }
 }
 
+# The sweeper's clock (CLOUD_ARCHITECTURE_PLAN.md section 16): a sweep.requested event every 2 minutes, which
+# audit-metrics handles. Fields the envelope leaves out (event_id, occurred_at) are filled in when it is read.
+resource "google_cloud_scheduler_job" "sweep" {
+  name      = "sweep"
+  region    = var.region
+  schedule  = "*/2 * * * *"
+  time_zone = "Etc/UTC"
+
+  pubsub_target {
+    topic_name = google_pubsub_topic.events.id
+    data       = base64encode(jsonencode({ type = "sweep.requested", actor_type = "system", actor = "cloud-scheduler" }))
+    attributes = { type = "sweep.requested" }
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
 # Where dead-lettered messages can be read and replayed from.
 resource "google_pubsub_subscription" "dead_letter" {
   name                 = "domain-events-dead-letter-pull"

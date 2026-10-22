@@ -93,7 +93,8 @@ Envelope (it is also the `audit_events` row):
 | `case.analysis.requested` | api | case-worker |
 | `case.analysis.completed` | case-worker | audit-metrics |
 | `case.created / renamed / deleted`, `document.deleted / moved`, `document.field_edited`, `document.type_corrected`, `auth.login` | api (and ingestion for uploads) | audit-metrics |
-| `recovery.requested` (`detail.stage`, `detail.attempt`) | sweeper | the worker owning that stage |
+| `sweep.requested` | Cloud Scheduler (every 2 minutes) | audit-metrics (runs the sweeper; not stored) |
+| `recovery.requested` (`detail.stage`, `detail.owner`, `detail.attempt`) | sweeper | the worker owning that stage (`owner` attribute) |
 | `document.recovered`, `recovery.exhausted` | the owning worker | audit-metrics |
 
 Rules:
@@ -312,11 +313,11 @@ If time runs short, drop Grafana polish first. Kong and the worker splits carry 
 |---|---|---|
 | 1 | Envelope, `events.publish()`, `EVENT_TRANSPORT`, `ROLE`, audit-metrics and `GET /audit/events`, officer actions and login audited (with Kong's request id), `/healthz`, graceful shutdown, `dev` flag removed | First cloud deploy |
 | 2 | `stage_duration_seconds` from the events | Reading the real 95th percentile once deployed |
-| 3 | detection-worker as handler plus push adapter; live results through Realtime | Database cancel flag (a cancel reaches a run only in the same process); shared rate budget |
+| 3 | detection-worker as handler plus push adapter; live results through Realtime; cancel across instances (the run polls the audit trail) | Shared rate budget |
 | 4 | doc-worker replaces the in-memory queue (`queue_service.py` removed) | |
-| 5 | case-worker; "already running" read from the database with a 15-minute limit | Heartbeat, `submission_finalized` debounce in the case-worker, the sweeper (section 16) |
-| 6 | Kong (local and cloud), Terraform (IAM per service, Secret Manager, Pub/Sub, Cloud Run, Workload Identity Federation, budget), one build per role to Artifact Registry, deploy with automatic rollback, Checkov and Snyk in CI (non-blocking until the first findings are reviewed), GHCR publishing removed | Cloud Scheduler (comes with the sweeper) |
-| 7 | `/metrics` in every service (Claude cost, cache and latency per agent; cost per unit of work; tool outcomes), the Managed Prometheus sidecar (Kong's too), Grafana on Cloud Run with four dashboards (section 8), traces joined across services through Pub/Sub | Stuck-work gauges (come with the sweeper) |
+| 5 | case-worker; "already running" read from the database with a 15-minute limit; the sweeper and owner-side recovery, cancel across instances, undoing an unpublished approval, `submission_finalized` refreshed before each request returns, signed WebSocket tickets (section 16) | Heartbeat column (start time plus the timeout instead) |
+| 6 | Kong (local and cloud), Terraform (IAM per service, Secret Manager, Pub/Sub, Cloud Run, Workload Identity Federation, budget, Cloud Scheduler for the sweeper), one build per role to Artifact Registry, deploy with automatic rollback, Checkov and Snyk in CI (non-blocking until the first findings are reviewed), GHCR publishing removed | |
+| 7 | `/metrics` in every service (Claude cost, cache and latency per agent; cost per unit of work; tool outcomes; stuck work and recoveries), the Managed Prometheus sidecar (Kong's too), Grafana on Cloud Run with four dashboards (section 8), traces joined across services through Pub/Sub | |
 | 8-10 | | Not started |
 
 Stage 2 (after Stage 1, each step deployable on its own):
@@ -384,9 +385,28 @@ Stateful and learning agents (separate plan), a parser sandbox service, Redis (u
 
 ## 16. Stuck work and recovery (a showcase item)
 
-**Deferred (2026-10-21):** the happy path comes first; this is the edge-case pass after it. Nothing below is built.
+**Built (2026-10-22), with no database changes.** What differs from the design below:
 
-Today "stuck" is only computed on read (`monitoring.is_stuck`) for the "Processing stuck" badge and the manual retry; nothing polls, and `detecting` is not covered. Pub/Sub redelivery already handles a worker that dies mid-request. Recovery covers what redelivery cannot: a publish lost after the database write, a message that went to the dead-letter topic, and a run that ended without reaching a final status.
+- **Sweeper trigger.** The sweeper is not a Cloud Run Job. Cloud Scheduler (`deploy/terraform/pubsub.tf`, job `sweep`) publishes `sweep.requested` to `domain-events` every 2 minutes. audit-metrics handles it (`backend/app/sweeper.py`) and doesn't store the tick. So there's no extra image or job to deploy, and Stage 2's CronJob can publish the same event. Off unless `SWEEPER_ENABLED` (Terraform sets it on audit-metrics only).
+- **Routing.** `recovery.requested` carries `detail.owner` and an `owner` message attribute. Each worker's subscription filter adds `attributes.owner = "<role>"` (only recovery requests carry it), and each handler also checks the owner, which covers in-process dispatch.
+- **Limits** (settings):
+  - `STUCK_WAITING_SECONDS` (300): uploaded or queued.
+  - `STUCK_RUNNING_SECONDS` (900): processing, extracting or detecting. Detecting is timed from the newest approval, detection retry or recovery event in the audit trail, since the row records no detection start.
+  - `CASE_ANALYSIS_TIMEOUT_SECONDS` (900): a running case analysis.
+- **Attempts:** the count of `recovery.requested` events for that work and owner in the last 24 hours. A new request waits a full stage limit after the previous one. Past `RECOVERY_MAX_ATTEMPTS` (3) the owner gives up.
+- **Owners:**
+  - doc-worker: compare-and-swap back to queued and rerun; on giving up, `failed` with a reason, so the officer's Retry works.
+  - detection-worker: compare-and-swap back to approved and rerun; on giving up, approved with a `detection_error`, the same as a failed run.
+  - case-worker: marks the run failed straight away, with no rerun (a rerun costs Claude calls and is the officer's call), and publishes `recovery.exhausted`. No heartbeat column was added; the start time plus the timeout stands in for it.
+- **Reported as:** `document.recovered` (outcome success or failed), `recovery.exhausted`, the metrics `stuck_work{stage}` and `recoveries_total{stage,result}`, and the Pipeline dashboard's "Stuck work and recovery" row.
+- **Cancel across instances (section 5).** There's no new column. A running detection polls the audit trail every `CANCEL_POLL_SECONDS` (5) for a `detection.cancel_requested` made since it started; a running document pipeline polls for its own status turning `cancelled`. Pub/Sub mode only; in-process the cancel event reaches the run directly.
+- **A lost approval publish** undoes the approval: back to analyzed, and the officer sees the 502. Lost upload and retry publishes leave the document queued, which the sweeper picks up.
+- **`submission_finalized`:** the debounce stays. Each request (and so each push) runs any refresh still pending before it returns (`document_repository.flush_pending_syncs`), because Cloud Run throttles CPU after a response and a leftover timer could stall. It did not move to the case-worker: about a dozen write paths call it, and ownership purity wasn't worth that churn.
+- **WebSocket tickets** are HMAC-signed with their own purpose and a 10-second expiry, so any api instance accepts them; api's max instances is now 3. A replay within the 10 s on a second instance would pass (each instance remembers the tickets it has used).
+
+The design as first written follows.
+
+Pub/Sub redelivery already handles a worker that dies mid-request. Recovery covers what redelivery cannot: a publish lost after the database write, a message that went to the dead-letter topic, and a run that ended without reaching a final status.
 
 **Who does what**
 - **Sweeper** (Cloud Run Job, every 2 minutes): reads in-flight documents and running analysis rows, and for each one past its threshold publishes `recovery.requested` with the stage and the next attempt number (the count of earlier `recovery.requested` events for it in `audit_events`). It writes no state.
