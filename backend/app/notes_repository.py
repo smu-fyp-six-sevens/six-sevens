@@ -62,8 +62,8 @@ def update_note(note_id: str, body: str) -> CaseNote:
     return CaseNote.model_validate(result.data[0])
 
 
-def _replies(note_id: str) -> list[dict]:
-    return service_supabase_client().table(TABLE).select("id").eq("parent_id", note_id).execute().data or []
+def _has_replies(note_id: str) -> bool:
+    return bool(service_supabase_client().table(TABLE).select("id").eq("parent_id", note_id).limit(1).execute().data)
 
 
 def _remove(note_id: str) -> None:
@@ -78,7 +78,7 @@ def delete_note(note: CaseNote) -> None:
     above them. Removing a reply also removes its note's placeholder once no replies are left.
     """
     if note.parent_id is None:
-        if not _replies(note.id):
+        if not _has_replies(note.id):
             _remove(note.id)
             return
         result = service_supabase_client().table(TABLE).update({
@@ -91,7 +91,7 @@ def delete_note(note: CaseNote) -> None:
 
     _remove(note.id)
     parent = get_note(note.parent_id)
-    if parent is not None and parent.deleted_at is not None and not _replies(parent.id):
+    if parent is not None and parent.deleted_at is not None and not _has_replies(parent.id):
         _remove(parent.id)
 
 
