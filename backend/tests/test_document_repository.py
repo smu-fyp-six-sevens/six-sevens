@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -452,7 +452,7 @@ def test_remove_document_deletes_fields_storage_and_row() -> None:
     mock_fields.delete_fields_for_documents.assert_called_once_with(["doc-1"])
     mock_storage.delete_file.assert_called_once_with("case-1/doc-1_statement.pdf")
     # What hangs off the document goes first, then the document itself.
-    assert [c.args for c in mock_client.table.call_args_list] == [("flags",), ("langgraph_trace",), ("documents",)]
+    assert [c.args for c in mock_client.table.call_args_list] == [("flags",), ("langgraph_trace",), ("case_notes",), ("documents",)]
     mock_client.table.return_value.delete.return_value.in_.assert_any_call("document_id", ["doc-1"])
     mock_client.table.return_value.delete.return_value.eq.assert_called_once_with("id", "doc-1")
     mock_client.table.return_value.delete.return_value.eq.return_value.execute.assert_called_once()
@@ -535,9 +535,10 @@ def test_remove_documents_batches_fields_storage_and_row_deletes() -> None:
         ["case-1/doc-1_statement.pdf", "case-1/doc-2_statement.pdf"]
     )
     mock_client = mock_service.return_value
-    assert [c.args for c in mock_client.table.call_args_list] == [("flags",), ("langgraph_trace",), ("documents",)]
+    assert [c.args for c in mock_client.table.call_args_list] == [("flags",), ("langgraph_trace",), ("case_notes",), ("documents",)]
     assert [c.args for c in mock_client.table.return_value.delete.return_value.in_.call_args_list] == [
-        ("document_id", ["doc-1", "doc-2"]), ("document_id", ["doc-1", "doc-2"]), ("id", ["doc-1", "doc-2"]),
+        ("document_id", ["doc-1", "doc-2"]), ("document_id", ["doc-1", "doc-2"]), ("document_id", ["doc-1", "doc-2"]),
+        ("id", ["doc-1", "doc-2"]),
     ]
     # Batch removal skips the per-document case resync (see remove_documents'
     # docstring) — callers doing this in bulk delete the case right after.
@@ -570,3 +571,20 @@ def test_remove_documents_swallows_a_storage_batch_delete_failure() -> None:
         document_repository.remove_documents(documents)
 
     mock_service.return_value.table.return_value.delete.return_value.in_.assert_called_with("id", ["doc-1"])
+
+
+def test_moved_document_takes_its_notes_to_the_new_case() -> None:
+    with (
+        patch("app.document_repository.supabase_client") as mock_client,
+        patch("app.document_repository.notes_repository") as mock_notes,
+        patch("app.document_repository._sync_case"),
+    ):
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+            _execute_result([{"id": "doc-1"}])
+        )
+        document_repository.move_document("doc-1", "case-2")
+        document_repository.move_documents(["doc-2", "doc-3"], "case-2")
+
+    assert mock_notes.move_with_documents.call_args_list == [
+        call(["doc-1"], "case-2"), call(["doc-2", "doc-3"], "case-2"),
+    ]

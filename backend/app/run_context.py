@@ -13,6 +13,8 @@ from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from typing import Any
 
+from . import metrics
+
 logger = logging.getLogger("classifier_pipeline.run_context")
 
 _MAX_REPAIRS = 50
@@ -34,6 +36,7 @@ class RunContext:
         if self.max_model_calls is not None and self.calls >= self.max_model_calls:
             if not self.exhausted:
                 logger.warning("Run reached its ceiling of %d model calls (next: %s)", self.max_model_calls, site)
+                metrics.llm_budget_exhausted.inc()
             self.exhausted = True
             raise RunBudgetExceeded(f"model call ceiling of {self.max_model_calls} reached")
         self.calls += 1

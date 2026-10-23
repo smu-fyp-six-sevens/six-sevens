@@ -1,0 +1,30 @@
+services:
+  pubsub-emulator:
+    # Pin a version (e.g. 520.0.0-emulators) if this tag ever moves under us.
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    command: gcloud beta emulators pubsub start --host-port=0.0.0.0:8085 --project=local
+    ports:
+      - "8085:8085"
+
+  # Creates the topic, dead-letter topic and one push subscription per role, then exits.
+  pubsub-init:
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+      target: api
+    image: six-sevens/api:local
+    command: python -m app.events.emulator_setup
+    environment:
+      PUBSUB_EMULATOR_HOST: pubsub-emulator:8085
+      GOOGLE_CLOUD_PROJECT: local
+      # The three workers share one container locally; audit-metrics has its own. To debug the workers in
+      # your IDE: PUSH_HOST=host.docker.internal PUSH_PORT=8001 docker compose up --scale workers=0
+      PUSH_HOST: ${PUSH_HOST:-workers}
+      PUSH_PORT: ${PUSH_PORT:-8000}
+      PUSH_HOST_AUDIT_METRICS: audit-metrics
+      PUSH_PORT_AUDIT_METRICS: "8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - pubsub-emulator
+    restart: on-failure

@@ -1,4 +1,7 @@
-FROM python:3.13-slim AS base
+# One image per role (CLOUD_ARCHITECTURE_PLAN.md section 2): build with --target <role>.
+# api, doc-worker, detection-worker, case-worker, audit-metrics, or all (every role in one process).
+
+FROM python:3.13-slim AS deps
 
 WORKDIR /app
 
@@ -20,14 +23,40 @@ RUN apt-get update && \
         fontconfig \
     && rm -rf /var/lib/apt/lists/*
 
-COPY backend/pyproject.toml ./pyproject.toml
+# Dependencies first, so a code change doesn't reinstall them.
 COPY backend/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir --retries 10 --timeout 120 -r requirements.txt
+
+COPY backend/pyproject.toml ./pyproject.toml
 COPY backend/app ./app
 RUN mkdir -p ./document_templates ./documents_generated
-RUN pip install --no-cache-dir --retries 10 --timeout 120 -e .
+RUN pip install --no-cache-dir --no-deps -e .
 
+# --- test stage, not shipped ---
+FROM deps AS test
+RUN pip install --no-cache-dir .[dev]
+COPY backend/tests ./tests
+
+# --- what every role ships: no dev injection tool ---
+FROM deps AS runtime
+RUN rm -rf ./app/injection ./app/routers/injection.py ./document_templates ./documents_generated
+# Runs as a non-root user. It may write only ./data (the land-use index, built below) and its home (font caches).
+RUN useradd --create-home --uid 10001 app && mkdir -p ./data && chown app ./data
+ENV LAND_USE_RUNTIME_REBUILD=false
+ENV PORT=8000
+EXPOSE 8000
+# Cloud Run ignores this and uses its own probes; compose and docker ps show it.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s \
+    CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\", \"8000\")}/health', timeout=4)"
+USER app
+# Cloud Run sends SIGTERM and allows 10 s; in-flight requests (a push's work) get most of it.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port \"$PORT\" --timeout-graceful-shutdown 8"]
+
+# The URA zoning index, for the roles that run detection.
+FROM runtime AS with-land-use
 ARG ALLOW_MISSING_LAND_USE=false
-RUN --mount=type=secret,id=data_gov_sg_api_key \
+# uid: secrets are mounted readable by root only, and this stage runs as app.
+RUN --mount=type=secret,id=data_gov_sg_api_key,uid=10001 \
     if [ -r /run/secrets/data_gov_sg_api_key ]; then export DATA_GOV_SG_API_KEY="$(cat /run/secrets/data_gov_sg_api_key)"; fi; \
     if python -c "from app.fraud_detection.external_validation.registry_lookups.land_use import cli; cli([])"; then :; \
     elif [ "$ALLOW_MISSING_LAND_USE" = "true" ]; then \
@@ -36,13 +65,22 @@ RUN --mount=type=secret,id=data_gov_sg_api_key \
         echo "ERROR: could not build the URA land-use index; fix the cause or build with --build-arg ALLOW_MISSING_LAND_USE=true" >&2; \
         exit 1; \
     fi
-ENV LAND_USE_RUNTIME_REBUILD=false
 
-EXPOSE 8000
+FROM runtime AS api
+ENV ROLE=api
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+FROM runtime AS doc-worker
+ENV ROLE=doc-worker
 
-# --- test stage, not shipped to prod ---
-FROM base AS test
-RUN pip install --no-cache-dir .[dev]
-COPY backend/tests ./tests
+FROM with-land-use AS detection-worker
+ENV ROLE=detection-worker
+
+FROM runtime AS case-worker
+ENV ROLE=case-worker
+
+FROM runtime AS audit-metrics
+ENV ROLE=audit-metrics
+
+# Every role in one process, as the single Cloud Run service ran before the split.
+FROM with-land-use AS all
+ENV ROLE=all

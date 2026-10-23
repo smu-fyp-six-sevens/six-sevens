@@ -44,9 +44,12 @@ The database is Supabase, and its schema is changed directly there; the repo kee
 | `case_analysis_runs` | each case analysis run (its result, risk, supporting documents and trace) |
 | `risk_scores` and the `latest_risk_scores` view (newest row per case) | saved scores and the case list |
 | `flags` | per-document findings a specialist approved |
+| `case_notes` | loan officers' notes on a case or one of its documents (a reply is a row with `parent_id`); only a note's author can edit (sets `edited_at`) or delete it, and a deleted note with replies stays as a placeholder (`deleted_at`, text erased) |
 | sequence `greenlink_case_id_seq` and trigger `set_greenlink_case_id` on `cases` | readable case ids (`GLDB-<n>`); the trigger skips any id already taken |
+| `audit_events` | the audit trail: every domain event, keyed by the event's id (the service role needs `select, insert`) |
+| the `supabase_realtime` publication with `documents`, `cases` and `case_analysis_runs` | live updates, including a case analysis finished by the case-worker |
 
-The backend role needs `select, insert` on `risk_scores` and `flags` (with row level security policies for insert and read if it is on). Every delete goes through the service key, so no delete *policy* is required, but the service role still needs the `DELETE` privilege on the tables the backend deletes from: `documents`, `extracted_fields`, `flags`, `langgraph_trace`, `case_analysis_runs`, `risk_scores` and `cases` (for example `grant delete on public.case_analysis_runs to service_role;`). Without it a delete fails with Postgres error 42501 ("permission denied for table ..."). Deleting a document removes its `extracted_fields`, `flags` and `langgraph_trace` rows and its stored file; deleting a case removes its documents, then its `risk_scores`, `case_analysis_runs` and `flags` rows. The backend deletes each child itself before the parent, so it works whether or not the foreign keys cascade. Deleting one document leaves the case's analysis runs and scores in place; the run is marked out of date.
+The backend role needs `select, insert` on `risk_scores` and `flags` (with row level security policies for insert and read if it is on). Every delete goes through the service key, so no delete *policy* is required, but the service role still needs the `DELETE` privilege on the tables the backend deletes from: `documents`, `extracted_fields`, `flags`, `case_notes`, `langgraph_trace`, `case_analysis_runs`, `risk_scores` and `cases` (for example `grant delete on public.case_analysis_runs to service_role;`). Without it a delete fails with Postgres error 42501 ("permission denied for table ..."). Deleting a document removes its `extracted_fields`, `flags`, `case_notes` and `langgraph_trace` rows and its stored file; deleting a case removes its documents, then its `risk_scores`, `case_analysis_runs`, `flags` and `case_notes` rows. On `case_notes` the service role needs `select, insert, delete` and `update (body, edited_at, deleted_at, case_id)`: an author's edit, a deleted note kept as a placeholder above its replies, and a moved document taking its notes to the new case. The backend deletes each child itself before the parent, so it works whether or not the foreign keys cascade. Deleting one document leaves the case's analysis runs and scores in place; the run is marked out of date.
 
 `exiftool` should be on the `PATH`; without it the metadata checks report that they could not run. Every setting and its default is in `HOW_IT_WORKS.md` §7, including the public-registry keys (a registry check that can't run is skipped, never a finding) and `CASE_ANALYSIS_ENABLED`. `python -m scripts.build_land_use_index` builds the URA zoning index ahead of time. The backend logs one `perf` line per request, snapshot and background job (§8).
 
@@ -59,17 +62,24 @@ npm install
 npm run dev
 ```
 
-## Docker
+The two commands above are all a developer needs: one process runs every role (`ROLE=all`) and passes events between them in memory (`EVENT_TRANSPORT=inprocess`). The split below is optional.
 
-From the repo root:
+## Docker: the services split locally (optional)
+
+From the repo root, with uvicorn stopped (Kong takes port 8000):
 
 ```bash
-docker compose up
+docker compose up --build                     # Pub/Sub emulator, Kong :8000, api, workers, audit-metrics
+docker compose --profile frontend up --build  # also the nginx frontend on :5173 (otherwise use npm run dev)
 ```
 
-The frontend is served on `http://localhost:5173` and the backend on `http://localhost:8000`.
+Settings come from `backend/.env`, as for uvicorn. The three workers share one container to save memory (about 3 GB in total). `CLOUD_ARCHITECTURE_PLAN.md` section 18 has the walkthrough, how to debug one role in the IDE, and the emulator's limits.
 
-Building the backend image downloads URA's land-use map and builds the zoning index into it (about a minute, needs internet, fails if it can't). To build without it, run `docker compose build --build-arg ALLOW_MISSING_LAND_USE=true`. Export `DATA_GOV_SG_API_KEY` first to pass it as a build secret.
+The backend image has one target per role (`backend/Dockerfile`). The `detection-worker` and `all` targets download URA's land-use map and build the zoning index into the image (about a minute, needs internet, fails if it can't). To build without it, set `ALLOW_MISSING_LAND_USE=true` in the environment before `docker compose build`. Export `DATA_GOV_SG_API_KEY` first to pass it as a build secret.
+
+## Deploying
+
+Cloud Run, from GitHub Actions ("Deploy to Cloud Run", manual). Terraform in `deploy/terraform` creates the services, Pub/Sub, secrets and identities once; its `README.md` has the one-time setup. `CLOUD_ARCHITECTURE_PLAN.md` describes the design.
 
 ## Tests
 

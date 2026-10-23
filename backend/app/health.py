@@ -22,6 +22,7 @@ def check_db_connection() -> None:
 
 
 @router.get("/health")
+@router.get("/healthz")
 def health_check() -> dict[str, str]:
     """Liveness only — does not touch the database. See /health/db for that."""
     return {"status": "ok"}

@@ -591,7 +591,7 @@ def _text_width(pil_font: PilFont, text: str) -> float:
 
 
 def _to_gray_bytes(image: Image.Image) -> list[int]:
-    return list(image.convert("L").getdata())
+    return cast(list[int], list(image.convert("L").get_flattened_data()))
 
 
 def _mean_abs_diff(left: list[int], right: list[int]) -> float:
@@ -626,7 +626,7 @@ def _gray_ink_metrics(
     """Return (bbox, fill_ratio, aspect) of pixels darker than threshold."""
     gray = image.convert("L")
     width, height = gray.size
-    data = list(gray.getdata())
+    data = cast(list[int], list(gray.get_flattened_data()))
     xs: list[int] = []
     ys: list[int] = []
     row_hits = [0] * height
@@ -888,7 +888,7 @@ def _crop_rgb_pixels(image: Image.Image, rect: list[float]) -> list[tuple[int, i
     x0, y0 = max(0, x0), max(0, y0)
     x1, y1 = min(image.width, max(x0 + 1, x1)), min(image.height, max(y0 + 1, y1))
     crop = image.crop((x0, y0, x1, y1)).convert("RGB")
-    return list(crop.getdata())
+    return cast(list[tuple[int, int, int]], list(crop.get_flattened_data()))
 
 
 def _halo_pixels(
@@ -1215,7 +1215,7 @@ def _snap_cut_x(
     width, height = gray.size
     if width < 3 or height < 1:
         return approx_x
-    data = list(gray.getdata())
+    data = cast(list[int], list(gray.get_flattened_data()))
     cols = [
         sum(1 for row in range(height) if data[row * width + col] < threshold)
         for col in range(width)
@@ -2150,7 +2150,7 @@ def _dominant_paper_color(image: Image.Image) -> tuple[int, int, int]:
     """Most common coarse colour — usually the page/card background."""
     sample = image.resize((80, 50), Image.Resampling.BOX)
     counts: dict[tuple[int, int, int], int] = {}
-    for pixel in sample.getdata():
+    for pixel in cast(tuple[tuple[int, ...], ...], sample.get_flattened_data()):
         key = (pixel[0] // 16, pixel[1] // 16, pixel[2] // 16)
         counts[key] = counts.get(key, 0) + 1
     quantized = max(counts, key=lambda k: counts[k])
@@ -2211,7 +2211,7 @@ def _discover_raster_image_fields(
     assert mask_px is not None and work_px is not None
     for y in range(small_h):
         for x in range(small_w):
-            red, green, blue = work_px[x, y]
+            red, green, blue = cast(tuple[int, int, int], work_px[x, y])
             dist = (
                 (red - paper[0]) ** 2
                 + (green - paper[1]) ** 2
@@ -2282,7 +2282,7 @@ def _mask_fill_ratio(
     crop = mask.crop((x0, y0, x1, y1))
     if crop.width < 1 or crop.height < 1:
         return 0.0
-    ink = sum(1 for value in crop.getdata() if value >= 128)
+    ink = sum(1 for value in cast(tuple[int, ...], crop.get_flattened_data()) if value >= 128)
     return ink / float(crop.width * crop.height)
 
 
@@ -2297,7 +2297,7 @@ def _connected_pixel_boxes(
     boxes: list[tuple[int, int, int, int]] = []
     for start_y in range(height):
         for start_x in range(width):
-            if pixels[start_x, start_y] < 128 or seen[start_y][start_x]:
+            if cast(int, pixels[start_x, start_y]) < 128 or seen[start_y][start_x]:
                 continue
             queue: deque[tuple[int, int]] = deque([(start_x, start_y)])
             seen[start_y][start_x] = True
@@ -2314,7 +2314,7 @@ def _connected_pixel_boxes(
                 for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
                     if nx < 0 or ny < 0 or nx >= width or ny >= height:
                         continue
-                    if seen[ny][nx] or pixels[nx, ny] < 128:
+                    if seen[ny][nx] or cast(int, pixels[nx, ny]) < 128:
                         continue
                     seen[ny][nx] = True
                     queue.append((nx, ny))
@@ -2705,7 +2705,7 @@ def _horizontal_rule_ys_in_image(
     if width < 4 or height < 2:
         return []
     crop = image.crop((x0, y0, x1, y1)).convert("RGB")
-    pixels = list(crop.getdata())
+    pixels = cast(list[tuple[int, int, int]], list(crop.get_flattened_data()))
     dark = [_luminance(pixel) <= 110 for pixel in pixels]
     ys: list[float] = []
     min_run = max(4, int(width * 0.55))

@@ -1,126 +1,178 @@
 name: Deploy to Cloud Run
 
-# Manual-only: pushing to this branch no longer auto-deploys, so you can
-# keep committing/iterating without touching the live Cloud Run services.
-# Deploy deliberately via the Actions tab -> "Deploy to Cloud Run" -> "Run
-# workflow" whenever you actually want the current branch state live.
+# Manual only (Actions tab -> "Deploy to Cloud Run" -> "Run workflow").
+# Terraform (deploy/terraform) owns each service's configuration; this only builds one image per role,
+# rolls it out, checks the gateway, and rolls every service back if the check fails.
 on:
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+  id-token: write # Workload Identity Federation
+
 env:
-  REGION: ${{ secrets.GCP_REGION || 'asia-southeast1' }}
-  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  REPO: app
-  BACKEND_SERVICE: fyp-backend
-  FRONTEND_SERVICE: fyp-frontend
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: ${{ vars.GCP_REGION || 'asia-southeast1' }}
+  REGISTRY: ${{ vars.GCP_REGION || 'asia-southeast1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/app
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - id: gcp-auth
+      # One access token for the whole job, minted once: gcloud and Docker use it directly, so nothing goes
+      # back to GitHub's token service mid-run (it times out now and then). 20 minutes: it must outlast the
+      # whole build, since each image is pushed as it finishes.
+      - id: auth
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+          token_format: access_token
+          access_token_lifetime: 1200s
+          create_credentials_file: false
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+      - name: Give gcloud the token
+        run: echo "CLOUDSDK_AUTH_ACCESS_TOKEN=${{ steps.auth.outputs.access_token }}" >> "$GITHUB_ENV"
 
-      - name: Ensure Artifact Registry repo exists
-        run: |
-          gcloud artifacts repositories describe "$REPO" \
-            --project "$PROJECT_ID" --location "$REGION" \
-            || gcloud artifacts repositories create "$REPO" \
-                 --project "$PROJECT_ID" --location "$REGION" \
-                 --repository-format=docker \
-                 --description="Fraud detection app images"
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGION }}-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
 
-      - name: Build and push backend image
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push every image
         env:
-          DOCKER_BUILDKIT: "1"
           # A build secret, so the key stays out of the image layers.
           DATA_GOV_SG_API_KEY: ${{ secrets.DATA_GOV_SG_API_KEY }}
         run: |
-          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/backend:${GITHUB_SHA}"
-          docker build -f backend/Dockerfile --target base \
-            --secret id=data_gov_sg_api_key,env=DATA_GOV_SG_API_KEY -t "$IMAGE" .
-          docker push "$IMAGE"
-          echo "BACKEND_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          KONG_URL=$(gcloud run services describe kong --region "$REGION" --format='value(status.url)')
+          # build <image> <dockerfile> [buildx args...]: skipped when this commit's image already exists
+          # (a rerun), otherwise unchanged layers come from the cache kept in Artifact Registry.
+          build() {
+            image=$1; file=$2; shift 2
+            if gcloud artifacts docker images describe "$REGISTRY/$image:$GITHUB_SHA" >/dev/null 2>&1; then
+              echo "$image:$GITHUB_SHA is already built; skipping"
+              return
+            fi
+            docker buildx build -f "$file" "$@" \
+              --cache-from "type=registry,ref=$REGISTRY/buildcache:$image" \
+              --cache-to "type=registry,ref=$REGISTRY/buildcache:$image,mode=max,image-manifest=true,oci-mediatypes=true" \
+              -t "$REGISTRY/$image:$GITHUB_SHA" --push .
+          }
+          for role in api doc-worker detection-worker case-worker audit-metrics; do
+            # Every role shares the dependency layers, so each may also start from api's cache.
+            build "$role" backend/Dockerfile --target "$role" \
+              --cache-from "type=registry,ref=$REGISTRY/buildcache:api" \
+              --secret id=data_gov_sg_api_key,env=DATA_GOV_SG_API_KEY
+          done
+          build kong deploy/kong/Dockerfile
+          build frontend frontend/Dockerfile --build-arg VITE_API_URL="$KONG_URL"
+          build grafana deploy/grafana/Dockerfile
 
-      - name: Deploy backend to Cloud Run
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # As in build: one 10-minute access token for the job.
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+          token_format: access_token
+          access_token_lifetime: 600s
+          create_credentials_file: false
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Give gcloud the token
+        run: echo "CLOUDSDK_AUTH_ACCESS_TOKEN=${{ steps.auth.outputs.access_token }}" >> "$GITHUB_ENV"
+
+      - name: Record the revisions now serving
         run: |
-          # ALLOWED_ORIGIN_REGEX is computed here, not fetched after the
-          # frontend deploys: Cloud Run hands each service more than one
-          # valid hostname (e.g. both "SERVICE-xxxxx-as.a.run.app" and
-          # "SERVICE-xxxxx.asia-southeast1.run.app" resolve to the same
-          # service), so pinning CORS to one exact resolved URL is fragile —
-          # whichever format a browser happens to be on can fail. Matching
-          # on the stable service-name prefix instead covers every hostname
-          # Cloud Run might hand this service, and needs no re-wiring after
-          # the frontend exists.
-          gcloud run deploy "$BACKEND_SERVICE" \
-            --image "$BACKEND_IMAGE" \
-            --project "$PROJECT_ID" \
-            --region "$REGION" \
-            --platform managed \
-            --allow-unauthenticated \
-            --port 8000 \
-            --memory 2Gi \
-            --cpu 2 \
-            --timeout 3600 \
-            --set-env-vars "ALLOWED_ORIGIN_REGEX=^https://${FRONTEND_SERVICE}-.*\.run\.app\$" \
-            --set-env-vars "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" \
-            --set-env-vars "SUPABASE_PUBLISHABLE_KEY=${{ secrets.SUPABASE_PUBLISHABLE_KEY }}" \
-            --set-env-vars "SUPABASE_SECRET_KEY=${{ secrets.SUPABASE_SECRET_KEY }}" \
-            --set-env-vars "SUPABASE_STORAGE_BUCKET=${{ secrets.SUPABASE_STORAGE_BUCKET || 'documents' }}" \
-            --set-env-vars "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" \
-            --set-env-vars "AUTH_USERS=${{ secrets.AUTH_USERS }}" \
-            --set-env-vars "AUTH_SECRET_KEY=${{ secrets.AUTH_SECRET_KEY }}" \
-            --set-env-vars "DATA_GOV_SG_API_KEY=${{ secrets.DATA_GOV_SG_API_KEY }}" \
-            --set-env-vars "ONEMAP_API_TOKEN=${{ secrets.ONEMAP_API_TOKEN }}" \
-            --set-env-vars "URA_API_KEY=${{ secrets.URA_API_KEY }}" \
-            --set-env-vars "DEPLOYMENT_ENV=cloud"
+          : > previous.txt
+          for svc in api doc-worker detection-worker case-worker audit-metrics kong frontend grafana; do
+            # The revision taking traffic, which after a rollback is not the newest one.
+            rev=$(gcloud run services describe "$svc" --region "$REGION" --format='value(status.traffic[0].revisionName)')
+            echo "$svc $rev" >> previous.txt
+          done
+          cat previous.txt
 
-      - name: Resolve backend URL
+      - name: Roll out the new images
         run: |
-          BACKEND_URL=$(gcloud run services describe "$BACKEND_SERVICE" \
-            --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')
-          echo "BACKEND_URL=$BACKEND_URL" >> "$GITHUB_ENV"
+          # Workers and audit-metrics first, so the api never publishes to an older consumer.
+          pids=""
+          for svc in audit-metrics doc-worker detection-worker case-worker api kong frontend grafana; do
+            # Services with a sidecar need the main container named. Every flag after --container belongs
+            # to that container, so the service-wide ones (--quiet) go before it.
+            case "$svc" in
+              frontend) container="" ;;
+              kong|grafana) container="--container $svc" ;;
+              *) container="--container app" ;;
+            esac
+            # update keeps the traffic split as it is, and a rollback pins traffic to an old revision,
+            # so traffic is moved to the new revision explicitly.
+            {
+              gcloud run services update "$svc" --region "$REGION" --quiet $container --image "$REGISTRY/$svc:$GITHUB_SHA" &&
+              gcloud run services update-traffic "$svc" --region "$REGION" --quiet --to-latest
+            } &
+            pids="$pids $!"
+          done
+          fail=0
+          for pid in $pids; do wait "$pid" || fail=1; done
+          exit $fail
 
-      - name: Build and push frontend image
+      - name: Check the gateway (no LLM, no database writes)
+        id: check
         run: |
-          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/frontend:${GITHUB_SHA}"
-          docker build -f frontend/Dockerfile --build-arg VITE_API_URL="$BACKEND_URL" \
-            -t "$IMAGE" .
-          docker push "$IMAGE"
-          echo "FRONTEND_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          KONG_URL=$(gcloud run services describe kong --region "$REGION" --format='value(status.url)')
+          FRONTEND_URL=$(gcloud run services describe frontend --region "$REGION" --format='value(status.url)')
+          WORKER_URL=$(gcloud run services describe detection-worker --region "$REGION" --format='value(status.url)')
+          expect() {  # expect <status> <method> <url> [curl args...]
+            want=$1; method=$2; url=$3; shift 3
+            got=$(curl -s -o /dev/null -w '%{http_code}' -X "$method" "$url" "$@")
+            echo "$method $url -> $got (want $want)"
+            [ "$got" = "$want" ]
+          }
+          # /health, not /healthz: Cloud Run's front end reserves paths ending in "z" and answers them itself.
+          expect 200 GET "$KONG_URL/health"
+          # Our app's own reply, not any page that happens to answer 200 (Cloud Run's placeholder does).
+          curl -s "$KONG_URL/health" | grep -q '"status":"ok"'
+          expect 401 GET "$KONG_URL/cases"
+          expect 401 GET "$KONG_URL/audit/events"
+          expect 404 POST "$KONG_URL/push/doc-worker"
+          expect 200 GET "$FRONTEND_URL/"
+          # Only Pub/Sub's identity may invoke a worker.
+          expect 403 POST "$WORKER_URL/push/detection-worker"
+          # Grafana is up and asks for a login.
+          GRAFANA_URL=$(gcloud run services describe grafana --region "$REGION" --format='value(status.url)')
+          expect 200 GET "$GRAFANA_URL/api/health"
+          expect 401 GET "$GRAFANA_URL/api/dashboards/uid/six-services"
+          # The frontend origin passes CORS.
+          curl -s -o /dev/null -D - -X OPTIONS "$KONG_URL/cases" -H "Origin: $FRONTEND_URL" \
+            -H "Access-Control-Request-Method: GET" | grep -qi "access-control-allow-origin: $FRONTEND_URL"
 
-      - name: Deploy frontend to Cloud Run
+      - name: Roll back every service
+        if: failure()
         run: |
-          gcloud run deploy "$FRONTEND_SERVICE" \
-            --image "$FRONTEND_IMAGE" \
-            --project "$PROJECT_ID" \
-            --region "$REGION" \
-            --platform managed \
-            --allow-unauthenticated \
-            --port 80 \
-            --memory 512Mi \
-            --cpu 1
+          while read -r svc rev; do
+            [ -n "$rev" ] && gcloud run services update-traffic "$svc" --region "$REGION" --to-revisions "$rev=100" --quiet
+          done < previous.txt
 
-      - name: Print deployed URLs
+      - name: Summary
+        if: success()
         run: |
-          FRONTEND_URL=$(gcloud run services describe "$FRONTEND_SERVICE" \
-            --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')
-
           {
-            echo "### Deployed"
-            echo "- Frontend: $FRONTEND_URL"
-            echo "- Backend: $BACKEND_URL"
+            echo "### Deployed $GITHUB_SHA"
+            echo "- Frontend: $(gcloud run services describe frontend --region "$REGION" --format='value(status.url)')"
+            echo "- API (Kong): $(gcloud run services describe kong --region "$REGION" --format='value(status.url)')"
+            echo "- Grafana: $(gcloud run services describe grafana --region "$REGION" --format='value(status.url)')"
           } >> "$GITHUB_STEP_SUMMARY"

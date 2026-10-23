@@ -88,15 +88,13 @@ def test_message_endpoint() -> None:
     assert response.json() == {"message": "Hello from FastAPI"}
 
 
-async def test_lifespan_starts_queue_and_passes_db_check() -> None:
+async def test_lifespan_passes_db_check() -> None:
     with (
-        patch("app.main.document_queue") as mock_queue,
         patch("app.main.check_db_connection") as mock_check,
     ):
         async with lifespan(app):
             pass
 
-    mock_queue.start.assert_called_once_with()
     mock_check.assert_called_once_with()
 
 
@@ -104,7 +102,6 @@ async def test_lifespan_tolerates_db_check_failure_at_startup() -> None:
     # A transient Supabase blip at boot shouldn't crash-loop the app — the
     # lifespan should log and continue rather than propagate.
     with (
-        patch("app.main.document_queue") as mock_queue,
         patch("app.main.check_db_connection") as mock_check,
     ):
         mock_check.side_effect = RuntimeError("connection refused")
@@ -112,7 +109,6 @@ async def test_lifespan_tolerates_db_check_failure_at_startup() -> None:
         async with lifespan(app):
             pass
 
-    mock_queue.start.assert_called_once_with()
 
 
 async def test_lifespan_tolerates_realtime_listener_start_failure() -> None:
@@ -120,7 +116,6 @@ async def test_lifespan_tolerates_realtime_listener_start_failure() -> None:
     # not being configured in a given environment shouldn't crash-loop the
     # app, just degrade the case status WebSocket to "no live pushes".
     with (
-        patch("app.main.document_queue") as mock_queue,
         patch("app.main.check_db_connection") as mock_check,
         patch("app.main.realtime_listener") as mock_realtime,
     ):
@@ -130,7 +125,6 @@ async def test_lifespan_tolerates_realtime_listener_start_failure() -> None:
         async with lifespan(app):
             pass
 
-    mock_queue.start.assert_called_once_with()
     mock_check.assert_called_once_with()
     mock_realtime.start.assert_awaited_once_with()
     mock_realtime.stop.assert_awaited_once_with()

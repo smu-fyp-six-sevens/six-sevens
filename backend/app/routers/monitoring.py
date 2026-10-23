@@ -11,7 +11,7 @@ from .. import document_repository
 from ._dependencies import bad_gateway_on_error
 from ..models import DocumentRecord, DocumentStatus, ProcessingErrorEntry, StuckDocument
 from ..monitoring import get_stuck_documents
-from ..queue_service import document_queue
+from ..workers import documents as doc_worker
 
 router = APIRouter(prefix="/documents", tags=["monitoring"])
 logger = logging.getLogger(__name__)
@@ -51,5 +51,6 @@ def list_monitoring_issues() -> MonitoringIssues:
     return MonitoringIssues(
         stuck=stuck,
         failed=failed,
-        recent_errors=document_queue.get_recent_errors(),
+        # Only this process's; with a separate doc-worker these are in its logs and the audit trail.
+        recent_errors=doc_worker.recent_errors(),
     )

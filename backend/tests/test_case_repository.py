@@ -117,7 +117,7 @@ def test_set_submission_finalized_false_clears_finalized_at() -> None:
         assert update_payload == {"submission_finalized": False, "finalized_at": None}
 
 
-def test_list_cases_includes_dev_cases_by_default() -> None:
+def test_list_cases_returns_every_case() -> None:
     with patch("app.case_repository.supabase_client") as mock_client:
         query = mock_client.table.return_value.select.return_value
         query.execute.return_value = _execute_result([_row()])
@@ -125,21 +125,7 @@ def test_list_cases_includes_dev_cases_by_default() -> None:
         cases = case_repository.list_cases()
 
         assert len(cases) == 1
-        # No dev filter applied — the query is executed as selected.
         query.eq.assert_not_called()
-
-
-def test_list_cases_excludes_dev_cases_when_asked() -> None:
-    # What the deployed environment uses so demo/test cases don't show up
-    # in the real queue.
-    with patch("app.case_repository.supabase_client") as mock_client:
-        query = mock_client.table.return_value.select.return_value
-        query.eq.return_value.execute.return_value = _execute_result([_row()])
-
-        cases = case_repository.list_cases(include_dev=False)
-
-        assert len(cases) == 1
-        query.eq.assert_called_once_with("dev", False)
 
 
 def test_update_case_writes_company_name_and_touches_updated_at() -> None:
@@ -181,12 +167,12 @@ def test_delete_case_deletes_the_row() -> None:
 
     # What hangs off the case first (a foreign key can block the case delete), then the case itself.
     assert [c.args for c in mock_client.table.call_args_list] == [
-        ("risk_scores",), ("case_analysis_runs",), ("flags",), ("cases",),
+        ("risk_scores",), ("case_analysis_runs",), ("flags",), ("case_notes",), ("cases",),
     ]
     assert [c.args for c in mock_client.table.return_value.delete.return_value.eq.call_args_list] == [
-        ("case_id", "case-1"), ("case_id", "case-1"), ("case_id", "case-1"), ("id", "case-1"),
+        ("case_id", "case-1"), ("case_id", "case-1"), ("case_id", "case-1"), ("case_id", "case-1"), ("id", "case-1"),
     ]
-    assert mock_client.table.return_value.delete.return_value.eq.return_value.execute.call_count == 4
+    assert mock_client.table.return_value.delete.return_value.eq.return_value.execute.call_count == 5
 
 
 def test_delete_case_raises_when_no_row_was_removed() -> None:

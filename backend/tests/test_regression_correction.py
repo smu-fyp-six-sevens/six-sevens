@@ -53,7 +53,7 @@ def test_a_below_threshold_document_cannot_be_approved_until_its_type_is_confirm
     with (
         patch("app.routers._dependencies.document_repository") as lookup,
         patch("app.routers.documents.document_repository") as documents,
-        patch("app.routers.documents._launch_detection") as launch,
+        patch("app.events.publish", new_callable=AsyncMock) as launch,
     ):
         lookup.get_document.return_value = document
         documents.get_document.return_value = document
@@ -68,16 +68,19 @@ def test_a_below_threshold_document_cannot_be_approved_until_its_type_is_confirm
 # --- SCRUM-17: officer-initiated retry, not automatic ---------------------------------
 
 
+def _published(publish: AsyncMock) -> list[tuple[str, str | None]]:
+    return [(c.args[0].type, c.args[0].document_id) for c in publish.await_args_list]
+
+
 def _retry(document: DocumentRecord):
     with (
         patch("app.routers._dependencies.document_repository") as lookup,
         patch("app.routers.documents.document_repository") as documents,
-        patch("app.routers.documents.document_queue") as queue,
+        patch("app.events.publish", new_callable=AsyncMock) as queue,
     ):
         lookup.get_document.return_value = document
         documents.get_document.return_value = document
         documents.update_status.return_value = True
-        queue.enqueue = AsyncMock()
         response = client.post(f"/documents/{document.id}/retry")
         return response, documents, queue
 
@@ -90,7 +93,7 @@ def test_an_officer_can_retry_a_failed_document() -> None:
     response, documents, queue = _retry(document)
 
     assert response.status_code == 200
-    queue.enqueue.assert_awaited_once_with("doc-1")
+    assert _published(queue) == [("document.retry_requested", "doc-1")]
 
 
 @pytest.mark.sprint2
@@ -103,7 +106,7 @@ def test_a_processing_document_is_retryable_only_after_the_retry_threshold() -> 
     )
     response, _, queue = _retry(long_running)
     assert response.status_code == 200
-    queue.enqueue.assert_awaited_once_with("doc-1")
+    assert _published(queue) == [("document.retry_requested", "doc-1")]
 
     recent = _document(
         status=DocumentStatus.PROCESSING,
@@ -111,7 +114,7 @@ def test_a_processing_document_is_retryable_only_after_the_retry_threshold() -> 
     )
     response, _, queue = _retry(recent)
     assert response.status_code == 409
-    queue.enqueue.assert_not_awaited()
+    queue.assert_not_awaited()
 
 
 # --- SCRUM-19: confirming a type re-runs extraction ------------------------------------
@@ -122,12 +125,11 @@ def _confirm_type(document: DocumentRecord, new_type: str):
         patch("app.routers._dependencies.document_repository") as lookup,
         patch("app.routers.documents.document_repository") as documents,
         patch("app.routers.documents.extracted_fields_repository") as fields,
-        patch("app.routers.documents.langgraph_pipeline") as pipeline,
+        patch("app.events.publish", new_callable=AsyncMock) as pipeline,
     ):
         lookup.get_document.return_value = document
         documents.get_document.return_value = document
         fields.get_extracted_fields.return_value = []
-        pipeline.rerun_extraction = AsyncMock()
         response = client.patch(f"/documents/{document.id}/document-type", json={"document_type": new_type})
         return response, pipeline
 
@@ -138,7 +140,7 @@ def test_picking_a_different_type_reruns_extraction_once() -> None:
     response, pipeline = _confirm_type(_document(), "bank_statement")
 
     assert response.status_code == 200
-    pipeline.rerun_extraction.assert_awaited_once()
+    assert _published(pipeline) == [("document.retyped", "doc-1")]
 
 
 @pytest.mark.sprint2
@@ -147,4 +149,4 @@ def test_confirming_the_same_type_after_a_generic_first_pass_reruns_extraction()
     response, pipeline = _confirm_type(_document(), "payslip")
 
     assert response.status_code == 200
-    pipeline.rerun_extraction.assert_awaited_once()
+    assert _published(pipeline) == [("document.retyped", "doc-1")]

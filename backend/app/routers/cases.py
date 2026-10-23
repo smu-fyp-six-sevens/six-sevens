@@ -5,7 +5,8 @@ import logging
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 
-from .. import case_service, document_repository
+from .. import case_service, document_repository, events
+from ..events import officer_event, types
 from ._dependencies import get_case_or_404, to_thread_or_502
 from ..case_match import CaseMatchResult
 from ..case_pipeline import service as analysis_service
@@ -18,11 +19,13 @@ logger = logging.getLogger(__name__)
 
 @router.post("", response_model=CaseRecord, status_code=status.HTTP_201_CREATED)
 async def create_case(company_name: str | None = Body(None, embed=True, max_length=MAX_COMPANY_NAME_LENGTH)) -> CaseRecord:
-    return await to_thread_or_502(
+    case = await to_thread_or_502(
         case_service.create_case, company_name,
         detail="Failed to create the case. Check Supabase table access.",
         log=("Failed to create case",),
     )
+    await events.record(officer_event(types.CASE_CREATED, case_id=case.id, detail={"company_name": company_name}))
+    return case
 
 
 @router.get("", response_model=list[CaseListItem])
@@ -58,6 +61,9 @@ async def update_case(
         detail="Failed to save the case. Check Supabase table access.",
         log=("Failed to update case %s", case_id),
     )
+    await events.record(officer_event(
+        types.CASE_RENAMED, case_id=case_id, detail={"from": case.company_name, "to": request.company_name},
+    ))
 
     updated = await asyncio.to_thread(case_service.get_case_summary, case_id)
     if updated is None:
@@ -99,6 +105,10 @@ async def delete_case(case_id: str, case: CaseRecord = Depends(get_case_or_404))
         detail="Failed to delete the case. Check Supabase table access.",
         log=("Failed to delete case %s", case_id),
     )
+    await events.record(officer_event(
+        types.CASE_DELETED, case_id=case_id,
+        detail={"company_name": case.company_name, "documents": len(documents)},
+    ))
 
 
 @router.get("/{case_id}/case-match", response_model=CaseMatchResult)

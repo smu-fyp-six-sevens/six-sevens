@@ -1,6 +1,6 @@
 # Pending work
 
-Open product and platform work only. Code smells and optimisations are in `REFACTORING_AUDIT.md`; test work is in `backend_tests.md`; detection bugs are in `FRAUD_DETECTION_MAP.md` §6. The roadmap (automatic case analysis, the 5-service Pub/Sub split) is in `CLAUDE.md`'s "Future Direction". Updated 2026-10-21.
+Open product and platform work only. Code smells and optimisations are in `REFACTORING_AUDIT.md`; test work is in `backend_tests.md`; detection bugs are in `FRAUD_DETECTION_MAP.md` §6. The roadmap (automatic case analysis, the cloud split) is in `CLAUDE.md`'s "Future Direction"; the cloud design is `CLOUD_ARCHITECTURE_PLAN.md`. Updated 2026-10-21.
 
 ## Decided, not started
 
@@ -24,7 +24,7 @@ Open product and platform work only. Code smells and optimisations are in `REFAC
 - **Postgres checkpointing, pruning and time travel** are not built (every graph compiles with `checkpointer=False`). A crashed run fails the document and is retried from scratch; there is no replay or fork from an earlier step and no thread cleanup. Time travel is no longer needed for "fix the type and re-extract" (the officer correction already reruns extraction only), so it is now a debugging and audit aid. If built: `langgraph-checkpoint-postgres` on the transaction pooler (`prepare_threshold=None`), its own `langgraph` schema (or a second free Postgres via `LANGGRAPH_DATABASE_URL` if churn hurts), only the parent graph checkpoints, delete a document's thread when it finishes and sweep failed ones after a few days by `thread_id` (= `document_id`; the tables have no `created_at`). Keep PII and text out of state (re-ingest the stored file to replay), measure bytes per document (target well under ~50 MB), consider encrypting the serializer, and add a keep-alive for the Supabase free-tier inactivity pause before the November demo.
 - **CPU work runs on one thread.** PyMuPDF is not thread-safe, so all PDF and forensic checks share one worker (`CPU_WORKER_CONCURRENCY=1`). Raising `DETECTION_CONCURRENCY` (now 2) only overlaps the model and registry calls; a process pool would be the real fix. Tune it from the `perf` log lines once the rate limiter below exists.
 - **Per-provider rate limiting.** No shared Anthropic limiter across the 4 queue workers. Detection runs are capped at `DETECTION_CONCURRENCY` (2), one at `DETECTION_MAX_MODEL_CALLS` (30) and the case analysis at 6, but nothing bounds the total across the queue, detection and an analysis at once.
-- **Prometheus metrics.** Token and cache counts are logged per unit of work (`query_stats.py`) but not exported; blocked on the `/metrics` endpoint below.
+- **Prometheus metrics.** Done: token, cache and cost counts per agent and per unit of work are on `/metrics` and the Grafana agents and cost dashboards.
 - **Guardrails, evals and CI.** `injection_manifest.json` lists the defects planted in each generated `_F` file, so it can score detection per defect type (a case may upload the clean version, which has no `_F`; check the file names first). Synthetic companies always fail the ACRA check, so that finding fires on every generated case; it scores once per case (8 points) and counts the document as high. Golden-set nightly evals (classification accuracy, per-field extraction, escalation rate, cost per document, cache hit rate) from `documents_generated/` and a mocked-subset-per-PR check are not built. Also not built: specialist precision and recall scored on the forged documents from `injection/pdf.py` (keep the synthetic-to-real caveat).
 - **Extraction repair node.** Only the classifier has a repair step (deterministic cleanup, one Haiku re-ask, then manual review); extraction has none. Unchecked whether that is still true in the code.
 - **LangGraph Store** (learning from officer corrections): last phase, not started.
@@ -56,11 +56,43 @@ Budgets are in `HOW_IT_WORKS.md` §8; read them off the `perf` log lines. Query-
 
 ## Architecture (Kong / Prometheus / Grafana)
 
-Not started; no urgency until the Cloud Native award work picks up.
+Built on the `microservices` branch (2026-10-22): Kong, `/metrics` in every service, Grafana with four dashboards, traces joined across services, and stuck-work recovery with its gauges. See `CLOUD_ARCHITECTURE_PLAN.md` sections 7, 8 and 16. Still open:
+- **Alert rules.** There are none yet; the budget alert is the only one.
+- **Shared Anthropic rate budget across instances** (plan section 5).
+- **WebSocket ticket replay.** A ticket replayed within its 10 s on a *different* api instance would be accepted; each instance remembers only the tickets it has used. Closing that needs a shared store, which isn't worth it for a 10 s window.
+- **Recovery of work still in a dead-letter subscription.** The sweeper rescues the document behind it, but the dead-lettered message itself stays in `domain-events-dead-letter-pull` until someone reads it.
 
-- **Kong API gateway** would sit in front of whatever service boundaries exist and can add value (auth, rate limiting, routing) even before a real split. Today's boundary crossings are direct Python calls (`case_service.sync_submission_finalized`, `document_repository.get_document`, `queue_service.enqueue`), not events or API calls; replacing them is the actual work.
-- **Prometheus `/metrics`:** no app-level endpoint yet (LLM token usage and cost per document, classify and extract latency, queue depth, stuck-document count). Gateway metrics would come free from Kong's plugin.
-- **Grafana** dashboards over both, once they exist; Cloud Trace can be a data source to surface the existing OpenTelemetry traces.
+### Tear down the old single-service deploy (kept running on purpose, 2026-10-22)
+
+`fyp-backend` and `fyp-frontend` (Cloud Run, `asia-southeast1`) are the deploy from before the split. They are kept up for now. While they run:
+- **They share the Supabase project.** A document handled through the old frontend is processed by the old code, which writes no audit events, doesn't appear in the new metrics or dashboards, and still applies the old `dev` case filtering. Don't use both at once, and never for a demo.
+- **`main`'s `deploy.yml` can still redeploy them** with the `GCP_SA_KEY` secret until `microservices` is merged. Keep that secret until the teardown below.
+- **Cost:** none while idle if they scale to zero. Check that no `minScale` of 1 or more appears in `gcloud run services describe fyp-backend --region asia-southeast1 --format="value(spec.template.metadata.annotations)"` (same for `fyp-frontend`).
+
+**Teardown, step by step** (PowerShell; each `delete` asks for confirmation):
+
+1. **Merge first.** Merge `microservices` into `main`, so `main`'s workflow is the new one and can't recreate the old services.
+2. **Check what exists:** `gcloud run services list --region asia-southeast1`. Expect the new services (api, doc-worker, detection-worker, case-worker, audit-metrics, kong, frontend, grafana) plus `fyp-backend` and `fyp-frontend`. Don't touch `frontend`, which is the new one.
+3. **Note the old service account** before deleting, for step 6: `gcloud run services describe fyp-backend --region asia-southeast1 --format="value(spec.template.spec.serviceAccountName)"`.
+4. **Delete the two services:**
+   ```powershell
+   gcloud run services delete fyp-backend --region asia-southeast1
+   gcloud run services delete fyp-frontend --region asia-southeast1
+   ```
+5. **Delete the GitHub secrets the new workflow doesn't read** (Settings → Secrets and variables → Actions → Secrets): `GCP_SA_KEY`, `SUPABASE_*`, `ANTHROPIC_API_KEY`, `AUTH_*`, `ONEMAP_API_TOKEN`, `URA_API_KEY`, and any `GCP_PROJECT_ID` or `GCP_REGION` *secrets*.
+   - Keep the *variables* `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_WIF_PROVIDER` and `GCP_DEPLOYER_SA`.
+   - Keep the secret `DATA_GOV_SG_API_KEY`.
+6. **Revoke the key behind `GCP_SA_KEY`.** Deleting the GitHub secret doesn't invalidate the key itself.
+   - Find its account: the `client_email` in that key's JSON, if you still have it, or the account from step 3.
+   - List its keys: `gcloud iam service-accounts keys list --iam-account <email> --managed-by user`.
+   - Delete each: `gcloud iam service-accounts keys delete <KEY_ID> --iam-account <email>`.
+   - If the account was used only by the old deploy (not `github-deployer` or a `run-*` account, which Terraform owns), delete it too: `gcloud iam service-accounts delete <email>`.
+7. **Old images.**
+   - Run `gcloud artifacts repositories list`. Keep `app`; delete any repository the old deploy used: `gcloud artifacts repositories delete <name> --location asia-southeast1`.
+   - Old GHCR packages: GitHub → the organisation or your profile → Packages → delete them.
+8. **Old secrets in Secret Manager:** `gcloud secrets list`. Keep every secret Terraform made (`terraform output secrets_to_fill`, plus `grafana-admin-password` and `kong-gmp-config`); delete any others with `gcloud secrets delete <name>`.
+9. **Drop the old `dev` column** (optional; a database change, so decide deliberately). Once the old backend is gone nothing writes or reads `cases.dev`, so it can be dropped in the Supabase dashboard.
+10. **Update the docs.** Remove this section, and tick the clean-up item in `deploy/terraform/README.md`.
 
 ## Frontend
 
@@ -68,5 +100,8 @@ Not started; no urgency until the Cloud Native award work picks up.
 - **Loading pages (not urgent).** Three pages in `App.tsx` are a bare line of text with no header: the `Suspense` fallback, `Loading case...` and `Loading document...`. Give them the document-not-found page's design. The case and document routes also wait for the whole case list before loading their own data; loading independently would remove that delay.
 
 ## Small known gaps
+
+- **Security job: make it blocking.** Checkov and Snyk findings were fixed on 2026-10-22: the backend runs as `app` (uid 10001), every image has a `HEALTHCHECK`, Pillow 13 and pypdf 6; Terraform skips (customer-managed keys, the view's deletion protection, the GitHub OIDC branch pin) are inline with reasons. Once a run is green (Snyk's npm scan had not run before then), remove `continue-on-error` from the job.
+- **Frontend fully non-root.** nginx's workers already run as `nginx`; only the master is root (Checkov skip in `frontend/Dockerfile`). Moving to `nginxinc/nginx-unprivileged` means listening on 8080: change `nginx.conf`, the frontend's `container_port` in `run.tf` and the compose port together, and apply before the deploy.- **Frontend type errors CI doesn't catch.** `tsc` fails on `frontend/src/pages/upload/CaseOverview.tsx:72`, a teammate's case-summary code from commit `d1529ee`. A finding's severity can be `info`, but the sort table lists only high, medium and low; adding `info: 3` fixes it. CI runs lint and build (Vite doesn't type-check) but not `tsc --noEmit`, so add that step to the frontend job.
 
 - `submission_finalized` is remembered per process (`case_service._synced_finalized`) so an unchanged value isn't rewritten. With more than one backend instance, or a hand edit in the database, the stored value is corrected on the next change in the computed answer, not before.

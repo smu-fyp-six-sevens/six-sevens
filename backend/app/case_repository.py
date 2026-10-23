@@ -3,7 +3,6 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from .config import settings
 from .models import AdditionalDocuments, CaseRecord
 from .supabase_client import service_supabase_client, supabase_client
 from .supabase_rows import row as _row
@@ -15,11 +14,6 @@ def create_case(company_name: str | None = None) -> CaseRecord:
     # greenlink_case_id is intentionally omitted — it's assigned by a DB
     # trigger (`set_greenlink_case_id`, which skips an id already taken) and
     # comes back populated in the inserted row's representation below.
-    # dev is driven by which process created it (see settings.DEPLOYMENT_ENV
-    # / IS_CLOUD_DEPLOYMENT), never set by the caller or flipped by hand —
-    # cloud always creates real (dev=False) cases, everything else creates
-    # dev=True ones, so local/test data never needs manual cleanup to stay
-    # out of the cloud demo's queue.
     row = {
         "id": str(uuid.uuid4()),
         "company_name": company_name,
@@ -28,7 +22,6 @@ def create_case(company_name: str | None = None) -> CaseRecord:
         "recommended_additional_documents": [],
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
-        "dev": not settings.IS_CLOUD_DEPLOYMENT,
     }
 
     result = supabase_client.table("cases").insert(row).execute()
@@ -43,11 +36,8 @@ def get_case(case_id: str) -> CaseRecord | None:
     return CaseRecord(**_row(result.data[0]))
 
 
-def list_cases(*, include_dev: bool = True) -> list[CaseRecord]:
-    query = supabase_client.table("cases").select("*")
-    if not include_dev:
-        query = query.eq("dev", False)
-    result = query.execute()
+def list_cases() -> list[CaseRecord]:
+    result = supabase_client.table("cases").select("*").execute()
     return [CaseRecord(**_row(row)) for row in result.data]
 
 
@@ -70,7 +60,7 @@ def update_case(case_id: str, company_name: str) -> CaseRecord | None:
 
 def delete_case(case_id: str) -> None:
     """
-    Removes the case's analysis runs, saved risk history and flags, and then its row. Callers delete
+    Removes the case's analysis runs, saved risk history, flags and notes, and then its row. Callers delete
     its documents first. These are historical per-analysis rows, but a foreign key can prevent
     deleting the case until they are removed.
 
@@ -79,7 +69,7 @@ def delete_case(case_id: str) -> None:
     still there.
     """
     client = service_supabase_client()
-    for table in ("risk_scores", "case_analysis_runs", "flags"):
+    for table in ("risk_scores", "case_analysis_runs", "flags", "case_notes"):
         client.table(table).delete().eq("case_id", case_id).execute()
     result = client.table("cases").delete().eq("id", case_id).execute()
     if not result.data:
