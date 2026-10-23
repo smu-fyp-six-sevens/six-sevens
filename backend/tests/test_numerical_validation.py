@@ -581,6 +581,19 @@ def test_noa_ya2026_accepts_the_original_and_the_enhanced_rebate() -> None:
     assert len(_noa_for("2026", "500000", "50000")) == 1
 
 
+def test_payslip_net_passes_on_matching_totals_alone() -> None:
+    result = _run([_field("net_pay", "4680"), _field("total_earnings", "5850"), _field("total_deductions", "1170")],
+                  document_type="payslip")
+    assert _codes(result, "PAY.NET") == []
+    assert not any(s.check_code == "PAY.NET" for s in result.skipped_checks)
+
+
+def test_payslip_net_is_skipped_not_passed_with_nothing_to_compare() -> None:
+    result = _run([_field("net_pay", "4680"), _field("total_earnings", "5850")], document_type="payslip")
+    assert _codes(result, "PAY.NET") == []
+    assert any(s.check_code == "PAY.NET" for s in result.skipped_checks)
+
+
 def test_noa_skips_a_year_without_known_rules_or_no_year() -> None:
     for year in ("2010", None):
         result = _run([_field("eci", "100000"), _field("tax_payable", "1")]
@@ -1000,6 +1013,12 @@ _FLAGGED_ONCE = [
              _field("total_deductions", "500"), _field("earnings_items", []),
              _field("deductions_items", [])],
         id='payslip_net_flags_earnings_minus_deductions_mismatch',
+    ),
+    pytest.param(
+        # A summary payslip: totals printed, no line items at all (SCRUM-288 PI-21).
+        'PAY.NET', "payslip", [_field("net_pay", "5680"), _field("total_earnings", "5850"),
+             _field("total_deductions", "1170")],
+        id='payslip_net_flags_mismatch_from_totals_alone',
     ),
     pytest.param(
         'PAY.EARNINGS_SUM', "payslip", [_field("net_pay", "5000"),
