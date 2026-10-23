@@ -494,20 +494,53 @@ def _check_holding_value(*, holdings: Any) -> CheckResult:
 
 @check(code="SOW.PORTFOLIO_SUM", applies=("source_of_wealth",))
 def _check_portfolio_sum(*, holdings: Any, portfolio_value: Num) -> CheckResult:
-    """Holdings must add up to the stated portfolio value."""
-    market_values = [_field_number(r, "market_value") for r in _rows(holdings)]
-    numeric_values = [v for v in market_values if v is not None]
-    if not market_values or len(numeric_values) != len(market_values):
-        return [], skipped(reason="holding market values not all readable")
-    total = sum(numeric_values)
-    if abs(total - portfolio_value) > _MONEY_TOLERANCE:
-        return [_finding(
-            "SOW.PORTFOLIO_SUM", "impossible",
-            f"Holdings sum to {_money(total)}, but the stated portfolio value is {_money(portfolio_value)}",
-            field="portfolio_value", stated=_money(portfolio_value), expected=_money(total),
-            severity_note=_materiality_note(total - portfolio_value, total),
-        )], None
-    return [], None
+    """
+    Holdings must add up to the stated portfolio value. A holding with no market value is valued at
+    quantity x price when both are printed. One with neither doesn't stop the check (that let a total
+    120,000.00 above its holdings pass unremarked, SCRUM-288 PI-24): valued holdings that already exceed
+    the total disprove it, and a total that rests on unvalued holdings is reported for review.
+    """
+    rows = _rows(holdings)
+    if not rows:
+        return [], skipped(reason="no holdings extracted")
+    total = 0.0
+    unvalued: list[dict] = []
+    for row in rows:
+        value = _field_number(row, "market_value")
+        if value is None:
+            quantity, price = _field_number(row, "quantity"), _field_number(row, "closing_price")
+            value = quantity * price if quantity is not None and price is not None else None
+        if value is None:
+            unvalued.append(row)
+        else:
+            total += value
+
+    # A short position (negative quantity) is worth less than nothing, so it could pull the total back down.
+    has_short = any((_field_number(row, "quantity") or 0) < 0 for row in unvalued)
+    disproved = bool(unvalued) and not has_short and total > portfolio_value + _MONEY_TOLERANCE
+    if not unvalued or disproved:
+        if abs(total - portfolio_value) > _MONEY_TOLERANCE:
+            valued = "Holdings sum" if not unvalued else "The holdings with a value already sum"
+            return [_finding(
+                "SOW.PORTFOLIO_SUM", "impossible",
+                f"{valued} to {_money(total)}, but the stated portfolio value is {_money(portfolio_value)}",
+                field="portfolio_value", stated=_money(portfolio_value), expected=_money(total),
+                severity_note=_materiality_note(total - portfolio_value, total),
+            )], None
+        return [], None
+
+    unexplained = portfolio_value - total
+    if abs(unexplained) <= _MONEY_TOLERANCE:
+        return [], None
+    names = ", ".join(str(row.get("name") or "unnamed holding") for row in unvalued)
+    share = f" ({abs(unexplained) / abs(portfolio_value) * 100:.0f}%)" if portfolio_value else ""
+    return [_finding(
+        "SOW.PORTFOLIO_SUM", "inconsistent",
+        f"{_money(unexplained)} of the stated portfolio value {_money(portfolio_value)}{share} rests on "
+        f"holding(s) with no market value or price shown ({names}); the total cannot be confirmed",
+        field="portfolio_value", stated=_money(portfolio_value), expected=f"{_money(total)} from valued holdings",
+        severity_note=_materiality_note(unexplained, portfolio_value),
+    )], None
 
 
 @check(code="SOW.NAV", applies=("source_of_wealth",))

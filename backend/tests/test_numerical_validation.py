@@ -502,6 +502,42 @@ def test_portfolio_sum_reconciles() -> None:
     assert _codes(result, "SOW.PORTFOLIO_SUM") == []
 
 
+def _portfolio(holdings: list[dict], portfolio_value: str):
+    return _codes(_run([_field("holdings", holdings), _field("portfolio_value", portfolio_value)],
+                       document_type="source_of_wealth"), "SOW.PORTFOLIO_SUM")
+
+
+def test_portfolio_sum_flags_a_total_resting_on_an_unvalued_holding() -> None:
+    # SCRUM-288 PI-24: a suspended counter with no price or value printed, and a total 120,000 too high.
+    holdings = [{"name": "Straits Industrial REIT", "market_value": 98000.0},
+                {"name": "Oriental Bank Holdings Ltd", "market_value": 114600.0},
+                {"name": "Kallang Data Centres Ltd", "market_value": 58200.0},
+                {"name": "Pacific Shipping Group Ltd (suspended)", "quantity": 25000, "market_value": None},
+                {"name": "SGD Money Market Fund", "market_value": 85000.0}]
+    [finding] = _portfolio(holdings, "475800")
+    assert finding.severity == "inconsistent"
+    assert "120,000.00" in finding.summary and "Pacific Shipping" in finding.summary
+
+
+def test_portfolio_sum_disproves_a_total_the_valued_holdings_already_exceed() -> None:
+    holdings = [{"market_value": 600.0}, {"market_value": 500.0}, {"name": "Suspended Co", "market_value": None}]
+    [finding] = _portfolio(holdings, "1000")
+    assert finding.severity == "impossible"
+
+
+def test_portfolio_sum_does_not_disprove_when_an_unvalued_holding_may_be_short() -> None:
+    holdings = [{"market_value": 600.0}, {"market_value": 500.0}, {"quantity": -100, "market_value": None}]
+    [finding] = _portfolio(holdings, "1000")
+    assert finding.severity == "inconsistent"
+
+
+def test_portfolio_sum_values_a_holding_from_quantity_and_price() -> None:
+    holdings = [{"market_value": 500.0}, {"quantity": 50, "closing_price": 10.0, "market_value": None}]
+    assert _portfolio(holdings, "1000") == []
+    [finding] = _portfolio(holdings, "1500")
+    assert finding.severity == "impossible"
+
+
 def test_fs_note_refs_flags_a_reference_with_no_matching_note() -> None:
     result = _run(
         [_field("notes", [{"note_number": "3", "heading": "Revenue"}]),
