@@ -20,9 +20,8 @@ class NumericalFinding(BaseModel):
     field: str | None = None
     stated: str | None = None
     expected: str | None = None
-    # True when the failing value has low extraction confidence, or its raw
-    # string can't be found anywhere in the document's own text — the
-    # failure might be an extraction artefact rather than a genuine anomaly.
+    # True when the failing value has low extraction confidence: the failure
+    # might be an extraction artefact rather than a genuine anomaly.
     needs_review: bool = False
     severity_note: str | None = None
     summary: str
@@ -56,14 +55,14 @@ class BenfordAnalysis(BaseModel):
 
 class NumericalValidationResult(BaseModel):
     """
-    Response for GET /documents/{id}/detection/numerical-validation.
-    Nothing is persisted — a pure read/compute, like the spelling and
-    layout checks.
+    Response for GET /documents/{id}/detection/numerical-validation. A pure
+    compute: no findings are stored, only a step entry on the document's
+    trace (routers/detection.py).
 
     Two independent Benford passes over transaction amounts (all amounts,
     and amounts with likely bank fees excluded) are named benford /
-    benford_excluding_fees; both are None when the document type has no
-    transaction list to run them on.
+    benford_excluding_fees. Without a transaction list, benford says why it
+    couldn't run (unable_to_assess) and benford_excluding_fees is None.
     """
 
     document_id: str

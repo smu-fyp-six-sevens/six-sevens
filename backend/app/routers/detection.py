@@ -395,15 +395,15 @@ async def get_numerical_validation(
     document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
 ) -> NumericalValidationResult:
     """
-    Content Validation Specialist. On-demand and side-effect free, like the
-    spelling and layout checks — the result is returned as JSON for a lead
-    agent to consume and nothing is written to the database.
+    Content Validation Specialist. On-demand: no findings are stored, only a
+    step entry on the document's trace (_record_result).
 
     Works from the document's extracted fields alone (trusted as already
-    human-reviewed) — no file download or re-ingestion. document_type
-    decides which of the per-type checks in
-    numerical_validation.DOCUMENT_TYPE_CHECKS apply, the same officer-
-    confirmed value metadata_analysis uses for its own type-scoped rules.
+    human-reviewed) — no file download or re-ingestion. The officer-confirmed
+    document_type decides which registered checks apply (each check's
+    `applies`). One small model call (bind_checks) maps the checks' roles to
+    this document's fields; in the detection run the specialist supplies
+    those bindings itself instead.
     """
     extracted_fields = await _fetch_extracted_fields(document_id)
     bound = await bind_checks(document.document_type, extracted_fields)
@@ -423,17 +423,14 @@ async def get_date_anomalies(
     document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
 ) -> DateAnomalyResult:
     """
-    Content Validation Specialist — "Detect Date Anomalies". On-demand and
-    side-effect free, same contract as numerical-validation above: the
-    result is returned as JSON for a lead agent to consume, nothing is
-    written to the database.
+    Content Validation Specialist — "Detect Date Anomalies". On-demand, same
+    contract as numerical-validation above: no findings are stored, only a
+    step entry on the document's trace (_record_result).
 
-    Split out of numerical_validation's date-logic checks into their own
-    module (date_anomalies.py) so this dimension has its own user story,
-    ACs, and endpoint, mirroring numerical-validation's own split from the
-    combined checks it started life with. Works from extracted fields
-    alone (trusted as already human-reviewed) — no file download or
-    re-ingestion.
+    The date-logic checks live in their own module (dates/date_anomalies.py)
+    so this dimension has its own user story, ACs, and endpoint. Works from
+    extracted fields alone (trusted as already human-reviewed) — no file
+    download or re-ingestion, and no model call.
     """
     extracted_fields = await _fetch_extracted_fields(document_id)
     result = await asyncio.to_thread(
