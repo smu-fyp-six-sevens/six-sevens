@@ -42,8 +42,11 @@ export function caseCrumb(
     to: `${casePath(caseRecord)}?section=summary`,
     current,
     menuLabel: 'switch case',
+    // Newest case first, by number compared as a number (GLDB-134, GLDB-133, … GLDB-77), not the list's own order.
     loadMenu: () =>
-      cases.map((item) => ({
+      [...cases]
+        .sort((a, b) => caseNumberLabel(b).localeCompare(caseNumberLabel(a), undefined, { numeric: true }))
+        .map((item) => ({
         key: item.id,
         to: `${casePath(item)}?section=summary`,
         tag: caseNumberLabel(item),

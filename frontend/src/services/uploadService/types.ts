@@ -92,6 +92,8 @@ export interface CaseRiskFinding {
   document_type: string | null;
   finding_id: string;
   tool: string | null;
+  // The tool's own check code where it reports one (e.g. "PAY.NET").
+  check_code?: string | null;
   severity: DetectionSeverity;
   summary: string;
   rationale: string;
@@ -405,4 +407,68 @@ export interface CaseNote {
   created_at: string;
   edited_at: string | null;
   deleted_at: string | null;
+}
+
+// Mirrors the finding-review models in backend/app/models.py (see backend/app/detection_metrics.py).
+// "document": a finding on one document (check_name is its tool). "case": a cross-document finding from the
+// case analysis (check_name is its category).
+export type ReviewScope = 'document' | 'case';
+export type ReviewVerdict = 'correct' | 'wrong';
+
+export interface FindingReview {
+  id: string;
+  case_id: string;
+  document_id: string | null;
+  scope: ReviewScope;
+  // "verdict": an officer marked a finding correct or wrong. "missed": an issue no finding raised.
+  kind: 'verdict' | 'missed';
+  finding_id: string | null;
+  check_name: string;
+  check_code: string | null;
+  summary: string;
+  verdict: ReviewVerdict | null;
+  note: string | null;
+  reviewer: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// precision = correct / (correct + wrong); recall = correct / (correct + missed). null: nothing to measure yet.
+export interface CheckMetrics {
+  check_name: string;
+  scope: ReviewScope;
+  correct: number;
+  wrong: number;
+  missed: number;
+  precision: number | null;
+  recall: number | null;
+  flags: string[];
+}
+
+export interface MetricsSummary {
+  correct: number;
+  wrong: number;
+  missed: number;
+  precision: number | null;
+  recall: number | null;
+  by_check: CheckMetrics[];
+}
+
+export interface CaseFindingReviews {
+  reviews: FindingReview[];
+  case: MetricsSummary;
+  // Keyed by document id: that document's own findings.
+  documents: Record<string, MetricsSummary>;
+  cross_document: MetricsSummary;
+  // The checks a missed issue can be reported against, per scope.
+  checks: Record<ReviewScope, string[]>;
+}
+
+export interface DetectionMetrics {
+  overall: MetricsSummary;
+  cases_reviewed: number;
+  documents_reviewed: number;
+  target_precision: number;
+  target_recall: number;
+  min_reviews: number;
 }

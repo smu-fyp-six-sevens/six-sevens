@@ -634,3 +634,313 @@
   margin-right: 7px;
   display: inline-block;
 }
+
+/* ---------------------------------------------------------------------------
+   Finding reviews: an officer marks each finding correct or wrong and reports
+   what detection missed; the case's precision and recall come from these.
+   --------------------------------------------------------------------------- */
+
+.verdict-buttons {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 4px;
+  align-self: center;
+}
+
+.verdict-button {
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.verdict-button:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: #b9c2ce;
+}
+
+.verdict-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.verdict-button:focus-visible,
+.missed-issue-add:focus-visible,
+.missed-issue-remove:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 1px;
+}
+
+.verdict-button--correct.verdict-button--on {
+  border-color: var(--teal);
+  background: var(--teal-bg);
+  color: var(--teal);
+}
+
+.verdict-button--wrong.verdict-button--on {
+  border-color: var(--red);
+  background: var(--red-bg);
+  color: var(--red);
+}
+
+.review-metrics-line {
+  color: var(--steel-dark);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.review-metrics-label {
+  margin-right: 6px;
+  color: var(--ink-soft);
+  font-family: inherit;
+}
+
+.risk-document-none {
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+.missed-issues {
+  margin: 0 20px 14px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+  font-size: 12.5px;
+}
+
+.missed-issue-list {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.missed-issue-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.missed-issue-tag {
+  flex: 0 0 58px;
+  padding: 2px 0;
+  border-radius: 4px;
+  background: #fdf0d8;
+  color: #8a5a00;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.missed-issue-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.missed-issue-text small {
+  color: var(--ink-soft);
+}
+
+.missed-issue-remove {
+  padding: 0 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 15px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.missed-issue-remove:hover {
+  background: #f1eee6;
+  color: var(--ink);
+}
+
+.missed-issue-add {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--steel);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.missed-issue-add:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.missed-issue-form {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #faf8f3;
+}
+
+.missed-issue-form label {
+  display: grid;
+  gap: 4px;
+  color: var(--ink-soft);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.missed-issue-form select,
+.missed-issue-form input {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.missed-issue-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.missed-issue-cancel,
+.missed-issue-save {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.missed-issue-save {
+  border-color: var(--steel);
+  background: var(--steel);
+  color: #ffffff;
+}
+
+.missed-issue-save:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.review-summary {
+  margin: 4px 20px 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.review-summary-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.review-summary-head h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14.5px;
+}
+
+.review-summary-hint {
+  color: var(--ink-soft);
+  font-size: 12.5px;
+}
+
+.review-summary-figures {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 24px;
+  margin: 12px 0;
+}
+
+.review-summary-figures > div {
+  display: grid;
+  gap: 2px;
+}
+
+.review-summary-value {
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.review-summary-caption {
+  color: var(--ink-soft);
+  font-size: 11.5px;
+}
+
+.review-check-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.review-check-table th {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.review-check-table td {
+  padding: 6px 8px;
+  border-bottom: 1px dashed var(--line);
+}
+
+.review-check-table small {
+  color: var(--ink-soft);
+}
+
+@media (max-width: 640px) {
+  .risk-findings li {
+    flex-wrap: wrap;
+  }
+
+  .verdict-buttons {
+    margin-left: 68px;
+  }
+
+  .review-check-table th:nth-child(2),
+  .review-check-table td:nth-child(2),
+  .review-check-table th:nth-child(3),
+  .review-check-table td:nth-child(3),
+  .review-check-table th:nth-child(4),
+  .review-check-table td:nth-child(4) {
+    display: none;
+  }
+}
+
+/* Documents with no findings, and the cross-document group: only for reporting what detection missed. */
+/* Its toggle is a .risk-toggle like "Show more"; the groups it opens run edge to edge like the list above. */
+.risk-review-empty > .flagged-list {
+  margin-bottom: 12px;
+}
+
+.summary-card .save-error {
+  margin: 0 20px 12px;
+}

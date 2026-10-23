@@ -5,7 +5,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 
-from . import extracted_fields_repository, notes_repository, storage_service
+from . import extracted_fields_repository, finding_reviews_repository, notes_repository, storage_service
 from .models import DocumentRecord, DocumentStatus
 from .supabase_client import service_supabase_client, supabase_client
 from .supabase_rows import row as _row
@@ -229,6 +229,7 @@ def move_documents(document_ids: list[str], case_id: str) -> None:
         "id", document_ids
     ).execute()
     notes_repository.move_with_documents(document_ids, case_id)
+    finding_reviews_repository.move_with_documents(document_ids, case_id)
 
 
 def move_document(document_id: str, case_id: str) -> None:
@@ -248,6 +249,7 @@ def move_document(document_id: str, case_id: str) -> None:
     )
     if result.data:
         notes_repository.move_with_documents([document_id], case_id)
+        finding_reviews_repository.move_with_documents([document_id], case_id)
         _sync_case(case_id)
 
 
@@ -364,11 +366,11 @@ def update_metadata(document_id: str, metadata: dict) -> None:
 
 
 # Tables whose rows belong to one document, besides extracted_fields (which has its own helper).
-_DOCUMENT_CHILD_TABLES = ("flags", "langgraph_trace", notes_repository.TABLE)
+_DOCUMENT_CHILD_TABLES = ("flags", "langgraph_trace", notes_repository.TABLE, finding_reviews_repository.TABLE)
 
 
 def _delete_document_children(document_ids: list[str]) -> None:
-    """Removes what hangs off the documents: field rows, flags, notes and the detection trace. Runs before the
+    """Removes what hangs off the documents: field rows, flags, notes, finding reviews and the detection trace. Runs before the
     documents delete, so a foreign key on any of them cannot block it, and works whether or not they cascade."""
     from .langgraph import trace
 

@@ -1,13 +1,12 @@
 import { useState } from 'react';
-import type { CaseRisk, CaseRiskFinding } from '../../services/uploadService';
+import type { CaseRisk, CaseRiskFinding, DocumentRecord, ReviewScope } from '../../services/uploadService';
 import { formatDocumentType } from '../../services/uploadService';
+import { formatCheck as formatTool } from '../../utils/checkLabels';
+import { MetricsLine, MissedIssues, ReviewSummary, VerdictButtons } from './FindingReviewControls';
+import { findingScope, useFindingReviews, verdictFor } from './useFindingReviews';
 
-// "font_consistency_tool" -> "Font consistency"
-function formatTool(tool: string | null): string {
-  if (!tool) return 'Check';
-  const words = tool.replace(/_tool$/, '').replace(/_/g, ' ');
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
+// The group cross-document findings sit in: they belong to the case, not to one document.
+const CASE_GROUP_ID = '__case__';
 
 type Severity = CaseRiskFinding['severity'];
 const SEVERITY_ORDER: Severity[] = ['high', 'medium', 'low'];
@@ -95,31 +94,38 @@ interface FindingRow {
   finding: CaseRiskFinding;
   // How many findings on this document share this check and summary.
   count: number;
+  // Those findings: a verdict on the row goes on each of them.
+  members: CaseRiskFinding[];
 }
 
 interface DocumentGroup {
+  // A document's id, or CASE_GROUP_ID for the cross-document findings.
   documentId: string;
+  scope: ReviewScope;
   filename: string;
   documentType: string | null;
   findings: CaseRiskFinding[];
   rows: FindingRow[];
 }
 
-// Grouped per document, most severe first (documents by their most severe finding, then total points);
-// identical findings (same check, same summary) collapse into one row.
+// Grouped per document (cross-document findings in a group of their own), most severe first (documents by their
+// most severe finding, then total points); identical findings (same check, same summary) collapse into one row.
 function groupByDocument(findings: CaseRiskFinding[]): DocumentGroup[] {
   const groups = new Map<string, DocumentGroup>();
   for (const finding of [...findings].sort(compareFindings)) {
-    let group = groups.get(finding.document_id);
+    const scope = findingScope(finding);
+    const key = scope === 'case' ? CASE_GROUP_ID : finding.document_id;
+    let group = groups.get(key);
     if (!group) {
       group = {
-        documentId: finding.document_id,
-        filename: finding.filename,
-        documentType: finding.document_type,
+        documentId: key,
+        scope,
+        filename: scope === 'case' ? 'Across documents' : finding.filename,
+        documentType: scope === 'case' ? null : finding.document_type,
         findings: [],
         rows: [],
       };
-      groups.set(finding.document_id, group);
+      groups.set(key, group);
     }
     group.findings.push(finding);
     const repeat = group.rows.find(
@@ -127,14 +133,34 @@ function groupByDocument(findings: CaseRiskFinding[]): DocumentGroup[] {
     );
     if (repeat) {
       repeat.count += 1;
+      repeat.members.push(finding);
     } else {
-      group.rows.push({ finding, count: 1 });
+      group.rows.push({ finding, count: 1, members: [finding] });
     }
   }
   const total = (group: DocumentGroup) => group.findings.reduce((sum, f) => sum + f.points, 0);
   return Array.from(groups.values()).sort(
     (a, b) => compareFindings(a.findings[0], b.findings[0]) || total(b) - total(a),
   );
+}
+
+// Scanned documents with no findings, and the cross-document group, so an officer can still report an issue
+// detection missed on them (recall needs the misses). `skip` holds the groups already shown or hidden as minor.
+function emptyGroups(skip: Set<string>, documents: DocumentRecord[]): DocumentGroup[] {
+  const groups: DocumentGroup[] = documents
+    .filter((document) => document.status === 'detected' && !skip.has(document.id))
+    .map((document) => ({
+      documentId: document.id,
+      scope: 'document' as const,
+      filename: document.filename,
+      documentType: document.document_type,
+      findings: [],
+      rows: [],
+    }));
+  if (!skip.has(CASE_GROUP_ID)) {
+    groups.push({ documentId: CASE_GROUP_ID, scope: 'case', filename: 'Across documents', documentType: null, findings: [], rows: [] });
+  }
+  return groups;
 }
 
 function countBySeverity(findings: CaseRiskFinding[]): [Severity, number][] {
@@ -176,16 +202,45 @@ function NotScoredMessage({ risk }: { risk: CaseRisk | null }) {
   );
 }
 
-export function CaseRiskCard({ risk }: { risk: CaseRisk | null }) {
+export function CaseRiskCard({
+  risk,
+  caseId,
+  caseDocuments = [],
+}: {
+  risk: CaseRisk | null;
+  caseId: string;
+  caseDocuments?: DocumentRecord[];
+}) {
   const scored = risk?.state === 'scored' && risk.level ? risk : null;
   const [showMinor, setShowMinor] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [showEmptyGroups, setShowEmptyGroups] = useState(false);
+  const reviews = useFindingReviews(caseId, scored !== null);
+  const allReviews = reviews.data?.reviews ?? [];
 
   const findings = scored?.contributing_findings ?? [];
   const lowCount = findings.filter((finding) => finding.severity === 'low').length;
   const unreviewedCount = findings.filter((finding) => finding.unreviewed && finding.severity !== 'low').length;
   const visibleFindings = showMinor ? findings : findings.filter((finding) => !isMinor(finding));
   const documents = groupByDocument(visibleFindings);
+  // Every group that has findings, shown or hidden as minor: only the rest are added as empty groups.
+  const withFindings = new Set(
+    findings.map((finding) => (findingScope(finding) === 'case' ? CASE_GROUP_ID : finding.document_id)),
+  );
+  const reviewGroups = emptyGroups(withFindings, caseDocuments);
+
+  function metricsFor(group: DocumentGroup) {
+    return group.scope === 'case' ? reviews.data?.cross_document : reviews.data?.documents[group.documentId];
+  }
+
+  function missedFor(group: DocumentGroup) {
+    return allReviews.filter(
+      (review) =>
+        review.kind === 'missed' &&
+        review.scope === group.scope &&
+        (group.scope === 'case' || review.document_id === group.documentId),
+    );
+  }
 
   function toggleDocument(documentId: string) {
     setExpanded((current) => {
@@ -197,6 +252,104 @@ export function CaseRiskCard({ risk }: { risk: CaseRisk | null }) {
       }
       return next;
     });
+  }
+
+  // One group: its findings with verdict buttons, then the issues reported as missed on it.
+  function renderGroup(document: DocumentGroup) {
+    const isOpen = expanded.has(document.documentId);
+    return (
+      <div key={document.documentId} className="risk-document">
+        <button
+          type="button"
+          className="risk-document-toggle"
+          aria-expanded={isOpen}
+          onClick={() => toggleDocument(document.documentId)}
+        >
+          <span className="risk-document-heading">
+            <strong>{document.filename}</strong>
+            <span className="risk-document-meta">
+              {document.scope === 'case' ? 'Cross-document findings' : formatDocumentType(document.documentType)}
+              {countBySeverity(document.findings).map(([severity, count]) => (
+                <span key={severity} className={`risk-severity risk-severity--${severity}`}>
+                  {count} {severity}
+                </span>
+              ))}
+              {document.findings.length === 0 && <span className="risk-document-none">No findings</span>}
+              <MetricsLine summary={metricsFor(document)} />
+            </span>
+            {!isOpen && document.rows.length > 0 && (
+              <span className="risk-document-preview">{document.rows[0].finding.summary}</span>
+            )}
+          </span>
+          <span className={`risk-chevron ${isOpen ? 'risk-chevron--open' : ''}`} aria-hidden="true">
+            ›
+          </span>
+        </button>
+
+        {isOpen && (
+          <>
+          <ul className="risk-findings">
+            {document.rows.map(({ finding, count, members }) => {
+              const review = verdictFor(allReviews, finding);
+              const rowKey = `${document.documentId}:${finding.finding_id}`;
+              const detail = finding.unreviewed
+                ? 'Not reviewed by a specialist.'
+                : addedDetail(finding.rationale, finding.summary);
+              return (
+                <li key={finding.finding_id}>
+                  <span className={`risk-severity risk-severity--${finding.severity}`}>
+                    {finding.severity}
+                  </span>
+                  <span className="risk-finding-text">
+                    <span className="risk-finding-check">{formatTool(finding.tool)}</span>
+                    <span className="risk-finding-summary">
+                      {finding.summary}
+                      {count > 1 && <span className="risk-repeat">×{count}</span>}
+                    </span>
+                    {detail && <span className="risk-finding-rationale">{detail}</span>}
+                    {finding.repeat_of && (
+                      <span className="risk-finding-rationale">
+                        Also found on another document; counted once there, not again here.
+                      </span>
+                    )}
+                    {(finding.also_on ?? 0) > 0 && (
+                      <span className="risk-finding-rationale">
+                        Also found on {finding.also_on} other{' '}
+                        {finding.also_on === 1 ? 'document' : 'documents'}; counted once.
+                      </span>
+                    )}
+                  </span>
+                  <VerdictButtons
+                    verdict={review?.verdict ?? null}
+                    disabled={reviews.savingKey !== null || reviews.data === null}
+                    onChange={(verdict) => void reviews.setVerdict(rowKey, members, verdict)}
+                  />
+                </li>
+              );
+            })}
+          </ul>
+          {reviews.data && (
+            <MissedIssues
+              scope={document.scope}
+              missed={missedFor(document)}
+              checks={reviews.data.checks[document.scope]}
+              saving={reviews.savingKey !== null}
+              onAdd={(checkName, note) =>
+                void reviews.addMissed(
+                  `missed:${document.documentId}`,
+                  document.scope,
+                  document.scope === 'case' ? null : document.documentId,
+                  checkName,
+                  note,
+                )
+              }
+              onRemove={(reviewId) => void reviews.removeReview(reviewId)}
+            />
+          )}
+          </>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -240,7 +393,7 @@ export function CaseRiskCard({ risk }: { risk: CaseRisk | null }) {
             ))}
           </div>
 
-          {findings.length === 0 ? (
+          {findings.length === 0 && (
             <div className="summary-message summary-message--success">
               <span className="summary-message-icon">✓</span>
               <div>
@@ -248,7 +401,8 @@ export function CaseRiskCard({ risk }: { risk: CaseRisk | null }) {
                 <p>Detection found nothing worth flagging across this case's documents.</p>
               </div>
             </div>
-          ) : documents.length === 0 ? (
+          )}
+          {findings.length > 0 && documents.length === 0 && (
             <div className="summary-message summary-message--info">
               <span className="summary-message-icon">ⓘ</span>
               <div>
@@ -256,77 +410,8 @@ export function CaseRiskCard({ risk }: { risk: CaseRisk | null }) {
                 <p>Every finding is low severity or unreviewed. They're hidden below.</p>
               </div>
             </div>
-          ) : (
-            <div className="flagged-list">
-              {documents.map((document) => {
-                const isOpen = expanded.has(document.documentId);
-                return (
-                  <div key={document.documentId} className="risk-document">
-                    <button
-                      type="button"
-                      className="risk-document-toggle"
-                      aria-expanded={isOpen}
-                      onClick={() => toggleDocument(document.documentId)}
-                    >
-                      <span className="risk-document-heading">
-                        <strong>{document.filename}</strong>
-                        <span className="risk-document-meta">
-                          {formatDocumentType(document.documentType)}
-                          {countBySeverity(document.findings).map(([severity, count]) => (
-                            <span key={severity} className={`risk-severity risk-severity--${severity}`}>
-                              {count} {severity}
-                            </span>
-                          ))}
-                        </span>
-                        {!isOpen && (
-                          <span className="risk-document-preview">{document.rows[0].finding.summary}</span>
-                        )}
-                      </span>
-                      <span className={`risk-chevron ${isOpen ? 'risk-chevron--open' : ''}`} aria-hidden="true">
-                        ›
-                      </span>
-                    </button>
-
-                    {isOpen && (
-                      <ul className="risk-findings">
-                        {document.rows.map(({ finding, count }) => {
-                          const detail = finding.unreviewed
-                            ? 'Not reviewed by a specialist.'
-                            : addedDetail(finding.rationale, finding.summary);
-                          return (
-                            <li key={finding.finding_id}>
-                              <span className={`risk-severity risk-severity--${finding.severity}`}>
-                                {finding.severity}
-                              </span>
-                              <span className="risk-finding-text">
-                                <span className="risk-finding-check">{formatTool(finding.tool)}</span>
-                                <span className="risk-finding-summary">
-                                  {finding.summary}
-                                  {count > 1 && <span className="risk-repeat">×{count}</span>}
-                                </span>
-                                {detail && <span className="risk-finding-rationale">{detail}</span>}
-                                {finding.repeat_of && (
-                                  <span className="risk-finding-rationale">
-                                    Also found on another document; counted once there, not again here.
-                                  </span>
-                                )}
-                                {(finding.also_on ?? 0) > 0 && (
-                                  <span className="risk-finding-rationale">
-                                    Also found on {finding.also_on} other{' '}
-                                    {finding.also_on === 1 ? 'document' : 'documents'}; counted once.
-                                  </span>
-                                )}
-                              </span>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
           )}
+          {documents.length > 0 && <div className="flagged-list">{documents.map(renderGroup)}</div>}
 
           {lowCount + unreviewedCount > 0 && (
             <button
@@ -338,6 +423,26 @@ export function CaseRiskCard({ risk }: { risk: CaseRisk | null }) {
               {showMinor ? 'Show less' : hiddenLabel(lowCount, unreviewedCount)}
             </button>
           )}
+
+          {reviews.data && reviewGroups.length > 0 && (
+            <div className="risk-review-empty">
+              <button
+                type="button"
+                className="risk-toggle"
+                aria-expanded={showEmptyGroups}
+                onClick={() => setShowEmptyGroups((current) => !current)}
+              >
+                {showEmptyGroups ? 'Hide' : 'Report what detection missed on'} documents with no findings ({reviewGroups.length})
+              </button>
+              {showEmptyGroups && <div className="flagged-list">{reviewGroups.map(renderGroup)}</div>}
+            </div>
+          )}
+          {reviews.error && (
+            <div className="save-error" role="alert">
+              {reviews.error}
+            </div>
+          )}
+          {reviews.data && <ReviewSummary caseSummary={reviews.data.case} crossDocument={reviews.data.cross_document} />}
 
           {scored.unassessed_checks.length > 0 && (
             <details className="risk-unassessed">

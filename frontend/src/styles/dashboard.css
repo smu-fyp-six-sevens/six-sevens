@@ -273,3 +273,7 @@
   .case-register-table .processing-time { min-width: 0; }
   .case-register-table .processing-time span { justify-content: flex-start; gap: 10px; }
 }
+
+/* Detection accuracy tab: a check can carry more than one flag. */
+.accuracy-table .flag-severity { margin: 2px 4px 2px 0; }
+.accuracy-table th:nth-child(1) { width: 26%; }
