@@ -1,7 +1,7 @@
 """Generates docs/architecture/six-sevens-architecture.drawio (one file, one page per diagram). Edit here, then run
 from the repo root:  python docs/architecture/build_diagrams.py docs/architecture/six-sevens-architecture.drawio
 
-Every edge on pages 1, 2, 4 and 5 has explicit attachment points (and waypoints where it bends), so draw.io never
+Every edge on pages 1, 2, 4, 5 and 6 has explicit attachment points (and waypoints where it bends), so draw.io never
 routes an arrow through a box; gaps are sized so each edge label fits between the boxes it joins.
 """
 
@@ -339,27 +339,44 @@ p5.edge(o_audit, o_audsvc, "read", exit=(1, 0.5), entry=(0, 0.5))
 p5.edge(o_audsvc, o_ui, "GET /audit/cases/<br>{id}/cost", exit=(1, 0.5), entry=(0, 0.5))
 
 # ------------------------------------------------------------------ 6. CI/CD
-p6 = Page("6 CI and deploy", 1800, 800)
-p6.box("Delivery: CI on every push, deploy on demand (GitHub Actions)", 40, 20, 1100, 40, "title")
-c_push = p6.box("<b>git push / PR</b>", 40, 160, 140, 60, "user")
-c_ci = p6.box("<b>CI (ci-cd.yml)</b><br><font style='font-size:10px'>backend: ruff · pyright (no suppressions) · pytest + coverage<br>frontend: lint · build · Playwright (107 tests)<br>security: Checkov · Snyk or pip-audit + npm audit</font>", 240, 130, 330, 120, "service")
-c_run = p6.box("<b>Run workflow</b><br><font style='font-size:10px'>Deploy to Cloud Run</font>", 40, 380, 140, 60, "user")
-c_auth = p6.box("<b>Authenticate</b><br><font style='font-size:10px'>Workload Identity Federation<br>one short-lived token per job</font>", 240, 360, 200, 100, "gcp")
-c_build = p6.box("<b>Build 8 images</b><br><font style='font-size:10px'>5 role targets of one Dockerfile (shared layers)<br>+ Kong, frontend, Grafana<br>skip if this commit's image exists</font>", 500, 360, 230, 100, "worker")
-c_ar = p6.box("<b>Artifact Registry</b>", 790, 380, 160, 60, "gcp")
-c_roll = p6.box("<b>Roll out</b><br><font style='font-size:10px'>workers first, then api, Kong, frontend<br>traffic → newest revision</font>", 1010, 360, 230, 100, "worker")
-c_check = p6.box("<b>Gateway check</b><br><font style='font-size:10px'>/health ok · /cases 401 · /push 404<br>worker 403 · CORS · frontend · Grafana</font>", 1300, 360, 230, 100, "service")
-c_ok = p6.box("<b>Done</b><br><font style='font-size:10px'>summary with URLs</font>", 1590, 300, 150, 60, "data")
-c_back = p6.box("<b>Roll back every service</b><br><font style='font-size:10px'>to the revision serving before</font>", 1590, 450, 170, 70, "ops")
-p6.edge(c_push, c_ci)
-p6.edge(c_run, c_auth)
-p6.edge(c_auth, c_build)
-p6.edge(c_build, c_ar)
-p6.edge(c_ar, c_roll)
-p6.edge(c_roll, c_check)
-p6.edge(c_check, c_ok, "pass")
-p6.edge(c_check, c_back, "fail")
-p6.box("Terraform owns configuration (sizes, scaling, env, secrets, IAM); the deploy workflow only changes images.", 240, 560, 900, 40, "note")
+# CI's four jobs run in parallel in a column; the gate below them hands a green push to main to deploy.yml.
+p6 = Page("6 CI and deploy", 1800, 900)
+p6.box("Delivery: CI on every push and PR; a green push to main deploys (GitHub Actions)", 40, 20, 1200, 40, "title")
+c_push = p6.box(S("git push / PR", "ci-cd.yml<br>a docs-only push is skipped"), 40, 250, 160, 70, "user")
+JOB_X, JOB_W, JOB_H = 270, 380, 80
+JOBS = [
+    ("Backend", "ruff · pyright (no suppressions)<br>pytest + coverage · pip and exiftool cached"),
+    ("Frontend", "lint · build<br>Playwright: 116 tests, 2 workers, production build"),
+    ("Security", "Checkov: Terraform, Dockerfiles, workflows<br>Snyk: Python and npm (blocking)"),
+    ("Terraform", "fmt · validate (1.16.6)<br>apply stays a manual step"),
+]
+c_gate = p6.box(S("All four green?", "only a push to main deploys;<br>a PR or branch stops here"), 740, 250, 190, 70, "gateway")
+for i, (title, detail) in enumerate(JOBS):
+    y = 110 + i * (JOB_H + 20)
+    job = p6.box(S(title, detail), JOB_X, y, JOB_W, JOB_H, "service")
+    p6.edge(c_push, job, exit=(1, 0.5), entry=(0, 0.5), points=[(235, 285), (235, y + JOB_H / 2)])
+    p6.edge(job, c_gate, exit=(1, 0.5), entry=(0, 0.5), points=[(695, y + JOB_H / 2), (695, 285)])
+
+DEPLOY_Y, DEPLOY_H = 600, 100
+p6.box("deploy.yml · one deploy at a time, never cancelled halfway (that would skip the rollback)", 220, 540, 1560, 250, "group")
+c_run = p6.box(S("Run workflow", "manual: Deploy to Cloud Run"), 40, 615, 160, 70, "user")
+c_auth = p6.box(S("Authenticate", "Workload Identity Federation<br>one short-lived token per job"), 240, DEPLOY_Y, 200, DEPLOY_H, "gcp")
+c_build = p6.box(S("Build 8 images", "5 role targets of one Dockerfile + Kong,<br>frontend, Grafana (one list in deploy.yml)<br>skipped if this commit's image exists"), 500, DEPLOY_Y, 240, DEPLOY_H, "worker")
+c_ar = p6.box(S("Artifact Registry"), 800, 620, 160, 60, "gcp")
+c_roll = p6.box(S("Roll out", "workers first, then api, Kong,<br>frontend and Grafana<br>traffic → newest revision"), 1020, DEPLOY_Y, 220, DEPLOY_H, "worker")
+c_check = p6.box(S("Gateway check", "/health ok · /cases 401 · /push 404<br>worker 403 · CORS · frontend · Grafana"), 1300, DEPLOY_Y, 230, DEPLOY_H, "service")
+c_ok = p6.box(S("Done", "summary with URLs"), 1590, 570, 160, 60, "data")
+c_back = p6.box(S("Roll back every service", "to the revision serving before"), 1590, 700, 170, 70, "ops")
+p6.edge(c_gate, c_auth, "green push to main", exit=(0.5, 1), entry=(0.5, 0), points=[(835, 510), (340, 510)])
+p6.edge(c_run, c_auth, exit=(1, 0.5), entry=(0, 0.5))
+p6.edge(c_auth, c_build, exit=(1, 0.5), entry=(0, 0.5))
+p6.edge(c_build, c_ar, exit=(1, 0.5), entry=(0, 0.5))
+p6.edge(c_ar, c_roll, exit=(1, 0.5), entry=(0, 0.5))
+p6.edge(c_roll, c_check, exit=(1, 0.5), entry=(0, 0.5))
+p6.edge(c_check, c_ok, "pass", exit=(1, 0.3), entry=(0, 0.5), points=[(1560, 630), (1560, 600)])
+p6.edge(c_check, c_back, "fail", exit=(1, 0.7), entry=(0, 0.5), points=[(1560, 670), (1560, 735)])
+p6.box("Terraform owns configuration (sizes, scaling, env, secrets, IAM) and is applied by hand before a push that needs it; "
+       "the deploy only changes images.", 240, 820, 1000, 40, "note")
 
 pages = [p1, p2, p3, p4, p5, p6]
 OUT.parent.mkdir(parents=True, exist_ok=True)
