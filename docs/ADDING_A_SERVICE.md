@@ -48,5 +48,5 @@ For example a tool like Grafana or Kong, with its own image.
 
 ## Afterwards
 
-- **Docs:** add the service to the services table in `CLOUD_ARCHITECTURE_PLAN.md` (section 2) and `docs/architecture/PRESENTATION_GUIDE.md` (section 3). The diagrams in `docs/architecture/` are generated, so ask for them to be regenerated rather than editing by hand.
+- **Docs:** add the service to the services table in `CLOUD_ARCHITECTURE_PLAN.md` (section 2) and `docs/architecture/PRESENTATION_GUIDE.md` (section 3). The diagrams are generated: add the service in `docs/architecture/build_diagrams.py` and rerun it, rather than editing the `.drawio` by hand.
 - **Check the first deploy** in the Actions tab. The gateway check runs after the rollout, and a failure rolls every service back to what was serving before.

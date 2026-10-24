@@ -2,24 +2,18 @@
 
 Code smells, cleanup and optimisations across the repo: `backend/app`, `frontend/src`, and the deployment (`deploy/`, `.github/workflows`). Tests are covered in `backend_tests.md`.
 
-Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22 on the `microservices` branch, by reading the code and running static measurements. Nothing was profiled against production data.
+Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22, by reading the code and running static measurements; updated 2026-10-24. Nothing was profiled against production data. Only open items are listed: remove one once it's done.
 
 ## Where we are
 
 | | |
 |---|---|
 | Backend | 43,500 lines in 191 files under `app/` (4,300 of them in `injection/`); 58 route handlers |
-| Frontend | 10,300 lines of TS/TSX in 74 files; 5,700 lines of CSS in 14 files |
-| Deployment | Terraform 1,000 lines in 12 files, 2 workflows (350 lines), 7 compose files, Kong and Grafana images |
-| Tests | 1,760 backend test functions in 87 files; 107 Playwright tests in 5 specs |
-| Backend gates | ruff clean, 0 `type: ignore`, pyright clean on the files checked; 14 `noqa` (all re-export `F401`), no TODOs |
-| Frontend gates | `tsc` clean; lint 0 errors, 6 warnings (`CaseHeader.tsx` fast-refresh exports, `CaseAnalysisCard.tsx:48` hook dependency) |
-
-**Done since the last review (2026-10-19):**
-- `injection/` is out of every image and mounted only in uvicorn mode (old 2.6).
-- The detection router no longer reaches into another router's task handling; workers own the runs (old 2.2; one leftover is below).
-- `telemetry.py` and `query_stats.py` now have separate jobs: spans, and per-unit counts plus metrics (old 2.7).
-- Most `mock-*` class names are gone (18 down to 2).
+| Frontend | 10,300 lines of TS/TSX in 75 files; 5,700 lines of CSS in 14 files |
+| Deployment | Terraform 1,000 lines in 12 files, 2 workflows, 7 compose files, Kong and Grafana images |
+| Tests | 1,760 backend test functions in 87 files; 107 Playwright tests plus the notes spec |
+| Backend gates | ruff clean on `app/` (16 old issues in `doc_gen_scripts/`, `scripts/` and one test, outside CI's scope), pyright clean, 0 `type: ignore`, 14 `noqa` (all re-export `F401`) |
+| Frontend gates | lint 0 errors, 0 warnings; `tsc` fails on `CaseOverview.tsx:72` (a teammate's `info` severity missing from a sort table; `PENDING_WORK.md`), and CI doesn't run `tsc` |
 
 ---
 
@@ -40,8 +34,7 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22 
 
 ### Deployment
 
-1. **The deploy workflow lists the services three times** ("Record", "Roll out", and the per-service container `case`). Adding Grafana meant editing all three. One `SERVICES` list and one container map at the top of `deploy.yml`. S
-2. **Four Cloud Run definitions repeat the same blocks** (scaling, resources, `lifecycle`, the collector sidecar): `run.tf` (roles, Kong, frontend) and `observability.tf` (Grafana). Kong's collector duplicates the roles' dynamic block. A local module would shrink this, but it isn't worth it before Stage 2 replaces Cloud Run with Helm charts. M, low priority
+1. **Four Cloud Run definitions repeat the same blocks** (scaling, resources, `lifecycle`, the collector sidecar): `run.tf` (roles, Kong, frontend) and `observability.tf` (Grafana). Kong's collector duplicates the roles' dynamic block. A local module would shrink this, but it isn't worth it before Stage 2 replaces Cloud Run with Helm charts. M, low priority
 
 ---
 
@@ -70,24 +63,19 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22 
 1. **Long pages:** `DocumentDetailsPage.tsx` (612 lines), `UploadPage.tsx` (495), `App.tsx` (415: routing, auth and case state together), `CaseQueuePage.tsx` (381), `DashboardPage.tsx` (349). M
 2. **Too many props:** `UploadPage` passes about 30 to `DocumentListPanel` (465 lines, rows inline). M
 3. **Inline `style={{...}}`:** 31 uses, mostly in `DetectionPanel`, `LangGraphTracePanel`, `CaseAnalysisTracePanel` and `CaseRiskCard`. S
-4. **Lint warnings:**
-   - `CaseHeader.tsx` exports constants next to its component, which breaks fast refresh. Move them to their own file.
-   - `CaseAnalysisCard.tsx:48`'s effect reads `overview` but lists only its fields.
-
-   S
-5. **Two leftover `mock-*` class names.** S
-6. **Placeholder screens that look real:**
+4. **Two leftover `mock-*` class names.** S
+5. **Placeholder screens that look real:**
    - **The case page's Audit Trail card** (`AuditTrailCard.tsx`) always says "No audit events available yet". It never calls `GET /audit/events`, which now serves every officer and agent action, and `GET /audit/cases/{id}/cost`, which serves the case's Claude spend.
    - **`/dashboard`** (`DashboardPage.tsx`, 349 lines) is built on hard-coded `MockCase` data.
 
-   Wire the card to the two endpoints (M). Either back the dashboard with audit-metrics (plan step 8) or hide it until then (S), so nobody demos fake numbers by mistake.
+   Wire the card to the two endpoints (M). Either back the dashboard with audit-metrics (the case dashboard in `CLOUD_ARCHITECTURE_PLAN.md` section 9) or hide it until then (S), so nobody demos fake numbers by mistake. The dashboard belongs to teammates.
 
 ### Deployment and repo
 
-1. **The Grafana dashboards are generated JSON with no generator in the repo.** They were built by a script in a scratch folder, so changing one means hand-editing about 1,000 lines of JSON or exporting it from Grafana. Commit the generator (`deploy/grafana/build_dashboards.py`) and a CI check that it reproduces the JSON, as `subscriptions.json` has. S
+1. **Nothing checks that the generated files match their generators.** `deploy/grafana/build_dashboards.py` writes the dashboard JSON and `docs/architecture/build_diagrams.py` the draw.io file. A CI step that reruns them and fails on a diff (as `subscriptions.json` has) would stop hand edits drifting from the source. S
 2. **Python dependencies are ranges with no lock file** (`requirements.txt`). Two builds a week apart can install different versions, and a bad release reaches production unannounced. Lock with `uv pip compile` (or pip-tools), install from the lock in the Dockerfile and CI, and let Snyk scan it. M
-3. **The database schema isn't in the repo** (also in `PENDING_WORK.md`). Everything else is code; the schema lives only in Supabase. Export it as versioned migrations. M (reading the schema needs your go-ahead)
-4. **Documentation overlap.** `CLAUDE.md`, `HOW_IT_WORKS.md`, `CLOUD_ARCHITECTURE_PLAN.md`, the Terraform README and `PENDING_WORK.md` each restate parts of the same status, and `CLAUDE.md`'s "Current State" keeps growing. Give each file one job: the plan for design, HOW_IT_WORKS for behaviour, the README for operations, PENDING_WORK for open items. Trim the rest to pointers. M
+3. **The database schema isn't in the repo.** Everything else is code; the schema lives only in Supabase. Export it as versioned migrations (the first step of staging, `CLOUD_ARCHITECTURE_PLAN.md` section 9). M (reading the schema needs your go-ahead)
+4. **Keep each doc to one job:** the plan for cloud design and its to-do, HOW_IT_WORKS for behaviour, the Terraform README for operations, PENDING_WORK for open items, `CLAUDE.md` for orientation. Condensed on 2026-10-24; keep status out of the others. S, ongoing
 
 ---
 
@@ -117,16 +105,15 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22 
 ## Suggested order
 
 1. **Quick wins** (S, an afternoon):
-   - commit the dashboard generator (repo 1);
-   - one service list in `deploy.yml`;
+   - the generator check in CI (repo 1);
    - the two decoders;
    - `skips_detection`;
    - `bus.drain()`;
-   - the frontend lint warnings and `loadPrefs`.
+   - `loadPrefs`.
 2. **Lock the Python dependencies** (repo 2). It protects every deploy.
 3. **Rules out of `routers/documents.py`** (backend 2.1), then the **detection endpoint table** (1.1). The biggest structural wins.
 4. **Public field-value helpers** (backend 2.3) and **`RunTracker`** (1.4).
 5. **Snapshot reads in parallel** (opt 1), then the case-list queries (opt 2 and 3; opt 3 needs a view).
-6. **The Audit Trail card and the mock dashboard** (frontend 2.6) before any demo.
+6. **The Audit Trail card and the mock dashboard** (frontend 2.5) before any demo.
 7. **Generated frontend API types** (frontend 1.3), then CSS tokens (1.2), whenever convenient.
 8. **Decide `submission_finalized`** (backend 2.5) as part of automatic case analysis.

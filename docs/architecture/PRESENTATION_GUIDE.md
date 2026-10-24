@@ -1,6 +1,6 @@
 # The cloud architecture: a guide for presenting it
 
-What we built on the `microservices` branch, how it works, and how to show it. The diagrams are in [`six-sevens-architecture.drawio`](six-sevens-architecture.drawio), one page per diagram:
+What we built for the cloud, how it works, and how to show it. The diagrams are in [`six-sevens-architecture.drawio`](six-sevens-architecture.drawio), one page per diagram:
 
 1. System architecture
 2. GCP infrastructure
@@ -13,6 +13,7 @@ What we built on the `microservices` branch, how it works, and how to show it. T
 - **VS Code:** the "Draw.io Integration" extension (`hediet.vscode-drawio`) opens the file directly.
 - **Browser:** app.diagrams.net → File → Open from → Device.
 - **Slides:** export each page as PNG or SVG (File → Export as).
+- **Changing them:** edit `build_diagrams.py` (next to the file) and run `python docs/architecture/build_diagrams.py docs/architecture/six-sevens-architecture.drawio` from the repo root. Edits made in draw.io are lost the next time it runs.
 
 Details live in `CLOUD_ARCHITECTURE_PLAN.md` (design), `HOW_IT_WORKS.md` (behaviour) and `deploy/terraform/README.md` (operations).
 

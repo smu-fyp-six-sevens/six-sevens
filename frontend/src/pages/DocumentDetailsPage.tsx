@@ -1,7 +1,8 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
-import CaseHeader, { CaseTitle, caseCrumb, caseQueueCrumb, documentCrumb } from '../components/CaseHeader';
+import CaseHeader, { CaseTitle } from '../components/CaseHeader';
+import { caseCrumb, caseQueueCrumb, documentCrumb } from '../components/caseCrumbs';
 import { useCases } from '../casesContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DocumentPreviewModal from '../components/DocumentPreviewModal';

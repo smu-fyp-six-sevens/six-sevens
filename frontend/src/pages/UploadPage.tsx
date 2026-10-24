@@ -23,7 +23,8 @@ import { caseSectionStatuses, isCaseSection, type CaseSection } from './upload/c
 import { FlaggedItemsCard } from './upload/FlaggedItemsCard';
 import { NotesCard } from '../components/NotesCard';
 import AppHeader from '../components/AppHeader';
-import CaseHeader, { CaseTitle, caseCrumb, caseQueueCrumb } from '../components/CaseHeader';
+import CaseHeader, { CaseTitle } from '../components/CaseHeader';
+import { caseCrumb, caseQueueCrumb } from '../components/caseCrumbs';
 import { useCases } from '../casesContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DropZone from '../components/DropZone';

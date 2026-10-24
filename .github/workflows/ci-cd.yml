@@ -33,6 +33,11 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.13'
+          # pip's download cache, reused until either file changes.
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/pyproject.toml
 
       # Cached between runs, so apt-get update (the slow part) only runs when the cache is empty.
       - name: Install exiftool (the metadata and AI-provenance tests need it)

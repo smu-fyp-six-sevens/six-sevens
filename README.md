@@ -73,7 +73,7 @@ docker compose up --build                     # Pub/Sub emulator, Kong :8000, ap
 docker compose --profile frontend up --build  # also the nginx frontend on :5173 (otherwise use npm run dev)
 ```
 
-Settings come from `backend/.env`, as for uvicorn. The three workers share one container to save memory (about 3 GB in total). `CLOUD_ARCHITECTURE_PLAN.md` section 18 has the walkthrough, how to debug one role in the IDE, and the emulator's limits.
+Settings come from `backend/.env`, as for uvicorn. The three workers share one container to save memory (about 3 GB in total). `CLOUD_ARCHITECTURE_PLAN.md` section 11 has the walkthrough, how to debug the workers in the IDE, and the emulator's limits.
 
 The backend image has one target per role (`backend/Dockerfile`). The `detection-worker` and `all` targets download URA's land-use map and build the zoning index into the image (about a minute, needs internet, fails if it can't). To build without it, set `ALLOW_MISSING_LAND_USE=true` in the environment before `docker compose build`. Export `DATA_GOV_SG_API_KEY` first to pass it as a build secret.
 
@@ -109,5 +109,11 @@ The Playwright suite runs against a mocked backend (`frontend/e2e/support/mockBa
 
 Defined in `.github/workflows/`:
 
-- `ci-cd.yml` runs on pushes to `main` and on pull requests. It runs ruff, pyright (a type error fails the build; `# type: ignore` and a weakened pyright config are rejected), the backend tests with coverage, then frontend lint, build and the Playwright suite. On a manual run it also publishes the backend and frontend images to GitHub Container Registry.
-- `deploy.yml` deploys both services to Cloud Run. It is manual only (`workflow_dispatch`), so pushes do not deploy. It needs the repository secrets `DATA_GOV_SG_API_KEY` and `URA_API_KEY`, alongside the Supabase, Anthropic and auth ones.
+- `ci-cd.yml` runs on pull requests and on pushes to `main` (not docs-only ones). Jobs:
+  - **backend:** ruff, pyright (a type error fails the build; `# type: ignore` and a weakened pyright config are rejected), the tests with coverage;
+  - **frontend:** lint, build and the Playwright suite (in Microsoft's Playwright container);
+  - **security:** Checkov, plus Snyk or pip-audit and npm audit;
+  - **Terraform:** `fmt` and `validate`.
+
+  All four must pass. On a push to `main` it then calls `deploy.yml`.
+- `deploy.yml` builds one image per service, rolls them out to Cloud Run, checks the gateway, and rolls everything back if a check fails. It also runs by hand. It signs in through Workload Identity Federation (repository *variables* `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_WIF_PROVIDER`, `GCP_DEPLOYER_SA`); the only repository secrets are `DATA_GOV_SG_API_KEY` and `SNYK_TOKEN`. The services read their own keys from Secret Manager.
