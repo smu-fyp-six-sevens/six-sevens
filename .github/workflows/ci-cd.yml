@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - main
+    # A docs-only push neither tests nor redeploys anything.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   pull_request:
   workflow_dispatch:
 
@@ -128,11 +132,10 @@ jobs:
           retention-days: 14
 
   security:
-    # Non-blocking until the first findings are reviewed (CLOUD_ARCHITECTURE_PLAN.md section 6); then
-    # remove continue-on-error so a high-severity finding fails the build.
+    # Blocking: a high-severity finding fails the build and stops the deploy. Findings that don't apply are
+    # skipped inline with a reason (#checkov:skip=...), never by making this job optional.
     name: Security (Checkov, Snyk)
     runs-on: ubuntu-latest
-    continue-on-error: true
     env:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
@@ -184,3 +187,38 @@ jobs:
           python -m pip install pip-audit
           pip-audit -r backend/requirements.txt
           cd frontend && npm ci && npm audit --audit-level=high
+
+  terraform:
+    # Format and validity only: no state, no credentials. `apply` stays a manual step (deploy/terraform/README.md).
+    name: Terraform (fmt, validate)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy/terraform
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          # The version `terraform apply` runs with locally; keep them the same.
+          terraform_version: 1.16.6
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive
+
+      - name: terraform validate
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+  deploy:
+    # Continuous deployment: every push to main whose checks all pass goes to Cloud Run.
+    name: Deploy to Cloud Run
+    needs: [backend-ci, frontend-ci, security, terraform]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      id-token: write # Workload Identity Federation, used inside deploy.yml
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit

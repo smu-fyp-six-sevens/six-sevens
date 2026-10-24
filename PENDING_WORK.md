@@ -62,37 +62,18 @@ Built on the `microservices` branch (2026-10-22): Kong, `/metrics` in every serv
 - **WebSocket ticket replay.** A ticket replayed within its 10 s on a *different* api instance would be accepted; each instance remembers only the tickets it has used. Closing that needs a shared store, which isn't worth it for a 10 s window.
 - **Recovery of work still in a dead-letter subscription.** The sweeper rescues the document behind it, but the dead-lettered message itself stays in `domain-events-dead-letter-pull` until someone reads it.
 
-### Tear down the old single-service deploy (kept running on purpose, 2026-10-22)
+### Artifact Registry clean-up: switch it on after a dry run
 
-`fyp-backend` and `fyp-frontend` (Cloud Run, `asia-southeast1`) are the deploy from before the split. They are kept up for now. While they run:
-- **They share the Supabase project.** A document handled through the old frontend is processed by the old code, which writes no audit events, doesn't appear in the new metrics or dashboards, and still applies the old `dev` case filtering. Don't use both at once, and never for a demo.
-- **`main`'s `deploy.yml` can still redeploy them** with the `GCP_SA_KEY` secret until `microservices` is merged. Keep that secret until the teardown below.
-- **Cost:** none while idle if they scale to zero. Check that no `minScale` of 1 or more appears in `gcloud run services describe fyp-backend --region asia-southeast1 --format="value(spec.template.metadata.annotations)"` (same for `fyp-frontend`).
+`app` held 11.8 GB on 2026-10-24 and grows with every push (8 images per commit, plus the build cache). The repository only had a KEEP policy, which deletes nothing. `main.tf` now adds two DELETE policies:
+- any version older than 14 days;
+- untagged versions older than 7 days (old build caches).
 
-**Teardown, step by step** (PowerShell; each `delete` asks for confirmation):
+The KEEP policy still protects the 10 newest versions of each image, so rollback targets survive. Images are now pushed without provenance attestations (`--provenance=false` in `deploy.yml`), so each image is a single manifest rather than an index with untagged children that a policy could delete.
 
-1. **Merge first.** Merge `microservices` into `main`, so `main`'s workflow is the new one and can't recreate the old services.
-2. **Check what exists:** `gcloud run services list --region asia-southeast1`. Expect the new services (api, doc-worker, detection-worker, case-worker, audit-metrics, kong, frontend, grafana) plus `fyp-backend` and `fyp-frontend`. Don't touch `frontend`, which is the new one.
-3. **Note the old service account** before deleting, for step 6: `gcloud run services describe fyp-backend --region asia-southeast1 --format="value(spec.template.spec.serviceAccountName)"`.
-4. **Delete the two services:**
-   ```powershell
-   gcloud run services delete fyp-backend --region asia-southeast1
-   gcloud run services delete fyp-frontend --region asia-southeast1
-   ```
-5. **Delete the GitHub secrets the new workflow doesn't read** (Settings → Secrets and variables → Actions → Secrets): `GCP_SA_KEY`, `SUPABASE_*`, `ANTHROPIC_API_KEY`, `AUTH_*`, `ONEMAP_API_TOKEN`, `URA_API_KEY`, and any `GCP_PROJECT_ID` or `GCP_REGION` *secrets*.
-   - Keep the *variables* `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_WIF_PROVIDER` and `GCP_DEPLOYER_SA`.
-   - Keep the secret `DATA_GOV_SG_API_KEY`.
-6. **Revoke the key behind `GCP_SA_KEY`.** Deleting the GitHub secret doesn't invalidate the key itself.
-   - Find its account: the `client_email` in that key's JSON, if you still have it, or the account from step 3.
-   - List its keys: `gcloud iam service-accounts keys list --iam-account <email> --managed-by user`.
-   - Delete each: `gcloud iam service-accounts keys delete <KEY_ID> --iam-account <email>`.
-   - If the account was used only by the old deploy (not `github-deployer` or a `run-*` account, which Terraform owns), delete it too: `gcloud iam service-accounts delete <email>`.
-7. **Old images.**
-   - Run `gcloud artifacts repositories list`. Keep `app`; delete any repository the old deploy used: `gcloud artifacts repositories delete <name> --location asia-southeast1`.
-   - Old GHCR packages: GitHub → the organisation or your profile → Packages → delete them.
-8. **Old secrets in Secret Manager:** `gcloud secrets list`. Keep every secret Terraform made (`terraform output secrets_to_fill`, plus `grafana-admin-password` and `kong-gmp-config`); delete any others with `gcloud secrets delete <name>`.
-9. **Drop the old `dev` column** (optional; a database change, so decide deliberately). Once the old backend is gone nothing writes or reads `cases.dev`, so it can be dropped in the Supabase dashboard.
-10. **Update the docs.** Remove this section, and tick the clean-up item in `deploy/terraform/README.md`.
+The policies start in **dry-run mode** (`cleanup_policy_dry_run = true`): Artifact Registry logs what it *would* delete, and deletes nothing.
+1. Run `terraform apply`.
+2. After a day, check the would-be deletions in Logs Explorer: filter on `protoPayload.methodName="Dry run : Vulnerability or cleanup policy delete"`. Make sure no image a serving Cloud Run revision uses is in the list.
+3. Set `cleanup_policy_dry_run = false` in `main.tf` and apply again. The size drops within a day.
 
 ## Frontend
 
@@ -101,7 +82,9 @@ Built on the `microservices` branch (2026-10-22): Kong, `/metrics` in every serv
 
 ## Small known gaps
 
-- **Security job: make it blocking.** Checkov and Snyk findings were fixed on 2026-10-22: the backend runs as `app` (uid 10001), every image has a `HEALTHCHECK`, Pillow 13 and pypdf 6; Terraform skips (customer-managed keys, the view's deletion protection, the GitHub OIDC branch pin) are inline with reasons. Once a run is green (Snyk's npm scan had not run before then), remove `continue-on-error` from the job.
-- **Frontend fully non-root.** nginx's workers already run as `nginx`; only the master is root (Checkov skip in `frontend/Dockerfile`). Moving to `nginxinc/nginx-unprivileged` means listening on 8080: change `nginx.conf`, the frontend's `container_port` in `run.tf` and the compose port together, and apply before the deploy.- **Frontend type errors CI doesn't catch.** `tsc` fails on `frontend/src/pages/upload/CaseOverview.tsx:72`, a teammate's case-summary code from commit `d1529ee`. A finding's severity can be `info`, but the sort table lists only high, medium and low; adding `info: 3` fixes it. CI runs lint and build (Vite doesn't type-check) but not `tsc --noEmit`, so add that step to the frontend job.
+- **Security job is blocking (2026-10-24), and it now gates the deploy.** Snyk's npm scan had never run before then: if its first run finds a high-severity issue, fix or upgrade it rather than making the job optional again. A finding that doesn't apply gets an inline `#checkov:skip` (or a Snyk ignore) with a reason.
+- **Branch protection on `main` is off on purpose** (small changes are pushed directly). CD still only deploys a push whose checks all pass; turning protection on later (require "Backend CI", "Frontend CI", "Security", "Terraform") would also stop a failing change from landing at all.
+- **Frontend fully non-root.** nginx's workers already run as `nginx`; only the master is root (Checkov skip in `frontend/Dockerfile`). Moving to `nginxinc/nginx-unprivileged` means listening on 8080: change `nginx.conf`, the frontend's `container_port` in `run.tf` and the compose port together, and apply before the deploy.
+- **Frontend type errors CI doesn't catch.** `tsc` fails on `frontend/src/pages/upload/CaseOverview.tsx:72`, a teammate's case-summary code from commit `d1529ee`. A finding's severity can be `info`, but the sort table lists only high, medium and low; adding `info: 3` fixes it. CI runs lint and build (Vite doesn't type-check) but not `tsc --noEmit`, so add that step to the frontend job.
 
 - `submission_finalized` is remembered per process (`case_service._synced_finalized`) so an unchanged value isn't rewritten. With more than one backend instance, or a hand edit in the database, the stored value is corrected on the next change in the computed answer, not before.

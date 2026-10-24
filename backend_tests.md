@@ -61,11 +61,10 @@ This comes from reading every test file and measuring them with a static script 
 | `flush_pending_syncs` | none | One test: a scheduled refresh runs on flush, not later |
 | `emulator_setup.py` | none | Fine: a local dev tool, exercised by the compose walkthrough |
 
-**Infrastructure has no automated checks in CI.** All of these were checked by hand on 2026-10-22, but nothing stops a broken change from merging:
+**Most infrastructure has no automated checks in CI.** Terraform `fmt` and `validate` run in CI since 2026-10-24 (the `terraform` job, which the deploy waits for). The rest were checked by hand on 2026-10-22, but nothing stops a broken change from merging:
 
 | Check | Command |
 |---|---|
-| Terraform format and validity | `terraform fmt -check` and `terraform init -backend=false && terraform validate` |
 | Kong's rendered config | build `deploy/kong`, render with sample env, `kong config parse` |
 | Compose files | `docker compose --profile observability --profile frontend config -q` |
 | Grafana dashboards | every PromQL query parses (`promtool` or a Prometheus container); provisioning loads (`/api/search` lists four dashboards) |

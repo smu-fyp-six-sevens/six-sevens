@@ -168,7 +168,9 @@ Runs from before this change carry no cost; the endpoint just leaves them out.
 
 ## Deploying and checking a deploy
 
-Actions → **Deploy to Cloud Run** → Run workflow, choosing the branch to deploy (`microservices` until it is merged; the `deploy.yml` on `main` is the old single-service one).
+**Automatic:** every push to `main` runs CI (`ci-cd.yml`: backend, frontend, security, Terraform fmt/validate), and when all of them pass it calls `deploy.yml`. A push that only touches `*.md` or `docs/` runs nothing. Deploys queue one at a time and are never cancelled halfway.
+
+**By hand:** Actions → **Deploy to Cloud Run** → Run workflow (a redeploy, or a branch other than `main`). Terraform `apply` is still manual, before the push that needs it.
 
 - Each job mints one Google access token at its start (20 minutes for build, 10 for deploy) and gives it to gcloud and Docker, so nothing returns to GitHub's token service mid-run.
 - An image the commit already has is not rebuilt; otherwise unchanged layers come from the build cache in Artifact Registry (`buildcache:<image>`). A change under `backend/app` still rebuilds the zoning index (about a minute).
@@ -190,7 +192,7 @@ A secret changed later reaches a service on its next revision (the next deploy, 
 
 ## Clean-up after the first successful deploy
 
-- Delete the old single-service deploy (`fyp-backend`, `fyp-frontend`). It's kept running for now; the full step-by-step teardown, including revoking the old key, is in `PENDING_WORK.md` under "Tear down the old single-service deploy".
+- The old single-service deploy is gone (2026-10-24): services, old key, GitHub secrets, GHCR packages and the `cases.dev` column. Don't delete the default compute account or `github-deployer`; the deploy uses the latter through Workload Identity Federation, without a key.
 - Delete the GitHub secrets the new workflow no longer reads: `GCP_SA_KEY`, `SUPABASE_*`, `ANTHROPIC_API_KEY`, `AUTH_*`, `ONEMAP_API_TOKEN`, `URA_API_KEY`, and any `GCP_PROJECT_ID` or `GCP_REGION` *secrets* (the variables of the same names stay). Keep `DATA_GOV_SG_API_KEY`.
 - Delete `set-secrets.ps1` if it still exists.
 - Optional: `docker image rm six-sevens/api:check six-sevens/kong:check six-sevens/grafana:check prom/prometheus:v3.1.0 hashicorp/terraform:1.9.8` (local images used to check the Dockerfiles, dashboards and Terraform).

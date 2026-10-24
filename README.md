@@ -79,7 +79,9 @@ The backend image has one target per role (`backend/Dockerfile`). The `detection
 
 ## Deploying
 
-Cloud Run, from GitHub Actions ("Deploy to Cloud Run", manual). Terraform in `deploy/terraform` creates the services, Pub/Sub, secrets and identities once; its `README.md` has the one-time setup. `CLOUD_ARCHITECTURE_PLAN.md` describes the design.
+Cloud Run, from GitHub Actions: every push to `main` deploys once CI passes, and "Deploy to Cloud Run" can also be run by hand. Terraform in `deploy/terraform` creates the services, Pub/Sub, secrets and identities; its `README.md` has the one-time setup. `CLOUD_ARCHITECTURE_PLAN.md` describes the design.
+
+**Adding a service?** Follow [`docs/ADDING_A_SERVICE.md`](docs/ADDING_A_SERVICE.md). Run Terraform first, then push.
 
 ## Tests
 

@@ -4,7 +4,7 @@ Proposed 2026-10-20, updated 2026-10-21. **Status: Stage 1 is built in code on t
 
 The demo is done and nothing uses the cloud deployment (every developer works locally), so the cloud environment is free to experiment on.
 
-One GCP project and one Supabase project, shared by local runs and the cloud. No separate staging environment (section 6, "Deploy and roll back").
+One GCP project and one Supabase project, shared by local runs and the cloud. No separate staging environment yet: section 19 plans one (2026-10-24).
 
 Two stages, one design:
 - **Stage 1 (by mid-November): Cloud Run.** Everything in this plan, on Cloud Run.
@@ -132,7 +132,7 @@ The classify and extract trace and the detection trace share one `langgraph_trac
 | `routers/injection.py` in the API | Mounted only when `EVENT_TRANSPORT=inprocess`; not copied into any image |
 | Calls such as `queue.enqueue` and `sync_submission_finalized` | `events.publish()`. `EVENT_TRANSPORT=inprocess` (the default) calls the handlers in the same process, so `uvicorn` + `npm run dev` and the test suite stay as they are; `pubsub` publishes to Pub/Sub (or the emulator when `PUBSUB_EMULATOR_HOST` is set) |
 | One process holds every role | `ROLE` selects what a process mounts: `all` (default, uvicorn), one role (cloud), or a comma list such as `doc,detection,case` (local compose, to save memory) |
-| `cases.dev` flag and `IS_CLOUD_DEPLOYMENT` filtering (UAT only) | Removed from the code; the column can be dropped later. Local and cloud cases share one list |
+| `cases.dev` flag and `IS_CLOUD_DEPLOYMENT` filtering (UAT only) | Removed from the code, and the column dropped on 2026-10-24. Local and cloud cases share one list |
 | Token and cost counts only logged (`query_stats.py`); no `/metrics` | `prometheus_client` in every service (section 8) |
 | Work arrives through one transport | **Handler plus adapters:** each worker is a `handle(event)` function with two thin adapters, an HTTP push endpoint (Stage 1) and a pull subscriber (Stage 2) |
 | No health endpoints, no shutdown handling | `/healthz` for liveness and readiness; on SIGTERM finish the current run or hand it back. Cloud Run benefits now; Kubernetes requires both |
@@ -176,7 +176,7 @@ Unchanged between stages: Supabase, Artifact Registry, the events and ownership,
 
 **Deploy and roll back (one project, no staging)**
 
-The cloud environment is the only one, so a deploy is checked and undone automatically if it fails (`.github/workflows/deploy.yml`):
+The cloud environment is the only one, so a deploy is checked and undone automatically if it fails (`.github/workflows/deploy.yml`). Since 2026-10-24 it runs on every push to `main` once CI (backend, frontend, security, Terraform fmt/validate) passes, one deploy at a time; it can still be run by hand.
 1. Build one image per role, Kong, and the frontend (pointed at Kong's URL); push them to Artifact Registry. An image the commit already has is skipped; otherwise unchanged layers come from a registry build cache. Each job mints one Google access token at its start (Workload Identity Federation) and gives it to gcloud and Docker.
 2. Record the revision each service is serving.
 3. Roll out the new images, workers and audit-metrics first, then api, Kong and the frontend (`gcloud run services update --image`, then `update-traffic --to-latest`, since an earlier rollback leaves traffic pinned; Terraform owns everything else about a service).
@@ -334,7 +334,7 @@ Locked (changing them later touches every service): the event envelope and type 
 Resolved 2026-10-21:
 - **Push dispatch for Stage 1.** Detection takes about 1-2 minutes per document, well inside the 600 s ack deadline. Revisit only if the measured 95th percentile of any stage passes 8 minutes (then a lease-extending pull subscriber, or Cloud Tasks). Stage 2 pulls anyway.
 - **Ingestion inside api** first.
-- **One GCP project, one Supabase project**, no staging; tagged revisions and automatic rollback instead (section 6).
+- **One GCP project, one Supabase project**, no staging; tagged revisions and automatic rollback instead (section 6). *Superseded 2026-10-24: a staging project is planned, section 19.*
 - **`dev` flag removed**; it existed only for UAT.
 - **Local default stays `uvicorn` + `npm run dev`** for every developer; compose is opt-in.
 - **Tests stub Anthropic and Supabase**, CI included (section 17).
@@ -358,7 +358,7 @@ Open:
 - **Kong** is a new single entry point: a misrouted `Host` header or a bad CORS rule breaks the whole frontend. Test the config locally with compose first.
 - **Min-instance cost** during the demo (Kong, api, two workers).
 - **Metric cardinality:** an id used as a label would overwhelm Prometheus.
-- **One environment:** a bad deploy hits the live system. Mitigated by tagged revisions, the post-deploy check and automatic rollback (section 6).
+- **One environment:** a bad deploy hits the live system. Mitigated by the post-deploy check and automatic rollback (section 6) until staging exists (section 19).
 - **Shared Supabase:** local runs and the cloud see each other's cases, Realtime changes and stuck documents. Anything that scans the whole database must run in one place only: the sweeper runs only in the cloud (a local run must name a case, section 16). A local process killed mid-run is recovered by the cloud sweeper, which is acceptable.
 - **Scope:** Stage 2 in the same four weeks would put too much new surface in play. Keep it after Stage 1 unless open decision 3 says otherwise.
 
@@ -543,3 +543,104 @@ Problems met while setting up and deploying (login consent, quota project, impor
 | Kong returns 404 for `/push` or `/metrics` | Intended: they are internal only |
 | Google's own HTML 404 for `/healthz` on any Cloud Run URL | Cloud Run reserves paths ending in `z`; use `/health` |
 | Events never reach a worker in compose | `pubsub-init` failed or ran before the emulator was up: `docker compose logs pubsub-init`, then `docker compose up pubsub-init` |
+
+## 19. Staging environment (plan, 2026-10-24)
+
+Not started. This replaces the 2026-10-21 decision "one project, no staging" (sections 6 and 11): the cloud deployment now matters (the demo, the professor's review, the Cloud Native award), so changes need somewhere to be tested before production sees them.
+
+### 19.1 Goal
+
+- **Every merge to `main` deploys to staging automatically.** Staging is checked, then the same images go to production after one approval.
+- **Staging can be broken freely.** Load tests, failure tests (section 13), Terraform changes and schema changes run there first.
+- **Production is touched only by a promotion,** never by an untested build.
+
+### 19.2 Options considered
+
+| Option | Isolation | Setup | Verdict |
+|---|---|---|---|
+| **A. A second GCP project and a second Supabase project** | Full: separate IAM, quotas, Pub/Sub, data and billing line | Medium: the same Terraform with a second set of variables | **Chosen** |
+| B. Same project, every resource suffixed `-staging` | Partial: shared IAM, quotas and service agents; easy to point one at the other by mistake | Medium: every Terraform name needs a suffix | Rejected |
+| C. Tagged no-traffic Cloud Run revisions | None: same database, same topic; Pub/Sub and Kong can't target a tag | Low | Rejected (why section 6 dropped it) |
+
+### 19.3 Design
+
+**Projects**
+- **Production:** `fyp-six-sevens` (unchanged).
+- **Staging:** `fyp-six-sevens-staging`, same region (`asia-southeast1`), same billing account. Idle cost is near zero: every service scales to zero, and the free tiers are per billing account, so they're shared with production.
+
+**Terraform: one configuration, two variable files, two states**
+- `deploy/terraform/environments/production.tfvars` and `staging.tfvars`. The state bucket is already passed at init (`-backend-config="bucket=<project>-tfstate"`), so each project keeps its own state.
+- A new `environment` variable (`staging` or `production`) for labels, the budget's name and amount, and the alert email's subject.
+- **Staging differences:**
+  - every `min_instances` 0, and smaller `max_instances`;
+  - a lower budget;
+  - `alert_email` optional, and the billing export off;
+  - `SWEEPER_ENABLED` on, since staging is the place to test recovery.
+- **Workload Identity Federation:** each project gets its own pool. The provider's condition also requires the GitHub environment (`assertion.environment == "staging"` or `"production"`), so a job that hasn't been approved for production can't get a production token. That pin also satisfies Checkov's CKV_GCP_125, which section 6 skips today.
+
+**Images: build once, promote the same digest**
+- **Backend roles, Kong, Grafana:** built once into production's Artifact Registry `app`. Staging's Cloud Run service agent gets `artifactregistry.reader` on it, so staging runs the exact image production will run.
+- **Frontend:** today Vite bakes Kong's URL in at build time (`VITE_API_URL`), so one image can't serve two environments.
+  - **Fix first:** nginx writes `/config.js` from an environment variable at start, and the app reads the URL from it at runtime.
+  - **Until then,** the frontend is built per environment, the only exception to "build once".
+
+**Supabase: a second free project**
+- **Schema as code first (prerequisite).** The repo has no schema files; the tables exist only in the production dashboard. Dump production's schema into `supabase/migrations/` (`supabase db dump --schema-only`: read-only, and only with the user's go-ahead), check it in, and apply it to staging. From then on a schema change is a migration, applied to staging first, then production.
+- **Storage:** the private `documents` bucket, created by the same migration or a setup script.
+- **Data:** synthetic documents only (`backend/doc_gen_scripts`), seeded by a script. Nothing is copied from production.
+- **Free-tier limits:** 2 active free projects per organisation, and a free project pauses after 7 days without activity. The nightly run below keeps staging active; if it does pause, unpause it in the dashboard.
+
+**Secrets:** separate values per project in Secret Manager. Staging gets:
+- its own Anthropic key, from a separate Anthropic workspace with a low monthly spend limit;
+- its own `AUTH_USERS`;
+- its own token-signing key.
+
+**GitHub Environments**
+- `staging` and `production` (repository Settings → Environments), each holding that project's variables: `GCP_PROJECT_ID`, `GCP_WIF_PROVIDER`, `GCP_DEPLOYER_SA`.
+- `production` has a required reviewer (one teammate approves) and deploys only from `main`.
+
+### 19.4 Pipeline
+
+```
+PR   → CI (lint, types, tests, Playwright, security) → merge to main
+
+main → CI → build images once → deploy staging → gateway check → smoke test
+          → approval → deploy production → gateway check
+
+A failed check on either environment rolls that environment back.
+```
+
+- **`deploy.yml` becomes a reusable workflow** (`workflow_call`) that takes the environment as an input. It keeps today's checks and automatic rollback, and `workflow_dispatch` stays for a manual redeploy.
+- **One deploy per environment at a time:** a `concurrency` group per environment, never cancelling a deploy halfway.
+- **The smoke test on staging** goes beyond today's gateway check: log in, create a case, upload one small synthetic document, wait for `analyzed`, then delete the case. It costs one extraction's worth of Claude (cents) per merge.
+- **Nightly on staging** (a scheduled workflow): the full path, through detection and case analysis, on a few synthetic documents. It's a regression check, it keeps the Supabase project awake, and it's the place to run the failure tests (section 13).
+- **Terraform in the pipeline:** `fmt`, `validate` and `plan` against staging on every PR that touches `deploy/terraform` (with the plan posted on the PR); `apply` to staging on merge; `apply` to production behind the same approval as the deploy. Until that's built, apply stays manual: staging first, then production.
+
+### 19.5 Order of work
+
+| # | Step | Size | Needs |
+|---|---|---|---|
+| 1 | ~~Continuous deployment to production alone~~ Done 2026-10-24: deploy after CI passes on `main`, a concurrency group, security and Terraform checks blocking. Branch protection and a `production` GitHub Environment were left off on purpose for now | S | |
+| 2 | Supabase schema into `supabase/migrations/` (read-only dump of production) | S | The user's go-ahead to read the schema |
+| 3 | Runtime config for the frontend (`/config.js`) | S | |
+| 4 | Terraform `environment` variable and the two variable files; the WIF environment condition | M | |
+| 5 | Create the staging GCP project and Supabase project; apply Terraform and the migrations; fill staging's secrets; grant the cross-project registry read | M | A billing admin to link the project |
+| 6 | Reusable deploy workflow: staging, then approval, then production | M | Steps 1, 4, 5 |
+| 7 | Staging smoke test, the nightly run, and a seed script for synthetic documents | M | Step 6 |
+| 8 | Terraform plan on PRs and apply through the pipeline | M | Step 6. The deployer needs broader permissions per project, so do this last |
+
+### 19.6 Cost
+
+| When | Cost |
+|---|---|
+| Idle | About $0: scale to zero, free tiers shared with production, one more free Supabase project |
+| Per merge | One smoke-test extraction (cents) |
+| Nightly | A few full runs, well under $1 a night with Haiku-heavy routing |
+| Grafana in staging | Optional; one more scale-to-zero service |
+
+### 19.7 Open decisions
+
+1. **Manual approval before production, or fully automatic?** Approval is suggested while production is the demo system.
+2. **Grafana in staging** (to test dashboard changes before production), or production only.
+3. **Who the required reviewer is** for production deploys.
+4. **Staging's smoke test on every merge** (real Claude, cents per run), or only the nightly run.
