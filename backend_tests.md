@@ -12,13 +12,13 @@ This comes from reading every test file and measuring them with a static script 
 
 ## 1. How healthy is the suite?
 
-**Backend:** 1,762 test functions in 87 files. 105 are parametrised, so the suite runs well over 2,000 cases. There are 3,695 plain `assert`s, 222 mock-call assertions and 972 patches. 6 files (about 137 tests) are ignored.
+**Backend:** 1,644 test functions in 82 files (recounted 2026-10-24, after the never-collected injection tests were deleted). 105 are parametrised, so the suite runs well over 1,900 cases. There are 3,339 plain `assert`s, 235 mock-call assertions and 778 `patch(...)` calls. Every file is collected.
 
 | Group | Share | What to do |
 |---|---|---|
 | **Solid:** the detection checks (layout 154 tests, numerical 84, image 51, metadata 37, fonts 35), the `test_regression_*` files on real fixtures, case match, identifiers, company identity, cross-document checks, case risk, the external-call guard, events and the sweeper | about 70% | Keep |
-| **Brittle:** router and repository tests that check exactly which mock was called, so a refactor breaks them even when behaviour is unchanged | about 20% | Rewrite to check results (step 7) |
-| **Low value or not running:** the ignored injection tests, and the remaining tests that only assert a mock was called | about 10% | Move, trim or rewrite |
+| **Brittle:** router and repository tests that check exactly which mock was called, so a refactor breaks them even when behaviour is unchanged | about 20% | Rewrite to check results (step 4) |
+| **Low value:** the tests that only assert a mock was called | about 10% | Trim or rewrite |
 
 **Where the brittleness is** (patches, mock-call assertions):
 
@@ -102,13 +102,13 @@ They run the real frontend against `e2e/support/mockBackend.ts`; CI runs them on
 
 ## 4. Plan
 
+In the suggested order: 1 is small and protects deploys.
+
 | Step | Change | Why | Size |
 |---|---|---|---|
-| A | **Tests for the service-code gaps** in section 2: push token 401s, the approve rollback, trace propagation, the LLM callback and `/metrics`, `flush_pending_syncs`, the two `/audit` routes | The cloud behaviour is otherwise checked only by hand | M |
-| B | **More infrastructure checks in CI:** Kong config parse, compose config, dashboard PromQL and provisioning, image builds, `tsc --noEmit` (the table in section 2) | Each has broken silently once and been caught by hand | S-M |
-| 7 | **Repository tests on an in-memory fake Supabase client,** asserting stored state instead of mock call chains. Start with `test_document_repository` and `test_extracted_fields_repository` (most mock asserts) | The biggest brittleness left | L |
-| 8 | **Playwright:** the case analysis card; cancel and retry for detection and documents (the mock already supports them); login failure and redirect; the triage chip and a faithful `DI-045`; merge the overlaps; add `data-testid`s | Fills the biggest UI gaps | M-L |
-| 9 | **Vitest** for the pure frontend helpers (`useCaseSnapshot`, `canApprove`) | Logic with no test below the browser | M |
-| 10 | **Read CI's coverage report** (the "Show coverage report" step lists the least-covered modules first), then add tests where it shows holes (start with `query_stats`, `telemetry`, `vision_tool`, the `cross_document` tools, `case_pipeline/risk/summary`) | Turns "no test names it" into facts | M |
-
-**Suggested order:** B (small, and it protects deploys), A, then 8, 7, 9 and 10.
+| 1 | **More infrastructure checks in CI:** Kong config parse, compose config, dashboard PromQL and provisioning, image builds, `tsc --noEmit` (the table in section 2) | Each has broken silently once and been caught by hand | S-M |
+| 2 | **Tests for the service-code gaps** in section 2: push token 401s, the approve rollback, trace propagation, the LLM callback and `/metrics`, `flush_pending_syncs`, the two `/audit` routes | The cloud behaviour is otherwise checked only by hand | M |
+| 3 | **Playwright:** the case analysis card; cancel and retry for detection and documents (the mock already supports them); login failure and redirect; the triage chip and a faithful `DI-045`; merge the overlaps; add `data-testid`s | Fills the biggest UI gaps | M-L |
+| 4 | **Repository tests on an in-memory fake Supabase client,** asserting stored state instead of mock call chains. Start with `test_document_repository` and `test_extracted_fields_repository` (most mock asserts) | The biggest brittleness left | L |
+| 5 | **Vitest** for the pure frontend helpers (`useCaseSnapshot`, `canApprove`) | Logic with no test below the browser | M |
+| 6 | **Read CI's coverage report** (the "Show coverage report" step lists the least-covered modules first), then add tests where it shows holes (start with `query_stats`, `telemetry`, `vision_tool`, the `cross_document` tools, `case_pipeline/risk/summary`) | Turns "no test names it" into facts | M |

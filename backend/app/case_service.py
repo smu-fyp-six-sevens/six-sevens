@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import concurrent.futures
+import contextvars
 import logging
 import threading
 from collections import defaultdict
-from typing import Any
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from . import case_repository, document_repository, extracted_fields_repository
 from .case_match import CaseMatchResult, DocumentCaseMatch, check_case_match
@@ -44,6 +46,7 @@ from .models import (
 from .monitoring import is_stuck
 
 logger = logging.getLogger("classifier_pipeline.case_service")
+T = TypeVar("T")
 
 
 def compute_documents_status(documents: list[DocumentRecord]) -> CaseDocumentsStatus:
@@ -180,13 +183,33 @@ def _load_detection_states(documents: list[DocumentRecord], *, slim: bool = Fals
         return None
 
 
-def _load_analyses(case_ids: list[str]) -> dict[str, CaseAnalysis]:
-    """Empty when the table can't be read: a case then simply shows no analysis."""
+def _load_analysis(case_id: str) -> CaseAnalysis | None:
+    """None when the table can't be read: the case then simply shows no analysis."""
     try:
-        return analysis_repository.get_latest_many(case_ids)
+        return analysis_repository.get_latest_summary(case_id)
     except Exception:
-        logger.exception("Failed to load case analyses for %d case(s)", len(case_ids))
-        return {}
+        logger.exception("Failed to load the latest analysis of case %s", case_id)
+        return None
+
+
+def _load_last_complete(case_id: str, analysis: CaseAnalysis | None) -> CaseAnalysis | None:
+    """The newest finished run while the latest one isn't finished: its risk is still the case's."""
+    if analysis is None or analysis.status == "complete":
+        return None
+    try:
+        return analysis_repository.get_latest_complete(case_id)
+    except Exception:
+        logger.exception("Failed to load the last complete analysis of case %s", case_id)
+        return None
+
+
+# One snapshot's or summary's independent reads run side by side instead of one after another.
+_reads = concurrent.futures.ThreadPoolExecutor(max_workers=8, thread_name_prefix="case-reads")
+
+
+def _submit(fn: Callable[..., T], *args: Any, **kwargs: Any) -> concurrent.futures.Future[T]:
+    """In a copy of the caller's context, so the read still counts in its perf log (query_stats)."""
+    return _reads.submit(contextvars.copy_context().run, fn, *args, **kwargs)
 
 
 def _load_saved_risks(case_ids: list[str]) -> dict[str, CaseRisk]:
@@ -427,21 +450,30 @@ def build_case_snapshot(case_id: str) -> dict | None:
 
 
 def _build_case_snapshot(case_id: str) -> dict | None:
-    case = case_repository.get_case(case_id)
+    case_read = _submit(case_repository.get_case, case_id)
+    documents_read = _submit(document_repository.list_documents, case_id=case_id, include_fields=False)
+    analysis_read = _submit(_load_analysis, case_id)
+    case = case_read.result()
     if case is None:
         return None
-    documents = document_repository.list_documents(case_id=case_id, include_fields=False)
+    documents, analysis = documents_read.result(), analysis_read.result()
+    # Second round: the reads that need the document ids or the analysis.
     # One fields query serves both the plain values (mapper/case_match) and the {value, confidence} wrappers.
-    fields_by_document = extracted_fields_repository.get_extracted_fields_for_documents(
-        [document.id for document in documents]
+    fields_read = _submit(
+        extracted_fields_repository.get_extracted_fields_for_documents, [document.id for document in documents]
     )
+    # Full reports only matter for the staleness check of an existing analysis; otherwise "was it scanned" is enough.
+    states_read = _submit(_load_detection_states, documents, slim=analysis is None)
+    completed_read = _submit(_load_last_complete, case_id, analysis)
+    fields_by_document = fields_read.result()
     for document in documents:
         fields = fields_by_document.get(document.id)
         document.extracted_fields = {f.field_name: f.field_value for f in fields} if fields else None
-    # Full reports only matter for the staleness check of an existing analysis; otherwise "was it scanned" is enough.
-    analysis = _load_analyses([case.id]).get(case.id)
-    detection_states = _load_detection_states(documents, slim=analysis is None)
-    summary = _summary_with_analysis(case, documents, detection_states, analysis)
+    detection_states = states_read.result()
+    summary = build_summary(
+        case, documents, detection_states[0] if detection_states is not None else None,
+        analysis, completed_read.result(),
+    )
     # Before enrichment: that rewrites extracted_fields in place into
     # {"value", "confidence"} wrappers, while case_match (and mapper.py, via
     # build_summary above) reads the plain values document_repository
@@ -470,28 +502,19 @@ def _build_case_snapshot(case_id: str) -> dict | None:
 
 
 def get_case_summary(case_id: str) -> CaseSummary | None:
-    case = case_repository.get_case(case_id)
+    case_read = _submit(case_repository.get_case, case_id)
+    documents_read = _submit(document_repository.list_documents, case_id=case_id)
+    analysis_read = _submit(_load_analysis, case_id)
+    case = case_read.result()
     if case is None:
         return None
-    documents = document_repository.list_documents(case_id=case_id)
-    analysis = _load_analyses([case.id]).get(case.id)
-    return _summary_with_analysis(
-        case, documents, _load_detection_states(documents, slim=analysis is None), analysis
+    documents, analysis = documents_read.result(), analysis_read.result()
+    states_read = _submit(_load_detection_states, documents, slim=analysis is None)
+    completed = _load_last_complete(case_id, analysis)
+    detection_states = states_read.result()
+    return build_summary(
+        case, documents, detection_states[0] if detection_states is not None else None, analysis, completed,
     )
-
-
-def _summary_with_analysis(
-    case, documents: list[DocumentRecord], detection_states: DetectionStates | None,
-    analysis: CaseAnalysis | None,
-) -> CaseSummary:
-    completed = None
-    if analysis is not None and analysis.status != "complete":
-        try:
-            completed = analysis_repository.get_latest_complete(case.id)
-        except Exception:
-            logger.exception("Failed to load the last complete analysis of case %s", case.id)
-    reports = detection_states[0] if detection_states is not None else None
-    return build_summary(case, documents, reports, analysis, completed)
 
 
 def list_case_summaries() -> list[CaseListItem]:
@@ -502,7 +525,7 @@ def list_case_summaries() -> list[CaseListItem]:
     """
     cases = case_repository.list_cases()
     documents_by_case: dict[str, list[DocumentRecord]] = defaultdict(list)
-    for doc in document_repository.list_documents(include_fields=False):
+    for doc in document_repository.list_document_statuses([case.id for case in cases]):
         if doc.case_id is not None:
             documents_by_case[doc.case_id].append(doc)
     saved = _load_saved_risks([case.id for case in cases])

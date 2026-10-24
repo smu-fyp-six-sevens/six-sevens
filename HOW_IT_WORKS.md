@@ -43,7 +43,7 @@ PDF, PNG or JPEG, up to 25 MB each, up to 20 per batch. For each file: store it,
 ### Step 3: Per-document pipeline (read, classify, extract)
 The doc-worker takes each `document.uploaded` (or an officer's `document.retry_requested`), claims the document with a compare-and-swap from `queued` to `processing` (so a repeated event is skipped), and runs the LangGraph document graph, `QUEUE_WORKER_CONCURRENCY` at once per process. When it ends it publishes `document.analyzed` or `document.failed`:
 
-1. **Ingest (`processing`, shown as "Classifying").** Download the file; read native PDF text or OCR it, and read file metadata with `exiftool` at the same time (it is a subprocess, so it runs in its own thread while the text extraction uses the single PDF/OCR worker, `cpu_pool.py`, which keeps PyMuPDF off two threads at once). A failed metadata read is stored as an error record, never as "no metadata".
+1. **Ingest (`processing`, shown as "Classifying").** Download the file; read native PDF text or OCR it, and read file metadata with `exiftool` at the same time (it is a subprocess, so it runs in its own thread while the text extraction uses the PDF/OCR pool, `cpu_pool.py`: one thread locally, which keeps PyMuPDF off two threads at once, and two processes on the deployed workers, each with its own PyMuPDF). A failed metadata read is stored as an error record, never as "no metadata".
 2. **Classify.** A rule-based classifier first (free); then a Sonnet agent that may ask a Haiku classifier for a second opinion and, on a later turn, vision. Confidence below **0.85** routes the document to manual review.
 3. **Extract (`extracting`).** One Sonnet call fills the type's schema, with a confidence per field. Fields are stored one row each in `extracted_fields` **before** the document row is updated, so a snapshot never sees a document without its fields. For a document that can belong to a company or a person (a bank statement, a source-of-wealth document) the model also says which it is (`entity_type`).
 4. **Disagreement loop.** If extraction says the type is wrong, the document returns to the classifier once; if still unresolved it is marked `failed`. An unreadable reply fails the document (retryable) without reclassifying it.
@@ -72,7 +72,7 @@ Approval publishes `document.approved`; the detection-worker runs it, **two runs
    - **A hard breach cannot be dismissed.** A finding a check marked `impossible` (an arithmetic that cannot hold, an identifier absent from its register) with confident extraction stays on the report as high, marked not approved by the specialist, with the specialist's note. A finding that needs review, or is only a signal, can still be dismissed.
    - **Font check.** Besides comparing a piece of text with the neighbours in its column, it compares a number with the other cells in its row (a lone table value has no column) and flags a number in a typeface no other number uses. Both fire only for a style that at most two runs in the document use, so a legitimate repeated style is not flagged.
    - **Metadata.** Subject and title are read out for the specialist to judge. No rule inspects them, and they do not affect whether the check can assess a document. A specialist can mention them in its summary but cannot create a scored finding.
-   - **Tool time limits** count the time a tool works, not the time its job waits for the single CPU worker; a wait has its own cap (`CPU_QUEUE_TIMEOUT_SECONDS`).
+   - **Tool time limits** count the time a tool works, not the time its job waits for a free CPU worker; a wait has its own cap (`CPU_QUEUE_TIMEOUT_SECONDS`).
 4. **Lead reviews**, and may request one second look from another specialist.
 5. **Merge (code).** One report with a verdict: `flagged`, `inconclusive` or `clean`. When a second look dismisses a finding the first pass kept, the later view stands: the finding is removed from the report, the flags and the score (the dismissal stays visible under the specialist). A check that failed and then ran in a retry or the second look is not listed as unable to assess.
 6. **Save.** The report is written to the document's trace, then the findings a specialist **approved** are written to `flags`, then the document becomes `detected`.
@@ -165,6 +165,7 @@ Required: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `AN
 | `QUEUE_WORKER_CONCURRENCY` | 4 | documents one doc-worker process runs at once |
 | `DETECTION_CONCURRENCY` | 2 | detection runs at once |
 | `CPU_WORKER_CONCURRENCY` | 1 | threads for PDF, OCR and forensic work; PyMuPDF is not thread-safe |
+| `CPU_WORKER_PROCESSES` | 0 | processes for that work instead, each with its own PyMuPDF (2 on the doc-worker and detection-worker); a bound method or closure still uses the thread |
 | `DOCUMENT_MAX_MODEL_CALLS` | 24 | model calls one document's classify and extract run may make |
 | `DETECTION_MAX_MODEL_CALLS` | 30 | model calls one detection run may make; past it the verdict can't be clean |
 | `LLM_MAX_RETRIES`, `LLM_TIMEOUT_SECONDS` | 1, 300 | the Anthropic client's own retries (each is billed) and one request's time limit |

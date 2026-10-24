@@ -11,8 +11,7 @@ from ..supabase_rows import row as _row
 from .models import AnalysisAudit, CaseAnalysis, CrossDocFinding, RiskOutlook
 
 _TABLE = "case_analysis_runs"
-_CHUNK = 100
-# What a case list needs from a run: no trace, outlook or audit, which are large and only read for one case.
+# What a snapshot or summary needs from a run: no trace, outlook or audit, which are large.
 _LIST_COLUMNS = (
     "run_id, case_id, status, fingerprint, started_at, finished_at, error, findings:result->findings, "
     "risk:result->risk, supporting_documents:result->supporting_documents"
@@ -139,18 +138,10 @@ def get_latest_complete(case_id: str) -> CaseAnalysis | None:
     return _to_analysis(_row(rows[0])) if rows else None
 
 
-def get_latest_many(case_ids: list[str]) -> dict[str, CaseAnalysis]:
-    """The newest run of each case, in one query per 100 cases. Findings only: no trace, outlook or audit."""
-    latest: dict[str, CaseAnalysis] = {}
-    for start in range(0, len(case_ids), _CHUNK):
-        query = (
-            supabase_client.table(_TABLE).select(_LIST_COLUMNS).in_("case_id", case_ids[start : start + _CHUNK])
-            .order("started_at", desc=True)
-        )
-        if len(case_ids) == 1:
-            query = query.limit(1)  # the snapshot path: only the newest run, not every past one
-        rows = query.execute().data
-        for raw in rows:
-            row = _row(raw)
-            latest.setdefault(row["case_id"], _to_analysis(row))
-    return latest
+def get_latest_summary(case_id: str) -> CaseAnalysis | None:
+    """The case's newest run, findings only (no trace, outlook or audit): one row however many runs there are."""
+    rows = (
+        supabase_client.table(_TABLE).select(_LIST_COLUMNS).eq("case_id", case_id)
+        .order("started_at", desc=True).limit(1).execute().data
+    )
+    return _to_analysis(_row(rows[0])) if rows else None

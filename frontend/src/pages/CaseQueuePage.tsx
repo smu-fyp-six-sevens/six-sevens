@@ -92,14 +92,11 @@ export default function CaseQueuePage({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deletingCaseId, setDeletingCaseId] = useState<string | null>(null);
   const [caseToDelete, setCaseToDelete] = useState<CaseRecord | null>(null);
-  const [savedStatuses, setSavedStatuses] = useState<Set<string>>(
-    () => new Set(loadPrefs().statuses),
-  );
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(
-    () => loadPrefs().sortOrder,
-  );
-
-  const [riskFirst, setRiskFirst] = useState(() => loadPrefs().riskFirst);
+  // Read localStorage once, on the first render; the three settings start from it.
+  const [initialPrefs] = useState(loadPrefs);
+  const [savedStatuses, setSavedStatuses] = useState<Set<string>>(() => new Set(initialPrefs.statuses));
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(initialPrefs.sortOrder);
+  const [riskFirst, setRiskFirst] = useState(initialPrefs.riskFirst);
 
   useEffect(() => {
     savePrefs({ statuses: Array.from(savedStatuses), sortOrder, riskFirst });

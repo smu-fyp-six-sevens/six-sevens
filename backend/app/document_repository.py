@@ -493,3 +493,20 @@ def list_documents(
     result = query.execute()
     documents = [DocumentRecord(**_row(row)) for row in result.data]
     return _attach_extracted_fields(documents) if include_fields else documents
+
+
+# What the case queue's status rollup reads (the status and monitoring.is_stuck's timestamps).
+_STATUS_COLUMNS = "id, case_id, filename, status, retry_count, uploaded_at, queued_at, processing_started_at"
+_CASE_CHUNK = 100
+
+
+def list_document_statuses(case_ids: list[str]) -> list[DocumentRecord]:
+    """These cases' documents with only their status columns, one query per 100 cases."""
+    documents: list[DocumentRecord] = []
+    for start in range(0, len(case_ids), _CASE_CHUNK):
+        rows = (
+            supabase_client.table("documents").select(_STATUS_COLUMNS)
+            .in_("case_id", case_ids[start : start + _CASE_CHUNK]).execute().data
+        )
+        documents.extend(DocumentRecord(**_row(row)) for row in rows)
+    return documents

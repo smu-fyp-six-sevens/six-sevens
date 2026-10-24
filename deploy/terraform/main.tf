@@ -41,14 +41,14 @@ locals {
       public    = false
       publishes = true
       secrets   = concat(local.supabase, ["ANTHROPIC_API_KEY"])
-      env       = tomap({ QUEUE_WORKER_CONCURRENCY = "2" })
+      env       = tomap({ QUEUE_WORKER_CONCURRENCY = "2", CPU_WORKER_PROCESSES = "2" })
     }
     detection-worker = {
       cpu       = "2", memory = "4Gi", concurrency = 2, timeout = 600, max = 3
       public    = false
       publishes = true
       secrets   = concat(local.supabase, ["ANTHROPIC_API_KEY"], local.registries)
-      env       = tomap({ DETECTION_CONCURRENCY = "2" })
+      env       = tomap({ DETECTION_CONCURRENCY = "2", CPU_WORKER_PROCESSES = "2" })
     }
     case-worker = {
       cpu       = "1", memory = "2Gi", concurrency = 4, timeout = 600, max = 2

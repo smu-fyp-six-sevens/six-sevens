@@ -8,6 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint .",
+    "gen:api": "openapi-typescript openapi.json -o src/services/api.gen.ts",
+    "check:api": "openapi-typescript openapi.json -o src/services/api.gen.ts --check",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:sprint1": "playwright test --grep @sprint1",

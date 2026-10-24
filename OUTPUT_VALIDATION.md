@@ -50,7 +50,7 @@ Transient provider errors are retried by the Anthropic client (`LLM_MAX_RETRIES`
 | Repaired output not traceable | `validate(..., raw=...)` records every non-`ok` result (site, issues, the raw reply capped at 4,000 characters, what was used) in the run context; it is written to the trace as a `run_audit` step (detection, document runs) or to the run trace (case analysis). Sites that don't pass `raw` (the binder, the classifier) are not recorded |
 | Hanging tools | `detection/tool_timeout.guard_tool` limits every tool (`TOOL_TIMEOUT_SECONDS` 60; `SLOW_TOOL_TIMEOUT_SECONDS` 120 for the model and registry tools); a timeout becomes `unable_to_assess`. The case-analysis evidence tools have the same limit |
 
-The tool limit counts working time only; a job waiting for the single CPU worker has its own, longer cap (`CPU_QUEUE_TIMEOUT_SECONDS`). A running thread can't be stopped, so a hung CPU check still blocks later ones until it returns; ending one for good needs a separate process.
+The tool limit counts working time only; a job waiting for a free CPU worker has its own, longer cap (`CPU_QUEUE_TIMEOUT_SECONDS`). A running job can't be stopped (a thread locally, a process when deployed, `cpu_pool.py`), so a hung CPU check holds its worker until it returns; a process that crashes is replaced with a fresh pool.
 
 ## Not covered
 
