@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
-
+from ...shared.check_result import CheckResult
 from ...numerical_validation.models import NumericalFinding, SkippedCheck
 
 
@@ -14,10 +13,8 @@ class RegistryFinding(NumericalFinding):
     source: str
 
 
-class RegistryResult(BaseModel):
+class RegistryResult(CheckResult):
     document_id: str
     document_type: str | None = None
     findings: list[RegistryFinding]
     skipped_checks: list[SkippedCheck]
-    unable_to_assess: bool
-    unable_to_assess_reason: str | None = None

@@ -9,6 +9,7 @@ import re
 from pydantic import BaseModel
 from symspellpy import SymSpell, Verbosity
 
+from ..shared.check_result import CheckResult
 from ...cpu_pool import run_cpu
 from ...ingestion.ingestion_service import content_type_from_filename, ingest_document
 from .domain_terms import DOMAIN_TERMS
@@ -86,11 +87,9 @@ class SpellingAnomaly(BaseModel):
     other_contexts: list[str] = []
 
 
-class SpellingAnomalyResult(BaseModel):
+class SpellingAnomalyResult(CheckResult):
     document_id: str
     anomalies: list[SpellingAnomaly]
-    unable_to_assess: bool
-    unable_to_assess_reason: str | None = None
 
 
 class _Candidate(BaseModel):

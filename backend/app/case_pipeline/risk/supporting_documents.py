@@ -55,7 +55,8 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-from ...fraud_detection.numerical_validation.common import _CURRENCY_WORDS, _as_number, _decode, _money, _rows
+from ...fraud_detection.numerical_validation.common import _CURRENCY_WORDS, _as_number, _money, _rows
+from ...fraud_detection.shared.field_values import decode_field_value
 from ...models import (
     DocumentRecord,
     DocumentType,
@@ -128,7 +129,7 @@ def _recommend_for_statement(document: DocumentRecord) -> list[SupportingDocumen
     company_name = fields.get("company_name")
     supplier_payments: list[RecommendationItem] = []
     customer_receipts: list[RecommendationItem] = []
-    for row in _rows(_decode(fields.get("transactions"))):
+    for row in _rows(decode_field_value(fields.get("transactions"))):
         amount = _as_number(row.get("amount"))
         description = str(row.get("description") or "").strip()
         if amount is None or abs(amount) < LARGE_TRANSACTION_AMOUNT or not _is_trade(description, company_name):
@@ -278,7 +279,7 @@ def _related_party_balances(document: DocumentRecord, rows: list[dict]) -> list[
 
 
 def _recommend_for_financial_statement(document: DocumentRecord) -> list[SupportingDocumentRecommendation]:
-    rows = _rows(_decode((document.extracted_fields or {}).get("balance_sheet_items")))
+    rows = _rows(decode_field_value((document.extracted_fields or {}).get("balance_sheet_items")))
     return _related_party_balances(document, rows) + _borrowing_growth(document, rows)
 
 

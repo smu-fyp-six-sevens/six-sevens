@@ -35,8 +35,6 @@ This comes from reading every test file and measuring them with a static script 
 
 **Noise:** some `test_ws` tests reach the snapshot code's trace reads, which the guard turns into logged "real Supabase call" errors. They pass, but the log looks like failures. Mock `langgraph_trace` in those tests too.
 
-**The six ignored files** (`conftest.collect_ignore`) all test `app/injection/`, the synthetic-data tool, which no image ships. Move them next to the tool (for example `backend/app/injection/tests/`, run by hand) so they stop looking like coverage (step C).
-
 ## 2. Service code: what's tested
 
 | Code | Tested by | Gap |
@@ -89,7 +87,7 @@ They run the real frontend against `e2e/support/mockBackend.ts`; CI runs them on
 - the **Claude Cost** tab.
 
 **Tests that prove less than they look like:**
-- **`CM-009`** checks that the Audit Trail card shows "No audit events available yet". That's a placeholder; the card isn't wired to `/audit/events` (`REFACTORING_AUDIT.md`, frontend 2.5). Rewrite it when the card is wired.
+- **`CM-009`** checks that the Audit Trail card shows "No audit events available yet". That's a placeholder; the card isn't wired to `/audit/events` (`REFACTORING_AUDIT.md`, frontend 2.1). Rewrite it when the card is wired.
 - **`DI-025`** (one of its four tests) only checks that a button is enabled.
 - **`CM-026`** sets the checklist answer in the mock itself, so it tests the re-render, not the rule.
 - **`DI-045`** forces a case-match state the backend no longer produces for that document.
@@ -108,10 +106,9 @@ They run the real frontend against `e2e/support/mockBackend.ts`; CI runs them on
 |---|---|---|---|
 | A | **Tests for the service-code gaps** in section 2: push token 401s, the approve rollback, trace propagation, the LLM callback and `/metrics`, `flush_pending_syncs`, the two `/audit` routes | The cloud behaviour is otherwise checked only by hand | M |
 | B | **More infrastructure checks in CI:** Kong config parse, compose config, dashboard PromQL and provisioning, image builds, `tsc --noEmit` (the table in section 2) | Each has broken silently once and been caught by hand | S-M |
-| C | **Move the injection tests** out of `tests/` (or turn them back on) | 137 tests that look like coverage but never run | S |
 | 7 | **Repository tests on an in-memory fake Supabase client,** asserting stored state instead of mock call chains. Start with `test_document_repository` and `test_extracted_fields_repository` (most mock asserts) | The biggest brittleness left | L |
 | 8 | **Playwright:** the case analysis card; cancel and retry for detection and documents (the mock already supports them); login failure and redirect; the triage chip and a faithful `DI-045`; merge the overlaps; add `data-testid`s | Fills the biggest UI gaps | M-L |
 | 9 | **Vitest** for the pure frontend helpers (`useCaseSnapshot`, `canApprove`) | Logic with no test below the browser | M |
 | 10 | **Read CI's coverage report** (the "Show coverage report" step lists the least-covered modules first), then add tests where it shows holes (start with `query_stats`, `telemetry`, `vision_tool`, the `cross_document` tools, `case_pipeline/risk/summary`) | Turns "no test names it" into facts | M |
 
-**Suggested order:** B and C (small, and they protect deploys), A, then 8, 7, 9 and 10.
+**Suggested order:** B (small, and it protects deploys), A, then 8, 7, 9 and 10.

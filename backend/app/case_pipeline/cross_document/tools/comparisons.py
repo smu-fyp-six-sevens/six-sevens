@@ -9,7 +9,8 @@ from langchain_core.tools import tool
 from pydantic import BaseModel
 
 from ....identifiers import alnum, individual_names_match, uen_key
-from ....fraud_detection.numerical_validation.common import _as_number, _decode
+from ....fraud_detection.numerical_validation.common import _as_number
+from ....fraud_detection.shared.field_values import decode_field_value
 from ..bias import is_protected_field
 from ..evidence import mask_identifiers
 from ..identity_pairs import compare_pair
@@ -52,8 +53,8 @@ def build_comparison_tools(kit: ToolKit) -> list:
         if overlap_days > 0:
             flags.append("PERIOD_OVERLAP")
             notes.append(f"The periods overlap by {overlap_days} day(s).")
-        closing = _as_number(_decode(first[0].fields.get("closing_balance")))
-        opening = _as_number(_decode(second[0].fields.get("opening_balance")))
+        closing = _as_number(decode_field_value(first[0].fields.get("closing_balance")))
+        opening = _as_number(decode_field_value(second[0].fields.get("opening_balance")))
         continuous = None
         if overlap_days <= 0 and gap_days <= 3 and closing is not None and opening is not None:
             continuous = abs(closing - opening) < 0.01
@@ -75,7 +76,7 @@ def build_comparison_tools(kit: ToolKit) -> list:
         for item in items[:_MAX_ITEMS]:
             view = context.resolve(item.document)
             # A personal attribute is never compared, whatever the model asks for.
-            raw = _decode(view.fields.get(item.field)) if view and not is_protected_field(item.field) else None
+            raw = decode_field_value(view.fields.get(item.field)) if view and not is_protected_field(item.field) else None
             if view is None or raw is None or str(raw).strip() == "":
                 missing.append({"document": item.document, "field": item.field})
                 continue

@@ -19,18 +19,17 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 
 ## 1. Duplicated code
 
-### Backend
-
-1. **The 12 on-demand detection endpoints** in `routers/detection.py` (527 lines) still repeat gate, download, run. A table of check name to function would remove most of the file. M
-2. **`unable_to_assess` and `unable_to_assess_reason`** are declared in 13 result models across the fraud checks. One shared base model. M
-3. **Two decoders for JSON-encoded field values:** `numerical_validation/common._decode` and `shared/field_values._decoded` (whose docstring mentions the other). Keep one, in `shared/field_values.py`. S
-4. **The doc-worker and the detection-worker repeat run tracking.** Each has its own `_active` task map, `_officer_cancels` set, cancel watcher, and recovery-report pattern (`workers/documents.py`, `workers/detection.py`). A small `RunTracker` in `workers/recovery.py` would hold it once. S-M
-
 ### Frontend
 
-1. **Two hooks named `useDocumentActions`** (`pages/document-details/` and `pages/upload/`, with different shapes). Rename one. S
-2. **CSS colours:** 587 hard-coded hex values against 368 `var(--...)` uses. The share got worse as new cards were added. Define tokens, then replace. L
-3. **Hand-written API types.** `services/uploadService/types.ts` (375 lines) restates the backend's Pydantic models by hand, so a backend field change can drift silently. Generate them from FastAPI's OpenAPI (`openapi-typescript`) and check in CI that they're current. M
+1. **CSS colours:** 587 hard-coded hex values against 368 `var(--...)` uses. The share got worse as new cards were added. Define tokens, then replace. L
+2. **Hand-written API types.** `services/uploadService/types.ts` (409 lines) restates the backend's Pydantic models by hand, so a backend field change can drift silently. **In progress:**
+   - Done: `backend/scripts/export_openapi.py` writes `frontend/openapi.json`. Every field of a response-only schema is marked required there, because responses always carry them (no route excludes unset or None fields); otherwise every defaulted field would come out optional. `openapi-typescript` 7.4.4 is a devDependency.
+   - Left:
+     - an `npm run gen:api` script writing `src/services/api.gen.ts`;
+     - `types.ts` as aliases of the generated schemas for the ~20 types that have a backend model. Keep hand-written the ones from dict endpoints or only on the frontend (`DetectionReport`, `LangGraphTrace`, `CaseCost`, `IndividualCheckId`, `PreviewKind`). Narrow where the backend is looser: `ContributingFinding.severity` is `str`, `CaseAnalysis.trace` is a list of dicts, and `DocumentRecord` gains the WebSocket-only `has_detection_*` flags;
+     - CI: `python scripts/export_openapi.py --check` in the backend job, and `openapi-typescript openapi.json -o src/services/api.gen.ts --check` in the frontend job. Confirm the `--check` flag exists in 7.4.4; the Playwright container may have no git for a `git diff`.
+
+     M
 
 ### Deployment
 
@@ -43,28 +42,17 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 ### Backend
 
 1. **Business rules in the routers.** `routers/documents.py` (903 lines): `approve_document` (101 lines, longer now that it undoes an unpublished approval), `update_extracted_fields` (99) and `update_document_type`. Move them to a document service so the router only translates HTTP. M
-2. **`skips_detection` lives in the documents router** and the detection router imports it from there (`documents_router.skips_detection`). Move it to the models or the document service. S
-3. **Private helpers shared across packages.** `case_pipeline/*` (8 modules) and the external validation checks (9 modules) import `_decode`, `_as_number`, `_rows` and `_parse_field_date` from `fraud_detection/numerical_validation/common.py`. Those are a public field-value API in practice: make them public in `fraud_detection/shared/field_values.py`. Similarly, `field_checks/*` and `tool_timeout.py` import `_result` and `_with_ids` from `detection/tools.py`. M
-4. **`case_service.py` (516 lines) mixes jobs:** the documents-status rollup, pass-throughs (`get_case`, `create_case`, `update_case`), the snapshot builder, and `submission_finalized`. The required-documents rules are split across `models.py`, `case_service.py` and `mapper.py`. M
-5. **`submission_finalized` machinery.** A debounce with timer threads (`document_repository`), a flush before each request returns, and a per-process "last written" cache (`case_service._synced_finalized`), all for a flag nothing reads yet. Decide its shape when automatic case analysis is built: keep it stored, or compute it inside the gate and delete the machinery. Decision pending this sprint
-6. **`models.py` (665 lines)** mixes enums and business rules, API schemas, and risk models that have a twin in `case_pipeline/models.py`. M
-7. **`case_match.py` (552 lines) at the app root,** with long functions (`_match_document` 97). Split into a `case_match/` package. S-M
-8. **`app/langgraph` shares its name with the `langgraph` library.** It works through relative imports, but confuses people and tools. M
-9. **The sweeper's local mode reads `bus._tasks`** to wait for in-process handlers. Add a public `bus.drain()`. S
-10. **Very long functions** (each a chain of decisions, so splitting is optional):
-    - `image_manipulation._check_compression` (267 lines), `_check_replacement` (193), `_check_resolution` (134), `_check_covered_regions` (125);
-    - `check_layout_anomalies` (188);
-    - `cross_document/tools/transactions.build_transaction_tools` (195) and `comparisons.build_comparison_tools` (137), both lists of closures;
-    - `ingestion_service.ingest_document` (118), `extraction_prompts.build_extraction_prompt` (120), `addresses._building_use` (112), `specialists._collect_node` (109). M each
-11. **`image_manipulation.py` is 2,519 lines,** the largest production module by far. It has six checks that could each be a module, as `layout_anomalies/` already is. M
+2. **Private helpers shared across packages.** `case_pipeline/*` and the external validation checks import `_as_number`, `_rows` and `_parse_field_date` from `fraud_detection/numerical_validation/common.py`. Those are a public field-value API in practice: make them public in `fraud_detection/shared/field_values.py`, as `decode_field_value` already is. Similarly, `field_checks/*` and `tool_timeout.py` import `_result` and `_with_ids` from `detection/tools.py`. M
+3. **`case_service.py` (516 lines) mixes jobs:** the documents-status rollup, pass-throughs (`get_case`, `create_case`, `update_case`), the snapshot builder, and `submission_finalized`. The required-documents rules are split across `models.py`, `case_service.py` and `mapper.py`. M
+4. **`submission_finalized` machinery.** A debounce with timer threads (`document_repository`), a flush before each request returns, and a per-process "last written" cache (`case_service._synced_finalized`), all for a flag nothing reads yet. Decide its shape when automatic case analysis is built: keep it stored, or compute it inside the gate and delete the machinery. Decision pending this sprint
+5. **`models.py` (665 lines)** mixes enums and business rules, API schemas, and risk models that have a twin in `case_pipeline/models.py`. M
+6. **`case_match.py` (552 lines) at the app root,** with long functions (`_match_document` 97). Split into a `case_match/` package. S-M
+7. **`app/langgraph` shares its name with the `langgraph` library.** It works through relative imports, but confuses people and tools. M
+8. **The sweeper's local mode reads `bus._tasks`** to wait for in-process handlers. Add a public `bus.drain()`. S
 
 ### Frontend
 
-1. **Long pages:** `DocumentDetailsPage.tsx` (612 lines), `UploadPage.tsx` (495), `App.tsx` (415: routing, auth and case state together), `CaseQueuePage.tsx` (381), `DashboardPage.tsx` (349). M
-2. **Too many props:** `UploadPage` passes about 30 to `DocumentListPanel` (465 lines, rows inline). M
-3. **Inline `style={{...}}`:** 31 uses, mostly in `DetectionPanel`, `LangGraphTracePanel`, `CaseAnalysisTracePanel` and `CaseRiskCard`. S
-4. **Two leftover `mock-*` class names.** S
-5. **Placeholder screens that look real:**
+1. **Placeholder screens that look real:**
    - **The case page's Audit Trail card** (`AuditTrailCard.tsx`) always says "No audit events available yet". It never calls `GET /audit/events`, which now serves every officer and agent action, and `GET /audit/cases/{id}/cost`, which serves the case's Claude spend.
    - **`/dashboard`** (`DashboardPage.tsx`, 349 lines) is built on hard-coded `MockCase` data.
 
@@ -95,7 +83,8 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 - **The snapshot payload** (every document on each push): pushes are debounced and built only for open cases. Measure a real case before designing deltas.
 - **The document page subscribes to the whole case snapshot**, but only while the document is in flight; a per-document stream would add backend work for almost no gain.
 - **`useCaseSnapshot`'s 12 state setters** are batched by React into one render. Cleaner as one object, but not faster.
-- **`DocumentListPanel` row memoization** won't help until the props cleanup (frontend 2.2).
+- **Row memoization on the case page:** the rows are now their own components (`ExtractedDocumentsCard`, `ApprovedDocumentsCard`), so `React.memo` is possible, but the hooks return new objects each render. Measure before adding it.
+- **Splitting long pages and long functions** (`DocumentDetailsPage`, `UploadPage`, `App.tsx`; `image_manipulation.py` and its long checks, `check_layout_anomalies`, the cross-document tool builders): decided against for now.
 - **Keeping per-page OCR text for the spelling check:** detection runs long after upload, so an in-memory copy would mostly miss.
 
 **Needs measuring first:** whether rule-confident classifications could skip the Sonnet call, or the detection lead could use Haiku. The Agents and Cost dashboards now give the data (cost and calls per agent and per unit of work). It changes detection quality, so test against the regression set first.
@@ -104,16 +93,15 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 
 ## Suggested order
 
-1. **Quick wins** (S, an afternoon):
+1. **Finish the generated frontend API types** (frontend 1.2), which is in progress.
+2. **Quick wins** (S, an afternoon):
    - the generator check in CI (repo 1);
-   - the two decoders;
-   - `skips_detection`;
    - `bus.drain()`;
    - `loadPrefs`.
-2. **Lock the Python dependencies** (repo 2). It protects every deploy.
-3. **Rules out of `routers/documents.py`** (backend 2.1), then the **detection endpoint table** (1.1). The biggest structural wins.
-4. **Public field-value helpers** (backend 2.3) and **`RunTracker`** (1.4).
-5. **Snapshot reads in parallel** (opt 1), then the case-list queries (opt 2 and 3; opt 3 needs a view).
-6. **The Audit Trail card and the mock dashboard** (frontend 2.5) before any demo.
-7. **Generated frontend API types** (frontend 1.3), then CSS tokens (1.2), whenever convenient.
-8. **Decide `submission_finalized`** (backend 2.5) as part of automatic case analysis.
+3. **Lock the Python dependencies** (repo 2). It protects every deploy.
+4. **Rules out of `routers/documents.py`** (backend 2.1), the biggest structural win left.
+5. **Public field-value helpers** (backend 2.2).
+6. **Snapshot reads in parallel** (opt 1), then the case-list queries (opt 2 and 3; opt 3 needs a view).
+7. **The Audit Trail card and the mock dashboard** (frontend 2.1) before any demo.
+8. **CSS tokens** (frontend 1.1), whenever convenient.
+9. **Decide `submission_finalized`** (backend 2.4) as part of automatic case analysis.

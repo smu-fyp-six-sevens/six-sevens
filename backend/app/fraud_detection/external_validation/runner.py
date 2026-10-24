@@ -14,8 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel
-
+from ..shared.check_result import CheckResult
 from ..font_consistency import ExtractedField
 from .giro import GIRO_DOCUMENT_TYPES, giro_on_closed_days
 from ..numerical_validation.models import SkippedCheck
@@ -28,13 +27,11 @@ GROUP = "external"
 GIRO_CODE = "BS.GIRO_BUSINESS_DAY"
 
 
-class ExternalValidationResult(BaseModel):
+class ExternalValidationResult(CheckResult):
     document_id: str
     document_type: str | None = None
     findings: list[RegistryFinding]
     skipped_checks: list[SkippedCheck]
-    unable_to_assess: bool
-    unable_to_assess_reason: str | None = None
     # Which fields were bound to which check roles, for the static checks.
     bindings_applied: list[dict] = []
     binding_issues: list[str] = []
