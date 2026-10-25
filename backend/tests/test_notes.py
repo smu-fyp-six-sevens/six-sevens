@@ -54,7 +54,7 @@ def repos():
         yield notes_repo, document_repo
 
 
-def test_note_is_signed_by_the_officer_and_timestamped(repos, audit_events) -> None:
+def test_note_is_signed_by_the_officer_and_timestamped(repos, published_events) -> None:
     notes_repo, _ = repos
     response = client.post(f"/cases/{CASE_ID}/notes", json={"body": "  Looks consistent.  ", "author": "someone-else"})
 
@@ -68,8 +68,8 @@ def test_note_is_signed_by_the_officer_and_timestamped(repos, audit_events) -> N
     notes_repo.add_note.assert_called_once_with(
         case_id=CASE_ID, author=TEST_USER, body="Looks consistent.", document_id=None, parent_id=None,
     )
-    assert audit_events[-1]["action"] == "note.added"
-    assert audit_events[-1]["actor"] == TEST_USER
+    assert published_events[-1].type == "note.added"
+    assert published_events[-1].actor == TEST_USER
 
 
 def test_note_on_an_approved_document_is_saved_and_leaves_the_document_alone(repos) -> None:
@@ -160,7 +160,7 @@ def test_save_failure_is_a_502(repos) -> None:
     assert client.post(f"/cases/{CASE_ID}/notes", json={"body": "x"}).status_code == 502
 
 
-def test_author_can_edit_their_note_and_it_shows_as_edited(repos, audit_events) -> None:
+def test_author_can_edit_their_note_and_it_shows_as_edited(repos, published_events) -> None:
     notes_repo, document_repo = repos
     notes_repo.get_note.return_value = _note(document_id=DOCUMENT_ID)
     notes_repo.update_note.side_effect = lambda note_id, body: _note(
@@ -175,11 +175,11 @@ def test_author_can_edit_their_note_and_it_shows_as_edited(repos, audit_events) 
     notes_repo.update_note.assert_called_once_with(NOTE_ID, "Corrected wording.")
     # Editing a note never reads or writes its document.
     assert document_repo.method_calls == []
-    assert audit_events[-1]["action"] == "note.edited"
-    assert audit_events[-1]["detail"] == {"note_id": NOTE_ID}
+    assert published_events[-1].type == "note.edited"
+    assert published_events[-1].detail["note_id"] == NOTE_ID
 
 
-def test_author_can_delete_their_note(repos, audit_events) -> None:
+def test_author_can_delete_their_note(repos, published_events) -> None:
     notes_repo, _ = repos
     notes_repo.get_note.return_value = _note()
 
@@ -187,7 +187,7 @@ def test_author_can_delete_their_note(repos, audit_events) -> None:
 
     assert response.status_code == 204
     notes_repo.delete_note.assert_called_once_with(_note())
-    assert audit_events[-1]["action"] == "note.deleted"
+    assert published_events[-1].type == "note.deleted"
 
 
 @pytest.mark.parametrize(

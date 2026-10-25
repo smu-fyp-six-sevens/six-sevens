@@ -21,7 +21,12 @@ RUN npm install
 RUN npm run build
 
 FROM nginx:1.27-alpine
+# nginx's workers, which serve requests, already run as the nginx user; only the master is root, to bind port 80.
+# Going fully non-root means nginx-unprivileged on 8080 and a Terraform port change (PENDING_WORK.md).
+#checkov:skip=CKV_DOCKER_3:Workers run as nginx; the root master only binds port 80 (see above).
 
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
+# Cloud Run ignores this and uses its own probes; compose and docker ps show it.
+HEALTHCHECK --interval=30s --timeout=5s CMD ["curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1/"]

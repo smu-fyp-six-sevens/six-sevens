@@ -6,7 +6,7 @@ import {
 } from './upload/uploadHelpers';
 import { useCaseSettings } from './upload/useCaseSettings';
 import { useCaseSnapshot } from './upload/useCaseSnapshot';
-import { useDocumentActions } from './upload/useDocumentActions';
+import { useDocumentRowActions } from './upload/useDocumentRowActions';
 import { useDocumentSelection } from './upload/useDocumentSelection';
 import { useUploadSelection } from './upload/useUploadSelection';
 import { DocumentListPanel } from './upload/DocumentListPanel';
@@ -14,6 +14,7 @@ import { MoveDocumentsDialog } from './upload/MoveDocumentsDialog';
 import { RequirementsSidebar } from './upload/RequirementsSidebar';
 import { AdditionalDocumentsCard } from './upload/AdditionalDocumentsCard';
 import { AuditTrailCard } from './upload/AuditTrailCard';
+import { CaseCostCard } from './upload/CaseCostCard';
 import { CaseAnalysisCard } from './upload/CaseAnalysisCard';
 import { CaseRiskCard } from './upload/CaseRiskCard';
 import { CaseOverview } from './upload/CaseOverview';
@@ -22,7 +23,8 @@ import { caseSectionStatuses, isCaseSection, type CaseSection } from './upload/c
 import { FlaggedItemsCard } from './upload/FlaggedItemsCard';
 import { NotesCard } from '../components/NotesCard';
 import AppHeader from '../components/AppHeader';
-import CaseHeader, { CaseTitle, caseCrumb, caseQueueCrumb } from '../components/CaseHeader';
+import CaseHeader, { CaseTitle } from '../components/CaseHeader';
+import { caseCrumb, caseQueueCrumb } from '../components/caseCrumbs';
 import { useCases } from '../casesContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DropZone from '../components/DropZone';
@@ -123,9 +125,17 @@ export default function UploadPage({
     removeFile,
   } = useUploadSelection({ caseId: selectedCase.id, caseSocketRef, liveDocumentIds });
 
+  const selection = useDocumentSelection({
+    caseId: selectedCase.id,
+    extractedDocuments,
+    caseMatches,
+    setDocumentDetails,
+    setCaseMatches,
+    setDeleteError,
+    isMountedRef,
+    caseSocketRef,
+  });
   const {
-    selectedDocumentIds,
-    setSelectedDocumentIds,
     documentsToDelete,
     setDocumentsToDelete,
     isBulkDeleting,
@@ -137,43 +147,16 @@ export default function UploadPage({
     setMoveTargetCaseId,
     isMovingDocuments,
     moveError,
-    selectedExtractedDocuments,
-    allExtractedSelected,
-    eligibleForApprovalCount,
-    selectedApprovableCount,
     selectedMovableOrDeletableCount,
-    clearDocumentSelection,
-    toggleDocumentSelected,
     confirmDeleteDocuments,
-    handleSelectAllEligible,
-    openMoveDialog,
     confirmMoveSelected,
-  } = useDocumentSelection({
-    caseId: selectedCase.id,
-    extractedDocuments,
-    caseMatches,
-    setDocumentDetails,
-    setCaseMatches,
-    setDeleteError,
-    isMountedRef,
-    caseSocketRef,
-  });
+  } = selection;
 
-  const {
-    approveError,
-    cancellingDocumentId,
-    cancelActionError,
-    retryingDocumentId,
-    retryActionError,
-    isApprovingSelected,
-    handleCancelDocument,
-    handleRetryDocument,
-    handleApproveSelected,
-  } = useDocumentActions({
+  const rowActions = useDocumentRowActions({
     setDocumentDetails,
     isMountedRef,
-    selectedDocumentIds,
-    setSelectedDocumentIds,
+    selectedDocumentIds: selection.selectedDocumentIds,
+    setSelectedDocumentIds: selection.setSelectedDocumentIds,
     extractedDocuments,
     caseMatches,
   });
@@ -384,33 +367,14 @@ export default function UploadPage({
                 )}
 
                 <DocumentListPanel
-                  handleCancelDocument={handleCancelDocument}
-                  handleRetryDocument={handleRetryDocument}
-                  allExtractedSelected={allExtractedSelected}
-                  approveError={approveError}
-                  approvedDocuments={approvedDocuments}
-                  cancelActionError={cancelActionError}
-                  cancellingDocumentId={cancellingDocumentId}
-                  caseMatches={caseMatches}
-                  clearDocumentSelection={clearDocumentSelection}
                   documents={documents}
-                  eligibleForApprovalCount={eligibleForApprovalCount}
                   extractedDocuments={extractedDocuments}
-                  handleApproveSelected={handleApproveSelected}
-                  handleSelectAllEligible={handleSelectAllEligible}
-                  isApprovingSelected={isApprovingSelected}
-                  onOpenDocument={onOpenDocument}
-                  openMoveDialog={openMoveDialog}
-                  retryActionError={retryActionError}
-                  retryingDocumentId={retryingDocumentId}
-                  selectedApprovableCount={selectedApprovableCount}
-                  selectedDocumentIds={selectedDocumentIds}
-                  selectedExtractedDocuments={selectedExtractedDocuments}
-                  selectedMovableOrDeletableCount={selectedMovableOrDeletableCount}
-                  setDocumentsToDelete={setDocumentsToDelete}
-                  setSelectedDocumentIds={setSelectedDocumentIds}
-                  toggleDocumentSelected={toggleDocumentSelected}
+                  approvedDocuments={approvedDocuments}
+                  caseMatches={caseMatches}
                   wsConnected={wsConnected}
+                  onOpenDocument={onOpenDocument}
+                  selection={selection}
+                  rowActions={rowActions}
                 />
               </section>
 
@@ -450,6 +414,8 @@ export default function UploadPage({
           {activeSection === 'notes' && <NotesCard caseId={selectedCase.id} caseNumber={selectedCase.caseNumber} documents={documents} />}
 
           {activeSection === 'audit' && <AuditTrailCard />}
+
+          {activeSection === 'cost' && <CaseCostCard caseId={selectedCase.id} documents={documents} />}
         </div>
       </div>
 

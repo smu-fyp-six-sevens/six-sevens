@@ -1,0 +1,29 @@
+services:
+  # doc-worker, detection-worker and case-worker in one container to save memory; in the cloud each is its
+  # own service. Same code and same push endpoints (/push/<role>), so the transport is exercised the same way.
+  workers:
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+      target: detection-worker
+      args:
+        ALLOW_MISSING_LAND_USE: ${ALLOW_MISSING_LAND_USE:-false}
+      secrets:
+        - data_gov_sg_api_key
+    image: six-sevens/workers:local
+    env_file:
+      - path: ../../backend/.env
+        required: false
+    environment:
+      ROLE: doc-worker,detection-worker,case-worker
+      EVENT_TRANSPORT: pubsub
+      PUBSUB_EMULATOR_HOST: pubsub-emulator:8085
+      GOOGLE_CLOUD_PROJECT: local
+      OTEL_SERVICE_NAME: workers
+    depends_on:
+      pubsub-init:
+        condition: service_completed_successfully
+
+secrets:
+  data_gov_sg_api_key:
+    environment: DATA_GOV_SG_API_KEY

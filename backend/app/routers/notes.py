@@ -6,8 +6,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from .. import audit, document_repository, notes_repository
+from .. import document_repository, events, notes_repository
 from ..auth import CurrentUser
+from ..events import officer_event, types
 from ..models import CaseNote, CaseRecord, CreateNoteRequest, UpdateNoteRequest
 from ._dependencies import bad_gateway_on_error, get_case_or_404, to_thread_or_502
 
@@ -68,9 +69,10 @@ async def add_case_note(
             notes_repository.add_note,
             case_id=case_id, author=user, body=request.body, document_id=document_id, parent_id=parent_id,
         )
-    await audit.arecord(
-        "note.added", user, case_id=case_id, document_id=document_id, note_id=note.id, reply=parent_id is not None,
-    )
+    await events.record(officer_event(
+        types.NOTE_ADDED, case_id=case_id, document_id=document_id,
+        detail={"note_id": note.id, "reply": parent_id is not None},
+    ))
     return note
 
 
@@ -102,7 +104,9 @@ async def edit_case_note(
         detail="Failed to save the note. Check Supabase table access.",
         log=("Failed to edit note %s", note.id),
     )
-    await audit.arecord("note.edited", user, case_id=case_id, document_id=note.document_id, note_id=note.id)
+    await events.record(officer_event(
+        types.NOTE_EDITED, case_id=case_id, document_id=note.document_id, detail={"note_id": note.id},
+    ))
     return updated
 
 
@@ -123,4 +127,6 @@ async def delete_case_note(
         detail="Failed to delete the note. Check Supabase table access.",
         log=("Failed to delete note %s", note.id),
     )
-    await audit.arecord("note.deleted", user, case_id=case_id, document_id=note.document_id, note_id=note.id)
+    await events.record(officer_event(
+        types.NOTE_DELETED, case_id=case_id, document_id=note.document_id, detail={"note_id": note.id},
+    ))

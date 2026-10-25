@@ -1,0 +1,16 @@
+services:
+  kong:
+    build:
+      context: ../..
+      dockerfile: deploy/kong/Dockerfile
+    image: six-sevens/kong:local
+    ports:
+      - "8000:8000"
+    environment:
+      API_URL: http://api:8000
+      AUDIT_URL: http://audit-metrics:8000
+      PRESERVE_HOST: "true"
+      CORS_ORIGINS: http://localhost:5173
+    depends_on:
+      - api
+      - audit-metrics

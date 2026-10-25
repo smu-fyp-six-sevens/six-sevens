@@ -41,6 +41,8 @@ import pymupdf
 from PIL import Image, ImageChops, ImageFilter, ImageStat
 from pydantic import BaseModel, Field
 
+from ..shared.check_result import CheckResult
+
 logger = logging.getLogger("fraud_detection.image_manipulation")
 
 BBox = tuple[float, float, float, float]
@@ -217,14 +219,12 @@ class ImageManipulationIndicator(BaseModel):
     evidence: dict
 
 
-class ImageManipulationResult(BaseModel):
+class ImageManipulationResult(CheckResult):
     document_id: str
     regions: list[ImageRegion]  # AC1
     indicators: list[ImageManipulationIndicator]
     pages_checked: int
     tolerances: Tolerances
-    unable_to_assess: bool  # AC7
-    unable_to_assess_reason: str | None = None
     # What the bbox numbers mean: PDF points for a PDF, pixels for a PNG or
     # JPEG upload, which has no page geometry of its own.
     bbox_units: Literal["pt", "px"] = "pt"
@@ -1699,14 +1699,12 @@ class ImageTamperingIndicator(BaseModel):
     evidence: dict
 
 
-class ImageTamperingResult(BaseModel):
+class ImageTamperingResult(CheckResult):
     document_id: str
     regions: list[ImageRegion]  # AC1
     indicators: list[ImageTamperingIndicator]
     pages_checked: int
     tolerances: TamperingTolerances
-    unable_to_assess: bool  # AC8
-    unable_to_assess_reason: str | None = None
     # PDF points for a PDF, pixels for a PNG or JPEG upload.
     bbox_units: Literal["pt", "px"] = "pt"
 

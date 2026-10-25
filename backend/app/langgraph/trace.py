@@ -201,11 +201,10 @@ def _flush(document_id: str) -> None:
 
 def _write_row(snapshot: dict[str, Any]) -> None:
     document_id = snapshot["document_id"]
-    table = supabase_client.table("langgraph_trace")
     try:
-        # No unique key on document_id, so update-then-insert instead of upsert.
-        updated = table.update({"trace": snapshot}).eq("document_id", document_id).execute()
-        if not updated.data:
-            table.insert({"document_id": document_id, "trace": snapshot}).execute()
+        # One round trip: needs the unique key on document_id (backend/sql/001_langgraph_trace_unique_document.sql).
+        supabase_client.table("langgraph_trace").upsert(
+            {"document_id": document_id, "trace": snapshot}, on_conflict="document_id",
+        ).execute()
     except Exception as exc:
         logger.warning("Failed to persist langgraph trace for %s: %s", document_id, exc)

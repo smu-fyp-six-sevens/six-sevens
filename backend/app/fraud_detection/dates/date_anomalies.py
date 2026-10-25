@@ -50,6 +50,7 @@ from typing import Any, Callable
 
 from pydantic import BaseModel
 
+from ..shared.check_result import CheckResult
 from .date_parsing import date_in_period, parse_date_parts
 from ..font_consistency import ExtractedField
 from ..numerical_validation.common import officer_appointed, officer_role, _apply_needs_review, _as_number, _confidence_by_name, _fields_by_name, _parse_field_date, _rows, _skip_missing
@@ -103,7 +104,7 @@ class ExtractedDate(BaseModel):
     confidence: float | None = None
 
 
-class DateAnomalyResult(BaseModel):
+class DateAnomalyResult(CheckResult):
     """
     Response for GET /documents/{id}/detection/date-anomalies. Nothing is
     persisted — a pure read/compute, like the spelling/layout/numerical
@@ -115,8 +116,6 @@ class DateAnomalyResult(BaseModel):
     dates_extracted: list[ExtractedDate]
     findings: list[DateFinding]
     skipped_checks: list[SkippedCheck]
-    unable_to_assess: bool
-    unable_to_assess_reason: str | None = None
 
 
 # ---------------------------------------------------------------------------

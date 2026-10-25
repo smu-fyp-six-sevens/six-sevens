@@ -28,14 +28,20 @@ class TextValue:
     top_level: bool
 
 
-def _decoded(value: Any) -> Any:
-    """A string that is itself JSON (a list, an object, or a doubly-encoded string), decoded once."""
-    if isinstance(value, str) and value[:1] in ('[', '{', '"'):
+def decode_field_value(value: Any) -> Any:
+    """An extracted value that is itself JSON (extraction sometimes encodes it twice), decoded once."""
+    if isinstance(value, str):
         try:
             return json.loads(value)
-        except ValueError:
+        except (ValueError, TypeError):
             return value
     return value
+
+
+def _decoded(value: Any) -> Any:
+    """Like decode_field_value, but a text value stays text ("123" isn't turned into a number)."""
+    decoded = decode_field_value(value)
+    return decoded if isinstance(decoded, (str, list, dict)) else value
 
 
 def _walk(value: Any, path: str, key: str, depth: int) -> Iterator[TextValue]:

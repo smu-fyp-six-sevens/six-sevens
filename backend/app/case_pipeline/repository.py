@@ -11,8 +11,7 @@ from ..supabase_rows import row as _row
 from .models import AnalysisAudit, CaseAnalysis, CrossDocFinding, RiskOutlook
 
 _TABLE = "case_analysis_runs"
-_CHUNK = 100
-# What a case list needs from a run: no trace, outlook or audit, which are large and only read for one case.
+# What a snapshot or summary needs from a run: no trace, outlook or audit, which are large.
 _LIST_COLUMNS = (
     "run_id, case_id, status, fingerprint, started_at, finished_at, error, findings:result->findings, "
     "risk:result->risk, supporting_documents:result->supporting_documents"
@@ -64,6 +63,38 @@ def latest_run_id(case_id: str) -> str | None:
     return _row(rows[0])["run_id"] if rows else None
 
 
+def latest_run_state(case_id: str) -> tuple[str, datetime] | None:
+    """The newest run's status and start, without its large result and trace."""
+    rows = (
+        supabase_client.table(_TABLE).select("status, started_at").eq("case_id", case_id)
+        .order("started_at", desc=True).limit(1).execute().data
+    )
+    if not rows:
+        return None
+    row = _row(rows[0])
+    return str(row["status"]), datetime.fromisoformat(str(row["started_at"]))
+
+
+def running_started_before(cutoff: datetime) -> list[tuple[str, str, datetime]]:
+    """(run_id, case_id, started_at) of runs still marked running that started before `cutoff`."""
+    rows = (
+        supabase_client.table(_TABLE).select("run_id, case_id, started_at").eq("status", "running")
+        .lt("started_at", cutoff.isoformat()).execute().data or []
+    )
+    return [
+        (str(r["run_id"]), str(r["case_id"]), datetime.fromisoformat(str(r["started_at"])))
+        for r in (_row(row) for row in rows)
+    ]
+
+
+def fail_if_running(run_id: str, error: str) -> bool:
+    """Marks a run failed only while it is still running (compare-and-swap); whether it was."""
+    result = supabase_client.table(_TABLE).update({
+        "status": "failed", "finished_at": datetime.now(timezone.utc).isoformat(), "error": error,
+    }).eq("run_id", run_id).eq("status", "running").execute()
+    return bool(result.data)
+
+
 def finish_run(analysis: CaseAnalysis) -> bool:
     """
     Writes a run's outcome only while it is still the case's newest run.
@@ -107,18 +138,10 @@ def get_latest_complete(case_id: str) -> CaseAnalysis | None:
     return _to_analysis(_row(rows[0])) if rows else None
 
 
-def get_latest_many(case_ids: list[str]) -> dict[str, CaseAnalysis]:
-    """The newest run of each case, in one query per 100 cases. Findings only: no trace, outlook or audit."""
-    latest: dict[str, CaseAnalysis] = {}
-    for start in range(0, len(case_ids), _CHUNK):
-        query = (
-            supabase_client.table(_TABLE).select(_LIST_COLUMNS).in_("case_id", case_ids[start : start + _CHUNK])
-            .order("started_at", desc=True)
-        )
-        if len(case_ids) == 1:
-            query = query.limit(1)  # the snapshot path: only the newest run, not every past one
-        rows = query.execute().data
-        for raw in rows:
-            row = _row(raw)
-            latest.setdefault(row["case_id"], _to_analysis(row))
-    return latest
+def get_latest_summary(case_id: str) -> CaseAnalysis | None:
+    """The case's newest run, findings only (no trace, outlook or audit): one row however many runs there are."""
+    rows = (
+        supabase_client.table(_TABLE).select(_LIST_COLUMNS).eq("case_id", case_id)
+        .order("started_at", desc=True).limit(1).execute().data
+    )
+    return _to_analysis(_row(rows[0])) if rows else None

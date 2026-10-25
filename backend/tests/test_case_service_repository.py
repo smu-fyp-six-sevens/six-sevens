@@ -63,7 +63,7 @@ def test_list_case_summaries_groups_documents_by_case() -> None:
         patch("app.case_service.document_repository") as mock_doc_repo,
     ):
         mock_case_repo.list_cases.return_value = [_make_case("case-1"), _make_case("case-2")]
-        mock_doc_repo.list_documents.return_value = [
+        mock_doc_repo.list_document_statuses.return_value = [
             _make_document("doc-1", case_id="case-1", status=DocumentStatus.ANALYZED),
             _make_document("doc-2", case_id="case-2", status=DocumentStatus.FAILED),
             # unassigned document (case_id=None) should never crash the grouping
@@ -75,7 +75,7 @@ def test_list_case_summaries_groups_documents_by_case() -> None:
         by_id = {s.id: s for s in summaries}
         assert by_id["case-1"].documents_status == CaseDocumentsStatus.ANALYZED
         assert by_id["case-2"].documents_status == CaseDocumentsStatus.FAILED
-        mock_doc_repo.list_documents.assert_called_once_with(include_fields=False)
+        mock_doc_repo.list_document_statuses.assert_called_once_with(["case-1", "case-2"])
 
 
 def test_list_case_summaries_case_with_no_documents_is_no_documents() -> None:
@@ -84,7 +84,7 @@ def test_list_case_summaries_case_with_no_documents_is_no_documents() -> None:
         patch("app.case_service.document_repository") as mock_doc_repo,
     ):
         mock_case_repo.list_cases.return_value = [_make_case("case-1")]
-        mock_doc_repo.list_documents.return_value = []
+        mock_doc_repo.list_document_statuses.return_value = []
 
         summaries = case_service.list_case_summaries()
 
@@ -98,7 +98,7 @@ def test_list_case_summaries_with_no_cases_returns_empty() -> None:
         patch("app.case_service.document_repository") as mock_doc_repo,
     ):
         mock_case_repo.list_cases.return_value = []
-        mock_doc_repo.list_documents.return_value = []
+        mock_doc_repo.list_document_statuses.return_value = []
 
         assert case_service.list_case_summaries() == []
 

@@ -1,27 +1,11 @@
 from pathlib import Path
 
-import pymupdf
 import pytest
 
 from app.auth import require_auth
 from app.main import app
 
 TEST_USER = "test-user"  # who the bypassed login says is acting
-PDF_DOC_ID = "C001_CertIncumbency"
-IMAGE_DOC_ID = "ocbc_sample"
-
-# app/injection/* is a dev-only synthetic fraud-injection tool used to
-# generate test documents for the detector — not part of the graded
-# detection pipeline (see CLAUDE.md). Deliberately not unit-tested for now;
-# the files below are left in place (not deleted) in case that changes.
-collect_ignore = [
-    "test_field_text.py",
-    "test_fraud_injections.py",
-    "test_injection_router.py",
-    "test_injectors.py",
-    "test_pdf.py",
-    "test_store.py",
-]
 
 
 @pytest.fixture(autouse=True)
@@ -56,13 +40,13 @@ def _bypass_auth():
 
 
 @pytest.fixture(autouse=True)
-def audit_events(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
-    """Audit rows written during a test, in order; nothing reaches the database."""
-    from app import audit
+def published_events(monkeypatch: pytest.MonkeyPatch) -> list:
+    """Events published during a test, in order. No handler runs: a test that wants one calls it directly."""
+    from app.events import bus
 
-    rows: list[dict] = []
-    monkeypatch.setattr(audit, "_insert", rows.append)
-    return rows
+    events: list = []
+    monkeypatch.setattr(bus, "_dispatch_in_process", events.append)
+    return events
 
 
 class _BlockedSupabaseAccess:
@@ -188,101 +172,6 @@ async def _refuse_real_realtime(*args, **kwargs):
     )
 
 
-def _write_sample_pdf(path: Path) -> None:
-    doc = pymupdf.open()
-    page = doc.new_page(width=400, height=300)
-    page.insert_text((72, 100), "Golden Harvest Trading Pte Ltd", fontsize=12, fontname="helv")
-    page.insert_text((72, 140), "100 000", fontsize=12, fontname="helv")
-    page.insert_text((72, 180), "Account No. 12345678", fontsize=12, fontname="helv")
-    page.insert_text((72, 220), "Opening Balance", fontsize=12, fontname="helv")
-    logo = pymupdf.open()
-    logo_page = logo.new_page(width=64, height=32)
-    logo_page.draw_rect(
-        logo_page.rect, color=(0.8, 0.1, 0.1), fill=(0.8, 0.1, 0.1)
-    )
-    pixmap = logo_page.get_pixmap()
-    logo.close()
-    page.insert_image(pymupdf.Rect(24, 18, 88, 50), pixmap=pixmap)
-    doc.set_metadata(
-        {
-            "title": "Certificate of Incumbency",
-            "author": "Corporate Secretary",
-            "subject": "KYC",
-            "creator": "pymupdf",
-        }
-    )
-    doc.save(path)
-    doc.close()
-
-
-def _write_sample_png(path: Path) -> None:
-    doc = pymupdf.open()
-    page = doc.new_page(width=612, height=792)
-    lines = (
-        "OCBC",
-        "STATEMENT",
-        "Account Number",
-        "12345678",
-        "Account No. 87654321",
-        "Available Balance",
-        "1000.00",
-        "Customer Name",
-        "Jane Citizen",
-        "Opening Balance",
-        "Branch Code",
-        "001",
-    )
-    y = 72
-    for line in lines:
-        page.insert_text((72, y), line, fontsize=22, fontname="helv")
-        y += 40
-    page.draw_rect(
-        pymupdf.Rect(430, 36, 560, 120),
-        color=(0.85, 0.05, 0.05),
-        fill=(0.85, 0.05, 0.05),
-    )
-    page.draw_rect(
-        pymupdf.Rect(444, 50, 492, 106),
-        color=(0.05, 0.05, 0.85),
-        fill=(0.05, 0.05, 0.85),
-    )
-    pix = page.get_pixmap(dpi=150)
-    pix.save(str(path))
-    doc.close()
-
-
-@pytest.fixture(scope="session")
-def _injection_template_files(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """
-    Session-scoped so the PDF/PNG live at a stable path for the whole test
-    run. app.injection.pdf.discover_fields_from_image caches OCR results by
-    (path, mtime, size) — with a fresh tmp_path (and therefore a fresh OCR
-    run) on every single test, that cache never hit, and RapidOCR ran once
-    per test (~5-14s each, dominating test_fraud_injections.py's runtime).
-    Reusing the same files across the session lets the existing cache do
-    its job: only the first test pays the OCR cost.
-    """
-    templates = tmp_path_factory.mktemp("document_templates")
-    _write_sample_pdf(templates / f"{PDF_DOC_ID}.pdf")
-    _write_sample_png(templates / f"{IMAGE_DOC_ID}.png")
-    return templates
-
-
-@pytest.fixture
-def isolated_injection_templates(
-    tmp_path: Path, _injection_template_files: Path, monkeypatch: pytest.MonkeyPatch
-) -> Path:
-    """Use generated PDF/PNG fixtures instead of document_templates/."""
-    generated = tmp_path / "documents_generated"
-    generated.mkdir()
-
-    monkeypatch.setattr("app.injection.pdf.TEMPLATES_DIR", _injection_template_files)
-    monkeypatch.setattr("app.injection.pdf.DOCUMENTS_GENERATED_DIR", generated)
-    monkeypatch.setattr("app.injection.store.TEMPLATES_DIR", _injection_template_files)
-    monkeypatch.setattr("app.injection.store.DOCUMENTS_GENERATED_DIR", generated)
-    return _injection_template_files
-
-
 # --- Regression suite tags (SCRUM-206, SCRUM-246) ---------------------------
 # Existing tests that also serve as regression tests for a sprint's manual test
 # cases, tagged here centrally (rather than editing each file) so that
@@ -295,7 +184,7 @@ _EXISTING_REGRESSION_TESTS: dict[str, list[tuple[str, str, str]]] = {
     "test_documents.py::test_upload_batch_rejects_too_many_files": [("sprint1", "SCRUM-6", "DI-004")],
     "test_ingestion.py::test_ingest_rejects_unsupported_type": [("sprint1", "SCRUM-6", "DI-008")],
     # SCRUM-17 Auto-trigger classification: stored document is queued (MA-001)
-    "test_queue_service.py::test_enqueue_marks_queued_and_puts_document_id_on_queue": [
+    "test_documents.py::test_upload_batch_marks_queued_and_publishes_uploaded": [
         ("sprint1", "SCRUM-17", "MA-001"),
     ],
     # Document generation, the mastersheet and fraud injection (TD-001 – TD-006,

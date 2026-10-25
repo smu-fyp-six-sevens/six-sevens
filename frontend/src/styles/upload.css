@@ -898,7 +898,7 @@
   }
 }
 
-.mock-badge {
+.live-badge {
   font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
   font-size: 9.5px;
   padding: 2.5px 7px;
@@ -910,7 +910,7 @@
   gap: 5px;
 }
 
-.mock-badge::before {
+.live-badge::before {
   content: '';
   width: 6px;
   height: 6px;
@@ -918,12 +918,12 @@
   background: var(--amber);
 }
 
-.mock-badge.live {
+.live-badge.live {
   background: var(--teal-bg);
   color: var(--teal);
 }
 
-.mock-badge.live::before {
+.live-badge.live::before {
   background: var(--teal);
   animation: live-pulse 1.6s ease-in-out infinite;
 }
@@ -941,16 +941,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mock-badge.live::before {
+  .live-badge.live::before {
     animation: none;
   }
-}
-
-.mock-failure-reason {
-  margin: 4px 0 0;
-  font-size: 11px;
-  color: var(--red);
-  white-space: pre-wrap;
 }
 
 .fulfils-row {
@@ -972,71 +965,6 @@
   background: var(--teal-bg);
   color: var(--teal);
   white-space: nowrap;
-}
-
-.mock-evidence {
-  margin: 8px 0 0;
-  padding-left: 18px;
-  font-size: 12px;
-  color: var(--ink-soft);
-  line-height: 1.6;
-}
-
-.mock-note {
-  margin: 8px 0 0;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: var(--teal-bg);
-  color: var(--teal);
-  font-size: 11.5px;
-  line-height: 1.5;
-}
-
-.mock-note.warning {
-  background: var(--amber-bg);
-  color: var(--amber);
-}
-
-.mock-classification-row {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-}
-
-.mock-classification-row:first-of-type {
-  border-top: none;
-  padding-top: 0;
-}
-
-.mock-filename {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ink);
-}
-
-.mock-classification {
-  display: flex;
-  gap: 24px;
-  margin-top: 6px;
-}
-
-.mock-classification > div {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.mock-label {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ink-soft);
-}
-
-.mock-value {
-  font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
-  font-size: 13px;
-  color: var(--ink);
 }
 
 .page-tabs {

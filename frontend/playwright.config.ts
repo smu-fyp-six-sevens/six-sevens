@@ -17,6 +17,8 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
+  // CI's default is half the cores, which is 1 on a 2-vCPU runner; the tests mostly wait on the browser.
+  workers: process.env.CI ? 2 : undefined,
   reporter: [
     ['list'],
     ['html', { open: 'never', outputFolder: 'playwright-report' }],
@@ -24,12 +26,15 @@ export default defineConfig({
   ],
   use: {
     baseURL: `http://localhost:${PORT}`,
-    trace: 'retain-on-failure',
+    // Recorded only when a failed test is retried, not for every test.
+    trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    command: `npm run dev -- --port ${PORT} --strictPort`,
+    // The production build, served as built: the dev server compiles modules on demand for every browser,
+    // which is slow and timed tests out under load. Its own folder, because VITE_API_URL below is built in.
+    command: `npm run build -- --outDir dist-e2e && npm run preview -- --outDir dist-e2e --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}`,
     // Its own port (not the usual 5173), so it never reuses a dev server
     // that's pointed at the real backend.

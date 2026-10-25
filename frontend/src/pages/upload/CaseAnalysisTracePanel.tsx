@@ -26,9 +26,9 @@ export function CaseAnalysisTracePanel({
     : [];
 
   return (
-    <section className="details-card" style={{ fontFamily: 'monospace', fontSize: '0.85em', position: 'relative' }}>
+    <section className="details-card debug-card">
       <RefreshButton isRefreshing={isRefreshing} onClick={() => void onRefresh()} label="case analysis trace" />
-      <h2 style={{ marginTop: 0 }}>Case analysis trace (debug)</h2>
+      <h2>Case analysis trace (debug)</h2>
       {!analysis ? (
         <p>No analysis has been run for this case yet.</p>
       ) : (
@@ -42,7 +42,7 @@ export function CaseAnalysisTracePanel({
             {Array.isArray(proposed?.proposed) ? proposed.proposed.length : '—'} / {kept}
           </div>
           {scoring && (
-            <div style={{ marginTop: '0.5em' }}>
+            <div className="debug-section">
               <strong>Scoring</strong>
               <div>
                 {String(scoring.level ?? '—')} · score {String(scoring.score ?? '—')}/100 · {String(scoring.points ?? '—')} points
@@ -55,7 +55,7 @@ export function CaseAnalysisTracePanel({
               </div>
               {Array.isArray(scoring.reasons) && scoring.reasons.map((reason) => <div key={String(reason)}>{String(reason)}</div>)}
               {scoredFindings.length > 0 && (
-                <table style={{ borderCollapse: 'collapse', marginTop: '0.25em' }}>
+                <table className="debug-table">
                   <thead>
                     <tr>
                       <th align="right">points</th>
@@ -80,7 +80,7 @@ export function CaseAnalysisTracePanel({
               )}
               <details>
                 <summary>Rules applied</summary>
-                <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                <pre className="debug-json">
                   {JSON.stringify(
                     {
                       severity_points: scoring.severity_points,
@@ -98,7 +98,7 @@ export function CaseAnalysisTracePanel({
             </div>
           )}
           {outlookRequests.length > 0 && (
-            <div style={{ marginTop: '0.5em' }}>
+            <div className="debug-section">
               <strong>Outlook</strong> (current {String(outlookStep?.current_score ?? '—')}, best case{' '}
               {String(outlookStep?.best_case_score ?? '—')})
               {outlookRequests.map((request, index) => (
@@ -107,20 +107,20 @@ export function CaseAnalysisTracePanel({
                     {String(request.title)}
                     {request.scored ? ` → ${String(request.score_if_supports)} (${String(request.level_if_supports)})` : ' (not scored)'}
                   </summary>
-                  <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{JSON.stringify(request, null, 2)}</pre>
+                  <pre className="debug-json">{JSON.stringify(request, null, 2)}</pre>
                 </details>
               ))}
             </div>
           )}
-          {analysis.error && <div style={{ color: 'crimson' }}>error: {analysis.error}</div>}
-          <details style={{ marginTop: '0.5em' }}>
+          {analysis.error && <div className="debug-error">error: {analysis.error}</div>}
+          <details className="debug-section">
             <summary>Full step log ({steps.length} steps)</summary>
-            <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{JSON.stringify(steps, null, 2)}</pre>
+            <pre className="debug-json">{JSON.stringify(steps, null, 2)}</pre>
           </details>
           {analysis.audit && (
-            <details style={{ marginTop: '0.5em' }}>
+            <details className="debug-section">
               <summary>Audit ({analysis.audit.tool_calls?.length ?? 0} tool calls)</summary>
-              <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+              <pre className="debug-json">
                 {JSON.stringify(analysis.audit, null, 2)}
               </pre>
             </details>

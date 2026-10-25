@@ -46,6 +46,8 @@ The database is Supabase, and its schema is changed directly there; the repo kee
 | `flags` | per-document findings a specialist approved |
 | `case_notes` | loan officers' notes on a case or one of its documents (a reply is a row with `parent_id`); only a note's author can edit (sets `edited_at`) or delete it, and a deleted note with replies stays as a placeholder (`deleted_at`, text erased) |
 | sequence `greenlink_case_id_seq` and trigger `set_greenlink_case_id` on `cases` | readable case ids (`GLDB-<n>`); the trigger skips any id already taken |
+| `audit_events` | the audit trail: every domain event, keyed by the event's id (the service role needs `select, insert`) |
+| the `supabase_realtime` publication with `documents`, `cases` and `case_analysis_runs` | live updates, including a case analysis finished by the case-worker |
 
 The backend role needs `select, insert` on `risk_scores` and `flags` (with row level security policies for insert and read if it is on). Every delete goes through the service key, so no delete *policy* is required, but the service role still needs the `DELETE` privilege on the tables the backend deletes from: `documents`, `extracted_fields`, `flags`, `case_notes`, `langgraph_trace`, `case_analysis_runs`, `risk_scores` and `cases` (for example `grant delete on public.case_analysis_runs to service_role;`). Without it a delete fails with Postgres error 42501 ("permission denied for table ..."). Deleting a document removes its `extracted_fields`, `flags`, `case_notes` and `langgraph_trace` rows and its stored file; deleting a case removes its documents, then its `risk_scores`, `case_analysis_runs`, `flags` and `case_notes` rows. On `case_notes` the service role needs `select, insert, delete` and `update (body, edited_at, deleted_at, case_id)`: an author's edit, a deleted note kept as a placeholder above its replies, and a moved document taking its notes to the new case. The backend deletes each child itself before the parent, so it works whether or not the foreign keys cascade. Deleting one document leaves the case's analysis runs and scores in place; the run is marked out of date.
 
@@ -60,17 +62,26 @@ npm install
 npm run dev
 ```
 
-## Docker
+The two commands above are all a developer needs: one process runs every role (`ROLE=all`) and passes events between them in memory (`EVENT_TRANSPORT=inprocess`). The split below is optional.
 
-From the repo root:
+## Docker: the services split locally (optional)
+
+From the repo root, with uvicorn stopped (Kong takes port 8000):
 
 ```bash
-docker compose up
+docker compose up --build                     # Pub/Sub emulator, Kong :8000, api, workers, audit-metrics
+docker compose --profile frontend up --build  # also the nginx frontend on :5173 (otherwise use npm run dev)
 ```
 
-The frontend is served on `http://localhost:5173` and the backend on `http://localhost:8000`.
+Settings come from `backend/.env`, as for uvicorn. The three workers share one container to save memory (about 3 GB in total). `CLOUD_ARCHITECTURE_PLAN.md` section 11 has the walkthrough, how to debug the workers in the IDE, and the emulator's limits.
 
-Building the backend image downloads URA's land-use map and builds the zoning index into it (about a minute, needs internet, fails if it can't). To build without it, run `docker compose build --build-arg ALLOW_MISSING_LAND_USE=true`. Export `DATA_GOV_SG_API_KEY` first to pass it as a build secret.
+The backend image has one target per role (`backend/Dockerfile`). The `detection-worker` and `all` targets download URA's land-use map and build the zoning index into the image (about a minute, needs internet, fails if it can't). To build without it, set `ALLOW_MISSING_LAND_USE=true` in the environment before `docker compose build`. Export `DATA_GOV_SG_API_KEY` first to pass it as a build secret.
+
+## Deploying
+
+Cloud Run, from GitHub Actions: every push to `main` deploys once CI passes, and "Deploy to Cloud Run" can also be run by hand. Terraform in `deploy/terraform` creates the services, Pub/Sub, secrets and identities; its `README.md` has the one-time setup. `CLOUD_ARCHITECTURE_PLAN.md` describes the design.
+
+**Adding a service?** Follow [`docs/ADDING_A_SERVICE.md`](docs/ADDING_A_SERVICE.md). Run Terraform first, then push.
 
 ## Tests
 
@@ -98,5 +109,11 @@ The Playwright suite runs against a mocked backend (`frontend/e2e/support/mockBa
 
 Defined in `.github/workflows/`:
 
-- `ci-cd.yml` runs on pushes to `main` and on pull requests. It runs ruff, pyright (a type error fails the build; `# type: ignore` and a weakened pyright config are rejected), the backend tests with coverage, then frontend lint, build and the Playwright suite. On a manual run it also publishes the backend and frontend images to GitHub Container Registry.
-- `deploy.yml` deploys both services to Cloud Run. It is manual only (`workflow_dispatch`), so pushes do not deploy. It needs the repository secrets `DATA_GOV_SG_API_KEY` and `URA_API_KEY`, alongside the Supabase, Anthropic and auth ones.
+- `ci-cd.yml` runs on pull requests and on pushes to `main` (not docs-only ones). Jobs:
+  - **backend:** ruff, pyright (a type error fails the build; `# type: ignore` and a weakened pyright config are rejected), the tests with coverage;
+  - **frontend:** lint, build and the Playwright suite (in Microsoft's Playwright container);
+  - **security:** Checkov, plus Snyk or pip-audit and npm audit;
+  - **Terraform:** `fmt` and `validate`.
+
+  All four must pass. On a push to `main` it then calls `deploy.yml`.
+- `deploy.yml` builds one image per service, rolls them out to Cloud Run, checks the gateway, and rolls everything back if a check fails. It also runs by hand. It signs in through Workload Identity Federation (repository *variables* `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_WIF_PROVIDER`, `GCP_DEPLOYER_SA`); the only repository secrets are `DATA_GOV_SG_API_KEY` and `SNYK_TOKEN`. The services read their own keys from Secret Manager.

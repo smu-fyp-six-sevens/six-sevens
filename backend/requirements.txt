@@ -10,9 +10,9 @@ python-multipart>=0.0.9
 pymupdf>=1.24,<2.0
 rapidocr>=3.0,<4.0
 onnxruntime>=1.20,<2.0
-pillow>=10.0,<12.0
+pillow>=12.2,<14.0
 reportlab>=4.2,<5.0
-pypdf>=4.2,<5.0
+pypdf>=6.19,<7.0
 symspellpy>=6.7,<7.0
 numpy
 ijson  # streams URA's 175 MB land-use GeoJSON when building the zoning index
@@ -20,7 +20,7 @@ openpyxl>=3.1
 pandas>=2.1
 
 # LangGraph pipeline (backend/app/langgraph) — imported unconditionally by
-# main.py (via queue_service -> langgraph.pipeline -> langgraph.graph), so
+# main.py (via workers -> langgraph.pipeline -> langgraph.graph), so
 # these are hard runtime dependencies, not optional.
 langgraph>=1.2,<2.0
 langchain-anthropic>=1.7,<2.0
@@ -34,3 +34,11 @@ opentelemetry-api>=1.27,<2.0
 opentelemetry-sdk>=1.27,<2.0
 opentelemetry-instrumentation-fastapi>=0.48b0
 opentelemetry-exporter-gcp-trace>=1.7,<2.0
+# Local traces to Jaeger (the observability compose profile); used only with OTEL_EXPORTER_OTLP_ENDPOINT.
+opentelemetry-exporter-otlp-proto-http>=1.27,<2.0
+
+# Domain events between services (app/events); imported only with EVENT_TRANSPORT=pubsub.
+google-cloud-pubsub>=2.21,<3.0
+
+# GET /metrics on every service (app/metrics.py), scraped by Managed Prometheus.
+prometheus-client>=0.20,<1.0

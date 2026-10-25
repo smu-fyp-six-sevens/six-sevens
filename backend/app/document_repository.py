@@ -48,6 +48,23 @@ def _run_scheduled_sync(case_id: str) -> None:
     _sync_case_now(case_id)
 
 
+def has_pending_syncs() -> bool:
+    return bool(_sync_timers)
+
+
+def flush_pending_syncs() -> None:
+    """
+    Runs every scheduled refresh now. Called before a request or push returns: Cloud Run throttles CPU
+    once nothing is in flight, so a timer left behind could stall until the instance's next request.
+    """
+    with _sync_lock:
+        pending = list(_sync_timers.items())
+        _sync_timers.clear()
+    for case_id, timer in pending:
+        timer.cancel()
+        _sync_case_now(case_id)
+
+
 def _sync_case_now(case_id: str | None) -> None:
     """
     Best-effort refresh of the case-level submission_finalized cache after a
@@ -476,3 +493,20 @@ def list_documents(
     result = query.execute()
     documents = [DocumentRecord(**_row(row)) for row in result.data]
     return _attach_extracted_fields(documents) if include_fields else documents
+
+
+# What the case queue's status rollup reads (the status and monitoring.is_stuck's timestamps).
+_STATUS_COLUMNS = "id, case_id, filename, status, retry_count, uploaded_at, queued_at, processing_started_at"
+_CASE_CHUNK = 100
+
+
+def list_document_statuses(case_ids: list[str]) -> list[DocumentRecord]:
+    """These cases' documents with only their status columns, one query per 100 cases."""
+    documents: list[DocumentRecord] = []
+    for start in range(0, len(case_ids), _CASE_CHUNK):
+        rows = (
+            supabase_client.table("documents").select(_STATUS_COLUMNS)
+            .in_("case_id", case_ids[start : start + _CASE_CHUNK]).execute().data
+        )
+        documents.extend(DocumentRecord(**_row(row)) for row in rows)
+    return documents

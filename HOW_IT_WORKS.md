@@ -1,6 +1,6 @@
 # How the App Works
 
-A plain-language walkthrough of the system as it is now (updated 2026-10-19): from a loan officer logging in to a case getting a risk score, what is built, and where it is rough. Design rationale is in the other documents; this one describes behaviour.
+A plain-language walkthrough of the system as it is now (updated 2026-10-21): from a loan officer logging in to a case getting a risk score, what is built, and where it is rough. Design rationale is in the other documents; this one describes behaviour.
 
 ---
 
@@ -15,14 +15,17 @@ A loan officer creates a **case** for a company applying for a loan and uploads 
 | Piece | What it is | Where |
 |---|---|---|
 | **Frontend** | React + Tailwind app for the loan officer | `frontend/src` |
-| **Backend** | One FastAPI server: API, in-memory queue, AI pipelines, scoring, live updates | `backend/app` |
+| **Backend** | One FastAPI codebase run as five roles: `api` (reads, officer commands, uploads, live updates), `doc-worker` (read, classify, extract), `detection-worker`, `case-worker` (case analysis) and `audit-metrics` (the audit trail) | `backend/app` |
+| **Events** | The roles trigger each other only through domain events: in one process during development, Pub/Sub in the cloud | `app/events/`, `app/workers/` |
+| **Gateway** | Kong in front of api and audit-metrics (compose and the cloud only) | `deploy/kong/` |
+| **Metrics** | `GET /metrics` on every role (Prometheus) | `metrics.py` |
 | **Database / storage** | Supabase: hosted Postgres and a private `documents` bucket | Supabase project |
 | **AI** | Claude via the Anthropic API. Sonnet for classifying, extracting, leading detection and the case analysis; Haiku for the second-opinion classifier, detection specialists, evidence requests and the summary | `app/langgraph`, `app/case_pipeline` |
 | **Agent framework** | LangGraph: each AI workflow is a graph of steps | same |
 | **Live updates** | Supabase Realtime tells the backend a row changed; the backend pushes a case snapshot over a WebSocket | `realtime_listener.py`, `case_broadcaster.py`, `routers/ws.py` |
 | **Cost logging** | One `perf` log line per unit of work | `query_stats.py` |
 
-Everything runs in **one process**. The 5-service Pub/Sub split in `CLAUDE.md` is not built, and the queue is a list in memory, so queued work is lost on restart.
+`ROLE` decides what a process runs. `uvicorn app.main:app` keeps the default `ROLE=all` and `EVENT_TRANSPORT=inprocess`: every role in one process, each event handled by a background task, as before the split (work in flight is lost on restart). In compose and on Cloud Run each role is its own container, events go through Pub/Sub (`EVENT_TRANSPORT=pubsub`), and each worker receives them on `POST /push/<role>`. The layout, the deployment and how to run it are in `CLOUD_ARCHITECTURE_PLAN.md`.
 
 ---
 
@@ -32,15 +35,15 @@ Everything runs in **one process**. The 5-service Pub/Sub split in `CLAUDE.md` i
 A few named accounts, all in one setting: `AUTH_USERS=alice:password1;bob:password2` (no roles; a password can't contain `;`, `,`, `$` or `#`). `POST /auth/login` returns a signed token carrying the username, which every other call sends; a handler that declares `user: CurrentUser` learns who is acting. A browser WebSocket can't send headers, so the frontend first asks for a one-time ticket (`POST /ws/tickets`) and puts it in the WebSocket URL.
 
 ### Step 1: Creating a case
-A row in `cases`. A database trigger assigns the readable ID (`GLDB-<n>`), skipping any already taken. Cases made locally are `dev = true` so they stay out of the cloud demo's list.
+A row in `cases`. A database trigger assigns the readable ID (`GLDB-<n>`), skipping any already taken. Local runs and the cloud share one Supabase project and one case list.
 
 ### Step 2: Uploading
-PDF, PNG or JPEG, up to 25 MB each, up to 20 per batch. For each file: store it, create a `documents` row (`uploaded`), queue it (`queued`). The request returns immediately.
+PDF, PNG or JPEG, up to 25 MB each, up to 20 per batch. For each file: store it, create a `documents` row (`uploaded`), mark it `queued` and publish `document.uploaded`. The request returns immediately; a failed publish fails that file with a 502.
 
 ### Step 3: Per-document pipeline (read, classify, extract)
-Four workers pull documents off the queue and run the LangGraph document graph:
+The doc-worker takes each `document.uploaded` (or an officer's `document.retry_requested`), claims the document with a compare-and-swap from `queued` to `processing` (so a repeated event is skipped), and runs the LangGraph document graph, `QUEUE_WORKER_CONCURRENCY` at once per process. When it ends it publishes `document.analyzed` or `document.failed`:
 
-1. **Ingest (`processing`, shown as "Classifying").** Download the file; read native PDF text or OCR it, and read file metadata with `exiftool` at the same time (it is a subprocess, so it runs in its own thread while the text extraction uses the single PDF/OCR worker, `cpu_pool.py`, which keeps PyMuPDF off two threads at once). A failed metadata read is stored as an error record, never as "no metadata".
+1. **Ingest (`processing`, shown as "Classifying").** Download the file; read native PDF text or OCR it, and read file metadata with `exiftool` at the same time (it is a subprocess, so it runs in its own thread while the text extraction uses the PDF/OCR pool, `cpu_pool.py`: one thread locally, which keeps PyMuPDF off two threads at once, and two processes on the deployed workers, each with its own PyMuPDF). A failed metadata read is stored as an error record, never as "no metadata".
 2. **Classify.** A rule-based classifier first (free); then a Sonnet agent that may ask a Haiku classifier for a second opinion and, on a later turn, vision. Confidence below **0.85** routes the document to manual review.
 3. **Extract (`extracting`).** One Sonnet call fills the type's schema, with a confidence per field. Fields are stored one row each in `extracted_fields` **before** the document row is updated, so a snapshot never sees a document without its fields. For a document that can belong to a company or a person (a bank statement, a source-of-wealth document) the model also says which it is (`entity_type`).
 4. **Disagreement loop.** If extraction says the type is wrong, the document returns to the classifier once; if still unresolved it is marked `failed`. An unreadable reply fails the document (retryable) without reclassifying it.
@@ -52,7 +55,7 @@ The officer can edit or delete fields, correct the document type (which re-runs 
 The case page also shows the **requirements checklist** (required types, proof of address per person, both sides of each ID). When everything required is covered, `submission_finalized` is set. It is recomputed after classification, field saves, rejection, moves and deletes, batched per case over 1.5 seconds so a burst of classifications costs one recompute, and written only when its value changes. Nothing reads it yet.
 
 ### Step 5: The Detection Agent (`approved` → `detecting` → `detected`)
-Approval starts detection in the background, **two runs at a time** (`DETECTION_CONCURRENCY`); the rest wait, shown as "Approved".
+Approval publishes `document.approved`; the detection-worker runs it, **two runs at a time** per process (`DETECTION_CONCURRENCY`); the rest wait, shown as "Approved". A cancel or retry is an event too. The run ends with `document.detected` or `detection.failed`.
 
 1. **Load context.** The document and its fields are fetched once and shared by every tool in the run. The file's contents are read too (`fraud_detection/shared/file_facts.py`): its kind, page count, whether a PDF has selectable text, and the size of each distinct embedded image.
 2. **Lead plans (Sonnet).** One brief per specialist. The lead sees those file facts and says which checks do not apply.
@@ -69,7 +72,7 @@ Approval starts detection in the background, **two runs at a time** (`DETECTION_
    - **A hard breach cannot be dismissed.** A finding a check marked `impossible` (an arithmetic that cannot hold, an identifier absent from its register) with confident extraction stays on the report as high, marked not approved by the specialist, with the specialist's note. A finding that needs review, or is only a signal, can still be dismissed.
    - **Font check.** Besides comparing a piece of text with the neighbours in its column, it compares a number with the other cells in its row (a lone table value has no column) and flags a number in a typeface no other number uses. Both fire only for a style that at most two runs in the document use, so a legitimate repeated style is not flagged.
    - **Metadata.** Subject and title are read out for the specialist to judge. No rule inspects them, and they do not affect whether the check can assess a document. A specialist can mention them in its summary but cannot create a scored finding.
-   - **Tool time limits** count the time a tool works, not the time its job waits for the single CPU worker; a wait has its own cap (`CPU_QUEUE_TIMEOUT_SECONDS`).
+   - **Tool time limits** count the time a tool works, not the time its job waits for a free CPU worker; a wait has its own cap (`CPU_QUEUE_TIMEOUT_SECONDS`).
 4. **Lead reviews**, and may request one second look from another specialist.
 5. **Merge (code).** One report with a verdict: `flagged`, `inconclusive` or `clean`. When a second look dismisses a finding the first pass kept, the later view stands: the finding is removed from the report, the flags and the score (the dismissal stays visible under the specialist). A check that failed and then ran in a retry or the second look is not listed as unable to assess.
 6. **Save.** The report is written to the document's trace, then the findings a specialist **approved** are written to `flags`, then the document becomes `detected`.
@@ -79,7 +82,7 @@ Approval starts detection in the background, **two runs at a time** (`DETECTION_
 If detection crashes it is recorded, the document returns to `approved`, and the officer can retry. Single checks can be run on demand once a report exists.
 
 ### Step 6: Case Analysis (on demand, the only source of the score)
-When every approved document is `detected`, the officer clicks **Run case analysis** (`POST /cases/{id}/analysis/run`). One run, in order:
+When every approved document is `detected`, the officer clicks **Run case analysis** (`POST /cases/{id}/analysis/run`). The api records a `running` run and publishes `case.analysis.requested`; the case-worker runs it and publishes `case.analysis.completed`. A second request is refused while the latest run is still `running`; one still `running` after `CASE_ANALYSIS_TIMEOUT_SECONDS` (15 minutes) reads as interrupted and can be run again. One run, in order:
 
 1. **Deterministic comparisons (code).** Company name, address, UEN, and a person's ID number, name and details (date of birth, race, sex, nationality) across documents. A person is compared against every document that names them, not just the NRIC. Each difference is its own finding (`xd-det-N`), written as one plain sentence naming the documents by type, and merged by value so one wrong ID on three documents is one row. Differences in ID, UEN or date of birth are high; the rest are medium. Checks that agreed are listed as "checked and consistent". The protected details are compared only here, in code, and never shown to any model.
 2. **Dossier (code).** A digest of each approved document's fields, derived transaction facts and detection findings. A person's protected attributes are **removed**. The code-found differences are added as established facts, grouped by value (at most 5,000 characters), with the instruction not to restate them. The planner's whole input is capped at 30,000 characters.
@@ -109,7 +112,7 @@ A case that was never analysed shows "Not scored yet". If documents change after
 
 ## 4. How live updates work
 
-1. A change to a `documents` row fires a Supabase Realtime event; one subscription serves the whole server.
+1. A change to a `documents`, `cases` or `case_analysis_runs` row fires a Supabase Realtime event; one subscription serves the whole api process. This is how a result written by a worker in another service reaches the browser (`case_analysis_runs` must be in the `supabase_realtime` publication).
 2. The backend waits **0.5 s** to merge a burst, then builds a **case snapshot**: case, documents with fields, detection states, the latest analysis (risk, additional documents, overview) and case-match. For a case with no analysis it reads only each report's verdict, not the full report.
 3. It pushes the snapshot to every browser with that case open (`/ws/cases/{case_id}`). **No snapshot is built for a case nobody has open.**
 4. **One build runs per case at a time.** A request that arrives mid-build waits for one follow-up build shared by everyone who arrived meanwhile; it is never handed the in-flight result, which may predate its change.
@@ -133,13 +136,14 @@ uploaded → queued → processing → extracting → analyzed ──approve─�
 
 | Table | Holds |
 |---|---|
-| `cases` | company name, GreenLink ID, `submission_finalized`, dev flag. `recommended_additional_documents` (jsonb) holds `[]` until a case is analysed, then the whole `additional_documents` result of its latest complete run; the case summary returns it as `additional_documents`. The summary's `missing_requirements` (the checklist types no accepted document covers yet) is computed on every read, not stored |
+| `cases` | company name, GreenLink ID, `submission_finalized` (the old `dev` column was dropped on 2026-10-24). `recommended_additional_documents` (jsonb) holds `[]` until a case is analysed, then the whole `additional_documents` result of its latest complete run; the case summary returns it as `additional_documents`. The summary's `missing_requirements` (the checklist types no accepted document covers yet) is computed on every read, not stored |
 | `documents` | one row per file: status, type, confidences, routing, requirements fulfilled, file metadata (read only by the metadata checks) |
 | `extracted_fields` | one row per field per document |
 | `langgraph_trace` | one JSON trace per document: pipeline steps and the **full detection report** |
 | `flags` | the per-document findings a specialist approved, with severity, check, description and evidence |
 | `case_analysis_runs` | each run: findings (including `xd-det-N`), `consistent_checks`, outlook, summary, **risk**, **additional documents**, audit, step trace |
 | `risk_scores` (+ `latest_risk_scores` view) | one row per completed run: score, level, reasoning, `flag_ids` |
+| `audit_events` | every domain event, stored by audit-metrics (id = the event's id, so a redelivery is ignored): who (officer, agent or system), what, which case or document, outcome, timing, and Kong's request id; read at `GET /audit/events` |
 | Storage bucket `documents` | the uploaded files |
 
 Deleting a document removes its fields, flags, trace and file; deleting a case removes its documents, then its runs, scores and flags. The schema is changed directly in Supabase (no SQL in the repo); `README.md` lists the objects the backend expects.
@@ -152,9 +156,16 @@ Required: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `AN
 
 | Variable | Default | Effect |
 |---|---|---|
-| `QUEUE_WORKER_CONCURRENCY` | 4 | documents processed at once |
+| `ROLE` | `all` | `all`, one role, or a comma list (`api`, `doc-worker`, `detection-worker`, `case-worker`, `audit-metrics`) |
+| `EVENT_TRANSPORT` | `inprocess` | `pubsub` publishes to Pub/Sub (needs `GOOGLE_CLOUD_PROJECT`; the emulator when `PUBSUB_EMULATOR_HOST` is set) |
+| `PUBSUB_TOPIC` | `domain-events` | the one topic |
+| `PUSH_AUDIENCE`, `PUSH_SERVICE_ACCOUNT` | — | when set, `/push` requires Pub/Sub's OIDC token for that audience from that account |
+| `CORS_IN_APP` | true | false behind Kong, which answers CORS itself |
+| `CASE_ANALYSIS_TIMEOUT_SECONDS` | 900 | a run still `running` after this reads as interrupted |
+| `QUEUE_WORKER_CONCURRENCY` | 4 | documents one doc-worker process runs at once |
 | `DETECTION_CONCURRENCY` | 2 | detection runs at once |
 | `CPU_WORKER_CONCURRENCY` | 1 | threads for PDF, OCR and forensic work; PyMuPDF is not thread-safe |
+| `CPU_WORKER_PROCESSES` | 0 | processes for that work instead, each with its own PyMuPDF (2 on the doc-worker and detection-worker); a bound method or closure still uses the thread |
 | `DOCUMENT_MAX_MODEL_CALLS` | 24 | model calls one document's classify and extract run may make |
 | `DETECTION_MAX_MODEL_CALLS` | 30 | model calls one detection run may make; past it the verdict can't be clean |
 | `LLM_MAX_RETRIES`, `LLM_TIMEOUT_SECONDS` | 1, 300 | the Anthropic client's own retries (each is billed) and one request's time limit |
@@ -181,15 +192,36 @@ GET /cases -> 3 supabase (GET cases x1, GET documents x1, GET latest_risk_scores
 detection doc=a25f9fc4 -> 12 supabase (...) | 11 claude (26601 in / 3008 out tokens; cache read 0 / write 0), 43813ms total
 ```
 
+The same counts are also on `GET /metrics` for Prometheus (`metrics.py`), together with:
+- request rates and latencies, events published and handled, and stage durations;
+- Claude calls, tokens, cost and latency per agent and model, with list prices from `pricing.py`;
+- cost and calls per unit of work, and detection tool outcomes.
+
+Labels are routes, event types, stages, agents and models, never ids. Kong blocks `/metrics` from outside. Grafana's four dashboards (services, pipeline, agents, cost) read these metrics (`deploy/grafana`, `CLOUD_ARCHITECTURE_PLAN.md` section 7).
+
+**Traces.** OpenTelemetry (`telemetry.py`) is off unless `OTEL_ENABLED=true`, which Terraform sets in the cloud. Spans go to:
+1. OTLP, when `OTEL_EXPORTER_OTLP_ENDPOINT` is set (Jaeger locally);
+2. otherwise Cloud Trace, when `GOOGLE_CLOUD_PROJECT` names a real project;
+3. otherwise the console.
+
+Each event's Pub/Sub message carries `traceparent`, so one upload is one trace across services. `OTEL_TRACES_SAMPLE_RATIO` (default 1.0) samples fewer.
+
+**Stuck work** (`sweeper.py`, `CLOUD_ARCHITECTURE_PLAN.md` section 5). In the cloud, Cloud Scheduler publishes `sweep.requested` every 2 minutes and audit-metrics runs the sweeper (`SWEEPER_ENABLED`; off locally, because the database is shared).
+- **What counts as stuck:** a document uploaded or queued for over 5 minutes (its event was lost), or processing, extracting or detecting for over 15 minutes (its run died); or a case analysis still running past `CASE_ANALYSIS_TIMEOUT_SECONDS`.
+- **What happens:** the sweeper publishes `recovery.requested` to the worker that owns the stage. That worker resets the status (compare-and-swap) and reruns it. After 3 attempts it fails the document (detection: back to approved with an error) and publishes `recovery.exhausted`. A stuck case analysis is marked failed, not rerun.
+- **Locally:** `python -m app.sweeper --once --case <id>` runs one pass for one case and does the recovery in the same process.
+- **Cancels:** a run checks every 5 seconds for a cancel made through another instance (Pub/Sub mode only).
+- **Approvals:** an approval whose event can't be published is undone.
+
 Every 60 seconds a summary of Realtime and WebSocket traffic (events received, ignored, merged, connects, pushes) and of calls made outside any unit of work is also logged. Rough budgets: case list 3 queries; a snapshot 5; approve 2; delete or add a field 6–7; detection about 12.
 
 ---
 
 ## 9. What is built and what isn't
 
-**Built:** upload and queue; classify and extract with the reclassify loop; officer review tools; requirements checklist; case-match; the Detection Agent with 10 checks and on-demand single checks; per-document flags; the case analysis (deterministic and agent cross-document findings, score, outlook, additional documents, summary); live WebSocket updates; cost logging; a manual Cloud Run deploy workflow.
+**Built:** upload and queue; classify and extract with the reclassify loop; officer review tools; requirements checklist; case-match; the Detection Agent with 10 checks and on-demand single checks; per-document flags; the case analysis (deterministic and agent cross-document findings, score, outlook, additional documents, summary); live WebSocket updates; case notes; cost logging and per-case Claude cost; the service split on Cloud Run (roles, domain events, Pub/Sub push, audit trail, stuck-work recovery, `/metrics`, Grafana, traces, alerts), Kong, the compose stack, Terraform, and CI/CD that deploys every green push to `main` (`CLOUD_ARCHITECTURE_PLAN.md`).
 
-**Not built:** the Output Aggregator; automatic case analysis when all documents are scanned; the 5-service Pub/Sub split; case-level flags; an officer review flow for flags (the `status` and `reviewed_by` columns exist, unused); Prometheus and Grafana. Open items are in `PENDING_WORK.md`.
+**Not built:** the Output Aggregator; automatic case analysis when all documents are scanned; case-level flags; an officer review flow for flags (the `status` and `reviewed_by` columns exist, unused); the case dashboard (`/dashboard` is mock data). Open items are in `PENDING_WORK.md` and the cloud plan's section 9.
 
 ## 10. Known rough edges
 
@@ -197,6 +229,12 @@ Every 60 seconds a summary of Realtime and WebSocket traffic (events received, i
 - Detection specialists run on Haiku, whose minimum cacheable prompt is longer than their prompts, so caching there does nothing. It works for classification, extraction and the case analysis.
 - Re-running the analysis on unchanged documents spends the tokens again; nothing short-circuits an identical fingerprint.
 - The first requester of a burst of snapshot requests can wait for a follow-up build.
+- Known limits of the split:
+  - On-demand single checks run in the api process.
+  - A WebSocket ticket replayed within its 10 s on a second api instance would pass.
+  - There's no shared Anthropic rate budget across instances.
+
+  Stuck work, cancels across instances, unpublished approvals and signed tickets are handled (see "Stuck work" above).
 
 ---
 
@@ -204,10 +242,11 @@ Every 60 seconds a summary of Realtime and WebSocket traffic (events received, i
 
 | To understand… | Read |
 |---|---|
-| Startup, routers, auth | `backend/app/main.py`, `auth.py` |
-| Upload and queue | `routers/upload.py`, `queue_service.py` |
+| Startup, roles, routers, auth | `backend/app/main.py`, `auth.py`, `config.py` |
+| Events and their transport | `events/` (`types.py`, `bus.py`, `push.py`, `registry.py`) |
+| Upload and the doc-worker | `routers/upload.py`, `workers/documents.py` |
 | Classify and extract | `langgraph/pipeline.py`, `graph.py`, `classify_graph.py`, `extract.py` |
-| Approve and detection | `routers/documents.py` (`_launch_detection`), `langgraph/detection/graph.py`, `specialists.py`, `tools.py` |
+| Approve and detection | `routers/documents.py` (`approve_document`), `workers/detection.py`, `langgraph/detection/graph.py`, `specialists.py`, `tools.py` |
 | The forensic checks | `fraud_detection/` |
 | Flags | `flags_repository.py` |
 | Case snapshot, checklist, case list | `case_service.py` |
@@ -215,4 +254,5 @@ Every 60 seconds a summary of Realtime and WebSocket traffic (events received, i
 | Risk score | `case_pipeline/risk/case_risk.py`, `store.py` |
 | Case analysis | `case_pipeline/service.py`, `cross_document/deterministic.py`, `agents.py`, `verify.py`, `bias.py`, `risk/outlook.py` |
 | Live updates | `realtime_listener.py`, `case_broadcaster.py`, `routers/ws.py`, `frontend/src/services/caseSocket.ts` |
-| Cost logging | `query_stats.py` |
+| Cost logging and metrics | `query_stats.py`, `metrics.py` |
+| Audit trail | `audit.py`, `routers/audit.py` |

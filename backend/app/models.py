@@ -240,11 +240,6 @@ class CaseRecord(BaseModel):
     additional_documents: AdditionalDocuments | None = Field(default=None, exclude=True)
     created_at: datetime
     updated_at: datetime
-    # Set automatically at creation from settings.IS_CLOUD_DEPLOYMENT (never
-    # by the caller) — True for anything created outside the cloud
-    # deployment, hidden from the cloud case queue during UAT. See
-    # case_repository.create_case / list_cases.
-    dev: bool = False
 
     @model_validator(mode="before")
     @classmethod
