@@ -25,7 +25,8 @@ from .tools import _result
 logger = logging.getLogger("classifier_pipeline.langgraph.detection.tool_timeout")
 
 # These call a model or an outside registry.
-_SLOW_TOOLS = frozenset({"ai_generation_tool", "numerical_checks_tool", "external_validation_tool"})
+# prompt_injection_tool re-reads (and for an image, OCRs) a document from before the content guard.
+_SLOW_TOOLS = frozenset({"ai_generation_tool", "numerical_checks_tool", "external_validation_tool", "prompt_injection_tool"})
 # Each wrapper guard_tool made -> the coroutine it limits, so guarding again (or guarding a copy) re-wraps the
 # original instead of stacking limits or keeping a stale one. Not tool ids: Python reuses them after collection.
 _originals: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()

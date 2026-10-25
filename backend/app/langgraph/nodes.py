@@ -15,8 +15,9 @@ import logging
 
 from . import extract, text_cache, trace
 from .state import DocumentGraphState
-from .. import document_repository, extracted_fields_repository, storage_service
+from .. import document_repository, extracted_fields_repository, metrics, storage_service
 from ..config import settings
+from ..guardrails import content_guard
 from .extraction_prompts import schema_field_names
 from ..ingestion.ingestion_service import ingest_document, content_type_from_filename
 from ..ingestion.metadata_extractor import EXTRACTION_ERROR_KEY, extract_metadata
@@ -81,8 +82,10 @@ async def persist_extracted_fields(document_id: str, document_type: str, extract
     )
 
 
-async def ingest_document_text(document_id: str, document) -> str:
+async def ingest_document_text(document_id: str, document) -> tuple[str, str | None]:
     """
+    The text the models will read, and the content guard's risk for the document (see _guard_document).
+
     Downloads the stored file and runs text extraction (native PDF text, or
     OCR for scans/images) once, up front — before classification, so the
     agent can decide for itself whether to fall back to vision. Deliberately
@@ -122,7 +125,37 @@ async def ingest_document_text(document_id: str, document) -> str:
             document_id, ingestion_result["extraction_method"],
         )
 
-    return ingestion_result["raw_text"]
+    return await _guard_document(document_id, file_bytes, content_type, ingestion_result["raw_text"], metadata)
+
+
+async def _guard_document(
+    document_id: str, file_bytes: bytes, content_type: str, raw_text: str, metadata: dict | None,
+) -> tuple[str, str | None]:
+    """
+    Layer 1 of the guardrails (guardrails/content_guard.py): records what the content guard found as the
+    document's guard_result, for detection to report, and returns the text the models will read, with flagged
+    hidden text taken out, plus the risk. Never fails the ingest: a guard that could not run is saved with no
+    checks run, which detection reads as unable to assess.
+    """
+    try:
+        result, removals = await run_cpu(content_guard.scan, file_bytes, content_type, raw_text, metadata)
+    except Exception as exc:
+        logger.exception("Document %s: content guard failed", document_id)
+        result, removals = content_guard.not_run(f"{type(exc).__name__}: {exc}"), []
+    metrics.content_guard_results.labels(result["risk"] or "not_run").inc()
+    # What was found, not just how much: each span's quote, where it was, why it counts as hidden, which check
+    # caught it. Document text, like the rest of the trace.
+    trace.record(
+        document_id, "content_guard", risk=result["risk"], checks_run=result["checks_run"],
+        spans=result["spans"], spans_dropped=result["spans_dropped"], hidden_spans_removed=len(removals),
+        error=result.get("error"),
+    )
+    try:
+        await asyncio.to_thread(document_repository.update_guard_result, document_id, result)
+    except Exception as exc:
+        # Until the documents.guard_result column exists the write fails; the ingest carries on regardless.
+        logger.warning("Document %s: guard_result not saved: %s", document_id, exc)
+    return content_guard.clean_text(raw_text, removals), result["risk"]
 
 
 def _is_unrecognised(document_type: str | None) -> bool:
@@ -133,11 +166,17 @@ def _is_below_threshold(confidence: float | None) -> bool:
     return confidence is None or confidence < settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
 
 
-async def record_classification_result(document_id: str, classification: dict) -> None:
+# A document the content guard rated this risky is never accepted on the classifier's word alone.
+_GUARD_REVIEW_RISKS = frozenset({"medium", "high"})
+
+
+async def record_classification_result(document_id: str, classification: dict, guard_risk: str | None = None) -> None:
     """
     Records the classification-stage result (type, confidence, outcome) and
     enforces the confidence threshold as a system-level gate — the agent's
-    own needs_manual_review flag is OR'd in as an extra signal.
+    own needs_manual_review flag is OR'd in as an extra signal, and so is a
+    medium or high content guard risk (hidden text, or an instruction to the AI
+    in hidden text or metadata), whatever the classifier was told.
     document_repository.record_classification resyncs the case's
     submission_finalized flag itself, since this is where a document's
     fulfilled_requirements (and so the case's coverage) first changes.
@@ -155,6 +194,7 @@ async def record_classification_result(document_id: str, classification: dict) -
         not unnamed
         and not _is_below_threshold(confidence)
         and not classification.get("needs_manual_review")
+        and guard_risk not in _GUARD_REVIEW_RISKS
     )
     if unnamed:
         # Written back into the dict (not just a local) so the caller's later
@@ -191,7 +231,7 @@ async def ingest_node(state: DocumentGraphState) -> dict:
         return {"status": "failed", "failure_reason": f"Document {document_id} not found"}
 
     try:
-        raw_text = await ingest_document_text(document_id, document)
+        raw_text, guard_risk = await ingest_document_text(document_id, document)
     except IngestError as exc:
         trace.record(document_id, "ingest", case_id=document.case_id, error=str(exc))
         return {"status": "failed", "failure_reason": str(exc)}
@@ -204,6 +244,7 @@ async def ingest_node(state: DocumentGraphState) -> dict:
         "storage_path": document.storage_path,
         "text_hash": text_hash,
         "text_available": bool(raw_text.strip()),
+        "guard_risk": guard_risk,
     }
 
 
@@ -213,7 +254,7 @@ async def finalise_classification_node(state: DocumentGraphState) -> dict:
     raw_classification = state.get("classification")
     assert raw_classification is not None
     classification = dict(raw_classification)
-    await record_classification_result(state["document_id"], classification)
+    await record_classification_result(state["document_id"], classification, guard_risk=state.get("guard_risk"))
     # record_classification_result may normalise document_type (unnamed ->
     # "unrecognised") in place — write the normalised dict back to state so
     # extract_node runs against the same type that was actually persisted.

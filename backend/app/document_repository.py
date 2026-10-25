@@ -363,6 +363,26 @@ def update_metadata(document_id: str, metadata: dict) -> None:
     ).execute()
 
 
+def update_guard_result(document_id: str, guard_result: dict) -> None:
+    """
+    What the content guard found at ingest (guardrails/content_guard.py), for detection's prompt injection
+    check. Needs the documents.guard_result jsonb column. Written on every ingest, so a rerun replaces it.
+    """
+    supabase_client.table("documents").update({"guard_result": guard_result}).eq("id", document_id).execute()
+
+
+def get_guard_result(document_id: str) -> dict | None:
+    """The saved guard_result, or None: none saved yet (a document from before the guard), or no column."""
+    try:
+        rows = supabase_client.table("documents").select("guard_result").eq("id", document_id).execute().data
+    except Exception as exc:
+        logger.warning("Document %s: guard_result could not be read: %s", document_id, exc)
+        return None
+    row = rows[0] if rows else None
+    value = row.get("guard_result") if isinstance(row, dict) else None
+    return value if isinstance(value, dict) else None
+
+
 # Tables whose rows belong to one document, besides extracted_fields (which has its own helper).
 _DOCUMENT_CHILD_TABLES = ("flags", "langgraph_trace", notes_repository.TABLE)
 

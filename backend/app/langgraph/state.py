@@ -52,6 +52,8 @@ class DocumentGraphState(TypedDict, total=False):
     # storing the text itself.
     text_hash: str | None
     text_available: bool
+    # The content guard's risk (guardrails/content_guard.py); medium or high sends the document to manual review.
+    guard_risk: str | None
 
     # Classify subgraph. rule_result is the only deterministically-computed
     # input — llm_classify_tool/vision_llm results live only inside

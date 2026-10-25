@@ -101,7 +101,7 @@ async def _rerun_extraction(document_id: str) -> None:
     document_type = document.document_type or "unrecognised"
 
     try:
-        raw_text = await nodes.ingest_document_text(document_id, document)
+        raw_text, _ = await nodes.ingest_document_text(document_id, document)
     except nodes.IngestError as exc:
         await nodes.fail_document(document_id, str(exc), document_type=document_type)
         return
