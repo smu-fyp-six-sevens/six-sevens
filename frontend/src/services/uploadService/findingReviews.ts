@@ -44,6 +44,39 @@ export async function setFindingVerdict(
   return (await response.json()) as CaseFindingReviews;
 }
 
+export interface FindingVerdictInput {
+  scope: ReviewScope;
+  documentId: string | null;
+  findingId: string;
+  checkName: string;
+  checkCode?: string | null;
+  summary: string;
+  verdict: ReviewVerdict | null;
+}
+
+// One group's review in one request: the findings the officer ticked are correct, the rest wrong.
+export async function setFindingVerdicts(caseId: string, verdicts: FindingVerdictInput[]): Promise<CaseFindingReviews> {
+  const response = await authFetch(`/cases/${caseId}/finding-reviews/verdicts`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      verdicts: verdicts.map((review) => ({
+        scope: review.scope,
+        document_id: review.documentId,
+        finding_id: review.findingId,
+        check_name: review.checkName,
+        check_code: review.checkCode ?? null,
+        summary: review.summary,
+        verdict: review.verdict,
+      })),
+    }),
+  });
+
+  await assertOk(response, 'Failed to save the review');
+
+  return (await response.json()) as CaseFindingReviews;
+}
+
 // An issue no finding raised, against the check that should have caught it (a false negative).
 export async function reportMissedIssue(
   caseId: string,

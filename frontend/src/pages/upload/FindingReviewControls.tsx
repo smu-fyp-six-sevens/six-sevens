@@ -1,40 +1,49 @@
 import { useState } from 'react';
-import type { FindingReview, MetricsSummary, ReviewScope, ReviewVerdict } from '../../services/uploadService';
+import type { FindingReview, MetricsSummary, ReviewScope } from '../../services/uploadService';
 import { formatCheck, formatRate } from '../../utils/checkLabels';
 
-// ✓ Correct / ✗ Wrong on one finding. Pressing the chosen one again clears it.
-export function VerdictButtons({
-  verdict,
-  disabled,
-  onChange,
+export type GroupReviewStatus = 'not_reviewed' | 'saved' | 'unsaved';
+
+// Above a group's findings: tick all of them at once, and save the group's review. Saving is what makes an
+// unticked finding count as wrong; before that, nothing in the group counts.
+export function GroupReviewBar({
+  checkedCount,
+  total,
+  status,
+  saving,
+  onToggleAll,
+  onSave,
 }: {
-  verdict: ReviewVerdict | null;
-  disabled: boolean;
-  onChange: (verdict: ReviewVerdict | null) => void;
+  checkedCount: number;
+  total: number;
+  status: GroupReviewStatus;
+  saving: boolean;
+  onToggleAll: (checked: boolean) => void;
+  onSave: () => void;
 }) {
+  const allChecked = total > 0 && checkedCount === total;
   return (
-    <span className="verdict-buttons" role="group" aria-label="Is this finding correct?">
-      <button
-        type="button"
-        className={`verdict-button verdict-button--correct${verdict === 'correct' ? ' verdict-button--on' : ''}`}
-        aria-pressed={verdict === 'correct'}
-        disabled={disabled}
-        title="This finding is correct: a real issue"
-        onClick={() => onChange(verdict === 'correct' ? null : 'correct')}
-      >
-        ✓ Correct
+    <div className="group-review-bar">
+      <label className="group-review-select-all">
+        <input
+          type="checkbox"
+          checked={allChecked}
+          ref={(input) => {
+            if (input) input.indeterminate = checkedCount > 0 && !allChecked;
+          }}
+          disabled={saving}
+          onChange={(event) => onToggleAll(event.target.checked)}
+        />
+        Select all
+      </label>
+      <span className="group-review-hint">Tick the findings that are real issues and save its review. Report anything detection missed.</span>
+      <span className={`group-review-status group-review-status--${status}`}>
+        {status === 'saved' ? 'Review saved' : status === 'unsaved' ? 'Unsaved changes' : 'Not reviewed yet'}
+      </span>
+      <button type="button" className="group-review-save" disabled={saving || status === 'saved'} onClick={onSave}>
+        {saving ? 'Saving…' : 'Save review'}
       </button>
-      <button
-        type="button"
-        className={`verdict-button verdict-button--wrong${verdict === 'wrong' ? ' verdict-button--on' : ''}`}
-        aria-pressed={verdict === 'wrong'}
-        disabled={disabled}
-        title="This finding is wrong: not a real issue"
-        onClick={() => onChange(verdict === 'wrong' ? null : 'wrong')}
-      >
-        ✗ Wrong
-      </button>
-    </span>
+    </div>
   );
 }
 
@@ -156,7 +165,7 @@ export function ReviewSummary({ caseSummary, crossDocument }: { caseSummary: Met
         <h3>Detection accuracy</h3>
         <span className="review-summary-hint">
           {reviewed === 0
-            ? 'Mark each finding correct or wrong, and report anything detection missed.'
+            ? 'Open a document, tick the findings that are real issues and save its review. Report anything detection missed.'
             : `${caseSummary.correct} correct · ${caseSummary.wrong} wrong · ${caseSummary.missed} missed`}
         </span>
       </div>

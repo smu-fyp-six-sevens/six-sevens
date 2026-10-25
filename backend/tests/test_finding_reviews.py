@@ -79,9 +79,10 @@ def test_case_metrics_split_per_document_and_across_documents() -> None:
     assert (result.case.correct, result.case.wrong) == (2, 1)
 
 
-def test_the_document_checks_are_the_specialists_tools() -> None:
+def test_the_checks_are_the_specialists_tools_and_the_finding_categories() -> None:
     tools = {tool.name for spec in SPECIALISTS.values() for tool in spec.tools}
-    assert set(detection_metrics.DOCUMENT_CHECKS) == tools
+    assert set(detection_metrics.document_checks()) == tools
+    assert "cross_document_variance" in detection_metrics.CASE_CHECKS
 
 
 # --- endpoints -----------------------------------------------------------------------------------------------
@@ -125,7 +126,7 @@ def test_a_verdict_is_signed_by_the_officer_and_returns_the_metrics(repos) -> No
     kwargs = reviews_repo.set_verdict.call_args.kwargs
     assert kwargs["reviewer"] == TEST_USER and kwargs["verdict"] == "correct" and kwargs["check_code"] == "PAY.NET"
     assert response.json()["case"]["precision"] == 1.0
-    assert response.json()["checks"]["document"] == list(detection_metrics.DOCUMENT_CHECKS)
+    assert response.json()["checks"]["document"] == list(detection_metrics.document_checks())
 
 
 def test_a_null_verdict_clears_the_mark(repos) -> None:
@@ -145,6 +146,30 @@ def test_a_review_must_name_a_check_of_its_scope_and_a_document_in_the_case(repo
     document_repo.get_document.return_value = _document(case_id=OTHER_CASE_ID)
     assert client.put(f"/cases/{CASE_ID}/finding-reviews/verdict", json=_VERDICT).status_code == 404
     reviews_repo.set_verdict.assert_not_called()
+
+
+def test_a_group_review_saves_every_ticked_finding_correct_and_the_rest_wrong(repos) -> None:
+    reviews_repo, _ = repos
+    response = client.put(f"/cases/{CASE_ID}/finding-reviews/verdicts", json={"verdicts": [
+        _VERDICT,
+        {**_VERDICT, "finding_id": "33333333:spelling_tool-1", "check_name": "spelling_tool", "verdict": "wrong"},
+    ]})
+    assert response.status_code == 200
+    saved = [(c.kwargs["finding_id"], c.kwargs["verdict"], c.kwargs["reviewer"]) for c in reviews_repo.set_verdict.call_args_list]
+    assert saved == [
+        ("33333333:numerical_checks_tool-1", "correct", TEST_USER),
+        ("33333333:spelling_tool-1", "wrong", TEST_USER),
+    ]
+
+
+def test_a_group_review_with_one_bad_entry_saves_nothing(repos) -> None:
+    reviews_repo, _ = repos
+    response = client.put(f"/cases/{CASE_ID}/finding-reviews/verdicts", json={"verdicts": [
+        _VERDICT, {**_VERDICT, "finding_id": "x", "check_name": "not_a_check"},
+    ]})
+    assert response.status_code == 400
+    reviews_repo.set_verdict.assert_not_called()
+    assert client.put(f"/cases/{CASE_ID}/finding-reviews/verdicts", json={"verdicts": []}).status_code == 422
 
 
 def test_a_missed_issue_is_recorded_against_the_check_that_should_have_caught_it(repos) -> None:

@@ -18,6 +18,7 @@ from .. import detection_metrics, document_repository, finding_reviews_repositor
 from ..auth import CurrentUser
 from ..models import (
     CaseFindingReviews, CaseRecord, DetectionMetrics, ReportMissedIssueRequest, SetFindingVerdictRequest,
+    SetFindingVerdictsRequest,
 )
 from ._dependencies import bad_gateway_on_error, get_case_or_404, to_thread_or_502
 
@@ -34,7 +35,7 @@ async def _case_reviews(case_id: str) -> CaseFindingReviews:
 
 async def _check_target(case_id: str, scope: str, document_id: UUID | None, check_name: str) -> str | None:
     """The document id as a string, after checking the document is in this case and the check fits the scope."""
-    if check_name not in detection_metrics.CHECKS_BY_SCOPE[scope]:
+    if check_name not in detection_metrics.checks_by_scope()[scope]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"'{check_name}' is not a {scope} check")
     if document_id is None:
         return None
@@ -69,6 +70,30 @@ async def set_finding_verdict(
                 case_id=case_id, scope=request.scope, document_id=document_id, finding_id=request.finding_id,
                 check_name=request.check_name, check_code=request.check_code, summary=request.summary,
                 verdict=request.verdict, reviewer=user,
+            )
+        return await _case_reviews(case_id)
+
+
+@router.put("/cases/{case_id}/finding-reviews/verdicts", response_model=CaseFindingReviews)
+async def set_finding_verdicts(
+    case_id: str, request: SetFindingVerdictsRequest, user: CurrentUser, case: CaseRecord = Depends(get_case_or_404),
+) -> CaseFindingReviews:
+    """Saves one group's review in one request: the officer ticked the findings that are real (correct) and left
+    the rest (wrong). Every target is checked before anything is written, so a bad entry saves nothing."""
+    with bad_gateway_on_error(_SAVE_FAILED, "Failed to save verdicts on case %s", case_id):
+        documents = {
+            (item.scope, item.document_id): await _check_target(case_id, item.scope, item.document_id, item.check_name)
+            for item in request.verdicts
+        }
+        for item in request.verdicts:
+            if item.verdict is None:
+                await asyncio.to_thread(finding_reviews_repository.clear_verdict, case_id, item.finding_id)
+                continue
+            await asyncio.to_thread(
+                finding_reviews_repository.set_verdict,
+                case_id=case_id, scope=item.scope, document_id=documents[(item.scope, item.document_id)],
+                finding_id=item.finding_id, check_name=item.check_name, check_code=item.check_code,
+                summary=item.summary, verdict=item.verdict, reviewer=user,
             )
         return await _case_reviews(case_id)
 

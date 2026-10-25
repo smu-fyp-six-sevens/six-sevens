@@ -629,6 +629,12 @@ class SetFindingVerdictRequest(_ReviewTarget):
     verdict: ReviewVerdict | None = None
 
 
+class SetFindingVerdictsRequest(BaseModel):
+    """A whole group's review at once: every finding the officer looked at, each correct or wrong."""
+
+    verdicts: list[SetFindingVerdictRequest] = Field(min_length=1, max_length=200)
+
+
 class ReportMissedIssueRequest(_ReviewTarget):
     """An issue the officer found that no finding raised, against the check that should have caught it."""
 

@@ -4,7 +4,7 @@ import {
   deleteFindingReview,
   getCaseFindingReviews,
   reportMissedIssue,
-  setFindingVerdict,
+  setFindingVerdicts,
 } from '../../services/uploadService';
 
 export function findingScope(finding: CaseRiskFinding): ReviewScope {
@@ -57,25 +57,29 @@ export function useFindingReviews(caseId: string, enabled: boolean) {
     }
   }, []);
 
-  // A row can stand for several identical findings (same check and summary): the verdict goes on each.
-  const setVerdict = useCallback(
-    (key: string, findings: CaseRiskFinding[], verdict: ReviewVerdict | null) =>
-      run(key, async () => {
-        let latest: CaseFindingReviews | null = null;
-        for (const finding of findings) {
-          const scope = findingScope(finding);
-          latest = await setFindingVerdict(caseId, {
-            scope,
-            documentId: scope === 'document' ? finding.document_id : null,
-            findingId: finding.finding_id,
-            checkName: findingCheck(finding),
-            checkCode: finding.check_code ?? null,
-            summary: finding.summary,
-            verdict,
-          });
-        }
-        return latest ?? getCaseFindingReviews(caseId);
-      }),
+  // One group's review: each row is correct (ticked) or wrong (not), and a row can stand for several identical
+  // findings (same check and summary), so its verdict goes on each of them. One request for the whole group.
+  const saveGroup = useCallback(
+    (key: string, rows: { members: CaseRiskFinding[]; verdict: ReviewVerdict }[]) =>
+      run(key, () =>
+        setFindingVerdicts(
+          caseId,
+          rows.flatMap(({ members, verdict }) =>
+            members.map((finding) => {
+              const scope = findingScope(finding);
+              return {
+                scope,
+                documentId: scope === 'document' ? finding.document_id : null,
+                findingId: finding.finding_id,
+                checkName: findingCheck(finding),
+                checkCode: finding.check_code ?? null,
+                summary: finding.summary,
+                verdict,
+              };
+            }),
+          ),
+        ),
+      ),
     [caseId, run],
   );
 
@@ -90,5 +94,5 @@ export function useFindingReviews(caseId: string, enabled: boolean) {
     [caseId, run],
   );
 
-  return { data, error, savingKey, setVerdict, addMissed, removeReview };
+  return { data, error, savingKey, saveGroup, addMissed, removeReview };
 }

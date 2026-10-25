@@ -2,7 +2,8 @@ import { useState } from 'react';
 import type { CaseRisk, CaseRiskFinding, DocumentRecord, ReviewScope } from '../../services/uploadService';
 import { formatDocumentType } from '../../services/uploadService';
 import { formatCheck as formatTool } from '../../utils/checkLabels';
-import { MetricsLine, MissedIssues, ReviewSummary, VerdictButtons } from './FindingReviewControls';
+import type { GroupReviewStatus } from './FindingReviewControls';
+import { GroupReviewBar, MetricsLine, MissedIssues, ReviewSummary } from './FindingReviewControls';
 import { findingScope, useFindingReviews, verdictFor } from './useFindingReviews';
 
 // The group cross-document findings sit in: they belong to the case, not to one document.
@@ -215,6 +216,8 @@ export function CaseRiskCard({
   const [showMinor, setShowMinor] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [showEmptyGroups, setShowEmptyGroups] = useState(false);
+  // Ticks the officer changed but hasn't saved, by row key. A row without one shows its saved verdict.
+  const [drafts, setDrafts] = useState<Record<string, boolean>>({});
   const reviews = useFindingReviews(caseId, scored !== null);
   const allReviews = reviews.data?.reviews ?? [];
 
@@ -254,9 +257,45 @@ export function CaseRiskCard({
     });
   }
 
-  // One group: its findings with verdict buttons, then the issues reported as missed on it.
+  function rowKey(group: DocumentGroup, row: FindingRow) {
+    return `${group.documentId}:${row.finding.finding_id}`;
+  }
+
+  function isChecked(group: DocumentGroup, row: FindingRow) {
+    const draft = drafts[rowKey(group, row)];
+    return draft ?? verdictFor(allReviews, row.finding)?.verdict === 'correct';
+  }
+
+  function groupStatus(group: DocumentGroup): GroupReviewStatus {
+    const saved = group.rows.map((row) => verdictFor(allReviews, row.finding)?.verdict ?? null);
+    const changed = group.rows.some((row, index) => {
+      const draft = drafts[rowKey(group, row)];
+      return draft !== undefined && draft !== (saved[index] === 'correct');
+    });
+    if (changed) return 'unsaved';
+    return saved.every((verdict) => verdict !== null) ? 'saved' : 'not_reviewed';
+  }
+
+  function setChecked(group: DocumentGroup, rows: FindingRow[], checked: boolean) {
+    setDrafts((current) => ({ ...current, ...Object.fromEntries(rows.map((row) => [rowKey(group, row), checked])) }));
+  }
+
+  async function saveGroup(group: DocumentGroup) {
+    await reviews.saveGroup(
+      `group:${group.documentId}`,
+      group.rows.map((row) => ({ members: row.members, verdict: isChecked(group, row) ? 'correct' : 'wrong' })),
+    );
+    // Saved: the rows show their saved verdicts again.
+    setDrafts((current) =>
+      Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(`${group.documentId}:`))),
+    );
+  }
+
+  // One group: Select all and Save review, its findings with a tick each, then the issues reported as missed.
   function renderGroup(document: DocumentGroup) {
     const isOpen = expanded.has(document.documentId);
+    const checkedCount = document.rows.filter((row) => isChecked(document, row)).length;
+    const saving = reviews.savingKey !== null || reviews.data === null;
     return (
       <div key={document.documentId} className="risk-document">
         <button
@@ -288,15 +327,34 @@ export function CaseRiskCard({
 
         {isOpen && (
           <>
+          {document.rows.length > 0 && reviews.data && (
+            <GroupReviewBar
+              checkedCount={checkedCount}
+              total={document.rows.length}
+              status={groupStatus(document)}
+              saving={saving}
+              onToggleAll={(checked) => setChecked(document, document.rows, checked)}
+              onSave={() => void saveGroup(document)}
+            />
+          )}
           <ul className="risk-findings">
-            {document.rows.map(({ finding, count, members }) => {
-              const review = verdictFor(allReviews, finding);
-              const rowKey = `${document.documentId}:${finding.finding_id}`;
+            {document.rows.map((row) => {
+              const { finding, count } = row;
               const detail = finding.unreviewed
                 ? 'Not reviewed by a specialist.'
                 : addedDetail(finding.rationale, finding.summary);
               return (
                 <li key={finding.finding_id}>
+                  {reviews.data && (
+                    <input
+                      type="checkbox"
+                      className="risk-finding-tick"
+                      aria-label={`Real issue: ${finding.summary}`}
+                      checked={isChecked(document, row)}
+                      disabled={saving}
+                      onChange={(event) => setChecked(document, [row], event.target.checked)}
+                    />
+                  )}
                   <span className={`risk-severity risk-severity--${finding.severity}`}>
                     {finding.severity}
                   </span>
@@ -319,11 +377,6 @@ export function CaseRiskCard({
                       </span>
                     )}
                   </span>
-                  <VerdictButtons
-                    verdict={review?.verdict ?? null}
-                    disabled={reviews.savingKey !== null || reviews.data === null}
-                    onChange={(verdict) => void reviews.setVerdict(rowKey, members, verdict)}
-                  />
                 </li>
               );
             })}

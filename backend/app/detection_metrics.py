@@ -14,8 +14,10 @@ None is shown as "no reviews" / "no examples", never as 0% or 100%. Unreviewed f
 from __future__ import annotations
 
 from collections import defaultdict
+from functools import lru_cache
 from typing import Iterable
 
+from .case_pipeline.models import FindingCategory
 from .models import CaseFindingReviews, CheckMetrics, DetectionMetrics, FindingReview, MetricsSummary, ReviewScope
 
 # Placeholders until the team agrees targets: a check under either is flagged on the dashboard.
@@ -24,31 +26,21 @@ TARGET_RECALL = 0.8
 # Below this many reviewed findings and missed issues, a check's rates are flagged as not yet meaningful.
 MIN_REVIEWS = 5
 
-# The checks a missed issue can be reported against. Per-document: the detection specialists' tools
-# (tests/test_detection_metrics.py keeps this in step with langgraph/detection/specialists.py).
-# Per-case: the categories a cross-document finding is filed under (case_pipeline.models.FindingCategory).
-DOCUMENT_CHECKS: tuple[str, ...] = (
-    "font_consistency_tool",
-    "layout_anomalies_tool",
-    "image_manipulation_tool",
-    "image_tampering_tool",
-    "spelling_tool",
-    "date_consistency_tool",
-    "page_consistency_tool",
-    "numerical_checks_tool",
-    "external_validation_tool",
-    "metadata_tool",
-    "ai_generation_tool",
-)
-CASE_CHECKS: tuple[str, ...] = (
-    "cross_document_variance",
-    "identity_entity_conflict",
-    "registry_discrepancy",
-    "behavioural_anomaly",
-    "unsupported_claim",
-    "tampering_forensic",
-)
-CHECKS_BY_SCOPE: dict[str, tuple[str, ...]] = {"document": DOCUMENT_CHECKS, "case": CASE_CHECKS}
+# The checks a missed issue can be reported against. Per-case: the categories a cross-document finding is
+# filed under. Per-document: whatever tools the detection specialists carry, read from them so the list can't
+# drift as checks are added (imported on first use: the specialists module pulls in the whole agent stack).
+CASE_CHECKS: tuple[str, ...] = tuple(category.value for category in FindingCategory)
+
+
+@lru_cache(maxsize=1)
+def document_checks() -> tuple[str, ...]:
+    from .langgraph.detection.specialists import SPECIALISTS
+
+    return tuple(dict.fromkeys(tool.name for spec in SPECIALISTS.values() for tool in spec.tools))
+
+
+def checks_by_scope() -> dict[str, tuple[str, ...]]:
+    return {"document": document_checks(), "case": CASE_CHECKS}
 
 
 def _rate(hits: int, others: int) -> float | None:
@@ -104,7 +96,7 @@ def case_metrics(reviews: list[FindingReview]) -> CaseFindingReviews:
         case=summarize(reviews),
         documents={document_id: summarize(items) for document_id, items in by_document.items()},
         cross_document=summarize(r for r in reviews if r.scope == "case"),
-        checks={scope: list(checks) for scope, checks in CHECKS_BY_SCOPE.items()},
+        checks={scope: list(checks) for scope, checks in checks_by_scope().items()},
     )
 
 
