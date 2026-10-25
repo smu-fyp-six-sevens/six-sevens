@@ -89,6 +89,12 @@ async def _publish_pubsub(event: Event) -> None:
     await asyncio.to_thread(future.result, timeout=settings.PUBSUB_PUBLISH_TIMEOUT_SECONDS)
 
 
+async def drain() -> None:
+    """Waits for every in-process handler task, including ones those handlers start."""
+    while _tasks:
+        await asyncio.gather(*list(_tasks), return_exceptions=True)
+
+
 async def shutdown() -> None:
     """Cancels in-process handler tasks still running, so their own cleanup (e.g. back to approved) runs."""
     for task in list(_tasks):

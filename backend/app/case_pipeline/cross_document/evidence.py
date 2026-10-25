@@ -11,7 +11,8 @@ from dataclasses import dataclass, field
 from statistics import median
 from typing import Any
 
-from ...fraud_detection.numerical_validation.common import _as_number, _decode, _rows
+from ...fraud_detection.numerical_validation.common import _as_number, _rows
+from ...fraud_detection.shared.field_values import decode_field_value
 from ...models import APPROVED_STATUSES, DocumentRecord
 from ..categories import category_for_finding
 from ..models import FindingCategory
@@ -48,7 +49,7 @@ def signed_amount(row: dict) -> float | None:
 
 
 def transaction_rows(fields: dict) -> list[dict]:
-    return _rows(_decode(fields.get("transactions")))
+    return _rows(decode_field_value(fields.get("transactions")))
 
 
 @dataclass
@@ -173,7 +174,7 @@ def render_dossier(context: CaseContext, max_chars: int = MAX_DOSSIER_CHARS) -> 
         for name, value in view.fields.items():
             if is_protected_field(name):
                 continue
-            decoded = _decode(value)
+            decoded = decode_field_value(value)
             if name == "transactions" or (isinstance(decoded, list) and decoded and isinstance(decoded[0], dict)):
                 rows = _rows(decoded)
                 lines.append(f"  {name}: {len(rows)} row(s)")

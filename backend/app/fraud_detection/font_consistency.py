@@ -20,6 +20,7 @@ from typing import Any, Hashable, Literal, cast
 
 import pymupdf
 from pydantic import BaseModel
+from .shared.check_result import CheckResult
 from .shared.pdf_pages import page as _page, pages as _pages
 
 logger = logging.getLogger("fraud_detection.font_consistency")
@@ -125,12 +126,10 @@ class _RawAnomaly(BaseModel):
     field_name: str | None = None
 
 
-class FontConsistencyResult(BaseModel):
+class FontConsistencyResult(CheckResult):
     document_id: str
     anomalies: list[FontAnomalyV2]
     all_detected_styles: list[DetectedStyle]
-    unable_to_assess: bool
-    unable_to_assess_reason: str | None = None
 
 
 def _empty_result(document_id: str, reason: str | None = None) -> FontConsistencyResult:

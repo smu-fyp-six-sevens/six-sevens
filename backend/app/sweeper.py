@@ -151,8 +151,7 @@ async def _once(case_id: str | None) -> None:
         registry.install("case-worker", cases.HANDLERS)
     count = await sweep(case_id)
     print(f"{count} recovery request(s) published")
-    while bus._tasks:
-        await asyncio.gather(*list(bus._tasks), return_exceptions=True)
+    await bus.drain()
 
 
 def main() -> None:

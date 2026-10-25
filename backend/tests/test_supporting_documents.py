@@ -429,7 +429,7 @@ def test_case_summary_carries_the_recommendations_its_analysis_produced() -> Non
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = [statement]
         trace.get_detection_states.return_value = ({}, set())
-        analyses.get_latest_many.return_value = {"case-1": _analysis_recommending([statement])}
+        analyses.get_latest_summary.return_value = _analysis_recommending([statement])
 
         summary = case_service.get_case_summary("case-1")
 
@@ -448,7 +448,7 @@ def test_case_without_an_analysis_recommends_nothing() -> None:
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = [_statement([SUPPLIER_PAYMENT])]
         trace.get_detection_states.return_value = ({}, set())
-        analyses.get_latest_many.return_value = {}
+        analyses.get_latest_summary.return_value = None
 
         summary = case_service.get_case_summary("case-1")
 
@@ -491,7 +491,7 @@ def test_case_snapshot_pushed_to_the_page_carries_the_recommendations() -> None:
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = [statement]
         trace.get_detection_states.return_value = ({}, set())
-        analyses.get_latest_many.return_value = {"case-1": _analysis_recommending([statement])}
+        analyses.get_latest_summary.return_value = _analysis_recommending([statement])
         fields_repo.get_extracted_fields_for_documents.return_value = {}
 
         snapshot = case_service.build_case_snapshot("case-1")

@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Literal
 from pydantic import BaseModel
 
+from ..shared.check_result import CheckResult
+
 
 Severity = Literal["impossible", "inconsistent", "implausible", "signal"]
 
@@ -42,18 +44,16 @@ class BenfordDigit(BaseModel):
     expected_percentage: float
 
 
-class BenfordAnalysis(BaseModel):
+class BenfordAnalysis(CheckResult):
     sample_size: int
     digits: list[BenfordDigit]
     mean_absolute_deviation: float | None = None
     chi_square: float | None = None
     chi_square_critical: float | None = None
     conforms: bool | None = None
-    unable_to_assess: bool
-    unable_to_assess_reason: str | None = None
 
 
-class NumericalValidationResult(BaseModel):
+class NumericalValidationResult(CheckResult):
     """
     Response for GET /documents/{id}/detection/numerical-validation. A pure
     compute: no findings are stored, only a step entry on the document's
@@ -72,8 +72,6 @@ class NumericalValidationResult(BaseModel):
     skipped_checks: list[SkippedCheck]
     benford: BenfordAnalysis
     benford_excluding_fees: BenfordAnalysis | None = None
-    unable_to_assess: bool
-    unable_to_assess_reason: str | None = None
     # Filled by the binder-driven endpoint; empty on the reference path.
     breakdown: list[dict] = []
     unassigned: list[dict] = []

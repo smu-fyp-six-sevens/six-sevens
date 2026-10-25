@@ -8,6 +8,7 @@ from datetime import date
 from ...config import settings
 from ..dates.date_parsing import parse_date
 from ..font_consistency import ExtractedField
+from ..shared.field_values import decode_field_value
 from .models import NumericalFinding, Severity, SkippedCheck
 
 
@@ -16,20 +17,8 @@ from .models import NumericalFinding, Severity, SkippedCheck
 # ---------------------------------------------------------------------------
 
 
-def _decode(value: Any) -> Any:
-    """Extracted field values are sometimes JSON-encoded a second time —
-    the same quirk field_values._decoded handles."""
-    if isinstance(value, str):
-        try:
-            import json
-            return json.loads(value)
-        except (ValueError, TypeError):
-            return value
-    return value
-
-
 def _fields_by_name(fields: list[ExtractedField] | None) -> dict[str, Any]:
-    return {f.field_name: _decode(f.field_value) for f in fields or []}
+    return {f.field_name: decode_field_value(f.field_value) for f in fields or []}
 
 
 def _confidence_by_name(fields: list[ExtractedField] | None) -> dict[str, float]:

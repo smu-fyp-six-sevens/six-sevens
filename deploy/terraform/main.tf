@@ -41,14 +41,14 @@ locals {
       public    = false
       publishes = true
       secrets   = concat(local.supabase, ["ANTHROPIC_API_KEY"])
-      env       = tomap({ QUEUE_WORKER_CONCURRENCY = "2" })
+      env       = tomap({ QUEUE_WORKER_CONCURRENCY = "2", CPU_WORKER_PROCESSES = "2" })
     }
     detection-worker = {
       cpu       = "2", memory = "4Gi", concurrency = 2, timeout = 600, max = 3
       public    = false
       publishes = true
       secrets   = concat(local.supabase, ["ANTHROPIC_API_KEY"], local.registries)
-      env       = tomap({ DETECTION_CONCURRENCY = "2" })
+      env       = tomap({ DETECTION_CONCURRENCY = "2", CPU_WORKER_PROCESSES = "2" })
     }
     case-worker = {
       cpu       = "1", memory = "2Gi", concurrency = 4, timeout = 600, max = 2
@@ -109,11 +109,34 @@ resource "google_artifact_registry_repository" "app" {
   format        = "DOCKER"
   description   = "One image per role"
 
+  # Logs what the policies would delete without deleting; set false once the dry run looks right (PENDING_WORK.md).
+  cleanup_policy_dry_run = true
+
+  # KEEP beats DELETE: the 10 newest versions of each image (rollback targets) are never deleted.
   cleanup_policies {
     id     = "keep-recent"
     action = "KEEP"
     most_recent_versions {
       keep_count = 10
+    }
+  }
+
+  cleanup_policies {
+    id     = "delete-old"
+    action = "DELETE"
+    condition {
+      tag_state  = "ANY"
+      older_than = "1209600s" # 14 days
+    }
+  }
+
+  # Every build moves the buildcache tags, leaving the previous cache untagged.
+  cleanup_policies {
+    id     = "delete-untagged"
+    action = "DELETE"
+    condition {
+      tag_state  = "UNTAGGED"
+      older_than = "604800s" # 7 days
     }
   }
 

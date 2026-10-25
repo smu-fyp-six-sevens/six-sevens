@@ -2,17 +2,19 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from ..langgraph import trace as langgraph_trace
 from ..langgraph.detection_report import read_report
-from ..models import DocumentRecord, DocumentStatus
+from ..models import DocumentRecord, DocumentStatus, skips_detection
 from .. import case_service, document_repository, events, extracted_fields_repository, storage_service
 from ..events import officer_event, types
 from ..cpu_pool import run_cpu
-from . import documents as documents_router
 from ._dependencies import get_document_or_404, get_document_with_metadata_or_404, to_thread_or_502
 from ..case_match import DocumentCaseMatch
 from ..case_pipeline.cross_document.company_identity import (
@@ -83,12 +85,6 @@ async def _trace_check(document_id: str, step: str, **fields: object) -> None:
     langgraph_trace.record(document_id, step, **fields)
 
 
-async def _record_result(document_id: str, step: str, result, findings: list) -> None:
-    await _trace_check(
-        document_id, step, unable_to_assess=result.unable_to_assess, finding_count=len(findings),
-    )
-
-
 async def _require_detection_has_run(
     document_id: str, document: DocumentRecord = Depends(get_document_or_404)
 ) -> DocumentRecord:
@@ -111,7 +107,7 @@ async def _check_detection_has_run(document_id: str, document: DocumentRecord) -
     a stored detection_report on the document's langgraph trace (same
     signal GET .../detection/report uses).
     """
-    if documents_router.skips_detection(document):
+    if skips_detection(document):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Detection doesn't run on documents with no type.",
@@ -123,103 +119,6 @@ async def _check_detection_has_run(document_id: str, document: DocumentRecord) -
             detail="Run full detection first before running an individual check.",
         )
     return document
-
-
-@router.get(
-    "/{document_id}/detection/font-consistency", response_model=FontConsistencyResult
-)
-async def get_font_consistency(
-    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
-) -> FontConsistencyResult:
-    file_bytes = await _download_document_bytes(document)
-    extracted_fields = await _fetch_extracted_fields(document_id)
-    result = await run_cpu(
-        check_font_consistency, document_id, file_bytes, extracted_fields
-    )
-    await _record_result(document_id, "check_font_consistency", result, result.anomalies)
-    return result
-
-
-@router.get(
-    "/{document_id}/detection/layout-anomalies",
-    response_model=LayoutAnomalyResult,
-)
-async def get_layout_anomalies(
-    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
-) -> LayoutAnomalyResult:
-    """
-    On-demand layout anomaly check (not part of the automatic pipeline).
-
-    Returns `LayoutAnomalyResult`. The JSON lists each finding as `type`,
-    `page`, `where`, `text`, `summary`, and `checks` (detected, expected,
-    difference). Several checks on the same area stay one finding.
-    Empty `anomalies` with `unable_to_assess: false` means the checks ran
-    and nothing crossed a threshold — not that the document is clean.
-    """
-    file_bytes = await _download_document_bytes(document)
-    result = await run_cpu(
-        check_layout_anomalies,
-        document_id,
-        file_bytes,
-        document.document_type,
-        document.classification_confidence,
-    )
-    await _record_result(document_id, "check_layout_anomalies", result, result.anomalies)
-    return result
-
-
-@router.get(
-    "/{document_id}/detection/image-manipulation",
-    response_model=ImageManipulationResult,
-)
-async def get_image_manipulation(
-    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
-) -> ImageManipulationResult:
-    """
-    On-demand, side-effect free: compares the resolution and compression of
-    the images embedded in a PDF against each other, and checks each for
-    signs of having been enlarged. Empty `indicators` with
-    `unable_to_assess: false` means the checks ran and nothing crossed a
-    tolerance — not that the document is clean.
-    """
-    file_bytes = await _download_document_bytes(document)
-    return await run_cpu(check_image_manipulation, document_id, file_bytes)
-
-
-@router.get(
-    "/{document_id}/detection/image-tampering",
-    response_model=ImageTamperingResult,
-)
-async def get_image_tampering(
-    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
-) -> ImageTamperingResult:
-    """
-    On-demand, side-effect free: looks for images edited into the document
-    after it was produced — painted over and replaced, stretched or
-    rotated, pasted with a visible seam, or with altered brightness, colour
-    or noise. Empty `indicators` with `unable_to_assess: false` means the
-    checks ran and nothing crossed a tolerance — not that the document is
-    clean.
-    """
-    file_bytes = await _download_document_bytes(document)
-    return await run_cpu(check_image_tampering, document_id, file_bytes)
-
-
-@router.get(
-    "/{document_id}/detection/ai-generation",
-    response_model=AIGenerationResult,
-)
-async def get_ai_generation(
-    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
-) -> AIGenerationResult:
-    """
-    On-demand, side-effect free: scores the document's photographs, scans or
-    image upload for traces of AI generation, with every indicator's
-    measured value and contribution to the score. A low score means no
-    indicator crossed its threshold — not that the image is proven genuine.
-    """
-    file_bytes = await _download_document_bytes(document)
-    return await run_cpu(check_ai_generation, document_id, file_bytes)
 
 
 class ImageIntegrityResult(BaseModel):
@@ -234,57 +133,171 @@ class ImageIntegrityResult(BaseModel):
     tampering: ImageTamperingResult
 
 
-@router.get(
-    "/{document_id}/detection/image-integrity",
-    response_model=ImageIntegrityResult,
-)
-async def get_image_integrity(
-    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
-) -> ImageIntegrityResult:
-    """
-    On-demand, side-effect free: both image checks in one call, so the
-    individual-check panel offers a single "Image integrity" option. The file
-    is downloaded once and both checks run on it in parallel.
-    """
-    file_bytes = await _download_document_bytes(document)
+# ---------------------------------------------------------------------------
+# On-demand checks: an officer re-runs one check after the full detection run.
+# Read-only; most record a step on the document's trace.
+# ---------------------------------------------------------------------------
+
+Run = Callable[[DocumentRecord, bytes, list[ExtractedField]], Awaitable[Any]]
+
+
+@dataclass(frozen=True)
+class _Check:
+    path: str
+    model: type[BaseModel]
+    run: Run
+    description: str
+    file: bool = False  # downloads the stored file
+    fields: bool = False  # reads the extracted fields
+    metadata: bool = False  # reads document.metadata (exiftool output)
+    # The trace step's name and what it records; None records nothing.
+    step: str | None = None
+    trace: Callable[[Any], dict] | None = None
+
+
+def _counted(findings: str) -> Callable[[Any], dict]:
+    return lambda result: {"unable_to_assess": result.unable_to_assess, "finding_count": len(getattr(result, findings))}
+
+
+async def _image_integrity(document: DocumentRecord, file_bytes: bytes, _: list[ExtractedField]) -> ImageIntegrityResult:
     manipulation, tampering = await asyncio.gather(
-        run_cpu(check_image_manipulation, document_id, file_bytes),
-        run_cpu(check_image_tampering, document_id, file_bytes),
+        run_cpu(check_image_manipulation, document.id, file_bytes),
+        run_cpu(check_image_tampering, document.id, file_bytes),
     )
     return ImageIntegrityResult(
-        report=build_image_integrity_report(manipulation, tampering),
-        manipulation=manipulation,
-        tampering=tampering,
+        report=build_image_integrity_report(manipulation, tampering), manipulation=manipulation, tampering=tampering,
     )
 
 
-@router.get(
-    "/{document_id}/detection/spelling-anomaly", response_model=SpellingAnomalyResult
-)
-async def get_spelling_anomaly(
-    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
-) -> SpellingAnomalyResult:
-    """
-    On-demand, like the font-consistency checks above — not part of the
-    automatic classification/extraction pipeline, and a pure read/compute:
-    nothing is written to the database (no flags-table row, unlike an
-    earlier version of this endpoint). Takes just a document_id and returns
-    a plain JSON body (SpellingAnomalyResult, serialised automatically by
-    FastAPI's response_model) — safe for another service/agent to call
-    directly and repeatedly without side effects.
-    """
-    file_bytes = await _download_document_bytes(document)
-    extracted_fields = await _fetch_extracted_fields(document_id)
-    result = await check_spelling_anomalies(
-        document_id, file_bytes, document.filename, extracted_fields
-    )
-    await _record_result(document_id, "check_spelling_anomaly", result, result.anomalies)
+async def _numerical(document: DocumentRecord, _: bytes, fields: list[ExtractedField]) -> NumericalValidationResult:
+    bound = await bind_checks(document.document_type, fields)
+    outcome = await asyncio.to_thread(run_numerical_checks, document.document_type, fields, bound.bindings)
+    return build_result(document.id, document.document_type, fields, outcome, bound.error)
+
+
+async def _external(document: DocumentRecord, _: bytes, fields: list[ExtractedField]) -> ExternalValidationResult:
+    bound = await bind_checks(document.document_type, fields, "external")
+    result = await run_external_validation(document.id, document.document_type, fields, bound.bindings)
+    result.binding_error = bound.error
     return result
 
 
-@router.get(
-    "/{document_id}/detection/page-consistency", response_model=PageConsistencyResult
-)
+async def _company_name(document: DocumentRecord, _: bytes, __: list[ExtractedField]) -> CompanyNameConsistencyResult:
+    case_documents = (
+        await asyncio.to_thread(document_repository.list_documents, case_id=document.case_id)
+        if document.case_id is not None
+        else []
+    )
+    return check_company_name_consistency(document, case_documents)
+
+
+async def _metadata(document: DocumentRecord, _: bytes, __: list[ExtractedField]) -> MetadataAnalysisResult:
+    return check_metadata_anomalies(document.id, document.metadata, document.document_type)
+
+
+_NOT_CLEAN = "An empty result with `unable_to_assess: false` means nothing crossed a threshold, not that the document is clean."
+
+_CHECKS = [
+    _Check(
+        "font-consistency", FontConsistencyResult,
+        lambda d, f, x: run_cpu(check_font_consistency, d.id, f, x),
+        "Font, size and embedding consistency across the document's text.",
+        file=True, fields=True, step="check_font_consistency", trace=_counted("anomalies"),
+    ),
+    _Check(
+        "layout-anomalies", LayoutAnomalyResult,
+        lambda d, f, _: run_cpu(check_layout_anomalies, d.id, f, d.document_type, d.classification_confidence),
+        "Alignment, margins, spacing and overlaid text. Each finding lists `type`, `page`, `where`, `text`, "
+        "`summary` and `checks` (detected, expected, difference). " + _NOT_CLEAN,
+        file=True, step="check_layout_anomalies", trace=_counted("anomalies"),
+    ),
+    _Check(
+        "image-manipulation", ImageManipulationResult,
+        lambda d, f, _: run_cpu(check_image_manipulation, d.id, f),
+        "Compares the resolution and compression of a PDF's embedded images, and checks each for signs of "
+        "having been enlarged. " + _NOT_CLEAN,
+        file=True,
+    ),
+    _Check(
+        "image-tampering", ImageTamperingResult,
+        lambda d, f, _: run_cpu(check_image_tampering, d.id, f),
+        "Images edited in after the document was produced: painted over and replaced, stretched or rotated, "
+        "pasted with a seam, or with altered brightness, colour or noise. " + _NOT_CLEAN,
+        file=True,
+    ),
+    _Check(
+        "ai-generation", AIGenerationResult,
+        lambda d, f, _: run_cpu(check_ai_generation, d.id, f),
+        "Scores the document's photographs, scans or image upload for traces of AI generation, with each "
+        "indicator's value and contribution. A low score is not proof the image is genuine.",
+        file=True,
+    ),
+    _Check(
+        "image-integrity", ImageIntegrityResult, _image_integrity,
+        "Both image checks in one call (the file is downloaded once), with a report written for a reader.",
+        file=True,
+    ),
+    _Check(
+        "spelling-anomaly", SpellingAnomalyResult,
+        lambda d, f, x: check_spelling_anomalies(d.id, f, d.filename, x),
+        "Misspellings in the document's text and extracted fields.",
+        file=True, fields=True, step="check_spelling_anomaly", trace=_counted("anomalies"),
+    ),
+    _Check(
+        "numerical-validation", NumericalValidationResult, _numerical,
+        "The per-type arithmetic and consistency checks on the extracted fields (no file download). "
+        "One LLM call binds each check's inputs.",
+        fields=True, step="check_numerical_validation", trace=_counted("findings"),
+    ),
+    _Check(
+        "date-anomalies", DateAnomalyResult,
+        lambda d, _, x: asyncio.to_thread(check_date_anomalies, d.id, x, d.document_type),
+        "Every labelled date in the extracted fields, and the inconsistent or suspicious ones (no file download).",
+        fields=True, step="check_date_anomalies", trace=_counted("findings"),
+    ),
+    _Check(
+        "external-validation", ExternalValidationResult, _external,
+        "The extracted facts against outside references chosen by document type: live ACRA, OneMap and HDB "
+        "lookups, and published tables (CPF, GST, IRAS, bank identifiers, GIRO holidays). An unreachable "
+        "registry is a skipped check, never a finding.",
+        fields=True, step="check_external_validation", trace=_counted("findings"),
+    ),
+    _Check(
+        "company-name-consistency", CompanyNameConsistencyResult, _company_name,
+        "This document's company name against every other company document in its case.",
+        step="check_company_name_consistency",
+        trace=lambda r: {"skipped_reason": r.skipped_reason, "finding_count": len(r.discrepancies)},
+    ),
+    _Check(
+        "metadata-anomaly", MetadataAnalysisResult, _metadata,
+        "Rules over the file metadata captured at ingestion (author, creator, producer, dates, software); "
+        "some apply only to institution-issued document types.",
+        metadata=True, step="check_metadata_anomaly", trace=_counted("anomalies"),
+    ),
+]
+
+
+def _add_check_route(check: _Check) -> None:
+    gate = _require_detection_has_run_with_metadata if check.metadata else _require_detection_has_run
+
+    async def endpoint(document_id: str, document: DocumentRecord = Depends(gate)) -> Any:
+        file_bytes = await _download_document_bytes(document) if check.file else b""
+        fields = await _fetch_extracted_fields(document_id) if check.fields else []
+        result = await check.run(document, file_bytes, fields)
+        if check.step and check.trace:
+            await _trace_check(document_id, check.step, **check.trace(result))
+        return result
+
+    router.add_api_route(
+        f"/{{document_id}}/detection/{check.path}", endpoint, methods=["GET"], response_model=check.model,
+        name=f"get_{check.path.replace('-', '_')}", description=check.description,
+    )
+
+
+for _check in _CHECKS:
+    _add_check_route(_check)
+
+
 async def get_page_consistency(
     document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
 ) -> PageConsistencyResult:
@@ -351,7 +364,7 @@ async def retry_document_detection(
     an error/cancellation behind and produced no report, and only when
     nothing is already running for this document.
     """
-    if documents_router.skips_detection(document):
+    if skips_detection(document):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Detection doesn't run on documents with no type.",
@@ -385,138 +398,6 @@ async def get_case_detection_reports(case_id: str) -> list[dict]:
         detail="Failed to load detection reports.",
         log=("Failed to load detection reports for case %s", case_id),
     )
-
-
-@router.get(
-    "/{document_id}/detection/numerical-validation",
-    response_model=NumericalValidationResult,
-)
-async def get_numerical_validation(
-    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
-) -> NumericalValidationResult:
-    """
-    Content Validation Specialist. On-demand: no findings are stored, only a
-    step entry on the document's trace (_record_result).
-
-    Works from the document's extracted fields alone (trusted as already
-    human-reviewed) — no file download or re-ingestion. The officer-confirmed
-    document_type decides which registered checks apply (each check's
-    `applies`). One small model call (bind_checks) maps the checks' roles to
-    this document's fields; in the detection run the specialist supplies
-    those bindings itself instead.
-    """
-    extracted_fields = await _fetch_extracted_fields(document_id)
-    bound = await bind_checks(document.document_type, extracted_fields)
-    outcome = await asyncio.to_thread(
-        run_numerical_checks, document.document_type, extracted_fields, bound.bindings,
-    )
-    result = build_result(document_id, document.document_type, extracted_fields, outcome, bound.error)
-    await _record_result(document_id, "check_numerical_validation", result, result.findings)
-    return result
-
-
-@router.get(
-    "/{document_id}/detection/date-anomalies",
-    response_model=DateAnomalyResult,
-)
-async def get_date_anomalies(
-    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
-) -> DateAnomalyResult:
-    """
-    Content Validation Specialist — "Detect Date Anomalies". On-demand, same
-    contract as numerical-validation above: no findings are stored, only a
-    step entry on the document's trace (_record_result).
-
-    The date-logic checks live in their own module (dates/date_anomalies.py)
-    so this dimension has its own user story, ACs, and endpoint. Works from
-    extracted fields alone (trusted as already human-reviewed) — no file
-    download or re-ingestion, and no model call.
-    """
-    extracted_fields = await _fetch_extracted_fields(document_id)
-    result = await asyncio.to_thread(
-        check_date_anomalies,
-        document_id,
-        extracted_fields,
-        document.document_type,
-    )
-    await _record_result(document_id, "check_date_anomalies", result, result.findings)
-    return result
-
-
-@router.get("/{document_id}/detection/external-validation", response_model=ExternalValidationResult)
-async def get_external_validation(
-    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
-) -> ExternalValidationResult:
-    """
-    The document's extracted facts against outside references, chosen by its document
-    type: live ACRA, OneMap and HDB lookups, and published tables (CPF rates, GST rate,
-    IRAS tax rules, a bank's published identifiers, public holidays for GIRO dates).
-    Read-only. A registry that can't be reached is reported as a skipped check, never a
-    finding. One LLM call binds the static checks' inputs, as numerical-validation does.
-    """
-    extracted_fields = await _fetch_extracted_fields(document_id)
-    bound = await bind_checks(document.document_type, extracted_fields, "external")
-    result = await run_external_validation(
-        document_id, document.document_type, extracted_fields, bound.bindings,
-    )
-    result.binding_error = bound.error
-    await _record_result(document_id, "check_external_validation", result, result.findings)
-    return result
-
-
-@router.get(
-    "/{document_id}/detection/company-name-consistency",
-    response_model=CompanyNameConsistencyResult,
-)
-async def get_company_name_consistency(
-    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
-) -> CompanyNameConsistencyResult:
-    """
-    Content Validation Specialist — "Company Identity Consistency". Compares
-    this document's company name with every other company document in its
-    case (see case_pipeline/cross_document/company_identity.py). Read-only, from
-    extracted fields alone.
-    """
-    case_documents = (
-        await asyncio.to_thread(document_repository.list_documents, case_id=document.case_id)
-        if document.case_id is not None
-        else []
-    )
-    result = check_company_name_consistency(document, case_documents)
-    await _trace_check(
-        document_id, "check_company_name_consistency",
-        skipped_reason=result.skipped_reason, finding_count=len(result.discrepancies),
-    )
-    return result
-
-
-@router.get(
-    "/{document_id}/detection/metadata-anomaly", response_model=MetadataAnalysisResult
-)
-async def get_metadata_anomaly(
-    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run_with_metadata)
-) -> MetadataAnalysisResult:
-    """
-    Digital Authenticity Specialist. Like the checks above, this doesn't
-    download or re-process the file at all — file metadata (author,
-    creator, producer, dates, software) is already captured once, up front,
-    for every document by ingestion.metadata_extractor and sits on
-    document.metadata; this just reads that and runs the local pattern/rule
-    checks in fraud_detection.metadata_analysis over it.
-
-    Like the other checks above, this is read-only: the result is returned
-    as JSON for a lead agent to consume and nothing is written to the
-    database.
-
-    document_type is passed through because some rules only apply to
-    documents an institution issued (see
-    metadata_analysis.INSTITUTION_ORIGINATED_DOCUMENT_TYPES). That assumes
-    the type is correct by the time this runs — the intended flow is that
-    an officer confirms classification before anomaly checks are run.
-    """
-    result = check_metadata_anomalies(document_id, document.metadata, document.document_type)
-    await _record_result(document_id, "check_metadata_anomaly", result, result.anomalies)
-    return result
 
 
 @router.get("/{document_id}/detection/case-match", response_model=DocumentCaseMatch)

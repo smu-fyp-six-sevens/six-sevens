@@ -8,7 +8,7 @@ import {
 import type { DocumentCaseMatch, DocumentRecord } from '../../services/uploadService';
 import { isEligibleForApproval } from './uploadHelpers';
 
-interface DocumentActionsParams {
+interface DocumentRowActionsParams {
   setDocumentDetails: Dispatch<SetStateAction<Map<string, DocumentRecord>>>;
   isMountedRef: { current: boolean };
   selectedDocumentIds: Set<string>;
@@ -18,14 +18,14 @@ interface DocumentActionsParams {
 }
 
 // Per-row approve, cancel and retry, plus approve-selected. approveError is shared by single and bulk approve.
-export function useDocumentActions({
+export function useDocumentRowActions({
   setDocumentDetails,
   isMountedRef,
   selectedDocumentIds,
   setSelectedDocumentIds,
   extractedDocuments,
   caseMatches,
-}: DocumentActionsParams) {
+}: DocumentRowActionsParams) {
   const [approveError, setApproveError] = useState<string | null>(null);
   const [cancellingDocumentId, setCancellingDocumentId] = useState<string | null>(null);
   const [cancelActionError, setCancelActionError] = useState<string | null>(null);
