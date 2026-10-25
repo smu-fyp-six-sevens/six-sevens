@@ -207,8 +207,9 @@ async def test_the_trace_shows_what_the_guard_found() -> None:
     await _ingest(data, f"Net pay\n{attack}", traced=traced)
 
     [(args, step)] = [(a, k) for a, k in traced if a[1] == "content_guard"]
-    [span] = step["spans"]
-    assert step["risk"] == "high" and step["hidden_spans_removed"] == 1
+    [span] = step["guard_spans"]
+    assert step["guard_risk"] == "high" and step["guard_hidden_spans_removed"] == 1
+    assert "error" not in step and "risk" not in step  # never overwrites another step's field at the top
     assert span["quote"] == attack and span["why_hidden"] == ["invisible"] and span["page"] == 1
     assert span["caught_by"] == "dictionary" and span["removed"] is True
 

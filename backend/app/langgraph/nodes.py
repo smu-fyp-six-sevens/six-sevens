@@ -144,11 +144,12 @@ async def _guard_document(
         result, removals = content_guard.not_run(f"{type(exc).__name__}: {exc}"), []
     metrics.content_guard_results.labels(result["risk"] or "not_run").inc()
     # What was found, not just how much: each span's quote, where it was, why it counts as hidden, which check
-    # caught it. Document text, like the rest of the trace.
+    # caught it. Document text, like the rest of the trace. Prefixed, since record() also copies the fields to
+    # the top of the trace, where a bare "error" or "risk" would overwrite another step's.
     trace.record(
-        document_id, "content_guard", risk=result["risk"], checks_run=result["checks_run"],
-        spans=result["spans"], spans_dropped=result["spans_dropped"], hidden_spans_removed=len(removals),
-        error=result.get("error"),
+        document_id, "content_guard", guard_risk=result["risk"], guard_checks_run=result["checks_run"],
+        guard_spans=result["spans"], guard_spans_dropped=result["spans_dropped"],
+        guard_hidden_spans_removed=len(removals), guard_error=result.get("error"),
     )
     try:
         await asyncio.to_thread(document_repository.update_guard_result, document_id, result)
