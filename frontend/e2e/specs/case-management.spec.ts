@@ -148,6 +148,114 @@ test.describe('View cases @sprint2 @SCRUM-78', () => {
   });
 });
 
+test.describe('Case queue paging and filters @SCRUM-299', () => {
+  // 45 cases, GLDB-2001 (the oldest) to GLDB-2045: 30 ready for review, 10 failed, 5 in progress.
+  function seedMany(backend: MockBackend) {
+    let n = 0;
+    for (const [documents_status, count] of [['analyzed', 30], ['failed', 10], ['in_progress', 5]] as const) {
+      for (let i = 0; i < count; i++) {
+        n += 1;
+        backend.cases.push(makeCase({
+          id: `case-${n}`,
+          greenlink_case_id: `GLDB-${2000 + n}`,
+          company_name: `Company ${n} Pte Ltd`,
+          documents_status,
+          created_at: new Date(Date.UTC(2026, 8, 1) + n * 60_000).toISOString(),
+        }));
+      }
+    }
+  }
+
+  const pagination = (page: Page) => page.getByRole('navigation', { name: 'Case pages' });
+  const chip = (page: Page, label: RegExp) => page.getByRole('button', { name: label });
+  const lastListRequest = (backend: MockBackend) => backend.requestsTo('GET', /^\/cases\?/).at(-1)?.path ?? '';
+
+  test('the queue shows 25 cases a page, newest first, and pages through the rest', async ({ page, backend }) => {
+    seedMany(backend);
+    await page.goto('/cases');
+
+    await expect(caseCards(page)).toHaveCount(25);
+    await expect(page.getByRole('heading', { name: 'Assigned to you (45)' })).toBeVisible();
+    await expect(caseCards(page).first()).toContainText('GLDB-2045');
+    await expect(pagination(page)).toContainText('Showing 1–25 of 45');
+
+    await pagination(page).getByRole('button', { name: /Next/ }).click();
+
+    await expect(page).toHaveURL(/page=2/);
+    await expect(caseCards(page)).toHaveCount(20);
+    await expect(caseCards(page).first()).toContainText('GLDB-2020');
+    await expect(pagination(page)).toContainText('Showing 26–45 of 45');
+    expect(lastListRequest(backend)).toContain('offset=25');
+
+    await pagination(page).getByRole('button', { name: /Previous/ }).click();
+
+    await expect(page).not.toHaveURL(/page=/);
+    await expect(caseCards(page)).toHaveCount(25);
+  });
+
+  test('several status filters at once narrow the total, and the filtered cases are paged', async ({ page, backend }) => {
+    seedMany(backend);
+    await page.goto('/cases');
+    await expect(caseCards(page)).toHaveCount(25);
+
+    await chip(page, /Ready for review/).click();
+    await chip(page, /Documents failed/).click();
+
+    // 30 + 10 = 40 cases, so two pages of the filtered list, not of all 45.
+    await expect(page.getByRole('heading', { name: 'Assigned to you (40)' })).toBeVisible();
+    await expect(pagination(page)).toContainText('Showing 1–25 of 40');
+    expect(lastListRequest(backend)).toContain('status=analyzed');
+    expect(lastListRequest(backend)).toContain('status=failed');
+    expect(lastListRequest(backend)).not.toContain('status=in_progress');
+
+    await pagination(page).getByRole('button', { name: /Next/ }).click();
+
+    await expect(caseCards(page)).toHaveCount(15);
+    await expect(pagination(page)).toContainText('Showing 26–40 of 40');
+    expect(lastListRequest(backend)).toContain('offset=25');
+    expect(lastListRequest(backend)).toContain('status=analyzed');
+    expect(lastListRequest(backend)).toContain('status=failed');
+
+    // Every case on that page is one of the two chosen statuses: the five in progress never appear.
+    await expect(page.locator('.case-row-status').filter({ hasText: 'In progress' })).toHaveCount(0);
+
+    await chip(page, /In progress/).click();
+
+    await expect(page.getByRole('heading', { name: 'Assigned to you (45)' })).toBeVisible();
+  });
+
+  test('changing a filter while on a later page goes back to the first page', async ({ page, backend }) => {
+    seedMany(backend);
+    await page.goto('/cases?page=2');
+    await expect(caseCards(page)).toHaveCount(20);
+
+    await chip(page, /Documents failed/).click();
+
+    await expect(page).not.toHaveURL(/page=/);
+    await expect(page.getByRole('heading', { name: 'Assigned to you (10)' })).toBeVisible();
+    await expect(caseCards(page)).toHaveCount(10);
+    await expect(pagination(page)).toHaveCount(0);
+  });
+
+  test('the sidebar counts stay the whole queue while a filter is on', async ({ page, backend }) => {
+    seedMany(backend);
+    await page.goto('/cases');
+    await chip(page, /Documents failed/).click();
+
+    await expect(page.getByRole('heading', { name: 'Assigned to you (10)' })).toBeVisible();
+    await expect(chip(page, /All cases/)).toContainText('45');
+    await expect(chip(page, /Ready for review/)).toContainText('30');
+  });
+
+  test('a page past the end falls back to the last page', async ({ page, backend }) => {
+    seedMany(backend);
+    await page.goto('/cases?page=9');
+
+    await expect(page).toHaveURL(/page=2/);
+    await expect(caseCards(page)).toHaveCount(20);
+  });
+});
+
 test.describe('View case details @sprint2 @SCRUM-83', () => {
   test('CM-005 a selected case opens its details page @CM-005', async ({ page, backend }) => {
     const { harbor } = seedQueue(backend);

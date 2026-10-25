@@ -3,7 +3,6 @@ import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
 import CaseHeader, { CaseTitle } from '../components/CaseHeader';
 import { caseCrumb, caseQueueCrumb, documentCrumb } from '../components/caseCrumbs';
-import { useCases } from '../casesContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DocumentPreviewModal from '../components/DocumentPreviewModal';
 import DocumentPreviewPane, { ShowDocumentButton } from '../components/DocumentPreviewPane';
@@ -75,7 +74,6 @@ export default function DocumentDetailsPage({
   documentId,
   onDocumentDeleted,
 }: DocumentDetailsPageProps) {
-  const cases = useCases();
   const {
     document,
     setDocument,
@@ -317,7 +315,7 @@ export default function DocumentDetailsPage({
     <CaseHeader
       crumbs={[
         caseQueueCrumb,
-        caseCrumb(cases, selectedCase),
+        caseCrumb(selectedCase),
         // The filename is known once the document has loaded.
         ...(document ? [documentCrumb(selectedCase, documentId, document.filename)] : []),
       ]}

@@ -25,7 +25,6 @@ import { NotesCard } from '../components/NotesCard';
 import AppHeader from '../components/AppHeader';
 import CaseHeader, { CaseTitle } from '../components/CaseHeader';
 import { caseCrumb, caseQueueCrumb } from '../components/caseCrumbs';
-import { useCases } from '../casesContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DropZone from '../components/DropZone';
 import FileRow from '../components/FileRow';
@@ -52,7 +51,6 @@ export default function UploadPage({
   onCaseUpdated,
   onCaseDeleted,
 }: UploadPageProps) {
-  const cases = useCases();
   const {
     setDocumentDetails,
     fulfilledRequirements,
@@ -165,7 +163,7 @@ export default function UploadPage({
     <main className="shell shell--upload">
       <AppHeader />
 
-      <CaseHeader crumbs={[caseQueueCrumb, caseCrumb(cases, selectedCase, { current: true })]}>
+      <CaseHeader crumbs={[caseQueueCrumb, caseCrumb(selectedCase, { current: true })]}>
         {isEditingCase ? (
           <div className="case-title-editing">
             <label htmlFor="case-company-name" className="sr-only">Company name</label>

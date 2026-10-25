@@ -4,9 +4,9 @@ import concurrent.futures
 import contextvars
 import logging
 import threading
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any, Literal, TypeVar
 
 from . import case_repository, document_repository, extracted_fields_repository
 from .case_match import CaseMatchResult, DocumentCaseMatch, check_case_match
@@ -29,10 +29,13 @@ from .models import (
     ADDITIONAL_DOCUMENT_TYPES,
     REQUIRED_DOCUMENT_TYPES,
     CaseAnalysisOverview,
+    CaseCounts,
     CaseDocumentsStatus,
     CaseListItem,
+    CaseListPage,
     CaseRecord,
     CaseRisk,
+    CaseSearchResult,
     CaseSummary,
     DocumentRecord,
     DocumentStatus,
@@ -517,18 +520,34 @@ def get_case_summary(case_id: str) -> CaseSummary | None:
     )
 
 
-def list_case_summaries() -> list[CaseListItem]:
-    """
-    The case queue: three queries in total (cases, their documents' statuses,
-    the latest saved scores), not one per case. The score is whatever the
-    case's last analysis run saved; nothing is recomputed here.
-    """
-    cases = case_repository.list_cases()
-    documents_by_case: dict[str, list[DocumentRecord]] = defaultdict(list)
-    for doc in document_repository.list_document_statuses([case.id for case in cases]):
+CaseSort = Literal["newest", "oldest", "risk"]
+_RISK_RANK = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
+
+
+def _group_by_case(documents: list[DocumentRecord]) -> dict[str, list[DocumentRecord]]:
+    grouped: dict[str, list[DocumentRecord]] = defaultdict(list)
+    for doc in documents:
         if doc.case_id is not None:
-            documents_by_case[doc.case_id].append(doc)
-    saved = _load_saved_risks([case.id for case in cases])
+            grouped[doc.case_id].append(doc)
+    return grouped
+
+
+def _list_items(
+    cases: list[CaseRecord],
+    documents_by_case: dict[str, list[DocumentRecord]] | None = None,
+    saved: dict[str, CaseRisk] | None = None,
+) -> list[CaseListItem]:
+    """
+    Queue rows for these cases: two queries (their documents' statuses, their latest saved scores) however many
+    there are. The score is whatever the case's last analysis run saved; nothing is recomputed here.
+    """
+    if not cases:
+        return []
+    ids = [case.id for case in cases]
+    if documents_by_case is None:
+        documents_by_case = _group_by_case(document_repository.list_document_statuses(ids))
+    if saved is None:
+        saved = _load_saved_risks(ids)
     return [
         CaseListItem(
             **case.model_dump(),
@@ -537,3 +556,74 @@ def list_case_summaries() -> list[CaseListItem]:
         )
         for case in cases
     ]
+
+
+def _risk_rank(risk: CaseRisk | None) -> int:
+    """Unscored cases rank below Low."""
+    return _RISK_RANK.get(risk.level or "", 0) if risk is not None and risk.state == "scored" else 0
+
+
+def list_cases_page(
+    *, limit: int, offset: int, sort: CaseSort, statuses: list[CaseDocumentsStatus], q: str | None,
+) -> CaseListPage:
+    """
+    One page of the case queue. Sorting by date and searching happen in the database, so only the page's own
+    documents and scores are read. A status filter and the risk order come from other tables (and "stuck" from
+    the clock), which the database can't sort or filter on: those read every matching case first, then slice.
+    """
+    q = (q or "").strip() or None
+    if sort != "risk" and not statuses:
+        cases, total = case_repository.list_cases_page(q, newest=sort == "newest", limit=limit, offset=offset)
+        return CaseListPage(items=_list_items(cases), total=total, limit=limit, offset=offset)
+
+    cases = case_repository.list_matching_cases(q)  # newest first
+    documents_by_case = _group_by_case(document_repository.list_document_statuses([case.id for case in cases]))
+    if statuses:
+        wanted = set(statuses)
+        cases = [case for case in cases if compute_documents_status(documents_by_case.get(case.id, [])) in wanted]
+    saved: dict[str, CaseRisk] | None = None
+    if sort == "risk":
+        saved = _load_saved_risks([case.id for case in cases])
+        cases = sorted(cases, key=lambda case: -_risk_rank((saved or {}).get(case.id)))  # stable: newest first among equals
+    elif sort == "oldest":
+        cases.reverse()
+    page = cases[offset : offset + limit]
+    return CaseListPage(items=_list_items(page, documents_by_case, saved), total=len(cases), limit=limit, offset=offset)
+
+
+def case_counts() -> CaseCounts:
+    """Every case, and how many are in each documents status (the queue's sidebar)."""
+    case_ids = case_repository.list_case_ids()
+    documents_by_case = _group_by_case(document_repository.list_all_document_statuses())
+    counts = Counter(compute_documents_status(documents_by_case.get(case_id, [])).value for case_id in case_ids)
+    return CaseCounts(total=len(case_ids), by_status=dict(counts))
+
+
+def _match_rank(case: CaseRecord, needle: str) -> int:
+    """Exact number first, then a number or name that starts with it, then the rest."""
+    number = case.greenlink_case_id.lower()
+    if needle in (number, case.id.lower()):
+        return 0
+    if number.startswith(needle) or (case.company_name or "").lower().startswith(needle):
+        return 1
+    return 2
+
+
+def search_cases(q: str | None, limit: int) -> CaseSearchResult:
+    """Cases whose number or name contains q, best match first. Without q: the newest cases."""
+    q = (q or "").strip() or None
+    cases, total = case_repository.list_cases_page(q, newest=True, limit=limit, offset=0)
+    if q and total > limit:
+        # More cases match than fit, so newer cases may have crowded the best ones out: fetch those directly.
+        exact = case_repository.find_case_numbered(q)
+        best = ([exact] if exact else []) + case_repository.find_cases_starting_with(q, limit) + cases
+        cases = list({case.id: case for case in best}.values())
+    if q:
+        cases = sorted(cases, key=lambda case: _match_rank(case, q.lower()))
+    return CaseSearchResult(items=cases[:limit], total=total)
+
+
+def get_case_item(number: str) -> CaseListItem | None:
+    """One queue row, by the number officers see in the URL (GLDB-137)."""
+    case = case_repository.get_case_by_number(number)
+    return _list_items([case])[0] if case is not None else None

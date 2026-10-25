@@ -9,7 +9,7 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 | | |
 |---|---|
 | Backend | 43,500 lines in 191 files under `app/` (4,300 of them in `injection/`); 58 route handlers |
-| Frontend | 10,300 lines of TS/TSX in 75 files; 5,700 lines of CSS in 14 files |
+| Frontend | 10,300 lines of TS/TSX in 75 files; 5,800 lines of CSS in 15 files |
 | Deployment | Terraform 1,000 lines in 12 files, 2 workflows, 7 compose files, Kong and Grafana images |
 | Tests | 1,644 backend test functions in 82 files; 107 Playwright tests plus the notes spec |
 | Backend gates | ruff clean on `app/` (16 old issues in `doc_gen_scripts/`, `scripts/` and one test, outside CI's scope), pyright clean, 0 `type: ignore`, 14 `noqa` (all re-export `F401`) |
@@ -21,7 +21,18 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 
 ### Frontend
 
-1. **CSS colours:** 587 hard-coded hex values against 368 `var(--...)` uses. The share got worse as new cards were added. Define tokens, then replace. L
+1. **105 one-off hex colours** are still written inline in the stylesheets (each appears once, so they were not merged into a token). Every repeated colour is a token in `styles/tokens.css`. When you restyle a component, move its one-offs into the palette (or onto the nearest existing token). S, as you go
+
+   | Group | Count | What they are |
+   |---|---|---|
+   | **Dashboard page** | 45 | The mock `/dashboard` (teammates' page): about 23 slate greys and blues (sidebar, nav, icons, avatars), its own red, orange and green markers, a lilac avatar. Leave until the dashboard is rebuilt |
+   | **Medium risk (orange)** | 22 | "Medium" on the case page (`case-summary`, `case-overview`, `upload`, `manual-review`, `document-details`): pale backgrounds, gauge bands, borders, dark text. A light-to-dark scale, but almost no two files use the same shades |
+   | **High risk and errors (red)** | 16 | The same for "high": gauge band, score text, error borders, danger hover states |
+   | **Low risk and success (green)** | 8 | Success messages, the toast border, approve-button greens |
+   | **Greys and small blues** | 8 | Scattered border and text greys, a blue focus outline and hover blue, a disabled-input grey |
+   | **Outliers** | 6 | Two vivid pink-reds in `.approval-warning` that match nothing else, two sand colours, a lilac avatar, leftovers |
+
+   The risk groups (46 colours) are one risk scale (low, medium, high) written out per file. Replace them with semantic tokens (`--risk-medium-bg`, `--risk-medium-text`, ...) when the risk cards are restyled, so the whole scale changes in one place.
 
 ### Deployment
 
@@ -86,5 +97,5 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 3. **Rules out of `routers/documents.py`** (backend 2.1), the biggest structural win left.
 4. **Public field-value helpers** (backend 2.2).
 5. **The Audit Trail card and the mock dashboard** (frontend 2.1) before any demo.
-6. **CSS tokens** (frontend 1.1), whenever convenient.
+6. **The one-off colours** (frontend 1.1), as you restyle each component.
 7. **Decide `submission_finalized`** (backend 2.4) as part of automatic case analysis.

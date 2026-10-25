@@ -241,6 +241,53 @@ export class MockBackend {
     );
   }
 
+  // The case endpoints below mirror backend/app/case_service.py (list_cases_page, case_counts, search_cases).
+  private matching(q: string | null): CaseRow[] {
+    const needle = (q ?? '').trim().toLowerCase();
+    return this.cases.filter(
+      (c) => !needle || c.greenlink_case_id.toLowerCase().includes(needle) || (c.company_name ?? '').toLowerCase().includes(needle),
+    );
+  }
+
+  private newestFirst(cases: CaseRow[]): CaseRow[] {
+    return [...cases].sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id));
+  }
+
+  private casePage(params: URLSearchParams) {
+    const limit = Number(params.get('limit') ?? 25);
+    const offset = Number(params.get('offset') ?? 0);
+    const sort = params.get('sort') ?? 'newest';
+    const statuses = params.getAll('status');
+
+    let cases = this.newestFirst(this.matching(params.get('q')));
+    if (statuses.length) cases = cases.filter((c) => statuses.includes(c.documents_status));
+    if (sort === 'oldest') cases.reverse();
+    if (sort === 'risk') {
+      const rank = (c: CaseRow) => (c.risk?.state === 'scored' ? ({ Critical: 4, High: 3, Medium: 2, Low: 1 } as Record<string, number>)[c.risk.level ?? ''] ?? 0 : 0);
+      cases = [...cases].sort((a, b) => rank(b) - rank(a)); // stable: newest first among equals
+    }
+    return { items: cases.slice(offset, offset + limit), total: cases.length, limit, offset };
+  }
+
+  private caseCounts() {
+    const by_status: Record<string, number> = {};
+    for (const c of this.cases) by_status[c.documents_status] = (by_status[c.documents_status] ?? 0) + 1;
+    return { total: this.cases.length, by_status };
+  }
+
+  private caseSearch(params: URLSearchParams) {
+    const limit = Number(params.get('limit') ?? 8);
+    const q = (params.get('q') ?? '').trim().toLowerCase();
+    const rank = (c: CaseRow) => {
+      const number = c.greenlink_case_id.toLowerCase();
+      if (q === number || q === c.id.toLowerCase()) return 0;
+      return number.startsWith(q) || (c.company_name ?? '').toLowerCase().startsWith(q) ? 1 : 2;
+    };
+    const matches = this.newestFirst(this.matching(q));
+    const ranked = q ? [...matches].sort((a, b) => rank(a) - rank(b)) : matches;
+    return { items: ranked.slice(0, limit), total: matches.length };
+  }
+
   private snapshot(caseId: string) {
     const found = this.cases.find((c) => c.id === caseId);
     return {
@@ -288,7 +335,19 @@ export class MockBackend {
 
     // --- cases ------------------------------------------------------------
     if (path === '/cases' && method === 'GET') {
-      return json(this.cases);
+      return json(this.casePage(url.searchParams));
+    }
+    if (path === '/cases/counts' && method === 'GET') {
+      return json(this.caseCounts());
+    }
+    if (path === '/cases/search' && method === 'GET') {
+      return json(this.caseSearch(url.searchParams));
+    }
+    const byNumber = path.match(/^\/cases\/by-number\/([^/]+)$/);
+    if (byNumber && method === 'GET') {
+      const number = decodeURIComponent(byNumber[1]);
+      const found = this.cases.find((c) => c.greenlink_case_id === number || c.id === number);
+      return found ? json(found) : json({ detail: 'Case not found' }, 404);
     }
     if (path === '/cases' && method === 'POST') {
       const companyName = (body as { company_name?: string } | null)?.company_name ?? null;

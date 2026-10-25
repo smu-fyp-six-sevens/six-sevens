@@ -50,6 +50,14 @@ export type UpdatedCase = Pick<Schemas['CaseSummary'], 'id' | 'greenlink_case_id
 
 export type DocumentDownloadResponse = Schemas['DocumentDownloadResponse'];
 
+// The case queue: one page of rows, the counts for its sidebar, and jump-to-case suggestions.
+export type CaseDocumentsStatus = Schemas['CaseDocumentsStatus'];
+export type CaseListPage = Schemas['CaseListPage'];
+export type CaseCounts = Schemas['CaseCounts'];
+export type CaseSearchResult = Schemas['CaseSearchResult'];
+export type CaseListItem = Schemas['CaseListItem'];
+export type CaseSort = 'newest' | 'oldest' | 'risk';
+
 // PDF -> <iframe> (native browser PDF viewer), image -> <img>.
 export type PreviewKind = 'pdf' | 'image' | 'unsupported';
 

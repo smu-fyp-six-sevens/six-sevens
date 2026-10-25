@@ -3,7 +3,13 @@ import { authFetch } from '../../lib/api';
 import type {
   CaseAnalysis,
   CaseCost,
+  CaseCounts,
+  CaseDocumentsStatus,
+  CaseListItem,
+  CaseListPage,
   CaseOption,
+  CaseSearchResult,
+  CaseSort,
   UpdatedCase,
 } from './types';
 
@@ -25,12 +31,68 @@ export async function updateCase(caseId: string, companyName: string): Promise<U
   return (await response.json()) as UpdatedCase;
 }
 
+// One page of the case queue. The server sorts, filters and slices; offset is the number of cases to skip.
+export interface CasePageQuery {
+  limit: number;
+  offset: number;
+  sort: CaseSort;
+  statuses: CaseDocumentsStatus[];
+  q: string;
+}
+
+export async function listCasesPage(query: CasePageQuery, signal?: AbortSignal): Promise<CaseListPage> {
+  const params = new URLSearchParams({
+    limit: String(query.limit),
+    offset: String(query.offset),
+    sort: query.sort,
+  });
+  for (const status of query.statuses) params.append('status', status);
+  if (query.q) params.set('q', query.q);
+
+  const response = await authFetch(`/cases?${params}`, { signal });
+
+  await assertOk(response, 'Failed to load cases');
+
+  return (await response.json()) as CaseListPage;
+}
+
+export async function getCaseCounts(signal?: AbortSignal): Promise<CaseCounts> {
+  const response = await authFetch('/cases/counts', { signal });
+
+  await assertOk(response, 'Failed to count cases');
+
+  return (await response.json()) as CaseCounts;
+}
+
+// Cases whose number or name contains q, best match first; without q, the newest.
+export async function searchCases(q: string, limit: number, signal?: AbortSignal): Promise<CaseSearchResult> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (q) params.set('q', q);
+
+  const response = await authFetch(`/cases/search?${params}`, { signal });
+
+  await assertOk(response, 'Failed to search cases');
+
+  return (await response.json()) as CaseSearchResult;
+}
+
+// The case behind /cases/GLDB-137, or null when there is none.
+export async function getCaseByNumber(number: string, signal?: AbortSignal): Promise<CaseListItem | null> {
+  const response = await authFetch(`/cases/by-number/${encodeURIComponent(number)}`, { signal });
+
+  if (response.status === 404) {
+    return null;
+  }
+  await assertOk(response, 'Failed to load the case');
+
+  return (await response.json()) as CaseListItem;
+}
+
+// The picker for moving documents lists the newest cases (the server returns at most 50).
 export async function listCaseOptions(): Promise<CaseOption[]> {
-  const response = await authFetch('/cases');
+  const { items } = await searchCases('', 50);
 
-  await assertOk(response, 'Failed to list cases');
-
-  return (await response.json()) as CaseOption[];
+  return items.map(({ id, greenlink_case_id, company_name }) => ({ id, greenlink_case_id, company_name }));
 }
 
 // Starts the per-case analysis in the background; the result arrives with the case snapshot.

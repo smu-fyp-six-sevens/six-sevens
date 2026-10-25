@@ -1341,6 +1341,28 @@
         "title": "CaseAnalysisOverview",
         "type": "object"
       },
+      "CaseCounts": {
+        "description": "What the queue's sidebar shows: every case, and how many are in each documents status.",
+        "properties": {
+          "by_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Status",
+            "type": "object"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "by_status"
+        ],
+        "title": "CaseCounts",
+        "type": "object"
+      },
       "CaseDocumentsStatus": {
         "description": "Rollup of every document under a case, worst-first: a single stuck\ndocument outranks nine analyzed ones. Computed live from the documents\ntable on every read \u2014 never stored \u2014 since \"stuck\" is itself a\ntime-elapsed condition with no event that would keep a stored column\nhonest (see case_service.py).",
         "enum": [
@@ -1434,6 +1456,38 @@
           "risk"
         ],
         "title": "CaseListItem",
+        "type": "object"
+      },
+      "CaseListPage": {
+        "description": "One page of the case queue. `total` counts every case matching the search and status filter.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CaseListItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "CaseListPage",
         "type": "object"
       },
       "CaseMatchResult": {
@@ -1717,6 +1771,28 @@
           "documents_total"
         ],
         "title": "CaseRisk",
+        "type": "object"
+      },
+      "CaseSearchResult": {
+        "description": "Jump-to-case suggestions: the best matches (exact number first), and how many cases match in all.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CaseRecord"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "CaseSearchResult",
         "type": "object"
       },
       "CaseSummary": {
@@ -6227,8 +6303,77 @@
     },
     "/cases": {
       "get": {
+        "description": "One page of the case queue: newest or oldest first, or highest risk first; optionally only these documents\nstatuses and only cases whose number or name contains q.",
         "operationId": "list_cases_cases_get",
         "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "newest",
+              "enum": [
+                "newest",
+                "oldest",
+                "risk"
+              ],
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/CaseDocumentsStatus"
+              },
+              "title": "Status",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",
@@ -6251,11 +6396,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/CaseListItem"
-                  },
-                  "title": "Response List Cases Cases Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/CaseListPage"
                 }
               }
             },
@@ -6329,6 +6470,193 @@
           }
         },
         "summary": "Create Case",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/cases/by-number/{number}": {
+      "get": {
+        "description": "The case behind a URL such as /cases/GLDB-137.",
+        "operationId": "get_case_by_number_cases_by_number__number__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "number",
+            "required": true,
+            "schema": {
+              "title": "Number",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseListItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Case By Number",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/cases/counts": {
+      "get": {
+        "operationId": "case_counts_cases_counts_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseCounts"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Case Counts",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/cases/search": {
+      "get": {
+        "description": "Jump-to-case suggestions, best match first; without q, the newest cases.",
+        "operationId": "search_cases_cases_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 8,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseSearchResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search Cases",
         "tags": [
           "cases"
         ]

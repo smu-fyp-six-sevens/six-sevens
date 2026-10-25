@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from . import extracted_fields_repository, notes_repository, storage_service
 from .models import DocumentRecord, DocumentStatus
 from .supabase_client import service_supabase_client, supabase_client
-from .supabase_rows import row as _row
+from .supabase_rows import fetch_all, row as _row
 
 logger = logging.getLogger(__name__)
 
@@ -501,12 +501,16 @@ _CASE_CHUNK = 100
 
 
 def list_document_statuses(case_ids: list[str]) -> list[DocumentRecord]:
-    """These cases' documents with only their status columns, one query per 100 cases."""
+    """These cases' documents with only their status columns, a query per 100 cases (and per 1,000 documents)."""
     documents: list[DocumentRecord] = []
     for start in range(0, len(case_ids), _CASE_CHUNK):
-        rows = (
-            supabase_client.table("documents").select(_STATUS_COLUMNS)
-            .in_("case_id", case_ids[start : start + _CASE_CHUNK]).execute().data
-        )
-        documents.extend(DocumentRecord(**_row(row)) for row in rows)
+        chunk = case_ids[start : start + _CASE_CHUNK]
+        rows = fetch_all(lambda: supabase_client.table("documents").select(_STATUS_COLUMNS).in_("case_id", chunk), "id")
+        documents.extend(DocumentRecord(**item) for item in rows)
     return documents
+
+
+def list_all_document_statuses() -> list[DocumentRecord]:
+    """Every document's status columns, a page of 1,000 per query: what the queue's status counts roll up."""
+    rows = fetch_all(lambda: supabase_client.table("documents").select(_STATUS_COLUMNS), "id")
+    return [DocumentRecord(**item) for item in rows]

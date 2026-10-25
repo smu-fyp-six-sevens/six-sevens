@@ -26,6 +26,11 @@
   box-sizing: border-box;
 }
 
+html {
+  /* Reserve the scrollbar's width, so content doesn't shift sideways when a page grows long enough to scroll. */
+  scrollbar-gutter: stable;
+}
+
 html,
 body,
 #root {
@@ -171,7 +176,7 @@ button {
   margin: 0;
   padding: 6px;
   list-style: none;
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 10px;
   box-shadow: 0 12px 32px rgba(18, 32, 61, 0.16);
@@ -210,7 +215,7 @@ button {
 
 .header-search-all {
   margin-top: 4px;
-  border-top: 1px solid #ece8de;
+  border-top: 1px solid var(--orange-90);
   border-radius: 0 0 6px 6px;
   color: var(--steel);
   font-size: 13px;
@@ -242,7 +247,7 @@ button {
   border: none;
   border-radius: 6px;
   background: var(--red);
-  color: #ffffff;
+  color: var(--white);
   font: inherit;
   font-size: 13px;
   font-weight: 600;

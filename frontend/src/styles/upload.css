@@ -1,7 +1,7 @@
 .dropzone {
   border: 1.5px dashed #b7af9c;
   border-radius: 10px;
-  background: #fffefb;
+  background: var(--orange-99);
   padding: 28px 20px;
   text-align: center;
   cursor: pointer;
@@ -11,7 +11,7 @@
 .dropzone:hover,
 .dropzone--dragging {
   border-color: var(--steel);
-  background: #fbfaf6;
+  background: var(--orange-97);
 }
 
 .dropzone--dragging {
@@ -52,7 +52,7 @@
 }
 
 .file-row {
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px 14px;
@@ -66,7 +66,7 @@
   height: 32px;
   border-radius: 6px;
   background: var(--ink);
-  color: #fff;
+  color: var(--white);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -139,7 +139,7 @@
 }
 
 .badge.pending {
-  background: #eeede7;
+  background: var(--sand-92);
   color: var(--ink-soft);
 }
 
@@ -176,7 +176,7 @@
   gap: 16px;
   margin-top: 14px;
   padding: 12px 14px;
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 8px;
 }
@@ -198,7 +198,7 @@
 }
 
 .upload-btn:disabled {
-  background: #b9c2ce;
+  background: var(--slate-77);
   cursor: not-allowed;
 }
 
@@ -252,8 +252,8 @@
   font-size: 9.5px;
   padding: 2.5px 7px;
   border-radius: 10px;
-  background: #eeede7;
-  color: #9ba2ae;
+  background: var(--sand-92);
+  color: var(--slate-65a);
   white-space: nowrap;
 }
 
@@ -263,7 +263,7 @@
 }
 
 .pstage.pending {
-  background: #eeede7;
+  background: var(--sand-92);
   color: var(--ink-soft);
 }
 
@@ -413,11 +413,11 @@
 }
 
 .case-nav-dot--risk-high {
-  background: #c4442a;
+  background: var(--red-47);
 }
 
 .case-nav-dot--risk-critical {
-  background: #7f1414;
+  background: var(--red-29);
 }
 
 @keyframes case-nav-pulse {
@@ -627,7 +627,7 @@
   margin: 0;
   padding: 6px;
   list-style: none;
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 10px;
   box-shadow: 0 12px 32px rgba(18, 32, 61, 0.16);
@@ -730,9 +730,9 @@
   padding: 0 8px;
   /* Cancels the border so switching to edit mode doesn't shift the page. */
   margin: -1px 0;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--slate-84);
   border-radius: 6px;
-  background: #ffffff;
+  background: var(--white);
   color: var(--ink);
   font: inherit;
   font-size: 28px;
@@ -743,7 +743,7 @@
 
 .case-title-input:focus {
   outline: none;
-  border-color: #6b7280;
+  border-color: var(--slate-46);
   box-shadow: 0 0 0 2px rgba(107, 114, 128, 0.12);
 }
 
@@ -775,7 +775,7 @@
 .upload-sidebar {
   position: sticky;
   top: calc(var(--topbar-height) + 24px);
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 9px;
   padding: 16px;
@@ -981,7 +981,7 @@
   padding: 5px 10px;
   border-radius: 20px;
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--white);
   color: var(--ink-soft);
   cursor: pointer;
   white-space: nowrap;
@@ -995,13 +995,13 @@
 .page-tab--active {
   background: var(--steel);
   border-color: var(--steel);
-  color: #fff;
+  color: var(--white);
 }
 
 .extraction-text-panel {
   margin: 8px 0 0;
   padding: 12px 14px;
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 8px;
   font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
@@ -1018,7 +1018,7 @@
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
-  background: #fff;
+  background: var(--white);
 }
 
 .kv-row {
@@ -1057,7 +1057,7 @@
   font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
   font-size: 12px;
   color: var(--ink);
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 5px;
   padding: 4px 7px;

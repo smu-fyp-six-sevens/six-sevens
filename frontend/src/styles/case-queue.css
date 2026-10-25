@@ -3,10 +3,17 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px 14px;
+}
+
+.search-box .search-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--slate-58);
 }
 
 .search-box:focus-within {
@@ -25,7 +32,7 @@
 }
 
 .search-box input::placeholder {
-  color: #9ea6b5;
+  color: var(--slate-66);
 }
 
 .filter-label {
@@ -33,7 +40,7 @@
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-  color: #8a93a6;
+  color: var(--slate-60);
 }
 
 
@@ -50,17 +57,12 @@
 
 
 
-
-.sort-toggle-arrow {
-  color: var(--steel);
-  font-weight: 700;
-}
 
 .go-btn,
 .upload-btn {
   font-size: 13px;
   font-weight: 600;
-  color: #fff;
+  color: var(--white);
   border: none;
   cursor: pointer;
 }
@@ -76,7 +78,6 @@
   background: var(--steel-dark);
 }
 
-.queue-label,
 .section-label {
   margin: 22px 0 10px;
   display: flex;
@@ -122,7 +123,7 @@
 
 .kebab-menu-button:hover:not(:disabled),
 .kebab-menu-button[aria-expanded='true'] {
-  background: #efede5;
+  background: var(--sand-92);
   color: var(--ink);
 }
 
@@ -149,7 +150,7 @@
   padding: 4px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fff;
+  background: var(--white);
   box-shadow: 0 8px 24px rgba(18, 32, 61, 0.12);
 }
 
@@ -174,7 +175,7 @@
 
 .kebab-menu-item:hover:not(:disabled),
 .kebab-menu-item:focus-visible {
-  background: #f6f4ef;
+  background: var(--paper);
 }
 
 .kebab-menu-item--danger:hover:not(:disabled),
@@ -210,10 +211,10 @@
   width: 100%;
   box-sizing: border-box;
   padding: 7px 9px;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--slate-84);
   border-radius: 6px;
-  background: #ffffff;
-  color: #111827;
+  background: var(--white);
+  color: var(--slate-11);
   font-size: 13.5px;
   font-weight: 600;
   font-family: inherit;
@@ -221,13 +222,13 @@
 
 .case-name-input:focus {
   outline: none;
-  border-color: #6b7280;
+  border-color: var(--slate-46);
   box-shadow: 0 0 0 2px rgba(107, 114, 128, 0.12);
 }
 
 .case-edit-error {
   font-size: 12px;
-  color: #b91c1c;
+  color: var(--red-42);
 }
 
 .case-edit-actions {
@@ -243,7 +244,7 @@
   padding: 20px 0;
   border: 1px dashed var(--line);
   border-radius: 8px;
-  background: #fffefb;
+  background: var(--orange-99);
 }
 
 .back-link {
@@ -278,7 +279,7 @@
   grid-template-columns: 236px minmax(0, 1fr);
   gap: 36px;
   align-items: start;
-  margin-top: 22px;
+  margin-top: 4px;
 }
 
 .queue-sidebar {
@@ -359,19 +360,19 @@
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
-  background: #98a2b3;
+  background: var(--slate-65);
 }
 
 .case-status-dot--green {
-  background: #1f7a4d;
+  background: var(--green-30);
 }
 
 .case-status-dot--blue {
-  background: #2563b8;
+  background: var(--blue-43);
 }
 
 .case-status-dot--red {
-  background: #b33131;
+  background: var(--red-45a);
 }
 
 .case-status-dot--amber {
@@ -390,7 +391,7 @@
   padding: 4px 5px 4px 12px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: #fff;
+  background: var(--white);
   font-size: 14px;
   color: var(--ink-soft);
 }
@@ -419,15 +420,41 @@
   color: var(--ink);
 }
 
-.queue-main .queue-label {
-  margin-top: 0;
+/* The title, the active search and the New case button share one row above the table. */
+.queue-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 44px;
+  margin-bottom: 12px;
+}
+
+.queue-title {
+  flex: 0 1 auto;
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.queue-toolbar .queue-search-chip {
+  max-width: 40%;
+}
+
+.create-case-btn.queue-new-case {
+  flex-shrink: 0;
+  margin: 0 0 0 auto;
+  padding: 11px 18px;
+  font-size: 14px;
 }
 
 /* Columns shared by the header and every row. The header's right padding leaves room for each row's ⋮ menu. */
 .case-table {
   --case-cols: 120px minmax(0, 2.4fr) 180px 112px 120px;
 
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 10px;
   overflow: visible;
@@ -445,7 +472,7 @@
   /* 48px = the row's ⋮ menu (32px button + 8px margin each side). */
   padding: 12px 48px 12px 20px;
   border-bottom: 1px solid var(--line);
-  background: #faf9f5;
+  background: var(--orange-97);
   border-radius: 10px 10px 0 0;
   font-family: var(--mono);
   font-size: 11.5px;
@@ -460,11 +487,185 @@
   padding: 0;
 }
 
+/* The next page is loading: the current rows stay, a little faded, so the table doesn't flash empty. */
+.case-table--busy .case-table-body {
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+
+.skeleton-bar {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--slate-91);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-bar {
+    animation: none;
+  }
+}
+
+/* A line of text is 22px tall (14.5px at 1.5), so a row of these is as tall as a real one. */
+.skeleton-cell {
+  display: flex;
+  align-items: center;
+  height: 22px;
+}
+
+.skeleton-cell--center {
+  justify-content: center;
+}
+
+.skeleton-bar--id {
+  width: 72px;
+}
+
+.skeleton-bar--name {
+  width: 55%;
+}
+
+.skeleton-bar--status {
+  width: 90px;
+}
+
+.skeleton-bar--pill {
+  width: 92px;
+  height: 20px;
+  border-radius: 999px;
+}
+
+.skeleton-bar--date {
+  width: 80px;
+}
+
+.case-row-menu-space {
+  /* The room a real row gives its menu button: 32px plus 8px each side. */
+  flex-shrink: 0;
+  width: 48px;
+}
+
+.queue-filter--skeleton {
+  min-height: 40px;
+  cursor: default;
+}
+
+.queue-filter--skeleton:hover {
+  background: transparent;
+}
+
+.skeleton-bar--dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.skeleton-bar--label {
+  width: 110px;
+}
+
+/* Page controls under the table. */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.pagination-range {
+  font-variant-numeric: tabular-nums;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pagination-page,
+.pagination-step {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background-color 0.12s;
+}
+
+.pagination-page:hover:not(:disabled),
+.pagination-step:hover:not(:disabled) {
+  background: rgba(61, 90, 128, 0.08);
+}
+
+.pagination-page:focus-visible,
+.pagination-step:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 1px;
+}
+
+.pagination-page[aria-current='page'] {
+  background: var(--ink);
+  color: var(--white);
+  font-weight: 600;
+}
+
+.pagination-step {
+  border-color: var(--line);
+  background: var(--white);
+}
+
+.pagination-step:disabled {
+  color: var(--slate-66);
+  cursor: default;
+  opacity: 0.6;
+}
+
+.pagination-gap {
+  min-width: 20px;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .pagination {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pagination-controls {
+    justify-content: space-between;
+  }
+
+  .pagination-page:not([aria-current='page']) {
+    display: none;
+  }
+
+  .pagination-gap {
+    display: none;
+  }
+}
+
 .case-row {
   position: relative;
   display: flex;
   align-items: center;
-  border-bottom: 1px solid #ece8de;
+  border-bottom: 1px solid var(--orange-90);
   transition: background-color 0.12s;
 }
 
@@ -475,7 +676,7 @@
 
 .case-row:hover,
 .case-row:focus-within {
-  background: #f7f6f1;
+  background: var(--paper);
 }
 
 .case-row-open {
@@ -546,7 +747,7 @@
 }
 
 .risk-badge--none {
-  background: #ecebe7;
+  background: var(--sand-92);
   color: var(--ink-soft);
   font-weight: 600;
 }
