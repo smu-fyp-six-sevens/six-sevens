@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from .. import document_repository, events, query_stats
 from ..config import settings
 from ..events import Event, Stopwatch, types
+from ..events.envelope import officer_of
 from ..langgraph import pipeline as langgraph_pipeline
 from ..models import DocumentStatus, ProcessingErrorEntry
 from . import recovery
@@ -67,8 +68,14 @@ async def _cancelled_elsewhere(document_id: str) -> bool:
     return document is not None and document.status == DocumentStatus.CANCELLED
 
 
-async def _run(document_id: str, work: Callable[[], Awaitable[None]], label: str, kind: str = "document") -> None:
-    """`label` names the unit in the perf log; `kind` is its work label in the cost metrics."""
+async def _run(
+    document_id: str, work: Callable[[], Awaitable[None]], label: str, kind: str = "document",
+    requested_by: str | None = None,
+) -> None:
+    """
+    `label` names the unit in the perf log; `kind` is its work label in the cost metrics. `requested_by` is the
+    officer whose upload, retry or retype started the run, for the audit trail.
+    """
     timer = Stopwatch()
     usage: dict[str, float | int] = {}
     try:
@@ -96,10 +103,10 @@ async def _run(document_id: str, work: Callable[[], Awaitable[None]], label: str
             )
         except Exception:
             logger.exception("Failed to mark document %s FAILED after an unhandled error", document_id)
-    await _announce(document_id, timer, {"run": kind, **usage})
+    await _announce(document_id, timer, {"run": kind, **usage}, requested_by)
 
 
-async def _announce(document_id: str, timer: Stopwatch, usage: dict) -> None:
+async def _announce(document_id: str, timer: Stopwatch, usage: dict, requested_by: str | None = None) -> None:
     """
     Publishes how the run ended (analyzed or failed), with its Claude usage; anything else, such as cancelled,
     was announced by its cause.
@@ -112,6 +119,8 @@ async def _announce(document_id: str, timer: Stopwatch, usage: dict) -> None:
         {"document_type": document.document_type, "failure_reason": document.failure_reason} if failed
         else {"document_type": document.document_type, "classification_confidence": document.classification_confidence}
     )
+    if requested_by is not None:
+        detail["requested_by"] = requested_by
     await events.record(Event(
         type=types.DOCUMENT_FAILED if failed else types.DOCUMENT_ANALYZED,
         actor_type="agent", actor=_ACTOR, case_id=document.case_id, document_id=document_id,
@@ -124,7 +133,7 @@ async def on_queued(event: Event) -> None:
     if event.document_id is None:
         return
     document_id = event.document_id
-    await _run(document_id, lambda: _process(document_id, event.occurred_at), "pipeline")
+    await _run(document_id, lambda: _process(document_id, event.occurred_at), "pipeline", requested_by=officer_of(event))
 
 
 async def on_retyped(event: Event) -> None:
@@ -132,7 +141,10 @@ async def on_retyped(event: Event) -> None:
     if event.document_id is None:
         return
     document_id = event.document_id
-    await _run(document_id, lambda: langgraph_pipeline.rerun_extraction(document_id), "rerun extraction", "extraction_rerun")
+    await _run(
+        document_id, lambda: langgraph_pipeline.rerun_extraction(document_id), "rerun extraction", "extraction_rerun",
+        requested_by=officer_of(event),
+    )
 
 
 async def on_cancelled(event: Event) -> None:

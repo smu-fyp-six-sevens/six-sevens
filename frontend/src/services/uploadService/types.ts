@@ -118,6 +118,9 @@ export type IndividualCheckId =
   | 'ai-generation';
 
 export type BulkActionFailure = Schemas['BulkActionFailure'];
+
+// One audit trail entry (backend/app/events/envelope.py). An agent's run names its officer in detail.requested_by.
+export type AuditEvent = Schemas['Event'];
 export type BulkMoveResponse = Schemas['BulkMoveResponse'];
 export type BulkDeleteResponse = Schemas['BulkDeleteResponse'];
 
