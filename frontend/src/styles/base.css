@@ -148,9 +148,46 @@ button {
   box-shadow: 0 0 0 3px rgba(61, 90, 128, 0.2);
 }
 
+.header-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 348px;
+  min-width: 0;
+}
+
+.header-new-case {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--white);
+  cursor: pointer;
+  transition: opacity 0.12s;
+}
+
+.header-new-case svg {
+  width: 16px;
+  height: 16px;
+}
+
+.header-new-case:hover {
+  opacity: 0.85;
+}
+
+.header-new-case:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(61, 90, 128, 0.3);
+}
+
 .header-search {
-  flex: 0 1 300px;
-  min-width: 160px;
+  flex: 1 1 auto;
+  min-width: 140px;
 }
 
 .header-search .search-box {
@@ -242,27 +279,87 @@ button {
 }
 
 
-.signout-btn {
-  padding: 7px 14px;
-  border: none;
-  border-radius: 6px;
-  background: var(--red);
-  color: var(--white);
+.officer-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 4px 4px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
   font: inherit;
+  cursor: pointer;
+  transition: background-color 0.12s;
+}
+
+.officer-trigger:hover,
+.officer-trigger[aria-expanded='true'] {
+  background: rgba(61, 90, 128, 0.08);
+}
+
+.officer-trigger:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(61, 90, 128, 0.2);
+}
+
+.officer-avatar {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--steel);
+  color: var(--white);
   font-size: 13px;
   font-weight: 600;
-  line-height: 1.2;
+}
+
+.officer-caret {
+  width: 10px;
+  height: 6px;
+  color: var(--ink-soft);
+}
+
+.officer-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 180px;
+  padding: 6px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(18, 32, 61, 0.16);
+}
+
+.officer-menu-name {
+  padding: 8px 10px 6px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--orange-90);
+  margin-bottom: 4px;
+}
+
+.officer-menu-item {
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--red);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: left;
   cursor: pointer;
-  transition: background 0.12s;
 }
 
-.signout-btn:hover {
-  background: #93321f;
-}
-
-.signout-btn:focus-visible {
+.officer-menu-item:hover,
+.officer-menu-item:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(179, 64, 42, 0.3);
+  background: rgba(179, 64, 42, 0.1);
 }
 
 .brand-link {
@@ -281,13 +378,13 @@ button {
 }
 
 .officer-tag {
+  position: relative;
   flex-shrink: 0;
   font-size: 13px;
   color: var(--ink-soft);
   font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
   display: flex;
   align-items: center;
-  gap: 24px;
 }
 
 /* The officer name goes first; then the header becomes two rows with the search on the second
@@ -327,8 +424,9 @@ button {
     grid-area: officer;
   }
 
-  .header-search {
+  .header-tools {
     grid-area: search;
+    flex-basis: auto;
   }
 }
 

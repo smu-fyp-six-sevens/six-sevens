@@ -8,6 +8,7 @@ import type {
   CaseListItem,
   CaseListPage,
   CaseOption,
+  CaseRiskFilter,
   CaseSearchResult,
   CaseSort,
   UpdatedCase,
@@ -37,6 +38,7 @@ export interface CasePageQuery {
   offset: number;
   sort: CaseSort;
   statuses: CaseDocumentsStatus[];
+  risks: CaseRiskFilter[];
   q: string;
 }
 
@@ -47,6 +49,7 @@ export async function listCasesPage(query: CasePageQuery, signal?: AbortSignal):
     sort: query.sort,
   });
   for (const status of query.statuses) params.append('status', status);
+  for (const risk of query.risks) params.append('risk', risk);
   if (query.q) params.set('q', query.q);
 
   const response = await authFetch(`/cases?${params}`, { signal });

@@ -1098,7 +1098,7 @@
     font-size: 16px;
   }
 
-  /* Sign out stays; the officer name doesn't fit beside the brand. */
+  /* The avatar stays as the menu's button; the officer name doesn't fit beside the brand. */
   .officer-name {
     display: none;
   }

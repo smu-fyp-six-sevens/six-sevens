@@ -122,20 +122,34 @@ def test_list_cases() -> None:
     assert (body["total"], body["limit"], body["offset"]) == (40, 25, 0)
     assert body["items"][1]["documents_status"] == "stuck"
     # Nothing asked for: the first 25, newest first, no filter.
-    mock_case_service.list_cases_page.assert_called_once_with(limit=25, offset=0, sort="newest", statuses=[], q=None)
+    mock_case_service.list_cases_page.assert_called_once_with(
+        limit=25, offset=0, sort="newest", statuses=[], risks=[], q=None,
+    )
 
 
 def test_list_cases_passes_the_page_sort_filter_and_search_through() -> None:
     with patch("app.routers.cases.case_service") as mock_case_service:
         mock_case_service.list_cases_page.return_value = CaseListPage(items=[], total=0, limit=10, offset=20)
 
-        response = client.get("/cases?limit=10&offset=20&sort=risk&status=stuck&status=failed&q=acme")
+        response = client.get(
+            "/cases?limit=10&offset=20&sort=risk&status=stuck&status=failed&risk=High&risk=unscored&q=acme"
+        )
 
     assert response.status_code == 200
     mock_case_service.list_cases_page.assert_called_once_with(
         limit=10, offset=20, sort="risk",
-        statuses=[CaseDocumentsStatus.STUCK, CaseDocumentsStatus.FAILED], q="acme",
+        statuses=[CaseDocumentsStatus.STUCK, CaseDocumentsStatus.FAILED], risks=["High", "unscored"], q="acme",
     )
+
+
+def test_list_cases_accepts_the_lowest_risk_order_and_rejects_an_unknown_risk_level() -> None:
+    with patch("app.routers.cases.case_service") as mock_case_service:
+        mock_case_service.list_cases_page.return_value = CaseListPage(items=[], total=0, limit=25, offset=0)
+
+        accepted = client.get("/cases?sort=lowest_risk")
+        rejected = client.get("/cases?risk=Severe")
+
+    assert (accepted.status_code, rejected.status_code) == (200, 422)
 
 
 def test_list_cases_rejects_a_page_outside_its_limits() -> None:

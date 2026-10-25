@@ -520,7 +520,9 @@ def get_case_summary(case_id: str) -> CaseSummary | None:
     )
 
 
-CaseSort = Literal["newest", "oldest", "risk"]
+CaseSort = Literal["newest", "oldest", "risk", "lowest_risk"]
+# "unscored" is a case no analysis run has scored yet.
+CaseRiskFilter = Literal["Critical", "High", "Medium", "Low", "unscored"]
 _RISK_RANK = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
 
 
@@ -563,16 +565,24 @@ def _risk_rank(risk: CaseRisk | None) -> int:
     return _RISK_RANK.get(risk.level or "", 0) if risk is not None and risk.state == "scored" else 0
 
 
+def _risk_filter_value(risk: CaseRisk | None) -> str:
+    rank = _risk_rank(risk)
+    return next((level for level, value in _RISK_RANK.items() if value == rank), "unscored")
+
+
 def list_cases_page(
     *, limit: int, offset: int, sort: CaseSort, statuses: list[CaseDocumentsStatus], q: str | None,
+    risks: list[CaseRiskFilter] | None = None,
 ) -> CaseListPage:
     """
     One page of the case queue. Sorting by date and searching happen in the database, so only the page's own
-    documents and scores are read. A status filter and the risk order come from other tables (and "stuck" from
-    the clock), which the database can't sort or filter on: those read every matching case first, then slice.
+    documents and scores are read. A status or risk filter and the risk order come from other tables (and
+    "stuck" from the clock), which the database can't sort or filter on: those read every matching case first,
+    then slice.
     """
     q = (q or "").strip() or None
-    if sort != "risk" and not statuses:
+    by_risk = sort in ("risk", "lowest_risk")
+    if not by_risk and not statuses and not risks:
         cases, total = case_repository.list_cases_page(q, newest=sort == "newest", limit=limit, offset=offset)
         return CaseListPage(items=_list_items(cases), total=total, limit=limit, offset=offset)
 
@@ -582,9 +592,14 @@ def list_cases_page(
         wanted = set(statuses)
         cases = [case for case in cases if compute_documents_status(documents_by_case.get(case.id, [])) in wanted]
     saved: dict[str, CaseRisk] | None = None
-    if sort == "risk":
+    if by_risk or risks:
         saved = _load_saved_risks([case.id for case in cases])
-        cases = sorted(cases, key=lambda case: -_risk_rank((saved or {}).get(case.id)))  # stable: newest first among equals
+    if risks:
+        wanted_risks = set(risks)
+        cases = [case for case in cases if _risk_filter_value((saved or {}).get(case.id)) in wanted_risks]
+    if by_risk:
+        sign = -1 if sort == "risk" else 1
+        cases = sorted(cases, key=lambda case: sign * _risk_rank((saved or {}).get(case.id)))  # stable: newest first among equals
     elif sort == "oldest":
         cases.reverse()
     page = cases[offset : offset + limit]

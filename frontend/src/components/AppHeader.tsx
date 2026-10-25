@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import type { CaseRecord } from '../App';
 import { clearToken, getUsername } from '../lib/api';
@@ -183,7 +183,74 @@ function HeaderSearch() {
   );
 }
 
+// The officer's name opens a small menu; sign out lives in it.
+function AccountMenu() {
+  const menuId = useId();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const username = getUsername();
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    function closeOnOutsideClick(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setIsOpen(false);
+    }
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') setIsOpen(false);
+    }
+
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutsideClick);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [isOpen]);
+
+  return (
+    <div className="officer-tag" ref={rootRef}>
+      <button
+        type="button"
+        className="officer-trigger"
+        aria-label="Account menu"
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        aria-controls={isOpen ? menuId : undefined}
+        onClick={() => setIsOpen((open) => !open)}
+      >
+        <span className="officer-avatar" aria-hidden="true">{(username ?? '?').charAt(0).toUpperCase()}</span>
+        <span className="officer-name">{officerLabel(username)}</span>
+        <svg className="officer-caret" viewBox="0 0 10 6" aria-hidden="true">
+          <path d="m1 1 4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div id={menuId} className="officer-menu" role="menu">
+          <div className="officer-menu-name">{officerLabel(username)}</div>
+          <button
+            type="button"
+            role="menuitem"
+            className="officer-menu-item"
+            onClick={() => {
+              clearToken();
+              window.location.assign('/login');
+            }}
+          >
+            Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AppHeader() {
+  const navigate = useNavigate();
+
   return (
     <header className="app-header">
       <BrandLink />
@@ -201,21 +268,17 @@ export default function AppHeader() {
       </nav>
 
       <div className="app-header-right">
-        <HeaderSearch />
+        <div className="header-tools">
+          <HeaderSearch />
 
-        <div className="officer-tag">
-          <span className="officer-name">{officerLabel(getUsername())}</span>
-          <button
-            type="button"
-            className="signout-btn"
-            onClick={() => {
-              clearToken();
-              window.location.assign('/login');
-            }}
-          >
-            Sign out
+          <button type="button" className="header-new-case" aria-label="New case" title="New case" onClick={() => navigate('/create-case')}>
+            <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M8 3v10M3 8h10" />
+            </svg>
           </button>
         </div>
+
+        <AccountMenu />
       </div>
     </header>
   );

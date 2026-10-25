@@ -127,8 +127,8 @@ export interface paths {
         };
         /**
          * List Cases
-         * @description One page of the case queue: newest or oldest first, or highest risk first; optionally only these documents
-         *     statuses and only cases whose number or name contains q.
+         * @description One page of the case queue: newest or oldest first, or by risk either way; optionally only these documents
+         *     statuses, only these risk levels and only cases whose number or name contains q.
          */
         get: operations["list_cases_cases_get"];
         put?: never;
@@ -3667,8 +3667,9 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
-                sort?: "newest" | "oldest" | "risk";
+                sort?: "newest" | "oldest" | "risk" | "lowest_risk";
                 status?: components["schemas"]["CaseDocumentsStatus"][];
+                risk?: ("Critical" | "High" | "Medium" | "Low" | "unscored")[];
                 q?: string | null;
             };
             header?: {

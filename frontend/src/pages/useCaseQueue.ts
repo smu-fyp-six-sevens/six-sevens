@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { CaseRecord } from '../App';
 import { getCaseCounts, listCasesPage } from '../services/uploadService';
-import type { CaseCounts, CaseDocumentsStatus, CaseSort } from '../services/uploadService';
+import type { CaseCounts, CaseDocumentsStatus, CaseRiskFilter, CaseSort } from '../services/uploadService';
 import { toCaseRecord } from '../utils/caseRecord';
 
 export interface CaseQueueQuery {
   q: string;
   sort: CaseSort;
   statuses: CaseDocumentsStatus[];
+  risks: CaseRiskFilter[];
   page: number;
   pageSize: number;
 }
@@ -18,7 +19,7 @@ function isAbort(err: unknown): boolean {
 
 // The queue's data, a page at a time from the server. While the next page loads the current rows stay on
 // screen (isFetching), so the table doesn't flash empty. The sidebar's counts are their own, cheaper request.
-export function useCaseQueue({ q, sort, statuses, page, pageSize }: CaseQueueQuery) {
+export function useCaseQueue({ q, sort, statuses, risks, page, pageSize }: CaseQueueQuery) {
   const [items, setItems] = useState<CaseRecord[]>([]);
   const [total, setTotal] = useState(0);
   const [hasLoaded, setHasLoaded] = useState(false);
@@ -28,6 +29,7 @@ export function useCaseQueue({ q, sort, statuses, page, pageSize }: CaseQueueQue
   const [version, setVersion] = useState(0);
   const [countsVersion, setCountsVersion] = useState(0);
   const statusKey = statuses.join(',');
+  const riskKey = risks.join(',');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -40,6 +42,7 @@ export function useCaseQueue({ q, sort, statuses, page, pageSize }: CaseQueueQue
         offset: (page - 1) * pageSize,
         sort,
         statuses: statusKey ? (statusKey.split(',') as CaseDocumentsStatus[]) : [],
+        risks: riskKey ? (riskKey.split(',') as CaseRiskFilter[]) : [],
         q,
       },
       controller.signal,
@@ -57,7 +60,7 @@ export function useCaseQueue({ q, sort, statuses, page, pageSize }: CaseQueueQue
       });
 
     return () => controller.abort();
-  }, [q, sort, statusKey, page, pageSize, version]);
+  }, [q, sort, statusKey, riskKey, page, pageSize, version]);
 
   useEffect(() => {
     const controller = new AbortController();

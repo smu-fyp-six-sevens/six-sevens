@@ -258,14 +258,17 @@ export class MockBackend {
     const offset = Number(params.get('offset') ?? 0);
     const sort = params.get('sort') ?? 'newest';
     const statuses = params.getAll('status');
+    const risks = params.getAll('risk');
+    const rank = (c: CaseRow) => (c.risk?.state === 'scored' ? ({ Critical: 4, High: 3, Medium: 2, Low: 1 } as Record<string, number>)[c.risk.level ?? ''] ?? 0 : 0);
+    const riskValue = (c: CaseRow) => (rank(c) ? c.risk!.level! : 'unscored');
 
     let cases = this.newestFirst(this.matching(params.get('q')));
     if (statuses.length) cases = cases.filter((c) => statuses.includes(c.documents_status));
+    if (risks.length) cases = cases.filter((c) => risks.includes(riskValue(c)));
     if (sort === 'oldest') cases.reverse();
-    if (sort === 'risk') {
-      const rank = (c: CaseRow) => (c.risk?.state === 'scored' ? ({ Critical: 4, High: 3, Medium: 2, Low: 1 } as Record<string, number>)[c.risk.level ?? ''] ?? 0 : 0);
-      cases = [...cases].sort((a, b) => rank(b) - rank(a)); // stable: newest first among equals
-    }
+    // Stable sorts: newest first among equals.
+    if (sort === 'risk') cases = [...cases].sort((a, b) => rank(b) - rank(a));
+    if (sort === 'lowest_risk') cases = [...cases].sort((a, b) => rank(a) - rank(b));
     return { items: cases.slice(offset, offset + limit), total: cases.length, limit, offset };
   }
 

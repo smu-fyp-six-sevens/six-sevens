@@ -6,7 +6,7 @@ import logging
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 
 from .. import case_service, document_repository, events
-from ..case_service import CaseSort
+from ..case_service import CaseRiskFilter, CaseSort
 from ..events import officer_event, types
 from ._dependencies import get_case_or_404, to_thread_or_502
 from ..case_match import CaseMatchResult
@@ -46,12 +46,14 @@ async def list_cases(
     offset: int = Query(0, ge=0),
     sort: CaseSort = "newest",
     status_filter: list[CaseDocumentsStatus] = Query(default=[], alias="status"),
+    risk_filter: list[CaseRiskFilter] = Query(default=[], alias="risk"),
     q: str | None = Query(None, max_length=MAX_COMPANY_NAME_LENGTH),
 ) -> CaseListPage:
-    """One page of the case queue: newest or oldest first, or highest risk first; optionally only these documents
-    statuses and only cases whose number or name contains q."""
+    """One page of the case queue: newest or oldest first, or by risk either way; optionally only these documents
+    statuses, only these risk levels and only cases whose number or name contains q."""
     return await to_thread_or_502(
-        case_service.list_cases_page, limit=limit, offset=offset, sort=sort, statuses=status_filter, q=q,
+        case_service.list_cases_page, limit=limit, offset=offset, sort=sort, statuses=status_filter,
+        risks=risk_filter, q=q,
         detail="Failed to list cases. Check Supabase table access.",
         log=("Failed to list cases",),
     )

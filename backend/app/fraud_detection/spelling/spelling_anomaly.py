@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import importlib.resources
 import logging
 import re
@@ -22,12 +23,16 @@ MAX_EDIT_DISTANCE = 2
 MIN_WORD_LENGTH = 2  # drops single-letter tokens (initials, OCR artifacts)
 MAX_OTHER_CONTEXTS = 2
 
-# Loaded once at module import — same "shared instance" pattern as
-# ocr_extractor.py's module-level `reader = RapidOCR()` — SymSpell's
-# dictionary load is the expensive part, not each individual lookup.
-_sym_spell = SymSpell(max_dictionary_edit_distance=MAX_EDIT_DISTANCE, prefix_length=7)
 _DICTIONARY_PATH = importlib.resources.files("symspellpy") / "frequency_dictionary_en_82_765.txt"
-_sym_spell.load_dictionary(str(_DICTIONARY_PATH), term_index=0, count_index=1)
+
+
+# Loaded on first use, then shared: building the index takes about 6 seconds, which would otherwise be paid by
+# every import (every uvicorn reload). SymSpell's dictionary load is the expensive part, not each lookup.
+@functools.cache
+def _spell_checker() -> SymSpell:
+    sym_spell = SymSpell(max_dictionary_edit_distance=MAX_EDIT_DISTANCE, prefix_length=7)
+    sym_spell.load_dictionary(str(_DICTIONARY_PATH), term_index=0, count_index=1)
+    return sym_spell
 
 # Letters touching a digit are part of a reference/account code
 # ("EBACT51059664352", "4n3NIEdM"), not a word — the lookarounds stop the
@@ -123,7 +128,7 @@ def _is_recognized_word(word: str, known_terms: set[str]) -> bool:
     normalized = word.lower()
     if normalized in DOMAIN_TERMS or normalized in known_terms:
         return True
-    exact = _sym_spell.lookup(normalized, Verbosity.TOP, max_edit_distance=0)
+    exact = _spell_checker().lookup(normalized, Verbosity.TOP, max_edit_distance=0)
     return bool(exact)
 
 
@@ -278,7 +283,7 @@ def _find_candidates(pages: list[dict], known_terms: set[str]) -> list[_Candidat
             if normalized in DOMAIN_TERMS or normalized in known_terms:
                 continue
 
-            suggestions = _sym_spell.lookup(
+            suggestions = _spell_checker().lookup(
                 normalized, Verbosity.CLOSEST, max_edit_distance=MAX_EDIT_DISTANCE
             )
             if suggestions and suggestions[0].term == normalized and suggestions[0].distance == 0:

@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import AppHeader from '../components/AppHeader';
 import CaseRow from '../components/CaseRow';
 import ConfirmDialog from '../components/ConfirmDialog';
+import HeaderFilter from '../components/HeaderFilter';
+import type { FilterOption } from '../components/HeaderFilter';
 import Pagination from '../components/Pagination';
 import { deleteCase } from '../services/uploadService';
-import type { CaseDocumentsStatus, CaseSort } from '../services/uploadService';
+import type { CaseDocumentsStatus, CaseRiskFilter, CaseSort } from '../services/uploadService';
 import type { CaseRecord } from '../App';
 import { caseStatusTone } from '../utils/caseStatusTone';
 import { STATUS_ORDER, statusLabel, statusValue } from '../utils/caseStatus';
@@ -14,28 +17,97 @@ import { useCaseQueue } from './useCaseQueue';
 
 interface CaseQueuePageProps {
   onOpenCase: (caseRecord: CaseRecord) => void;
-  onCreateCase: () => void;
 }
 
 const PREFS_STORAGE_KEY = 'caseQueue.prefs';
 const PAGE_SIZE = 25;
 
-// One sort at a time. Risk puts the highest first and the newest first among equals.
-const SORT_OPTIONS: { value: CaseSort; label: string }[] = [
-  { value: 'newest', label: 'Newest first' },
-  { value: 'oldest', label: 'Oldest first' },
-  { value: 'risk', label: 'Highest risk first' },
-];
+// One sort at a time, picked from a column header: the first click puts the newest or highest first (arrow down),
+// the second reverses it (arrow up). Equal risks are newest first.
+const SORT_KEYS: CaseSort[] = ['newest', 'oldest', 'risk', 'lowest_risk'];
 
 const DEFAULT_SORT: CaseSort = 'newest';
 
+const SORT_CHOICES: { value: CaseSort; label: string }[] = [
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+  { value: 'risk', label: 'Highest risk first' },
+  { value: 'lowest_risk', label: 'Lowest risk first' },
+];
+
+const RISK_OPTIONS: { value: CaseRiskFilter; label: string }[] = [
+  { value: 'Critical', label: 'Critical' },
+  { value: 'High', label: 'High' },
+  { value: 'Medium', label: 'Medium' },
+  { value: 'Low', label: 'Low' },
+  { value: 'unscored', label: 'Not assessed' },
+];
+
 interface QueuePrefs {
   statuses: CaseDocumentsStatus[];
+  risks: CaseRiskFilter[];
   sort: CaseSort;
 }
 
 function isSortKey(value: unknown): value is CaseSort {
-  return SORT_OPTIONS.some((option) => option.value === value);
+  return SORT_KEYS.some((key) => key === value);
+}
+
+function savedRisk(item: unknown): CaseRiskFilter | undefined {
+  return RISK_OPTIONS.find((option) => option.value === item)?.value;
+}
+
+// A column header that sorts: both arrows show, the one for the current direction is dark.
+function SortHeader({ label, first, second, sort, disabled, onSort }: {
+  label: string;
+  first: CaseSort;
+  second: CaseSort;
+  sort: CaseSort;
+  disabled: boolean;
+  onSort: (next: CaseSort) => void;
+}) {
+  const direction = sort === first ? 'desc' : sort === second ? 'asc' : undefined;
+  const state = direction === 'desc' ? 'high to low' : direction === 'asc' ? 'low to high' : 'not sorted';
+
+  return (
+    <button
+      type="button"
+      className="case-sort"
+      data-direction={direction}
+      disabled={disabled}
+      aria-label={`Sort by ${label.toLowerCase()} (${state})`}
+      onClick={() => onSort(sort === first ? second : first)}
+    >
+      {label}
+      <svg className="case-sort-arrows" viewBox="0 0 8 14" aria-hidden="true">
+        <path className="case-sort-up" d="M4 0 8 5H0z" />
+        <path className="case-sort-down" d="M4 14 0 9h8z" />
+      </svg>
+    </button>
+  );
+}
+
+function TableHead({ sort, disabled, statusFilter, riskFilter, onSort }: {
+  sort: CaseSort;
+  disabled: boolean;
+  statusFilter: ReactNode;
+  riskFilter: ReactNode;
+  onSort: (next: CaseSort) => void;
+}) {
+  return (
+    <div className="case-table-head">
+      <span>Case</span>
+      <span>Company name</span>
+      <span className="case-table-head-cell">{statusFilter}</span>
+      <span className="case-table-head-cell">
+        <SortHeader label="Risk" first="risk" second="lowest_risk" sort={sort} disabled={disabled} onSort={onSort} />
+        {riskFilter}
+      </span>
+      <span className="case-table-head-center">
+        <SortHeader label="Created" first="newest" second="oldest" sort={sort} disabled={disabled} onSort={onSort} />
+      </span>
+    </div>
+  );
 }
 
 // A saved status is the backend's value; older saves hold the label ("In progress") the queue used to store.
@@ -49,7 +121,7 @@ function savedStatus(item: unknown): CaseDocumentsStatus | undefined {
 // re-apply the same filters and sort on every visit. Wrapped in try/catch
 // since storage can throw (private mode, blocked site data) or hold junk.
 function loadPrefs(): QueuePrefs {
-  const defaults: QueuePrefs = { statuses: [], sort: DEFAULT_SORT };
+  const defaults: QueuePrefs = { statuses: [], risks: [], sort: DEFAULT_SORT };
 
   try {
     const raw = localStorage.getItem(PREFS_STORAGE_KEY);
@@ -57,7 +129,7 @@ function loadPrefs(): QueuePrefs {
     if (!raw) return defaults;
 
     // The oldest shape kept a date direction and a separate "highest risk first" switch.
-    const parsed = JSON.parse(raw) as { statuses?: unknown; sort?: unknown; sortOrder?: string; riskFirst?: boolean };
+    const parsed = JSON.parse(raw) as { statuses?: unknown; risks?: unknown; sort?: unknown; sortOrder?: string; riskFirst?: boolean };
     const sort: CaseSort = isSortKey(parsed.sort)
       ? parsed.sort
       : parsed.riskFirst === true
@@ -69,6 +141,9 @@ function loadPrefs(): QueuePrefs {
     return {
       statuses: Array.isArray(parsed.statuses)
         ? parsed.statuses.map(savedStatus).filter((status): status is CaseDocumentsStatus => status !== undefined)
+        : [],
+      risks: Array.isArray(parsed.risks)
+        ? parsed.risks.map(savedRisk).filter((risk): risk is CaseRiskFilter => risk !== undefined)
         : [],
       sort,
     };
@@ -85,7 +160,7 @@ function savePrefs(prefs: QueuePrefs) {
   }
 }
 
-export default function CaseQueuePage({ onOpenCase, onCreateCase }: CaseQueuePageProps) {
+export default function CaseQueuePage({ onOpenCase }: CaseQueuePageProps) {
   // Set by the header search's "See all results" (see AppHeader).
   const [searchParams, setSearchParams] = useSearchParams();
   const search = searchParams.get('q') ?? '';
@@ -96,11 +171,12 @@ export default function CaseQueuePage({ onOpenCase, onCreateCase }: CaseQueuePag
   // Read localStorage once, on the first render; the settings start from it.
   const [initialPrefs] = useState(loadPrefs);
   const [savedStatuses, setSavedStatuses] = useState<Set<CaseDocumentsStatus>>(() => new Set(initialPrefs.statuses));
+  const [risks, setRisks] = useState<Set<CaseRiskFilter>>(() => new Set(initialPrefs.risks));
   const [sort, setSort] = useState<CaseSort>(initialPrefs.sort);
 
   useEffect(() => {
-    savePrefs({ statuses: Array.from(savedStatuses), sort });
-  }, [savedStatuses, sort]);
+    savePrefs({ statuses: Array.from(savedStatuses), risks: Array.from(risks), sort });
+  }, [savedStatuses, risks, sort]);
 
   // The sidebar lists the statuses cases are in, so it learns them from the server's counts.
   const [counts, setCounts] = useState<Map<CaseDocumentsStatus, number> | null>(null);
@@ -116,8 +192,11 @@ export default function CaseQueuePage({ onOpenCase, onCreateCase }: CaseQueuePag
     [counts, statusOptions, savedStatuses],
   );
   const activeList = useMemo(() => STATUS_ORDER.filter((status) => activeStatuses.has(status)), [activeStatuses]);
+  const riskList = useMemo(() => RISK_OPTIONS.map((option) => option.value).filter((risk) => risks.has(risk)), [risks]);
 
-  const queue = useCaseQueue({ q: search.trim(), sort, statuses: activeList, page: requestedPage, pageSize: PAGE_SIZE });
+  const queue = useCaseQueue({
+    q: search.trim(), sort, statuses: activeList, risks: riskList, page: requestedPage, pageSize: PAGE_SIZE,
+  });
   const { items, total, hasLoaded, isFetching, error } = queue;
 
   useEffect(() => {
@@ -152,22 +231,59 @@ export default function CaseQueuePage({ onOpenCase, onCreateCase }: CaseQueuePag
     goToPage(1);
   }
 
+  function changeRisks(next: Set<CaseRiskFilter>) {
+    setRisks(next);
+    goToPage(1);
+  }
+
   function changeSort(next: CaseSort) {
     setSort(next);
     goToPage(1);
   }
 
-  function toggleStatus(status: CaseDocumentsStatus) {
-    const next = new Set(activeStatuses);
+  const statusFilterOptions: FilterOption[] = statusOptions.map((status) => ({
+    value: status,
+    text: statusLabel(status),
+    count: counts?.get(status) ?? 0,
+    label: (
+      <>
+        <span className={`case-status-dot case-status-dot--${caseStatusTone(statusLabel(status))}`} aria-hidden="true" />
+        {statusLabel(status)}
+      </>
+    ),
+  }));
+  const riskFilterOptions: FilterOption[] = RISK_OPTIONS.map((option) => ({
+    value: option.value,
+    text: option.label,
+    label: (
+      <span className={`risk-badge risk-badge--${option.value === 'unscored' ? 'none' : option.value.toLowerCase()} queue-risk-badge`}>
+        {option.label}
+      </span>
+    ),
+  }));
 
-    if (next.has(status)) {
-      next.delete(status);
-    } else {
-      next.add(status);
-    }
-
-    changeStatuses(next);
-  }
+  const statusFilter = (
+    <HeaderFilter
+      name="status"
+      title="Status"
+      options={statusFilterOptions}
+      selected={activeStatuses}
+      disabled={!counts}
+      onChange={(next) => changeStatuses(next as Set<CaseDocumentsStatus>)}
+    />
+  );
+  // The header's own risk filter is just a funnel next to the sort arrows; the small-screen row has no header, so it is titled.
+  const riskFilterWith = (title?: string) => (
+    <HeaderFilter
+      name="risk"
+      title={title}
+      options={riskFilterOptions}
+      selected={risks}
+      disabled={!hasLoaded}
+      onChange={(next) => changeRisks(next as Set<CaseRiskFilter>)}
+    />
+  );
+  const riskFilter = riskFilterWith();
 
   async function confirmDeleteCase() {
     if (!caseToDelete) return;
@@ -193,187 +309,115 @@ export default function CaseQueuePage({ onOpenCase, onCreateCase }: CaseQueuePag
       <AppHeader />
 
       <section className="queue-view">
-        <div className="queue-layout">
-          <aside className="queue-sidebar" aria-label="Filter and sort cases">
-            <div className="queue-sidebar-group">
-              <span className="filter-label">Status</span>
+        <div className="queue-bar">
+          <h1 className="queue-title">{hasLoaded ? `Cases (${total})` : 'Cases'}</h1>
 
-              <ul className="queue-filter-list">
-                <li>
-                  <button
-                    type="button"
-                    aria-pressed={activeStatuses.size === 0}
-                    className="queue-filter"
-                    onClick={() => changeStatuses(new Set())}
-                  >
-                    <span className="queue-filter-label">All cases</span>
-                    <span className="queue-filter-count">{queue.counts ? queue.counts.total : ''}</span>
-                  </button>
-                </li>
-
-                {/* The statuses are only known once the counts arrive: hold their place so nothing below moves. */}
-                {!counts && [0, 1, 2].map((slot) => (
-                  <li key={slot} aria-hidden="true">
-                    <div className="queue-filter queue-filter--skeleton">
-                      <span className="skeleton-bar skeleton-bar--dot" />
-                      <span className="skeleton-bar skeleton-bar--label" />
-                    </div>
-                  </li>
-                ))}
-
-                {statusOptions.map((status) => (
-                  <li key={status}>
-                    <button
-                      type="button"
-                      aria-pressed={activeStatuses.has(status)}
-                      className="queue-filter status-filter"
-                      onClick={() => toggleStatus(status)}
-                    >
-                      <span className={`case-status-dot case-status-dot--${caseStatusTone(statusLabel(status))}`} aria-hidden="true" />
-                      <span className="queue-filter-label">{statusLabel(status)}</span>
-                      <span className="queue-filter-count">{counts?.get(status) ?? 0}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="queue-sidebar-group">
-              <span className="filter-label">Sort</span>
-
-              <ul className="queue-filter-list">
-                {SORT_OPTIONS.map((option) => (
-                  <li key={option.value}>
-                    <button
-                      type="button"
-                      className="queue-filter"
-                      aria-pressed={sort === option.value}
-                      onClick={() => changeSort(option.value)}
-                    >
-                      <span className="queue-filter-label">{option.label}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </aside>
-
-          <div className="queue-main">
-            <div className="queue-toolbar">
-              <h1 className="queue-title">{hasLoaded ? `Assigned to you (${total})` : 'Assigned to you'}</h1>
-
-              {search && (
-                <span className="queue-search-chip">
-                  <span className="queue-search-chip-text">Matching “{search}”</span>
-                  <button
-                    type="button"
-                    aria-label="Clear search"
-                    onClick={() => {
-                      const params = new URLSearchParams(searchParams);
-                      params.delete('q');
-                      params.delete('page');
-                      setSearchParams(params, { replace: true });
-                    }}
-                  >
-                    ✕
-                  </button>
-                </span>
-              )}
-
-              <button type="button" className="create-case-btn queue-new-case" onClick={onCreateCase}>
-                <span aria-hidden="true">+ </span>New case
-              </button>
-            </div>
-
-            {deleteError && (
-              <div className="toast show mixed" role="alert">
-                ⚠ {deleteError}
-              </div>
-            )}
-
-            {error ? (
-              <div className="no-results">
-                <div>{error}</div>
-
-                <button
-                  type="button"
-                  className="go-btn queue-retry"
-                  onClick={queue.reload}
-                >
-                  Retry
-                </button>
-              </div>
-            ) : !hasLoaded ? (
-              <div className="case-table" aria-busy="true">
-                <span className="sr-only" role="status">Loading cases…</span>
-
-                <div className="case-table-head" aria-hidden="true">
-                  <span>Case</span>
-                  <span>Company name</span>
-                  <span>Status</span>
-                  <span className="case-table-head-center">Risk</span>
-                  <span className="case-table-head-center">Created</span>
-                </div>
-
-                <ul className="case-table-body" aria-hidden="true">
-                  {Array.from({ length: 8 }, (_, row) => (
-                    <li key={row} className="case-row">
-                      <div className="case-row-open">
-                        <span className="skeleton-cell"><span className="skeleton-bar skeleton-bar--id" /></span>
-                        <span className="skeleton-cell"><span className="skeleton-bar skeleton-bar--name" /></span>
-                        <span className="skeleton-cell"><span className="skeleton-bar skeleton-bar--status" /></span>
-                        <span className="skeleton-cell skeleton-cell--center"><span className="skeleton-bar skeleton-bar--pill" /></span>
-                        <span className="skeleton-cell skeleton-cell--center"><span className="skeleton-bar skeleton-bar--date" /></span>
-                      </div>
-                      <span className="case-row-menu-space" />
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : items.length > 0 ? (
-              <div className={`case-table${isFetching ? ' case-table--busy' : ''}`} aria-busy={isFetching}>
-                <div className="case-table-head" aria-hidden="true">
-                  <span>Case</span>
-                  <span>Company name</span>
-                  <span>Status</span>
-                  <span className="case-table-head-center">Risk</span>
-                  <span className="case-table-head-center">Created</span>
-                </div>
-
-                <ul className="case-table-body">
-                  {items.map((caseRecord) => (
-                    <CaseRow
-                      key={caseRecord.id}
-                      caseRecord={caseRecord}
-                      onOpen={onOpenCase}
-                      onDelete={setCaseToDelete}
-                      onCaseUpdated={(caseId, companyName) => queue.patchItem(caseId, { applicant: companyName })}
-                      isDeleting={deletingCaseId === caseRecord.id}
-                    />
-                  ))}
-                </ul>
-              </div>
-            ) : (
-              <div className="no-results">
-                {search
-                  ? `No case matches "${search}". Check the case number and try again.`
-                  : 'No cases to show.'}
-              </div>
-            )}
-
-            {hasLoaded && !error && (
-              <Pagination
-                page={page}
-                pageSize={PAGE_SIZE}
-                total={total}
-                onChange={(next) => {
-                  goToPage(next);
-                  window.scrollTo({ top: 0 });
+          {search && (
+            <span className="queue-search-chip">
+              <span className="queue-search-chip-text">Matching “{search}”</span>
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={() => {
+                  const params = new URLSearchParams(searchParams);
+                  params.delete('q');
+                  params.delete('page');
+                  setSearchParams(params, { replace: true });
                 }}
-              />
-            )}
-          </div>
+              >
+                ✕
+              </button>
+            </span>
+          )}
+
+          {!error && (
+            <Pagination
+              page={page}
+              pageSize={PAGE_SIZE}
+              total={total}
+              loading={!hasLoaded}
+              onChange={(next) => {
+                goToPage(next);
+                window.scrollTo({ top: 0 });
+              }}
+            />
+          )}
         </div>
+
+        {/* Where the table has no column headers (narrow screens), the same filters and the sort live here. */}
+        <div className="queue-controls">
+          {statusFilter}
+          {riskFilterWith('Risk')}
+
+          <label className="queue-sort-select">
+            <span className="sr-only">Sort cases</span>
+            <select value={sort} onChange={(event) => changeSort(event.target.value as CaseSort)}>
+              {SORT_CHOICES.map((choice) => (
+                <option key={choice.value} value={choice.value}>{choice.label}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {deleteError && (
+          <div className="toast show mixed" role="alert">
+            ⚠ {deleteError}
+          </div>
+        )}
+
+        {error ? (
+          <div className="no-results">
+            <div>{error}</div>
+
+            <button type="button" className="go-btn queue-retry" onClick={queue.reload}>
+              Retry
+            </button>
+          </div>
+        ) : !hasLoaded ? (
+          <div className="case-table" aria-busy="true">
+            <span className="sr-only" role="status">Loading cases…</span>
+
+            <TableHead sort={sort} disabled statusFilter={statusFilter} riskFilter={riskFilter} onSort={changeSort} />
+
+            <ul className="case-table-body" aria-hidden="true">
+              {Array.from({ length: 8 }, (_, row) => (
+                <li key={row} className="case-row">
+                  <div className="case-row-open">
+                    <span className="skeleton-cell"><span className="skeleton-bar skeleton-bar--id" /></span>
+                    <span className="skeleton-cell"><span className="skeleton-bar skeleton-bar--name" /></span>
+                    <span className="skeleton-cell"><span className="skeleton-bar skeleton-bar--status" /></span>
+                    <span className="skeleton-cell"><span className="skeleton-bar skeleton-bar--pill" /></span>
+                    <span className="skeleton-cell skeleton-cell--center"><span className="skeleton-bar skeleton-bar--date" /></span>
+                  </div>
+                  <span className="case-row-menu-space" />
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : items.length > 0 ? (
+          <div className={`case-table${isFetching ? ' case-table--busy' : ''}`} aria-busy={isFetching}>
+            <TableHead sort={sort} disabled={false} statusFilter={statusFilter} riskFilter={riskFilter} onSort={changeSort} />
+
+            <ul className="case-table-body">
+              {items.map((caseRecord) => (
+                <CaseRow
+                  key={caseRecord.id}
+                  caseRecord={caseRecord}
+                  onOpen={onOpenCase}
+                  onDelete={setCaseToDelete}
+                  onCaseUpdated={(caseId, companyName) => queue.patchItem(caseId, { applicant: companyName })}
+                  isDeleting={deletingCaseId === caseRecord.id}
+                />
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <div className="no-results">
+            {search
+              ? `No case matches "${search}". Check the case number and try again.`
+              : 'No cases to show.'}
+          </div>
+        )}
       </section>
 
       {caseToDelete && (

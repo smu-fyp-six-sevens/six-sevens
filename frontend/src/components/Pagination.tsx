@@ -2,6 +2,8 @@ interface PaginationProps {
   page: number;
   pageSize: number;
   total: number;
+  // Until the first page arrives, the row's place is held so the table doesn't move.
+  loading?: boolean;
   onChange: (page: number) => void;
 }
 
@@ -13,9 +15,10 @@ function pageItems(page: number, pageCount: number): (number | 'gap')[] {
   return [1, 'gap', page - 1, page, page + 1, 'gap', pageCount];
 }
 
-export default function Pagination({ page, pageSize, total, onChange }: PaginationProps) {
+export default function Pagination({ page, pageSize, total, loading = false, onChange }: PaginationProps) {
   const pageCount = Math.ceil(total / pageSize);
-  if (pageCount <= 1) return null;
+  if (loading) return <div className="pagination" aria-hidden="true" />;
+  if (total === 0) return null;
 
   const from = (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
@@ -26,14 +29,18 @@ export default function Pagination({ page, pageSize, total, onChange }: Paginati
         Showing {from}–{to} of {total}
       </span>
 
+      {pageCount > 1 && (
       <div className="pagination-controls">
         <button
           type="button"
           className="pagination-step"
+          aria-label="Previous page"
           disabled={page <= 1}
           onClick={() => onChange(page - 1)}
         >
-          <span aria-hidden="true">←</span> Previous
+          <svg className="pagination-chevron" viewBox="0 0 10 10" aria-hidden="true">
+            <path d="m6.5 1.5-3.5 3.5 3.5 3.5" />
+          </svg>
         </button>
 
         {pageItems(page, pageCount).map((item, index) =>
@@ -58,12 +65,16 @@ export default function Pagination({ page, pageSize, total, onChange }: Paginati
         <button
           type="button"
           className="pagination-step"
+          aria-label="Next page"
           disabled={page >= pageCount}
           onClick={() => onChange(page + 1)}
         >
-          Next <span aria-hidden="true">→</span>
+          <svg className="pagination-chevron" viewBox="0 0 10 10" aria-hidden="true">
+            <path d="m3.5 1.5 3.5 3.5-3.5 3.5" />
+          </svg>
         </button>
       </div>
+      )}
     </nav>
   );
 }

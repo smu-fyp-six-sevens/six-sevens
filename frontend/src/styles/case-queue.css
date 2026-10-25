@@ -35,29 +35,6 @@
   color: var(--slate-66);
 }
 
-.filter-label {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: var(--slate-60);
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 .go-btn,
 .upload-btn {
   font-size: 13px;
@@ -84,17 +61,6 @@
   justify-content: space-between;
   align-items: center;
 }
-
-
-
-
-
-
-
-
-
-
-
 
 .kebab-menu {
   position: relative;
@@ -188,7 +154,6 @@
   cursor: not-allowed;
 }
 
-
 .case-row-open:focus-visible,
 .dropzone:focus-visible,
 .back-link:focus-visible,
@@ -198,14 +163,6 @@
   outline: none;
   box-shadow: 0 0 0 3px rgba(61, 90, 128, 0.2);
 }
-
-
-
-
-
-
-
-
 
 .case-name-input {
   width: 100%;
@@ -234,7 +191,6 @@
 .case-edit-actions {
   flex-shrink: 0;
 }
-
 
 .no-results,
 .empty {
@@ -268,91 +224,20 @@
   background: rgba(61, 90, 128, 0.08);
 }
 
-/* Case queue: filter/sort sidebar on the left, cases as table rows on the right.
-   Same width and sidebar style as the case page (.shell--upload, .case-nav). */
+/* Case queue: the cases as table rows, centred at about three quarters of the page. */
 .shell--queue {
   width: calc(100% - 48px);
 }
 
-.queue-layout {
-  display: grid;
-  grid-template-columns: 236px minmax(0, 1fr);
-  gap: 36px;
-  align-items: start;
-  margin-top: 4px;
+.queue-view {
+  width: 78%;
+  margin: 0 auto;
 }
 
-.queue-sidebar {
-  position: sticky;
-  top: calc(var(--topbar-height) + 24px);
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
-}
-
-.queue-sidebar-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.queue-sidebar-group .filter-label {
-  padding: 0 12px;
-}
-
-.queue-filter-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.queue-filter {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 12px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--ink);
-  font: inherit;
-  font-size: 14.5px;
-  text-align: left;
-  cursor: pointer;
-  transition: background-color 0.12s;
-}
-
-.queue-filter:hover {
-  background: rgba(61, 90, 128, 0.08);
-}
-
-.queue-filter:focus-visible {
-  outline: 2px solid var(--steel);
-  outline-offset: 1px;
-}
-
-.queue-filter[aria-pressed='true'] {
-  background: rgba(61, 90, 128, 0.14);
-  color: var(--steel-dark);
-  font-weight: 600;
-  box-shadow: inset 3px 0 0 var(--steel);
-}
-
-.queue-filter-label {
-  flex: 1;
-  min-width: 0;
-}
-
-.queue-filter-count {
-  font-family: var(--mono);
-  font-size: 11.5px;
-  color: var(--ink-soft);
-  font-weight: 400;
-  font-variant-numeric: tabular-nums;
+@media (max-width: 1280px) {
+  .queue-view {
+    width: 100%;
+  }
 }
 
 .case-status-dot {
@@ -377,10 +262,6 @@
 
 .case-status-dot--amber {
   background: #b26a00;
-}
-
-.queue-main {
-  min-width: 0;
 }
 
 .queue-search-chip {
@@ -421,16 +302,18 @@
 }
 
 /* The title, the active search and the New case button share one row above the table. */
-.queue-toolbar {
+/* Empty on a wide screen unless a search is active, so it only takes room when it has something to show. */
+/* The title and active search on the left, the page controls on the right. */
+.queue-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 14px;
-  min-height: 44px;
+  gap: 8px 14px;
+  min-height: 34px;
   margin-bottom: 12px;
 }
 
 .queue-title {
-  flex: 0 1 auto;
   margin: 0;
   font-size: 20px;
   line-height: 1.3;
@@ -439,15 +322,51 @@
   white-space: nowrap;
 }
 
-.queue-toolbar .queue-search-chip {
+.queue-bar .queue-search-chip {
   max-width: 40%;
 }
 
-.create-case-btn.queue-new-case {
-  flex-shrink: 0;
-  margin: 0 0 0 auto;
-  padding: 11px 18px;
-  font-size: 14px;
+/* The header's filters and sorts, for screens where the table has no header. */
+.queue-controls {
+  display: none;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 12px;
+  font-size: 13.5px;
+}
+
+.queue-controls .header-filter-trigger {
+  padding: 7px 12px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--ink);
+}
+
+.queue-controls .header-filter-list {
+  z-index: 25;
+}
+
+.queue-sort-select select {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+}
+
+@media (max-width: 620px) {
+  .queue-sort-select select {
+    max-width: 118px;
+  }
+
+  .queue-controls .header-filter-trigger {
+    padding: 7px 9px;
+  }
 }
 
 /* Columns shared by the header and every row. The header's right padding leaves room for each row's ⋮ menu. */
@@ -552,33 +471,12 @@
   width: 48px;
 }
 
-.queue-filter--skeleton {
-  min-height: 40px;
-  cursor: default;
-}
-
-.queue-filter--skeleton:hover {
-  background: transparent;
-}
-
-.skeleton-bar--dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.skeleton-bar--label {
-  width: 110px;
-}
-
-/* Page controls under the table. */
+/* Page controls, at the right of the bar above the table. */
 .pagination {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
-  margin-top: 14px;
+  margin-left: auto;
   font-size: 13px;
   color: var(--ink-soft);
 }
@@ -598,20 +496,22 @@
   min-width: 34px;
   height: 34px;
   padding: 0 10px;
-  border: 1px solid transparent;
-  border-radius: 8px;
+  border: none;
+  border-radius: 50%;
   background: transparent;
-  color: var(--ink);
+  color: var(--slate-46);
   font: inherit;
   font-size: 13.5px;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
-  transition: background-color 0.12s;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 
+/* The same quiet, transparent buttons as the bulk actions on the case page; round, with a tint on hover. */
 .pagination-page:hover:not(:disabled),
 .pagination-step:hover:not(:disabled) {
-  background: rgba(61, 90, 128, 0.08);
+  background: rgba(18, 32, 61, 0.08);
+  color: var(--slate-17);
 }
 
 .pagination-page:focus-visible,
@@ -620,21 +520,30 @@
   outline-offset: 1px;
 }
 
+/* The page you're on is told by its darker, bolder number; no fill until hovered, like the rest. */
 .pagination-page[aria-current='page'] {
-  background: var(--ink);
-  color: var(--white);
-  font-weight: 600;
+  color: var(--slate-17);
+  font-weight: 700;
 }
 
 .pagination-step {
-  border-color: var(--line);
-  background: var(--white);
+  width: 34px;
+  padding: 0;
+}
+
+.pagination-chevron {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .pagination-step:disabled {
-  color: var(--slate-66);
-  cursor: default;
-  opacity: 0.6;
+  cursor: not-allowed;
+  opacity: 0.4;
 }
 
 .pagination-gap {
@@ -643,15 +552,6 @@
 }
 
 @media (max-width: 760px) {
-  .pagination {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .pagination-controls {
-    justify-content: space-between;
-  }
-
   .pagination-page:not([aria-current='page']) {
     display: none;
   }
@@ -697,6 +597,21 @@
   margin: 0 8px;
 }
 
+/* The row menu shows when the pointer is over the row, or something in it has keyboard focus or its menu is open.
+   Without a hover (touch screens) it stays visible. */
+@media (hover: hover) {
+  .case-row .kebab-menu-button {
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+
+  .case-row:hover .kebab-menu-button,
+  .case-row:focus-within .kebab-menu-button,
+  .case-row .kebab-menu-button[aria-expanded='true'] {
+    opacity: 1;
+  }
+}
+
 .case-row-id {
   font-family: var(--mono);
   font-size: 13.5px;
@@ -735,7 +650,191 @@
 
 .case-row-risk {
   display: flex;
+  justify-content: flex-start;
+}
+
+.case-table-head-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* A column header's filter: a funnel (and the title, for Status) that opens a list of checkboxes. */
+.header-filter {
+  position: relative;
+  display: inline-flex;
+}
+
+.header-filter-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.header-filter-trigger:disabled {
+  cursor: default;
+}
+
+.header-filter-trigger:hover:not(:disabled),
+.header-filter-trigger[aria-expanded='true'],
+.header-filter-trigger[data-active] {
+  color: var(--ink);
+}
+
+.header-filter-trigger:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 2px;
+}
+
+.header-filter-icon {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+}
+
+.header-filter-trigger[data-active] .header-filter-icon {
+  fill: var(--steel);
+  stroke: var(--steel);
+}
+
+.header-filter-list {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 20;
+  min-width: 210px;
+  padding: 6px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(18, 32, 61, 0.16);
+  font-family: var(--sans, inherit);
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--ink);
+}
+
+.header-filter-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.header-filter-option:hover {
+  background: rgba(61, 90, 128, 0.08);
+}
+
+.header-filter-option input {
+  flex-shrink: 0;
+  margin: 0;
+  accent-color: var(--steel);
+}
+
+.header-filter-label {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.header-filter-count {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.header-filter-clear {
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: 0;
+  border-top: 1px solid var(--orange-90);
+  border-radius: 0 0 6px 6px;
+  background: transparent;
+  color: var(--steel);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.header-filter-clear:hover {
+  background: rgba(61, 90, 128, 0.08);
+}
+
+/* A column header that sorts. Both arrows show; the current direction's is dark. */
+.case-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.case-sort:disabled {
+  cursor: default;
+}
+
+.case-sort:hover:not(:disabled),
+.case-sort[data-direction] {
+  color: var(--ink);
+}
+
+.case-sort:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.case-sort-arrows {
+  width: 7px;
+  height: 12px;
+  fill: var(--slate-66);
+  opacity: 0.55;
+}
+
+.case-sort[data-direction] .case-sort-arrows {
+  opacity: 1;
+}
+
+.case-sort[data-direction='desc'] .case-sort-down,
+.case-sort[data-direction='asc'] .case-sort-up {
+  fill: var(--ink);
+}
+
+.queue-risk-badge {
+  margin-left: 0;
+  min-width: 92px;
   justify-content: center;
+  box-sizing: border-box;
 }
 
 /* One width for every level so the column reads as a tidy stack of pills. */
@@ -772,6 +871,10 @@
     display: none;
   }
 
+  .queue-controls {
+    display: flex;
+  }
+
   .case-row-open {
     display: flex;
     flex-wrap: wrap;
@@ -793,39 +896,3 @@
   }
 }
 
-@media (max-width: 760px) {
-  .queue-layout {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 14px;
-  }
-
-  .queue-sidebar {
-    position: static;
-    gap: 10px;
-  }
-
-  .queue-sidebar-group {
-    flex-direction: row;
-    align-items: center;
-    min-width: 0;
-    overflow-x: auto;
-  }
-
-  .queue-sidebar-group .filter-label {
-    flex-shrink: 0;
-    padding: 0;
-    min-width: 52px;
-  }
-
-  .queue-filter-list {
-    flex-direction: row;
-  }
-
-  .queue-filter {
-    white-space: nowrap;
-  }
-
-  .queue-filter[aria-pressed='true'] {
-    box-shadow: inset 0 -2px 0 var(--steel);
-  }
-}

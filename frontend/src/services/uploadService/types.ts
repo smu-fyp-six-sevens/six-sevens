@@ -56,7 +56,9 @@ export type CaseListPage = Schemas['CaseListPage'];
 export type CaseCounts = Schemas['CaseCounts'];
 export type CaseSearchResult = Schemas['CaseSearchResult'];
 export type CaseListItem = Schemas['CaseListItem'];
-export type CaseSort = 'newest' | 'oldest' | 'risk';
+export type CaseSort = 'newest' | 'oldest' | 'risk' | 'lowest_risk';
+// "unscored" is a case no analysis run has scored yet.
+export type CaseRiskFilter = 'Critical' | 'High' | 'Medium' | 'Low' | 'unscored';
 
 // PDF -> <iframe> (native browser PDF viewer), image -> <img>.
 export type PreviewKind = 'pdf' | 'image' | 'unsupported';

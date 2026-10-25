@@ -44,7 +44,6 @@ function CaseQueueRoute() {
       onOpenCase={(selectedCase) =>
         navigate(`/cases/${selectedCase.caseNumber ?? selectedCase.id}`)
       }
-      onCreateCase={() => navigate('/create-case')}
     />
   );
 }

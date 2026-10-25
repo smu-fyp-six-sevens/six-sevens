@@ -183,6 +183,80 @@ def test_highest_risk_first_puts_unscored_last_and_the_newest_first_among_equals
     assert page.total == 4
 
 
+def _risk_cases():
+    cases = [*_three_cases(), _case_at("case-4", "2026-09-01T00:00:00Z")]
+    risks = {
+        "case-1": CaseRisk(state="pending"),
+        "case-2": CaseRisk(state="scored", level="High", score=70),
+        "case-3": CaseRisk(state="scored", level="Low", score=10),
+        "case-4": CaseRisk(state="scored", level="High", score=75),
+    }
+    return cases, risks
+
+
+def test_lowest_risk_first_puts_unscored_first_and_the_newest_first_among_equals() -> None:
+    cases, risks = _risk_cases()
+    with (
+        patch("app.case_service.case_repository") as case_repo,
+        patch("app.case_service.document_repository") as doc_repo,
+        patch("app.case_service.risk_store") as store,
+    ):
+        case_repo.list_matching_cases.return_value = cases
+        doc_repo.list_document_statuses.return_value = []
+        store.latest_many.return_value = risks
+
+        page = _page(sort="lowest_risk")
+
+    assert [i.id for i in page.items] == ["case-1", "case-3", "case-2", "case-4"]
+
+
+def test_a_risk_filter_keeps_only_those_levels_and_pages_the_matches() -> None:
+    cases, risks = _risk_cases()
+    with (
+        patch("app.case_service.case_repository") as case_repo,
+        patch("app.case_service.document_repository") as doc_repo,
+        patch("app.case_service.risk_store") as store,
+    ):
+        case_repo.list_matching_cases.return_value = cases
+        doc_repo.list_document_statuses.return_value = []
+        store.latest_many.return_value = risks
+
+        high = _page(risks=["High"])
+        high_or_low = _page(risks=["High", "Low"])
+        second = _page(risks=["High", "Low"], offset=2, limit=2)
+        unscored = _page(risks=["unscored"])
+
+    assert [i.id for i in high.items] == ["case-2", "case-4"] and high.total == 2
+    assert [i.id for i in high_or_low.items] == ["case-2", "case-3", "case-4"] and high_or_low.total == 3
+    assert [i.id for i in second.items] == ["case-4"] and second.total == 3
+    assert [i.id for i in unscored.items] == ["case-1"]
+    case_repo.list_cases_page.assert_not_called()
+
+
+def test_status_risk_and_search_filters_combine_and_share_one_total() -> None:
+    cases, risks = _risk_cases()
+    documents = [
+        _make_document(f"d{n}", case_id=f"case-{n}", status=DocumentStatus.ANALYZED if n != 2 else DocumentStatus.FAILED)
+        for n in (1, 2, 3, 4)
+    ]
+    with (
+        patch("app.case_service.case_repository") as case_repo,
+        patch("app.case_service.document_repository") as doc_repo,
+        patch("app.case_service.risk_store") as store,
+    ):
+        case_repo.list_matching_cases.return_value = cases
+        doc_repo.list_document_statuses.return_value = documents
+        store.latest_many.return_value = risks
+
+        page = _page(statuses=[CaseDocumentsStatus.ANALYZED], risks=["High", "Low"], q="gldb", sort="risk")
+        second = _page(statuses=[CaseDocumentsStatus.ANALYZED], risks=["High", "Low"], q="gldb", sort="risk", offset=1, limit=1)
+
+    # case-2 is High but failed, so it is out; High before Low.
+    assert [i.id for i in page.items] == ["case-4", "case-3"] and page.total == 2
+    assert [i.id for i in second.items] == ["case-3"] and second.total == 2
+    case_repo.list_matching_cases.assert_called_with("gldb")
+
+
 def test_oldest_first_with_a_filter_reverses_the_newest_first_list() -> None:
     with (
         patch("app.case_service.case_repository") as case_repo,
