@@ -13,6 +13,7 @@ import { DocumentListPanel } from './upload/DocumentListPanel';
 import { MoveDocumentsDialog } from './upload/MoveDocumentsDialog';
 import { RequirementsSidebar } from './upload/RequirementsSidebar';
 import { AdditionalDocumentsCard } from './upload/AdditionalDocumentsCard';
+import { ApprovedDocumentsCard } from './upload/ApprovedDocumentsCard';
 import { AuditTrailCard } from './upload/AuditTrailCard';
 import { CaseCostCard } from './upload/CaseCostCard';
 import { CaseAnalysisCard } from './upload/CaseAnalysisCard';
@@ -249,6 +250,7 @@ export default function UploadPage({
       <div className={`case-layout${navCollapsed ? ' case-layout--collapsed' : ''}`}>
         <CaseSectionNav
           collapsed={navCollapsed}
+          statusesLoading={!snapshotLoaded}
           onToggleCollapsed={() => setNavCollapsed((collapsed) => !collapsed)}
           activeSection={activeSection}
           statuses={caseSectionStatuses({
@@ -390,13 +392,21 @@ export default function UploadPage({
                 <DocumentListPanel
                   documents={documents}
                   extractedDocuments={extractedDocuments}
-                  approvedDocuments={approvedDocuments}
                   caseMatches={caseMatches}
                   wsConnected={wsConnected}
                   onOpenDocument={onOpenDocument}
                   selection={selection}
                   rowActions={rowActions}
                 />
+
+                {flaggedDocuments.length > 0 && (
+                  <FlaggedItemsCard
+                    caseMatchNeedsReview={caseMatchNeedsReview}
+                    caseMatches={caseMatches}
+                    flaggedDocuments={flaggedDocuments}
+                    onOpenDocument={onOpenDocument}
+                  />
+                )}
               </section>
 
               <RequirementsSidebar
@@ -408,13 +418,25 @@ export default function UploadPage({
             </div>
           )}
 
-          {activeSection === 'flagged' && (
-            <FlaggedItemsCard
-              caseMatchNeedsReview={caseMatchNeedsReview}
-              caseMatches={caseMatches}
-              flaggedDocuments={flaggedDocuments}
-              onOpenDocument={onOpenDocument}
-            />
+          {activeSection === 'approved' && (
+            approvedDocuments.length > 0 ? (
+              <ApprovedDocumentsCard approvedDocuments={approvedDocuments} wsConnected={wsConnected} onOpenDocument={onOpenDocument} />
+            ) : (
+              <section className="summary-card">
+                <div className="summary-card-header">
+                  <div className="summary-card-title">
+                    <span className="summary-icon">✓</span>
+                    <h2>Approved Documents</h2>
+                  </div>
+                </div>
+                <div className="summary-message">
+                  <div>
+                    <strong>No approved documents yet.</strong>
+                    <p>Documents appear here once an officer approves them from the Documents tab.</p>
+                  </div>
+                </div>
+              </section>
+            )
           )}
 
           {activeSection === 'risk' && <CaseRiskCard risk={risk} />}

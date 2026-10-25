@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import asyncio
-import functools
 import importlib.resources
 import logging
 import re
+import threading
 
 from pydantic import BaseModel
 from symspellpy import SymSpell, Verbosity
@@ -26,13 +26,26 @@ MAX_OTHER_CONTEXTS = 2
 _DICTIONARY_PATH = importlib.resources.files("symspellpy") / "frequency_dictionary_en_82_765.txt"
 
 
-# Loaded on first use, then shared: building the index takes about 6 seconds, which would otherwise be paid by
-# every import (every uvicorn reload). SymSpell's dictionary load is the expensive part, not each lookup.
-@functools.cache
+# Built once, not at import: it takes about 6 seconds, which every uvicorn reload would otherwise pay. The lock
+# keeps two callers from building it twice, and warm_up() builds it in the background at startup so no request
+# or detection run is the one to wait for it.
+_spell_checker_instance: SymSpell | None = None
+_spell_checker_lock = threading.Lock()
+
+
 def _spell_checker() -> SymSpell:
-    sym_spell = SymSpell(max_dictionary_edit_distance=MAX_EDIT_DISTANCE, prefix_length=7)
-    sym_spell.load_dictionary(str(_DICTIONARY_PATH), term_index=0, count_index=1)
-    return sym_spell
+    global _spell_checker_instance
+    if _spell_checker_instance is None:
+        with _spell_checker_lock:
+            if _spell_checker_instance is None:
+                sym_spell = SymSpell(max_dictionary_edit_distance=MAX_EDIT_DISTANCE, prefix_length=7)
+                sym_spell.load_dictionary(str(_DICTIONARY_PATH), term_index=0, count_index=1)
+                _spell_checker_instance = sym_spell
+    return _spell_checker_instance
+
+
+def warm_up() -> None:
+    _spell_checker()
 
 # Letters touching a digit are part of a reference/account code
 # ("EBACT51059664352", "4n3NIEdM"), not a word — the lookarounds stop the

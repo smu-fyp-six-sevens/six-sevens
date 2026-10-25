@@ -141,7 +141,7 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     await expect(page.getByRole('button', { name: '✓ Approve Document' })).toHaveCount(0);
     expect(backend.requestsTo('POST', `/documents/${cert.id}/approve`)).toHaveLength(1);
 
-    await page.goto(`${fixture.caseUrl}?section=documents`);
+    await page.goto(`${fixture.caseUrl}?section=approved`);
     await expect(page.locator('.approved-documents-card')).toContainText(cert.filename);
   });
 

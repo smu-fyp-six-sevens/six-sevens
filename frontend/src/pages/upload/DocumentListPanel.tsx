@@ -1,12 +1,10 @@
 import type { DocumentCaseMatch, DocumentRecord } from '../../services/uploadService';
-import { ApprovedDocumentsCard } from './ApprovedDocumentsCard';
 import { ExtractedDocumentsCard } from './ExtractedDocumentsCard';
 import type { DocumentRowActions, DocumentSelection } from './ExtractedDocumentsCard';
 
 export function DocumentListPanel({
   documents,
   extractedDocuments,
-  approvedDocuments,
   caseMatches,
   wsConnected,
   onOpenDocument,
@@ -15,7 +13,6 @@ export function DocumentListPanel({
 }: {
   documents: DocumentRecord[];
   extractedDocuments: DocumentRecord[];
-  approvedDocuments: DocumentRecord[];
   caseMatches: Map<string, DocumentCaseMatch>;
   wsConnected: boolean;
   onOpenDocument: (documentId: string) => void;
@@ -34,9 +31,6 @@ export function DocumentListPanel({
           selection={selection}
           rowActions={rowActions}
         />
-      )}
-      {approvedDocuments.length > 0 && (
-        <ApprovedDocumentsCard approvedDocuments={approvedDocuments} wsConnected={wsConnected} onOpenDocument={onOpenDocument} />
       )}
     </>
   );

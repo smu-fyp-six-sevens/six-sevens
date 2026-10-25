@@ -27,6 +27,11 @@
   border-radius: 8px;
 }
 
+.skeleton-bar--nav-status {
+  width: 72px;
+  height: 10px;
+}
+
 .skeleton-card {
   display: flex;
   flex-direction: column;

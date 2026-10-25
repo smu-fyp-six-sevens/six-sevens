@@ -75,7 +75,7 @@ function HeaderSearch() {
 
   function openCase(caseRecord: CaseRecord) {
     reset();
-    navigate(`/cases/${caseRecord.caseNumber ?? caseRecord.id}`);
+    navigate(`/cases/${caseRecord.caseNumber ?? caseRecord.id}`, { state: { caseRecord } });
   }
 
   function showAll() {

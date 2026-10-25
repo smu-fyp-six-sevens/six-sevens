@@ -1,13 +1,16 @@
-import { CASE_SECTIONS, type CaseSection, type SectionStatus } from './caseSections';
+import { CASE_SECTIONS, SECTIONS_WITH_STATUS, type CaseSection, type SectionStatus } from './caseSections';
 
 export function CaseSectionNav({
   activeSection,
   statuses,
+  statusesLoading,
   collapsed,
   onToggleCollapsed,
   onSelect,
 }: {
   activeSection: CaseSection;
+  // The snapshot hasn't arrived, so the status lines show a placeholder instead of a wrong "None Uploaded".
+  statusesLoading: boolean;
   // Where each section stands; a section without one shows just its label.
   statuses: Partial<Record<CaseSection, SectionStatus>>;
   // Collapsed, only the icons show (the status becomes a dot on the icon).
@@ -26,15 +29,16 @@ export function CaseSectionNav({
         onClick={onToggleCollapsed}
       >
         <svg viewBox="0 0 14 14" aria-hidden="true">
-          <path d={collapsed ? 'm5 2 5 5-5 5' : 'm9 2-5 5 5 5'} />
+          <path d="M2 3.5h10M2 7h10M2 10.5h10" />
         </svg>
-        <span className="case-nav-toggle-label">Collapse</span>
+        <span className="case-nav-toggle-label">Menu</span>
       </button>
 
       <ul>
         {CASE_SECTIONS.map((section) => {
           const isActive = section.id === activeSection;
-          const status = statuses[section.id];
+          const status = statusesLoading ? undefined : statuses[section.id];
+          const statusPending = statusesLoading && SECTIONS_WITH_STATUS.includes(section.id);
 
           return (
             <li key={section.id}>
@@ -58,6 +62,11 @@ export function CaseSectionNav({
                     <span className="case-nav-status">
                       <span className={`case-nav-dot case-nav-dot--${status.tone}`} aria-hidden="true" />
                       {status.text}
+                    </span>
+                  )}
+                  {statusPending && (
+                    <span className="case-nav-status" aria-hidden="true">
+                      <span className="skeleton-bar skeleton-bar--nav-status" />
                     </span>
                   )}
                 </span>

@@ -357,6 +357,23 @@ test.describe('Case page layout @SCRUM-299', () => {
     await expect(page.locator('.case-header')).toHaveCSS('position', 'sticky');
   });
 
+  test('opening a case from the queue shows its header at once, without waiting for the lookup', async ({ page, backend }) => {
+    const meridian = makeCase({ id: 'case-fast', greenlink_case_id: 'GLDB-3010', company_name: 'Fast Open Pte Ltd' });
+    backend.cases.push(meridian);
+    await page.goto('/cases');
+    await expect(caseCards(page)).toHaveCount(1);
+    // The server's answer takes three seconds; the page must not wait for it.
+    await page.route('**/cases/by-number/**', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await route.fallback();
+    });
+
+    await page.getByRole('button', { name: `Open case ${meridian.greenlink_case_id}, ${meridian.company_name}` }).click();
+
+    await expect(page.getByRole('heading', { name: 'Fast Open Pte Ltd' })).toBeVisible({ timeout: 1500 });
+    await expect(sectionNav(page).getByRole('button', { name: /^Case Summary/ })).toBeVisible();
+  });
+
   test('the section menu collapses to its icons, and stays collapsed after a reload', async ({ page, backend }) => {
     backend.cases.push(makeCase({ id: 'case-nav', greenlink_case_id: 'GLDB-3002', company_name: 'Nav Co Pte Ltd' }));
     await page.goto('/cases/GLDB-3002');
@@ -581,8 +598,8 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     );
 
     await page.goto(`/cases/${harbor.greenlink_case_id}?section=documents`);
-    await openSection(page, 'Flagged items');
 
+    // Flagged items sit under the extracted files on the Documents tab.
     const flagged = page.locator('.summary-card', {
       has: page.getByRole('heading', { name: 'Flagged Items for Manual Review' }),
     });
@@ -1089,7 +1106,7 @@ test.describe('Delete case and documents @sprint3 @SCRUM-117', () => {
   test('CM-026 deleting the document that fulfilled a requirement reverts the checklist @CM-026', async ({ page, backend }) => {
     const { theCase, documentUrl } = seedScrum117(backend);
     await page.goto(`/cases/${theCase.greenlink_case_id}?section=documents`);
-    const noaRequirement = page.locator('.requirement-row').filter({ hasText: /^NOA/ });
+    const noaRequirement = page.locator('.requirement-row').filter({ hasText: /^Notice of Assessment/ });
     await expect(noaRequirement).toHaveClass(/fulfilled/);
 
     await page.goto(documentUrl);

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import {
   BrowserRouter,
   Navigate,
@@ -14,12 +14,14 @@ import CreateCasePage from './pages/CreateCasePage';
 import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
 import NotFoundState from './components/NotFoundState';
-import { useCaseByNumber } from './pages/useCaseByNumber';
+import { useCaseByNumber, type CaseHandover } from './pages/useCaseByNumber';
 import { useRecentCases } from './pages/useRecentCases';
 
 // Loaded on first visit to keep the initial bundle small.
-const UploadPage = lazy(() => import('./pages/UploadPage'));
-const DocumentDetailsPage = lazy(() => import('./pages/DocumentDetailsPage'));
+const loadUploadPage = () => import('./pages/UploadPage');
+const loadDocumentDetailsPage = () => import('./pages/DocumentDetailsPage');
+const UploadPage = lazy(loadUploadPage);
+const DocumentDetailsPage = lazy(loadDocumentDetailsPage);
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 import { getToken } from './lib/api';
 import type { CaseRiskLevel } from './services/uploadService';
@@ -40,10 +42,20 @@ export interface CaseRecord {
 function CaseQueueRoute() {
   const navigate = useNavigate();
 
+  // Once the queue has settled, fetch the code of the pages a click leads to, so opening one doesn't wait for it.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadUploadPage();
+      void loadDocumentDetailsPage();
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
+  }, []);
+
   return (
     <CaseQueuePage
       onOpenCase={(selectedCase) =>
-        navigate(`/cases/${selectedCase.caseNumber ?? selectedCase.id}`)
+        navigate(`/cases/${selectedCase.caseNumber ?? selectedCase.id}`, { state: { caseRecord: selectedCase } satisfies CaseHandover })
       }
     />
   );
@@ -67,6 +79,11 @@ function CaseDetailsRoute() {
   const { caseNumber } = useParams();
   const navigate = useNavigate();
   const { lookup, retry, rename } = useCaseByNumber(caseNumber);
+
+  // The page's code loads while the case is looked up, so the two waits overlap instead of following each other.
+  useEffect(() => {
+    void loadUploadPage();
+  }, []);
 
   if (lookup.status === 'loading') {
     return <CasePageSkeleton />;
@@ -97,7 +114,8 @@ function CaseDetailsRoute() {
       selectedCase={selectedCase}
       onOpenDocument={(documentId) =>
         navigate(
-          `/cases/${selectedCase.caseNumber ?? selectedCase.id}/documents/${documentId}`
+          `/cases/${selectedCase.caseNumber ?? selectedCase.id}/documents/${documentId}`,
+          { state: { caseRecord: selectedCase } satisfies CaseHandover },
         )
       }
       onCaseUpdated={rename}
@@ -110,6 +128,10 @@ function DocumentDetailsRoute() {
   const { caseNumber, documentId } = useParams();
   const navigate = useNavigate();
   const { lookup, retry } = useCaseByNumber(caseNumber);
+
+  useEffect(() => {
+    void loadDocumentDetailsPage();
+  }, []);
 
   if (lookup.status === 'loading') {
     return <DocumentPageSkeleton />;
@@ -223,7 +245,10 @@ export default function App() {
           path="/cases/:caseNumber"
           element={
             <RequireAuth isAuthed={isAuthed}>
-              <CaseDetailsRoute />
+              {/* The same skeleton as the lookup's, so waiting for the page's code doesn't swap it for another. */}
+              <Suspense fallback={<CasePageSkeleton />}>
+                <CaseDetailsRoute />
+              </Suspense>
             </RequireAuth>
           }
         />
@@ -232,7 +257,9 @@ export default function App() {
           path="/cases/:caseNumber/documents/:documentId"
           element={
             <RequireAuth isAuthed={isAuthed}>
-              <DocumentDetailsRoute />
+              <Suspense fallback={<DocumentPageSkeleton />}>
+                <DocumentDetailsRoute />
+              </Suspense>
             </RequireAuth>
           }
         />

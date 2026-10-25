@@ -20,19 +20,19 @@ import { loadFixture } from '../support/fixtures';
  */
 
 const REQUIRED = [
-  'Identity document (NRIC/Passport)',
-  'Corporate bank statement',
-  'Personal proof of address',
-  'FATCA/CRS',
-  'Certificate of incorporation',
-  'Certificate of incumbency',
-  'Company constitution',
-  'Credit report',
-  'Payslip(s)',
-  'Source of (corporate) wealth',
-  'NOA',
+  'Identity Document (NRIC/Passport)',
+  'Corporate Bank Statement',
+  'Personal Proof of Address',
+  'FATCA/CRS Declaration',
+  'Certificate of Incorporation',
+  'Certificate of Incumbency',
+  'Company Constitution',
+  'Credit Report',
+  'Payslips',
+  'Source of Corporate Wealth',
+  'Notice of Assessment',
 ];
-const ADDITIONAL = ['Company proof of address', 'List of loans', 'Source of (personal) wealth'];
+const ADDITIONAL = ['Company Proof of Address', 'List of Loans', 'Source of Personal Wealth'];
 
 const sidebar = (page: Page) => page.locator('.upload-sidebar');
 const requiredList = (page: Page) => sidebar(page).locator('.requirements-list').first();
@@ -98,8 +98,8 @@ test.describe('Classify optional documents @sprint2 @SCRUM-114', () => {
     for (const label of REQUIRED) {
       await expect(requirement(requiredList(page), label)).toHaveClass(/fulfilled/);
     }
-    await expect(requirement(additionalList(page), 'List of loans')).toHaveClass(/fulfilled/);
-    await expect(requirement(additionalList(page), 'Company proof of address')).not.toHaveClass(/fulfilled/);
+    await expect(requirement(additionalList(page), 'List of Loans')).toHaveClass(/fulfilled/);
+    await expect(requirement(additionalList(page), 'Company Proof of Address')).not.toHaveClass(/fulfilled/);
   });
 });
 
@@ -109,10 +109,10 @@ test.describe('Map documents @sprint2 @SCRUM-118', () => {
     await page.goto(`${fixture.caseUrl}?section=documents`);
 
     const expected: [string, string, string][] = [
-      ['C014_CertIncorp.pdf', 'Certificate Of Incorporation', 'Certificate of incorporation'],
-      ['C014_CertIncumbency.pdf', 'Certificate Of Incumbency', 'Certificate of incumbency'],
-      ['C014_SourceWealth_BS.pdf', 'Source Of Wealth', 'Source of (corporate) wealth'],
-      ['Passport_5187.jpeg', 'Passport', 'Identity document (NRIC/Passport)'],
+      ['C014_CertIncorp.pdf', 'Certificate Of Incorporation', 'Certificate of Incorporation'],
+      ['C014_CertIncumbency.pdf', 'Certificate Of Incumbency', 'Certificate of Incumbency'],
+      ['C014_SourceWealth_BS.pdf', 'Source Of Wealth', 'Source of Corporate Wealth'],
+      ['Passport_5187.jpeg', 'Passport', 'Identity Document (NRIC/Passport)'],
     ];
     for (const [filename, type, label] of expected) {
       const row = page.locator('.documents-table-row').filter({ hasText: filename });
@@ -121,17 +121,17 @@ test.describe('Map documents @sprint2 @SCRUM-118', () => {
     }
     const loans = page.locator('.documents-table-row').filter({ hasText: 'C014_ListLoans' });
     await expect(loans.locator('.document-type-cell')).toHaveText(/list of loans/i);
-    await expect(requirement(additionalList(page), 'List of loans')).toHaveClass(/fulfilled/);
+    await expect(requirement(additionalList(page), 'List of Loans')).toHaveClass(/fulfilled/);
   });
 
   test('DI-036 an NRIC (front + back) fulfils both identity document and proof of address @DI-036', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
     await page.goto(`${fixture.caseUrl}?section=documents`);
 
-    const identity = requirement(requiredList(page), 'Identity document (NRIC/Passport)');
+    const identity = requirement(requiredList(page), 'Identity Document (NRIC/Passport)');
     await expect(identity).toHaveClass(/fulfilled/);
     await expect(identity.locator('.requirement-progress')).toHaveText('(2/2)');
-    const address = requirement(requiredList(page), 'Personal proof of address');
+    const address = requirement(requiredList(page), 'Personal Proof of Address');
     await expect(address).toHaveClass(/fulfilled/);
     await expect(address.locator('.requirement-progress')).toHaveText('(2/2)');
 
@@ -159,17 +159,17 @@ test.describe('Map documents @sprint2 @SCRUM-118', () => {
 
     const fulfilled = new Set(fixture.case.fulfilled_requirements);
     const labelByValue: Record<string, string> = {
-      id_document: 'Identity document (NRIC/Passport)',
-      certificate_of_incorporation: 'Certificate of incorporation',
-      certificate_of_incumbency: 'Certificate of incumbency',
-      source_of_wealth: 'Source of (corporate) wealth',
-      bank_statement: 'Corporate bank statement',
-      payslip: 'Payslip(s)',
-      fatca_crs_declaration: 'FATCA/CRS',
-      company_constitution: 'Company constitution',
-      proof_of_address: 'Personal proof of address',
-      credit_report: 'Credit report',
-      notice_of_assessment: 'NOA',
+      id_document: 'Identity Document (NRIC/Passport)',
+      certificate_of_incorporation: 'Certificate of Incorporation',
+      certificate_of_incumbency: 'Certificate of Incumbency',
+      source_of_wealth: 'Source of Corporate Wealth',
+      bank_statement: 'Corporate Bank Statement',
+      payslip: 'Payslips',
+      fatca_crs_declaration: 'FATCA/CRS Declaration',
+      company_constitution: 'Company Constitution',
+      proof_of_address: 'Personal Proof of Address',
+      credit_report: 'Credit Report',
+      notice_of_assessment: 'Notice of Assessment',
     };
     for (const [value, label] of Object.entries(labelByValue)) {
       const row = requirement(requiredList(page), label);
@@ -184,7 +184,7 @@ test.describe('Map documents @sprint2 @SCRUM-118', () => {
 
   test('DI-others-05 an NRIC with only one side uploaded says which side is missing @DI-others', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
-    const identity = () => requiredList(page).locator('li', { hasText: 'Identity document (NRIC/Passport)' }).locator('.requirement-unmatched');
+    const identity = () => requiredList(page).locator('li', { hasText: 'Identity Document (NRIC/Passport)' }).locator('.requirement-unmatched');
 
     fixture.case.id_document_coverage = { covered: 1, total: 2, missing_side: 'back' };
     await page.goto(`${fixture.caseUrl}?section=documents`);
@@ -200,7 +200,7 @@ test.describe('Map documents @sprint2 @SCRUM-118', () => {
     fixture.case.proof_of_address_coverage = { covered: 1, total: 2, unmatched_names: ['Jane Tan'] };
     await page.goto(`${fixture.caseUrl}?section=documents`);
 
-    const address = requiredList(page).locator('li', { hasText: 'Personal proof of address' }).locator('.requirement-unmatched');
+    const address = requiredList(page).locator('li', { hasText: 'Personal Proof of Address' }).locator('.requirement-unmatched');
     await expect(address).toHaveText('Address on file but no matching ID uploaded: Jane Tan');
   });
 });

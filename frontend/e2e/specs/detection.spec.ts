@@ -72,8 +72,10 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     await expect(page.locator('.details-label', { hasText: 'Routing Outcome' }).locator('xpath=following-sibling::strong')).toHaveText('Approved');
     expect(backend.requestsTo('POST', `/documents/${document.id}/approve`)).toHaveLength(1);
     await page.goto(`${fixture.caseUrl}?section=documents`);
-    await expect(approvedCard(page)).toContainText(document.filename);
     await expect(extractedCard(page)).not.toContainText(document.filename);
+    // Approved documents have their own tab.
+    await page.goto(`${fixture.caseUrl}?section=approved`);
+    await expect(approvedCard(page)).toContainText(document.filename);
   });
 
   test('MA-006 a document not yet approved stays in Extracted Files @MA-006', async ({ page, backend }) => {
@@ -83,8 +85,10 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     await page.goto(`${fixture.caseUrl}?section=documents`);
 
     await expect(extractedCard(page)).toContainText(constitution.filename);
-    // No document is approved yet, so the Approved Documents card isn't shown at all.
-    await expect(approvedCard(page).getByText(constitution.filename)).toHaveCount(0);
+    // No document is approved yet, so the Approved Documents tab has nothing to list.
+    await page.goto(`${fixture.caseUrl}?section=approved`);
+    await expect(page.getByText('No approved documents yet.')).toBeVisible();
+    await expect(approvedCard(page)).toHaveCount(0);
   });
 
   test('MA-007 an approved document can no longer be edited, deleted or re-typed @MA-007', async ({ page, backend }) => {
