@@ -244,6 +244,14 @@ _CHECKS = [
         file=True, fields=True, step="check_spelling_anomaly", trace=_counted("anomalies"),
     ),
     _Check(
+        "page-consistency", PageConsistencyResult,
+        lambda d, f, x: check_page_consistency(d.id, f, d.filename, x),
+        "Whether a multi-page PDF's pages belong together: page numbering, balances carried between pages, "
+        "identifiers repeated on each page, a page of another size or a scan among digital pages, and duplicated "
+        "pages. Evidence about the same page or boundary is one finding; `check_codes` lists every check behind it.",
+        file=True, fields=True, step="check_page_consistency", trace=_counted("findings"),
+    ),
+    _Check(
         "numerical-validation", NumericalValidationResult, _numerical,
         "The per-type arithmetic and consistency checks on the extracted fields (no file download). "
         "One LLM call binds each check's inputs.",
@@ -296,18 +304,6 @@ def _add_check_route(check: _Check) -> None:
 
 for _check in _CHECKS:
     _add_check_route(_check)
-
-
-async def get_page_consistency(
-    document_id: str, document: DocumentRecord = Depends(_require_detection_has_run)
-) -> PageConsistencyResult:
-    """On-demand cross-page consistency (fraud_detection/pages), like the spelling check above: a pure
-    read/compute, nothing written to the database."""
-    file_bytes = await _download_document_bytes(document)
-    extracted_fields = await _fetch_extracted_fields(document_id)
-    result = await check_page_consistency(document_id, file_bytes, document.filename, extracted_fields)
-    await _record_result(document_id, "check_page_consistency", result, result.findings)
-    return result
 
 
 @router.get("/{document_id}/detection/report")
