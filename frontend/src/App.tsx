@@ -8,6 +8,7 @@ import {
   useParams,
 } from 'react-router-dom';
 
+import { CasePageSkeleton, DocumentPageSkeleton, PageSkeleton } from './components/Skeletons';
 import CaseQueuePage from './pages/CaseQueuePage';
 import CreateCasePage from './pages/CreateCasePage';
 import SettingsPage from './pages/SettingsPage';
@@ -68,11 +69,7 @@ function CaseDetailsRoute() {
   const { lookup, retry, rename } = useCaseByNumber(caseNumber);
 
   if (lookup.status === 'loading') {
-    return (
-      <div className="shell">
-        <p>Loading case...</p>
-      </div>
-    );
+    return <CasePageSkeleton />;
   }
 
   if (lookup.status === 'error') {
@@ -115,11 +112,7 @@ function DocumentDetailsRoute() {
   const { lookup, retry } = useCaseByNumber(caseNumber);
 
   if (lookup.status === 'loading') {
-    return (
-      <div className="shell">
-        <p>Loading document...</p>
-      </div>
-    );
+    return <DocumentPageSkeleton />;
   }
 
   if (lookup.status === 'error') {
@@ -146,9 +139,10 @@ function DocumentDetailsRoute() {
     <DocumentDetailsPage
       selectedCase={selectedCase}
       documentId={documentId}
+      // Back to the case's document list, where the officer was working.
       onDocumentDeleted={() =>
         navigate(
-          `/cases/${selectedCase.caseNumber ?? selectedCase.id}`
+          `/cases/${selectedCase.caseNumber ?? selectedCase.id}?section=documents`
         )
       }
     />
@@ -204,7 +198,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <Suspense fallback={<p className="loading">Loading…</p>}>
+      <Suspense fallback={<PageSkeleton />}>
       <Routes>
         <Route
           path="/"

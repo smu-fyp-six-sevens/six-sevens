@@ -161,12 +161,21 @@ export interface CaseCostRun {
   llm_cache_read_tokens: number | null;
 }
 
+// A finished run and how long it took (success only; document.analyzed, document.detected, case.analysis.completed).
+export interface CaseCostTiming {
+  occurred_at: string;
+  type: string;
+  document_id: string | null;
+  duration_ms: number;
+}
+
 export interface CaseCost {
   case_id: string;
   total_usd: number;
   documents_usd: Record<string, number>;
   case_analysis_usd: number;
   runs: CaseCostRun[];
+  timings?: CaseCostTiming[];
 }
 
 // parent_id marks a reply; edited_at is set once its author edits it; deleted_at marks a deleted note kept

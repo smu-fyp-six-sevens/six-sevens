@@ -285,18 +285,91 @@
   width: calc(100% - 48px);
 }
 
-/* Case page: section nav on the left, one section shown at a time. */
+/* Case page: section nav on the left (collapsible to its icons), one section shown at a time. */
 .case-layout {
+  --case-nav-width: 236px;
+
   display: grid;
-  grid-template-columns: 236px minmax(0, 1fr);
+  grid-template-columns: var(--case-nav-width) minmax(0, 1fr);
   margin-top: 24px;
   gap: 36px;
   align-items: start;
 }
 
+.case-layout--collapsed {
+  --case-nav-width: 52px;
+}
+
 .case-nav {
   position: sticky;
-  top: calc(var(--topbar-height) + 24px);
+  top: calc(var(--topbar-height) + var(--case-header-height) + 24px);
+}
+
+.case-nav-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.case-nav-toggle:hover {
+  background: rgba(61, 90, 128, 0.08);
+  color: var(--ink);
+}
+
+.case-nav-toggle:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 1px;
+}
+
+.case-nav-toggle svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.case-layout--collapsed .case-nav-toggle {
+  justify-content: center;
+  padding: 7px 0;
+}
+
+.case-layout--collapsed .case-nav-toggle-label,
+.case-layout--collapsed .case-nav-text {
+  display: none;
+}
+
+.case-layout--collapsed .case-nav-item {
+  justify-content: center;
+  min-height: 44px;
+  padding: 9px 0;
+}
+
+.case-layout--collapsed .case-nav-item .case-nav-icon {
+  position: relative;
+  align-self: center;
+  margin-top: 0;
+}
+
+/* A collapsed item has no status line, so its dot sits on the icon. */
+.case-nav-badge {
+  position: absolute;
+  top: -3px;
+  right: -6px;
+  box-shadow: 0 0 0 2px var(--paper);
 }
 
 .case-nav ul {
@@ -436,22 +509,40 @@
   min-width: 0;
 }
 
-/* Same columns as .case-layout: the breadcrumbs sit over the section nav and the
-   case number + company name (the page title) start in line with each section's heading. */
+/* The top bar's usual gap below it would make the header taller at the top of the page than when stuck. */
+.app-header:has(~ .case-header) {
+  margin-bottom: 0;
+}
+
+/* One short row, the same height at the top of the page and stuck under the top bar while it scrolls.
+   Same columns as .case-layout (at its expanded width): the breadcrumbs sit over the section nav and the
+   company name (the page title) starts in line with each section's heading. */
 .case-header {
+  position: sticky;
+  top: var(--topbar-height);
+  z-index: 15;
   display: grid;
   grid-template-columns: 236px minmax(0, 1fr);
   column-gap: 36px;
-  align-items: start;
-  padding-bottom: 20px;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: var(--case-header-height);
+  padding: 8px 0;
+  background: var(--paper);
   border-bottom: 1px solid var(--line);
+}
+
+@media (max-width: 860px) {
+  .case-header {
+    position: static;
+  }
 }
 
 /* Breadcrumbs (components/Breadcrumbs.tsx): the case number and filename are switchers that list
    the other items at their level. Offset to sit on the company name's first line. */
 .breadcrumbs {
   min-width: 0;
-  margin-top: 7px;
+  flex: 0 1 auto;
 }
 
 .breadcrumbs ol {
@@ -678,9 +769,10 @@
 
 .case-title-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
+  min-width: 0;
 }
 
 .case-title-editing {
@@ -712,10 +804,12 @@
 }
 
 .case-title h1 {
-  font-size: 28px;
+  font-size: 22px;
   margin: 0;
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .case-title .add-field-form-actions {
@@ -735,7 +829,7 @@
   background: var(--white);
   color: var(--ink);
   font: inherit;
-  font-size: 28px;
+  font-size: 22px;
   font-weight: 700;
   line-height: 1.2;
   letter-spacing: -0.01em;

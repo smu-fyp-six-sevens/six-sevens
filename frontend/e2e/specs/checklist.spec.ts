@@ -43,7 +43,7 @@ const requirement = (list: ReturnType<typeof requiredList>, label: string) =>
 test.describe('Classify optional documents @sprint2 @SCRUM-114', () => {
   test('DI-031 required and optional documents are shown as separate requirement types @DI-031', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
-    await page.goto(fixture.caseUrl);
+    await page.goto(`${fixture.caseUrl}?section=documents`);
 
     await expect(sidebar(page).getByText('Required documents')).toBeVisible();
     await expect(sidebar(page).getByText('Present in every case')).toBeVisible();
@@ -64,7 +64,7 @@ test.describe('Classify optional documents @sprint2 @SCRUM-114', () => {
     fixture.case.fulfilled_requirements = fixture.case.fulfilled_requirements.filter(
       (value) => !['list_of_loans', 'company_proof_of_address', 'source_of_personal_wealth'].includes(value),
     );
-    await page.goto(fixture.caseUrl);
+    await page.goto(`${fixture.caseUrl}?section=documents`);
 
     await expect(sidebar(page).locator('.section-label').first()).toContainText(`${REQUIRED.length} / ${REQUIRED.length}`);
     for (const label of ADDITIONAL) {
@@ -76,7 +76,7 @@ test.describe('Classify optional documents @sprint2 @SCRUM-114', () => {
 
   test('DI-033 uploaded optional documents are mapped to their optional requirement @DI-033', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
-    await page.goto(fixture.caseUrl);
+    await page.goto(`${fixture.caseUrl}?section=documents`);
 
     for (const label of ADDITIONAL) {
       await expect(requirement(additionalList(page), label)).toHaveClass(/fulfilled/);
@@ -92,7 +92,7 @@ test.describe('Classify optional documents @sprint2 @SCRUM-114', () => {
     fixture.case.fulfilled_requirements = fixture.case.fulfilled_requirements.filter(
       (value) => value !== 'company_proof_of_address',
     );
-    await page.goto(fixture.caseUrl);
+    await page.goto(`${fixture.caseUrl}?section=documents`);
 
     await expect(sidebar(page).locator('.section-label').first()).toContainText(`${REQUIRED.length} / ${REQUIRED.length}`);
     for (const label of REQUIRED) {
@@ -106,7 +106,7 @@ test.describe('Classify optional documents @sprint2 @SCRUM-114', () => {
 test.describe('Map documents @sprint2 @SCRUM-118', () => {
   test('DI-035 each document shows its identified type, and its requirement is ticked @DI-035', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'harbor-light');
-    await page.goto(fixture.caseUrl);
+    await page.goto(`${fixture.caseUrl}?section=documents`);
 
     const expected: [string, string, string][] = [
       ['C014_CertIncorp.pdf', 'Certificate Of Incorporation', 'Certificate of incorporation'],
@@ -126,7 +126,7 @@ test.describe('Map documents @sprint2 @SCRUM-118', () => {
 
   test('DI-036 an NRIC (front + back) fulfils both identity document and proof of address @DI-036', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
-    await page.goto(fixture.caseUrl);
+    await page.goto(`${fixture.caseUrl}?section=documents`);
 
     const identity = requirement(requiredList(page), 'Identity document (NRIC/Passport)');
     await expect(identity).toHaveClass(/fulfilled/);
@@ -143,7 +143,7 @@ test.describe('Map documents @sprint2 @SCRUM-118', () => {
   test('DI-037 mapped documents are recorded against the correct case @DI-037', async ({ page, backend }) => {
     const harbor = loadFixture(backend, 'harbor-light');
     loadFixture(backend, 'anchorpoint');
-    await page.goto(harbor.caseUrl);
+    await page.goto(`${harbor.caseUrl}?section=documents`);
 
     const rows = page.locator('.documents-table-row');
     await expect(rows).toHaveCount(harbor.documents.length);
@@ -155,7 +155,7 @@ test.describe('Map documents @sprint2 @SCRUM-118', () => {
 
   test('DI-038 a requirement a document fulfils is not shown as missing @DI-038', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'harbor-light');
-    await page.goto(fixture.caseUrl);
+    await page.goto(`${fixture.caseUrl}?section=documents`);
 
     const fulfilled = new Set(fixture.case.fulfilled_requirements);
     const labelByValue: Record<string, string> = {
@@ -187,18 +187,18 @@ test.describe('Map documents @sprint2 @SCRUM-118', () => {
     const identity = () => requiredList(page).locator('li', { hasText: 'Identity document (NRIC/Passport)' }).locator('.requirement-unmatched');
 
     fixture.case.id_document_coverage = { covered: 1, total: 2, missing_side: 'back' };
-    await page.goto(fixture.caseUrl);
+    await page.goto(`${fixture.caseUrl}?section=documents`);
     await expect(identity()).toHaveText('Front photo present, back missing.');
 
     fixture.case.id_document_coverage = { covered: 1, total: 2, missing_side: 'front' };
-    await page.goto(fixture.caseUrl);
+    await page.goto(`${fixture.caseUrl}?section=documents`);
     await expect(identity()).toHaveText('Back photo present, front missing.');
   });
 
   test('DI-others-06 an address on file with no matching ID is named in the proof of address requirement @DI-others', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
     fixture.case.proof_of_address_coverage = { covered: 1, total: 2, unmatched_names: ['Jane Tan'] };
-    await page.goto(fixture.caseUrl);
+    await page.goto(`${fixture.caseUrl}?section=documents`);
 
     const address = requiredList(page).locator('li', { hasText: 'Personal proof of address' }).locator('.requirement-unmatched');
     await expect(address).toHaveText('Address on file but no matching ID uploaded: Jane Tan');

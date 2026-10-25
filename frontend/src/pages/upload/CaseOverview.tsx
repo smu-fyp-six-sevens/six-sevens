@@ -2,11 +2,10 @@ import type { CaseAnalysisOverview, CaseRisk, DocumentCaseMatch, DocumentRecord 
 import { formatDocumentType } from '../../services/uploadService';
 import { isEligibleForApproval } from './uploadHelpers';
 import type { CaseSection } from './caseSections';
+import { formatUsd, processingTimes } from './processingTimes';
+import { useCaseCost } from './useCaseCost';
+import { CaseOverviewSkeleton } from '../../components/Skeletons';
 
-const SAMPLE_PROCESSING_TIMES = [
-  { label: 'Upload → extraction', value: '2m 04s' },
-  { label: 'Detection → completion', value: '55s' },
-];
 const RISK_LEVELS = ['Low', 'Medium', 'High', 'Critical'] as const;
 
 function riskTone(level: string | null | undefined): string {
@@ -52,6 +51,7 @@ export function CaseOverview({
   analysisReady,
   analysisOverview,
   snapshotLoaded,
+  caseId,
   onSelectSection,
 }: {
   documents: DocumentRecord[];
@@ -62,6 +62,7 @@ export function CaseOverview({
   analysisReady: boolean;
   analysisOverview: CaseAnalysisOverview | null;
   snapshotLoaded: boolean;
+  caseId: string;
   onSelectSection: (section: CaseSection) => void;
 }) {
   const scored = risk?.state === 'scored' && risk.level;
@@ -90,10 +91,12 @@ export function CaseOverview({
     { label: 'Fraud Detection', detail: `${detectedCount} of ${documents.length} complete`, tone: documents.length > 0 && detectedCount === documents.length ? 'done' : risk?.state === 'pending' ? 'progress' : 'idle' },
     { label: 'Case Analysis', detail: analysisPhase.label, tone: analysisPhase.tone },
   ];
+  const { cost, error: timingError, loading: timingLoading } = useCaseCost(caseId);
+  const timings = processingTimes(cost?.timings);
   return (
     <main className="case-overview" aria-label="Case summary dashboard">
       {!snapshotLoaded ? (
-        <div className="case-overview-loading" role="status">Loading the latest case information…</div>
+        <CaseOverviewSkeleton />
       ) : (
         <>
           <section className="case-overview-topline" aria-label="Case risk and progress">
@@ -163,15 +166,33 @@ export function CaseOverview({
           <section className="case-overview-metrics" aria-label="Processing and classification metrics">
             <article className="case-overview-panel case-overview-timing">
               <div className="case-overview-panel-heading">
-                <div><h2>Processing Time</h2><p>Example timings to show the intended metric</p></div>
-                <span className="case-overview-metric-tag">SAMPLE</span>
+                <div><h2>Processing Time</h2><p>How long each stage took on this case</p></div>
               </div>
               <div className="case-overview-timing-values">
-                {SAMPLE_PROCESSING_TIMES.map((metric) => (
-                  <div key={metric.label}><span>{metric.label}</span><strong>{metric.value}</strong></div>
+                {timings.map((metric) => (
+                  <div key={metric.label}>
+                    <span>{metric.label}<small>{metric.detail}</small></span>
+                    <strong>{timingLoading ? '…' : metric.value}</strong>
+                  </div>
                 ))}
               </div>
-              <p className="case-overview-metric-note">Sample placeholders only; measured case timings are not available yet.</p>
+              <p className="case-overview-metric-note">
+                {timingError ? "Couldn't load the timings." : 'Time the work took, from the audit trail; waiting in the queue is not counted.'}
+              </p>
+            </article>
+
+            <article className="case-overview-panel case-overview-cost">
+              <div className="case-overview-panel-heading">
+                <div><h2>Claude Cost</h2><p>What this case's runs cost at list prices</p></div>
+              </div>
+              <div className="case-overview-timing-values">
+                <div><span>Total</span><strong>{cost ? formatUsd(cost.total_usd) : '…'}</strong></div>
+                <div><span>Documents</span><strong>{cost ? formatUsd(cost.total_usd - cost.case_analysis_usd) : '…'}</strong></div>
+                <div><span>Case analysis</span><strong>{cost ? formatUsd(cost.case_analysis_usd) : '…'}</strong></div>
+              </div>
+              <p className="case-overview-metric-note">
+                {timingError ? "Couldn't load the cost." : "From each run's record in the audit trail; runs from before cost was recorded aren't included."}
+              </p>
             </article>
 
             <article className="case-overview-panel case-overview-classification">

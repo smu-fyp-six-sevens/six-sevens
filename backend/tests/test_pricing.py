@@ -44,13 +44,14 @@ def test_case_cost_adds_up_runs_per_document_and_case():
     from app import audit
     from app.events import Event, types
 
-    def row(type: str, document_id: str | None, run: str, usd: float | None) -> dict:
+    def row(type: str, document_id: str | None, run: str, usd: float | None, **fields) -> dict:
         detail = {"run": run} if usd is None else {"run": run, "llm_cost_usd": usd, "llm_calls": 2}
-        return Event(type=type, case_id="case-1", document_id=document_id, detail=detail).to_audit_row()
+        return Event(type=type, case_id="case-1", document_id=document_id, detail=detail, **fields).to_audit_row()
 
     rows = [
-        row(types.DOCUMENT_ANALYZED, "doc-1", "document", 0.02),
-        row(types.DOCUMENT_DETECTED, "doc-1", "detection", 0.05),
+        row(types.DOCUMENT_ANALYZED, "doc-1", "document", 0.02, duration_ms=4000),
+        row(types.DOCUMENT_DETECTED, "doc-1", "detection", 0.05, duration_ms=9000),
+        row(types.DOCUMENT_FAILED, "doc-9", "document", None, duration_ms=1500, outcome="failed"),  # not a finished run
         row(types.DOCUMENT_ANALYZED, "doc-2", "document", 0.01),
         row(types.DOCUMENT_ANALYZED, "doc-3", "document", None),  # from before events carried cost
         row(types.CASE_ANALYSIS_COMPLETED, None, "case_analysis", 0.04),
@@ -64,3 +65,7 @@ def test_case_cost_adds_up_runs_per_document_and_case():
     assert summary["documents_usd"] == {"doc-1": 0.07, "doc-2": 0.01}
     assert summary["case_analysis_usd"] == 0.04
     assert len(summary["runs"]) == 4
+    # Timings are the successful runs that recorded a duration, costed or not.
+    assert [(t["type"], t["duration_ms"]) for t in summary["timings"]] == [
+        (types.DOCUMENT_ANALYZED, 4000), (types.DOCUMENT_DETECTED, 9000),
+    ]

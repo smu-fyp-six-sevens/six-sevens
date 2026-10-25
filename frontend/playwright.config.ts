@@ -16,7 +16,8 @@ export default defineConfig({
   testDir: './e2e/specs',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  // No retries: a test that passes on a second try is a flaky test, and should fail so it gets fixed.
+  retries: 0,
   // CI's default is half the cores, which is 1 on a 2-vCPU runner; the tests mostly wait on the browser.
   workers: process.env.CI ? 2 : undefined,
   reporter: [
@@ -26,8 +27,8 @@ export default defineConfig({
   ],
   use: {
     baseURL: `http://localhost:${PORT}`,
-    // Recorded only when a failed test is retried, not for every test.
-    trace: 'on-first-retry',
+    // Kept only for a test that failed, not for every test.
+    trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],

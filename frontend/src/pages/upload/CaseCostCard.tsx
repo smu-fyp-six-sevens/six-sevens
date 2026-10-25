@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
-import { getCaseCost, type CaseCost, type DocumentRecord } from '../../services/uploadService';
+import type { DocumentRecord } from '../../services/uploadService';
+import { formatUsd as usd } from './processingTimes';
+import { useCaseCost } from './useCaseCost';
 
 // Placeholder view of a case's Claude spend (GET /audit/cases/{id}/cost). Deliberately plain; to be reworked.
 const RUN_LABELS: Record<string, string> = {
@@ -9,28 +10,8 @@ const RUN_LABELS: Record<string, string> = {
   case_analysis: 'Case analysis',
 };
 
-const usd = (value: number) => `$${value.toFixed(4)}`;
-
 export function CaseCostCard({ caseId, documents }: { caseId: string; documents: DocumentRecord[] }) {
-  const [cost, setCost] = useState<CaseCost | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setCost(await getCaseCost(caseId));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load the cost');
-    } finally {
-      setLoading(false);
-    }
-  }, [caseId]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const { cost, error, loading, reload } = useCaseCost(caseId);
 
   const filename = (id: string) => documents.find((document) => document.id === id)?.filename ?? `${id.slice(0, 8)}… (removed)`;
 
@@ -41,7 +22,7 @@ export function CaseCostCard({ caseId, documents }: { caseId: string; documents:
           <span className="summary-icon summary-icon--audit">$</span>
           <h2>Claude Cost</h2>
         </div>
-        <button type="button" className="case-overview-text-button" onClick={() => void load()} disabled={loading}>
+        <button type="button" className="case-overview-text-button" onClick={() => void reload()} disabled={loading}>
           {loading ? 'Loading…' : 'Refresh'}
         </button>
       </div>

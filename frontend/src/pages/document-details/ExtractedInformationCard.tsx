@@ -1,4 +1,5 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
+import ConfirmDialog from '../../components/ConfirmDialog';
 import type { DocumentRecord } from '../../services/uploadService';
 import type { ExtractedField } from './fieldDisplay';
 import {
@@ -14,7 +15,7 @@ import { humanizeFieldKey, normaliseFieldName } from '../../utils/fieldLabels';
 
 export function ExtractedInformationCard({
   addFieldError,
-  canEditFields,
+  canAddOrDeleteFields,
   deleteFieldError,
   deletingFieldId,
   document,
@@ -36,7 +37,8 @@ export function ExtractedInformationCard({
   setNewFieldValue,
 }: {
   addFieldError: string | null;
-  canEditFields: boolean;
+  // Until the document is approved or rejected, even a verified one: the officer can always add what is missing.
+  canAddOrDeleteFields: boolean;
   deleteFieldError: string | null;
   deletingFieldId: string | null;
   document: DocumentRecord;
@@ -58,6 +60,36 @@ export function ExtractedInformationCard({
   setNewFieldValue: Dispatch<SetStateAction<string>>;
 }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  // The field the officer asked to delete, until they confirm or cancel in the dialog.
+  const [fieldToDelete, setFieldToDelete] = useState<{ id: string; key: string } | null>(null);
+
+  async function confirmDeleteField() {
+    if (!fieldToDelete) return;
+
+    const { id: fieldId, key } = fieldToDelete;
+
+    setDeletingFieldId(fieldId);
+    setDeleteFieldError(null);
+
+    try {
+      const updated = await deleteExtractedField(document.id, fieldId);
+
+      setDocument(updated);
+      // Save sends the whole draft and replaces every field, so a
+      // deleted key left in it would be recreated, empty, on the
+      // next Save. Other unsaved edits are kept.
+      setFieldDraft((current) => {
+        const rest = { ...current };
+        delete rest[key];
+        return rest;
+      });
+    } catch (error) {
+      setDeleteFieldError(error instanceof Error ? error.message : 'Failed to delete field.');
+    } finally {
+      setDeletingFieldId(null);
+      setFieldToDelete(null);
+    }
+  }
 
   return (
         <section className="details-card">
@@ -75,7 +107,7 @@ export function ExtractedInformationCard({
             )}
 
             <div className="details-section-actions">
-              {canEditFields && !isInFlight && (
+              {canAddOrDeleteFields && !isInFlight && (
                 <button
                   type="button"
                   className="add-field-button"
@@ -106,7 +138,7 @@ export function ExtractedInformationCard({
             </div>
           </div>
 
-          {!isCollapsed && canEditFields && isAddFieldOpen && (
+          {!isCollapsed && canAddOrDeleteFields && isAddFieldOpen && (
             <div className="add-field-form">
               <div className="add-field-form-row">
                 <label htmlFor="new-field-name">Field name</label>
@@ -269,58 +301,11 @@ export function ExtractedInformationCard({
                       '—'
                     )}
 
-                    {canEditFields && field.id && (
+                    {canAddOrDeleteFields && field.id && (
                       <button
                         type="button"
                         className="delete-field-button"
-                        onClick={async () => {
-                          const confirmed = window.confirm(
-                            'Are you sure you want to delete this field? This field will not be recoverable.',
-                          );
-
-                          if (!confirmed) {
-                            return;
-                          }
-
-                          const fieldId = field.id;
-
-                          if (!fieldId) {
-                            return;
-                          }
-
-                          if (!document) {
-                            setDeleteFieldError('Document is not loaded.');
-                            return;
-                          }
-
-                          setDeletingFieldId(fieldId);
-                          setDeleteFieldError(null);
-
-                          try {
-                            const updated = await deleteExtractedField(
-                              document.id,
-                              fieldId,
-                            );
-
-                            setDocument(updated);
-                            // Save sends the whole draft and replaces every field, so a
-                            // deleted key left in it would be recreated, empty, on the
-                            // next Save. Other unsaved edits are kept.
-                            setFieldDraft((current) => {
-                              const rest = { ...current };
-                              delete rest[key];
-                              return rest;
-                            });
-                          } catch (error) {
-                            setDeleteFieldError(
-                              error instanceof Error
-                                ? error.message
-                                : 'Failed to delete field.',
-                            );
-                          } finally {
-                            setDeletingFieldId(null);
-                          }
-                        }}
+                        onClick={() => setFieldToDelete({ id: field.id as string, key })}
                         disabled={deletingFieldId === field.id || isInFlight}
                         title="Delete field"
                         aria-label={`Delete ${humanizeFieldKey(key)}`}
@@ -332,6 +317,18 @@ export function ExtractedInformationCard({
                 </div>
               ))}
             </div>
+          )}
+
+          {fieldToDelete && (
+            <ConfirmDialog
+              title="Delete this field?"
+              message={`${humanizeFieldKey(fieldToDelete.key)} will be removed from this document and cannot be recovered.`}
+              isConfirming={deletingFieldId === fieldToDelete.id}
+              onCancel={() => {
+                if (deletingFieldId === null) setFieldToDelete(null);
+              }}
+              onConfirm={() => void confirmDeleteField()}
+            />
           )}
         </section>
   );

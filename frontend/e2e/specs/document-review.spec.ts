@@ -141,7 +141,7 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     await expect(page.getByRole('button', { name: '✓ Approve Document' })).toHaveCount(0);
     expect(backend.requestsTo('POST', `/documents/${cert.id}/approve`)).toHaveLength(1);
 
-    await page.goto(fixture.caseUrl);
+    await page.goto(`${fixture.caseUrl}?section=documents`);
     await expect(page.locator('.approved-documents-card')).toContainText(cert.filename);
   });
 
@@ -158,8 +158,9 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
 
     await expect(routingOutcome(page)).toHaveText('Accepted');
     await expect(reviewSection(page)).toHaveCount(0);
-    await expect(page.getByRole('button', { name: '+ Add field' })).toHaveCount(0);
-    await expect(page.locator('.delete-field-button')).toHaveCount(0);
+    // The values are verified, but a missing field can still be added (or a wrong one deleted) until approval.
+    await expect(page.getByRole('button', { name: '+ Add field' })).toBeVisible();
+    await expect(page.locator('.delete-field-button').first()).toBeVisible();
 
     await page.reload();
     await expect(routingOutcome(page)).toHaveText('Accepted');
@@ -261,11 +262,32 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     await page.getByRole('button', { name: 'Add field', exact: true }).click();
     await expect(fieldRow(page, 'Employer Address')).toBeVisible();
 
-    page.once('dialog', (dialog) => dialog.accept());
     await fieldRow(page, 'Employer Address').locator('.delete-field-button').click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
 
     await expect(fieldRow(page, 'Employer Address')).toHaveCount(0);
     expect(backend.requestsTo('DELETE', `/documents/${payslip.id}/extracted-fields/field-employer_address`)).toHaveLength(1);
+  });
+
+  test('deleting a field asks first in a dialog, and Cancel keeps the field @SCRUM-299', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const payslip = fixture.document('Payslip');
+    await page.goto(fixture.documentUrl(payslip));
+    await page.getByRole('button', { name: '+ Add field' }).click();
+    await page.locator('#new-field-name').fill('employer_address');
+    await page.locator('#new-field-value').fill('1 Raffles Place');
+    await page.getByRole('button', { name: 'Add field', exact: true }).click();
+    await expect(fieldRow(page, 'Employer Address')).toBeVisible();
+
+    await fieldRow(page, 'Employer Address').locator('.delete-field-button').click();
+
+    const dialog = page.getByRole('alertdialog');
+    await expect(dialog).toContainText('Employer Address will be removed from this document and cannot be recovered.');
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+
+    await expect(dialog).toHaveCount(0);
+    await expect(fieldRow(page, 'Employer Address')).toBeVisible();
+    expect(backend.requestsTo('DELETE', /extracted-fields/)).toHaveLength(0);
   });
 
   test('DI-others-11 a deleted field is not recreated when the other flagged fields are saved @DI-others', async ({ page, backend }) => {
@@ -276,8 +298,8 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     fields.former_names = { id: 'field-former_names', value: null, confidence: 0.4 };
     await page.goto(fixture.documentUrl(cert));
 
-    page.once('dialog', (dialog) => dialog.accept());
     await fieldRow(page, 'Former Names').locator('.delete-field-button').click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
     await expect(fieldRow(page, 'Former Names')).toHaveCount(0);
 
     await reviewRow(page, 'UEN').locator('input').fill('201634564N');

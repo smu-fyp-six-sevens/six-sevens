@@ -2,6 +2,10 @@
 
 Open product and platform work only: remove an item once it's done. Elsewhere: code smells and optimisations in `REFACTORING_AUDIT.md`; test work in `backend_tests.md`; detection bugs in `FRAUD_DETECTION_MAP.md` §6; the cloud to-do list (failure tests, case dashboard, eval job, shared Anthropic rate budget, Kong config test, staging, Stage 2) in `CLOUD_ARCHITECTURE_PLAN.md` section 9. Updated 2026-10-24.
 
+## my notes
+
+check if audit trail watches for cancel/retry etc.
+
 ## Product
 
 - **Automatic case analysis** (this sprint). The officer clicks it today. Not built: the gate on every document completion, supersede with a run-id fence, debounce and a re-run cap (`CROSS_DOCUMENT_AND_RISK_PLAN.md` Step 0). Decide `submission_finalized`'s shape here: keep it stored, or compute it inside the gate and delete the debounce machinery (`REFACTORING_AUDIT.md` backend 2.4).

@@ -10,6 +10,7 @@ export function DetectionPanel({
   isApproved,
   isRetryingDetection,
   isCancellingDetection,
+  cancelError,
   isRefreshingDetection,
   refreshDetectionReport,
   handleRetryDetection,
@@ -26,6 +27,7 @@ export function DetectionPanel({
   isApproved: boolean;
   isRetryingDetection: boolean;
   isCancellingDetection: boolean;
+  cancelError: string | null;
   isRefreshingDetection: boolean;
   refreshDetectionReport: () => void | Promise<void>;
   handleRetryDetection: () => void | Promise<void>;
@@ -69,6 +71,7 @@ export function DetectionPanel({
                 </button>
               )
             )}
+            {cancelError && <p className="debug-error">{cancelError}</p>}
           </>
         ) : (
           <>

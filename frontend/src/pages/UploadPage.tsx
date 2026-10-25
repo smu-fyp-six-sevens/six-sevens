@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { CaseRecord } from '../App';
 import {
@@ -37,6 +37,17 @@ import {
   MAX_COMPANY_NAME_LENGTH,
 } from '../utils/caseValidation';
 
+
+const NAV_COLLAPSED_KEY = 'caseNav.collapsed';
+
+// Per-browser, like the queue's filters; storage can throw (private mode), so it is only a convenience.
+function loadNavCollapsed(): boolean {
+  try {
+    return localStorage.getItem(NAV_COLLAPSED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
 
 interface UploadPageProps {
   selectedCase: CaseRecord;
@@ -79,10 +90,19 @@ export default function UploadPage({
   // Kept in the URL so a refresh or a trip to a document and back lands on the same section.
   const [searchParams, setSearchParams] = useSearchParams();
   const sectionParam = searchParams.get('section');
-  const activeSection: CaseSection = isCaseSection(sectionParam) ? sectionParam : 'documents';
+  const activeSection: CaseSection = isCaseSection(sectionParam) ? sectionParam : 'summary';
   const selectSection = (section: CaseSection) => {
-    setSearchParams(section === 'documents' ? {} : { section }, { replace: true });
+    setSearchParams(section === 'summary' ? {} : { section }, { replace: true });
   };
+
+  const [navCollapsed, setNavCollapsed] = useState(loadNavCollapsed);
+  useEffect(() => {
+    try {
+      localStorage.setItem(NAV_COLLAPSED_KEY, String(navCollapsed));
+    } catch {
+      // Not remembering the menu is fine.
+    }
+  }, [navCollapsed]);
 
   const liveDocumentIds = useMemo(
     () => (snapshotLoaded ? new Set(documents.map((document) => document.id)) : null),
@@ -226,8 +246,10 @@ export default function UploadPage({
         </div>
       )}
 
-      <div className="case-layout">
+      <div className={`case-layout${navCollapsed ? ' case-layout--collapsed' : ''}`}>
         <CaseSectionNav
+          collapsed={navCollapsed}
+          onToggleCollapsed={() => setNavCollapsed((collapsed) => !collapsed)}
           activeSection={activeSection}
           statuses={caseSectionStatuses({
             documentCount: documents.length,
@@ -255,6 +277,7 @@ export default function UploadPage({
               analysisReady={analysisReady}
               analysisOverview={analysisOverview}
               snapshotLoaded={snapshotLoaded}
+              caseId={selectedCase.id}
               onSelectSection={selectSection}
             />
           )}

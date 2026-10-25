@@ -7,6 +7,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import DocumentPreviewModal from '../components/DocumentPreviewModal';
 import DocumentPreviewPane, { ShowDocumentButton } from '../components/DocumentPreviewPane';
 import KebabMenu from '../components/KebabMenu';
+import { DocumentBodySkeleton } from '../components/Skeletons';
 import {
   canCancelDocument,
   canRetryDocument,
@@ -261,6 +262,7 @@ export default function DocumentDetailsPage({
     isRefreshingDetection,
     refreshDetectionReport,
     isCancellingDetection,
+    cancelDetectionError,
     handleCancelDetection,
     isRetryingDetection,
     handleRetryDetection,
@@ -268,7 +270,7 @@ export default function DocumentDetailsPage({
     individualCheckError,
     individualCheckResults,
     handleRunIndividualCheck,
-  } = useDetection(documentId);
+  } = useDetection(documentId, document?.status);
 
   const { langGraphTrace, isRefreshingTrace, refreshLangGraphTrace } = useLangGraphTrace(documentId);
 
@@ -331,11 +333,7 @@ export default function DocumentDetailsPage({
 
         {caseHeader}
 
-        <div className="document-details-body">
-          <div className="document-details-loading">
-            Loading document details…
-          </div>
-        </div>
+        <DocumentBodySkeleton />
       </div>
     );
   }
@@ -451,7 +449,7 @@ export default function DocumentDetailsPage({
 
         <ExtractedInformationCard
           addFieldError={addFieldError}
-          canEditFields={canEditFields}
+          canAddOrDeleteFields={!isLocked}
           deleteFieldError={deleteFieldError}
           deletingFieldId={deletingFieldId}
           document={document}
@@ -511,6 +509,7 @@ export default function DocumentDetailsPage({
             isApproved={isApproved}
             isRetryingDetection={isRetryingDetection}
             isCancellingDetection={isCancellingDetection}
+            cancelError={cancelDetectionError}
             isRefreshingDetection={isRefreshingDetection}
             refreshDetectionReport={refreshDetectionReport}
             handleRetryDetection={handleRetryDetection}

@@ -23,7 +23,6 @@
   cursor: pointer;
 }
 .case-overview-text-button:hover { color: var(--steel-dark); text-decoration: underline; }
-.case-overview-loading,
 .case-overview-panel,
 .case-overview-risk,
 .case-overview-stat {
@@ -32,7 +31,6 @@
   background: var(--white);
   box-shadow: 0 1px 2px rgb(18 32 61 / 5%);
 }
-.case-overview-loading { padding: 24px; color: var(--ink-soft); }
 .case-overview-topline { display: grid; grid-template-columns: minmax(230px, .9fr) minmax(0, 1.5fr); gap: 12px; }
 .case-overview-risk {
   display: flex;
@@ -122,7 +120,8 @@
 .case-overview-metric-tag { flex: none; padding: 4px 8px; border: 1px solid var(--slate-88); border-radius: 999px; color: var(--slate-54); font-size: 9px; font-weight: 750; letter-spacing: .07em; }
 .case-overview-timing-values { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .case-overview-timing-values > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 1px solid var(--slate-91); border-radius: 8px; background: var(--slate-97); }
-.case-overview-timing-values span { color: var(--ink-soft); font-size: 12px; }
+.case-overview-timing-values span { display: flex; flex-direction: column; gap: 2px; color: var(--ink-soft); font-size: 12px; }
+.case-overview-timing-values small { color: var(--slate-54); font-size: 11px; }
 .case-overview-timing-values strong { flex: none; color: var(--steel-dark); font-family: var(--mono); font-size: 14px; }
 .case-overview-accuracy { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding: 10px 12px; border: 1px solid var(--slate-89); border-radius: 8px; background: var(--slate-97a); color: var(--steel-dark); font-size: 12px; }
 .case-overview-accuracy strong { font-size: 19px; }

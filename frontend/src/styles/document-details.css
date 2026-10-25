@@ -41,10 +41,10 @@
 /* Stays in view under the sticky top bar while the fields scroll. */
 .document-preview-pane {
   position: sticky;
-  top: calc(var(--topbar-height) + 16px);
+  top: calc(var(--topbar-height) + var(--case-header-height) + 16px);
   display: flex;
   flex-direction: column;
-  height: calc(100vh - var(--topbar-height) - 32px);
+  height: calc(100vh - var(--topbar-height) - var(--case-header-height) - 32px);
   overflow: hidden;
   border: 1px solid var(--slate-90);
   border-radius: 12px;
@@ -1300,13 +1300,6 @@
   background: var(--red-98);
   color: var(--red-40);
   font-size: 13px;
-}
-
-.document-details-loading {
-  padding: 40px 0;
-  color: var(--slate-48);
-  text-align: center;
-  font-size: 14px;
 }
 
 /* Responsive */
