@@ -9,6 +9,7 @@ import pytest
 from langchain_core.messages import AIMessage
 
 from app import run_context
+from app.guardrails.envelope import DOCUMENT_DATA_RULE, fence
 from app.langgraph import classify_support, extract, llm_classify, nodes
 from app.langgraph import graph as document_graph
 
@@ -250,9 +251,10 @@ async def test_the_hint_is_its_own_block_after_the_cached_prefix() -> None:
         await extract.run_extraction("unrecognised", "Net pay 1,200.00", classified_as="list_of_loans")
         await extract.run_extraction("unrecognised", "Net pay 1,200.00")
     with_hint, without = (call[0]["content"] if isinstance(call[0], dict) else call[0].content for call in model.calls)
-    assert [b["text"] for b in without] == ["prompt", "Net pay 1,200.00"]
+    document = fence("Net pay 1,200.00", "document_text")
+    assert [b["text"] for b in without] == [f"prompt\n{DOCUMENT_DATA_RULE}\n", document]
     assert with_hint[0] == without[0] and with_hint[0].get("cache_control")
-    assert "list_of_loans" in with_hint[1]["text"] and with_hint[2]["text"] == "Net pay 1,200.00"
+    assert "list_of_loans" in with_hint[1]["text"] and with_hint[2]["text"] == document
 
 
 def test_an_objection_with_no_suggested_type_sends_the_document_back() -> None:

@@ -24,6 +24,7 @@ from . import trace
 from .llm_classify import parse_llm_classification
 from .. import storage_service
 from ..config import settings
+from ..guardrails.envelope import IMAGE_RULE
 from ..llm_io import message_text
 from ..run_context import spend_model_call
 
@@ -130,7 +131,7 @@ async def _classify_with_vision(storage_path: str, filename: str) -> VisionClass
     message = {
         "role": "user",
         "content": [
-            {"type": "text", "text": VISION_PROMPT, "cache_control": {"type": "ephemeral"}},
+            {"type": "text", "text": f"{VISION_PROMPT}\n\n{IMAGE_RULE}", "cache_control": {"type": "ephemeral"}},
             _build_image_block(file_bytes, filename),
         ],
     }
