@@ -1,13 +1,15 @@
 import type { CaseAnalysisOverview, CaseRisk, DocumentCaseMatch, DocumentRecord } from '../../services/uploadService';
 import { formatDocumentType } from '../../services/uploadService';
+import { Rate } from '../../components/Rate';
+import { RATE_MEANING, formatCheck } from '../../utils/checkLabels';
 import { isEligibleForApproval } from './uploadHelpers';
+import { useFindingReviews } from './useFindingReviews';
 import type { CaseSection } from './caseSections';
 
 const SAMPLE_PROCESSING_TIMES = [
   { label: 'Upload → extraction', value: '2m 04s' },
   { label: 'Detection → completion', value: '55s' },
 ];
-const RISK_LEVELS = ['Low', 'Medium', 'High', 'Critical'] as const;
 
 function riskTone(level: string | null | undefined): string {
   return level ? level.toLowerCase() : 'unknown';
@@ -52,6 +54,7 @@ export function CaseOverview({
   analysisReady,
   analysisOverview,
   snapshotLoaded,
+  caseId,
   onSelectSection,
 }: {
   documents: DocumentRecord[];
@@ -62,9 +65,16 @@ export function CaseOverview({
   analysisReady: boolean;
   analysisOverview: CaseAnalysisOverview | null;
   snapshotLoaded: boolean;
+  caseId: string;
   onSelectSection: (section: CaseSection) => void;
 }) {
   const scored = risk?.state === 'scored' && risk.level;
+  // The officer's reviews of this case's findings (Risk Summary), as precision and recall.
+  const accuracy = useFindingReviews(caseId, true).data;
+  const reviewed = accuracy ? accuracy.case.correct + accuracy.case.wrong + accuracy.case.missed : 0;
+  const checksByReviews = [...(accuracy?.case.by_check ?? [])]
+    .sort((a, b) => b.correct + b.wrong + b.missed - (a.correct + a.wrong + a.missed))
+    .slice(0, 4);
   const reviewCount = flaggedDocuments.length;
   const awaitingApprovalCount = documents.filter((document) => isEligibleForApproval(document, caseMatches)).length;
   const findingCount = risk?.contributing_findings.length ?? 0;
@@ -176,20 +186,29 @@ export function CaseOverview({
 
             <article className="case-overview-panel case-overview-classification">
               <div className="case-overview-panel-heading">
-                <div><h2>Classification Metrics</h2><p>Quality measures by predicted risk level</p></div>
-                <span className="case-overview-metric-tag">PLACEHOLDERS</span>
+                <div><h2>Detection Accuracy</h2><p>How often this case's findings were right, from the officer's review</p></div>
+                <button type="button" className="case-overview-text-button" onClick={() => onSelectSection('risk')}>Review findings →</button>
               </div>
-              <div className="case-overview-accuracy"><span>Overall Accuracy</span><strong>—</strong></div>
-              <div className="case-overview-classification-grid">
-                {RISK_LEVELS.map((level) => (
-                  <div className={`case-overview-classification-card case-overview-classification-card--${level.toLowerCase()}`} key={level}>
-                    <strong>{level}</strong>
-                    <span>Precision <b>—</b></span>
-                    <span>Recall <b>—</b></span>
-                  </div>
-                ))}
+              <div className="case-overview-accuracy">
+                <span title={RATE_MEANING.precision}>Precision <strong><Rate rate={accuracy?.case.precision ?? null} kind="precision" /></strong></span>
+                <span title={RATE_MEANING.recall}>Recall <strong><Rate rate={accuracy?.case.recall ?? null} kind="recall" /></strong></span>
               </div>
-              <p className="case-overview-metric-note">Placeholder values; metric definitions and calculations are pending.</p>
+              {checksByReviews.length > 0 && (
+                <div className="case-overview-classification-grid">
+                  {checksByReviews.map((check) => (
+                    <div className="case-overview-classification-card case-overview-classification-card--check" key={`${check.scope}-${check.check_name}`}>
+                      <strong>{formatCheck(check.check_name)}</strong>
+                      <span>Precision <b><Rate rate={check.precision} kind="precision" /></b></span>
+                      <span>Recall <b><Rate rate={check.recall} kind="recall" /></b></span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="case-overview-metric-note">
+                {reviewed === 0
+                  ? 'No findings reviewed yet. In Risk Summary, tick the real issues for each document, save its review, and report anything detection missed.'
+                  : `${accuracy!.case.correct} correct · ${accuracy!.case.wrong} wrong · ${accuracy!.case.missed} missed`}
+              </p>
             </article>
           </section>
 

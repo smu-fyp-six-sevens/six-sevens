@@ -159,3 +159,8 @@
   .case-overview-document-status { max-width: 112px; text-align: center; }
   .case-overview-timing-values { grid-template-columns: 1fr; }
 }
+
+/* Detection Accuracy: precision and recall side by side, then one card per reviewed check. */
+.case-overview-accuracy > span { display: inline-flex; align-items: baseline; gap: 8px; cursor: help; }
+.case-overview-classification-card--check { border-left-color: var(--steel); }
+.case-overview-classification-card--check > strong { overflow: hidden; color: var(--steel-dark); text-overflow: ellipsis; white-space: nowrap; }

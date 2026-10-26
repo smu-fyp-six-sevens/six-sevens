@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
-import { DetectionAccuracyPanel } from './DetectionAccuracyPanel';
+import { DetectionAccuracyPanel, DetectionAccuracySummary } from './DetectionAccuracyPanel';
 
 type Status = 'Needs review' | 'In progress' | 'Awaiting documents' | 'Finalised';
 type Risk = 'Critical' | 'High' | 'Medium' | 'Low';
@@ -316,12 +316,7 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
               <div className="snapshot-note"><span>i</span> Consider document findings, case status and review context alongside the risk score.</div>
             </article>
           </section>
-          <section className="dashboard-panel classification-panel">
-            <div className="panel-heading"><div><h2>Classification metrics</h2><p>Quality measures by predicted risk level</p></div><span className="metric-placeholder-label">PLACEHOLDERS</span></div>
-            <div className="classification-overall"><span>Overall accuracy</span><strong>—</strong></div>
-            <div className="classification-grid">{(['Low', 'Medium', 'High', 'Critical'] as Risk[]).map((risk) => <article key={risk} className={`classification-class class-${risk.toLowerCase()}`}><div className="classification-risk"><i />{risk} risk</div><div className="classification-values"><span>Precision <b>—</b></span><span>Recall <b>—</b></span></div></article>)}</div>
-            <p className="classification-note">Placeholder values only. Metric definitions and calculations are pending.</p>
-          </section>
+          <DetectionAccuracySummary onViewAll={() => setTab('Accuracy')} />
           <CaseTable cases={visibleCases.slice(0, 5)} heading="Recent cases" onOpenCase={openCase} showRiskAnalysis />
           </>}
 

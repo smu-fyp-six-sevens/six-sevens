@@ -118,3 +118,70 @@ export function DetectionAccuracyPanel() {
     </>
   );
 }
+
+// The dashboard Overview's panel: overall precision and recall, and the checks most in need of attention
+// (flagged first, then the most reviewed). The Accuracy tab has the full table.
+export function DetectionAccuracySummary({ onViewAll }: { onViewAll: () => void }) {
+  const [metrics, setMetrics] = useState<DetectionMetrics | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getDetectionMetrics()
+      .then((loaded) => {
+        if (!cancelled) setMetrics(loaded);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load the detection metrics');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const overall = metrics?.overall;
+  const reviewed = overall ? overall.correct + overall.wrong + overall.missed : 0;
+  const reviews = (check: { correct: number; wrong: number; missed: number }) => check.correct + check.wrong + check.missed;
+  const attention = [...(overall?.by_check ?? [])]
+    .sort((a, b) => b.flags.filter((f) => f !== 'Few reviews').length - a.flags.filter((f) => f !== 'Few reviews').length || reviews(b) - reviews(a))
+    .slice(0, 4);
+
+  return (
+    <section className="dashboard-panel classification-panel">
+      <div className="panel-heading">
+        <div><h2>Detection accuracy</h2><p>Precision and recall per check, from officers' reviews of findings</p></div>
+        <button className="text-button" onClick={onViewAll}>View accuracy <span>→</span></button>
+      </div>
+      {error ? (
+        <p className="empty-insight" role="alert">{error}</p>
+      ) : (
+        <>
+          <div className="classification-overall">
+            <span title={RATE_MEANING.precision}>Precision <strong><Rate rate={overall?.precision ?? null} kind="precision" /></strong></span>
+            <span title={RATE_MEANING.recall}>Recall <strong><Rate rate={overall?.recall ?? null} kind="recall" /></strong></span>
+          </div>
+          {attention.length > 0 && (
+            <div className="classification-grid">
+              {attention.map((check) => (
+                <article key={`${check.scope}-${check.check_name}`} className="classification-class class-check">
+                  <div className="classification-risk"><i />{formatCheck(check.check_name)}</div>
+                  <div className="classification-values">
+                    <span>Precision <b><Rate rate={check.precision} kind="precision" /></b></span>
+                    <span>Recall <b><Rate rate={check.recall} kind="recall" /></b></span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+          <p className="classification-note">
+            {!metrics
+              ? 'Loading…'
+              : reviewed === 0
+                ? 'No findings reviewed yet. Officers review findings in each case’s Risk Summary.'
+                : `${metrics.cases_reviewed} ${metrics.cases_reviewed === 1 ? 'case' : 'cases'} reviewed · ${overall!.correct} correct · ${overall!.wrong} wrong · ${overall!.missed} missed`}
+          </p>
+        </>
+      )}
+    </section>
+  );
+}

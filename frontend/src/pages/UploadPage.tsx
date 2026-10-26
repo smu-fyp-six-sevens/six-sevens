@@ -275,6 +275,7 @@ export default function UploadPage({
               analysisReady={analysisReady}
               analysisOverview={analysisOverview}
               snapshotLoaded={snapshotLoaded}
+              caseId={selectedCase.id}
               onSelectSection={selectSection}
             />
           )}
