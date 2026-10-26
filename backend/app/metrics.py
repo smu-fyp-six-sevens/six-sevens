@@ -53,6 +53,7 @@ detection_tool_calls = Counter("detection_tool_calls_total", "Detection tool res
 detection_verdicts = Counter("detection_verdicts_total", "Detection runs by verdict", ["verdict"])
 content_guard_results = Counter("content_guard_results_total", "Content guard results by risk", ["risk"])
 content_guard_blocks = Counter("content_guard_blocks_total", "Documents stopped at ingest by the content guard")
+llm_prompt_leaks = Counter("llm_prompt_leaks_total", "Model replies that repeat their own instructions", ["agent"])
 
 supabase_calls = Counter("supabase_calls_total", "Supabase calls", ["target"])
 
