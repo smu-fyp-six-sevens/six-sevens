@@ -408,7 +408,10 @@ _WHY_HIDDEN = {
 }
 # The design's severities (guardrails/content_guard._risk), per span. The specialist may raise one, never
 # lower it or dismiss it: an attempt to steer the review is evidence on its own.
-_INJECTION_SEVERITY = {("hidden", "dictionary"): "high", ("metadata", "dictionary"): "high", ("hidden", "hidden_text"): "medium"}
+_INJECTION_SEVERITY = {
+    ("hidden", "dictionary"): "high", ("metadata", "dictionary"): "high", ("image", "dictionary"): "high",
+    ("hidden", "hidden_text"): "medium",
+}
 
 
 def _injection_finding(span: dict) -> dict:
@@ -420,6 +423,8 @@ def _injection_finding(span: dict) -> dict:
         summary = f'{lead} ({why}, page {span.get("page")}): "{quote}"'
     elif where == "metadata":
         summary = f'Metadata field {span.get("field")} is worded as an instruction to the AI: "{quote}"'
+    elif where == "image":
+        summary = f'Text inside an image on page {span.get("page")} is worded as an instruction to the AI: "{quote}"'
     else:
         summary = f'Visible text worded as an instruction to the AI: "{quote}"'
     severity = _INJECTION_SEVERITY.get((where, caught_by), "low")

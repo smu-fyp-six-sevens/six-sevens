@@ -170,3 +170,9 @@ async def test_a_low_or_clean_document_is_accepted_as_before() -> None:
     assert await _routing("low") == RoutingStatus.ACCEPTED.value
     assert await _routing("none") == RoutingStatus.ACCEPTED.value
     assert await _routing(None) == RoutingStatus.ACCEPTED.value
+
+
+def test_an_instruction_inside_an_image_is_a_high_finding() -> None:
+    finding = tools._injection_finding({"quote": ATTACK, "where": "image", "page": 2, "caught_by": "dictionary", "score": 3})
+    assert finding["severity_floor"] == "high"
+    assert finding["summary"].startswith("Text inside an image on page 2 is worded as an instruction to the AI")

@@ -2,12 +2,14 @@
 Layer 1 of the guardrails: looks at an uploaded document, once at ingest, for text written to steer the models
 that read it, and records what it found as the document's `guard_result`.
 
-Two checks, both deterministic:
+Three checks, all deterministic:
 
 - Hidden text (PDFs): text drawn so a reader can't see it but text extraction still reads it: invisible render
   mode or zero opacity, white on a white page, under 2pt. Ingestion already drops text under a cover-up box
   (pdf_extractor._visible_segments); this covers the rest. A scan's invisible OCR layer sits over the page image
   and is not hidden text.
+- Text inside images embedded in a PDF's text-layer pages, read by OCR: ingestion never reads it, but the vision
+  model does.
 - A scored dictionary over the text, the hidden runs and the metadata. A single word never flags: genuine KYC
   documents say "approved", "verified", "compliance" and "assistant" (a job title) all the time. A hit needs a
   phrase that only an injection uses, or words that address an AI next to a command or an outcome, or a command
@@ -19,14 +21,18 @@ evidence of fraud on its own, so detection turns `guard_result` into a finding (
 
 from __future__ import annotations
 
+import base64
+import html
+import io
 import re
 import unicodedata
 from datetime import datetime, timezone
 from typing import Any, Iterable, cast
 
 import pymupdf
+from PIL import Image
 
-GUARD_VERSION = 1
+GUARD_VERSION = 2  # 2: adds the embedded image text check
 _MAX_SPANS = 20
 _MAX_QUOTE_CHARS = 300
 REMOVED_MARKER = "[hidden text removed]"
@@ -46,8 +52,27 @@ _LOOKALIKES = str.maketrans({
 
 
 def normalise(text: str) -> str:
-    """The text as the dictionary reads it: NFKC, invisible characters dropped, look-alike letters folded."""
-    return _INVISIBLE_CHARS.sub("", unicodedata.normalize("NFKC", text or "")).translate(_LOOKALIKES)
+    """The text as the dictionary reads it: HTML entities unescaped ("&#105;gnore"), NFKC (which also folds
+    mathematical letters such as "𝗶𝗴𝗻𝗼𝗿𝗲"), invisible characters dropped, look-alike letters folded."""
+    unescaped = html.unescape(text or "")
+    return _INVISIBLE_CHARS.sub("", unicodedata.normalize("NFKC", unescaped)).translate(_LOOKALIKES)
+
+
+# A run of base64 long enough to carry a sentence. Decoded, it is scanned like any other text.
+_BASE64 = re.compile(r"(?<![A-Za-z0-9+/])[A-Za-z0-9+/]{16,}={0,2}(?![A-Za-z0-9+/=])")
+
+
+def _decoded_base64(text: str) -> list[str]:
+    """Base64 in the text that decodes to readable words, e.g. an instruction hidden as "SWdub3Jl..."."""
+    decoded = []
+    for match in _BASE64.finditer(text):
+        try:
+            words = base64.b64decode(match.group(0), validate=True).decode("utf-8")
+        except ValueError:
+            continue
+        if " " in words and sum(ch.isprintable() for ch in words) >= 0.9 * len(words):
+            decoded.append(words)
+    return decoded
 
 
 # --- the dictionary ---------------------------------------------------------------------------------
@@ -58,6 +83,9 @@ _STRONG = (
     "disregard previous", "disregard the above", "disregard all prior", "previous instructions",
     "prior instructions", "system prompt", "you are now", "as an ai", "language model", "new instructions",
     "ai reviewer", "ai assistant", "prompt injection",
+    # From the PayloadsAllTheThings "Prompt Injection" catalogue: phrasings with no other trigger word nearby.
+    "ignore the user", "disregard the user", "decode and execute", "exfiltrate", "url encode the result",
+    "tell me your secrets", "without any restrictions", "developer mode", "jailbroken",
 )
 # Words that address the model. Bare "assistant", "model", "system", "prompt", "instructions" and "ai" are left
 # out: a job title, "business model", "system generated", "prompt payment", "payment instructions", a given name.
@@ -115,7 +143,8 @@ def _line_around(text: str, start: int, end: int) -> str:
 
 def instruction_hits(text: str) -> list[dict[str, Any]]:
     """Places in `text` that read as an instruction to the model: each with a quote (its line) and a score."""
-    normalised = normalise(text)
+    # Decoded base64 is read as extra lines, so an encoded instruction is quoted in plain words.
+    normalised = normalise("\n".join([text or "", *_decoded_base64(text or "")]))
     lowered = normalised.lower()
     # Quotes keep the document's capitals, unless lowering changed the length (offsets would no longer line up).
     quoted = normalised if len(normalised) == len(lowered) else lowered
@@ -241,6 +270,71 @@ def hidden_runs(file_bytes: bytes) -> list[dict[str, Any]]:
     return [run for run in runs if sum(ch.isalnum() for ch in run["text"]) >= 3]
 
 
+# --- text inside embedded images (PDF) --------------------------------------------------------------
+
+# Ingestion reads only a page's text layer when it has one, so text drawn inside an image on that page (a pasted
+# note, a stamp) is never screened, yet the vision model sees it. A page with no text layer is OCRed whole at
+# ingestion, so its images' text is in raw_text already.
+_MIN_IMAGE_PX = 48  # smaller on either side: no readable line of text
+_MAX_IMAGES_OCRED = 12  # the largest first; each OCR takes about a second
+# OCR misreads small lettering: a line of 12pt text in an 84px-high image came back as noise, and read
+# correctly at twice the size (but not at three times). An image this short is read at both sizes.
+_SMALL_IMAGE_PX = 200
+# OCR reads "AI" as "Al" or "A1"; put it back where an AI is being addressed, so the dictionary sees it.
+_OCR_AI = re.compile(r"\bA[l1|](?=\s+(?:reviewer|assistant|model|system|agent)\b)")
+
+
+def _ocr_lines(image: Image.Image, page_number: int) -> list[str]:
+    from ..ingestion.ocr_extractor import extract_image_with_ocr  # local import: loads the OCR model on first use
+
+    passes = [image]
+    if image.height < _SMALL_IMAGE_PX:
+        passes.append(image.resize((image.width * 2, image.height * 2), Image.Resampling.LANCZOS))
+    lines: list[str] = []
+    for picture in passes:
+        for element in extract_image_with_ocr(picture, page_number)["elements"]:
+            line = _OCR_AI.sub("AI", element["text"].strip())
+            if line and line not in lines:
+                lines.append(line)
+    return lines
+
+
+def _as_rgb_image(doc: pymupdf.Document, xref: int) -> Image.Image:
+    pixmap = pymupdf.Pixmap(doc, xref)
+    if pixmap.n - pixmap.alpha > 3:  # CMYK
+        pixmap = pymupdf.Pixmap(pymupdf.csRGB, pixmap)
+    if pixmap.alpha:  # a logo with transparency: OCR wants plain RGB
+        pixmap = pymupdf.Pixmap(pixmap, 0)
+    return Image.open(io.BytesIO(pixmap.tobytes("png")))
+
+
+def image_texts(file_bytes: bytes) -> list[dict[str, Any]]:
+    """
+    The OCR text of the images embedded in a PDF's text-layer pages: one line per OCR box, with its page. An image
+    that can't be decoded is skipped and listed as {"page", "unreadable": True}, so the others are still read.
+    """
+    found: list[dict[str, Any]] = []
+    with pymupdf.open(stream=file_bytes, filetype="pdf") as doc:
+        candidates: dict[int, tuple[int, int]] = {}  # xref -> (pixels, first page), so a repeated logo is read once
+        for page_number, page in enumerate(cast(Iterable[pymupdf.Page], doc), start=1):
+            if not cast(str, page.get_text("text")).strip():
+                continue
+            for xref, _smask, width, height, *_ in page.get_images(full=True):
+                if min(width, height) >= _MIN_IMAGE_PX and xref not in candidates:
+                    candidates[xref] = (width * height, page_number)
+        largest = sorted(candidates.items(), key=lambda item: -item[1][0])[:_MAX_IMAGES_OCRED]
+        for xref, (_, page_number) in largest:
+            try:
+                image = _as_rgb_image(doc, xref)
+            except Exception:
+                found.append({"page": page_number, "text": "", "unreadable": True})
+                continue
+            lines = _ocr_lines(image, page_number)
+            if lines:
+                found.append({"page": page_number, "text": "\n".join(lines)})
+    return found
+
+
 # --- the result -------------------------------------------------------------------------------------
 
 
@@ -253,9 +347,10 @@ def not_run(reason: str) -> dict[str, Any]:
 
 
 def _risk(spans: list[dict[str, Any]]) -> str:
-    """The severities in the design: an instruction in hidden text or metadata is high; hidden text with no
-    instruction is medium; an instruction in visible text only is low (genuine forms can trip it)."""
-    if any(s["caught_by"] == "dictionary" and s["where"] in ("hidden", "metadata") for s in spans):
+    """The severities in the design: an instruction in hidden text, metadata or an embedded image (which only the
+    vision model would read) is high; hidden text with no instruction is medium; an instruction in visible text
+    only is low (genuine forms can trip it)."""
+    if any(s["caught_by"] == "dictionary" and s["where"] in ("hidden", "metadata", "image") for s in spans):
         return "high"
     if any(s["where"] == "hidden" for s in spans):
         return "medium"
@@ -282,6 +377,21 @@ def scan(
             checks_run.insert(0, "hidden_text")
         except Exception as exc:  # a file that won't open as a PDF: the dictionary still runs on its text
             errors.append(f"hidden text check could not run: {type(exc).__name__}")
+        else:
+            try:
+                images = image_texts(file_bytes)
+                unreadable = sum(1 for image in images if image.get("unreadable"))
+                if unreadable:
+                    errors.append(f"{unreadable} embedded image(s) could not be read")
+                for image in images:
+                    spans.extend(
+                        {"quote": hit["quote"], "where": "image", "page": image["page"], "caught_by": "dictionary",
+                         "score": hit["score"], "removed": False}
+                        for hit in instruction_hits(image["text"])
+                    )
+                checks_run.insert(1, "image_text")
+            except Exception as exc:
+                errors.append(f"image text check could not run: {type(exc).__name__}")
     for run in runs:
         hits = instruction_hits(run["text"])
         hidden_normalised.append(" ".join(normalise(run["text"]).lower().split()))
@@ -305,11 +415,13 @@ def scan(
                           "score": hit["score"]})
 
     for key, value in (metadata or {}).items():
-        if isinstance(value, str) and not key.startswith("_"):
+        # A multi-valued field (XMP keywords, subject) comes as a list of strings: each item is one line.
+        items = [value] if isinstance(value, str) else [v for v in value if isinstance(v, str)] if isinstance(value, list) else []
+        if items and not key.startswith("_"):
             spans.extend(
                 {"quote": hit["quote"], "where": "metadata", "field": key, "page": None, "caught_by": "dictionary",
                  "score": hit["score"]}
-                for hit in instruction_hits(value)
+                for hit in instruction_hits("\n".join(items))
             )
 
     spans.sort(key=lambda s: (s["caught_by"] != "dictionary", s["where"] == "visible", -s["score"]))
@@ -332,6 +444,7 @@ def blocking_reason(result: dict[str, Any]) -> str | None:
         return None
     where = {
         "hidden": f"hidden text on page {span.get('page')}",
+        "image": f"text inside an image on page {span.get('page')}",
         "metadata": f"the metadata field {span.get('field')}",
         "visible": "text in the document",
     }.get(str(span.get("where")), "text in the document")
