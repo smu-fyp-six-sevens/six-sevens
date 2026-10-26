@@ -2,6 +2,7 @@ import { useState, type Dispatch, type SetStateAction } from 'react';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import type { DocumentRecord } from '../../services/uploadService';
 import type { ExtractedField } from './fieldDisplay';
+import type { FieldEditing } from './useFieldEditing';
 import {
   ArrayValueCell,
 } from './ArrayFieldModal';
@@ -14,51 +15,42 @@ import { buildFieldDraft, formatFieldDisplayValue, formatNumberWithCommas, isArr
 import { humanizeFieldKey, normaliseFieldName } from '../../utils/fieldLabels';
 
 export function ExtractedInformationCard({
-  addFieldError,
   canAddOrDeleteFields,
-  deleteFieldError,
-  deletingFieldId,
   document,
   extractedFields,
-  isAddFieldOpen,
-  isAddingField,
   isInFlight,
   lowestConfidence,
-  newFieldName,
-  newFieldValue,
-  setAddFieldError,
-  setDeleteFieldError,
-  setDeletingFieldId,
   setDocument,
   setFieldDraft,
-  setIsAddFieldOpen,
-  setIsAddingField,
-  setNewFieldName,
-  setNewFieldValue,
+  editing,
 }: {
-  addFieldError: string | null;
   // Until the document is approved or rejected, even a verified one: the officer can always add what is missing.
   canAddOrDeleteFields: boolean;
-  deleteFieldError: string | null;
-  deletingFieldId: string | null;
   document: DocumentRecord;
   extractedFields: [string, ExtractedField][];
-  isAddFieldOpen: boolean;
-  isAddingField: boolean;
   isInFlight: boolean;
   lowestConfidence: number | null;
-  newFieldName: string;
-  newFieldValue: string;
-  setAddFieldError: Dispatch<SetStateAction<string | null>>;
-  setDeleteFieldError: Dispatch<SetStateAction<string | null>>;
-  setDeletingFieldId: Dispatch<SetStateAction<string | null>>;
   setDocument: Dispatch<SetStateAction<DocumentRecord | null>>;
   setFieldDraft: Dispatch<SetStateAction<Record<string, string>>>;
-  setIsAddFieldOpen: Dispatch<SetStateAction<boolean>>;
-  setIsAddingField: Dispatch<SetStateAction<boolean>>;
-  setNewFieldName: Dispatch<SetStateAction<string>>;
-  setNewFieldValue: Dispatch<SetStateAction<string>>;
+  // The add and delete field state (useFieldEditing), passed as one object.
+  editing: FieldEditing;
 }) {
+  const {
+    addFieldError,
+    deleteFieldError,
+    deletingFieldId,
+    isAddFieldOpen,
+    isAddingField,
+    newFieldName,
+    newFieldValue,
+    setAddFieldError,
+    setDeleteFieldError,
+    setDeletingFieldId,
+    setIsAddFieldOpen,
+    setIsAddingField,
+    setNewFieldName,
+    setNewFieldValue,
+  } = editing;
   const [isCollapsed, setIsCollapsed] = useState(false);
   // The field the officer asked to delete, until they confirm or cancel in the dialog.
   const [fieldToDelete, setFieldToDelete] = useState<{ id: string; key: string } | null>(null);

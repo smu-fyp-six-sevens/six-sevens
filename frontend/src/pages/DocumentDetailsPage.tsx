@@ -207,28 +207,7 @@ export default function DocumentDetailsPage({
     (document?.status === 'analyzed' || document?.status === 'failed') &&
     !isTypeConfirmed;
 
-  const {
-    isAddFieldOpen,
-    setIsAddFieldOpen,
-    newFieldName,
-    setNewFieldName,
-    newFieldValue,
-    setNewFieldValue,
-    isAddingField,
-    setIsAddingField,
-    addFieldError,
-    setAddFieldError,
-    deletingFieldId,
-    setDeletingFieldId,
-    deleteFieldError,
-    setDeleteFieldError,
-    isSaving,
-    saveMessage,
-    saveError,
-    handleFieldChange,
-    handleSaveFields,
-    clearSaveMessages,
-  } = useFieldEditing({
+  const fieldEditing = useFieldEditing({
     document,
     setDocument,
     fieldDraft,
@@ -239,6 +218,7 @@ export default function DocumentDetailsPage({
     absentRequiredFields,
     needsAttention,
   });
+  const { isSaving, saveMessage, saveError, handleFieldChange, handleSaveFields, clearSaveMessages } = fieldEditing;
 
   const {
     setSelectedType,
@@ -448,27 +428,14 @@ export default function DocumentDetailsPage({
         {/* Extracted information */}
 
         <ExtractedInformationCard
-          addFieldError={addFieldError}
           canAddOrDeleteFields={!isLocked}
-          deleteFieldError={deleteFieldError}
-          deletingFieldId={deletingFieldId}
           document={document}
           extractedFields={extractedFields}
-          isAddFieldOpen={isAddFieldOpen}
-          isAddingField={isAddingField}
           isInFlight={isInFlight}
           lowestConfidence={lowestConfidence}
-          newFieldName={newFieldName}
-          newFieldValue={newFieldValue}
-          setAddFieldError={setAddFieldError}
-          setDeleteFieldError={setDeleteFieldError}
-          setDeletingFieldId={setDeletingFieldId}
           setDocument={setDocument}
           setFieldDraft={setFieldDraft}
-          setIsAddFieldOpen={setIsAddFieldOpen}
-          setIsAddingField={setIsAddingField}
-          setNewFieldName={setNewFieldName}
-          setNewFieldValue={setNewFieldValue}
+          editing={fieldEditing}
         />
 
         {/* Manual review */}

@@ -70,7 +70,7 @@ export function CaseOverview({
   const awaitingApprovalCount = documents.filter((document) => isEligibleForApproval(document, caseMatches)).length;
   const findingCount = risk?.contributing_findings.length ?? 0;
   const findings = [...(risk?.contributing_findings ?? [])]
-    .sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.severity] - ({ high: 0, medium: 1, low: 2 }[b.severity])))
+    .sort((a, b) => ({ high: 0, medium: 1, low: 2, info: 3 }[a.severity] - ({ high: 0, medium: 1, low: 2, info: 3 }[b.severity])))
     .slice(0, 4);
   const recentDocuments = [...documents].reverse().slice(0, 5);
   const detectedCount = documents.filter((document) => document.status === 'detected').length;

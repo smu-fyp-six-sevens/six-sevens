@@ -73,7 +73,7 @@ docker compose up --build                     # Pub/Sub emulator, Kong :8000, ap
 docker compose --profile frontend up --build  # also the nginx frontend on :5173 (otherwise use npm run dev)
 ```
 
-Settings come from `backend/.env`, as for uvicorn. The three workers share one container to save memory (about 3 GB in total). `CLOUD_ARCHITECTURE_PLAN.md` section 11 has the walkthrough, how to debug the workers in the IDE, and the emulator's limits.
+Settings come from `backend/.env`, as for uvicorn. The three workers share one container to save memory (about 3 GB in total). `CLOUD_ARCHITECTURE_PLAN.md` section 12 has the walkthrough, how to debug the workers in the IDE, and the emulator's limits.
 
 The backend image has one target per role (`backend/Dockerfile`). The `detection-worker` and `all` targets download URA's land-use map and build the zoning index into the image (about a minute, needs internet, fails if it can't). To build without it, set `ALLOW_MISSING_LAND_USE=true` in the environment before `docker compose build`. Export `DATA_GOV_SG_API_KEY` first to pass it as a build secret.
 
