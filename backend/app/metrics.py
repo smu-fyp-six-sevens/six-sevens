@@ -42,6 +42,7 @@ llm_cost = Counter("llm_cost_usd_total", "Claude cost at list price, USD", ["age
 llm_cache_savings = Counter("llm_cache_savings_usd_total", "What prompt-cache reads saved, USD", ["agent", "model"])
 llm_latency = Histogram("llm_call_duration_seconds", "One Claude call", ["agent", "model"], buckets=_LLM_BUCKETS)
 llm_budget_exhausted = Counter("llm_budget_exhausted_total", "Runs that hit their model-call ceiling")
+llm_token_budget_reached = Counter("llm_token_budget_reached_total", "Runs that hit their token budget")
 
 # Per unit of work (a document's classify and extract, a detection run, a case analysis).
 work_cost = Histogram("work_llm_cost_usd", "Claude cost of one unit of work, USD", ["work"], buckets=_COST_BUCKETS)

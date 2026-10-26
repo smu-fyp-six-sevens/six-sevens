@@ -132,6 +132,12 @@ class Settings:
     # Most model calls one document's classify and extract run may make (agent turns, the two classifier
     # tools, a repair, extraction and its one retry, and one reclassification).
     DOCUMENT_MAX_MODEL_CALLS: int = int(os.environ.get("DOCUMENT_MAX_MODEL_CALLS", "24"))
+    # Most tokens (input, cached or not, plus output) one run may use; past it the run stops asking, as at its
+    # call ceiling. About 10x the largest runs in the audit trail on 2026-10-26 (document 16k, detection 27k,
+    # case 10k, from 14 runs): placeholders until there are more. 0 turns one off.
+    DOCUMENT_MAX_TOKENS: int = int(os.environ.get("DOCUMENT_MAX_TOKENS", "200000"))
+    DETECTION_MAX_TOKENS: int = int(os.environ.get("DETECTION_MAX_TOKENS", "400000"))
+    CASE_ANALYSIS_MAX_TOKENS: int = int(os.environ.get("CASE_ANALYSIS_MAX_TOKENS", "200000"))
     # Retries the Anthropic client makes by itself on a rate limit or 5xx; each one is billed again.
     LLM_MAX_RETRIES: int = int(os.environ.get("LLM_MAX_RETRIES", "1"))
     # One model request. Extraction can write 16k tokens, so this is generous.

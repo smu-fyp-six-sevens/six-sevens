@@ -124,7 +124,7 @@ async def _execute(
 ) -> None:
     case_id = analysis.case_id
     trace = RunTrace(analysis.run_id)
-    run, run_token = start_run(_MAX_MODEL_CALLS)
+    run, run_token = start_run(_MAX_MODEL_CALLS, settings.CASE_ANALYSIS_MAX_TOKENS or None)
     trace.record(
         "run_start", case_id=case_id, fingerprint=analysis.fingerprint,
         documents=[{"id": d.id, "filename": d.filename, "type": d.document_type, "status": d.status.value} for d in documents],
@@ -182,7 +182,10 @@ async def _execute(
         analysis.error = f"{type(exc).__name__}: {exc}"[:500]
         trace.record("error", error=analysis.error)
     finally:
-        trace.record("run_audit", model_calls=run.calls, call_ceiling=run.max_model_calls, output_repairs=run.repairs)
+        trace.record(
+            "run_audit", model_calls=run.calls, call_ceiling=run.max_model_calls,
+            tokens=run.tokens, token_budget=run.max_tokens, output_repairs=run.repairs,
+        )
         end_run(run_token)
         trace.save()
         try:
