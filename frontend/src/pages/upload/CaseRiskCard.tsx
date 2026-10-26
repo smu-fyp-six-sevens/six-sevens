@@ -158,7 +158,11 @@ function NotScoredMessage({ risk }: { risk: CaseRisk | null }) {
     : risk.state === 'no_documents'
       ? ['No documents to score yet.', 'A risk level appears once documents are uploaded, approved and scanned.', 'info']
       : risk.state === 'failed'
-        ? ['Detection failed on a document.', 'Retry detection on the failed document to complete the risk score.', 'warning']
+        ? [
+            'Detection failed on a document.',
+            `${risk.documents_scanned} of ${risk.documents_total} documents scanned. Retry detection on the failed document to complete the risk score.`,
+            'warning',
+          ]
         : [
             `${risk.documents_scanned} of ${risk.documents_total} documents scanned.`,
             'The risk score is calculated once every document has been approved and scanned.',

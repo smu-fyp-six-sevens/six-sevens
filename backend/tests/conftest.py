@@ -172,10 +172,10 @@ async def _refuse_real_realtime(*args, **kwargs):
     )
 
 
-# --- Regression suite tags (SCRUM-206, SCRUM-246) ---------------------------
+# --- Regression suite tags (SCRUM-206, SCRUM-246, SCRUM-296) ----------------
 # Existing tests that also serve as regression tests for a sprint's manual test
 # cases, tagged here centrally (rather than editing each file) so that
-# `pytest -m sprint1` / `-m sprint2` / `-m sprint3` run each sprint's full set. The
+# `pytest -m sprint1` … `-m sprint4` run each sprint's full set. The
 # regression-specific test files tag themselves with @pytest.mark.sprintN.
 # Keys are a test file, or file::test_name for a single test.
 _EXISTING_REGRESSION_TESTS: dict[str, list[tuple[str, str, str]]] = {
@@ -231,7 +231,24 @@ _EXISTING_REGRESSION_TESTS: dict[str, list[tuple[str, str, str]]] = {
     "test_image_manipulation.py": [("sprint3", "SCRUM-64", "FD-013 / FD-014")],
     "test_font_consistency.py": [("sprint3", "SCRUM-61", "FD-021 – FD-024")],
     "test_spelling_anomaly.py": [("sprint3", "SCRUM-70", "FD-025 / FD-026")],
-    "test_company_identity.py": [("sprint3", "SCRUM-70", "FD-025")],
+    "test_company_identity.py": [("sprint3", "SCRUM-70", "FD-025"), ("sprint4", "SCRUM-255", "CD-001 – CD-007")],
+    # --- Sprint 4 (SCRUM-296) ---
+    # SCRUM-81 Attach officer notes (CM-029 – CM-036)
+    "test_notes.py": [("sprint4", "SCRUM-81", "CM-029 – CM-036")],
+    # SCRUM-84 / SCRUM-90 Case risk score and its reasons (RS-001 – RS-008)
+    "test_case_risk.py": [("sprint4", "SCRUM-84", "RS-001 – RS-008")],
+    # SCRUM-52 Run case analysis only once every approved document is scanned (MA-013 / MA-014)
+    "test_case_analysis.py": [("sprint4", "SCRUM-52", "MA-013 / MA-014")],
+    # SCRUM-54 Handle invalid agent output (MA-024 – MA-027): every agent's reply is validated, never raised
+    "test_output_validation.py": [("sprint4", "SCRUM-54", "MA-024 – MA-027")],
+    # SCRUM-253 / SCRUM-254 / SCRUM-255 Cross-document comparisons (CD-001 – CD-007, CD-012 – CD-021)
+    "test_cross_document_deterministic.py": [("sprint4", "SCRUM-253", "CD-001 – CD-021")],
+    "test_cross_document_mismatches.py": [("sprint4", "SCRUM-253", "CD-012 – CD-021")],
+    "test_address_matching.py": [("sprint4", "SCRUM-254", "CD-018 – CD-021")],
+    # SCRUM-256 Public reference checks: addresses against OneMap/HDB (CD-008 / CD-009)
+    "test_registry_lookups.py": [("sprint4", "SCRUM-256", "CD-008 / CD-009")],
+    # SCRUM-67 AI-generated content (FD-027 / FD-028), the deterministic layer under ai_generation_tool
+    "test_ai_generation.py": [("sprint4", "SCRUM-67", "FD-027 / FD-028")],
 }
 
 
