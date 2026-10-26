@@ -284,10 +284,14 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     await expect(section.locator('.risk-gauge')).toHaveAttribute('aria-label', 'Score 57 out of 100, High risk');
     await expect(section).toContainText('2 high · 3 medium · 1 low');
 
-    // Documents start collapsed; the low-only bank statement is hidden behind "Show more".
+    // Documents start collapsed, and every one is listed, the low-only bank statement included; the
+    // cross-document group follows with a green "No findings" badge, still open to report a miss.
     const documents = section.locator('.risk-document');
-    await expect(documents).toHaveCount(1);
+    await expect(documents).toHaveCount(3);
     await expect(documents.first()).toContainText('C011_Payslip.pdf');
+    await expect(documents.nth(1)).toContainText('C011_BankStatement.pdf');
+    await expect(documents.nth(2)).toContainText('Across documents');
+    await expect(documents.nth(2).locator('.risk-document-none')).toHaveText('✓ No findings');
     await expect(section.locator('.risk-findings')).toHaveCount(0);
 
     // Expanding lists highs before mediums, and merges the three identical layout findings into one ×3 row.
@@ -300,10 +304,8 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     await expect(rows.nth(1).locator('.risk-finding-check')).toHaveText('Date consistency');
     await expect(rows.nth(1).locator('.risk-finding-rationale')).toHaveText('This is impossible for this product.');
 
-    await section.getByRole('button', { name: 'Show 1 low-severity finding' }).click();
-    await expect(documents).toHaveCount(2);
-    await expect(documents.nth(1)).toContainText('C011_BankStatement.pdf');
-    await expect(section.getByRole('button', { name: 'Show less' })).toBeVisible();
+    // There is nothing to show or hide: low findings are listed with the rest.
+    await expect(section.getByRole('button', { name: /Show .* finding|Show less/ })).toHaveCount(0);
 
     await section.getByText("Couldn't verify (1)").click();
     await expect(section).toContainText('C011_BankStatement.pdf — Metadata: No metadata');

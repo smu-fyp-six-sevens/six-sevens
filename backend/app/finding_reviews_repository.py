@@ -78,6 +78,15 @@ def add_missed(
         raise RuntimeError(f"The missed issue on case {case_id} was not saved")
 
 
+def update_missed(review_id: str, *, check_name: str, note: str | None, reviewer: str) -> None:
+    """Corrects a missed issue's check and note; the officer who edited it becomes its reviewer."""
+    result = service_supabase_client().table(TABLE).update({
+        "check_name": check_name, "note": note, "reviewer": reviewer, "updated_at": _now(),
+    }).eq("id", review_id).eq("kind", "missed").execute()
+    if not result.data:
+        raise RuntimeError(f"Missed issue {review_id} was not updated")
+
+
 def delete(review_id: str) -> None:
     service_supabase_client().table(TABLE).delete().eq("id", review_id).execute()
 

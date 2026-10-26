@@ -84,13 +84,6 @@ function ScoreGauge({ score, level }: { score: number; level: string }) {
   );
 }
 
-// Hidden behind "Show more": lows are "odd but plausibly innocent", and an
-// unreviewed finding only got its severity by default (the specialist never
-// assessed it). Both still count towards the score.
-function isMinor(finding: CaseRiskFinding): boolean {
-  return finding.severity === 'low' || finding.unreviewed;
-}
-
 interface FindingRow {
   finding: CaseRiskFinding;
   // How many findings on this document share this check and summary.
@@ -170,14 +163,6 @@ function countBySeverity(findings: CaseRiskFinding[]): [Severity, number][] {
   ).filter(([, count]) => count > 0);
 }
 
-function hiddenLabel(lowCount: number, unreviewedCount: number): string {
-  const parts = [
-    lowCount > 0 ? `${lowCount} low-severity` : null,
-    unreviewedCount > 0 ? `${unreviewedCount} unreviewed` : null,
-  ].filter(Boolean);
-  return `Show ${parts.join(' and ')} ${lowCount + unreviewedCount === 1 ? 'finding' : 'findings'}`;
-}
-
 function NotScoredMessage({ risk }: { risk: CaseRisk | null }) {
   // The score only comes from a case analysis run, never computed on its own.
   const [title, body, tone] = !risk
@@ -213,19 +198,16 @@ export function CaseRiskCard({
   caseDocuments?: DocumentRecord[];
 }) {
   const scored = risk?.state === 'scored' && risk.level ? risk : null;
-  const [showMinor, setShowMinor] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [showEmptyGroups, setShowEmptyGroups] = useState(false);
   // Ticks the officer changed but hasn't saved, by row key. A row without one shows its saved verdict.
   const [drafts, setDrafts] = useState<Record<string, boolean>>({});
   const reviews = useFindingReviews(caseId, scored !== null);
   const allReviews = reviews.data?.reviews ?? [];
 
   const findings = scored?.contributing_findings ?? [];
-  const lowCount = findings.filter((finding) => finding.severity === 'low').length;
-  const unreviewedCount = findings.filter((finding) => finding.unreviewed && finding.severity !== 'low').length;
-  const visibleFindings = showMinor ? findings : findings.filter((finding) => !isMinor(finding));
-  const documents = groupByDocument(visibleFindings);
+  // Every finding is listed, lows and ones a specialist didn't assess included: all of them count towards the
+  // score, and all of them are the officer's to review.
+  const documents = groupByDocument(findings);
   // Every group that has findings, shown or hidden as minor: only the rest are added as empty groups.
   const withFindings = new Set(
     findings.map((finding) => (findingScope(finding) === 'case' ? CASE_GROUP_ID : finding.document_id)),
@@ -313,7 +295,7 @@ export function CaseRiskCard({
                   {count} {severity}
                 </span>
               ))}
-              {document.findings.length === 0 && <span className="risk-document-none">No findings</span>}
+              {document.findings.length === 0 && <span className="risk-document-none">✓ No findings</span>}
               <MetricsLine summary={metricsFor(document)} />
             </span>
             {!isOpen && document.rows.length > 0 && (
@@ -348,7 +330,7 @@ export function CaseRiskCard({
                   {reviews.data && (
                     <input
                       type="checkbox"
-                      className="risk-finding-tick"
+                      className="review-tick risk-finding-tick"
                       aria-label={`Real issue: ${finding.summary}`}
                       checked={isChecked(document, row)}
                       disabled={saving}
@@ -396,6 +378,7 @@ export function CaseRiskCard({
                   note,
                 )
               }
+              onEdit={(reviewId, checkName, note) => void reviews.editMissed(reviewId, checkName, note)}
               onRemove={(reviewId) => void reviews.removeReview(reviewId)}
             />
           )}
@@ -455,40 +438,9 @@ export function CaseRiskCard({
               </div>
             </div>
           )}
-          {findings.length > 0 && documents.length === 0 && (
-            <div className="summary-message summary-message--info">
-              <span className="summary-message-icon">ⓘ</span>
-              <div>
-                <strong>Only minor findings.</strong>
-                <p>Every finding is low severity or unreviewed. They're hidden below.</p>
-              </div>
-            </div>
-          )}
-          {documents.length > 0 && <div className="flagged-list">{documents.map(renderGroup)}</div>}
-
-          {lowCount + unreviewedCount > 0 && (
-            <button
-              type="button"
-              className="risk-toggle"
-              aria-expanded={showMinor}
-              onClick={() => setShowMinor((current) => !current)}
-            >
-              {showMinor ? 'Show less' : hiddenLabel(lowCount, unreviewedCount)}
-            </button>
-          )}
-
-          {reviews.data && reviewGroups.length > 0 && (
-            <div className="risk-review-empty">
-              <button
-                type="button"
-                className="risk-toggle"
-                aria-expanded={showEmptyGroups}
-                onClick={() => setShowEmptyGroups((current) => !current)}
-              >
-                {showEmptyGroups ? 'Hide' : 'Report what detection missed on'} documents with no findings ({reviewGroups.length})
-              </button>
-              {showEmptyGroups && <div className="flagged-list">{reviewGroups.map(renderGroup)}</div>}
-            </div>
+          {/* Documents with findings first, then the ones detection found nothing on (still open, to report a miss). */}
+          {documents.length + reviewGroups.length > 0 && (
+            <div className="flagged-list">{[...documents, ...reviewGroups].map(renderGroup)}</div>
           )}
           {reviews.error && (
             <div className="save-error" role="alert">

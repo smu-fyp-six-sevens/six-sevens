@@ -183,6 +183,25 @@ def test_a_missed_issue_is_recorded_against_the_check_that_should_have_caught_it
     assert kwargs["note"] == "Director's NRIC differs on the CBR" and kwargs["reviewer"] == TEST_USER
 
 
+def test_a_missed_issue_can_be_corrected_but_a_verdict_cannot(repos) -> None:
+    reviews_repo, _ = repos
+    reviews_repo.get.return_value = _review(kind="missed", verdict=None, finding_id=None)
+    response = client.patch(f"/cases/{CASE_ID}/finding-reviews/{REVIEW_ID}", json={
+        "check_name": "metadata_tool", "note": "  Author was edited  ",
+    })
+    assert response.status_code == 200
+    reviews_repo.update_missed.assert_called_once_with(
+        REVIEW_ID, check_name="metadata_tool", note="Author was edited", reviewer=TEST_USER,
+    )
+    # A check from the wrong scope, or a verdict row, can't be edited this way.
+    assert client.patch(f"/cases/{CASE_ID}/finding-reviews/{REVIEW_ID}", json={"check_name": "cross_document_variance"}).status_code == 400
+    reviews_repo.get.return_value = _review()
+    assert client.patch(f"/cases/{CASE_ID}/finding-reviews/{REVIEW_ID}", json={"check_name": "metadata_tool"}).status_code == 400
+    reviews_repo.get.return_value = _review(case_id=OTHER_CASE_ID, kind="missed", verdict=None, finding_id=None)
+    assert client.patch(f"/cases/{CASE_ID}/finding-reviews/{REVIEW_ID}", json={"check_name": "metadata_tool"}).status_code == 404
+    assert reviews_repo.update_missed.call_count == 1
+
+
 def test_a_review_can_only_be_deleted_from_its_own_case(repos) -> None:
     reviews_repo, _ = repos
     reviews_repo.get.return_value = _review(case_id=OTHER_CASE_ID)

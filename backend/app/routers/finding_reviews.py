@@ -18,7 +18,7 @@ from .. import detection_metrics, document_repository, finding_reviews_repositor
 from ..auth import CurrentUser
 from ..models import (
     CaseFindingReviews, CaseRecord, DetectionMetrics, ReportMissedIssueRequest, SetFindingVerdictRequest,
-    SetFindingVerdictsRequest,
+    SetFindingVerdictsRequest, UpdateMissedIssueRequest,
 )
 from ._dependencies import bad_gateway_on_error, get_case_or_404, to_thread_or_502
 
@@ -111,6 +111,27 @@ async def report_missed_issue(
             finding_reviews_repository.add_missed,
             case_id=case_id, scope=request.scope, document_id=document_id, check_name=request.check_name,
             note=request.note, reviewer=user,
+        )
+        return await _case_reviews(case_id)
+
+
+@router.patch("/cases/{case_id}/finding-reviews/{review_id}", response_model=CaseFindingReviews)
+async def update_missed_issue(
+    case_id: str, review_id: UUID, request: UpdateMissedIssueRequest, user: CurrentUser,
+    case: CaseRecord = Depends(get_case_or_404),
+) -> CaseFindingReviews:
+    """Corrects a reported missed issue (its check or note), e.g. one filed against the wrong check. A verdict
+    on a finding is changed by reviewing the finding again, not here."""
+    with bad_gateway_on_error(_SAVE_FAILED, "Failed to update review %s", review_id):
+        review = await asyncio.to_thread(finding_reviews_repository.get, str(review_id))
+        if review is None or review.case_id != case_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review not found in this case")
+        if review.kind != "missed":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only a missed issue can be edited")
+        await _check_target(case_id, review.scope, None, request.check_name)
+        await asyncio.to_thread(
+            finding_reviews_repository.update_missed, str(review_id),
+            check_name=request.check_name, note=request.note, reviewer=user,
         )
         return await _case_reviews(case_id)
 

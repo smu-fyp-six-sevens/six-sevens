@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { DetectionMetrics } from '../services/uploadService';
 import { getDetectionMetrics } from '../services/uploadService';
-import { formatCheck, formatRate } from '../utils/checkLabels';
+import { Rate } from '../components/Rate';
+import { RATE_MEANING, formatCheck } from '../utils/checkLabels';
 
 // The dashboard's Accuracy tab: precision and recall per detection check, from officers' reviews on case pages.
 export function DetectionAccuracyPanel() {
@@ -33,13 +34,13 @@ export function DetectionAccuracyPanel() {
     <>
       <section className="flag-summary-grid" aria-label="Detection accuracy overall">
         <article className="dashboard-stat-card">
-          <span className="stat-caption">Precision</span>
-          <span className="stat-number">{formatRate(overall.precision, 'precision')}</span>
+          <span className="stat-caption" title={RATE_MEANING.precision}>Precision</span>
+          <Rate rate={overall.precision} kind="precision" className="stat-number" />
           <span className="stat-caption">{overall.correct} correct of {overall.correct + overall.wrong} reviewed findings</span>
         </article>
         <article className="dashboard-stat-card">
-          <span className="stat-caption">Recall</span>
-          <span className="stat-number">{formatRate(overall.recall, 'recall')}</span>
+          <span className="stat-caption" title={RATE_MEANING.recall}>Recall</span>
+          <Rate rate={overall.recall} kind="recall" className="stat-number" />
           <span className="stat-caption">{overall.correct} caught of {overall.correct + overall.missed} real issues</span>
         </article>
         <article className="dashboard-stat-card">
@@ -71,8 +72,8 @@ export function DetectionAccuracyPanel() {
                 <th>CORRECT</th>
                 <th>WRONG</th>
                 <th>MISSED</th>
-                <th>PRECISION</th>
-                <th>RECALL</th>
+                <th title={RATE_MEANING.precision}>PRECISION</th>
+                <th title={RATE_MEANING.recall}>RECALL</th>
                 <th>FLAG</th>
               </tr>
             </thead>
@@ -86,8 +87,8 @@ export function DetectionAccuracyPanel() {
                   <td data-label="Correct">{check.correct}</td>
                   <td data-label="Wrong">{check.wrong}</td>
                   <td data-label="Missed">{check.missed}</td>
-                  <td data-label="Precision"><strong>{formatRate(check.precision, 'precision')}</strong></td>
-                  <td data-label="Recall"><strong>{formatRate(check.recall, 'recall')}</strong></td>
+                  <td data-label="Precision"><strong><Rate rate={check.precision} kind="precision" /></strong></td>
+                  <td data-label="Recall"><strong><Rate rate={check.recall} kind="recall" /></strong></td>
                   <td data-label="Flag">
                     {check.flags.length === 0
                       ? <span className="no-flag">On target</span>

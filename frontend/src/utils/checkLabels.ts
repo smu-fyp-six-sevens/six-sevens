@@ -22,3 +22,9 @@ export function formatRate(rate: number | null, kind: 'precision' | 'recall'): s
   if (rate === null) return kind === 'precision' ? 'no reviews' : 'no examples';
   return `${Math.round(rate * 100)}%`;
 }
+
+// What each rate measures, shown on hover over a rate or its heading.
+export const RATE_MEANING: Record<'precision' | 'recall', string> = {
+  precision: 'Precision = correct ÷ (correct + wrong): of the findings this check raised, how many were real issues.',
+  recall: 'Recall = correct ÷ (correct + missed): of the real issues of this kind, how many this check caught.',
+};

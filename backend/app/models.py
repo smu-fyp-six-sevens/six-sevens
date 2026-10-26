@@ -646,6 +646,18 @@ class ReportMissedIssueRequest(_ReviewTarget):
         return (value.strip() or None) if value is not None else None
 
 
+class UpdateMissedIssueRequest(BaseModel):
+    """Corrects a reported missed issue: the check it's filed against, and its note. Where it sits never changes."""
+
+    check_name: str = Field(min_length=1, max_length=100)
+    note: str | None = Field(default=None, max_length=MAX_REVIEW_NOTE_LENGTH)
+
+    @field_validator("note")
+    @classmethod
+    def blank_note_is_none(cls, value: str | None) -> str | None:
+        return (value.strip() or None) if value is not None else None
+
+
 class CheckMetrics(BaseModel):
     """
     One check's counts and rates. precision is correct / (correct + wrong): None when no finding of the check

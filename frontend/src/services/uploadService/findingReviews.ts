@@ -98,6 +98,23 @@ export async function reportMissedIssue(
   return (await response.json()) as CaseFindingReviews;
 }
 
+// Corrects a reported missed issue: the check it's filed against, and its note.
+export async function updateMissedIssue(
+  caseId: string,
+  reviewId: string,
+  issue: { checkName: string; note?: string },
+): Promise<CaseFindingReviews> {
+  const response = await authFetch(`/cases/${caseId}/finding-reviews/${reviewId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ check_name: issue.checkName, note: issue.note ?? null }),
+  });
+
+  await assertOk(response, 'Failed to save the missed issue');
+
+  return (await response.json()) as CaseFindingReviews;
+}
+
 export async function deleteFindingReview(caseId: string, reviewId: string): Promise<CaseFindingReviews> {
   const response = await authFetch(`/cases/${caseId}/finding-reviews/${reviewId}`, { method: 'DELETE' });
 

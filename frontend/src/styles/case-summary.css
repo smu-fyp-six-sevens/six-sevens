@@ -640,22 +640,23 @@
    what detection missed; the case's precision and recall come from these.
    --------------------------------------------------------------------------- */
 
+/* The officer's review of a group, as one header row for its findings: Select all (in the same column as the
+   findings' ticks), what the ticks mean, the review's state, and Save. */
 .group-review-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 14px;
-  margin: 0 20px 4px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: #faf8f3;
+  margin: 0 20px;
+  padding: 2px 0 10px;
+  border-bottom: 1px dashed var(--line);
   font-size: 12.5px;
 }
 
 .group-review-select-all {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
   color: var(--ink);
   font-weight: 600;
   cursor: pointer;
@@ -663,24 +664,36 @@
 
 .group-review-hint {
   flex: 1;
-  min-width: 180px;
+  min-width: 200px;
   color: var(--ink-soft);
 }
 
-.group-review-status {
-  font-size: 11.5px;
+.group-review-hint strong {
+  color: var(--ink);
   font-weight: 600;
 }
 
+/* A chip, so the group's review state reads at a glance. */
+.group-review-status {
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .group-review-status--saved {
+  background: var(--teal-bg);
   color: var(--teal);
 }
 
 .group-review-status--unsaved {
-  color: #9a6507;
+  background: #fdf0d8;
+  color: #8a5a00;
 }
 
 .group-review-status--not_reviewed {
+  background: #eef0f3;
   color: var(--ink-soft);
 }
 
@@ -710,13 +723,18 @@
   outline-offset: 1px;
 }
 
-.risk-finding-tick {
+/* Every review tick, Select all included: one size and no browser margins, so they line up. */
+.review-tick {
   flex-shrink: 0;
   width: 16px;
   height: 16px;
-  margin-top: 2px;
+  margin: 0;
   accent-color: var(--steel);
   cursor: pointer;
+}
+
+.risk-finding-tick {
+  margin-top: 2px;
 }
 
 .review-metrics-line {
@@ -732,9 +750,16 @@
   font-family: inherit;
 }
 
+/* Detection found nothing on this document: a green badge in the severity badges' place. */
 .risk-document-none {
-  color: var(--ink-soft);
-  font-style: italic;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--teal-bg);
+  color: var(--teal);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
 .missed-issues {
@@ -962,11 +987,56 @@
 }
 
 /* Documents with no findings, and the cross-document group: only for reporting what detection missed. */
-/* Its toggle is a .risk-toggle like "Show more"; the groups it opens run edge to edge like the list above. */
-.risk-review-empty > .flagged-list {
-  margin-bottom: 12px;
-}
 
 .summary-card .save-error {
   margin: 0 20px 12px;
+}
+
+/* A precision or recall (components/Rate.tsx): hovering explains it. When there's nothing to measure yet
+   ("no reviews" / "no examples") it's underlined so the explanation is easy to find. */
+.rate {
+  cursor: help;
+}
+
+.rate--empty {
+  color: var(--ink-soft);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.review-summary-caption[title],
+.review-check-table th[title] {
+  cursor: help;
+}
+
+.missed-issue-edit {
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--steel);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.missed-issue-edit:hover:not(:disabled) {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.missed-issue-edit:disabled,
+.missed-issue-add:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.missed-issue-edit:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 1px;
+}
+
+/* A missed issue being corrected: its form takes the whole row. */
+.missed-issue-list li > .missed-issue-form {
+  flex: 1;
 }

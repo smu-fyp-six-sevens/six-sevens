@@ -5,6 +5,7 @@ import {
   getCaseFindingReviews,
   reportMissedIssue,
   setFindingVerdicts,
+  updateMissedIssue,
 } from '../../services/uploadService';
 
 export function findingScope(finding: CaseRiskFinding): ReviewScope {
@@ -89,10 +90,16 @@ export function useFindingReviews(caseId: string, enabled: boolean) {
     [caseId, run],
   );
 
+  const editMissed = useCallback(
+    (reviewId: string, checkName: string, note: string) =>
+      run(reviewId, () => updateMissedIssue(caseId, reviewId, { checkName, note })),
+    [caseId, run],
+  );
+
   const removeReview = useCallback(
     (reviewId: string) => run(reviewId, () => deleteFindingReview(caseId, reviewId)),
     [caseId, run],
   );
 
-  return { data, error, savingKey, saveGroup, addMissed, removeReview };
+  return { data, error, savingKey, saveGroup, addMissed, editMissed, removeReview };
 }
