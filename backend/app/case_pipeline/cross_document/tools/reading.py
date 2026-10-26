@@ -7,7 +7,7 @@ import re
 
 from langchain_core.tools import tool
 
-from ....fraud_detection.numerical_validation.common import _decode
+from ....fraud_detection.shared.field_values import decode_field_value
 from ..bias import is_protected_field
 from ..evidence import mask_identifiers
 from .common import MAX_ROWS, ToolKit, unavailable
@@ -50,7 +50,7 @@ def build_reading_tools(kit: ToolKit) -> list:
             if name not in view.fields:
                 out.append({"field": name, "available": False})
                 continue
-            value = _decode(view.fields[name])
+            value = decode_field_value(view.fields[name])
             shown = value[:MAX_ROWS] if isinstance(value, list) else value
             ref = context.ledger.issue(view.key, name, value, source="get_fields")
             refs.append(ref)
@@ -69,11 +69,11 @@ def build_reading_tools(kit: ToolKit) -> list:
                 for name, value in view.fields.items():
                     if is_protected_field(name):
                         continue
-                    if any(k in name.lower() for k in keys) and str(_decode(value) or "").strip():
+                    if any(k in name.lower() for k in keys) and str(decode_field_value(value) or "").strip():
                         ref = context.ledger.issue(view.key, name, value, source="get_business_profile")
                         refs.append(ref)
                         found.append({"document": view.key, "field": name,
-                                      "value": mask_identifiers(str(_decode(value)))[:200], "ref": ref})
+                                      "value": mask_identifiers(str(decode_field_value(value)))[:200], "ref": ref})
             if found:
                 profile[attribute] = found
         disagreements = [

@@ -2,16 +2,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from postgrest.exceptions import APIError
 from pydantic import BaseModel
 
-from .. import case_service, document_repository, storage_service
-from ._dependencies import bad_gateway_on_error, ensure_case_editable, to_thread_or_502
+from .. import case_service, document_repository, events, storage_service
+from ._dependencies import bad_gateway_on_error, to_thread_or_502
 from ..config import settings
+from ..events import officer_event, types
 from ..models import DocumentRecord, DocumentStatus
-from ..queue_service import document_queue
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 logger = logging.getLogger(__name__)
@@ -106,8 +107,14 @@ async def _ingest_one(
         "Document %s stored but failed to enqueue for processing",
         document.id,
     ):
-        # AC1: enters the background task queue for async processing.
-        await document_queue.enqueue(document.id)
+        # AC1: queued, then the event hands it to the doc-worker.
+        await asyncio.to_thread(
+            document_repository.update_status, document.id, DocumentStatus.QUEUED, queued_at=datetime.now(timezone.utc)
+        )
+        await events.publish(officer_event(
+            types.DOCUMENT_UPLOADED, document_id=document.id, case_id=case_id,
+            detail={"filename": filename, "content_type": file.content_type, "size_bytes": len(file_bytes)},
+        ))
 
     return document
 
@@ -141,7 +148,6 @@ async def upload_documents_batch(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="At least one file is required",
         )
-    await ensure_case_editable(case_id)
 
     if len(files) > settings.MAX_BULK_FILES:
         raise HTTPException(

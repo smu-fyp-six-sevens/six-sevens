@@ -4,12 +4,15 @@ on:
   push:
     branches:
       - main
+    # A docs-only push neither tests nor redeploys anything.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   backend-ci:
@@ -30,13 +33,22 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.13'
+          # pip's download cache, reused until either file changes.
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/pyproject.toml
 
+      # Cached between runs, so apt-get update (the slow part) only runs when the cache is empty.
       - name: Install exiftool (the metadata and AI-provenance tests need it)
+        uses: awalsh128/cache-apt-pkgs-action@v1.4.3
+        with:
+          packages: libimage-exiftool-perl
+          version: 1.0
+
+      - name: Check exiftool
         working-directory: .
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libimage-exiftool-perl
-          exiftool -ver
+        run: exiftool -ver
 
       - name: Install backend dependencies
         run: |
@@ -83,6 +95,11 @@ jobs:
     # instead of a second job repeating checkout/setup-node/npm ci.
     name: Frontend CI
     runs-on: ubuntu-latest
+    # Chromium and its system libraries come with the image, so there is no browser install step. The tag must
+    # match @playwright/test in frontend/package-lock.json; bump both together.
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --user 1001
     defaults:
       run:
         working-directory: frontend
@@ -103,11 +120,12 @@ jobs:
       - name: Lint frontend
         run: npm run lint
 
+      # vite build doesn't type-check, so a type error would otherwise ship.
+      - name: Type-check frontend
+        run: npm run typecheck
+
       - name: Build frontend
         run: npm run build
-
-      - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
 
       - name: Run regression tests
         run: npm run test:e2e
@@ -122,49 +140,94 @@ jobs:
             frontend/test-results/
           retention-days: 14
 
-  publish-images:
-    name: Publish Docker images
-    needs:
-      - backend-ci
-      - frontend-ci
-    if: github.event_name == 'workflow_dispatch'
+  security:
+    # Blocking: a high-severity finding fails the build and stops the deploy. Findings that don't apply are
+    # skipped inline with a reason (#checkov:skip=...), never by making this job optional.
+    name: Security (Checkov, Snyk)
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - name: backend
-            dockerfile: backend/Dockerfile
-            image_name: six-sevens-backend
-          - name: frontend
-            dockerfile: frontend/Dockerfile
-            image_name: six-sevens-frontend
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Set image repository
-        id: set-image-repo
-        run: echo "image_repo=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.image_name }}" >> "$GITHUB_OUTPUT"
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          python-version: '3.13'
 
-      - name: Build and push image
-        uses: docker/build-push-action@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
         with:
-          context: .
-          file: ${{ matrix.dockerfile }}
-          push: true
-          # GHCR often fails BuildKit attestation blobs with "unknown blob".
-          provenance: false
-          sbom: false
-          # Build secret for the backend image's zoning index (the frontend ignores it).
-          secrets: |
-            data_gov_sg_api_key=${{ secrets.DATA_GOV_SG_API_KEY }}
-          tags: |
-            ${{ steps.set-image-repo.outputs.image_repo }}:latest
-            ${{ steps.set-image-repo.outputs.image_repo }}:${{ github.sha }}
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # One step per scan, so findings in one don't stop the others from running.
+      - name: Install Checkov
+        run: python -m pip install "checkov>=3.2,<4"
+
+      - name: Checkov (Terraform)
+        if: ${{ !cancelled() }}
+        run: checkov -d deploy/terraform --framework terraform --compact --quiet
+
+      - name: Checkov (Dockerfiles)
+        if: ${{ !cancelled() }}
+        run: checkov --framework dockerfile -f backend/Dockerfile -f deploy/kong/Dockerfile -f deploy/grafana/Dockerfile -f frontend/Dockerfile --compact --quiet
+
+      - name: Checkov (workflows)
+        if: ${{ !cancelled() }}
+        run: checkov -d .github/workflows --framework github_actions --compact --quiet
+
+      - name: Snyk (Python dependencies)
+        if: ${{ !cancelled() && env.SNYK_TOKEN != '' }}
+        run: |
+          # Snyk reads installed packages for a requirements file, so install them first.
+          python -m pip install -r backend/requirements.txt
+          npx --yes snyk@1 test --file=backend/requirements.txt --package-manager=pip --severity-threshold=high
+
+      - name: Snyk (npm dependencies)
+        if: ${{ !cancelled() && env.SNYK_TOKEN != '' }}
+        run: cd frontend && npm ci && npx --yes snyk@1 test --severity-threshold=high
+
+      - name: pip-audit and npm audit (when there is no Snyk token)
+        if: ${{ !cancelled() && env.SNYK_TOKEN == '' }}
+        run: |
+          python -m pip install pip-audit
+          pip-audit -r backend/requirements.txt
+          cd frontend && npm ci && npm audit --audit-level=high
+
+  terraform:
+    # Format and validity only: no state, no credentials. `apply` stays a manual step (deploy/terraform/README.md).
+    name: Terraform (fmt, validate)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy/terraform
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          # The version `terraform apply` runs with locally; keep them the same.
+          terraform_version: 1.16.6
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive
+
+      - name: terraform validate
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+  deploy:
+    # Continuous deployment: every push to main whose checks all pass goes to Cloud Run.
+    name: Deploy to Cloud Run
+    needs: [backend-ci, frontend-ci, security, terraform]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      id-token: write # Workload Identity Federation, used inside deploy.yml
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit

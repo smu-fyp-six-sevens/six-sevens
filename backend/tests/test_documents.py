@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import asyncio
 import io
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, call, patch
+from unittest.mock import ANY, AsyncMock, call, patch
 
 import pytest
 from fastapi import HTTPException, UploadFile
@@ -44,23 +43,20 @@ def _make_case(case_id: str = "case-1", greenlink_case_id: str = "GLDB-1") -> Ca
         greenlink_case_id=greenlink_case_id,
         status="open",
         submission_finalized=False,
-        recommended_additional_documents=[],
         created_at=_TIMESTAMP,
         updated_at=_TIMESTAMP,
     )
 
 
-def test_upload_batch_partial_failure() -> None:
+def test_upload_batch_partial_failure(published_events) -> None:
     with (
         patch("app.routers.upload.case_service") as mock_case_service,
         patch("app.routers.upload.storage_service") as mock_storage,
         patch("app.routers.upload.document_repository") as mock_repo,
-        patch("app.routers.upload.document_queue") as mock_queue,
     ):
         mock_case_service.get_case.return_value = _make_case("case-1")
         mock_storage.upload_file.return_value = "case-1/uuid_good.pdf"
         mock_repo.create_document.return_value = _make_document("doc-good")
-        mock_queue.enqueue = AsyncMock()
 
         response = client.post(
             "/documents/upload-batch",
@@ -81,7 +77,32 @@ def test_upload_batch_partial_failure() -> None:
     assert results["bad.exe"]["success"] is False
     assert results["bad.exe"]["error"] is not None
 
-    mock_queue.enqueue.assert_awaited_once_with("doc-good")
+    assert [(e.type, e.document_id) for e in published_events] == [("document.uploaded", "doc-good")]
+
+
+def test_upload_batch_marks_queued_and_publishes_uploaded(published_events) -> None:
+    with (
+        patch("app.routers.upload.case_service") as mock_case_service,
+        patch("app.routers.upload.storage_service") as mock_storage,
+        patch("app.routers.upload.document_repository") as mock_repo,
+    ):
+        mock_case_service.get_case.return_value = _make_case("case-1")
+        mock_storage.upload_file.return_value = "case-1/uuid_good.pdf"
+        mock_repo.create_document.return_value = _make_document("doc-good")
+
+        response = client.post(
+            "/documents/upload-batch",
+            data={"case_id": "case-1"},
+            files=[("files", ("good.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf"))],
+        )
+
+    assert response.status_code == 202
+    args, kwargs = mock_repo.update_status.call_args
+    assert args == ("doc-good", DocumentStatus.QUEUED)
+    assert "queued_at" in kwargs
+    [event] = published_events
+    assert (event.type, event.document_id, event.case_id) == ("document.uploaded", "doc-good", "case-1")
+    assert event.detail["filename"] == "good.pdf"
 
 
 def test_upload_batch_rejects_no_files() -> None:
@@ -184,7 +205,7 @@ def test_retry_document_rejects_already_analyzed() -> None:
     assert response.status_code == 409
 
 
-def test_retry_document_requeues_stuck_processing_document() -> None:
+def test_retry_document_requeues_stuck_processing_document(published_events) -> None:
     # Depends(get_document_or_404) fetches via _dependencies.document_repository
     # (provides the pre-retry record the handler checks status/retry_count
     # on); the handler's own final `return await ... document_repository.get_document`
@@ -199,11 +220,9 @@ def test_retry_document_requeues_stuck_processing_document() -> None:
     with (
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
-        patch("app.routers.documents.document_queue") as mock_queue,
     ):
         mock_dep_repo.get_document.return_value = stuck
         mock_repo.get_document.return_value = requeued
-        mock_queue.enqueue = AsyncMock()
 
         response = client.post("/documents/doc-1/retry")
 
@@ -212,10 +231,11 @@ def test_retry_document_requeues_stuck_processing_document() -> None:
     mock_repo.update_status.assert_called_once_with(
         "doc-1",
         DocumentStatus.QUEUED,
+        queued_at=ANY,
         retry_count=1,
         expected_current_statuses=[DocumentStatus.PROCESSING],
     )
-    mock_queue.enqueue.assert_awaited_once_with("doc-1")
+    assert [(e.type, e.document_id) for e in published_events] == [("document.retry_requested", "doc-1")]
 
 
 def test_retry_document_allows_retrying_failed_document() -> None:
@@ -227,11 +247,9 @@ def test_retry_document_allows_retrying_failed_document() -> None:
     with (
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
-        patch("app.routers.documents.document_queue") as mock_queue,
     ):
         mock_dep_repo.get_document.return_value = failed
         mock_repo.get_document.return_value = failed
-        mock_queue.enqueue = AsyncMock()
 
         response = client.post("/documents/doc-1/retry")
 
@@ -239,6 +257,7 @@ def test_retry_document_allows_retrying_failed_document() -> None:
     mock_repo.update_status.assert_called_once_with(
         "doc-1",
         DocumentStatus.QUEUED,
+        queued_at=ANY,
         retry_count=3,
         expected_current_statuses=[DocumentStatus.FAILED],
     )
@@ -618,12 +637,11 @@ def test_retry_document_fetch_and_enqueue_failures() -> None:
     with (
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository"),
-        patch("app.routers.documents.document_queue") as mock_queue,
+        patch("app.events.publish", AsyncMock(side_effect=RuntimeError("queue down"))),
     ):
         failed = _make_document("doc-1")
         failed.status = DocumentStatus.FAILED
         mock_dep_repo.get_document.return_value = failed
-        mock_queue.enqueue = AsyncMock(side_effect=RuntimeError("queue down"))
         assert client.post("/documents/doc-1/retry").status_code == 502
 
 
@@ -682,18 +700,16 @@ def _typed_document(**overrides) -> DocumentRecord:
     return _make_document().model_copy(update=fields)
 
 
-def test_update_document_type_records_type_and_reruns_extraction() -> None:
+def test_update_document_type_records_type_and_reruns_extraction(published_events) -> None:
     with (
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
-        patch("app.routers.documents.langgraph_pipeline") as mock_pipeline,
     ):
         document = _typed_document()
         mock_dep_repo.get_document.return_value = document
         mock_repo.get_document.return_value = document
         mock_fields_repo.get_extracted_fields.return_value = []
-        mock_pipeline.rerun_extraction = AsyncMock()
 
         response = client.patch("/documents/doc-1/document-type", json={"document_type": " NRIC "})
 
@@ -712,21 +728,19 @@ def test_update_document_type_records_type_and_reruns_extraction() -> None:
     # document_repository.record_classification/update_status resync the
     # case themselves now (see document_repository._sync_case) — not
     # observable from here since those calls are mocked.
-    mock_pipeline.rerun_extraction.assert_awaited_once_with("doc-1")
+    assert [e.type for e in published_events] == ["document.retyped"]
 
 
-def test_update_document_type_confirms_existing_type_without_rerunning_extraction() -> None:
+def test_update_document_type_confirms_existing_type_without_rerunning_extraction(published_events) -> None:
     with (
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
-        patch("app.routers.documents.langgraph_pipeline") as mock_pipeline,
     ):
         document = _typed_document()
         mock_dep_repo.get_document.return_value = document
         mock_repo.get_document.return_value = document
         mock_fields_repo.get_extracted_fields.return_value = []
-        mock_pipeline.rerun_extraction = AsyncMock()
 
         response = client.patch("/documents/doc-1/document-type", json={"document_type": "payslip"})
 
@@ -740,15 +754,14 @@ def test_update_document_type_confirms_existing_type_without_rerunning_extractio
         fulfilled_requirements=compute_fulfilled_requirements("payslip", document.extracted_fields),
     )
     mock_repo.update_status.assert_not_called()
-    mock_pipeline.rerun_extraction.assert_not_awaited()
+    assert "document.retyped" not in [e.type for e in published_events]
 
 
-def test_update_document_type_allows_unclassified_failed_document_without_case() -> None:
+def test_update_document_type_allows_unclassified_failed_document_without_case(published_events) -> None:
     with (
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
-        patch("app.routers.documents.langgraph_pipeline") as mock_pipeline,
     ):
         document = _typed_document(
             status=DocumentStatus.FAILED,
@@ -759,14 +772,13 @@ def test_update_document_type_allows_unclassified_failed_document_without_case()
         mock_dep_repo.get_document.return_value = document
         mock_repo.get_document.return_value = document
         mock_fields_repo.get_extracted_fields.return_value = []
-        mock_pipeline.rerun_extraction = AsyncMock()
 
         response = client.patch(
             "/documents/doc-1/document-type", json={"document_type": "unrecognised"}
         )
 
     assert response.status_code == 200
-    mock_pipeline.rerun_extraction.assert_awaited_once_with("doc-1")
+    assert [e.type for e in published_events] == ["document.retyped"]
 
 
 def test_update_document_type_rejects_unknown_type() -> None:
@@ -809,20 +821,18 @@ def test_update_document_type_rejects_confident_classification() -> None:
     mock_repo.record_classification.assert_not_called()
 
 
-def test_update_document_type_write_failure_returns_502_without_rerun() -> None:
+def test_update_document_type_write_failure_returns_502_without_rerun(published_events) -> None:
     with (
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
-        patch("app.routers.documents.langgraph_pipeline") as mock_pipeline,
     ):
         mock_dep_repo.get_document.return_value = _typed_document()
         mock_repo.record_classification.side_effect = RuntimeError("db down")
-        mock_pipeline.rerun_extraction = AsyncMock()
 
         response = client.patch("/documents/doc-1/document-type", json={"document_type": "nric"})
 
     assert response.status_code == 502
-    mock_pipeline.rerun_extraction.assert_not_called()
+    assert "document.retyped" not in [e.type for e in published_events]
 
 
 # --- POST /documents/{id}/extracted-fields (manual field add) -----------
@@ -1172,14 +1182,16 @@ def test_move_document_success_pushes_both_case_snapshots() -> None:
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
         patch("app.routers.documents.case_service") as mock_case_service,
-        patch("app.routers.documents.broadcaster") as mock_broadcaster,
+        # The live push lives in app/snapshots.py and builds through case_service itself.
+        patch("app.snapshots.broadcaster") as mock_broadcaster,
+        patch("app.case_service.build_case_snapshot") as mock_build,
     ):
         mock_dep_repo.get_document.return_value = document
         mock_repo.get_document.return_value = moved
         mock_fields_repo.get_extracted_fields.return_value = []
         mock_case_service.get_case.return_value = _make_case(case_id="case-2")
         mock_case_service.missing_required_fields.return_value = []
-        mock_case_service.build_case_snapshot.side_effect = lambda case_id: {"case": {"id": case_id}}
+        mock_build.side_effect = lambda case_id: {"case": {"id": case_id}}
 
         response = client.post("/documents/doc-1/move", json={"case_id": "case-2"})
 
@@ -1190,7 +1202,7 @@ def test_move_document_success_pushes_both_case_snapshots() -> None:
     # needs resyncing from the router, since its own Realtime event (if any)
     # never carries this document's old case_id.
     mock_case_service.sync_submission_finalized.assert_called_once_with("case-1")
-    assert mock_case_service.build_case_snapshot.call_args_list == [call("case-1")]
+    assert mock_build.call_args_list == [call("case-1")]
     assert mock_broadcaster.publish.call_args_list == [
         call("case-1", {"case": {"id": "case-1"}}),
     ]
@@ -1461,83 +1473,6 @@ def test_langgraph_trace_404_when_nothing_found_anywhere() -> None:
     assert response.status_code == 404
 
 
-# --- _run_detection_task / _launch_detection --------------------------------
-
-
-@pytest.mark.asyncio
-async def test_run_detection_task_pushes_case_snapshot_on_success() -> None:
-    from app.routers.documents import _run_detection_task
-
-    with (
-        patch("app.routers.documents.run_detection", AsyncMock(return_value={"verdict": "clean"})),
-        patch("app.routers.documents._push_case_snapshot", AsyncMock()) as mock_push,
-    ):
-        await _run_detection_task("doc-1", "case-1")
-
-    mock_push.assert_called_once_with("case-1")
-
-
-@pytest.mark.asyncio
-async def test_run_detection_task_still_pushes_case_snapshot_on_failure() -> None:
-    # A crashed run must still surface live (status stays "scanning" forever
-    # otherwise) — the push isn't conditional on run_detection succeeding.
-    from app.routers.documents import _run_detection_task
-
-    with (
-        patch("app.routers.documents.run_detection", AsyncMock(side_effect=RuntimeError("boom"))),
-        patch("app.routers.documents._push_case_snapshot", AsyncMock()) as mock_push,
-    ):
-        await _run_detection_task("doc-1", "case-1")
-
-    mock_push.assert_called_once_with("case-1")
-
-
-@pytest.mark.asyncio
-async def test_run_detection_task_skips_push_when_no_case_id() -> None:
-    from app.routers.documents import _run_detection_task
-
-    with (
-        patch("app.routers.documents.run_detection", AsyncMock(return_value={"verdict": "clean"})),
-        patch("app.routers.documents._push_case_snapshot", AsyncMock()) as mock_push,
-    ):
-        await _run_detection_task("doc-1", None)
-
-    mock_push.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_run_detection_task_records_cancellation_and_still_pushes_snapshot() -> None:
-    from app.routers.documents import _run_detection_task
-
-    with (
-        patch("app.routers.documents.run_detection", AsyncMock(side_effect=asyncio.CancelledError())),
-        patch("app.routers.documents.langgraph_trace") as mock_trace,
-        patch("app.routers.documents._push_case_snapshot", AsyncMock()) as mock_push,
-        patch("app.routers.documents.document_repository") as mock_repo,
-    ):
-        with pytest.raises(asyncio.CancelledError):
-            await _run_detection_task("doc-1", "case-1")
-
-    mock_trace.record.assert_called_once_with(
-        "doc-1", "detection_error", error="Cancelled by loan officer",
-    )
-    # DETECTING -> back to APPROVED: a cancelled run must not leave the document stuck as "Scanning".
-    mock_repo.revert_to_approved.assert_called_once_with("doc-1")
-    mock_push.assert_called_once_with("case-1")
-
-
-@pytest.mark.asyncio
-async def test_launch_detection_tracks_the_task() -> None:
-    from app.routers import documents as documents_router
-
-    with patch("app.routers.documents.run_detection", AsyncMock(return_value={"verdict": "clean"})):
-        documents_router._launch_detection("doc-1", None)
-        assert "doc-1" in documents_router._detection_tasks
-        await documents_router._detection_tasks["doc-1"]
-
-    assert "doc-1" not in documents_router._detection_tasks
-
-
 @pytest.mark.parametrize("locked_status", [DocumentStatus.APPROVED, DocumentStatus.REJECTED])
 @pytest.mark.parametrize(
     ("method", "url", "body"),
@@ -1584,7 +1519,7 @@ def test_rejected_document_can_still_be_deleted() -> None:
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.case_service"),
-        patch("app.routers.documents.broadcaster"),
+        patch("app.snapshots.broadcaster"),
     ):
         mock_dep_repo.get_document.return_value = document
 
@@ -1623,7 +1558,7 @@ def test_approve_document_requires_a_confirmed_type(document_type, classificatio
     mock_repo.approve_document.assert_not_called()
 
 
-def test_approve_document_allows_officer_confirmed_unrecognised() -> None:
+def test_approve_document_allows_officer_confirmed_unrecognised(published_events) -> None:
     # Picking "Other" in the type dropdown writes 1.0 — an explicit decision.
     document = _typed_document(
         document_type="unrecognised", classification_confidence=1.0,
@@ -1634,7 +1569,6 @@ def test_approve_document_allows_officer_confirmed_unrecognised() -> None:
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
-        patch("app.routers.documents._launch_detection") as mock_launch,
     ):
         mock_dep_repo.get_document.return_value = document
         mock_repo.approve_document.return_value = mock_repo.get_document.return_value = document
@@ -1647,7 +1581,7 @@ def test_approve_document_allows_officer_confirmed_unrecognised() -> None:
     assert response.status_code == 200
     mock_repo.approve_document.assert_called_once_with("doc-1")
     # Approved as Other, and scanned like any other document.
-    mock_launch.assert_called_once()
+    assert [(e.type, e.detail["skip_detection"]) for e in published_events] == [("document.approved", False)]
 
 
 def test_approve_document_requires_an_other_documents_fields_to_be_saved() -> None:
@@ -1681,7 +1615,6 @@ def test_approve_document_does_not_require_saved_fields_for_a_known_type() -> No
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
-        patch("app.routers.documents._launch_detection"),
     ):
         mock_dep_repo.get_document.return_value = document
         mock_repo.approve_document.return_value = mock_repo.get_document.return_value = document
@@ -1727,7 +1660,6 @@ def test_retyping_a_reviewed_document_clears_the_review() -> None:
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository"),
-        patch("app.routers.documents.langgraph_pipeline"),
     ):
         mock_dep_repo.get_document.return_value = document
         mock_repo.get_document.return_value = document
@@ -1747,7 +1679,6 @@ def test_confident_unrecognised_document_can_still_be_retyped() -> None:
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.routers.documents.document_repository") as mock_repo,
         patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
-        patch("app.routers.documents.langgraph_pipeline"),
     ):
         mock_dep_repo.get_document.return_value = document
         mock_repo.get_document.return_value = document

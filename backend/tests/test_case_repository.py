@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from postgrest import CountMethod
+
 from app import case_repository
 
 
@@ -85,16 +87,77 @@ def test_get_case_returns_record_when_found() -> None:
         )
 
 
-def test_list_cases_returns_all_rows() -> None:
+def test_a_page_of_cases_is_ordered_ranged_and_counted_by_the_database() -> None:
     with patch("app.case_repository.supabase_client") as mock_client:
-        mock_client.table.return_value.select.return_value.execute.return_value = (
-            _execute_result([_row(id="case-1"), _row(id="case-2")])
-        )
+        query = mock_client.table.return_value.select.return_value
+        result = _execute_result([_row(id="case-26"), _row(id="case-27")])
+        result.count = 51
+        query.order.return_value.order.return_value.range.return_value.execute.return_value = result
 
-        results = case_repository.list_cases()
+        cases, total = case_repository.list_cases_page(None, newest=True, limit=25, offset=25)
 
-        assert len(results) == 2
-        assert {c.id for c in results} == {"case-1", "case-2"}
+    assert [c.id for c in cases] == ["case-26", "case-27"]
+    assert total == 51
+    mock_client.table.return_value.select.assert_called_once_with("*", count=CountMethod.exact)
+    query.order.assert_called_once_with("created_at", desc=True)
+    query.order.return_value.order.assert_called_once_with("id")  # a tie-break, so pages never overlap
+    query.order.return_value.order.return_value.range.assert_called_once_with(25, 49)
+    query.or_.assert_not_called()
+
+
+def test_a_search_matches_the_number_or_the_name_and_quotes_what_it_was_given() -> None:
+    with patch("app.case_repository.supabase_client") as mock_client:
+        query = mock_client.table.return_value.select.return_value
+        result = _execute_result([])
+        result.count = None
+        query.or_.return_value.order.return_value.order.return_value.range.return_value.execute.return_value = result
+
+        cases, total = case_repository.list_cases_page('Acme, (SG) "x"', newest=False, limit=10, offset=0)
+
+    assert cases == [] and total == 0
+    query.or_.assert_called_once_with(
+        'company_name.ilike."*Acme, (SG) \\"x\\"*",greenlink_case_id.ilike."*Acme, (SG) \\"x\\"*"'
+    )
+    query.or_.return_value.order.assert_called_once_with("created_at", desc=False)
+
+
+def test_every_matching_case_comes_back_newest_first() -> None:
+    rows = [
+        _row(id="case-1", created_at="2026-10-01T00:00:00Z"),
+        _row(id="case-2", created_at="2026-10-03T00:00:00Z"),
+        _row(id="case-3", created_at="2026-10-02T00:00:00Z"),
+    ]
+    with patch("app.case_repository.fetch_all", return_value=rows) as fetch:
+        cases = case_repository.list_matching_cases(None)
+
+    assert [c.id for c in cases] == ["case-2", "case-3", "case-1"]
+    assert fetch.call_args.args[1] == "id"  # paged by a unique key
+
+
+def test_case_ids_are_read_a_page_at_a_time() -> None:
+    with patch("app.case_repository.fetch_all", return_value=[{"id": "a"}, {"id": "b"}]):
+        assert case_repository.list_case_ids() == ["a", "b"]
+
+
+def test_a_case_is_found_by_its_number_or_else_its_id() -> None:
+    with patch("app.case_repository.supabase_client") as mock_client:
+        select = mock_client.table.return_value.select.return_value
+        select.eq.return_value.limit.return_value.execute.side_effect = [
+            _execute_result([]), _execute_result([_row(id="case-7")]),
+        ]
+
+        found = case_repository.get_case_by_number("case-7")
+
+    assert found is not None and found.id == "case-7"
+    assert [call.args for call in select.eq.call_args_list] == [("greenlink_case_id", "case-7"), ("id", "case-7")]
+
+
+def test_an_unknown_number_is_none() -> None:
+    with patch("app.case_repository.supabase_client") as mock_client:
+        select = mock_client.table.return_value.select.return_value
+        select.eq.return_value.limit.return_value.execute.return_value = _execute_result([])
+
+        assert case_repository.get_case_by_number("GLDB-404") is None
 
 
 def test_set_submission_finalized_true_sets_finalized_at() -> None:
@@ -115,31 +178,6 @@ def test_set_submission_finalized_false_clears_finalized_at() -> None:
 
         update_payload = mock_client.table.return_value.update.call_args[0][0]
         assert update_payload == {"submission_finalized": False, "finalized_at": None}
-
-
-def test_list_cases_includes_dev_cases_by_default() -> None:
-    with patch("app.case_repository.supabase_client") as mock_client:
-        query = mock_client.table.return_value.select.return_value
-        query.execute.return_value = _execute_result([_row()])
-
-        cases = case_repository.list_cases()
-
-        assert len(cases) == 1
-        # No dev filter applied — the query is executed as selected.
-        query.eq.assert_not_called()
-
-
-def test_list_cases_excludes_dev_cases_when_asked() -> None:
-    # What the deployed environment uses so demo/test cases don't show up
-    # in the real queue.
-    with patch("app.case_repository.supabase_client") as mock_client:
-        query = mock_client.table.return_value.select.return_value
-        query.eq.return_value.execute.return_value = _execute_result([_row()])
-
-        cases = case_repository.list_cases(include_dev=False)
-
-        assert len(cases) == 1
-        query.eq.assert_called_once_with("dev", False)
 
 
 def test_update_case_writes_company_name_and_touches_updated_at() -> None:
@@ -181,11 +219,10 @@ def test_delete_case_deletes_the_row() -> None:
 
     # What hangs off the case first (a foreign key can block the case delete), then the case itself.
     assert [c.args for c in mock_client.table.call_args_list] == [
-        ("risk_scores",), ("case_analysis_runs",), ("flags",), ("case_status_history",), ("cases",),
+        ("risk_scores",), ("case_analysis_runs",), ("flags",), ("case_notes",), ("cases",),
     ]
     assert [c.args for c in mock_client.table.return_value.delete.return_value.eq.call_args_list] == [
-        ("case_id", "case-1"), ("case_id", "case-1"), ("case_id", "case-1"), ("case_id", "case-1"),
-        ("id", "case-1"),
+        ("case_id", "case-1"), ("case_id", "case-1"), ("case_id", "case-1"), ("case_id", "case-1"), ("id", "case-1"),
     ]
     assert mock_client.table.return_value.delete.return_value.eq.return_value.execute.call_count == 5
 

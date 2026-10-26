@@ -77,6 +77,8 @@ import pymupdf
 from PIL import Image, ImageFilter
 from pydantic import BaseModel, Field
 
+from ..shared.check_result import CheckResult
+
 logger = logging.getLogger("fraud_detection.ai_generation")
 
 BBox = tuple[float, float, float, float]
@@ -233,7 +235,7 @@ class AIImageAssessment(BaseModel):
     indicators: list[AIIndicator]  # AC3
 
 
-class AIGenerationResult(BaseModel):
+class AIGenerationResult(CheckResult):
     document_id: str
     score: float  # AC2: the most suspicious image, or the file's provenance floor
     likelihood: Likelihood
@@ -241,8 +243,6 @@ class AIGenerationResult(BaseModel):
     # PDFs only: what the PDF file itself declares (uploads carry it per image).
     file_provenance: AIIndicator | None = None
     config: AIGenerationConfig
-    unable_to_assess: bool
-    unable_to_assess_reason: str | None = None
     bbox_units: Literal["pt", "px"] = "pt"
 
 

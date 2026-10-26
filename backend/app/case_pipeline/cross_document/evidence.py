@@ -11,12 +11,14 @@ from dataclasses import dataclass, field
 from statistics import median
 from typing import Any
 
-from ...fraud_detection.numerical_validation.common import _as_number, _decode, _rows
+from ...fraud_detection.numerical_validation.common import _as_number, _rows
+from ...fraud_detection.shared.field_values import decode_field_value
 from ...models import APPROVED_STATUSES, DocumentRecord
 from ..categories import category_for_finding
 from ..models import FindingCategory
 from ..trace import RunTrace
 from .bias import has_protected_text, is_protected_field
+from .leads import lead_for
 
 _NRIC_RE = re.compile(r"\b([STFGM])\d{4}(\d{3}[A-Z])\b", re.IGNORECASE)
 _LONG_NUMBER_RE = re.compile(r"\b(\d[\d -]{6,}\d)\b")
@@ -47,7 +49,7 @@ def signed_amount(row: dict) -> float | None:
 
 
 def transaction_rows(fields: dict) -> list[dict]:
-    return _rows(_decode(fields.get("transactions")))
+    return _rows(decode_field_value(fields.get("transactions")))
 
 
 @dataclass
@@ -172,7 +174,7 @@ def render_dossier(context: CaseContext, max_chars: int = MAX_DOSSIER_CHARS) -> 
         for name, value in view.fields.items():
             if is_protected_field(name):
                 continue
-            decoded = _decode(value)
+            decoded = decode_field_value(value)
             if name == "transactions" or (isinstance(decoded, list) and decoded and isinstance(decoded[0], dict)):
                 rows = _rows(decoded)
                 lines.append(f"  {name}: {len(rows)} row(s)")
@@ -200,6 +202,9 @@ def render_dossier(context: CaseContext, max_chars: int = MAX_DOSSIER_CHARS) -> 
             shown = "(details withheld: concerns a personal attribute)" if has_protected_text(summary) \
                 else mask_identifiers(summary)[:200]
             lines.append(f"  finding [{finding.get('severity')}] {finding.get('tool')}: {shown}  {ref}")
+            lead = lead_for(finding, context.docs)
+            if lead and not shown.startswith("(details withheld"):
+                lines.append(f"    {lead}")
         blocks.append("\n".join(lines))
     if blocks and sum(len(b) for b in blocks) > max_chars:
         share = max(200, max_chars // len(blocks))

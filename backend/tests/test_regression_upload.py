@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import io
 from datetime import datetime
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -55,11 +55,9 @@ def test_a_file_over_the_25mb_limit_is_rejected_and_never_stored():
         patch("app.routers.upload.case_service") as case_service,
         patch("app.routers.upload.storage_service") as storage,
         patch("app.routers.upload.document_repository") as repository,
-        patch("app.routers.upload.document_queue") as queue,
     ):
         case_service.get_case.return_value = _case()
         repository.create_document.return_value = _document("doc-ok", "payslip.pdf")
-        queue.enqueue = AsyncMock()
 
         response = _upload([("large-statement.pdf", too_big), ("payslip.pdf", b"%PDF-1.4 payslip")])
 
@@ -74,7 +72,7 @@ def test_a_file_over_the_25mb_limit_is_rejected_and_never_stored():
 
 @pytest.mark.sprint1
 @pytest.mark.story("SCRUM-6", "DI-012 / DI-013")
-def test_a_storage_failure_fails_only_that_file_with_an_error():
+def test_a_storage_failure_fails_only_that_file_with_an_error(published_events):
     def store(case_id, filename, content, content_type):
         if filename == "passport.pdf":
             raise RuntimeError("bucket unavailable")
@@ -84,12 +82,10 @@ def test_a_storage_failure_fails_only_that_file_with_an_error():
         patch("app.routers.upload.case_service") as case_service,
         patch("app.routers.upload.storage_service") as storage,
         patch("app.routers.upload.document_repository") as repository,
-        patch("app.routers.upload.document_queue") as queue,
     ):
         case_service.get_case.return_value = _case()
         storage.upload_file.side_effect = store
         repository.create_document.return_value = _document("doc-payslip", "payslip.pdf")
-        queue.enqueue = AsyncMock()
 
         response = _upload([("payslip.pdf", b"%PDF-1.4 payslip"), ("passport.pdf", b"%PDF-1.4 passport")])
 
@@ -99,4 +95,4 @@ def test_a_storage_failure_fails_only_that_file_with_an_error():
     assert results["payslip.pdf"]["document_id"] == "doc-payslip"
     assert results["passport.pdf"]["success"] is False
     assert "Failed to store" in results["passport.pdf"]["error"]
-    queue.enqueue.assert_awaited_once_with("doc-payslip")
+    assert [(e.type, e.document_id) for e in published_events] == [("document.uploaded", "doc-payslip")]

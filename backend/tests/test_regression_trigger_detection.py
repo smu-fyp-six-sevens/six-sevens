@@ -3,7 +3,7 @@ Regression tests (SCRUM-246) for approving/rejecting a document and what
 that does to fraud detection — "Test Cases - Sprint 3.xlsx", Multi-Agent
 sheet, Trigger Detection (SCRUM-26): MA-005 – MA-012.
 
-Runs the real approve/reject endpoints and the real _launch_detection with
+Runs the real approve/reject endpoints and the real approval event with
 only the database faked, using real extraction results captured from
 Supabase (tests/fixtures/regression/anchorpoint.json). Detection itself is
 replaced by a recorder here — the detection graph is covered by
@@ -16,7 +16,7 @@ import json
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -24,7 +24,9 @@ from fastapi.testclient import TestClient
 from app.fraud_detection.font_consistency import ExtractedField
 from app.main import app
 from app.models import DocumentRecord, DocumentStatus, RoutingStatus
+from app.events import bus
 from app.routers import documents as documents_router
+from app.workers import detection as detection_worker
 
 client = TestClient(app)
 ANCHORPOINT = json.loads((Path(__file__).parent / "fixtures" / "regression" / "anchorpoint.json").read_text())
@@ -79,13 +81,13 @@ class Repo:
 
 
 def _call(document: DocumentRecord, fields: list[ExtractedField], method: str, url: str, body: dict | None = None):
-    """Calls the real endpoint; returns the response and the (mocked) detection launcher."""
+    """Calls the real endpoint; returns the response and the (mocked) publisher of the events that start work."""
     repo = Repo(document)
     with (
         patch("app.routers._dependencies.document_repository", repo),
         patch("app.routers.documents.document_repository", repo),
         patch("app.routers.documents.extracted_fields_repository") as extracted,
-        patch("app.routers.documents._launch_detection") as launch,
+        patch("app.events.publish", new_callable=AsyncMock) as launch,
     ):
         extracted.get_extracted_fields.return_value = fields
         response = getattr(client, method)(url, **({"json": body} if body is not None else {}))
@@ -150,7 +152,7 @@ def test_a_document_with_an_unreviewed_low_confidence_field_cannot_be_approved()
 
 @pytest.mark.sprint3
 @pytest.mark.story("SCRUM-26", "MA-009")
-async def test_detection_starts_within_five_seconds_of_approval():
+async def test_detection_starts_within_five_seconds_of_approval(monkeypatch):
     document, fields = _real("BizFile_333996")
     repo = Repo(document)
     started: list[float] = []
@@ -160,16 +162,26 @@ async def test_detection_starts_within_five_seconds_of_approval():
         started.append(time.monotonic())
         detection_started.set()
 
+    tasks: list[asyncio.Task] = []
+
+    def dispatch(event):
+        # The in-process transport, with only the detection-worker installed.
+        handler = detection_worker.HANDLERS.get(event.type)
+        if handler is not None:
+            tasks.append(asyncio.get_running_loop().create_task(handler(event)))
+
+    monkeypatch.setattr(bus, "_dispatch_in_process", dispatch)
     with (
         patch("app.routers.documents.document_repository", repo),
         patch("app.routers.documents.extracted_fields_repository") as extracted,
-        patch("app.routers.documents.run_detection", detection),
-        patch("app.routers.documents._push_case_snapshot"),
+        patch("app.workers.detection.run_detection", detection),
+        patch("app.workers.detection.push_case_snapshot", AsyncMock()),
     ):
         extracted.get_extracted_fields.return_value = fields
         approved_at = time.monotonic()
         await documents_router.approve_document(document.id, document=document)
         await asyncio.wait_for(detection_started.wait(), timeout=5)
+        await asyncio.gather(*tasks)
 
     assert document.status == DocumentStatus.APPROVED
     [start] = started
@@ -183,7 +195,8 @@ def test_approval_launches_detection_for_that_document():
 
     _, launch = _call(document, fields, "post", f"/documents/{document.id}/approve")
 
-    launch.assert_called_once_with(document.id, document.case_id)
+    [event] = [c.args[0] for c in launch.await_args_list]
+    assert (event.type, event.document_id, event.case_id) == ("document.approved", document.id, document.case_id)
 
 
 @pytest.mark.sprint3

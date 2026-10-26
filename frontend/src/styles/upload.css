@@ -1,7 +1,7 @@
 .dropzone {
   border: 1.5px dashed #b7af9c;
   border-radius: 10px;
-  background: #fffefb;
+  background: var(--orange-99);
   padding: 28px 20px;
   text-align: center;
   cursor: pointer;
@@ -11,7 +11,7 @@
 .dropzone:hover,
 .dropzone--dragging {
   border-color: var(--steel);
-  background: #fbfaf6;
+  background: var(--orange-97);
 }
 
 .dropzone--dragging {
@@ -52,7 +52,7 @@
 }
 
 .file-row {
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px 14px;
@@ -66,7 +66,7 @@
   height: 32px;
   border-radius: 6px;
   background: var(--ink);
-  color: #fff;
+  color: var(--white);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -139,7 +139,7 @@
 }
 
 .badge.pending {
-  background: #eeede7;
+  background: var(--sand-92);
   color: var(--ink-soft);
 }
 
@@ -176,7 +176,7 @@
   gap: 16px;
   margin-top: 14px;
   padding: 12px 14px;
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 8px;
 }
@@ -198,7 +198,7 @@
 }
 
 .upload-btn:disabled {
-  background: #b9c2ce;
+  background: var(--slate-77);
   cursor: not-allowed;
 }
 
@@ -252,8 +252,8 @@
   font-size: 9.5px;
   padding: 2.5px 7px;
   border-radius: 10px;
-  background: #eeede7;
-  color: #9ba2ae;
+  background: var(--sand-92);
+  color: var(--slate-65a);
   white-space: nowrap;
 }
 
@@ -263,7 +263,7 @@
 }
 
 .pstage.pending {
-  background: #eeede7;
+  background: var(--sand-92);
   color: var(--ink-soft);
 }
 
@@ -282,12 +282,589 @@
 }
 
 .shell--upload {
-  width: min(1040px, calc(100% - 40px));
+  width: calc(100% - 48px);
+  /* The usual 60px of room under the page would make a page that fits still scroll. */
+  padding-bottom: 24px;
+}
+
+/* Case page: section nav on the left (collapsible to its icons), one section shown at a time. */
+.case-layout {
+  --case-nav-width: 236px;
+
+  display: grid;
+  grid-template-columns: var(--case-nav-width) minmax(0, 1fr);
+  margin-top: 24px;
+  gap: 36px;
+  align-items: start;
+}
+
+.case-layout--collapsed {
+  --case-nav-width: 52px;
+}
+
+.case-nav {
+  position: sticky;
+  top: calc(var(--topbar-height) + var(--case-header-height) + 24px);
+}
+
+.case-nav-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.case-nav-toggle:hover {
+  background: rgba(61, 90, 128, 0.08);
+  color: var(--ink);
+}
+
+.case-nav-toggle:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 1px;
+}
+
+.case-nav-toggle svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.case-layout--collapsed .case-nav-toggle {
+  justify-content: center;
+  padding: 7px 0;
+}
+
+.case-layout--collapsed .case-nav-toggle-label,
+.case-layout--collapsed .case-nav-text {
+  display: none;
+}
+
+.case-layout--collapsed .case-nav-item {
+  justify-content: center;
+  min-height: 40px;
+  padding: 8px 0;
+}
+
+.case-layout--collapsed .case-nav-item .case-nav-icon {
+  position: relative;
+  align-self: center;
+  margin-top: 0;
+}
+
+/* A collapsed item has no status line, so its dot sits on the icon. */
+.case-nav-badge {
+  position: absolute;
+  top: -3px;
+  right: -6px;
+  box-shadow: 0 0 0 2px var(--paper);
+}
+
+.case-nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.case-nav-item {
+  width: 100%;
+  /* Same height whether or not the item has a status line under its label. */
+  min-height: 61px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* An item with no status line under its label (Notes, Audit Trail, Claude Cost) needs less height. */
+.case-nav-item:not(:has(.case-nav-status)) {
+  min-height: 40px;
+}
+
+.case-nav-item:hover {
+  background: rgba(61, 90, 128, 0.08);
+}
+
+.case-nav-item:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 1px;
+}
+
+.case-nav-item.active {
+  background: rgba(61, 90, 128, 0.14);
+  color: var(--steel-dark);
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--steel);
+}
+
+.case-nav-icon {
+  width: 16px;
+  align-self: flex-start;
+  margin-top: 1px;
+  flex-shrink: 0;
+  text-align: center;
+  color: var(--ink-soft);
+}
+
+/* Without a status line the label is one line, so the icon centres on it. */
+.case-nav-item:not(:has(.case-nav-status)) .case-nav-icon {
+  align-self: center;
+  margin-top: 0;
+}
+
+.case-nav-item.active .case-nav-icon {
+  color: var(--steel);
+}
+
+.case-nav-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.case-nav-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.case-nav-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--line);
+}
+
+.case-nav-dot--done {
+  background: var(--teal);
+}
+
+.case-nav-dot--action {
+  background: var(--amber);
+}
+
+.case-nav-dot--progress {
+  background: var(--steel);
+  animation: case-nav-pulse 1.4s ease-in-out infinite;
+}
+
+.case-nav-dot--error {
+  background: var(--red);
+}
+
+/* Same hues as .risk-badge--* in case-summary.css. */
+.case-nav-dot--risk-low {
+  background: #e8a27e;
+}
+
+.case-nav-dot--risk-medium {
+  background: #d9703f;
+}
+
+.case-nav-dot--risk-high {
+  background: var(--red-47);
+}
+
+.case-nav-dot--risk-critical {
+  background: var(--red-29);
+}
+
+@keyframes case-nav-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .case-nav-dot--progress {
+    animation: none;
+  }
+}
+
+.case-content {
+  min-width: 0;
+}
+
+/* The top bar's usual gap below it would make the header taller at the top of the page than when stuck. */
+.app-header:has(~ .case-header) {
+  margin-bottom: 0;
+}
+
+/* One short row, the same height at the top of the page and stuck under the top bar while it scrolls.
+   Same columns as .case-layout (at its expanded width): the breadcrumbs sit over the section nav and the
+   company name (the page title) starts in line with each section's heading. */
+.case-header {
+  position: sticky;
+  top: var(--topbar-height);
+  z-index: 15;
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  column-gap: 36px;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: var(--case-header-height);
+  padding: 8px 0;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+
+@media (max-width: 860px) {
+  .case-header {
+    position: static;
+  }
+}
+
+/* Breadcrumbs (components/Breadcrumbs.tsx): the case number and filename are switchers that list
+   the other items at their level. Offset to sit on the company name's first line. */
+.breadcrumbs {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.breadcrumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.breadcrumbs ol > li {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.breadcrumbs ol > li + li::before {
+  content: '›';
+  padding: 0 4px;
+  color: var(--ink-soft);
+  font-size: 15px;
+}
+
+.breadcrumb-link,
+.breadcrumb-current,
+.breadcrumb-switcher {
+  padding: 3px 5px;
+  border-radius: 5px;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.breadcrumb-link {
+  text-decoration: none;
+}
+
+.breadcrumb-link:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.breadcrumb-current,
+.breadcrumb-switcher--current {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.breadcrumb-current {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Shrinks (rather than capping at 100%) so a long filename leaves room for the › before it. */
+.breadcrumb-menu {
+  position: relative;
+  display: inline-flex;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.breadcrumb-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 0.12s, color 0.12s;
+}
+
+.breadcrumb-switcher:hover,
+.breadcrumb-switcher[aria-expanded='true'] {
+  background: rgba(61, 90, 128, 0.1);
+  color: var(--ink);
+}
+
+.breadcrumb-switcher-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.breadcrumb-caret {
+  flex-shrink: 0;
+  transition: transform 0.12s;
+}
+
+.breadcrumb-switcher[aria-expanded='true'] .breadcrumb-caret {
+  transform: rotate(180deg);
+}
+
+/* A crumb above the current page: its label links back, its caret opens the switcher list. */
+.breadcrumb-split {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  border-radius: 5px;
+  transition: background-color 0.12s;
+}
+
+.breadcrumb-split:hover,
+.breadcrumb-split--open {
+  background: rgba(61, 90, 128, 0.1);
+}
+
+.breadcrumb-split-link,
+.breadcrumb-split-caret {
+  padding: 3px 5px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.breadcrumb-split-link {
+  min-width: 0;
+  overflow: hidden;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  border-radius: 5px 0 0 5px;
+}
+
+.breadcrumb-split-link:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.breadcrumb-split-caret {
+  display: inline-flex;
+  align-items: center;
+  padding-left: 2px;
+  border-radius: 0 5px 5px 0;
+  cursor: pointer;
+}
+
+.breadcrumb-split:hover .breadcrumb-split-caret,
+.breadcrumb-split--open .breadcrumb-split-caret {
+  color: var(--ink);
+}
+
+.breadcrumb-split--open .breadcrumb-caret {
+  transform: rotate(180deg);
+}
+
+.breadcrumb-split-link:focus-visible,
+.breadcrumb-split-caret:focus-visible,
+.breadcrumb-link:focus-visible,
+.breadcrumb-switcher:focus-visible,
+.breadcrumb-list-item:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 1px;
+}
+
+.breadcrumb-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 25;
+  width: 340px;
+  max-width: calc(100vw - 24px);
+  max-height: min(360px, 60vh);
+  overflow-y: auto;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(18, 32, 61, 0.16);
+}
+
+.breadcrumb-list-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.breadcrumb-list-item:hover,
+.breadcrumb-list-item:focus-visible {
+  background: rgba(61, 90, 128, 0.1);
+}
+
+.breadcrumb-list-item[aria-current='page'] {
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--steel);
+}
+
+.breadcrumb-list-tag {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--steel-dark);
+}
+
+.breadcrumb-list-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.breadcrumb-list-note {
+  padding: 8px 10px;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+
+
+.case-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+}
+
+.case-title-editing {
+  flex: 1;
+  min-width: 0;
+}
+
+.case-title {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.case-id-tag {
+  flex-shrink: 0;
+  /* Centres the tag on the 28px name's first line. */
+  margin-top: 6px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: rgba(18, 32, 61, 0.04);
+  color: var(--ink-soft);
+  font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.case-title h1 {
+  font-size: 22px;
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.case-title .add-field-form-actions {
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.case-title-input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0 8px;
+  /* Cancels the border so switching to edit mode doesn't shift the page. */
+  margin: -1px 0;
+  border: 1px solid var(--slate-84);
+  border-radius: 6px;
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.case-title-input:focus {
+  outline: none;
+  border-color: var(--slate-46);
+  box-shadow: 0 0 0 2px rgba(107, 114, 128, 0.12);
+}
+
+.case-title-editing .add-field-error {
+  margin: 6px 0 0;
+}
+
+.section-title {
+  font-size: 19px;
+  line-height: 1.3;
+  margin: 0 0 4px;
+}
+
+.case-content > .summary-card:first-child {
+  margin-top: 0;
 }
 
 .upload-view {
   display: grid;
-  grid-template-columns: 1fr 240px;
+  grid-template-columns: 1fr 280px;
   gap: 32px;
   align-items: start;
 }
@@ -298,8 +875,8 @@
 
 .upload-sidebar {
   position: sticky;
-  top: 24px;
-  background: #fff;
+  top: calc(var(--topbar-height) + 24px);
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 9px;
   padding: 16px;
@@ -372,6 +949,46 @@
 }
 
 @media (max-width: 860px) {
+  .case-layout {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .case-header {
+    grid-template-columns: 1fr;
+    row-gap: 12px;
+  }
+
+  .breadcrumbs {
+    margin-top: 0;
+  }
+
+  .case-id-tag {
+    margin-top: 3px;
+  }
+
+  .case-title h1,
+  .case-title-input {
+    font-size: 22px;
+  }
+
+  .case-nav {
+    position: static;
+    overflow-x: auto;
+  }
+
+  .case-nav ul {
+    flex-direction: row;
+  }
+
+  .case-nav-item {
+    white-space: nowrap;
+  }
+
+  .case-nav-item.active {
+    box-shadow: inset 0 -2px 0 var(--steel);
+  }
+
   .upload-view {
     grid-template-columns: 1fr;
   }
@@ -382,7 +999,7 @@
   }
 }
 
-.mock-badge {
+.live-badge {
   font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
   font-size: 9.5px;
   padding: 2.5px 7px;
@@ -394,7 +1011,7 @@
   gap: 5px;
 }
 
-.mock-badge::before {
+.live-badge::before {
   content: '';
   width: 6px;
   height: 6px;
@@ -402,12 +1019,12 @@
   background: var(--amber);
 }
 
-.mock-badge.live {
+.live-badge.live {
   background: var(--teal-bg);
   color: var(--teal);
 }
 
-.mock-badge.live::before {
+.live-badge.live::before {
   background: var(--teal);
   animation: live-pulse 1.6s ease-in-out infinite;
 }
@@ -425,16 +1042,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mock-badge.live::before {
+  .live-badge.live::before {
     animation: none;
   }
-}
-
-.mock-failure-reason {
-  margin: 4px 0 0;
-  font-size: 11px;
-  color: var(--red);
-  white-space: pre-wrap;
 }
 
 .fulfils-row {
@@ -458,71 +1068,6 @@
   white-space: nowrap;
 }
 
-.mock-evidence {
-  margin: 8px 0 0;
-  padding-left: 18px;
-  font-size: 12px;
-  color: var(--ink-soft);
-  line-height: 1.6;
-}
-
-.mock-note {
-  margin: 8px 0 0;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: var(--teal-bg);
-  color: var(--teal);
-  font-size: 11.5px;
-  line-height: 1.5;
-}
-
-.mock-note.warning {
-  background: var(--amber-bg);
-  color: var(--amber);
-}
-
-.mock-classification-row {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-}
-
-.mock-classification-row:first-of-type {
-  border-top: none;
-  padding-top: 0;
-}
-
-.mock-filename {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ink);
-}
-
-.mock-classification {
-  display: flex;
-  gap: 24px;
-  margin-top: 6px;
-}
-
-.mock-classification > div {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.mock-label {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ink-soft);
-}
-
-.mock-value {
-  font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
-  font-size: 13px;
-  color: var(--ink);
-}
-
 .page-tabs {
   display: flex;
   gap: 6px;
@@ -537,7 +1082,7 @@
   padding: 5px 10px;
   border-radius: 20px;
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--white);
   color: var(--ink-soft);
   cursor: pointer;
   white-space: nowrap;
@@ -551,13 +1096,13 @@
 .page-tab--active {
   background: var(--steel);
   border-color: var(--steel);
-  color: #fff;
+  color: var(--white);
 }
 
 .extraction-text-panel {
   margin: 8px 0 0;
   padding: 12px 14px;
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 8px;
   font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
@@ -574,7 +1119,7 @@
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
-  background: #fff;
+  background: var(--white);
 }
 
 .kv-row {
@@ -613,7 +1158,7 @@
   font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
   font-size: 12px;
   color: var(--ink);
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 5px;
   padding: 4px 7px;
@@ -635,34 +1180,32 @@
 }
 
 @media (max-width: 620px) {
-  .shell {
+  .shell,
+  .shell--queue,
+  .shell--upload {
     width: min(100% - 24px, 760px);
     padding-top: 20px;
   }
 
+  /* Matches the shell's smaller top padding. */
   .app-header {
-    align-items: flex-start;
+    margin-top: -20px;
+    padding-left: 12px;
+    padding-right: 12px;
     gap: 12px;
   }
 
-  .officer-tag {
-    text-align: right;
+  .brand {
+    font-size: 16px;
   }
 
-  .search-row {
-    flex-direction: column;
+  /* The avatar stays as the menu's button; the officer name doesn't fit beside the brand. */
+  .officer-name {
+    display: none;
   }
 
   .go-btn {
     min-height: 42px;
-  }
-
-  .case-card {
-    align-items: flex-start;
-  }
-
-  .case-id {
-    margin-top: 1px;
   }
 
   .file-row {

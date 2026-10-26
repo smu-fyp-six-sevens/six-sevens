@@ -12,8 +12,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from .. import document_repository, query_stats
+from .. import case_repository, document_repository, events
 from ..config import settings
+from ..snapshots import push_case_snapshot
 from ..langgraph import trace as langgraph_trace
 from ..models import DocumentRecord
 from ..run_context import end_run, start_run
@@ -70,16 +71,17 @@ def _check_outcomes(reports: dict[str, dict[str, Any]]) -> tuple[list[str], list
 
 
 async def start_analysis(case_id: str) -> CaseAnalysis:
+    """The api side: checks, records a running run, and asks the case-worker to run it."""
     if not settings.CASE_ANALYSIS_ENABLED:
         raise AnalysisDisabled()
     documents = await asyncio.to_thread(document_repository.list_documents, case_id=case_id)
     if not is_ready_for_analysis(documents):
         raise AnalysisNotReady()
-    task = state.running_tasks.get(case_id)
-    if task is not None and not task.done():
+    latest = await asyncio.to_thread(repository.latest_run_state, case_id)
+    if latest is not None and state.is_live(*latest):
         raise AnalysisAlreadyRunning()
 
-    reports, failed_ids = await asyncio.to_thread(
+    reports, _ = await asyncio.to_thread(
         langgraph_trace.get_detection_states, [d.id for d in documents]
     )
     run_id = str(uuid.uuid4())
@@ -89,19 +91,31 @@ async def start_analysis(case_id: str) -> CaseAnalysis:
         run_id=run_id, case_id=case_id, status="running", fingerprint=fingerprint,
         started_at=datetime.now(timezone.utc),
     )
-    state.running_tasks[case_id] = asyncio.create_task(
-        _execute_scoped(analysis, documents, reports, failed_ids)
-    )
-    await _sync_stage(case_id)
+    try:
+        await events.publish(events.officer_event(
+            events.types.CASE_ANALYSIS_REQUESTED, case_id=case_id,
+            detail={"run_id": run_id, "fingerprint": fingerprint, "started_at": analysis.started_at.isoformat()},
+        ))
+    except Exception:
+        # Nothing will run it, so it must not block the next attempt for the whole time limit.
+        analysis.status, analysis.error = "failed", "The analysis could not be started. Run it again."
+        await asyncio.to_thread(repository.finish_run, analysis)
+        raise
     return analysis
 
 
-async def _execute_scoped(
-    analysis: CaseAnalysis, documents: list[DocumentRecord], reports: dict[str, dict[str, Any]],
-    failed_ids: set[str],
-) -> None:
-    with query_stats.scope(f"case analysis case={analysis.case_id[:8]}"):
-        await _execute(analysis, documents, reports, failed_ids)
+async def run_requested(case_id: str, run_id: str, fingerprint: str, started_at: datetime) -> CaseAnalysis:
+    """The case-worker side: runs a requested analysis over the documents as they are now."""
+    documents = await asyncio.to_thread(document_repository.list_documents, case_id=case_id)
+    reports, failed_ids = await asyncio.to_thread(
+        langgraph_trace.get_detection_states, [d.id for d in documents]
+    )
+    analysis = CaseAnalysis(
+        run_id=run_id, case_id=case_id, status="running", fingerprint=fingerprint, started_at=started_at,
+    )
+    # The case-worker's scope counts this run's calls (workers/cases.py).
+    await _execute(analysis, documents, reports, failed_ids)
+    return analysis
 
 
 async def _execute(
@@ -172,41 +186,21 @@ async def _execute(
         end_run(run_token)
         trace.save()
         try:
-            published = await asyncio.to_thread(repository.finish_run, analysis)
-            if published and analysis.status == "complete":
-                # The case list reads the score from here rather than opening every run.
-                await asyncio.to_thread(risk_store.save, case_id, analysis.risk)
+            await _store_result(analysis)
         except Exception:
             logger.exception("Failed to store the case analysis result for case %s", case_id)
-        state.running_tasks.pop(case_id, None)
-        await _sync_stage(case_id)
-        await _push_snapshot(case_id)
+        await push_case_snapshot(case_id)
 
 
-async def _sync_stage(case_id: str) -> None:
-    """The run started or finished, which moves the case's stage. Never raises: the run itself is unaffected."""
-    from .. import case_stage
-
-    try:
-        await asyncio.to_thread(case_stage.sync_case_stage, case_id)
-    except Exception:
-        logger.exception("Failed to update the stage of case %s", case_id)
-
-
-async def _push_snapshot(case_id: str) -> None:
-    from .. import case_service
-    from ..case_broadcaster import broadcaster
-
-    if not broadcaster.has_subscribers(case_id):
-        return
-    try:
-        with query_stats.scope("pushed snapshot"):
-            snapshot = await asyncio.to_thread(case_service.build_case_snapshot, case_id)
-    except Exception:
-        logger.exception("Failed to build case snapshot for case %s", case_id)
-        return
-    if snapshot is not None:
-        broadcaster.publish(case_id, snapshot)
+async def _store_result(analysis: CaseAnalysis) -> None:
+    """Saves a finished run; only the case's newest complete run also updates the case's score and requested documents."""
+    published = await asyncio.to_thread(repository.finish_run, analysis)
+    if published and analysis.status == "complete":
+        # The case list reads the score from here rather than opening every run.
+        await asyncio.to_thread(risk_store.save, analysis.case_id, analysis.risk)
+        await asyncio.to_thread(
+            case_repository.set_recommended_additional_documents, analysis.case_id, analysis.additional_documents
+        )
 
 
 def get_current(case_id: str) -> CaseAnalysis | None:

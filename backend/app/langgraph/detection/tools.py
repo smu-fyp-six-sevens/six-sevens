@@ -39,7 +39,12 @@ from ...fraud_detection.dates.date_anomalies import check_date_anomalies
 from ...fraud_detection.font_consistency import check_font_consistency
 from ...fraud_detection.images.image_manipulation import check_image_manipulation, check_image_tampering
 from ...fraud_detection.layout_anomalies import check_layout_anomalies
-from ...fraud_detection.authenticity.metadata_analysis import SUPPORTED_METADATA_FIELDS, check_metadata_anomalies
+from ...fraud_detection.shared.file_facts import describe_file
+from ...fraud_detection.authenticity.metadata_analysis import (
+    DESCRIPTIVE_METADATA_FIELDS,
+    SUPPORTED_METADATA_FIELDS,
+    check_metadata_anomalies,
+)
 from ...fraud_detection.spelling.spelling_anomaly import check_spelling_anomalies
 
 logger = logging.getLogger("classifier_pipeline.langgraph.detection.tools")
@@ -131,6 +136,20 @@ async def _load_bytes(document_id: str) -> bytes | None:
 
 async def _file_bytes(document_id: str) -> bytes | None:
     return await _once(document_id, "bytes", lambda: _load_bytes(document_id))
+
+
+async def file_facts(document_id: str) -> dict | None:
+    """What the file holds (see fraud_detection.shared.file_facts), read once per run; None when it can't be."""
+
+    async def load() -> dict | None:
+        file_bytes = await _file_bytes(document_id)
+        return await run_cpu(describe_file, file_bytes) if file_bytes else None
+
+    try:
+        return await _once(document_id, "file_facts", load)
+    except Exception:
+        logger.warning("Could not read the file facts for document %s", document_id, exc_info=True)
+        return None
 
 
 # Reasons a check gives when the document simply has nothing it applies to:
@@ -340,7 +359,8 @@ async def date_consistency_tool(document_id: Annotated[str, InjectedState("docum
 
 def _observed_metadata(extracted: dict) -> dict:
     """What the file's metadata holds, so "no anomalies" is never read as "no metadata"."""
-    present = {k: v for k, v in extracted.items() if v and k in SUPPORTED_METADATA_FIELDS}
+    shown = (*SUPPORTED_METADATA_FIELDS, *DESCRIPTIVE_METADATA_FIELDS)
+    present = {k: v for k, v in extracted.items() if v and k in shown}
     absent = [k for k in SUPPORTED_METADATA_FIELDS if k not in present]
     created, modified = present.get("creation_date"), present.get("modification_date")
     parts = [f"{k.replace('_', ' ')} {_short(v)}" for k, v in present.items()]

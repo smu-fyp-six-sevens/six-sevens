@@ -9,6 +9,8 @@ from typing import Iterable, Literal, TypeVar
 
 from pydantic import BaseModel, Field, model_serializer
 
+from ..shared.check_result import CheckResult
+
 
 logger = logging.getLogger("fraud_detection.layout_anomalies")
 
@@ -226,12 +228,10 @@ class LayoutAnomaly(BaseModel):
         }
 
 
-class CheckAssessment(BaseModel):
+class CheckAssessment(CheckResult):
     """AC5: the relevant check is marked Unable to Assess when its inputs
     cannot be extracted or there isn't enough comparable content."""
 
-    unable_to_assess: bool
-    unable_to_assess_reason: str | None = None
 
 
 class PageMargins(BaseModel):
@@ -264,7 +264,7 @@ class LayoutElement(BaseModel):
     text: str
 
 
-class LayoutAnomalyResult(BaseModel):
+class LayoutAnomalyResult(CheckResult):
     """
     Response for GET /documents/{id}/detection/layout-anomalies.
 
@@ -286,8 +286,6 @@ class LayoutAnomalyResult(BaseModel):
     alignment: CheckAssessment
     margin: CheckAssessment
     spacing: CheckAssessment
-    unable_to_assess: bool
-    unable_to_assess_reason: str | None = None
 
 
 class _Line(BaseModel):

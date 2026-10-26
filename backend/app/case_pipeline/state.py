@@ -6,16 +6,14 @@ towards the score.
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from ..config import settings
 from ..models import APPROVED_STATUSES, DocumentRecord
 from .models import CaseAnalysis
-
-# The one in-flight analysis task per case, in this process.
-running_tasks: dict[str, asyncio.Task] = {}
 
 
 def compute_fingerprint(documents: list[DocumentRecord], reports: dict[str, dict[str, Any]]) -> str:
@@ -31,13 +29,20 @@ def compute_fingerprint(documents: list[DocumentRecord], reports: dict[str, dict
     return hashlib.sha256(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()
 
 
+def is_live(status: str, started_at: datetime) -> bool:
+    """A run reads as running only within the time limit; past it the worker was lost (no heartbeat yet)."""
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=timezone.utc)
+    limit = timedelta(seconds=settings.CASE_ANALYSIS_TIMEOUT_SECONDS)
+    return status == "running" and datetime.now(timezone.utc) - started_at < limit
+
+
 def current_view(
     analysis: CaseAnalysis, documents: list[DocumentRecord], reports: dict[str, dict[str, Any]]
 ) -> CaseAnalysis:
     view = analysis.model_copy()
     view.stale = analysis.fingerprint != compute_fingerprint(documents, reports)
-    task = running_tasks.get(analysis.case_id)
-    if analysis.status == "running" and (task is None or task.done()):
+    if analysis.status == "running" and not is_live(analysis.status, analysis.started_at):
         view.status = "failed"
         view.error = "The analysis was interrupted before it finished. Run it again."
     return view

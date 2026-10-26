@@ -5,10 +5,10 @@ import threading
 import uuid
 from datetime import datetime, timezone
 
-from . import extracted_fields_repository, storage_service
+from . import extracted_fields_repository, notes_repository, storage_service
 from .models import DocumentRecord, DocumentStatus
 from .supabase_client import service_supabase_client, supabase_client
-from .supabase_rows import row as _row
+from .supabase_rows import fetch_all, row as _row
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +75,23 @@ def _sync_stage_now(case_id: str | None) -> None:
         logger.exception("Document write succeeded but failed to update the stage of case %s", case_id)
 
 
+def has_pending_syncs() -> bool:
+    return bool(_sync_timers)
+
+
+def flush_pending_syncs() -> None:
+    """
+    Runs every scheduled refresh now. Called before a request or push returns: Cloud Run throttles CPU
+    once nothing is in flight, so a timer left behind could stall until the instance's next request.
+    """
+    with _sync_lock:
+        pending = list(_sync_timers.items())
+        _sync_timers.clear()
+    for case_id, timer in pending:
+        timer.cancel()
+        _sync_case_now(case_id)
+
+
 def _sync_case_now(case_id: str | None) -> None:
     """
     Best-effort refresh of the case-level submission_finalized cache after a
@@ -133,6 +150,8 @@ def update_status(
     expected_current_statuses: list[DocumentStatus] | None = None,
 ) -> bool:
     """
+    A failure_reason belongs to a failed run: any other status clears it, FAILED sets it (or keeps the old one if none is given).
+
     expected_current_statuses turns this into an atomic compare-and-swap:
     the WHERE clause requires the row's current status to still be one of
     these, so a caller that read a document's status and now wants to act
@@ -152,7 +171,9 @@ def update_status(
         update["processing_started_at"] = processing_started_at.isoformat()
     if retry_count is not None:
         update["retry_count"] = retry_count
-    if failure_reason is not None:
+    if status != DocumentStatus.FAILED:
+        update["failure_reason"] = None
+    elif failure_reason is not None:
         update["failure_reason"] = failure_reason
     if document_type is not None:
         update["document_type"] = document_type
@@ -244,6 +265,7 @@ def move_documents(document_ids: list[str], case_id: str) -> None:
     supabase_client.table("documents").update({"case_id": case_id}).in_(
         "id", document_ids
     ).execute()
+    notes_repository.move_with_documents(document_ids, case_id)
 
 
 def move_document(document_id: str, case_id: str) -> None:
@@ -262,6 +284,7 @@ def move_document(document_id: str, case_id: str) -> None:
         .execute()
     )
     if result.data:
+        notes_repository.move_with_documents([document_id], case_id)
         _sync_case(case_id)
 
 
@@ -378,11 +401,11 @@ def update_metadata(document_id: str, metadata: dict) -> None:
 
 
 # Tables whose rows belong to one document, besides extracted_fields (which has its own helper).
-_DOCUMENT_CHILD_TABLES = ("flags", "langgraph_trace")
+_DOCUMENT_CHILD_TABLES = ("flags", "langgraph_trace", notes_repository.TABLE)
 
 
 def _delete_document_children(document_ids: list[str]) -> None:
-    """Removes what hangs off the documents: field rows, flags and the detection trace. Runs before the
+    """Removes what hangs off the documents: field rows, flags, notes and the detection trace. Runs before the
     documents delete, so a foreign key on any of them cannot block it, and works whether or not they cascade."""
     from .langgraph import trace
 
@@ -395,8 +418,8 @@ def _delete_document_children(document_ids: list[str]) -> None:
 
 def remove_document(document: DocumentRecord) -> None:
     """
-    Permanently removes a document: its extracted-field rows, flags and
-    trace, the stored file, and the documents row. The dependent rows go
+    Permanently removes a document: its extracted-field rows, flags, notes
+    and trace, the stored file, and the documents row. The dependent rows go
     first so a foreign key cannot block the documents delete.
 
     Storage deletion is best-effort. A missing object should not leave the
@@ -507,3 +530,24 @@ def list_documents(
     result = query.execute()
     documents = [DocumentRecord(**_row(row)) for row in result.data]
     return _attach_extracted_fields(documents) if include_fields else documents
+
+
+# What the case queue's status rollup reads (the status and monitoring.is_stuck's timestamps).
+_STATUS_COLUMNS = "id, case_id, filename, status, retry_count, uploaded_at, queued_at, processing_started_at"
+_CASE_CHUNK = 100
+
+
+def list_document_statuses(case_ids: list[str]) -> list[DocumentRecord]:
+    """These cases' documents with only their status columns, a query per 100 cases (and per 1,000 documents)."""
+    documents: list[DocumentRecord] = []
+    for start in range(0, len(case_ids), _CASE_CHUNK):
+        chunk = case_ids[start : start + _CASE_CHUNK]
+        rows = fetch_all(lambda: supabase_client.table("documents").select(_STATUS_COLUMNS).in_("case_id", chunk), "id")
+        documents.extend(DocumentRecord(**item) for item in rows)
+    return documents
+
+
+def list_all_document_statuses() -> list[DocumentRecord]:
+    """Every document's status columns, a page of 1,000 per query: what the queue's status counts roll up."""
+    rows = fetch_all(lambda: supabase_client.table("documents").select(_STATUS_COLUMNS), "id")
+    return [DocumentRecord(**item) for item in rows]

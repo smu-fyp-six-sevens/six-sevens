@@ -38,14 +38,19 @@ export function CaseAnalysisCard({
     }
   }, [caseId]);
 
-  // The case snapshot carries the overview over the socket, so a change in it means the result moved.
+  // The case snapshot carries the overview over the socket, so a change in it means the result moved. Each
+  // snapshot is a new object, so the effect watches these fields, not the object.
+  const hasOverview = overview !== null;
+  const runId = overview?.run_id;
+  const runStatus = overview?.status;
+  const stale = overview?.stale;
   useEffect(() => {
-    if (overview) {
+    if (hasOverview) {
       void load();
     } else {
       setAnalysis(null);
     }
-  }, [overview?.run_id, overview?.status, overview?.stale, load]);
+  }, [hasOverview, runId, runStatus, stale, load]);
 
   const running = starting || overview?.status === 'running';
 

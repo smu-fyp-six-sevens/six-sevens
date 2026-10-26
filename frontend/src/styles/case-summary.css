@@ -4,7 +4,7 @@
 
 .summary-card {
   margin-top: 18px;
-  background: #ffffff;
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 10px;
   overflow: hidden;
@@ -48,7 +48,7 @@
 }
 
 .summary-icon--warning {
-  color: #d33b3b;
+  color: var(--red-53);
 }
 
 .summary-icon--audit {
@@ -60,8 +60,8 @@
   align-items: center;
   padding: 4px 9px;
   border-radius: 999px;
-  background: #fff0f0;
-  color: #b52d2d;
+  background: var(--red-97);
+  color: var(--red-44);
   font-family: var(--mono);
   font-size: 10px;
   font-weight: 700;
@@ -80,18 +80,18 @@
 }
 
 .summary-message--info {
-  background: #eef6ff;
+  background: var(--blue-97);
   color: var(--ink);
 }
 
 .summary-message--warning {
-  background: #fff0f0;
+  background: var(--red-97);
   color: #8f2929;
 }
 
 .summary-message--success {
   background: #eafbf6;
-  color: #166b58;
+  color: var(--green-25);
 }
 
 .summary-message-icon {
@@ -105,11 +105,11 @@
 }
 
 .summary-message--warning .summary-message-icon {
-  color: #c33131;
+  color: var(--red-48);
 }
 
 .summary-message--success .summary-message-icon {
-  color: #16816d;
+  color: var(--green-30a);
 }
 
 .summary-message strong {
@@ -147,22 +147,22 @@
 /* One hue, light to dark, so no level reads as "safe". Badges also go from tint to solid as the level rises. */
 .risk-badge--low {
   background: #fdf0e8;
-  color: #a0502e;
+  color: var(--orange-40);
 }
 
 .risk-badge--medium {
   background: #f9d2bd;
-  color: #85310f;
+  color: var(--orange-29);
 }
 
 .risk-badge--high {
-  background: #c4442a;
-  color: #fff;
+  background: var(--red-47);
+  color: var(--white);
 }
 
 .risk-badge--critical {
-  background: #7f1414;
-  color: #fff;
+  background: var(--red-29);
+  color: var(--white);
 }
 
 .risk-score {
@@ -204,10 +204,10 @@
   font-weight: 700;
 }
 
-.risk-score-level--low { color: #a0502e; }
+.risk-score-level--low { color: var(--orange-40); }
 .risk-score-level--medium { color: #9a3a14; }
 .risk-score-level--high { color: #b3361c; }
-.risk-score-level--critical { color: #7f1414; }
+.risk-score-level--critical { color: var(--red-29); }
 
 .risk-gauge {
   position: relative;
@@ -229,7 +229,7 @@
 .risk-gauge-band--low { background: #f6c9b0; }
 .risk-gauge-band--medium { background: #ec9673; }
 .risk-gauge-band--high { background: #d0543a; }
-.risk-gauge-band--critical { background: #7f1414; }
+.risk-gauge-band--critical { background: var(--red-29); }
 
 .risk-gauge-marker {
   position: absolute;
@@ -239,7 +239,7 @@
   margin-left: -1.5px;
   border-radius: 2px;
   background: var(--ink);
-  box-shadow: 0 0 0 2px #fff;
+  box-shadow: 0 0 0 2px var(--white);
 }
 
 .risk-gauge-labels {
@@ -295,11 +295,11 @@
 }
 
 .risk-document-toggle:hover {
-  background: #faf8f4;
+  background: var(--orange-97);
 }
 
 .risk-document-toggle:focus-visible {
-  outline: 2px solid #17294d;
+  outline: 2px solid var(--slate-20);
   outline-offset: -2px;
 }
 
@@ -358,11 +358,11 @@
   margin-left: 6px;
   padding: 0 6px;
   border-radius: 999px;
-  background: #f2f4f7;
+  background: var(--slate-97a);
   font-family: var(--mono);
   font-size: 10px;
   font-weight: 700;
-  color: #667085;
+  color: var(--slate-46a);
 }
 
 .risk-findings {
@@ -396,19 +396,19 @@
 }
 
 .risk-severity--low {
-  background: #fbe3d5;
+  background: var(--orange-91);
   color: #8a3f20;
 }
 
 .risk-severity--medium {
-  background: #f2a888;
+  background: var(--orange-74);
   color: #4d1a07;
 }
 
 /* Darker than the gauge's band so the white label stays readable. */
 .risk-severity--high {
   background: #b83c22;
-  color: #fff;
+  color: var(--white);
 }
 
 .risk-finding-text {
@@ -445,7 +445,7 @@
   margin: 0 20px 20px;
   padding: 12px 14px;
   border-radius: 8px;
-  background: #f2f4f7;
+  background: var(--slate-97a);
   font-size: 12px;
   color: var(--ink-soft);
 }
@@ -467,7 +467,7 @@
   padding: 10px 0 0;
   border: none;
   background: transparent;
-  color: #1769c2;
+  color: var(--blue-43a);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
@@ -483,6 +483,12 @@
 
 .flagged-list {
   border-top: 1px solid var(--line);
+}
+
+/* The header already draws the dividing line; a second border here showed as an empty strip. */
+.summary-card-header + .flagged-list {
+  border-top: none;
+  margin-top: -14px;
 }
 
 .flagged-item {
@@ -536,8 +542,8 @@
 .flagged-status {
   padding: 3px 7px;
   border-radius: 999px;
-  background: #fff0f0;
-  color: #b52d2d;
+  background: var(--red-97);
+  color: var(--red-44);
   font-weight: 700;
 }
 
@@ -602,7 +608,7 @@
   flex: 0 0 auto;
   border: none;
   background: transparent;
-  color: #1769c2;
+  color: var(--blue-43a);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
@@ -622,7 +628,7 @@
 }
 
 .document-manual-review-icon {
-  color: #dc2626;
+  color: var(--red-51);
   font-size: 16px;
   font-weight: 700;
   margin-right: 7px;

@@ -26,6 +26,8 @@ DEBOUNCE_SECONDS = 0.5
 
 _client: AsyncClient | None = None
 _channel: AsyncRealtimeChannel | None = None
+# Separate, so a table missing from the Realtime publication can't break the main channel.
+_analysis_channel: AsyncRealtimeChannel | None = None
 _pending: dict[str, asyncio.Task] = {}
 
 
@@ -89,7 +91,7 @@ async def start() -> None:
     independently runs its own copy of this, and Realtime's fan-out means
     every replica sees every change regardless of how many others exist.
     """
-    global _client, _channel
+    global _client, _channel, _analysis_channel
 
     _client = await build_async_supabase_client()
     _channel = _client.channel("case-status-changes")
@@ -102,9 +104,21 @@ async def start() -> None:
     await _channel.subscribe()
     logger.info("Realtime listener subscribed to documents/cases changes")
 
+    # A case analysis now finishes in the case-worker, so its result reaches viewers through Realtime.
+    try:
+        _analysis_channel = _client.channel("case-analysis-changes")
+        _analysis_channel.on_postgres_changes(
+            RealtimePostgresChangesListenEvent.All, callback=_on_change, table="case_analysis_runs", schema="public"
+        )
+        await _analysis_channel.subscribe()
+        logger.info("Realtime listener subscribed to case_analysis_runs changes")
+    except Exception:
+        logger.exception("Could not subscribe to case_analysis_runs; is it in the supabase_realtime publication?")
+
 
 async def stop() -> None:
-    global _client, _channel
+    global _client, _channel, _analysis_channel
+    _analysis_channel = None
 
     for task in _pending.values():
         task.cancel()

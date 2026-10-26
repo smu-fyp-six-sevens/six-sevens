@@ -33,7 +33,7 @@
       "total": 2,
       "unmatched_names": []
     },
-    "recommended_additional_documents": [],
+    "missing_requirements": [],
     "status": "open",
     "submission_finalized": true,
     "updated_at": "2026-09-21T05:59:30.137402Z"
@@ -4901,7 +4901,7 @@
         "total": 2,
         "unmatched_names": []
       },
-      "recommended_additional_documents": [],
+      "missing_requirements": [],
       "status": "open",
       "submission_finalized": true,
       "updated_at": "2026-09-21T05:59:30.137402Z"

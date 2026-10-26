@@ -12,7 +12,8 @@ from datetime import date
 from typing import Any
 
 from ....fraud_detection.dates.date_parsing import date_in_period
-from ....fraud_detection.numerical_validation.common import _decode, _parse_field_date
+from ....fraud_detection.numerical_validation.common import _parse_field_date
+from ....fraud_detection.shared.field_values import decode_field_value
 from ..evidence import CaseContext, DocView, transaction_rows
 
 # The only flags a tool may emit; verify.py lets a finding reach High only on one of these.
@@ -74,8 +75,8 @@ def statement_rows(view: DocView) -> list[dict] | None:
 
 def statement_period(view: DocView) -> tuple[date | None, date | None]:
     return (
-        _parse_field_date(_decode(view.fields.get("statement_period_start"))),
-        _parse_field_date(_decode(view.fields.get("statement_period_end"))),
+        _parse_field_date(decode_field_value(view.fields.get("statement_period_start"))),
+        _parse_field_date(decode_field_value(view.fields.get("statement_period_end"))),
     )
 
 

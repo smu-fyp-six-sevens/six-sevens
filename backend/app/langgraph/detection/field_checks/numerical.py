@@ -9,7 +9,7 @@ from langgraph.prebuilt import InjectedState
 
 from ....fraud_detection.numerical_validation.runner import finding_dict, run_numerical_checks
 from ..tools import _result, _with_ids, document_fields
-from .bindings import BindingArg, to_bindings
+from .bindings import BindingArg, binding_problems, to_bindings
 
 TOOL_NAME = "numerical_checks_tool"
 
@@ -31,6 +31,6 @@ async def numerical_checks_tool(
         breakdown=outcome.breakdown,
         unassigned=outcome.unassigned,
         bindings_applied=outcome.applied,
-        binding_issues=outcome.issues,
+        binding_issues=[*binding_problems(bindings), *outcome.issues],
     )
     return result

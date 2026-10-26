@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from app.config import settings
 from app.main import app
 from app.models import DocumentRecord, DocumentStatus
-from app.queue_service import document_queue
+from app.workers import documents as doc_worker
 
 
 client = TestClient(app)
@@ -124,7 +124,7 @@ def test_monitoring_issues_surfaces_failed_and_recent_errors() -> None:
         failure_reason="Classifier invocation failed after 3 attempts",
     )
 
-    document_queue._record_error("doc-missing", "Document doc-missing not found when dequeued")
+    doc_worker._record_error("doc-missing", "Document doc-missing not found when dequeued")
 
     with patch("app.routers.monitoring.document_repository") as mock_repo, \
          patch("app.routers.monitoring.get_stuck_documents", return_value=[]):

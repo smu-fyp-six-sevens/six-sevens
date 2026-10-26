@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from datetime import datetime, timezone
+from unittest.mock import patch
 
 import pytest
 
@@ -403,7 +404,7 @@ def test_case_summary_shows_the_risk_its_analysis_produced() -> None:
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = [_document("doc")]
         trace.get_detection_states.return_value = ({"doc": _report()}, set())
-        analyses.get_latest_many.return_value = {"case-1": _analysis(risk)}
+        analyses.get_latest_summary.return_value = _analysis(risk)
 
         summary = case_service.get_case_summary("case-1")
 
@@ -421,7 +422,7 @@ def test_case_never_analysed_has_no_risk() -> None:
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = [_document("doc")]
         trace.get_detection_states.return_value = ({"doc": _report(_finding("high", "font_consistency_tool"))}, set())
-        analyses.get_latest_many.return_value = {}
+        analyses.get_latest_summary.return_value = None
 
         summary = case_service.get_case_summary("case-1")
 
@@ -441,20 +442,20 @@ def test_case_summary_keeps_the_last_complete_risk_while_a_rerun_is_going() -> N
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = [_document("doc")]
         trace.get_detection_states.return_value = ({"doc": _report()}, set())
-        analyses.get_latest_many.return_value = {"case-1": _analysis(None, status="running")}
+        analyses.get_latest_summary.return_value = _analysis(None, status="running")
         analyses.get_latest_complete.return_value = _analysis(risk)
-        # A run only reads as running while this process still has its task.
-        live_task = MagicMock()
-        live_task.done.return_value = False
-        with patch.dict("app.case_pipeline.state.running_tasks", {"case-1": live_task}):
-            summary = case_service.get_case_summary("case-1")
+        # A run reads as running only within the time limit after it started.
+        running = _analysis(None, status="running")
+        running.started_at = datetime.now(timezone.utc)
+        analyses.get_latest_summary.return_value = running
+        summary = case_service.get_case_summary("case-1")
 
     assert summary is not None and summary.risk is not None
     assert summary.risk.level == "High"
     assert summary.analysis is not None and summary.analysis.status == "running"
 
 
-def test_a_running_analysis_with_no_live_task_reads_as_interrupted() -> None:
+def test_a_running_analysis_past_its_time_limit_reads_as_interrupted() -> None:
     risk = compute_case_risk([_document("doc")], {"doc": _report(_finding("high", "font_consistency_tool"))}, set())
     with (
         patch("app.case_service.case_repository") as case_repo,
@@ -465,7 +466,7 @@ def test_a_running_analysis_with_no_live_task_reads_as_interrupted() -> None:
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = [_document("doc")]
         trace.get_detection_states.return_value = ({"doc": _report()}, set())
-        analyses.get_latest_many.return_value = {"case-1": _analysis(None, status="running")}
+        analyses.get_latest_summary.return_value = _analysis(None, status="running")
         analyses.get_latest_complete.return_value = _analysis(risk)
 
         summary = case_service.get_case_summary("case-1")
@@ -484,11 +485,11 @@ def test_case_list_reads_saved_scores_and_never_detection_reports() -> None:
         patch("app.case_service.langgraph_trace") as trace,
         patch("app.case_service.risk_store") as store,
     ):
-        case_repo.list_cases.return_value = [_case(), other_case]
-        doc_repo.list_documents.return_value = [_document("doc")]
+        case_repo.list_cases_page.return_value = ([_case(), other_case], 2)
+        doc_repo.list_document_statuses.return_value = [_document("doc")]
         store.latest_many.return_value = {"case-1": CaseRisk(state="scored", level="High", score=70)}
 
-        items = case_service.list_case_summaries()
+        items = case_service.list_cases_page(limit=25, offset=0, sort="newest", statuses=[], q=None).items
 
     assert [(i.id, i.risk.level if i.risk else None) for i in items] == [("case-1", "High"), ("case-2", None)]
     trace.get_detection_states.assert_not_called()

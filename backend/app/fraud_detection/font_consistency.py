@@ -20,6 +20,7 @@ from typing import Any, Hashable, Literal, cast
 
 import pymupdf
 from pydantic import BaseModel
+from .shared.check_result import CheckResult
 from .shared.pdf_pages import page as _page, pages as _pages
 
 logger = logging.getLogger("fraud_detection.font_consistency")
@@ -125,12 +126,10 @@ class _RawAnomaly(BaseModel):
     field_name: str | None = None
 
 
-class FontConsistencyResult(BaseModel):
+class FontConsistencyResult(CheckResult):
     document_id: str
     anomalies: list[FontAnomalyV2]
     all_detected_styles: list[DetectedStyle]
-    unable_to_assess: bool
-    unable_to_assess_reason: str | None = None
 
 
 def _empty_result(document_id: str, reason: str | None = None) -> FontConsistencyResult:
@@ -676,6 +675,61 @@ def _heading_deviations(runs: list[_Run]) -> list[_RawAnomaly]:
     return raw
 
 
+# Column peers can't judge a lone value in a table cell, and a right-aligned number set wider
+# leaves its column. These two checks look at the row and at the whole document instead, and only
+# for a style that almost nothing else in the document uses.
+_RARE_STYLE_MAX_RUNS = 2
+_ROW_MIN_MATES = 2
+_DOC_MIN_NUMBERS = 4
+_DOC_NUMBER_FONT_SHARE = 0.75
+
+
+def _row_deviations(runs: list[_Run]) -> list[_RawAnomaly]:
+    """A number in a different font or size than every other cell in its row, in a style that recurs nowhere."""
+    pool = [run for run in runs if not run.signature]
+    rows: dict[RowKey, list[_Run]] = {}
+    for run in pool:
+        rows.setdefault(run.row_key, []).append(run)
+    family_runs = Counter(run.family for run in pool)
+    size_runs = Counter(round(run.size, 1) for run in pool)
+
+    raw: list[_RawAnomaly] = []
+    for run in pool:
+        if not run.numeric or run.heading:
+            continue
+        mates = [m for m in rows[run.row_key] if m is not run and _alnum(m.text) >= _MIN_MATE_ALNUM]
+        if len(mates) < _ROW_MIN_MATES:
+            continue
+        expected = _expect(mates, len(mates), 1.0, len(mates), 1.0)
+        expected.emphasis = None
+        dims = expected.deviations(run)
+        dims["font"] = dims["font"] and family_runs[run.family] <= _RARE_STYLE_MAX_RUNS
+        dims["size"] = dims["size"] and size_runs[round(run.size, 1)] <= _RARE_STYLE_MAX_RUNS
+        if any(dims.values()):
+            raw.append(_raw_anomaly(run, dims, expected))
+    return raw
+
+
+def _foreign_font_deviations(runs: list[_Run]) -> list[_RawAnomaly]:
+    """A number in a typeface used by almost nothing else, where the document's numbers share one."""
+    pool = [run for run in runs if not run.signature and not run.heading]
+    numbers = [run for run in pool if run.numeric]
+    if len(numbers) < _DOC_MIN_NUMBERS:
+        return []
+    dominant, count = Counter(run.family for run in numbers).most_common(1)[0]
+    if count / len(numbers) < _DOC_NUMBER_FONT_SHARE:
+        return []
+    family_runs = Counter(run.family for run in pool)
+    font = next(run.font for run in numbers if run.family == dominant)
+    expected = _Expectation(family=dominant, font=font, size=None, emphasis=None)
+    dims = {"font": True, "size": False, "emphasis": False}
+    return [
+        _raw_anomaly(run, dims, expected)
+        for run in numbers
+        if run.family != dominant and family_runs[run.family] <= _RARE_STYLE_MAX_RUNS
+    ]
+
+
 # A fragment inside one flowing line is checked for font and size only: bold,
 # italic and underline inside a sentence are ordinary emphasis.
 _FRAGMENT_MIN_RUN_CHARS = 12
@@ -832,6 +886,11 @@ def check_font_consistency(
         _mark_headings(runs)
 
         raw = _peer_deviations(runs) + _heading_deviations(runs)
+        seen = {(item.page, item.bbox) for item in raw}
+        for extra in _row_deviations(runs) + _foreign_font_deviations(runs):
+            if (extra.page, extra.bbox) not in seen:
+                seen.add((extra.page, extra.bbox))
+                raw.append(extra)
         for run in runs:
             raw += _fragment_deviations(run)
         if extracted_fields:

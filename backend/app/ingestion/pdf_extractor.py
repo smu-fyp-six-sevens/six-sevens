@@ -21,6 +21,9 @@ _DESCENT = 0.18
 # Two runs of text whose letters overlap by this share of the smaller one are
 # drawn on top of each other.
 _OVERLAP_MIN_RATIO = 0.20
+# A baseline shift of more than this share of the font size within one span is
+# a wrap onto the next line; a superscript rises by about a third.
+_NEW_LINE_MIN_DROP = 0.5
 
 
 @dataclass
@@ -107,6 +110,11 @@ def _visible_segments(page: pymupdf.Page) -> tuple[list[_Segment], int]:
 
             for ch in span["chars"]:
                 total += 1
+                # A table cell's wrapped text can be one span; each line is its
+                # own run, as on a page read with get_text, so "at" / "load"
+                # doesn't come out as "atload".
+                if run and abs(ch[2][1] - run[-1][2][1]) > _NEW_LINE_MIN_DROP * float(span["size"]):
+                    flush()
                 bbox = ch[3]
                 cx, cy = (bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2
                 # A space under a form's checkbox is not hidden content.

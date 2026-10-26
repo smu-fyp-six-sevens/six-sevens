@@ -26,7 +26,15 @@ backend/test_files
 backend/.langgraph_api/
 
 # Playwright regression suite output
+frontend/dist-e2e/
 frontend/playwright-report/
 frontend/test-results/
 
 .ruff_cache/
+
+# Terraform
+deploy/terraform/.terraform/
+deploy/terraform/.terraform.lock.hcl.bak
+deploy/terraform/*.tfstate*
+deploy/terraform/terraform.tfvars
+deploy/terraform/set-secrets.ps1

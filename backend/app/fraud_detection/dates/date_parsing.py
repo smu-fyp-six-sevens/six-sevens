@@ -47,8 +47,8 @@ _TRAILING_TIME_RE = re.compile(
 )
 _WEEKDAY_RE = re.compile(rf"\b(?:{_WEEKDAYS})\b\.?,?", re.IGNORECASE)
 _ORDINAL_RE = re.compile(r"(\d)(?:st|nd|rd|th)\b", re.IGNORECASE)
-# Legal wording: "the 23rd day of August 2026", "23 day of March 2015".
-_FILLER_RE = re.compile(r"\b(?:the|day|of)\b", re.IGNORECASE)
+# Legal wording: "the 23rd day of August 2026", "Dated this 23 day of March 2015".
+_FILLER_RE = re.compile(r"\b(?:dated|this|the|day|of)\b", re.IGNORECASE)
 _TOKEN_RE = re.compile(r"\d+|[a-z]+", re.IGNORECASE)
 _SEPARATORS = re.compile(r"^[\s,./\-]*$")
 

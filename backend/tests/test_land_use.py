@@ -39,7 +39,8 @@ _GEOJSON = {"features": [
 def _land_use_run_step() -> str:
     text = DOCKERFILE.read_text(encoding="utf-8")
     start = text.index("ARG ALLOW_MISSING_LAND_USE")
-    return text[start:text.index("ENV LAND_USE_RUNTIME_REBUILD", start)]
+    # The step is the rest of its build stage, up to the next FROM.
+    return text[start:text.index("\nFROM ", start)]
 
 
 def test_the_dockerfile_imports_the_index_builder_under_a_name_that_exists() -> None:

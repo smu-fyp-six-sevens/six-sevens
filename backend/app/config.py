@@ -15,24 +15,72 @@ def _env(name: str, default: str = "") -> str:
     return os.environ.get(name, default).strip()
 
 
+ALL_ROLES = ("api", "doc-worker", "detection-worker", "case-worker", "audit-metrics")
+
+
+def _roles(raw: str) -> frozenset[str]:
+    """ROLE: "all" (one process runs everything), one role, or a comma list. An unknown role stops the app."""
+    names = {name.strip() for name in raw.split(",") if name.strip()} or {"all"}
+    if "all" in names:
+        return frozenset(ALL_ROLES)
+    unknown = names - set(ALL_ROLES)
+    if unknown:
+        raise ValueError(f"Unknown ROLE {sorted(unknown)}; expected 'all' or some of {list(ALL_ROLES)}")
+    return frozenset(names)
+
+
+def _users(raw: str) -> dict[str, str]:
+    """AUTH_USERS: "alice:password1;bob:password2". A malformed entry stops the app at start-up."""
+    users: dict[str, str] = {}
+    for entry in raw.split(";"):
+        if not entry.strip():
+            continue
+        name, separator, password = entry.partition(":")
+        name, password = name.strip(), password.strip()
+        if not separator or not name or not password:
+            raise ValueError('AUTH_USERS must look like "alice:password1;bob:password2"')
+        users[name] = password
+    return users
+
+
 class Settings:
     """
     Centralised config. All values come from environment variables so
     nothing sensitive (API keys, service role key) is hardcoded.
     """
-    # Shared-credential auth for the public demo (see app/auth.py).
+    # Every account that can log in, in one place (see app/auth.py).
     # AUTH_SECRET_KEY signs bearer tokens — must be a real random value in
     # any deployed environment; the "" default is only safe for local dev.
-    AUTH_USERNAME: str = _env("AUTH_USERNAME")
-    AUTH_PASSWORD: str = _env("AUTH_PASSWORD")
+    AUTH_USERS: dict[str, str] = _users(_env("AUTH_USERS"))
     AUTH_SECRET_KEY: str = _env("AUTH_SECRET_KEY")
 
-    # Source of truth for "is this process the cloud deployment or local
-    # dev" — local and cloud currently share one Supabase project, so this
-    # drives case_repository's dev flag and the queue's dev-case filtering.
-    # Set to "cloud" only by the Cloud Run deploy workflow.
-    DEPLOYMENT_ENV: str = _env("DEPLOYMENT_ENV", "dev")
-    IS_CLOUD_DEPLOYMENT: bool = DEPLOYMENT_ENV.lower() == "cloud"
+    # --- Services and events (CLOUD_ARCHITECTURE_PLAN.md) ---
+    # Which roles this process runs; the default runs all of them, as uvicorn always has.
+    ROLES: frozenset[str] = _roles(_env("ROLE", "all"))
+    # "inprocess" calls handlers in this process; "pubsub" publishes to Pub/Sub (or the emulator
+    # when PUBSUB_EMULATOR_HOST is set) and workers receive events on POST /push.
+    EVENT_TRANSPORT: str = _env("EVENT_TRANSPORT", "inprocess").lower()
+    PUBSUB_TOPIC: str = _env("PUBSUB_TOPIC", "domain-events")
+    PUBSUB_PUBLISH_TIMEOUT_SECONDS: float = float(os.environ.get("PUBSUB_PUBLISH_TIMEOUT_SECONDS", "30"))
+    # When set, POST /push requires a Google OIDC token for this audience from PUSH_SERVICE_ACCOUNT.
+    # Needed on a public service (audit-metrics sits behind Kong); private workers are also guarded by Cloud Run IAM.
+    PUSH_AUDIENCE: str = _env("PUSH_AUDIENCE")
+    PUSH_SERVICE_ACCOUNT: str = _env("PUSH_SERVICE_ACCOUNT")
+    # Off behind Kong, which answers CORS itself; two sets of CORS headers make browsers refuse the response.
+    CORS_IN_APP: bool = os.environ.get("CORS_IN_APP", "true").lower() == "true"
+    # A case analysis still "running" after this long was interrupted; the sweeper then marks it failed.
+    CASE_ANALYSIS_TIMEOUT_SECONDS: int = int(os.environ.get("CASE_ANALYSIS_TIMEOUT_SECONDS", "900"))
+
+    # --- Stuck work and recovery (sweeper.py, CLOUD_ARCHITECTURE_PLAN.md section 16) ---
+    # Off by default: the database is shared, so a local process must never sweep cloud work. Terraform turns it on.
+    SWEEPER_ENABLED: bool = os.environ.get("SWEEPER_ENABLED", "false").lower() == "true"
+    # uploaded/queued past this means its event was lost; processing/extracting/detecting past the other means
+    # its run died (both well past the 600 s push deadline, so a recovery never races a live redelivery).
+    STUCK_WAITING_SECONDS: int = int(os.environ.get("STUCK_WAITING_SECONDS", "300"))
+    STUCK_RUNNING_SECONDS: int = int(os.environ.get("STUCK_RUNNING_SECONDS", "900"))
+    RECOVERY_MAX_ATTEMPTS: int = int(os.environ.get("RECOVERY_MAX_ATTEMPTS", "3"))
+    # How often a running pipeline or detection checks for a cancel made through another instance (pubsub only).
+    CANCEL_POLL_SECONDS: float = float(os.environ.get("CANCEL_POLL_SECONDS", "5"))
 
     # Comma-separated list of exact origins the frontend is served from, in
     # addition to local dev.
@@ -69,12 +117,13 @@ class Settings:
     # re-classification attempt before routing to manual review.
     MAX_RECLASSIFICATION_ATTEMPTS: int = 1
 
-    # Concurrent documents processed by the in-memory queue worker pool
-    # (queue_service.py) — bounded by Anthropic rate limits, not local resources.
+    # Documents one doc-worker process runs at once (workers/documents.py) — bounded by Anthropic rate limits.
     QUEUE_WORKER_CONCURRENCY: int = int(os.environ.get("QUEUE_WORKER_CONCURRENCY", "4"))
 
     # Threads for PDF/OCR/forensic work (cpu_pool.py). 1 = PyMuPDF only ever runs on one thread.
     CPU_WORKER_CONCURRENCY: int = int(os.environ.get("CPU_WORKER_CONCURRENCY", "1"))
+    # Processes for that work instead (each with its own PyMuPDF); 0 keeps the thread. Set on the deployed workers.
+    CPU_WORKER_PROCESSES: int = int(os.environ.get("CPU_WORKER_PROCESSES", "0"))
     # Detection runs (lead + 3 specialists each) allowed at once; the rest wait their turn.
     DETECTION_CONCURRENCY: int = int(os.environ.get("DETECTION_CONCURRENCY", "2"))
     # Most model calls one detection run may make (lead, specialists, reviews, binders). Past it the run
@@ -91,6 +140,8 @@ class Settings:
     # run time. The slow ones call a model or an outside registry.
     TOOL_TIMEOUT_SECONDS: float = float(os.environ.get("TOOL_TIMEOUT_SECONDS", "60"))
     SLOW_TOOL_TIMEOUT_SECONDS: float = float(os.environ.get("SLOW_TOOL_TIMEOUT_SECONDS", "120"))
+    # The most a tool waits for the CPU worker before it starts; its own limit only runs once it has started.
+    CPU_QUEUE_TIMEOUT_SECONDS: float = float(os.environ.get("CPU_QUEUE_TIMEOUT_SECONDS", "300"))
 
     # Below this, classification is routed to manual review regardless of
     # the guessed document_type (see langgraph/nodes._is_below_threshold).
@@ -133,7 +184,12 @@ class Settings:
     # Required for the Cloud Trace exporter; left unset -> traces print to
     # the console instead.
     GOOGLE_CLOUD_PROJECT: str = _env("GOOGLE_CLOUD_PROJECT", "")
-    OTEL_SERVICE_NAME: str = _env("OTEL_SERVICE_NAME", "six-sevens-backend")
+    # K_SERVICE / K_REVISION are set by Cloud Run, so each service's traces carry its own name.
+    OTEL_SERVICE_NAME: str = _env("OTEL_SERVICE_NAME", os.environ.get("K_SERVICE", "six-sevens-backend"))
+    SERVICE_REVISION: str = os.environ.get("K_REVISION", "local")
+    # Set to send traces over OTLP instead (e.g. http://jaeger:4318 in the local observability profile).
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = _env("OTEL_EXPORTER_OTLP_ENDPOINT")
+    OTEL_TRACES_SAMPLE_RATIO: float = float(os.environ.get("OTEL_TRACES_SAMPLE_RATIO", "1.0"))
 
     # --- Public registry lookups (fraud_detection/external_validation/registry_lookups) ---
     # Both optional: without them the anonymous limits apply, and a lookup

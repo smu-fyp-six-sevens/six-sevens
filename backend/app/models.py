@@ -3,8 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 from typing import Literal
+from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .config import settings
 from .holder import holder_kind
@@ -273,14 +274,22 @@ class CaseRecord(BaseModel):
     status: str = CaseStage.OPEN.value
     submission_finalized: bool = False
     finalized_at: datetime | None = None
-    recommended_additional_documents: list = Field(default_factory=list)
+    # The list of documents to request, read from the recommended_additional_documents column (see the validator); only the case summary returns it.
+    additional_documents: AdditionalDocuments | None = Field(default=None, exclude=True)
     created_at: datetime
     updated_at: datetime
-    # Set automatically at creation from settings.IS_CLOUD_DEPLOYMENT (never
-    # by the caller) — True for anything created outside the cloud
-    # deployment, hidden from the cloud case queue during UAT. See
-    # case_repository.create_case / list_cases.
-    dev: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _split_stored_additional_documents(cls, data):
+        """
+        The recommended_additional_documents column holds [] until a case is analysed, then the analysis's
+        whole additional-documents result (an object). It is not a field: callers see that object as additional_documents.
+        """
+        raw = data.get("recommended_additional_documents") if isinstance(data, dict) else None
+        if isinstance(raw, dict):
+            data = {**data, "additional_documents": raw or None}
+        return data
 
 
 class CaseDocumentsStatus(str, Enum):
@@ -466,6 +475,9 @@ class AdditionalDocuments(BaseModel):
     best_case_level: str | None = None
 
 
+CaseRecord.model_rebuild()  # now that AdditionalDocuments exists
+
+
 class CaseAnalysisOverview(BaseModel):
     """The latest per-case analysis in brief; the full result is GET /cases/{id}/analysis."""
 
@@ -479,17 +491,15 @@ class CaseAnalysisOverview(BaseModel):
 
 class CaseSummary(CaseRecord):
     """
-    documents_status and fulfilled_requirements are both computed live from
-    the documents table on every read, never stored — see case_service.py.
-    recommended_additional_documents is repurposed here as the computed
-    "still missing" list (the checklist requirements no accepted document
-    has fulfilled yet), overriding whatever's in the underlying (always
-    empty — nothing ever wrote to it) cases.recommended_additional_documents
-    column.
+    documents_status, fulfilled_requirements and missing_requirements are all
+    computed live from the documents table on every read, never stored — see
+    case_service.py.
     """
 
     documents_status: CaseDocumentsStatus
     fulfilled_requirements: list[str] = Field(default_factory=list)
+    # The checklist requirements no accepted document has fulfilled yet.
+    missing_requirements: list[str] = Field(default_factory=list)
     proof_of_address_coverage: ProofOfAddressCoverage = Field(
         default_factory=lambda: ProofOfAddressCoverage(covered=0, total=0)
     )
@@ -499,12 +509,12 @@ class CaseSummary(CaseRecord):
     # None when the documents' detection reports couldn't be loaded.
     risk: CaseRisk | None = None
     # Further evidence to request from the client; empty when nothing in the
-    # case needs any. Unlike recommended_additional_documents (missing
-    # checklist items), these come from what the documents themselves show.
+    # case needs any. Unlike missing_requirements (missing checklist items),
+    # these come from what the documents themselves show.
     supporting_document_recommendations: list[SupportingDocumentRecommendation] = Field(
         default_factory=list
     )
-    # The same requests merged with the agent's, in one list; None for runs from before it existed.
+    # The checklist requests merged with the agent's, in one list; None before the case is analysed.
     additional_documents: AdditionalDocuments | None = None
     # Every approved document has been scanned, so the case analysis can be run.
     analysis_ready: bool = False
@@ -520,6 +530,29 @@ class CaseListItem(CaseRecord):
     documents_status: CaseDocumentsStatus
     # None when the documents' detection reports couldn't be loaded.
     risk: CaseRisk | None = None
+
+
+class CaseListPage(BaseModel):
+    """One page of the case queue. `total` counts every case matching the search and status filter."""
+
+    items: list[CaseListItem]
+    total: int
+    limit: int
+    offset: int
+
+
+class CaseCounts(BaseModel):
+    """What the queue's sidebar shows: every case, and how many are in each documents status."""
+
+    total: int
+    by_status: dict[str, int]
+
+
+class CaseSearchResult(BaseModel):
+    """Jump-to-case suggestions: the best matches (exact number first), and how many cases match in all."""
+
+    items: list[CaseRecord]
+    total: int
 
 
 # The same limit as the case forms in the frontend (utils/caseValidation.ts).
@@ -546,6 +579,61 @@ class UpdateCaseRequest(BaseModel):
         if len(trimmed) > MAX_COMPANY_NAME_LENGTH:
             raise ValueError(f"company_name must be at most {MAX_COMPANY_NAME_LENGTH} characters")
         return trimmed
+
+
+MAX_NOTE_LENGTH = 4000
+
+
+class CaseNote(BaseModel):
+    """
+    A loan officer's note on a case, or on one of its documents (document_id). parent_id marks a
+    reply to an earlier note. Only its author can edit or delete it; edited_at shows it was edited.
+    A deleted note that has replies stays as a placeholder (deleted_at set, its text erased) so the
+    replies keep their place.
+    """
+
+    id: str
+    case_id: str
+    document_id: str | None = None
+    parent_id: str | None = None
+    author: str
+    body: str
+    created_at: datetime
+    edited_at: datetime | None = None
+    deleted_at: datetime | None = None
+
+
+def _note_body(value: str) -> str:
+    trimmed = value.strip()
+    if not trimmed:
+        raise ValueError("A note can't be empty")
+    if len(trimmed) > MAX_NOTE_LENGTH:
+        raise ValueError(f"A note must be at most {MAX_NOTE_LENGTH} characters")
+    return trimmed
+
+
+class CreateNoteRequest(BaseModel):
+    """A new note: on the whole case, on one of its documents, or a reply to an earlier note (parent_id)."""
+
+    body: str
+    document_id: UUID | None = None
+    parent_id: UUID | None = None
+
+    @field_validator("body")
+    @classmethod
+    def body_must_not_be_blank(cls, value: str) -> str:
+        return _note_body(value)
+
+
+class UpdateNoteRequest(BaseModel):
+    """A note's new text. Where the note sits (case, document, parent) never changes."""
+
+    body: str
+
+    @field_validator("body")
+    @classmethod
+    def body_must_not_be_blank(cls, value: str) -> str:
+        return _note_body(value)
 
 
 class DocumentRecord(BaseModel):

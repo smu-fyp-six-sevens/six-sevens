@@ -1,9 +1,13 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
+import CaseHeader, { CaseTitle } from '../components/CaseHeader';
+import { caseCrumb, caseQueueCrumb, documentCrumb } from '../components/caseCrumbs';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DocumentPreviewModal from '../components/DocumentPreviewModal';
+import DocumentPreviewPane, { ShowDocumentButton } from '../components/DocumentPreviewPane';
 import KebabMenu from '../components/KebabMenu';
+import { DocumentBodySkeleton } from '../components/Skeletons';
 import {
   canCancelDocument,
   canRetryDocument,
@@ -22,6 +26,7 @@ import { describeFailureReason } from './document-details/formatters';
 import { DocumentSummaryCard } from './document-details/DocumentSummaryCard';
 import { ExtractedInformationCard } from './document-details/ExtractedInformationCard';
 import { ManualReviewCard } from './document-details/ManualReviewCard';
+import { NotesCard } from '../components/NotesCard';
 import { useDetection } from './document-details/useDetection';
 import { useDocumentActions } from './document-details/useDocumentActions';
 import { useDocumentCaseMatch } from './document-details/useDocumentCaseMatch';
@@ -39,17 +44,35 @@ const LangGraphTracePanel = lazy(() =>
   import('./document-details/LangGraphTracePanel').then((m) => ({ default: m.LangGraphTracePanel })),
 );
 
+// Whether the side-by-side preview is shown, remembered per browser. Storage can throw (private mode,
+// blocked site data), so it falls back to shown.
+const PREVIEW_PANE_STORAGE_KEY = 'documentDetails.previewPaneOpen';
+
+function loadPreviewPaneOpen(): boolean {
+  try {
+    return localStorage.getItem(PREVIEW_PANE_STORAGE_KEY) !== 'false';
+  } catch {
+    return true;
+  }
+}
+
+function savePreviewPaneOpen(open: boolean) {
+  try {
+    localStorage.setItem(PREVIEW_PANE_STORAGE_KEY, String(open));
+  } catch {
+    // Not remembering is fine: the toggle still works for this visit.
+  }
+}
+
 interface DocumentDetailsPageProps {
   selectedCase: CaseRecord;
   documentId: string;
-  onBack: () => void;
   onDocumentDeleted: () => void;
 }
 
 export default function DocumentDetailsPage({
   selectedCase,
   documentId,
-  onBack,
   onDocumentDeleted,
 }: DocumentDetailsPageProps) {
   const {
@@ -64,6 +87,11 @@ export default function DocumentDetailsPage({
   } = useDocumentRecord(documentId);
   const caseMatch = useDocumentCaseMatch(documentId, document);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isPreviewPaneOpen, setIsPreviewPaneOpen] = useState(loadPreviewPaneOpen);
+  const togglePreviewPane = (open: boolean) => {
+    setIsPreviewPaneOpen(open);
+    savePreviewPaneOpen(open);
+  };
 
   const isApproved = hasBeenApproved(document?.status);
   // Approve and Reject are both final: the document is locked against field edits and type corrections.
@@ -179,28 +207,7 @@ export default function DocumentDetailsPage({
     (document?.status === 'analyzed' || document?.status === 'failed') &&
     !isTypeConfirmed;
 
-  const {
-    isAddFieldOpen,
-    setIsAddFieldOpen,
-    newFieldName,
-    setNewFieldName,
-    newFieldValue,
-    setNewFieldValue,
-    isAddingField,
-    setIsAddingField,
-    addFieldError,
-    setAddFieldError,
-    deletingFieldId,
-    setDeletingFieldId,
-    deleteFieldError,
-    setDeleteFieldError,
-    isSaving,
-    saveMessage,
-    saveError,
-    handleFieldChange,
-    handleSaveFields,
-    clearSaveMessages,
-  } = useFieldEditing({
+  const fieldEditing = useFieldEditing({
     document,
     setDocument,
     fieldDraft,
@@ -211,6 +218,7 @@ export default function DocumentDetailsPage({
     absentRequiredFields,
     needsAttention,
   });
+  const { isSaving, saveMessage, saveError, handleFieldChange, handleSaveFields, clearSaveMessages } = fieldEditing;
 
   const {
     setSelectedType,
@@ -234,6 +242,7 @@ export default function DocumentDetailsPage({
     isRefreshingDetection,
     refreshDetectionReport,
     isCancellingDetection,
+    cancelDetectionError,
     handleCancelDetection,
     isRetryingDetection,
     handleRetryDetection,
@@ -241,7 +250,7 @@ export default function DocumentDetailsPage({
     individualCheckError,
     individualCheckResults,
     handleRunIndividualCheck,
-  } = useDetection(documentId);
+  } = useDetection(documentId, document?.status);
 
   const { langGraphTrace, isRefreshingTrace, refreshLangGraphTrace } = useLangGraphTrace(documentId);
 
@@ -284,33 +293,42 @@ export default function DocumentDetailsPage({
     : null;
   const detectionSkipped = skipsDetection(document?.document_type);
 
+  const caseHeader = (
+    <CaseHeader
+      crumbs={[
+        caseQueueCrumb,
+        caseCrumb(selectedCase),
+        // The filename is known once the document has loaded.
+        ...(document ? [documentCrumb(selectedCase, documentId, document.filename)] : []),
+      ]}
+    >
+      <CaseTitle caseRecord={selectedCase} />
+    </CaseHeader>
+  );
+
   if (isLoading) {
     return (
-      <div className="shell shell--upload">
+      <div className="shell shell--upload document-details-page">
         <AppHeader />
 
-        <button type="button" className="back-link" onClick={onBack}>
-          ← Back to case
-        </button>
+        {caseHeader}
 
-        <div className="document-details-loading">
-          Loading document details…
-        </div>
+        <DocumentBodySkeleton />
       </div>
     );
   }
 
   if (loadError || !document) {
     return (
-      <div className="shell shell--upload">
+      <div className="shell shell--upload document-details-page">
         <AppHeader />
 
-        <button type="button" className="back-link" onClick={onBack}>
-          ← Back to case
-        </button>
+        {caseHeader}
 
-        <div className="document-details-error">
-          {loadError ?? 'Document could not be found.'}
+        <div className="document-details-body">
+          <div className="document-details-error">
+            {loadError ?? 'Document could not be found.'}
+          </div>
         </div>
       </div>
     );
@@ -320,25 +338,59 @@ export default function DocumentDetailsPage({
     <div className="shell shell--upload document-details-page">
       <AppHeader />
 
-      <button type="button" className="back-link" onClick={onBack}>
-        ← Back to case
-      </button>
+      {caseHeader}
 
-      <div className="eyebrow">
-        Case #{selectedCase.caseNumber} · Document · {document.filename}
-      </div>
+      <div
+        className={`document-details-body document-details-body--split${
+          isPreviewPaneOpen ? '' : ' document-details-body--preview-hidden'
+        }`}
+      >
+        {/* The document on the left, kept in view while the fields on the right scroll, so each value
+            can be checked against the page. Hidden, "Show document" in the header brings it back. */}
+        <div className="document-details-split">
+        {isPreviewPaneOpen && (
+          <DocumentPreviewPane
+            documentId={document.id}
+            filename={document.filename}
+            onExpand={() => setIsPreviewOpen(true)}
+            onCollapse={() => togglePreviewPane(false)}
+          />
+        )}
 
-      <div className="document-details-intro">
-        <div className="document-details-title-row">
-          <h1>Document Details</h1>
-          <div className="document-details-title-actions">
+        <div className="document-details-main">
+        {deleteDocumentError && (
+          <div className="toast show mixed" role="alert">
+            ⚠ {deleteDocumentError}
+          </div>
+        )}
+
+        {/* Notes: open on a locked document too, since a note never edits the document. */}
+
+        <NotesCard
+          caseId={selectedCase.id}
+          caseNumber={selectedCase.caseNumber}
+          documents={[{ id: document.id, filename: document.filename }]}
+          documentId={document.id}
+          lockedNotice={
+            isLocked
+              ? `Document ${isApproved ? 'approved' : 'rejected'} and locked · notes don't change it`
+              : undefined
+          }
+        />
+
+        {/* Document summary */}
+
+        <DocumentSummaryCard
+          headerActions={
+            <>
+            {!isPreviewPaneOpen && <ShowDocumentButton onClick={() => togglePreviewPane(true)} />}
             <KebabMenu
               label={isDeletingDocument ? 'Deleting document' : 'Document actions'}
               disabled={isDeletingDocument}
               items={[
                 {
                   id: 'preview',
-                  label: 'Preview document',
+                  label: 'Full-screen preview',
                   onSelect: () => setIsPreviewOpen(true),
                 },
                 ...(!hasBeenApproved(document.status) && !isInFlight
@@ -354,229 +406,206 @@ export default function DocumentDetailsPage({
                   : []),
               ]}
             />
-          </div>
-        </div>
-        <p className="sub">
-          View extracted data and review any fields that require
-          manual correction.
-        </p>
-        {deleteDocumentError && (
-          <div className="toast show mixed" role="alert">
-            ⚠ {deleteDocumentError}
-          </div>
-        )}
-      </div>
+            </>
+          }
+          canCorrectType={canCorrectType}
+          caseMatch={caseMatch}
+          caseMatchMismatches={caseMatchMismatches}
+          chosenType={chosenType}
+          detectionStage={detectionStage}
+          document={document}
+          failureReason={failureReason}
+          handleSaveType={handleSaveType}
+          hasDetectionReport={hasDetectionReport}
+          isSavingType={isSavingType}
+          isUnconfirmedUnrecognised={isUnconfirmedUnrecognised}
+          lowClassificationConfidence={lowClassificationConfidence}
+          setSelectedType={setSelectedType}
+          setTypeError={setTypeError}
+          typeError={typeError}
+        />
 
-      {/* Document summary */}
+        {/* Extracted information */}
 
-      <DocumentSummaryCard
-        canCorrectType={canCorrectType}
-        caseMatch={caseMatch}
-        caseMatchMismatches={caseMatchMismatches}
-        chosenType={chosenType}
-        detectionStage={detectionStage}
-        document={document}
-        failureReason={failureReason}
-        handleSaveType={handleSaveType}
-        hasDetectionReport={hasDetectionReport}
-        isSavingType={isSavingType}
-        isUnconfirmedUnrecognised={isUnconfirmedUnrecognised}
-        lowClassificationConfidence={lowClassificationConfidence}
-        setSelectedType={setSelectedType}
-        setTypeError={setTypeError}
-        typeError={typeError}
-      />
-
-      {/* Extracted information */}
-
-      <ExtractedInformationCard
-        addFieldError={addFieldError}
-        canEditFields={canEditFields}
-        deleteFieldError={deleteFieldError}
-        deletingFieldId={deletingFieldId}
-        document={document}
-        extractedFields={extractedFields}
-        isAddFieldOpen={isAddFieldOpen}
-        isAddingField={isAddingField}
-        isInFlight={isInFlight}
-        lowestConfidence={lowestConfidence}
-        newFieldName={newFieldName}
-        newFieldValue={newFieldValue}
-        setAddFieldError={setAddFieldError}
-        setDeleteFieldError={setDeleteFieldError}
-        setDeletingFieldId={setDeletingFieldId}
-        setDocument={setDocument}
-        setFieldDraft={setFieldDraft}
-        setIsAddFieldOpen={setIsAddFieldOpen}
-        setIsAddingField={setIsAddingField}
-        setNewFieldName={setNewFieldName}
-        setNewFieldValue={setNewFieldValue}
-      />
-
-      {/* Manual review */}
-
-      {canEditFields && (needsManualReview || isUnrecognisedDocument) && (
-        <ManualReviewCard
-          canEditFields={canEditFields}
-          fieldDraft={fieldDraft}
-          handleFieldChange={handleFieldChange}
-          handleSaveFields={handleSaveFields}
+        <ExtractedInformationCard
+          canAddOrDeleteFields={!isLocked}
+          document={document}
+          extractedFields={extractedFields}
           isInFlight={isInFlight}
-          isSaving={isSaving}
-          needsAttention={needsAttention}
-          reviewFields={reviewFields}
-          saveError={saveError}
-          saveMessage={saveMessage}
+          lowestConfidence={lowestConfidence}
+          setDocument={setDocument}
+          setFieldDraft={setFieldDraft}
+          editing={fieldEditing}
         />
-      )}
 
-      {/* LangGraph trace (debug) */}
+        {/* Manual review */}
 
-      <Suspense fallback={null}>
-        <LangGraphTracePanel
-          langGraphTrace={langGraphTrace}
-          isRefreshingTrace={isRefreshingTrace}
-          refreshLangGraphTrace={refreshLangGraphTrace}
-        />
-      </Suspense>
-
-      {/* Detection Agent (dev aid) */}
-
-      <Suspense fallback={null}>
-        <DetectionPanel
-          status={document.status}
-          detectionError={detectionError}
-          detectionReport={detectionReport}
-          detectionSkipped={detectionSkipped}
-          isApproved={isApproved}
-          isRetryingDetection={isRetryingDetection}
-          isCancellingDetection={isCancellingDetection}
-          isRefreshingDetection={isRefreshingDetection}
-          refreshDetectionReport={refreshDetectionReport}
-          handleRetryDetection={handleRetryDetection}
-          handleCancelDetection={handleCancelDetection}
-          runningCheckId={runningCheckId}
-          individualCheckError={individualCheckError}
-          individualCheckResults={individualCheckResults}
-          handleRunIndividualCheck={handleRunIndividualCheck}
-        />
-      </Suspense>
-
-      {/* Document actions */}
-
-        {approveError && (
-          <div className="save-error">{approveError}</div>
-        )}
-        {cancelError && (
-          <div className="save-error">{cancelError}</div>
-        )}
-        {rejectError && (
-          <div className="save-error">{rejectError}</div>
-        )}
-        {retryError && (
-          <div className="save-error">{retryError}</div>
+        {canEditFields && (needsManualReview || isUnrecognisedDocument) && (
+          <ManualReviewCard
+            canEditFields={canEditFields}
+            fieldDraft={fieldDraft}
+            handleFieldChange={handleFieldChange}
+            handleSaveFields={handleSaveFields}
+            isInFlight={isInFlight}
+            isSaving={isSaving}
+            needsAttention={needsAttention}
+            reviewFields={reviewFields}
+            saveError={saveError}
+            saveMessage={saveMessage}
+          />
         )}
 
-        {!hasBeenApproved(document.status) &&
-        document.status !== 'rejected' && (
-          <div className="document-actions">
-            {canCancelDocument(document.status) && (
-              <button
-                type="button"
-                className="document-action--cancel"
-                disabled={isCancelling}
-                onClick={() => void handleCancelDocument()}
-              >
-                {isCancelling ? 'Cancelling…' : '⏹ Cancel Processing'}
-              </button>
-            )}
+        {/* LangGraph trace (debug) */}
 
-            {canRetryDocument(document) && (
-              <button
-                type="button"
-                className="document-action--retry"
-                disabled={isRetrying}
-                onClick={() => void handleRetryDocument()}
-              >
-                {isRetrying ? 'Retrying…' : '↻ Retry Document'}
-              </button>
-            )}
+        <Suspense fallback={null}>
+          <LangGraphTracePanel
+            langGraphTrace={langGraphTrace}
+            isRefreshingTrace={isRefreshingTrace}
+            refreshLangGraphTrace={refreshLangGraphTrace}
+          />
+        </Suspense>
 
-            {document.status === 'analyzed' && !isTypeConfirmed && (
-              <div className="approval-warning">
-                Cannot approve yet.{' '}
-                {!document.document_type || document.document_type === 'unrecognised'
-                  ? 'The document type could not be identified.'
-                  : `The classifier is only ${Math.round(
-                      (document.classification_confidence ?? 0) * 100,
-                    )}% sure this is a ${formatDocumentType(document.document_type, null)}.`}{' '}
-                Choose the correct type in <strong>Document Type</strong> above and save it before
-                approving, or reject the document if it doesn't belong in this case.
+        {/* Detection Agent (dev aid) */}
+
+        <Suspense fallback={null}>
+          <DetectionPanel
+            status={document.status}
+            detectionError={detectionError}
+            detectionReport={detectionReport}
+            detectionSkipped={detectionSkipped}
+            isApproved={isApproved}
+            isRetryingDetection={isRetryingDetection}
+            isCancellingDetection={isCancellingDetection}
+            cancelError={cancelDetectionError}
+            isRefreshingDetection={isRefreshingDetection}
+            refreshDetectionReport={refreshDetectionReport}
+            handleRetryDetection={handleRetryDetection}
+            handleCancelDetection={handleCancelDetection}
+            runningCheckId={runningCheckId}
+            individualCheckError={individualCheckError}
+            individualCheckResults={individualCheckResults}
+            handleRunIndividualCheck={handleRunIndividualCheck}
+          />
+        </Suspense>
+
+        {/* Document actions */}
+
+          {approveError && (
+            <div className="save-error">{approveError}</div>
+          )}
+          {cancelError && (
+            <div className="save-error">{cancelError}</div>
+          )}
+          {rejectError && (
+            <div className="save-error">{rejectError}</div>
+          )}
+          {retryError && (
+            <div className="save-error">{retryError}</div>
+          )}
+
+          {!hasBeenApproved(document.status) &&
+          document.status !== 'rejected' && (
+            <div className="document-actions">
+              {canCancelDocument(document.status) && (
+                <button
+                  type="button"
+                  className="document-action--cancel"
+                  disabled={isCancelling}
+                  onClick={() => void handleCancelDocument()}
+                >
+                  {isCancelling ? 'Cancelling…' : '⏹ Cancel Processing'}
+                </button>
+              )}
+
+              {canRetryDocument(document) && (
+                <button
+                  type="button"
+                  className="document-action--retry"
+                  disabled={isRetrying}
+                  onClick={() => void handleRetryDocument()}
+                >
+                  {isRetrying ? 'Retrying…' : '↻ Retry Document'}
+                </button>
+              )}
+
+              {document.status === 'analyzed' && !isTypeConfirmed && (
+                <div className="approval-warning">
+                  Cannot approve yet.{' '}
+                  {!document.document_type || document.document_type === 'unrecognised'
+                    ? 'The document type could not be identified.'
+                    : `The classifier is only ${Math.round(
+                        (document.classification_confidence ?? 0) * 100,
+                      )}% sure this is a ${formatDocumentType(document.document_type, null)}.`}{' '}
+                  Choose the correct type in <strong>Document Type</strong> above and save it before
+                  approving, or reject the document if it doesn't belong in this case.
+                </div>
+              )}
+
+              {document.status === 'analyzed' && !hasExtractedInfo && (
+                <div className="approval-warning">
+                  Cannot approve yet. No information was extracted from this document. Add the
+                  fields manually, or reject it if it doesn't belong in this case.
+                </div>
+              )}
+
+              {document.status === 'analyzed' && missingRequiredFields.length > 0 && (
+                <div className="approval-warning">
+                  Cannot approve yet. Please complete the following required field
+                  {missingRequiredFields.length > 1 ? 's' : ''}:{' '}
+                  <strong>
+                    {missingRequiredFields
+                      .map((fieldName) => humanizeFieldKey(fieldName))
+                      .join(', ')}
+                  </strong>
+                </div>
+              )}
+
+              {document.status === 'analyzed' && lowConfidenceFields.length > 0 && (
+                <div className="approval-warning">
+                  Cannot approve yet. {lowConfidenceFields.length > 1 ? 'These fields have' : 'This field has'}{' '}
+                  low confidence:{' '}
+                  <strong>
+                    {lowConfidenceFields
+                      .map((fieldName) => humanizeFieldKey(fieldName))
+                      .join(', ')}
+                  </strong>
+                  . Check {lowConfidenceFields.length > 1 ? 'them' : 'it'} in Manual Review and press{' '}
+                  <strong>Save fields</strong> before approving.
+                </div>
+              )}
+
+              {document.status === 'analyzed' && isTypeConfirmed && otherFieldsUnsaved && (
+                <div className="approval-warning">
+                  Cannot approve yet. This document is set to <strong>Other</strong>, so every field
+                  needs your review. Check them in Manual Review and press <strong>Save fields</strong>{' '}
+                  before approving.
+                </div>
+              )}
+
+              <div className="document-actions-row">
+                <button
+                  type="button"
+                  className="document-action--reject"
+                  disabled={isRejecting || isApproving}
+                  onClick={() => void handleRejectDocument()}
+                >
+                  {isRejecting ? 'Rejecting…' : '✕ Reject Document'}
+                </button>
+
+                <button
+                  type="button"
+                  className="document-action--approve"
+                  disabled={isApproving || !canApprove}
+                  onClick={() => void handleApproveDocument()}
+                >
+                  {isApproving ? 'Approving…' : '✓ Approve Document'}
+                </button>
               </div>
-            )}
-
-            {document.status === 'analyzed' && !hasExtractedInfo && (
-              <div className="approval-warning">
-                Cannot approve yet. No information was extracted from this document. Add the
-                fields manually, or reject it if it doesn't belong in this case.
-              </div>
-            )}
-
-            {document.status === 'analyzed' && missingRequiredFields.length > 0 && (
-              <div className="approval-warning">
-                Cannot approve yet. Please complete the following required field
-                {missingRequiredFields.length > 1 ? 's' : ''}:{' '}
-                <strong>
-                  {missingRequiredFields
-                    .map((fieldName) => humanizeFieldKey(fieldName))
-                    .join(', ')}
-                </strong>
-              </div>
-            )}
-
-            {document.status === 'analyzed' && lowConfidenceFields.length > 0 && (
-              <div className="approval-warning">
-                Cannot approve yet. {lowConfidenceFields.length > 1 ? 'These fields have' : 'This field has'}{' '}
-                low confidence:{' '}
-                <strong>
-                  {lowConfidenceFields
-                    .map((fieldName) => humanizeFieldKey(fieldName))
-                    .join(', ')}
-                </strong>
-                . Check {lowConfidenceFields.length > 1 ? 'them' : 'it'} in Manual Review and press{' '}
-                <strong>Save fields</strong> before approving.
-              </div>
-            )}
-
-            {document.status === 'analyzed' && isTypeConfirmed && otherFieldsUnsaved && (
-              <div className="approval-warning">
-                Cannot approve yet. This document is set to <strong>Other</strong>, so every field
-                needs your review. Check them in Manual Review and press <strong>Save fields</strong>{' '}
-                before approving.
-              </div>
-            )}
-
-            <div className="document-actions-row">
-              <button
-                type="button"
-                className="document-action--reject"
-                disabled={isRejecting || isApproving}
-                onClick={() => void handleRejectDocument()}
-              >
-                {isRejecting ? 'Rejecting…' : '✕ Reject Document'}
-              </button>
-
-              <button
-                type="button"
-                className="document-action--approve"
-                disabled={isApproving || !canApprove}
-                onClick={() => void handleApproveDocument()}
-              >
-                {isApproving ? 'Approving…' : '✓ Approve Document'}
-              </button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
+        </div>
+      </div>
 
       {deleteConfirmOpen && document && (
         <ConfirmDialog

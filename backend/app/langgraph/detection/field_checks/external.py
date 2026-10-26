@@ -9,7 +9,7 @@ from langgraph.prebuilt import InjectedState
 
 from ....fraud_detection.external_validation.runner import run_external_validation
 from ..tools import _result, _with_ids, document_fields
-from .bindings import BindingArg, to_bindings
+from .bindings import BindingArg, binding_problems, to_bindings
 
 TOOL_NAME = "external_validation_tool"
 
@@ -45,6 +45,6 @@ async def external_validation_tool(
     result.update(
         skipped=[{"check": s.check_code, "reason": s.reason} for s in outcome.skipped_checks],
         bindings_applied=outcome.bindings_applied,
-        binding_issues=outcome.binding_issues,
+        binding_issues=[*binding_problems(bindings), *outcome.binding_issues],
     )
     return result

@@ -1,0 +1,43 @@
+# Prometheus, Grafana and Jaeger on one machine (opt-in, about 400 MB). Works with the compose split or with
+# plain uvicorn on :8000 (scraped as "uvicorn"):
+#
+#   docker compose --profile observability up prometheus grafana jaeger    # just these three
+#   docker compose --profile observability up --build                      # with the whole split
+#
+# Grafana http://localhost:3000 (admin / admin), Prometheus :9090, Jaeger :16686. For traces, set
+# OTEL_ENABLED=true and OTEL_EXPORTER_OTLP_ENDPOINT in backend/.env: http://jaeger:4318 for compose services,
+# http://localhost:4318 for uvicorn.
+services:
+  prometheus:
+    profiles: [observability]
+    image: prom/prometheus:v3.1.0
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=7d"]
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  grafana:
+    profiles: [observability]
+    build:
+      context: ../..
+      dockerfile: deploy/grafana/Dockerfile
+    image: six-sevens/grafana:local
+    environment:
+      PROMETHEUS_URL: http://prometheus:9090
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+  jaeger:
+    profiles: [observability]
+    image: jaegertracing/all-in-one:1.65.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+      - "4318:4318"

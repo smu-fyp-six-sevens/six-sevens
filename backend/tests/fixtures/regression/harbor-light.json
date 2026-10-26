@@ -24,7 +24,7 @@
       "total": 1,
       "unmatched_names": []
     },
-    "recommended_additional_documents": [
+    "missing_requirements": [
       "bank_statement",
       "payslip",
       "fatca_crs_declaration",
@@ -1245,7 +1245,7 @@
         "total": 1,
         "unmatched_names": []
       },
-      "recommended_additional_documents": [
+      "missing_requirements": [
         "bank_statement",
         "payslip",
         "fatca_crs_declaration",

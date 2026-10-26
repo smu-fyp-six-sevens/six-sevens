@@ -24,7 +24,7 @@
   padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fff;
+  background: var(--white);
   color: var(--ink);
   font-size: 14px;
   outline: none;
@@ -62,7 +62,7 @@
   border: none;
   border-radius: 8px;
   background: var(--ink);
-  color: #fff;
+  color: var(--white);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -77,15 +77,3 @@
   box-shadow: 0 0 0 3px rgba(61, 90, 128, 0.2);
 }
 
-.case-queue-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 8px;
-}
-
-.case-queue-header .create-case-btn {
-  flex-shrink: 0;
-  margin: 0;
-}

@@ -140,14 +140,14 @@ def _pick_grantor_banks(rng) -> dict[str, str]:
 SAMPLE_ACCOUNTS = [
     AccountRow("Unsecured Credit Card", "Bank A", "Single", "22/03/2004", "05/03/2024", "6,500.00", "WHHHDDDDCBA*", "NNNNNNNNNNN-"),
     AccountRow("HDB Loan", "Bank A", "Joint", "10/10/2014", "", "", "AAAAAABAAAAA", current_balance="157,000.00", monthly_instalment="2,800.00"),
-    AccountRow("Executive Condominium Purchase", "Bank B", "Single", "01/01/2021", "", "", "ABBBBBBBAAAA", current_balance="1,700,250.00", monthly_instalment="2,500.00"),
+    AccountRow("Executive Condominium Purchase", "Bank B", "Single", "01/01/2021", "", "", "ABBBBBBBAAAA", current_balance="980,000.00", monthly_instalment="4,450.00"),
     AccountRow("Unsecured Personal Loan", "Bank B", "Single", "01/09/2010", "", "", "AAAAAAAAAAAB", current_balance="7,000.00", monthly_instalment="300.00"),
     AccountRow("Unsecured Credit Card", "Bank B", "Single", "22/03/2004", "", "", "AAAAAAAAAAA*", "NNNNNNNNNNN-", current_balance="2,500.00", monthly_instalment="100.00"),
     AccountRow("Private Residential Purchase", "Bank C", "Single", "30/11/2004", "20/07/2024", "90,000.00", "RHDDDCBAACBA"),
     AccountRow("Mortgage Restructured Loan", "Bank C", "Single", "20/07/2024", "", "", "AAAAAAAAAAAA", current_balance="75,000.00", monthly_instalment="1,000.00"),
 ]
 SAMPLE_PREVIOUS_ENQUIRIES = [
-    ("01/01/2025", "Bank B", "New Application", "Executive Condominium Purchase", "Single"),
+    ("01/01/2025", "Bank B", "New Application", "Unsecured Personal Loan", "Single"),
     ("20/12/2024", "Bank B", "Review", "Unsecured Credit Card", "Single"),
     ("25/11/2024", "Bank A", "Review", "HDB Loan", "Joint"),
 ]
@@ -195,7 +195,43 @@ def _jitter_date(value: str, rng, max_days: int = 30, offset_days: int | None = 
     return (dt + timedelta(days=days)).strftime("%d/%m/%Y")
 
 
-def _jitter_accounts(accounts: list[AccountRow], rng, bank_map: dict[str, str]) -> list[AccountRow]:
+# The template history's own span: its oldest account opened, and its newest account or
+# default event. _history_retimer maps that span onto each applicant's adult life.
+_TEMPLATE_HISTORY_START = date(2004, 3, 22)
+_TEMPLATE_HISTORY_END = date(2024, 7, 20)
+# The template's most recent previous enquiry.
+_TEMPLATE_LAST_ENQUIRY = date(2025, 1, 1)
+
+
+def _years_after(day: date, years: int) -> date:
+    try:
+        return day.replace(year=day.year + years)
+    except ValueError:  # 29 Feb
+        return day.replace(year=day.year + years, day=28)
+
+
+def _history_retimer(dob: date, enquiry_date: date):
+    """Maps a template account/default date onto this applicant's credit history: the oldest
+    account at 21 at the earliest (and no more than 22 years back), the newest event two months
+    before this enquiry. The template's spacing is kept, compressed for a younger applicant."""
+    end = enquiry_date - timedelta(days=60)
+    start = max(_years_after(dob, 21), enquiry_date - timedelta(days=round(22 * 365.25)))
+    start = min(start, end - timedelta(days=365))
+    span = (_TEMPLATE_HISTORY_END - _TEMPLATE_HISTORY_START).days
+    scale = min(1.0, (end - start).days / span)
+    if scale == 1.0:
+        start = end - timedelta(days=span)
+
+    def retime(value: str) -> str:
+        if not value:
+            return value
+        template = datetime.strptime(value, "%d/%m/%Y").date()
+        offset = round((template - _TEMPLATE_HISTORY_START).days * scale)
+        return (start + timedelta(days=offset)).strftime("%d/%m/%Y")
+    return retime
+
+
+def _jitter_accounts(accounts: list[AccountRow], rng, bank_map: dict[str, str], retime=lambda v: v) -> list[AccountRow]:
     jittered = []
     for row in accounts:
         shift = rng.randint(-30, 30)  # keeps each row's open/close gap intact
@@ -203,8 +239,8 @@ def _jitter_accounts(accounts: list[AccountRow], rng, bank_map: dict[str, str]) 
             product_type=row.product_type,
             grantor=bank_map.get(row.grantor, row.grantor),
             account_type=row.account_type,
-            date_opened=_jitter_date(row.date_opened, rng, offset_days=shift),
-            date_closed=_jitter_date(row.date_closed, rng, offset_days=shift),
+            date_opened=_jitter_date(retime(row.date_opened), rng, offset_days=shift),
+            date_closed=_jitter_date(retime(row.date_closed), rng, offset_days=shift),
             overdue_balance=_jitter_amount(row.overdue_balance, rng),
             cycles=row.cycles,
             cash_advance=row.cash_advance,
@@ -223,13 +259,14 @@ def _pick_accounts(rng, pool: list[AccountRow] = SAMPLE_ACCOUNTS) -> list[Accoun
     return [pool[i] for i in indices]
 
 
-def _jitter_enquiries(rows: list[tuple], rng, bank_map: dict[str, str]) -> list[tuple]:
-    return [(_jitter_date(a, rng), bank_map.get(b, b), c, d, e) for a, b, c, d, e in rows]
+def _jitter_enquiries(rows: list[tuple], rng, bank_map: dict[str, str], shift_days: int = 0) -> list[tuple]:
+    return [(_jitter_date(_jitter_date(a, rng, offset_days=shift_days), rng), bank_map.get(b, b), c, d, e)
+            for a, b, c, d, e in rows]
 
 
-def _jitter_defaults(rows: list[tuple], rng, bank_map: dict[str, str]) -> list[tuple]:
+def _jitter_defaults(rows: list[tuple], rng, bank_map: dict[str, str], retime=lambda v: v) -> list[tuple]:
     return [
-        (a, bank_map.get(b, b), _jitter_date(c, rng), _jitter_amount(d, rng), _jitter_amount(e, rng), f)
+        (a, bank_map.get(b, b), _jitter_date(retime(c), rng), _jitter_amount(d, rng), _jitter_amount(e, rng), f)
         for a, b, c, d, e, f in rows
     ]
 
@@ -261,6 +298,20 @@ PROPERTY_PRODUCTS = {
 }
 INTEREST_UNSECURED_PRODUCTS = {"Unsecured Credit Card"}
 # Anything else still open (e.g. "Unsecured Personal Loan") is plain unsecured.
+
+# Annual interest rate per product, for walking each open account's balance back
+# month by month in "Aggregated Outstanding Balances for Preceding 5 Months". Each
+# month's fall is that month's instalment less its interest, so it never exceeds the
+# instalment, and (interest shrinking with the balance) never repeats to the cent.
+ANNUAL_RATES = {
+    "HDB Loan": 0.026,
+    "Executive Condominium Purchase": 0.031,
+    "Private Residential Purchase": 0.031,
+    "Mortgage Restructured Loan": 0.035,
+    "Unsecured Personal Loan": 0.07,
+    "Unsecured Credit Card": 0.269,
+}
+DEFAULT_ANNUAL_RATE = 0.05
 
 
 def _amt(value: str) -> float:
@@ -294,20 +345,47 @@ def _bucket_balances(accounts: list[AccountRow]) -> tuple[list[list[str]], dict[
     for a in accounts:
         if a.date_closed or not a.current_balance:
             continue
-        bal = _amt(a.current_balance)
-        secured = unsecured = interest = exempted = 0.0
-        if a.product_type in PROPERTY_PRODUCTS:
-            secured = bal
-        elif a.product_type in INTEREST_UNSECURED_PRODUCTS:
-            interest = bal
-        else:
-            unsecured = bal
-        totals["secured"] += secured
-        totals["unsecured"] += unsecured
-        totals["interest"] += interest
-        totals["exempted"] += exempted
-        rows.append([a.product_type, a.grantor, _money0(secured), _money0(unsecured), _money0(interest), _money0(exempted)])
+        amounts = {"secured": 0.0, "unsecured": 0.0, "interest": 0.0, "exempted": 0.0}
+        amounts[_balance_bucket(a.product_type)] = _amt(a.current_balance)
+        for key, value in amounts.items():
+            totals[key] += value
+        rows.append([a.product_type, a.grantor, *(_money0(amounts[k]) for k in ("secured", "unsecured", "interest", "exempted"))])
     return rows, totals
+
+
+def _balance_bucket(product_type: str) -> str:
+    if product_type in PROPERTY_PRODUCTS:
+        return "secured"
+    if product_type in INTEREST_UNSECURED_PRODUCTS:
+        return "interest"
+    return "unsecured"
+
+
+def _bucket_balance_history(accounts: list[AccountRow], months: int) -> list[dict[str, float]]:
+    """Column totals for each of the `months` months before the current one, most
+    recent first, from each open account's balance walked back through its own
+    instalments and interest."""
+    history = [{"secured": 0.0, "unsecured": 0.0, "interest": 0.0, "exempted": 0.0} for _ in range(months)]
+    for a in accounts:
+        if a.date_closed or not a.current_balance:
+            continue
+        bucket = _balance_bucket(a.product_type)
+        balance = _amt(a.current_balance)
+        instalment = _amt(a.monthly_instalment)
+        rate = ANNUAL_RATES.get(a.product_type, DEFAULT_ANNUAL_RATE) / 12
+        for month in history:
+            # This month's balance is last month's plus interest, less the instalment.
+            balance = (balance + instalment) / (1 + rate)
+            month[bucket] += balance
+    return history
+
+
+def _limit_covering(picked: float, outstanding: float, pool: list[int], step: int) -> float:
+    """The seeded limit pick, raised when the accounts' balances already exceed it: a
+    facility's outstanding balance can't be more than its limit."""
+    if picked >= outstanding:
+        return picked
+    return next((limit for limit in sorted(pool) if limit >= outstanding), -(-outstanding // step) * step)
 
 
 def _bucket_instalments(accounts: list[AccountRow]) -> tuple[list[list[str]], dict[str, float]]:
@@ -347,8 +425,10 @@ def _styles():
 
 # Every full-width table in the report (section bars and the grids/pair-tables under
 # them alike) is pinned to this width, so a table's own column widths never have to
-# add up exactly right by hand -- see _scale_widths below.
-FULL_WIDTH = 163 * mm
+# add up exactly right by hand -- see _scale_widths below. It's the whole frame
+# between the 15 mm margins, so tables run out to the header rule's edges like the
+# sample CBS report rather than stopping short of the right margin.
+FULL_WIDTH = letter[0] - 30 * mm
 
 
 def _scale_widths(widths: list[float], target: float = FULL_WIDTH) -> list[float]:
@@ -603,7 +683,7 @@ def generate_credit_bureau_report(
         ("Reference", reference),
     ]))
     story.append(Spacer(1, 2 * mm))
-    story.append(_section_bar(["Data Provided", "Summary"], col_widths=[80 * mm, 83 * mm]))
+    story.append(_section_bar(["Data Provided", "Summary"], col_widths=_scale_widths([80 * mm, 83 * mm])))
     story.append(Table(
         [
             [Paragraph("Name", s["body_bold"]), Paragraph(consumer_name, s["body"]), Paragraph("Date of Earliest known Credit Account", s["body_bold"]), Paragraph(earliest_credit_account_date.strftime("%d/%m/%Y"), s["body"])],
@@ -616,7 +696,7 @@ def generate_credit_bureau_report(
             [Paragraph("Applicant Type", s["body_bold"]), Paragraph(applicant_type, s["body"]), Paragraph("Exempted Credit Limit", s["body_bold"]), Paragraph(f"{exempted_credit_limit:,.2f}", s["body"])],
             [Paragraph("Debt Management Programme", s["body_bold"]), Paragraph(debt_management_programme, s["body"]), Paragraph("ID Theft", s["body_bold"]), Paragraph(id_theft, s["body"])],
         ],
-        colWidths=[35 * mm, 45 * mm, 55 * mm, 28 * mm],
+        colWidths=_scale_widths([35 * mm, 45 * mm, 55 * mm, 28 * mm]),
         style=TableStyle([
             ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")),
             ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#F2F4F7")),
@@ -688,7 +768,7 @@ def generate_credit_bureau_report(
             Paragraph(row.cycles, s["body"]),
             Paragraph(row.cash_advance, s["body"]),
         ])
-    story.append(Table(account_header + account_rows, colWidths=_scale_widths([30 * mm, 18 * mm, 18 * mm, 18 * mm, 26 * mm, 20 * mm, 28 * mm, 30 * mm]), style=TableStyle([
+    story.append(Table(account_header + account_rows, colWidths=_scale_widths([29 * mm, 18 * mm, 18 * mm, 16 * mm, 25 * mm, 20 * mm, 31 * mm, 31 * mm]), style=TableStyle([
         ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")),
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2F4F7")),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -783,16 +863,12 @@ def generate_credit_bureau_report(
     story.append(Table([[Paragraph(cell, s["tiny"]) for cell in row] for row in outstanding], colWidths=_scale_widths([20 * mm, 34 * mm, 22 * mm, 25 * mm, 25 * mm, 30 * mm, 30 * mm]), style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2F4F7")), ("FONTSIZE", (0, 0), (-1, -1), 6.5)])))
     story.append(Spacer(1, 3 * mm))
     story.append(Paragraph("Aggregated Outstanding Balances for Preceding 5 Months", s["body_bold"]))
-    # No real month-by-month history is simulated, so the preceding months are a
-    # small deterministic decline off the current totals (balances trend down as
-    # they're paid off) -- derived from this case's own totals, not hardcoded.
     bal_trend_rows = []
-    for i in range(1, 5):
-        factor = 1 + 0.006 * i
+    for i, month in enumerate(_bucket_balance_history(accounts, 4), start=1):
         bal_trend_rows.append([Paragraph(c, s["tiny"]) for c in [
             _month_label(enquiry_date, i), "All", "All",
-            _money0(bal_totals["secured"] * factor), _money0(bal_totals["unsecured"] * factor),
-            _money0(bal_totals["interest"] * factor), _money0(bal_totals["exempted"] * factor),
+            _money0(month["secured"]), _money0(month["unsecured"]),
+            _money0(month["interest"]), _money0(month["exempted"]),
         ]])
     story.append(Table(
         bal_trend_rows,
@@ -939,13 +1015,32 @@ def build_persona(case: dict, people: list[dict]) -> dict:
     marital_status = rng.choice(["Single", "Married", "Divorced", "Widowed"])
     score, risk_grade, probability_of_default = SCORE_BANDS[rng.randrange(len(SCORE_BANDS))]
 
+    # Account and default dates follow this applicant's life; previous enquiries come in the
+    # months just before this one.
+    retime = _history_retimer(dob, enquiry_date)
+    enquiry_shift = ((enquiry_date - timedelta(days=60)) - _TEMPLATE_LAST_ENQUIRY).days
+    # The earliest-account date used to be drawn here on its own; it's now the earliest account
+    # in the table (set below). The draws stay so the rest of the report doesn't shift.
     earliest_year = max(dob.year + 18, enquiry_date.year - rng.randint(5, 20))
     if earliest_year >= enquiry_date.year:
         earliest_year = enquiry_date.year - 1
     earliest_credit_account_date = date(earliest_year, rng.randint(1, 12), rng.randint(1, 28))
 
-    return dict(
-        enquiry_number=f"{rng.randint(0, 999_999_999):09d}",
+    # Drawn in the same order as before (enquiry number, limits, accounts) so every
+    # case's seeded values stay put; the limits are then raised to cover the balances.
+    enquiry_number = f"{rng.randint(0, 999_999_999):09d}"
+    secured_credit_limit = SECURED_LIMITS[rng.randrange(len(SECURED_LIMITS))]
+    unsecured_credit_limit = UNSECURED_LIMITS[rng.randrange(len(UNSECURED_LIMITS))]
+    exempted_credit_limit = EXEMPTED_LIMITS[rng.randrange(len(EXEMPTED_LIMITS))]
+    # Same products/narrative text every case (there's no mastersheet source to
+    # vary them from), but the amounts/dates get a small per-case jitter and the
+    # "Bank A"/"Bank B"/"Bank C" placeholders are swapped for 3 real bank names
+    # (also seeded) so 36 cases don't all show byte-identical credit histories.
+    accounts = _jitter_accounts(_pick_accounts(rng), rng, bank_map, retime)
+    _, balances = _bucket_balances(accounts)
+
+    persona = dict(
+        enquiry_number=enquiry_number,
         enquiry_date=enquiry_date,
         reference=f"{id_number}_{enquiry_date:%d%m%y}",
         consumer_name=consumer_name,
@@ -957,9 +1052,11 @@ def build_persona(case: dict, people: list[dict]) -> dict:
         product_type="Self",
         applicant_type="Primary",
         earliest_credit_account_date=earliest_credit_account_date,
-        secured_credit_limit=SECURED_LIMITS[rng.randrange(len(SECURED_LIMITS))],
-        unsecured_credit_limit=UNSECURED_LIMITS[rng.randrange(len(UNSECURED_LIMITS))],
-        exempted_credit_limit=EXEMPTED_LIMITS[rng.randrange(len(EXEMPTED_LIMITS))],
+        secured_credit_limit=_limit_covering(secured_credit_limit, balances["secured"], SECURED_LIMITS, 250_000),
+        unsecured_credit_limit=_limit_covering(
+            unsecured_credit_limit, balances["unsecured"] + balances["interest"], UNSECURED_LIMITS, 5_000
+        ),
+        exempted_credit_limit=exempted_credit_limit,
         debt_management_programme="N",
         id_theft="N",
         surname=surname,
@@ -977,19 +1074,15 @@ def build_persona(case: dict, people: list[dict]) -> dict:
         score=score,
         risk_grade=risk_grade,
         probability_of_default=probability_of_default,
-        # Same products/narrative text every case (there's no mastersheet source to
-        # vary them from), but the amounts/dates get a small per-case jitter and the
-        # "Bank A"/"Bank B"/"Bank C" placeholders are swapped for 3 real bank names
-        # (also seeded) so 36 cases don't all show byte-identical credit histories.
-        accounts=_jitter_accounts(_pick_accounts(rng), rng, bank_map),
-        previous_enquiries=_jitter_enquiries(SAMPLE_PREVIOUS_ENQUIRIES, rng, bank_map),
+        accounts=accounts,
+        previous_enquiries=_jitter_enquiries(SAMPLE_PREVIOUS_ENQUIRIES, rng, bank_map, enquiry_shift),
         # No mastersheet source for a default/bankruptcy/narrative history, and most
         # applicants have none of these -- each is only included for a small, seeded
         # per-case chance (independent rolls, so a case could show any subset of the
         # three) rather than showing the same "Negotiated Settlement" / bankruptcy
         # order / distress narratives on every single case.
         default_records=(
-            _jitter_defaults(SAMPLE_DEFAULT_RECORDS, rng, bank_map) if rng.random() < 0.15 else []
+            _jitter_defaults(SAMPLE_DEFAULT_RECORDS, rng, bank_map, retime) if rng.random() < 0.15 else []
         ),
         bankruptcy_rows=(
             _jitter_bankruptcy(SAMPLE_BANKRUPTCY_ROWS, rng) if rng.random() < 0.08 else []
@@ -998,6 +1091,11 @@ def build_persona(case: dict, people: list[dict]) -> dict:
             _jitter_narratives(SAMPLE_NARRATIVES, rng, bank_map) if rng.random() < 0.15 else []
         ),
     )
+    # The summary's earliest known account is the earliest one the table lists.
+    persona["earliest_credit_account_date"] = min(
+        datetime.strptime(a.date_opened, "%d/%m/%Y").date() for a in persona["accounts"]
+    )
+    return persona
 
 
 def main() -> None:

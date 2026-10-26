@@ -14,7 +14,6 @@ function seedQueue(backend: MockBackend) {
     id: 'case-harbor',
     greenlink_case_id: 'GLDB-1014',
     company_name: 'Harbor Light Shipping Pte Ltd',
-    status: 'documents_extracted',
     documents_status: 'analyzed',
     created_at: '2026-09-01T00:00:00Z',
   });
@@ -22,7 +21,6 @@ function seedQueue(backend: MockBackend) {
     id: 'case-meridian',
     greenlink_case_id: 'GLDB-1067',
     company_name: 'Meridian Warehousing Solutions Pte Ltd',
-    status: 'documents_uploaded',
     documents_status: 'in_progress',
     created_at: '2026-09-02T00:00:00Z',
   });
@@ -37,8 +35,35 @@ function seedQueue(backend: MockBackend) {
   return { harbor, meridian, platinum };
 }
 
-const caseCards = (page: Page) => page.locator('.case-card');
-const searchBox = (page: Page) => page.getByRole('textbox', { name: 'Search case number or applicant' });
+const caseCards = (page: Page) => page.locator('.case-row');
+const searchBox = (page: Page) => page.getByRole('combobox', { name: 'Search case number or company name' });
+const searchOptions = (page: Page) => page.getByRole('listbox').getByRole('option');
+// Enter without picking a suggestion lists every match in the queue (/cases?q=…).
+async function searchQueue(page: Page, query: string) {
+  await searchBox(page).fill(query);
+  await searchBox(page).press('Enter');
+}
+// A header filter stays open while its boxes are ticked. With no filter every box is ticked.
+async function openFilter(page: Page, filter: 'status' | 'risk') {
+  const list = page.getByRole('group', { name: `${filter} filter` });
+  if (!(await list.isVisible())) await page.getByRole('button', { name: new RegExp(`^Filter by ${filter}`) }).click();
+  return list;
+}
+// Ticks or unticks one box.
+async function pick(page: Page, filter: 'status' | 'risk', label: RegExp) {
+  await (await openFilter(page, filter)).getByRole('checkbox', { name: label }).click();
+}
+// Leaves only these ticked, by unticking the rest.
+async function showOnly(page: Page, filter: 'status' | 'risk', ...wanted: RegExp[]) {
+  const boxes = (await openFilter(page, filter)).getByRole('checkbox');
+  for (let i = 0; i < (await boxes.count()); i++) {
+    const name = (await boxes.nth(i).getAttribute('aria-label')) ?? '';
+    if (!wanted.some((pattern) => pattern.test(name))) await boxes.nth(i).uncheck();
+  }
+}
+// The case page shows one section at a time; pick it from the left-hand nav.
+const openSection = (page: Page, label: string) =>
+  page.getByRole('navigation', { name: 'Case sections' }).getByRole('button', { name: new RegExp(`^${label}`, 'i') }).click();
 
 test.describe('View cases @sprint2 @SCRUM-78', () => {
   test('CM-001 cases can be searched by company name or case ID @CM-001', async ({ page, backend }) => {
@@ -46,28 +71,38 @@ test.describe('View cases @sprint2 @SCRUM-78', () => {
     await page.goto('/cases');
     await expect(caseCards(page)).toHaveCount(3);
 
+    // The header search suggests matching cases as you type...
     await searchBox(page).fill('meridian');
-    await expect(caseCards(page)).toHaveCount(1);
-    await expect(caseCards(page)).toContainText(meridian.company_name!);
+    await expect(searchOptions(page).filter({ hasText: meridian.company_name! })).toHaveCount(1);
 
     await searchBox(page).fill(harbor.greenlink_case_id);
+    await expect(searchOptions(page).filter({ hasText: harbor.company_name! })).toHaveCount(1);
+
+    // ...and picking one opens it.
+    await searchOptions(page).filter({ hasText: harbor.company_name! }).click();
+    await expect(page.locator('.case-title')).toContainText(harbor.company_name!);
+
+    // "See all results" filters the queue.
+    await page.goto('/cases');
+    await searchBox(page).fill('meridian');
+    await searchOptions(page).filter({ hasText: /See all/ }).click();
     await expect(caseCards(page)).toHaveCount(1);
-    await expect(caseCards(page)).toContainText(harbor.company_name!);
+    await expect(caseCards(page)).toContainText(meridian.company_name!);
   });
 
   test('CM-002 only cases matching the search are displayed @CM-002', async ({ page, backend }) => {
     seedQueue(backend);
     await page.goto('/cases');
 
-    await searchBox(page).fill('pte ltd');
+    await searchQueue(page, 'pte ltd');
     await expect(caseCards(page)).toHaveCount(3);
 
-    await searchBox(page).fill('fitness');
+    await searchQueue(page, 'fitness');
     await expect(caseCards(page)).toHaveCount(1);
     await expect(caseCards(page)).toContainText('Platinum Fitness Group Pte Ltd');
-    await expect(page.getByText('Assigned to you (1)')).toBeVisible();
+    await expect(page.getByText('Showing 1–1 of 1')).toBeVisible();
 
-    await searchBox(page).fill('GLDB-0000');
+    await searchQueue(page, 'GLDB-0000');
     await expect(caseCards(page)).toHaveCount(0);
     await expect(page.getByText('No case matches "GLDB-0000"')).toBeVisible();
   });
@@ -79,58 +114,303 @@ test.describe('View cases @sprint2 @SCRUM-78', () => {
     await page.getByRole('button', { name: `Open case ${meridian.greenlink_case_id}, ${meridian.company_name}` }).click();
 
     await expect(page).toHaveURL(`/cases/${meridian.greenlink_case_id}`);
-    await expect(page.getByRole('heading', { name: 'Upload supporting documents' })).toBeVisible();
+    // A case opens on its summary dashboard, not on the document list.
+    await expect(page.getByRole('main', { name: 'Case summary dashboard' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Upload supporting documents' })).toHaveCount(0);
   });
 
   test('CM-004 cases can be filtered by case status @CM-004', async ({ page, backend }) => {
     seedQueue(backend);
     await page.goto('/cases');
 
-    // One chip per stage some case is at, in the order a case moves through them.
-    await expect(page.locator('.status-chip')).toHaveText(['Open', 'Documents Uploaded', 'Documents Extracted']);
-
-    await page.locator('.status-chip', { hasText: 'Documents Extracted' }).click();
+    await showOnly(page, 'status', /Ready for review/);
     await expect(caseCards(page)).toHaveCount(1);
     await expect(caseCards(page)).toContainText('Harbor Light Shipping Pte Ltd');
 
-    await page.locator('.status-chip', { hasText: 'Documents Uploaded' }).click();
+    await pick(page, 'status', /In progress/);
     await expect(caseCards(page)).toHaveCount(2);
 
-    await page.locator('.status-chip', { hasText: 'Documents Extracted' }).click();
-    await page.locator('.status-chip', { hasText: 'Documents Uploaded' }).click();
+    // Both unticked again is no filter at all.
+    await pick(page, 'status', /Ready for review/);
+    await pick(page, 'status', /In progress/);
     await expect(caseCards(page)).toHaveCount(3);
   });
 
-  test('CM-004 the Documents Failed chip shows only cases with a failed document @CM-004', async ({ page, backend }) => {
+  test('CM-004 the Documents failed chip shows only cases with a failed document @CM-004', async ({ page, backend }) => {
     seedQueue(backend);
-    backend.cases.push(makeCase({ id: 'case-failed', greenlink_case_id: 'GLDB-1099', company_name: 'Failing Co Pte Ltd', status: 'documents_failed', documents_status: 'failed' }));
+    backend.cases.push(makeCase({ id: 'case-failed', greenlink_case_id: 'GLDB-1099', company_name: 'Failing Co Pte Ltd', documents_status: 'failed' }));
     await page.goto('/cases');
 
-    await page.locator('.status-chip', { hasText: 'Documents Failed' }).click();
+    await showOnly(page, 'status', /Documents failed/);
 
     await expect(caseCards(page)).toHaveCount(1);
     await expect(caseCards(page)).toContainText('Failing Co Pte Ltd');
   });
 
-  test('CM-004 the Processing Stuck chip shows only cases with a stuck document @CM-004', async ({ page, backend }) => {
+  test('CM-004 the Processing stuck chip shows only cases with a stuck document @CM-004', async ({ page, backend }) => {
     seedQueue(backend);
     backend.cases.push(makeCase({ id: 'case-stuck', greenlink_case_id: 'GLDB-1100', company_name: 'Stuck Co Pte Ltd', documents_status: 'stuck' }));
     await page.goto('/cases');
 
-    await page.locator('.status-chip', { hasText: 'Processing Stuck' }).click();
+    await showOnly(page, 'status', /Processing stuck/);
 
     await expect(caseCards(page)).toHaveCount(1);
     await expect(caseCards(page)).toContainText('Stuck Co Pte Ltd');
   });
 
-  test('CM-004 the Open chip shows only cases with no documents yet @CM-004', async ({ page, backend }) => {
+  test('CM-004 the Documents pending chip shows only cases with no documents yet @CM-004', async ({ page, backend }) => {
     const { platinum } = seedQueue(backend);
     await page.goto('/cases');
 
-    await page.locator('.status-chip', { hasText: 'Open' }).click();
+    await showOnly(page, 'status', /Documents pending/);
 
     await expect(caseCards(page)).toHaveCount(1);
     await expect(caseCards(page)).toContainText(platinum.company_name!);
+  });
+});
+
+test.describe('Case queue paging and filters @SCRUM-299', () => {
+  // 45 cases, GLDB-2001 (the oldest) to GLDB-2045: 30 ready for review, 10 failed, 5 in progress.
+  function seedMany(backend: MockBackend) {
+    let n = 0;
+    for (const [documents_status, count] of [['analyzed', 30], ['failed', 10], ['in_progress', 5]] as const) {
+      for (let i = 0; i < count; i++) {
+        n += 1;
+        backend.cases.push(makeCase({
+          id: `case-${n}`,
+          greenlink_case_id: `GLDB-${2000 + n}`,
+          company_name: `Company ${n} Pte Ltd`,
+          documents_status,
+          created_at: new Date(Date.UTC(2026, 8, 1) + n * 60_000).toISOString(),
+          // Every third case is High, the next Low, the rest not assessed.
+          risk: n % 3 === 0 ? makeRisk({ state: 'scored', level: 'High', score: 60 })
+            : n % 3 === 1 ? makeRisk({ state: 'scored', level: 'Low', score: 10 }) : makeRisk(),
+        }));
+      }
+    }
+  }
+
+  const pagination = (page: Page) => page.getByRole('navigation', { name: 'Case pages' });
+  const lastListRequest = (backend: MockBackend) => backend.requestsTo('GET', /^\/cases\?/).at(-1)?.path ?? '';
+
+  test('the queue shows 25 cases a page, newest first, and pages through the rest', async ({ page, backend }) => {
+    seedMany(backend);
+    await page.goto('/cases');
+
+    await expect(caseCards(page)).toHaveCount(25);
+    await expect(pagination(page)).toContainText('of 45');
+    await expect(caseCards(page).first()).toContainText('GLDB-2045');
+    await expect(pagination(page)).toContainText('Showing 1–25 of 45');
+
+    await pagination(page).getByRole('button', { name: /Next/ }).click();
+
+    await expect(page).toHaveURL(/page=2/);
+    await expect(caseCards(page)).toHaveCount(20);
+    await expect(caseCards(page).first()).toContainText('GLDB-2020');
+    await expect(pagination(page)).toContainText('Showing 26–45 of 45');
+    expect(lastListRequest(backend)).toContain('offset=25');
+
+    await pagination(page).getByRole('button', { name: /Previous/ }).click();
+
+    await expect(page).not.toHaveURL(/page=/);
+    await expect(caseCards(page)).toHaveCount(25);
+  });
+
+  test('several status filters at once narrow the total, and the filtered cases are paged', async ({ page, backend }) => {
+    seedMany(backend);
+    await page.goto('/cases');
+    await expect(caseCards(page)).toHaveCount(25);
+
+    await showOnly(page, 'status', /Ready for review/, /Documents failed/);
+
+    // 30 + 10 = 40 cases, so two pages of the filtered list, not of all 45.
+    await expect(pagination(page)).toContainText('of 40');
+    await expect(pagination(page)).toContainText('Showing 1–25 of 40');
+    expect(lastListRequest(backend)).toContain('status=analyzed');
+    expect(lastListRequest(backend)).toContain('status=failed');
+    expect(lastListRequest(backend)).not.toContain('status=in_progress');
+
+    await pagination(page).getByRole('button', { name: /Next/ }).click();
+
+    await expect(caseCards(page)).toHaveCount(15);
+    await expect(pagination(page)).toContainText('Showing 26–40 of 40');
+    expect(lastListRequest(backend)).toContain('offset=25');
+    expect(lastListRequest(backend)).toContain('status=analyzed');
+    expect(lastListRequest(backend)).toContain('status=failed');
+
+    // Every case on that page is one of the two chosen statuses: the five in progress never appear.
+    await expect(page.locator('.case-row-status').filter({ hasText: 'In progress' })).toHaveCount(0);
+
+    await pick(page, 'status', /In progress/);
+
+    await expect(pagination(page)).toContainText('of 45');
+  });
+
+  test('changing a filter while on a later page goes back to the first page', async ({ page, backend }) => {
+    seedMany(backend);
+    await page.goto('/cases?page=2');
+    await expect(caseCards(page)).toHaveCount(20);
+
+    await showOnly(page, 'status', /Documents failed/);
+
+    await expect(page).not.toHaveURL(/page=/);
+    await expect(pagination(page)).toContainText('of 10');
+    await expect(caseCards(page)).toHaveCount(10);
+    await expect(pagination(page)).toContainText('Showing 1–10 of 10');
+    await expect(pagination(page).getByRole('button', { name: /Next/ })).toHaveCount(0);
+  });
+
+  test('several risk levels at once narrow the total, and combine with a status filter', async ({ page, backend }) => {
+    seedMany(backend);
+    await page.goto('/cases');
+    await expect(caseCards(page)).toHaveCount(25);
+
+    await showOnly(page, 'risk', /^High$/, /^Low$/);
+
+    // 15 High + 15 Low = 30 cases: two pages of the filtered list.
+    await expect(pagination(page)).toContainText('of 30');
+    await expect(pagination(page)).toContainText('Showing 1–25 of 30');
+    expect(lastListRequest(backend)).toContain('risk=High');
+    expect(lastListRequest(backend)).toContain('risk=Low');
+    expect(lastListRequest(backend)).not.toContain('risk=unscored');
+
+    await pagination(page).getByRole('button', { name: /Next/ }).click();
+
+    await expect(caseCards(page)).toHaveCount(5);
+    expect(lastListRequest(backend)).toContain('offset=25');
+    expect(lastListRequest(backend)).toContain('risk=High');
+
+    await showOnly(page, 'status', /Documents failed/);
+
+    // The ten failed cases are 31-40: High is 33, 36, 39 and Low is 31, 34, 37, 40.
+    await expect(pagination(page)).toContainText('of 7');
+    await expect(caseCards(page)).toHaveCount(7);
+    expect(lastListRequest(backend)).toContain('status=failed');
+    expect(lastListRequest(backend)).toContain('risk=High');
+    expect(lastListRequest(backend)).not.toContain('offset=25');
+  });
+
+  test('the Risk and Created headers sort, each click reversing the last', async ({ page, backend }) => {
+    seedMany(backend);
+    await page.goto('/cases');
+    await expect(caseCards(page).first()).toContainText('GLDB-2045');
+
+    await page.getByRole('button', { name: /^Sort by created/ }).click();
+
+    await expect(caseCards(page).first()).toContainText('GLDB-2001');
+    expect(lastListRequest(backend)).toContain('sort=oldest');
+
+    await page.getByRole('button', { name: /^Sort by risk/ }).click();
+
+    // High first, newest first among the High ones: 45 is the newest case, and 45 % 3 is 0.
+    await expect(caseCards(page).first()).toContainText('GLDB-2045');
+    await expect(caseCards(page).first()).toContainText('High');
+    expect(lastListRequest(backend)).toContain('sort=risk');
+
+    await page.getByRole('button', { name: /^Sort by risk/ }).click();
+
+    await expect(page.getByRole('button', { name: 'Sort by risk (low to high)' })).toBeVisible();
+    expect(lastListRequest(backend)).toContain('sort=lowest_risk');
+    await expect(caseCards(page).first()).toContainText('Not assessed');
+  });
+
+  test('the account menu holds sign out', async ({ page, backend }) => {
+    seedMany(backend);
+    await page.goto('/cases');
+    await expect(page.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Account menu' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Sign out' })).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menuitem', { name: 'Sign out' })).toHaveCount(0);
+  });
+
+  test('the status filter counts stay the whole queue while a filter is on', async ({ page, backend }) => {
+    seedMany(backend);
+    await page.goto('/cases');
+    await showOnly(page, 'status', /Documents failed/);
+
+    await expect(pagination(page)).toContainText('of 10');
+    await expect(page.getByRole('group', { name: 'status filter' }).locator('label', { hasText: /Ready for review/ })).toContainText('30');
+  });
+
+  test('a page past the end falls back to the last page', async ({ page, backend }) => {
+    seedMany(backend);
+    await page.goto('/cases?page=9');
+
+    await expect(page).toHaveURL(/page=2/);
+    await expect(caseCards(page)).toHaveCount(20);
+  });
+});
+
+test.describe('Case page layout @SCRUM-299', () => {
+  const sectionNav = (page: Page) => page.getByRole('navigation', { name: 'Case sections' });
+
+  test('a case opens on the summary, under a header that stays in view', async ({ page, backend }) => {
+    const theCase = makeCase({ id: 'case-layout', greenlink_case_id: 'GLDB-3001', company_name: 'Layout Co Pte Ltd' });
+    backend.cases.push(theCase);
+    await page.goto('/cases/GLDB-3001');
+
+    await expect(sectionNav(page).getByRole('button', { name: /^Case Summary/ })).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByRole('main', { name: 'Case summary dashboard' })).toBeVisible();
+    await expect(page.locator('.case-header')).toHaveCSS('position', 'sticky');
+  });
+
+  test('opening a case from the queue shows its header at once, without waiting for the lookup', async ({ page, backend }) => {
+    const meridian = makeCase({ id: 'case-fast', greenlink_case_id: 'GLDB-3010', company_name: 'Fast Open Pte Ltd' });
+    backend.cases.push(meridian);
+    await page.goto('/cases');
+    await expect(caseCards(page)).toHaveCount(1);
+    // The server's answer takes three seconds; the page must not wait for it.
+    await page.route('**/cases/by-number/**', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await route.fallback();
+    });
+
+    await page.getByRole('button', { name: `Open case ${meridian.greenlink_case_id}, ${meridian.company_name}` }).click();
+
+    await expect(page.getByRole('heading', { name: 'Fast Open Pte Ltd' })).toBeVisible({ timeout: 1500 });
+    await expect(sectionNav(page).getByRole('button', { name: /^Case Summary/ })).toBeVisible();
+  });
+
+  test('the section menu collapses to its icons, and stays collapsed after a reload', async ({ page, backend }) => {
+    backend.cases.push(makeCase({ id: 'case-nav', greenlink_case_id: 'GLDB-3002', company_name: 'Nav Co Pte Ltd' }));
+    await page.goto('/cases/GLDB-3002');
+    await expect(sectionNav(page).getByText('Case Analysis')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Collapse menu' }).click();
+
+    await expect(sectionNav(page).getByText('Case Analysis')).toBeHidden();
+    // Still reachable by name, and still works.
+    await sectionNav(page).getByRole('button', { name: /^Documents/ }).click();
+    await expect(page.getByRole('heading', { name: 'Upload supporting documents' })).toBeVisible();
+
+    await page.reload();
+
+    await expect(page.getByRole('button', { name: 'Expand menu' })).toBeVisible();
+    await page.getByRole('button', { name: 'Expand menu' }).click();
+    await expect(sectionNav(page).getByText('Case Analysis')).toBeVisible();
+  });
+
+  test('the summary shows how long each stage took, from the recorded runs', async ({ page, backend }) => {
+    backend.cases.push(makeCase({ id: 'case-time', greenlink_case_id: 'GLDB-3003', company_name: 'Timing Co Pte Ltd' }));
+    const when = '2026-09-01T00:00:00Z';
+    backend.timings['case-time'] = [
+      { type: 'document.analyzed', document_id: 'd1', occurred_at: when, duration_ms: 4000 },
+      { type: 'document.analyzed', document_id: 'd2', occurred_at: when, duration_ms: 8000 },
+      { type: 'case.analysis.completed', document_id: null, occurred_at: when, duration_ms: 125000 },
+    ];
+    await page.goto('/cases/GLDB-3003');
+
+    const stage = (name: string) => page.locator('.case-overview-timing .case-overview-timing-values > div', { hasText: name });
+    await expect(stage('Classify + extract')).toContainText('6.0s');
+    await expect(stage('Classify + extract')).toContainText('average of 2 documents');
+    await expect(stage('Case analysis')).toContainText('2m 05s');
+    // Nothing recorded for detection yet.
+    await expect(stage('Fraud detection')).toContainText('—');
+    // The mock reports no spend, and the summary shows that rather than leaving the card blank.
+    await expect(page.locator('.case-overview-cost')).toContainText('$0.0000');
   });
 });
 
@@ -141,9 +421,22 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
 
     await page.getByRole('button', { name: `Open case ${harbor.greenlink_case_id}, ${harbor.company_name}` }).click();
 
-    await expect(page.locator('.eyebrow')).toContainText(`Case #${harbor.greenlink_case_id}`);
-    await expect(page.locator('.eyebrow')).toContainText(harbor.company_name!);
-    await expect(page.getByRole('button', { name: '← Back to case queue' })).toBeVisible();
+    await expect(page.locator('.case-title')).toContainText(harbor.company_name!);
+    const breadcrumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
+    await expect(breadcrumbs).toContainText(harbor.greenlink_case_id);
+    await expect(breadcrumbs.getByRole('link', { name: 'Case Queue' })).toBeVisible();
+  });
+
+  test('selecting a case from the breadcrumb dropdown opens its summary @CM-005', async ({ page, backend }) => {
+    const { harbor } = seedQueue(backend);
+    await page.goto(`/cases/${harbor.greenlink_case_id}?section=documents`);
+
+    const breadcrumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
+    await breadcrumbs.getByRole('button', { name: new RegExp(`${harbor.greenlink_case_id}: switch case`) }).click();
+    await page.getByRole('menuitem', { name: harbor.company_name! }).click();
+
+    await expect(page.getByRole('main', { name: 'Case summary dashboard' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Case sections' }).getByRole('button', { name: /^Case Summary/i })).toHaveAttribute('aria-current', 'page');
   });
 
   test('CM-006 case details show only the selected case\'s information @CM-006', async ({ page, backend }) => {
@@ -153,10 +446,10 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
       makeDocument({ case_id: meridian.id, filename: 'C067_NOA.pdf', status: 'analyzed' }),
     );
 
-    await page.goto(`/cases/${harbor.greenlink_case_id}`);
+    await page.goto(`/cases/${harbor.greenlink_case_id}?section=documents`);
 
-    await expect(page.locator('.eyebrow')).toContainText(harbor.company_name!);
-    await expect(page.locator('.eyebrow')).not.toContainText(meridian.company_name!);
+    await expect(page.locator('.case-title')).toContainText(harbor.company_name!);
+    await expect(page.locator('.case-title')).not.toContainText(meridian.company_name!);
     const table = page.locator('.documents-table');
     await expect(table.getByText('C014_CertIncumbency.pdf')).toBeVisible();
     await expect(page.getByText('C067_NOA.pdf')).toHaveCount(0);
@@ -164,7 +457,8 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
 
   test('CM-007 the customer risk summary is accessible from case details @CM-007', async ({ page, backend }) => {
     const { harbor } = seedQueue(backend);
-    await page.goto(`/cases/${harbor.greenlink_case_id}`);
+    await page.goto(`/cases/${harbor.greenlink_case_id}?section=documents`);
+    await openSection(page, 'Risk summary');
 
     const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
     await expect(section).toBeVisible();
@@ -178,7 +472,8 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
       risk: makeRisk({ state: 'pending', documents_scanned: 2, documents_total: 3 }),
     });
     backend.cases.push(harbor);
-    await page.goto(`/cases/${harbor.greenlink_case_id}`);
+    await page.goto(`/cases/${harbor.greenlink_case_id}?section=documents`);
+    await openSection(page, 'Risk summary');
 
     const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
     await expect(section).toContainText('2 of 3 documents scanned.');
@@ -245,7 +540,8 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
       }),
     });
     backend.cases.push(harbor);
-    await page.goto(`/cases/${harbor.greenlink_case_id}`);
+    await page.goto(`/cases/${harbor.greenlink_case_id}?section=documents`);
+    await openSection(page, 'Risk summary');
 
     const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
     await expect(section.locator('.risk-badge')).toHaveText('High risk');
@@ -301,8 +597,9 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
       }),
     );
 
-    await page.goto(`/cases/${harbor.greenlink_case_id}`);
+    await page.goto(`/cases/${harbor.greenlink_case_id}?section=documents`);
 
+    // Flagged items sit under the extracted files on the Documents tab.
     const flagged = page.locator('.summary-card', {
       has: page.getByRole('heading', { name: 'Flagged Items for Manual Review' }),
     });
@@ -316,7 +613,8 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
 
   test('CM-009 the case audit trail is accessible from case details @CM-009', async ({ page, backend }) => {
     const { harbor } = seedQueue(backend);
-    await page.goto(`/cases/${harbor.greenlink_case_id}`);
+    await page.goto(`/cases/${harbor.greenlink_case_id}?section=documents`);
+    await openSection(page, 'Audit trail');
 
     const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Case Audit Trail' }) });
     await expect(section).toBeVisible();
@@ -326,7 +624,8 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
 
   test('a case with nothing needing further evidence recommends no documents', async ({ page, backend }) => {
     const { harbor } = seedQueue(backend);
-    await page.goto(`/cases/${harbor.greenlink_case_id}`);
+    await page.goto(`/cases/${harbor.greenlink_case_id}?section=documents`);
+    await openSection(page, 'Additional documents');
 
     const section = page.locator('.summary-card', {
       has: page.getByRole('heading', { name: 'Additional Documents' }),
@@ -358,7 +657,8 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
       },
     });
     backend.cases.push(harbor);
-    await page.goto(`/cases/${harbor.greenlink_case_id}`);
+    await page.goto(`/cases/${harbor.greenlink_case_id}?section=documents`);
+    await openSection(page, 'Additional documents');
 
     const section = page.locator('.summary-card', {
       has: page.getByRole('heading', { name: 'Additional Documents' }),
@@ -434,7 +734,8 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
       ],
     });
     backend.cases.push(harbor);
-    await page.goto(`/cases/${harbor.greenlink_case_id}`);
+    await page.goto(`/cases/${harbor.greenlink_case_id}?section=documents`);
+    await openSection(page, 'Additional documents');
 
     const section = page.locator('.summary-card', {
       has: page.getByRole('heading', { name: 'Additional Documents' }),
@@ -458,10 +759,10 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
 
 test.describe('Create case @sprint2 @SCRUM-96', () => {
   async function createCase(page: Page, companyName: string) {
-    await page.goto('/cases');
-    await page.getByRole('button', { name: '+ Create new case' }).click();
+    // The queue's New case button is hidden for now, so the form is opened by its address.
+    await page.goto('/create-case');
     await expect(page.getByRole('heading', { name: 'Create Case' })).toBeVisible();
-    await page.getByLabel(/company name/i).fill(companyName);
+    await page.getByLabel(/^company name/i).fill(companyName);
     await page.getByRole('button', { name: 'Create Case' }).click();
     await expect(page).toHaveURL('/cases');
   }
@@ -491,7 +792,7 @@ test.describe('Create case @sprint2 @SCRUM-96', () => {
     seedQueue(backend);
     await page.goto('/create-case');
 
-    const input = page.getByLabel(/company name/i);
+    const input = page.getByLabel(/^company name/i);
     await input.pressSequentially('A'.repeat(101));
 
     await expect(input).toHaveValue('A'.repeat(100));
@@ -516,7 +817,7 @@ test.describe('Create case @sprint2 @SCRUM-96', () => {
 
     const newCard = caseCards(page).filter({ hasText: 'Ironclad Security Services Pte Ltd' });
     await expect(newCard).toHaveCount(1);
-    const newId = (await newCard.locator('.case-id').innerText()).trim();
+    const newId = (await newCard.locator('.case-row-id').innerText()).trim();
     expect(newId).toMatch(/^GLDB-\d+$/);
     expect(existing).not.toContain(newId);
   });
@@ -525,11 +826,11 @@ test.describe('Create case @sprint2 @SCRUM-96', () => {
     seedQueue(backend);
 
     await createCase(page, 'Ironclad Security Services Pte Ltd');
-    await caseCards(page).filter({ hasText: 'Ironclad Security Services Pte Ltd' }).locator('.case-card-open').click();
+    await caseCards(page).filter({ hasText: 'Ironclad Security Services Pte Ltd' }).locator('.case-row-open').click();
 
-    await expect(page.locator('.eyebrow')).toContainText('Ironclad Security Services Pte Ltd');
+    await expect(page.locator('.case-title')).toContainText('Ironclad Security Services Pte Ltd');
     await page.reload();
-    await expect(page.locator('.eyebrow')).toContainText('Ironclad Security Services Pte Ltd');
+    await expect(page.locator('.case-title')).toContainText('Ironclad Security Services Pte Ltd');
   });
 
   test('CM-013 a newly created case appears in the queue and can be found by its case ID @CM-013', async ({ page, backend }) => {
@@ -539,8 +840,7 @@ test.describe('Create case @sprint2 @SCRUM-96', () => {
 
     const created = backend.cases.find((c) => c.company_name === 'Ironclad Security Services Pte Ltd')!;
     await searchBox(page).fill(created.greenlink_case_id);
-    await expect(caseCards(page)).toHaveCount(1);
-    await expect(caseCards(page)).toContainText('Ironclad Security Services Pte Ltd');
+    await expect(searchOptions(page).filter({ hasText: created.greenlink_case_id })).toContainText('Ironclad Security Services Pte Ltd');
   });
 });
 
@@ -562,12 +862,12 @@ function seedIronclad(backend: MockBackend) {
 }
 
 const NEW_NAME = 'IRONCLAD SECURITY SERVICES PTE LTD';
-const caseHeader = (page: Page) => page.locator('.eyebrow');
+const caseHeader = (page: Page) => page.locator('.case-title');
 const companyNameInput = (page: Page) => page.locator('#case-company-name');
 const saveCase = (page: Page) => page.getByRole('button', { name: 'Save', exact: true }).click();
 
 async function openEditMode(page: Page, caseId: string) {
-  await page.goto(`/cases/${caseId}`);
+  await page.goto(`/cases/${caseId}?section=documents`);
   await page.getByRole('button', { name: 'Case actions' }).click();
   await page.getByRole('menuitem', { name: 'Edit case details' }).click();
 }
@@ -616,7 +916,7 @@ test.describe('Update case @sprint3 @SCRUM-116', () => {
 
     await renameCase(page, ironclad.greenlink_case_id, NEW_NAME);
     await expect(caseHeader(page)).toContainText(NEW_NAME);
-    await page.getByRole('button', { name: '← Back to case queue' }).click();
+    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Case Queue' }).click();
 
     await expect(caseCards(page).filter({ hasText: 'GLDB-01' })).toContainText(NEW_NAME);
   });
@@ -626,7 +926,7 @@ test.describe('Update case @sprint3 @SCRUM-116', () => {
 
     await renameCase(page, ironclad.greenlink_case_id, NEW_NAME);
     await expect(caseHeader(page)).toContainText(NEW_NAME);
-    await page.getByRole('button', { name: '← Back to case queue' }).click();
+    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Case Queue' }).click();
     await page.getByRole('button', { name: `Open case GLDB-01, ${NEW_NAME}` }).click();
 
     await expect(caseHeader(page)).toContainText(NEW_NAME);
@@ -648,13 +948,37 @@ test.describe('Update case @sprint3 @SCRUM-116', () => {
       await signIn();
       await renameCase(page, ironclad.greenlink_case_id, NEW_NAME);
       await expect(caseHeader(page)).toContainText(NEW_NAME);
-      await page.getByRole('button', { name: 'Sign out' }).click();
+      await page.getByRole('button', { name: 'Account menu' }).click();
+      await page.getByRole('menuitem', { name: 'Sign out' }).click();
       await expect(page).toHaveURL(/\/login/);
       await signIn();
-      await page.goto(`/cases/${ironclad.greenlink_case_id}`);
+      await page.goto(`/cases/${ironclad.greenlink_case_id}?section=documents`);
 
       await expect(caseHeader(page)).toContainText(NEW_NAME);
     });
+  });
+
+  test.describe('who is signed in', () => {
+    test.use({ loggedIn: false });
+
+    for (const [username, shown] of [
+      ['greenlink-tester', 'Loan Officer · J. Tan'],
+      ['demo', 'Loan Officer · K. Lim'],
+      ['bob', 'Loan Officer · B. Smith'],
+      ['carol', 'Loan Officer · C. Wong'],
+      ['someone-new', 'Loan Officer · someone-new'],
+    ] as const) {
+      test(`the header names ${username} as "${shown}"`, async ({ page, backend }) => {
+        backend.credentials = { username, password: 'pw' };
+        await page.goto('/login');
+        await page.getByLabel('Username').fill(username);
+        await page.getByLabel('Password').fill('pw');
+        await page.getByRole('button', { name: /Sign in/ }).click();
+
+        await expect(page).toHaveURL('/cases');
+        await expect(page.locator('.officer-tag')).toContainText(shown);
+      });
+    }
   });
 
   for (const [id, value] of [['CM-020', ''], ['CM-021', '   ']] as const) {
@@ -735,7 +1059,7 @@ test.describe('Delete case and documents @sprint3 @SCRUM-117', () => {
     await expect(dialog).toContainText('C035_NOA.pdf');
     await dialog.getByRole('button', { name: 'Delete' }).click();
 
-    await expect(page).toHaveURL(`/cases/${theCase.greenlink_case_id}`);
+    await expect(page).toHaveURL(`/cases/${theCase.greenlink_case_id}?section=documents`);
     expect(backend.requestsTo('DELETE', `/documents/${noa.id}`)).toHaveLength(1);
     await expect(page.getByText('C035_NOA.pdf')).toHaveCount(0);
     await page.goto(documentUrl);
@@ -746,7 +1070,7 @@ test.describe('Delete case and documents @sprint3 @SCRUM-117', () => {
   test('CM-025 a case is deleted after confirming, and its link then shows the case not-found page @CM-025', async ({ page, backend }) => {
     const { theCase } = seedScrum117(backend);
     seedQueue(backend);
-    await page.goto(`/cases/${theCase.greenlink_case_id}`);
+    await page.goto(`/cases/${theCase.greenlink_case_id}?section=documents`);
 
     await page.getByRole('button', { name: 'Case actions' }).click();
     await page.getByRole('menuitem', { name: 'Delete case' }).click();
@@ -757,7 +1081,7 @@ test.describe('Delete case and documents @sprint3 @SCRUM-117', () => {
     await expect(page).toHaveURL('/cases');
     await expect(caseCards(page).filter({ hasText: 'scrum-117 test' })).toHaveCount(0);
     expect(backend.requestsTo('DELETE', `/cases/${theCase.id}`)).toHaveLength(1);
-    await page.goto(`/cases/${theCase.greenlink_case_id}`);
+    await page.goto(`/cases/${theCase.greenlink_case_id}?section=documents`);
     await expect(page.getByRole('heading', { name: "We couldn't find that case" })).toBeVisible();
     await page.getByRole('button', { name: 'Go to case queue' }).click();
     await expect(page).toHaveURL('/cases');
@@ -766,7 +1090,7 @@ test.describe('Delete case and documents @sprint3 @SCRUM-117', () => {
   test('CM-029 a document link into a deleted case shows the not-found page @CM-029', async ({ page, backend }) => {
     const { theCase, documentUrl } = seedScrum117(backend);
     seedQueue(backend);
-    await page.goto(`/cases/${theCase.greenlink_case_id}`);
+    await page.goto(`/cases/${theCase.greenlink_case_id}?section=documents`);
 
     await page.getByRole('button', { name: 'Case actions' }).click();
     await page.getByRole('menuitem', { name: 'Delete case' }).click();
@@ -781,8 +1105,8 @@ test.describe('Delete case and documents @sprint3 @SCRUM-117', () => {
 
   test('CM-026 deleting the document that fulfilled a requirement reverts the checklist @CM-026', async ({ page, backend }) => {
     const { theCase, documentUrl } = seedScrum117(backend);
-    await page.goto(`/cases/${theCase.greenlink_case_id}`);
-    const noaRequirement = page.locator('.requirement-row').filter({ hasText: /^NOA/ });
+    await page.goto(`/cases/${theCase.greenlink_case_id}?section=documents`);
+    const noaRequirement = page.locator('.requirement-row').filter({ hasText: /^Notice of Assessment/ });
     await expect(noaRequirement).toHaveClass(/fulfilled/);
 
     await page.goto(documentUrl);
@@ -791,7 +1115,7 @@ test.describe('Delete case and documents @sprint3 @SCRUM-117', () => {
     await deleteDocument(page);
     await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
 
-    await expect(page).toHaveURL(`/cases/${theCase.greenlink_case_id}`);
+    await expect(page).toHaveURL(`/cases/${theCase.greenlink_case_id}?section=documents`);
     await expect(noaRequirement).not.toHaveClass(/fulfilled/);
   });
 
@@ -814,7 +1138,7 @@ test.describe('Delete case and documents @sprint3 @SCRUM-117', () => {
     await expect(page.getByRole('alertdialog')).toHaveCount(0);
     await expect(page).toHaveURL(documentUrl);
 
-    await page.goto(`/cases/${theCase.greenlink_case_id}`);
+    await page.goto(`/cases/${theCase.greenlink_case_id}?section=documents`);
     await page.getByRole('button', { name: 'Case actions' }).click();
     await page.getByRole('menuitem', { name: 'Delete case' }).click();
     await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel' }).click();

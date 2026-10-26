@@ -133,6 +133,19 @@ def test_semi_transparent_fill_does_not_hide_text() -> None:
     assert "8,193.27" in extract_pdf(_pdf(build))["text"]
 
 
+def test_cell_wrapped_onto_two_lines_is_not_glued_on_a_covered_page() -> None:
+    # One text object holding both lines of a wrapped table header; read from
+    # its visible runs, the lines used to join into "Original Amt atload Date".
+    def build(page):
+        _cover_up(page)
+        page.insert_text((60, 140), ["Original Amt at", "load Date"], fontsize=11)
+    result = extract_pdf(_pdf(build))
+    assert "atload" not in result["text"]
+    texts = [element["text"] for element in result["pages"][0]["elements"]]
+    assert "Original Amt at" in texts
+    assert "load Date" in texts
+
+
 def test_text_drawn_over_text_is_two_lines_not_interleaved() -> None:
     # Without a cover both values are visible; pymupdf's sorted text would
     # read "NETNET PAY:PAY: SGDSGD 9,000.008,193.27".

@@ -11,9 +11,9 @@ export function LangGraphTracePanel({
   refreshLangGraphTrace: () => void | Promise<void>;
 }) {
   return (
-        <section className="details-card" style={{ fontFamily: 'monospace', fontSize: '0.85em', position: 'relative' }}>
+        <section className="details-card debug-card">
           <RefreshButton isRefreshing={isRefreshingTrace} onClick={() => void refreshLangGraphTrace()} label="langgraph trace" />
-          <h2 style={{ marginTop: 0 }}>LangGraph trace (debug)</h2>
+          <h2>LangGraph trace (debug)</h2>
           {!langGraphTrace ? (
             <p>No langgraph trace yet for this document (not processed via langgraph in this backend process, or not started yet).</p>
           ) : (
@@ -27,9 +27,9 @@ export function LangGraphTracePanel({
                 classification_reasoning (debug only — not saved to the database yet):{' '}
                 {String(langGraphTrace.classification_reasoning ?? '—')}
               </div>
-              <details style={{ marginTop: '0.5em' }}>
+              <details className="debug-section">
                 <summary>Full step log ({langGraphTrace.steps.length} steps)</summary>
-                <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                <pre className="debug-json">
                   {JSON.stringify(langGraphTrace.steps, null, 2)}
                 </pre>
               </details>

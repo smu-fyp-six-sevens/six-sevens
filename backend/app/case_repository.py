@@ -3,10 +3,11 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from .config import settings
-from .models import CaseRecord, CaseStageChange
+from postgrest import CountMethod
+
+from .models import AdditionalDocuments, CaseRecord
 from .supabase_client import service_supabase_client, supabase_client
-from .supabase_rows import row as _row
+from .supabase_rows import fetch_all, row as _row
 
 
 def create_case(company_name: str | None = None) -> CaseRecord:
@@ -15,11 +16,6 @@ def create_case(company_name: str | None = None) -> CaseRecord:
     # greenlink_case_id is intentionally omitted — it's assigned by a DB
     # trigger (`set_greenlink_case_id`, which skips an id already taken) and
     # comes back populated in the inserted row's representation below.
-    # dev is driven by which process created it (see settings.DEPLOYMENT_ENV
-    # / IS_CLOUD_DEPLOYMENT), never set by the caller or flipped by hand —
-    # cloud always creates real (dev=False) cases, everything else creates
-    # dev=True ones, so local/test data never needs manual cleanup to stay
-    # out of the cloud demo's queue.
     row = {
         "id": str(uuid.uuid4()),
         "company_name": company_name,
@@ -28,7 +24,6 @@ def create_case(company_name: str | None = None) -> CaseRecord:
         "recommended_additional_documents": [],
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
-        "dev": not settings.IS_CLOUD_DEPLOYMENT,
     }
 
     result = supabase_client.table("cases").insert(row).execute()
@@ -43,12 +38,67 @@ def get_case(case_id: str) -> CaseRecord | None:
     return CaseRecord(**_row(result.data[0]))
 
 
-def list_cases(*, include_dev: bool = True) -> list[CaseRecord]:
-    query = supabase_client.table("cases").select("*")
-    if not include_dev:
-        query = query.eq("dev", False)
-    result = query.execute()
-    return [CaseRecord(**_row(row)) for row in result.data]
+def get_case_by_number(number: str) -> CaseRecord | None:
+    """By the number officers see (GLDB-137); the id also works, for a case that has no number."""
+    for column in ("greenlink_case_id", "id"):
+        result = supabase_client.table("cases").select("*").eq(column, number).limit(1).execute()
+        if result.data:
+            return CaseRecord(**_row(result.data[0]))
+    return None
+
+
+def _quoted(value: str) -> str:
+    """A value inside a PostgREST filter list, double-quoted so commas and brackets in it aren't read as syntax."""
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _matching(pattern: str) -> str:
+    """The case number or the company name matches the pattern (* is the wildcard; ilike ignores case)."""
+    quoted = _quoted(pattern)
+    return f"company_name.ilike.{quoted},greenlink_case_id.ilike.{quoted}"
+
+
+def list_cases_page(q: str | None, *, newest: bool, limit: int, offset: int) -> tuple[list[CaseRecord], int]:
+    """One page of cases by creation date, and how many cases match in all. `q` is a part of a number or name."""
+    query = supabase_client.table("cases").select("*", count=CountMethod.exact)
+    if q:
+        query = query.or_(_matching(f"*{q}*"))
+    result = query.order("created_at", desc=newest).order("id").range(offset, offset + limit - 1).execute()
+    return [CaseRecord(**_row(item)) for item in result.data], result.count or 0
+
+
+def list_matching_cases(q: str | None) -> list[CaseRecord]:
+    """Every matching case, newest first. Only for what the database can't sort or filter itself (status, risk)."""
+
+    def build():
+        query = supabase_client.table("cases").select("*")
+        return query.or_(_matching(f"*{q}*")) if q else query
+
+    cases = [CaseRecord(**item) for item in fetch_all(build, "id")]
+    return sorted(cases, key=lambda case: case.created_at, reverse=True)
+
+
+def list_case_ids() -> list[str]:
+    return [item["id"] for item in fetch_all(lambda: supabase_client.table("cases").select("id"), "id")]
+
+
+def find_cases_starting_with(q: str, limit: int) -> list[CaseRecord]:
+    """Newest first: the cases whose number or name begins with q."""
+    result = (
+        supabase_client.table("cases").select("*").or_(_matching(f"{q}*"))
+        .order("created_at", desc=True).order("id").limit(limit).execute()
+    )
+    return [CaseRecord(**_row(item)) for item in result.data]
+
+
+def find_case_numbered(q: str) -> CaseRecord | None:
+    """The case whose number (or id) is exactly q, ignoring case."""
+    quoted = _quoted(q)
+    result = (
+        supabase_client.table("cases").select("*")
+        .or_(f"greenlink_case_id.ilike.{quoted},id.eq.{quoted}").limit(1).execute()
+    )
+    return CaseRecord(**_row(result.data[0])) if result.data else None
 
 
 def update_case(case_id: str, company_name: str) -> CaseRecord | None:
@@ -70,7 +120,7 @@ def update_case(case_id: str, company_name: str) -> CaseRecord | None:
 
 def delete_case(case_id: str) -> None:
     """
-    Removes the case's analysis runs, saved risk history, flags and stage history, and then its row. Callers delete
+    Removes the case's analysis runs, saved risk history, flags and notes, and then its row. Callers delete
     its documents first. These are historical per-analysis rows, but a foreign key can prevent
     deleting the case until they are removed.
 
@@ -79,11 +129,17 @@ def delete_case(case_id: str) -> None:
     still there.
     """
     client = service_supabase_client()
-    for table in ("risk_scores", "case_analysis_runs", "flags", "case_status_history"):
+    for table in ("risk_scores", "case_analysis_runs", "flags", "case_notes"):
         client.table(table).delete().eq("case_id", case_id).execute()
     result = client.table("cases").delete().eq("id", case_id).execute()
     if not result.data:
         raise RuntimeError(f"Case {case_id} was not deleted")
+
+
+def set_recommended_additional_documents(case_id: str, additional: AdditionalDocuments | None) -> None:
+    """Stores the latest complete analysis's whole list of documents to request on the case (jsonb); [] clears it."""
+    value = additional.model_dump(mode="json") if additional else []
+    supabase_client.table("cases").update({"recommended_additional_documents": value}).eq("id", case_id).execute()
 
 
 def set_submission_finalized(case_id: str, finalized: bool) -> None:
@@ -99,44 +155,3 @@ def set_submission_finalized(case_id: str, finalized: bool) -> None:
         "finalized_at": datetime.now(timezone.utc).isoformat() if finalized else None,
     }
     supabase_client.table("cases").update(update).eq("id", case_id).execute()
-
-
-def set_status(case_id: str, expected: str, status: str) -> bool:
-    """
-    Moves the case to a new stage only if it is still at `expected` — a
-    compare-and-swap, so two processes syncing the same case can't both
-    record the same change. Returns whether this call made the change.
-    """
-    result = (
-        supabase_client.table("cases")
-        .update({"status": status})
-        .eq("id", case_id)
-        .eq("status", expected)
-        .execute()
-    )
-    return bool(result.data)
-
-
-def add_status_change(case_id: str, from_status: str | None, to_status: str, changed_by: str) -> CaseStageChange:
-    row = {
-        "id": str(uuid.uuid4()),
-        "case_id": case_id,
-        "from_status": from_status,
-        "to_status": to_status,
-        "changed_by": changed_by,
-        "changed_at": datetime.now(timezone.utc).isoformat(),
-    }
-    result = supabase_client.table("case_status_history").insert(row).execute()
-    return CaseStageChange(**_row(result.data[0]))
-
-
-def list_status_history(case_id: str) -> list[CaseStageChange]:
-    """Every stage change of the case, oldest first."""
-    result = (
-        supabase_client.table("case_status_history")
-        .select("*")
-        .eq("case_id", case_id)
-        .order("changed_at")
-        .execute()
-    )
-    return [CaseStageChange(**_row(row)) for row in result.data]

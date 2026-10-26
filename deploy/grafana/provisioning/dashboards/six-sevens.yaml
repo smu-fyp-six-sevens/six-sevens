@@ -1,0 +1,11 @@
+# The dashboards in deploy/grafana/dashboards. Edits made in Grafana last until the instance stops: export the
+# JSON (Share → Export) into that folder to keep them.
+apiVersion: 1
+
+providers:
+  - name: six-sevens
+    folder: Six Sevens
+    type: file
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

@@ -70,9 +70,7 @@ select = ["E4", "E7", "E9", "F", "PGH003", "PGH004"]
 
 [tool.coverage.run]
 omit = [
-  # Dev-only synthetic fraud-injection tool, deliberately not unit-tested
-  # (see tests/conftest.py's collect_ignore) — omit so it doesn't show as a
-  # 0% coverage gap.
+  # Dev-only synthetic fraud-injection tool, not shipped and not unit-tested: omit so it isn't a 0% gap.
   "app/injection/*",
   "app/routers/injection.py",
 ]

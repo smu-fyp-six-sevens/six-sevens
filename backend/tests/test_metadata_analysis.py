@@ -500,3 +500,16 @@ def test_multiple_anomalies_all_reported_together() -> None:
     fields = {a.field for a in result.anomalies}
     assert fields == {"author", "producer", "modification_date"}
     assert result.document_id == "doc-1"
+
+
+def test_subject_and_title_are_read_but_are_not_among_the_six_supported_fields() -> None:
+    extracted = extract_supported_metadata({"Subject": "modified copy", "Title": "Constitution"})
+
+    assert extracted["subject"] == "modified copy" and extracted["title"] == "Constitution"
+    assert "subject" not in SUPPORTED_METADATA_FIELDS and "title" not in SUPPORTED_METADATA_FIELDS
+
+
+def test_a_document_with_only_a_subject_or_title_is_still_unable_to_assess() -> None:
+    result = check_metadata_anomalies("doc-1", {"Subject": "modified copy", "Title": "x", "FileType": "PDF"}, "company_constitution")
+
+    assert result.unable_to_assess is True

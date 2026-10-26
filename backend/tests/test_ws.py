@@ -23,7 +23,6 @@ def _make_case(case_id: str = "case-1") -> CaseRecord:
         greenlink_case_id="GLDB-1",
         status="open",
         submission_finalized=False,
-        recommended_additional_documents=[],
         created_at="2026-08-26T00:00:00Z",
         updated_at="2026-08-26T00:00:00Z",
     )

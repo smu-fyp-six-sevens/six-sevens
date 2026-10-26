@@ -1,18 +1,19 @@
-.search-row {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 18px;
-}
-
 .search-box {
   flex: 1;
   display: flex;
   align-items: center;
   gap: 8px;
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: 12px 14px;
+}
+
+.search-box .search-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--slate-58);
 }
 
 .search-box:focus-within {
@@ -23,7 +24,7 @@
 .search-box input {
   border: none;
   outline: none;
-  font-size: 13.5px;
+  font-size: 14.5px;
   flex: 1;
   background: none;
   color: var(--ink);
@@ -31,101 +32,14 @@
 }
 
 .search-box input::placeholder {
-  color: #9ea6b5;
-}
-
-.filter-label {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: #8a93a6;
-}
-
-.status-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.status-chip {
-  --chip-color: #667085;
-  --chip-tint: #f2f4f7;
-
-  padding: 7px 14px;
-  border: 1.5px solid var(--chip-color);
-  border-radius: 999px;
-  background: var(--chip-tint);
-  color: var(--chip-color);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s, box-shadow 0.12s;
-}
-
-.status-chip:hover {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--chip-color) 18%, transparent);
-}
-
-.status-chip:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--chip-color) 30%, transparent);
-}
-
-.status-chip--active {
-  background: var(--chip-color);
-  color: #ffffff;
-}
-
-.sort-toggle-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 14px;
-  border: 1px solid #d8d3c8;
-  border-radius: 999px;
-  background: #fffdf9;
-  color: #17294d;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: border-color 0.12s, background 0.12s;
-}
-
-.sort-toggle-btn:hover {
-  border-color: #9e9a91;
-  background: #f7f4ee;
-}
-
-.sort-toggle-btn:focus-visible {
-  outline: none;
-  border-color: #17294d;
-  box-shadow: 0 0 0 3px rgba(23, 41, 77, 0.12);
-}
-
-.sort-toggle-btn--active {
-  border-color: #17294d;
-  background: #17294d;
-  color: #fff;
-}
-
-.sort-toggle-btn--active:hover {
-  border-color: #17294d;
-  background: #24385f;
-}
-
-.sort-toggle-arrow {
-  color: var(--steel);
-  font-weight: 700;
+  color: var(--slate-66);
 }
 
 .go-btn,
 .upload-btn {
   font-size: 13px;
   font-weight: 600;
-  color: #fff;
+  color: var(--white);
   border: none;
   cursor: pointer;
 }
@@ -133,90 +47,19 @@
 .go-btn {
   background: var(--ink);
   border-radius: 8px;
-  padding: 0 16px;
+  padding: 0 20px;
+  font-size: 14px;
 }
 
 .go-btn:hover {
   background: var(--steel-dark);
 }
 
-.queue-label,
 .section-label {
   margin: 22px 0 10px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-}
-.queue-filters {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-  width: 100%;
-  margin: 24px 0;
-  flex-wrap: wrap;
-}
-
-.queue-filters-main {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 0;
-}
-
-.queue-filters-sort {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
-  flex-shrink: 0;
-}
-
-.case-created {
-  display: block;
-  margin-top: 2px;
-  font-size: 11px;
-  line-height: 1.4;
-  color: #667085;
-}
-
-.case-card {
-  position: relative;
-  width: 100%;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  padding: 14px 16px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 8px;
-  color: inherit;
-  text-align: left;
-  transition: border-color 0.12s, transform 0.12s;
-}
-
-.case-card-open {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin: 0;
-  padding: 0 36px 0 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.case-card > .kebab-menu {
-  position: absolute;
-  top: 50%;
-  right: 8px;
-  transform: translateY(-50%);
 }
 
 .kebab-menu {
@@ -225,7 +68,7 @@
   flex-shrink: 0;
 }
 
-.case-card:has(.kebab-menu-button[aria-expanded='true']),
+.case-row:has(.kebab-menu-button[aria-expanded='true']),
 .documents-table-row:has(.kebab-menu-button[aria-expanded='true']) {
   z-index: 3;
 }
@@ -246,7 +89,7 @@
 
 .kebab-menu-button:hover:not(:disabled),
 .kebab-menu-button[aria-expanded='true'] {
-  background: #efede5;
+  background: var(--sand-92);
   color: var(--ink);
 }
 
@@ -273,7 +116,7 @@
   padding: 4px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fff;
+  background: var(--white);
   box-shadow: 0 8px 24px rgba(18, 32, 61, 0.12);
 }
 
@@ -298,7 +141,7 @@
 
 .kebab-menu-item:hover:not(:disabled),
 .kebab-menu-item:focus-visible {
-  background: #f6f4ef;
+  background: var(--paper);
 }
 
 .kebab-menu-item--danger:hover:not(:disabled),
@@ -311,14 +154,7 @@
   cursor: not-allowed;
 }
 
-.case-card:hover,
-.case-card:focus-within {
-  border-color: var(--steel);
-  transform: translateX(2px);
-}
-
-.case-card-open:focus-visible,
-.case-card:focus-visible,
+.case-row-open:focus-visible,
 .dropzone:focus-visible,
 .back-link:focus-visible,
 .remove-btn:focus-visible,
@@ -328,45 +164,14 @@
   box-shadow: 0 0 0 3px rgba(61, 90, 128, 0.2);
 }
 
-.case-id {
-  font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--ink);
-  background: #efede5;
-  padding: 4px 8px;
-  border-radius: 5px;
-  flex-shrink: 0;
-}
-.case-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.case-name,
-.case-sub {
-  display: block;
-}
-
-.case-name {
-  font-size: 13.5px;
-  font-weight: 600;
-}
-
-.case-main--editing {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
 .case-name-input {
   width: 100%;
   box-sizing: border-box;
   padding: 7px 9px;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--slate-84);
   border-radius: 6px;
-  background: #ffffff;
-  color: #111827;
+  background: var(--white);
+  color: var(--slate-11);
   font-size: 13.5px;
   font-weight: 600;
   font-family: inherit;
@@ -374,23 +179,17 @@
 
 .case-name-input:focus {
   outline: none;
-  border-color: #6b7280;
+  border-color: var(--slate-46);
   box-shadow: 0 0 0 2px rgba(107, 114, 128, 0.12);
 }
 
 .case-edit-error {
   font-size: 12px;
-  color: #b91c1c;
+  color: var(--red-42);
 }
 
 .case-edit-actions {
   flex-shrink: 0;
-}
-
-.case-sub {
-  font-size: 12px;
-  color: var(--ink-soft);
-  margin-top: 2px;
 }
 
 .no-results,
@@ -401,7 +200,7 @@
   padding: 20px 0;
   border: 1px dashed var(--line);
   border-radius: 8px;
-  background: #fffefb;
+  background: var(--orange-99);
 }
 
 .back-link {
@@ -413,47 +212,687 @@
   color: var(--ink-soft);
   font-size: 12.5px;
   cursor: pointer;
-  padding: 0 0 16px;
+  /* Padding gives the hover background room; the negative margin keeps the text where it was. */
+  padding: 4px 8px;
+  margin: -4px -8px 12px;
+  border-radius: 6px;
+  transition: background-color 0.15s, color 0.15s;
 }
 
 .back-link:hover {
+  color: var(--steel-dark);
+  background: rgba(61, 90, 128, 0.08);
+}
+
+/* Case queue: the cases as table rows, centred at about three quarters of the page. */
+.shell--queue {
+  width: calc(100% - 48px);
+}
+
+.queue-view {
+  width: 78%;
+  margin: 0 auto;
+}
+
+@media (max-width: 1280px) {
+  .queue-view {
+    width: 100%;
+  }
+}
+
+.case-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--slate-65);
+}
+
+.case-status-dot--green {
+  background: var(--green-30);
+}
+
+.case-status-dot--blue {
+  background: var(--blue-43);
+}
+
+.case-status-dot--red {
+  background: var(--red-45a);
+}
+
+.case-status-dot--amber {
+  background: #b26a00;
+}
+
+.queue-search-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 50%;
+  padding: 4px 5px 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--white);
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+
+.queue-search-chip-text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-search-chip button {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.queue-search-chip button:hover {
+  background: rgba(61, 90, 128, 0.1);
+  color: var(--ink);
+}
+
+/* The title, the active search and the New case button share one row above the table. */
+/* Empty on a wide screen unless a search is active, so it only takes room when it has something to show. */
+/* The title and active search on the left, the page controls on the right. */
+.queue-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  min-height: 34px;
+  margin-bottom: 12px;
+}
+
+.queue-title {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.queue-bar .queue-search-chip {
+  max-width: 40%;
+}
+
+/* The header's filters and sorts, for screens where the table has no header. */
+.queue-controls {
+  display: none;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 12px;
+  font-size: 13.5px;
+}
+
+.queue-controls .header-filter-trigger {
+  padding: 7px 12px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--ink);
+}
+
+.queue-controls .header-filter-list {
+  z-index: 25;
+}
+
+.queue-sort-select select {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+}
+
+@media (max-width: 620px) {
+  .queue-sort-select select {
+    max-width: 118px;
+  }
+
+  .queue-controls .header-filter-trigger {
+    padding: 7px 9px;
+  }
+}
+
+/* Columns shared by the header and every row. The header's right padding leaves room for each row's ⋮ menu. */
+.case-table {
+  --case-cols: 120px minmax(0, 2.4fr) 180px 112px 120px;
+
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: visible;
+}
+
+.case-table-head,
+.case-row-open {
+  display: grid;
+  grid-template-columns: var(--case-cols);
+  gap: 14px;
+  align-items: center;
+}
+
+.case-table-head {
+  /* 48px = the row's ⋮ menu (32px button + 8px margin each side). */
+  padding: 12px 48px 12px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--orange-97);
+  border-radius: 10px 10px 0 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.case-table-body {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* The next page is loading: the current rows stay, a little faded, so the table doesn't flash empty. */
+.case-table--busy .case-table-body {
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+
+.skeleton-bar {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--slate-91);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-bar {
+    animation: none;
+  }
+}
+
+/* A line of text is 22px tall (14.5px at 1.5), so a row of these is as tall as a real one. */
+.skeleton-cell {
+  display: flex;
+  align-items: center;
+  height: 22px;
+}
+
+.skeleton-cell--center {
+  justify-content: center;
+}
+
+.skeleton-bar--id {
+  width: 72px;
+}
+
+.skeleton-bar--name {
+  width: 55%;
+}
+
+.skeleton-bar--status {
+  width: 90px;
+}
+
+.skeleton-bar--pill {
+  width: 92px;
+  height: 20px;
+  border-radius: 999px;
+}
+
+.skeleton-bar--date {
+  width: 80px;
+}
+
+.case-row-menu-space {
+  /* The room a real row gives its menu button: 32px plus 8px each side. */
+  flex-shrink: 0;
+  width: 48px;
+}
+
+/* Page controls, at the right of the bar above the table. */
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.pagination-range {
+  font-variant-numeric: tabular-nums;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pagination-page,
+.pagination-step {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--slate-46);
+  font: inherit;
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+/* The same quiet, transparent buttons as the bulk actions on the case page; round, with a tint on hover. */
+.pagination-page:hover:not(:disabled),
+.pagination-step:hover:not(:disabled) {
+  background: rgba(18, 32, 61, 0.08);
+  color: var(--slate-17);
+}
+
+.pagination-page:focus-visible,
+.pagination-step:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 1px;
+}
+
+/* The page you're on is told by its darker, bolder number; no fill until hovered, like the rest. */
+.pagination-page[aria-current='page'] {
+  color: var(--slate-17);
+  font-weight: 700;
+}
+
+.pagination-step {
+  width: 34px;
+  padding: 0;
+}
+
+.pagination-chevron {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pagination-step:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.pagination-gap {
+  min-width: 20px;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .pagination-page:not([aria-current='page']) {
+    display: none;
+  }
+
+  .pagination-gap {
+    display: none;
+  }
+}
+
+.case-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--orange-90);
+  transition: background-color 0.12s;
+}
+
+.case-row:last-child {
+  border-bottom: 0;
+  border-radius: 0 0 10px 10px;
+}
+
+.case-row:hover,
+.case-row:focus-within {
+  background: var(--paper);
+}
+
+.case-row-open {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 15px 0 15px 20px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 14.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.case-row > .kebab-menu {
+  margin: 0 8px;
+}
+
+/* The row menu shows when the pointer is over the row, or something in it has keyboard focus or its menu is open.
+   Without a hover (touch screens) it stays visible. */
+@media (hover: hover) {
+  .case-row .kebab-menu-button {
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+
+  .case-row:hover .kebab-menu-button,
+  .case-row:focus-within .kebab-menu-button,
+  .case-row .kebab-menu-button[aria-expanded='true'] {
+    opacity: 1;
+  }
+}
+
+.case-row-id {
+  font-family: var(--mono);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--steel-dark);
+  white-space: nowrap;
+}
+
+.case-row-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.case-row-created {
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+.case-row-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+/* Risk and created are short values, so they sit centred under their headings. */
+.case-table-head-center,
+.case-row-created {
+  text-align: center;
+}
+
+.case-row-risk {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.case-table-head-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* A column header's filter: a funnel (and the title, for Status) that opens a list of checkboxes. */
+.header-filter {
+  position: relative;
+  display: inline-flex;
+}
+
+.header-filter-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.header-filter-trigger:disabled {
+  cursor: default;
+}
+
+.header-filter-trigger:hover:not(:disabled),
+.header-filter-trigger[aria-expanded='true'],
+.header-filter-trigger[data-active] {
+  color: var(--ink);
+}
+
+.header-filter-trigger:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 2px;
+}
+
+.header-filter-icon {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+}
+
+.header-filter-trigger[data-active] .header-filter-icon {
+  fill: var(--steel);
+  stroke: var(--steel);
+}
+
+.header-filter-list {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 20;
+  min-width: 210px;
+  padding: 6px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(18, 32, 61, 0.16);
+  font-family: var(--sans, inherit);
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--ink);
+}
+
+.header-filter-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.header-filter-option:hover {
+  background: rgba(61, 90, 128, 0.08);
+}
+
+.header-filter-option input {
+  flex-shrink: 0;
+  margin: 0;
+  accent-color: var(--steel);
+}
+
+.header-filter-label {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.header-filter-count {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.header-filter-clear {
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: 0;
+  border-top: 1px solid var(--orange-90);
+  border-radius: 0 0 6px 6px;
+  background: transparent;
   color: var(--steel);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
 }
 
-/* =========================================================
-   Status tones: one colour per case stage (see caseStageTone in
-   utils/caseStages.ts), shared by the queue's filter chips and cards
-   and the case page's Case Progress badge.
-   ========================================================= */
-
-.tone-grey   { --tone: #667085; --tone-tint: #f2f4f7; --tone-border: #d5d9e0; }
-.tone-sky    { --tone: #0369a1; --tone-tint: #e6f4fc; --tone-border: #a9d7f2; }
-.tone-blue   { --tone: #2563b8; --tone-tint: #e8f0fb; --tone-border: #b8d4ff; }
-.tone-indigo { --tone: #4338ca; --tone-tint: #eef0ff; --tone-border: #c7cdfa; }
-.tone-red    { --tone: #b33131; --tone-tint: #fbeaea; --tone-border: #f0b8b8; }
-.tone-orange { --tone: #c2410c; --tone-tint: #fff1e6; --tone-border: #f9c9a3; }
-.tone-amber  { --tone: #b26a00; --tone-tint: #fdf1de; --tone-border: #f2d18a; }
-.tone-gold   { --tone: #806300; --tone-tint: #fdf7d9; --tone-border: #e8d68a; }
-.tone-teal   { --tone: #0f766e; --tone-tint: #e6f6f4; --tone-border: #a3ddd6; }
-.tone-rose   { --tone: #be185d; --tone-tint: #fdecf4; --tone-border: #f5b8d3; }
-.tone-purple { --tone: #7e22ce; --tone-tint: #f4ebfd; --tone-border: #dcc0f5; }
-.tone-maroon { --tone: #8b1e3f; --tone-tint: #f9e9ee; --tone-border: #e3b0c0; }
-.tone-lime   { --tone: #4d7c0f; --tone-tint: #f1f8e4; --tone-border: #cde5a5; }
-.tone-cyan   { --tone: #0e7490; --tone-tint: #e5f7fa; --tone-border: #a5dde8; }
-.tone-green  { --tone: #1f7a4d; --tone-tint: #e8f5ee; --tone-border: #a7e3c5; }
-.tone-slate  { --tone: #1e3a5f; --tone-tint: #e8edf3; --tone-border: #b7c4d4; }
-
-.status-chip[class*='tone-'] {
-  --chip-color: var(--tone);
-  --chip-tint: var(--tone-tint);
+.header-filter-clear:hover {
+  background: rgba(61, 90, 128, 0.08);
 }
 
-.case-card[class*='tone-'] {
-  border-color: var(--tone-border);
+/* A column header that sorts. Both arrows show; the current direction's is dark. */
+.case-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
 }
 
-.case-id[class*='tone-'] {
-  background: var(--tone-tint);
-  color: var(--tone);
-  border: 1px solid var(--tone-border);
+.case-sort:disabled {
+  cursor: default;
 }
+
+.case-sort:hover:not(:disabled),
+.case-sort[data-direction] {
+  color: var(--ink);
+}
+
+.case-sort:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.case-sort-arrows {
+  width: 7px;
+  height: 12px;
+  fill: var(--slate-66);
+  opacity: 0.55;
+}
+
+.case-sort[data-direction] .case-sort-arrows {
+  opacity: 1;
+}
+
+.case-sort[data-direction='desc'] .case-sort-down,
+.case-sort[data-direction='asc'] .case-sort-up {
+  fill: var(--ink);
+}
+
+.queue-risk-badge {
+  margin-left: 0;
+  min-width: 92px;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+/* One width for every level so the column reads as a tidy stack of pills. */
+.case-row-risk .risk-badge {
+  margin-left: 0;
+  justify-content: center;
+  min-width: 92px;
+  box-sizing: border-box;
+}
+
+.risk-badge--none {
+  background: var(--sand-92);
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.case-row--editing {
+  gap: 14px;
+  padding: 10px 16px;
+}
+
+.case-row-edit {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Below this the columns get too narrow for names, so each row stacks:
+   case number and name on top, the rest as a line of details. */
+@media (max-width: 1000px) {
+  .case-table-head {
+    display: none;
+  }
+
+  .queue-controls {
+    display: flex;
+  }
+
+  .case-row-open {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    padding-right: 4px;
+  }
+
+  .case-row-name {
+    flex: 1 1 calc(100% - 120px);
+  }
+
+  .case-row-status,
+  .case-row-created {
+    font-size: 12px;
+  }
+
+  .case-row:first-child {
+    border-radius: 10px 10px 0 0;
+  }
+}
+

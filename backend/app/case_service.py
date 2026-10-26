@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 import concurrent.futures
+import contextvars
 import logging
 import threading
-from collections import defaultdict
-from typing import Any
+from collections import Counter, defaultdict
+from collections.abc import Callable
+from typing import Any, Literal, TypeVar
 
-from . import case_repository, case_stage, document_repository, extracted_fields_repository
+from . import case_repository, document_repository, extracted_fields_repository
 from .case_match import CaseMatchResult, DocumentCaseMatch, check_case_match
 from .case_pipeline import repository as analysis_repository, state as analysis_state
 from .case_pipeline.models import CaseAnalysis
 from .case_pipeline.readiness import is_ready_for_analysis
 from .case_pipeline.risk import store as risk_store
-from .config import settings
 from .langgraph import trace as langgraph_trace
 from .langgraph.extraction_prompts import EXTRACTION_SCHEMAS
 
@@ -28,12 +29,13 @@ from .models import (
     ADDITIONAL_DOCUMENT_TYPES,
     REQUIRED_DOCUMENT_TYPES,
     CaseAnalysisOverview,
+    CaseCounts,
     CaseDocumentsStatus,
     CaseListItem,
+    CaseListPage,
     CaseRecord,
     CaseRisk,
-    CaseStage,
-    CaseStageChange,
+    CaseSearchResult,
     CaseSummary,
     DocumentRecord,
     DocumentStatus,
@@ -47,6 +49,7 @@ from .models import (
 from .monitoring import is_stuck
 
 logger = logging.getLogger("classifier_pipeline.case_service")
+T = TypeVar("T")
 
 
 def compute_documents_status(documents: list[DocumentRecord]) -> CaseDocumentsStatus:
@@ -122,16 +125,8 @@ def get_case(case_id: str) -> CaseRecord | None:
     return case_repository.get_case(case_id)
 
 
-def is_case_finalised(case_id: str) -> bool:
-    """A finalised case accepts no changes until an officer reopens it (see routers/_dependencies.py)."""
-    case = case_repository.get_case(case_id)
-    return case is not None and case.status == CaseStage.FINALISED.value
-
-
-def create_case(company_name: str | None = None, created_by: str = case_stage.SYSTEM) -> CaseRecord:
-    case = case_repository.create_case(company_name)
-    case_stage.record_created(case, created_by)
-    return case
+def create_case(company_name: str | None = None) -> CaseRecord:
+    return case_repository.create_case(company_name)
 
 
 def update_case(case_id: str, company_name: str) -> CaseRecord | None:
@@ -191,22 +186,33 @@ def _load_detection_states(documents: list[DocumentRecord], *, slim: bool = Fals
         return None
 
 
-def _load_analyses(case_ids: list[str]) -> dict[str, CaseAnalysis]:
-    """Empty when the table can't be read: a case then simply shows no analysis."""
+def _load_analysis(case_id: str) -> CaseAnalysis | None:
+    """None when the table can't be read: the case then simply shows no analysis."""
     try:
-        return analysis_repository.get_latest_many(case_ids)
+        return analysis_repository.get_latest_summary(case_id)
     except Exception:
-        logger.exception("Failed to load case analyses for %d case(s)", len(case_ids))
-        return {}
+        logger.exception("Failed to load the latest analysis of case %s", case_id)
+        return None
 
 
-def _load_status_history(case_id: str) -> list[CaseStageChange]:
-    """Empty when the history can't be read: the case still loads, with its current stage."""
+def _load_last_complete(case_id: str, analysis: CaseAnalysis | None) -> CaseAnalysis | None:
+    """The newest finished run while the latest one isn't finished: its risk is still the case's."""
+    if analysis is None or analysis.status == "complete":
+        return None
     try:
-        return case_repository.list_status_history(case_id)
+        return analysis_repository.get_latest_complete(case_id)
     except Exception:
-        logger.exception("Failed to load the stage history of case %s", case_id)
-        return []
+        logger.exception("Failed to load the last complete analysis of case %s", case_id)
+        return None
+
+
+# One snapshot's or summary's independent reads run side by side instead of one after another.
+_reads = concurrent.futures.ThreadPoolExecutor(max_workers=8, thread_name_prefix="case-reads")
+
+
+def _submit(fn: Callable[..., T], *args: Any, **kwargs: Any) -> concurrent.futures.Future[T]:
+    """In a copy of the caller's context, so the read still counts in its perf log (query_stats)."""
+    return _reads.submit(contextvars.copy_context().run, fn, *args, **kwargs)
 
 
 def _load_saved_risks(case_ids: list[str]) -> dict[str, CaseRisk]:
@@ -224,7 +230,6 @@ def build_summary(
     reports: dict[str, dict[str, Any]] | None = None,
     analysis: CaseAnalysis | None = None,
     completed: CaseAnalysis | None = None,
-    status_history: list[CaseStageChange] | None = None,
 ) -> CaseSummary:
     """
     The case's checklist and document rollup, computed from its documents,
@@ -238,8 +243,6 @@ def build_summary(
     unmatched_names = compute_unmatched_proof_of_address_names(documents)
     id_covered, id_total = compute_id_document_identity_progress(documents)
     id_missing_side = compute_id_document_missing_side(documents)
-    data = case.model_dump()
-    data["recommended_additional_documents"] = missing
     overview: CaseAnalysisOverview | None = None
     if analysis is not None:
         if reports is not None:
@@ -251,9 +254,10 @@ def build_summary(
     if completed is None and analysis is not None and analysis.status == "complete":
         completed = analysis
     return CaseSummary(
-        **data,
+        **case.model_dump(),
         documents_status=compute_documents_status(documents),
         fulfilled_requirements=fulfilled,
+        missing_requirements=missing,
         proof_of_address_coverage=ProofOfAddressCoverage(
             covered=covered, total=total, unmatched_names=unmatched_names
         ),
@@ -262,10 +266,9 @@ def build_summary(
         ),
         risk=completed.risk if completed else None,
         supporting_document_recommendations=completed.supporting_documents if completed else [],
-        additional_documents=completed.additional_documents if completed else None,
+        additional_documents=case.additional_documents,
         analysis_ready=is_ready_for_analysis(documents),
         analysis=overview,
-        status_history=status_history or [],
     )
 
 
@@ -450,21 +453,30 @@ def build_case_snapshot(case_id: str) -> dict | None:
 
 
 def _build_case_snapshot(case_id: str) -> dict | None:
-    case = case_repository.get_case(case_id)
+    case_read = _submit(case_repository.get_case, case_id)
+    documents_read = _submit(document_repository.list_documents, case_id=case_id, include_fields=False)
+    analysis_read = _submit(_load_analysis, case_id)
+    case = case_read.result()
     if case is None:
         return None
-    documents = document_repository.list_documents(case_id=case_id, include_fields=False)
+    documents, analysis = documents_read.result(), analysis_read.result()
+    # Second round: the reads that need the document ids or the analysis.
     # One fields query serves both the plain values (mapper/case_match) and the {value, confidence} wrappers.
-    fields_by_document = extracted_fields_repository.get_extracted_fields_for_documents(
-        [document.id for document in documents]
+    fields_read = _submit(
+        extracted_fields_repository.get_extracted_fields_for_documents, [document.id for document in documents]
     )
+    # Full reports only matter for the staleness check of an existing analysis; otherwise "was it scanned" is enough.
+    states_read = _submit(_load_detection_states, documents, slim=analysis is None)
+    completed_read = _submit(_load_last_complete, case_id, analysis)
+    fields_by_document = fields_read.result()
     for document in documents:
         fields = fields_by_document.get(document.id)
         document.extracted_fields = {f.field_name: f.field_value for f in fields} if fields else None
-    # Full reports only matter for the staleness check of an existing analysis; otherwise "was it scanned" is enough.
-    analysis = _load_analyses([case.id]).get(case.id)
-    detection_states = _load_detection_states(documents, slim=analysis is None)
-    summary = _summary_with_analysis(case, documents, detection_states, analysis)
+    detection_states = states_read.result()
+    summary = build_summary(
+        case, documents, detection_states[0] if detection_states is not None else None,
+        analysis, completed_read.result(),
+    )
     # Before enrichment: that rewrites extracted_fields in place into
     # {"value", "confidence"} wrappers, while case_match (and mapper.py, via
     # build_summary above) reads the plain values document_repository
@@ -493,42 +505,51 @@ def _build_case_snapshot(case_id: str) -> dict | None:
 
 
 def get_case_summary(case_id: str) -> CaseSummary | None:
-    case = case_repository.get_case(case_id)
+    case_read = _submit(case_repository.get_case, case_id)
+    documents_read = _submit(document_repository.list_documents, case_id=case_id)
+    analysis_read = _submit(_load_analysis, case_id)
+    case = case_read.result()
     if case is None:
         return None
-    documents = document_repository.list_documents(case_id=case_id)
-    analysis = _load_analyses([case.id]).get(case.id)
-    return _summary_with_analysis(
-        case, documents, _load_detection_states(documents, slim=analysis is None), analysis
+    documents, analysis = documents_read.result(), analysis_read.result()
+    states_read = _submit(_load_detection_states, documents, slim=analysis is None)
+    completed = _load_last_complete(case_id, analysis)
+    detection_states = states_read.result()
+    return build_summary(
+        case, documents, detection_states[0] if detection_states is not None else None, analysis, completed,
     )
 
 
-def _summary_with_analysis(
-    case, documents: list[DocumentRecord], detection_states: DetectionStates | None,
-    analysis: CaseAnalysis | None,
-) -> CaseSummary:
-    completed = None
-    if analysis is not None and analysis.status != "complete":
-        try:
-            completed = analysis_repository.get_latest_complete(case.id)
-        except Exception:
-            logger.exception("Failed to load the last complete analysis of case %s", case.id)
-    reports = detection_states[0] if detection_states is not None else None
-    return build_summary(case, documents, reports, analysis, completed, _load_status_history(case.id))
+CaseSort = Literal["newest", "oldest", "risk", "lowest_risk"]
+# "unscored" is a case no analysis run has scored yet.
+CaseRiskFilter = Literal["Critical", "High", "Medium", "Low", "unscored"]
+_RISK_RANK = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
 
 
-def list_case_summaries() -> list[CaseListItem]:
-    """
-    The case queue: three queries in total (cases, their documents' statuses,
-    the latest saved scores), not one per case. The score is whatever the
-    case's last analysis run saved; nothing is recomputed here.
-    """
-    cases = case_repository.list_cases(include_dev=not settings.IS_CLOUD_DEPLOYMENT)
-    documents_by_case: dict[str, list[DocumentRecord]] = defaultdict(list)
-    for doc in document_repository.list_documents(include_fields=False):
+def _group_by_case(documents: list[DocumentRecord]) -> dict[str, list[DocumentRecord]]:
+    grouped: dict[str, list[DocumentRecord]] = defaultdict(list)
+    for doc in documents:
         if doc.case_id is not None:
-            documents_by_case[doc.case_id].append(doc)
-    saved = _load_saved_risks([case.id for case in cases])
+            grouped[doc.case_id].append(doc)
+    return grouped
+
+
+def _list_items(
+    cases: list[CaseRecord],
+    documents_by_case: dict[str, list[DocumentRecord]] | None = None,
+    saved: dict[str, CaseRisk] | None = None,
+) -> list[CaseListItem]:
+    """
+    Queue rows for these cases: two queries (their documents' statuses, their latest saved scores) however many
+    there are. The score is whatever the case's last analysis run saved; nothing is recomputed here.
+    """
+    if not cases:
+        return []
+    ids = [case.id for case in cases]
+    if documents_by_case is None:
+        documents_by_case = _group_by_case(document_repository.list_document_statuses(ids))
+    if saved is None:
+        saved = _load_saved_risks(ids)
     return [
         CaseListItem(
             **case.model_dump(),
@@ -539,13 +560,85 @@ def list_case_summaries() -> list[CaseListItem]:
     ]
 
 
-def finalise_case(case_id: str, changed_by: str) -> CaseSummary | None:
-    """Raises case_stage.StageChangeNotAllowed when the case isn't analysed."""
-    case_stage.finalise(case_id, changed_by)
-    return get_case_summary(case_id)
+def _risk_rank(risk: CaseRisk | None) -> int:
+    """Unscored cases rank below Low."""
+    return _RISK_RANK.get(risk.level or "", 0) if risk is not None and risk.state == "scored" else 0
 
 
-def reopen_case(case_id: str, changed_by: str) -> CaseSummary | None:
-    """Raises case_stage.StageChangeNotAllowed when the case isn't finalised."""
-    case_stage.reopen(case_id, changed_by)
-    return get_case_summary(case_id)
+def _risk_filter_value(risk: CaseRisk | None) -> str:
+    rank = _risk_rank(risk)
+    return next((level for level, value in _RISK_RANK.items() if value == rank), "unscored")
+
+
+def list_cases_page(
+    *, limit: int, offset: int, sort: CaseSort, statuses: list[CaseDocumentsStatus], q: str | None,
+    risks: list[CaseRiskFilter] | None = None,
+) -> CaseListPage:
+    """
+    One page of the case queue. Sorting by date and searching happen in the database, so only the page's own
+    documents and scores are read. A status or risk filter and the risk order come from other tables (and
+    "stuck" from the clock), which the database can't sort or filter on: those read every matching case first,
+    then slice.
+    """
+    q = (q or "").strip() or None
+    by_risk = sort in ("risk", "lowest_risk")
+    if not by_risk and not statuses and not risks:
+        cases, total = case_repository.list_cases_page(q, newest=sort == "newest", limit=limit, offset=offset)
+        return CaseListPage(items=_list_items(cases), total=total, limit=limit, offset=offset)
+
+    cases = case_repository.list_matching_cases(q)  # newest first
+    documents_by_case = _group_by_case(document_repository.list_document_statuses([case.id for case in cases]))
+    if statuses:
+        wanted = set(statuses)
+        cases = [case for case in cases if compute_documents_status(documents_by_case.get(case.id, [])) in wanted]
+    saved: dict[str, CaseRisk] | None = None
+    if by_risk or risks:
+        saved = _load_saved_risks([case.id for case in cases])
+    if risks:
+        wanted_risks = set(risks)
+        cases = [case for case in cases if _risk_filter_value((saved or {}).get(case.id)) in wanted_risks]
+    if by_risk:
+        sign = -1 if sort == "risk" else 1
+        cases = sorted(cases, key=lambda case: sign * _risk_rank((saved or {}).get(case.id)))  # stable: newest first among equals
+    elif sort == "oldest":
+        cases.reverse()
+    page = cases[offset : offset + limit]
+    return CaseListPage(items=_list_items(page, documents_by_case, saved), total=len(cases), limit=limit, offset=offset)
+
+
+def case_counts() -> CaseCounts:
+    """Every case, and how many are in each documents status (the queue's sidebar)."""
+    case_ids = case_repository.list_case_ids()
+    documents_by_case = _group_by_case(document_repository.list_all_document_statuses())
+    counts = Counter(compute_documents_status(documents_by_case.get(case_id, [])).value for case_id in case_ids)
+    return CaseCounts(total=len(case_ids), by_status=dict(counts))
+
+
+def _match_rank(case: CaseRecord, needle: str) -> int:
+    """Exact number first, then a number or name that starts with it, then the rest."""
+    number = case.greenlink_case_id.lower()
+    if needle in (number, case.id.lower()):
+        return 0
+    if number.startswith(needle) or (case.company_name or "").lower().startswith(needle):
+        return 1
+    return 2
+
+
+def search_cases(q: str | None, limit: int) -> CaseSearchResult:
+    """Cases whose number or name contains q, best match first. Without q: the newest cases."""
+    q = (q or "").strip() or None
+    cases, total = case_repository.list_cases_page(q, newest=True, limit=limit, offset=0)
+    if q and total > limit:
+        # More cases match than fit, so newer cases may have crowded the best ones out: fetch those directly.
+        exact = case_repository.find_case_numbered(q)
+        best = ([exact] if exact else []) + case_repository.find_cases_starting_with(q, limit) + cases
+        cases = list({case.id: case for case in best}.values())
+    if q:
+        cases = sorted(cases, key=lambda case: _match_rank(case, q.lower()))
+    return CaseSearchResult(items=cases[:limit], total=total)
+
+
+def get_case_item(number: str) -> CaseListItem | None:
+    """One queue row, by the number officers see in the URL (GLDB-137)."""
+    case = case_repository.get_case_by_number(number)
+    return _list_items([case])[0] if case is not None else None

@@ -1,49 +1,151 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import AppHeader from '../components/AppHeader';
-import CaseCard from '../components/CaseCard';
+import CaseRow from '../components/CaseRow';
 import ConfirmDialog from '../components/ConfirmDialog';
+import HeaderFilter from '../components/HeaderFilter';
+import type { FilterOption } from '../components/HeaderFilter';
+import Pagination from '../components/Pagination';
 import { deleteCase } from '../services/uploadService';
+import type { CaseDocumentsStatus, CaseRiskFilter, CaseSort } from '../services/uploadService';
 import type { CaseRecord } from '../App';
+import { caseStatusTone } from '../utils/caseStatusTone';
+import { STATUS_ORDER, statusLabel, statusValue } from '../utils/caseStatus';
+import { caseNumberLabel } from '../utils/caseSearch';
+import { useCaseQueue } from './useCaseQueue';
 
 interface CaseQueuePageProps {
-  cases: CaseRecord[];
-  isLoading: boolean;
-  error: string | null;
-  onRetry: () => void;
   onOpenCase: (caseRecord: CaseRecord) => void;
-  onCreateCase: () => void;
-  onCaseUpdated: (caseId: string, companyName: string) => void;
-  onCaseDeleted: (caseId: string) => void;
 }
 
 const PREFS_STORAGE_KEY = 'caseQueue.prefs';
+const PAGE_SIZE = 25;
+
+// One sort at a time, picked from a column header: the first click puts the newest or highest first (arrow down),
+// the second reverses it (arrow up). Equal risks are newest first.
+const SORT_KEYS: CaseSort[] = ['newest', 'oldest', 'risk', 'lowest_risk'];
+
+const DEFAULT_SORT: CaseSort = 'newest';
+
+const SORT_CHOICES: { value: CaseSort; label: string }[] = [
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+  { value: 'risk', label: 'Highest risk first' },
+  { value: 'lowest_risk', label: 'Lowest risk first' },
+];
+
+const RISK_OPTIONS: { value: CaseRiskFilter; label: string }[] = [
+  { value: 'Critical', label: 'Critical' },
+  { value: 'High', label: 'High' },
+  { value: 'Medium', label: 'Medium' },
+  { value: 'Low', label: 'Low' },
+  { value: 'unscored', label: 'Not assessed' },
+];
 
 interface QueuePrefs {
-  statuses: string[];
-  sortOrder: 'asc' | 'desc';
-  // Highest risk first, with creation date (sortOrder) breaking ties.
-  riskFirst: boolean;
+  statuses: CaseDocumentsStatus[];
+  risks: CaseRiskFilter[];
+  sort: CaseSort;
+}
+
+function isSortKey(value: unknown): value is CaseSort {
+  return SORT_KEYS.some((key) => key === value);
+}
+
+function savedRisk(item: unknown): CaseRiskFilter | undefined {
+  return RISK_OPTIONS.find((option) => option.value === item)?.value;
+}
+
+// A column header that sorts: both arrows show, the one for the current direction is dark.
+function SortHeader({ label, first, second, sort, disabled, onSort }: {
+  label: string;
+  first: CaseSort;
+  second: CaseSort;
+  sort: CaseSort;
+  disabled: boolean;
+  onSort: (next: CaseSort) => void;
+}) {
+  const direction = sort === first ? 'desc' : sort === second ? 'asc' : undefined;
+  const state = direction === 'desc' ? 'high to low' : direction === 'asc' ? 'low to high' : 'not sorted';
+
+  return (
+    <button
+      type="button"
+      className="case-sort"
+      data-direction={direction}
+      disabled={disabled}
+      aria-label={`Sort by ${label.toLowerCase()} (${state})`}
+      onClick={() => onSort(sort === first ? second : first)}
+    >
+      {label}
+      <svg className="case-sort-arrows" viewBox="0 0 8 14" aria-hidden="true">
+        <path className="case-sort-up" d="M4 0 8 5H0z" />
+        <path className="case-sort-down" d="M4 14 0 9h8z" />
+      </svg>
+    </button>
+  );
+}
+
+function TableHead({ sort, disabled, statusFilter, riskFilter, onSort }: {
+  sort: CaseSort;
+  disabled: boolean;
+  statusFilter: ReactNode;
+  riskFilter: ReactNode;
+  onSort: (next: CaseSort) => void;
+}) {
+  return (
+    <div className="case-table-head">
+      <span>Case</span>
+      <span>Company name</span>
+      <span className="case-table-head-cell">{statusFilter}</span>
+      <span className="case-table-head-cell">
+        <SortHeader label="Risk" first="risk" second="lowest_risk" sort={sort} disabled={disabled} onSort={onSort} />
+        {riskFilter}
+      </span>
+      <span className="case-table-head-center">
+        <SortHeader label="Created" first="newest" second="oldest" sort={sort} disabled={disabled} onSort={onSort} />
+      </span>
+    </div>
+  );
+}
+
+// A saved status is the backend's value; older saves hold the label ("In progress") the queue used to store.
+function savedStatus(item: unknown): CaseDocumentsStatus | undefined {
+  if (typeof item !== 'string') return undefined;
+
+  return STATUS_ORDER.find((value) => value === item) ?? statusValue(item);
 }
 
 // Per-browser (localStorage), not per-account — enough to stop having to
 // re-apply the same filters and sort on every visit. Wrapped in try/catch
 // since storage can throw (private mode, blocked site data) or hold junk.
 function loadPrefs(): QueuePrefs {
-  const defaults: QueuePrefs = { statuses: [], sortOrder: 'asc', riskFirst: false };
+  const defaults: QueuePrefs = { statuses: [], risks: [], sort: DEFAULT_SORT };
 
   try {
     const raw = localStorage.getItem(PREFS_STORAGE_KEY);
 
     if (!raw) return defaults;
 
-    const parsed = JSON.parse(raw) as Partial<QueuePrefs>;
+    // The oldest shape kept a date direction and a separate "highest risk first" switch.
+    const parsed = JSON.parse(raw) as { statuses?: unknown; risks?: unknown; sort?: unknown; sortOrder?: string; riskFirst?: boolean };
+    const sort: CaseSort = isSortKey(parsed.sort)
+      ? parsed.sort
+      : parsed.riskFirst === true
+        ? 'risk'
+        : parsed.sortOrder === 'asc'
+          ? 'oldest'
+          : DEFAULT_SORT;
 
     return {
       statuses: Array.isArray(parsed.statuses)
-        ? parsed.statuses.filter((item) => typeof item === 'string')
+        ? parsed.statuses.map(savedStatus).filter((status): status is CaseDocumentsStatus => status !== undefined)
         : [],
-      sortOrder: parsed.sortOrder === 'desc' ? 'desc' : 'asc',
-      riskFirst: parsed.riskFirst === true,
+      risks: Array.isArray(parsed.risks)
+        ? parsed.risks.map(savedRisk).filter((risk): risk is CaseRiskFilter => risk !== undefined)
+        : [],
+      sort,
     };
   } catch {
     return defaults;
@@ -58,137 +160,130 @@ function savePrefs(prefs: QueuePrefs) {
   }
 }
 
-function displayCaseNumber(caseRecord: CaseRecord): string {
-  return caseRecord.caseNumber || caseRecord.id;
-}
-
-// Unscored cases (riskLevel null) rank below Low.
-const RISK_RANK: Record<string, number> = { Critical: 4, High: 3, Medium: 2, Low: 1 };
-
-function riskRank(caseRecord: CaseRecord): number {
-  return caseRecord.riskLevel ? RISK_RANK[caseRecord.riskLevel] : 0;
-}
-
-function creationTime(caseRecord: CaseRecord): number | null {
-  if (!caseRecord.created_at) return null;
-
-  const time = Date.parse(caseRecord.created_at);
-
-  return Number.isNaN(time) ? null : time;
-}
-
-export default function CaseQueuePage({
-  cases,
-  isLoading,
-  error,
-  onRetry,
-  onOpenCase,
-  onCreateCase,
-  onCaseUpdated,
-  onCaseDeleted,
-}: CaseQueuePageProps) {
-  const [search, setSearch] = useState('');
+export default function CaseQueuePage({ onOpenCase }: CaseQueuePageProps) {
+  // Set by the header search's "See all results" (see AppHeader).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const search = searchParams.get('q') ?? '';
+  const requestedPage = Math.max(1, Math.floor(Number(searchParams.get('page'))) || 1);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deletingCaseId, setDeletingCaseId] = useState<string | null>(null);
   const [caseToDelete, setCaseToDelete] = useState<CaseRecord | null>(null);
-  const [savedStatuses, setSavedStatuses] = useState<Set<string>>(
-    () => new Set(loadPrefs().statuses),
-  );
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(
-    () => loadPrefs().sortOrder,
-  );
-
-  const [riskFirst, setRiskFirst] = useState(() => loadPrefs().riskFirst);
+  // Read localStorage once, on the first render; the settings start from it.
+  const [initialPrefs] = useState(loadPrefs);
+  const [savedStatuses, setSavedStatuses] = useState<Set<CaseDocumentsStatus>>(() => new Set(initialPrefs.statuses));
+  const [risks, setRisks] = useState<Set<CaseRiskFilter>>(() => new Set(initialPrefs.risks));
+  const [sort, setSort] = useState<CaseSort>(initialPrefs.sort);
 
   useEffect(() => {
-    savePrefs({ statuses: Array.from(savedStatuses), sortOrder, riskFirst });
-  }, [savedStatuses, sortOrder, riskFirst]);
+    savePrefs({ statuses: Array.from(savedStatuses), risks: Array.from(risks), sort });
+  }, [savedStatuses, risks, sort]);
 
-  // The statuses some case has right now, in the order a case moves through them, each with its colour.
-  const statusTones = useMemo(() => {
-    const tones = new Map<string, { tone: string; rank: number }>();
-    for (const item of cases) {
-      if (item.status) tones.set(item.status, { tone: item.statusTone, rank: item.statusRank });
-    }
-    return tones;
-  }, [cases]);
+  // The sidebar lists the statuses cases are in, so it learns them from the server's counts.
+  const [counts, setCounts] = useState<Map<CaseDocumentsStatus, number> | null>(null);
 
+  // A saved status no case has right now has no chip to switch it off, so it must not filter anything: only
+  // statuses that currently exist count as active. Until the counts arrive, the saved ones are used as they are.
   const statusOptions = useMemo(
-    () => Array.from(statusTones.keys()).sort((a, b) => statusTones.get(a)!.rank - statusTones.get(b)!.rank),
-    [statusTones],
+    () => (counts ? STATUS_ORDER.filter((status) => (counts.get(status) ?? 0) > 0) : []),
+    [counts],
   );
-
-  // A saved status no case has right now (e.g. nothing is "stuck" today)
-  // has no chip to switch it off, so it must not filter anything — only
-  // statuses that currently exist count as active.
   const activeStatuses = useMemo(
-    () => new Set(statusOptions.filter((status) => savedStatuses.has(status))),
-    [statusOptions, savedStatuses],
+    () => new Set(counts ? statusOptions.filter((status) => savedStatuses.has(status)) : savedStatuses),
+    [counts, statusOptions, savedStatuses],
   );
+  const activeList = useMemo(() => STATUS_ORDER.filter((status) => activeStatuses.has(status)), [activeStatuses]);
+  const riskList = useMemo(() => RISK_OPTIONS.map((option) => option.value).filter((risk) => risks.has(risk)), [risks]);
 
-  function toggleStatus(status: string) {
-    const next = new Set(activeStatuses);
+  const queue = useCaseQueue({
+    q: search.trim(), sort, statuses: activeList, risks: riskList, page: requestedPage, pageSize: PAGE_SIZE,
+  });
+  const { items, total, hasLoaded, isFetching, error } = queue;
 
-    if (next.has(status)) {
-      next.delete(status);
-    } else {
-      next.add(status);
+  useEffect(() => {
+    if (queue.counts) {
+      setCounts(new Map(Object.entries(queue.counts.by_status) as [CaseDocumentsStatus, number][]));
     }
+  }, [queue.counts]);
 
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const page = hasLoaded ? Math.min(requestedPage, pageCount) : requestedPage;
+
+  // The page is in the URL (?page=2), so a refresh or the back button lands on the same one.
+  function goToPage(next: number) {
+    const params = new URLSearchParams(searchParams);
+    if (next <= 1) params.delete('page');
+    else params.set('page', String(next));
+    setSearchParams(params, { replace: true });
+  }
+
+  // After the last case of the last page is deleted (or a stale ?page=9), fall back to the last page there is.
+  useEffect(() => {
+    if (hasLoaded && !isFetching && items.length === 0 && total > 0 && requestedPage > pageCount) {
+      goToPage(pageCount);
+    }
+    // goToPage only reads the URL's own params.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasLoaded, isFetching, items.length, total, requestedPage, pageCount]);
+
+  // Changing a filter or the sort starts again from the first page.
+  function changeStatuses(next: Set<CaseDocumentsStatus>) {
     setSavedStatuses(next);
+    goToPage(1);
   }
 
-  const matches = useMemo(() => {
-    const query = search.trim().toLowerCase();
-
-    const filteredCases = cases.filter((item) => {
-      const matchesSearch =
-        !query ||
-        [displayCaseNumber(item), item.applicant]
-          .some((value) => value.toLowerCase().includes(query));
-
-      // No chip active = no status filter; otherwise a case matches if its
-      // status is any of the active ones.
-      const matchesStatus =
-        activeStatuses.size === 0 ||
-        activeStatuses.has(item.status);
-
-      return matchesSearch && matchesStatus;
-    });
-
-    return [...filteredCases].sort((a, b) => {
-      if (riskFirst && riskRank(a) !== riskRank(b)) {
-        return riskRank(b) - riskRank(a);
-      }
-
-      const timeA = creationTime(a);
-      const timeB = creationTime(b);
-
-      // Cases with no creation date sink to the bottom in either direction.
-      if (timeA === null && timeB === null) return 0;
-      if (timeA === null) return 1;
-      if (timeB === null) return -1;
-
-      return sortOrder === 'asc' ? timeA - timeB : timeB - timeA;
-    });
-  }, [cases, search, activeStatuses, sortOrder, riskFirst]);
-
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const query = search.trim().toLowerCase();
-
-    if (!query) return;
-
-    const exact = cases.find((item) =>
-      [displayCaseNumber(item), item.id]
-        .some((value) => value.toLowerCase() === query),
-    );
-
-    if (exact) {
-      onOpenCase(exact);
-    }
+  function changeRisks(next: Set<CaseRiskFilter>) {
+    setRisks(next);
+    goToPage(1);
   }
+
+  function changeSort(next: CaseSort) {
+    setSort(next);
+    goToPage(1);
+  }
+
+  const statusFilterOptions: FilterOption[] = statusOptions.map((status) => ({
+    value: status,
+    text: statusLabel(status),
+    count: counts?.get(status) ?? 0,
+    label: (
+      <>
+        <span className={`case-status-dot case-status-dot--${caseStatusTone(statusLabel(status))}`} aria-hidden="true" />
+        {statusLabel(status)}
+      </>
+    ),
+  }));
+  const riskFilterOptions: FilterOption[] = RISK_OPTIONS.map((option) => ({
+    value: option.value,
+    text: option.label,
+    label: (
+      <span className={`risk-badge risk-badge--${option.value === 'unscored' ? 'none' : option.value.toLowerCase()} queue-risk-badge`}>
+        {option.label}
+      </span>
+    ),
+  }));
+
+  const statusFilter = (
+    <HeaderFilter
+      name="status"
+      title="Status"
+      options={statusFilterOptions}
+      selected={activeStatuses}
+      disabled={!counts}
+      onChange={(next) => changeStatuses(next as Set<CaseDocumentsStatus>)}
+    />
+  );
+  // The header's own risk filter is just a funnel next to the sort arrows; the small-screen row has no header, so it is titled.
+  const riskFilterWith = (title?: string) => (
+    <HeaderFilter
+      name="risk"
+      title={title}
+      options={riskFilterOptions}
+      selected={risks}
+      disabled={!hasLoaded}
+      onChange={(next) => changeRisks(next as Set<CaseRiskFilter>)}
+    />
+  );
+  const riskFilter = riskFilterWith();
 
   async function confirmDeleteCase() {
     if (!caseToDelete) return;
@@ -200,7 +295,7 @@ export default function CaseQueuePage({
     try {
       await deleteCase(caseRecord.id);
       setCaseToDelete(null);
-      onCaseDeleted(caseRecord.id);
+      queue.reload();
     } catch (err) {
       setCaseToDelete(null);
       setDeleteError(err instanceof Error ? err.message : 'Failed to delete case.');
@@ -210,105 +305,58 @@ export default function CaseQueuePage({
   }
 
   return (
-    <main className="shell">
+    <main className="shell shell--queue">
       <AppHeader />
 
       <section className="queue-view">
-        <div className="case-queue-header">
-          <div>
-            <p className="eyebrow">My case queue</p>
-            <h1>Find a case</h1>
-          </div>
+        <div className="queue-bar">
+          <h1 className="queue-title">{hasLoaded ? `Cases (${total})` : 'Cases'}</h1>
 
-          <button
-            type="button"
-            className="create-case-btn"
-            onClick={onCreateCase}
-          >
-            + Create new case
-          </button>
-        </div>
+          {search && (
+            <span className="queue-search-chip">
+              <span className="queue-search-chip-text">Matching “{search}”</span>
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={() => {
+                  const params = new URLSearchParams(searchParams);
+                  params.delete('q');
+                  params.delete('page');
+                  setSearchParams(params, { replace: true });
+                }}
+              >
+                ✕
+              </button>
+            </span>
+          )}
 
-        <p className="sub">
-          Search by case number or applicant, or pick from your assigned cases below.
-        </p>
-
-        <form className="search-row" onSubmit={handleSubmit}>
-          <label className="search-box">
-            <span aria-hidden="true">⌕</span>
-
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Enter case number, e.g. GLDB-22841"
-              aria-label="Search case number or applicant"
+          {!error && (
+            <Pagination
+              page={page}
+              pageSize={PAGE_SIZE}
+              total={total}
+              loading={!hasLoaded}
+              onChange={(next) => {
+                goToPage(next);
+                window.scrollTo({ top: 0 });
+              }}
             />
-          </label>
-
-          <button className="go-btn" type="submit">
-            Go
-          </button>
-        </form>
-
-        <div className="queue-filters">
-          <div className="queue-filters-main">
-            <span className="filter-label">Filter by status</span>
-
-            <div className="status-chips">
-              {statusOptions.map((status) => {
-                const isActive = activeStatuses.has(status);
-
-                return (
-                  <button
-                    key={status}
-                    type="button"
-                    aria-pressed={isActive}
-                    className={`status-chip tone-${statusTones.get(status)?.tone ?? 'grey'} ${
-                      isActive ? 'status-chip--active' : ''
-                    }`}
-                    onClick={() => toggleStatus(status)}
-                  >
-                    {status}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="queue-filters-sort">
-            <span className="filter-label">Creation date</span>
-
-            <button
-              type="button"
-              className="sort-toggle-btn"
-              aria-label={
-                sortOrder === 'asc'
-                  ? 'Sorted by creation date, oldest first. Click for newest first.'
-                  : 'Sorted by creation date, newest first. Click for oldest first.'
-              }
-              onClick={() =>
-                setSortOrder((current) => (current === 'asc' ? 'desc' : 'asc'))
-              }
-            >
-              {sortOrder === 'asc' ? 'Oldest first' : 'Newest first'}
-              <span className="sort-toggle-arrow" aria-hidden="true">
-                {sortOrder === 'asc' ? '↑' : '↓'}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              className={`sort-toggle-btn ${riskFirst ? 'sort-toggle-btn--active' : ''}`}
-              aria-pressed={riskFirst}
-              onClick={() => setRiskFirst((current) => !current)}
-            >
-              Highest risk first
-            </button>
-          </div>
+          )}
         </div>
 
-        <div className="queue-label">
-          Assigned to you ({matches.length})
+        {/* Where the table has no column headers (narrow screens), the same filters and the sort live here. */}
+        <div className="queue-controls">
+          {statusFilter}
+          {riskFilterWith('Risk')}
+
+          <label className="queue-sort-select">
+            <span className="sr-only">Sort cases</span>
+            <select value={sort} onChange={(event) => changeSort(event.target.value as CaseSort)}>
+              {SORT_CHOICES.map((choice) => (
+                <option key={choice.value} value={choice.value}>{choice.label}</option>
+              ))}
+            </select>
+          </label>
         </div>
 
         {deleteError && (
@@ -317,36 +365,57 @@ export default function CaseQueuePage({
           </div>
         )}
 
-        {isLoading ? (
-          <div className="no-results">
-            Loading cases…
-          </div>
-        ) : error ? (
+        {error ? (
           <div className="no-results">
             <div>{error}</div>
 
-            <button
-              type="button"
-              className="go-btn queue-retry"
-              onClick={onRetry}
-            >
+            <button type="button" className="go-btn queue-retry" onClick={queue.reload}>
               Retry
             </button>
           </div>
-        ) : matches.length > 0 ? (
-          matches.map((caseRecord) => (
-            <CaseCard
-              key={caseRecord.id}
-              caseRecord={caseRecord}
-              onOpen={onOpenCase}
-              onDelete={setCaseToDelete}
-              onCaseUpdated={onCaseUpdated}
-              isDeleting={deletingCaseId === caseRecord.id}
-            />
-          ))
+        ) : !hasLoaded ? (
+          <div className="case-table" aria-busy="true">
+            <span className="sr-only" role="status">Loading cases…</span>
+
+            <TableHead sort={sort} disabled statusFilter={statusFilter} riskFilter={riskFilter} onSort={changeSort} />
+
+            <ul className="case-table-body" aria-hidden="true">
+              {Array.from({ length: 8 }, (_, row) => (
+                <li key={row} className="case-row">
+                  <div className="case-row-open">
+                    <span className="skeleton-cell"><span className="skeleton-bar skeleton-bar--id" /></span>
+                    <span className="skeleton-cell"><span className="skeleton-bar skeleton-bar--name" /></span>
+                    <span className="skeleton-cell"><span className="skeleton-bar skeleton-bar--status" /></span>
+                    <span className="skeleton-cell"><span className="skeleton-bar skeleton-bar--pill" /></span>
+                    <span className="skeleton-cell skeleton-cell--center"><span className="skeleton-bar skeleton-bar--date" /></span>
+                  </div>
+                  <span className="case-row-menu-space" />
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : items.length > 0 ? (
+          <div className={`case-table${isFetching ? ' case-table--busy' : ''}`} aria-busy={isFetching}>
+            <TableHead sort={sort} disabled={false} statusFilter={statusFilter} riskFilter={riskFilter} onSort={changeSort} />
+
+            <ul className="case-table-body">
+              {items.map((caseRecord) => (
+                <CaseRow
+                  key={caseRecord.id}
+                  caseRecord={caseRecord}
+                  onOpen={onOpenCase}
+                  onDelete={setCaseToDelete}
+                  onCaseUpdated={(caseId, companyName) => queue.patchItem(caseId, { applicant: companyName })}
+                  isDeleting={deletingCaseId === caseRecord.id}
+                />
+              ))}
+            </ul>
+          </div>
         ) : (
           <div className="no-results">
-            No case matches "{search}". Check the case number and try again.
+            {search
+              ? `No case matches "${search}". Check the case number and try again.`
+              : 'No cases to show.'}
           </div>
         )}
       </section>
@@ -354,7 +423,7 @@ export default function CaseQueuePage({
       {caseToDelete && (
         <ConfirmDialog
           title="Delete this case?"
-          message={`Case ${displayCaseNumber(caseToDelete)} (${caseToDelete.applicant}) and its documents will be removed and cannot be recovered.`}
+          message={`Case ${caseNumberLabel(caseToDelete)} (${caseToDelete.applicant}) and its documents will be removed and cannot be recovered.`}
           isConfirming={deletingCaseId === caseToDelete.id}
           onCancel={() => {
             if (deletingCaseId === null) setCaseToDelete(null);
