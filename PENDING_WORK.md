@@ -30,12 +30,7 @@ check if audit trail watches for cancel/retry etc.
 
 ## Detection and the document pipeline
 
-- **Payslip 7 pt shift not detected** (caught on the balance sheet and credit report). Probably no reference layout for the payslip template; check `layout_anomalies` and the payslip generator.
-- **Re-scan a case to confirm the latest detection changes** (the row and foreign-font checks, the hard-breach rule, metadata subject and title, cross-document leads `cross-doc-v7`, file-contents guidance), all tested on synthetic inputs only. After a live run, image tools should mostly stop returning "nothing to check" (before: 15 of 19 calls), and the leads should produce a tested hypothesis.
-- **Install `exiftool` locally.** Without it the metadata check and the AI-provenance check report "could not run" and never score. Optional: a startup warning when it's missing, a PyMuPDF fallback for basic metadata.
 - **Watch the new CPU process pool** on the first deployed runs (`CPU_WORKER_PROCESSES=2` on doc-worker and detection-worker): memory per instance (each process loads PyMuPDF and the OCR model), and the "CPU worker process died" log line.
-- **Very long bank statements** can overflow the extraction cap (`_EXTRACTION_MAX_TOKENS` 16,000); the document fails cleanly with the complete fields kept. Chunked transaction extraction would fix it.
-- **Credit report total check** (`CR.AGGREGATE_SUM`) allows 1%, which would pass a 2,000 difference on 1.8M. Tighten if it proves too loose.
 - **A cross-document finding's category:** a share-capital conflict is labelled `unsupported_claim`; a `cross_document_variance` label for verdicts needs a schema change.
 - **Vertical text:** `text_overlay.py` skips it by an aspect-ratio guess; reading the direction from PyMuPDF would replace the guess.
 - **Detection specialist prompts don't cache** (Haiku's minimum cacheable prefix is longer than their prompts). Accept it unless the cost logs show a large Haiku input bill.
@@ -57,7 +52,7 @@ Design: `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
 ## Performance
 
 Budgets are in `HOW_IT_WORKS.md` §8; query-level fixes are in `REFACTORING_AUDIT.md` §3.
-- `GET /cases/{id}/analysis` costs 5 queries per card reload; `GET /documents/{id}/detection/case-match` costs 7 and runs after each field edit.
+- `GET /cases/{id}/analysis` and `GET /documents/{id}/detection/case-match` read more than they need: fixes in `REFACTORING_AUDIT.md` §3 (1 and 2).
 - A burst of changes can chain snapshot builds, and the first requester waits for the follow-up.
 - **Opening a case still waits in sequence on a direct link or refresh:** the case lookup, then the WebSocket ticket, connection and first snapshot. (From the queue the case is handed over and the page code is prefetched.) Not done yet: fetching the first snapshot over a plain request alongside the socket, and putting the case's own details in the snapshot so a direct load needs one request.
 - **The queue's status filter, risk filter and risk sort read every matching case** (and `/cases/counts` reads every document's status) because status and risk are computed, not stored. Fine at today's volume; a stored rollup or index would be needed if the case count grows a lot.

@@ -78,7 +78,7 @@ Pub/Sub redelivery covers a worker that dies mid-request. The sweeper covers the
 
 ## 6. Delivery and security
 
-**CI** (`.github/workflows/ci-cd.yml`, on every PR and every push to `main`, except docs-only pushes): backend (ruff, pyright, pytest with coverage; pip and exiftool cached), frontend (lint, build, Playwright in Microsoft's Playwright container, version pinned to the lockfile), security (Checkov on Terraform, Dockerfiles and workflows; Snyk on `requirements.txt` and npm, or pip-audit and npm audit without a token; **blocking**), and Terraform `fmt` and `validate`.
+**CI** (`.github/workflows/ci-cd.yml`, on every PR and every push to `main`, except docs-only pushes; a push that only changes `backend/tests` runs CI but doesn't deploy): backend (ruff, pyright, pytest with coverage; pip and exiftool cached), frontend (lint, build, Playwright in Microsoft's Playwright container, version pinned to the lockfile), security (Checkov on Terraform, Dockerfiles and workflows; Snyk on `requirements.txt` and npm, or pip-audit and npm audit without a token; **blocking**), and Terraform `fmt` and `validate`.
 
 **Deploy** (`deploy.yml`, called by CI when all four pass on `main`, or run by hand; one at a time, never cancelled halfway):
 1. Build each image once (role targets of the backend Dockerfile, Kong, frontend, Grafana) into Artifact Registry `app`, skipping any this commit already has; a registry build cache keeps it fast. One service list at the top of the workflow drives every step.
@@ -120,7 +120,7 @@ Terraform owns everything else about a service (`deploy/terraform`); `apply` is 
 - **Failure tests** (a deliverable): kill a worker mid-run (redelivered, the document recovers); flood uploads (scale out, the queue drains); stop audit-metrics (events wait, then catch up); a poison message goes to the dead-letter topic without blocking; a lost publish (set a document to `queued` without publishing; the sweeper recovers it and the audit trail shows `recovery.requested` then `document.recovered`).
 - **Case dashboard in the app:** cases by stage, risk distribution, stuck or failed, "needs attention", from audit-metrics. (`/dashboard` is mock data owned by teammates.)
 - **Shared Anthropic rate budget** across instances: today each instance caps itself (max instances times concurrency).
-- **A Kong config test in CI:** the rendered `kong.yml` in front of stub upstreams (routes, CORS, rate limits, WebSocket upgrade). See `backend_tests.md` step 1 for the other missing infrastructure checks.
+- **A Kong config test in CI:** the rendered `kong.yml` in front of stub upstreams (routes, CORS, rate limits, WebSocket upgrade). See `backend_tests.md` step 3 for the other missing infrastructure checks.
 - **Optional:** ingestion out of api; the frontend reading Kong's URL at runtime (needed for staging anyway).
 
 **Staging** (planned, not started). A second GCP project (`fyp-six-sevens-staging`) and a second free Supabase project, run by the same Terraform with a second variables file and state. Rejected: suffixing every resource in one project (shared IAM, easy to cross-wire) and tagged Cloud Run revisions (same database and topic).
