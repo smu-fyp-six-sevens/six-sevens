@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pymupdf
 from langchain_core.messages import AIMessage, ToolMessage
@@ -96,10 +96,29 @@ def test_the_finding_counts_as_tampering_for_the_case_risk() -> None:
 # --- the specialist ------------------------------------------------------------------------------
 
 
-def test_digital_authenticity_must_call_the_tool_first() -> None:
-    spec = specialists.SPECIALISTS["digital_authenticity"]
-    assert spec.first_tool == "prompt_injection_tool"
-    assert "prompt_injection_tool" in [t.name for t in spec.tools]
+async def test_digital_authenticity_runs_the_injection_check_before_its_first_turn() -> None:
+    # The model is free to call any tool; the check must run regardless (tool_choice naming it was not honoured).
+    model = MagicMock()
+    model.bind_tools.return_value = model
+    model.ainvoke = AsyncMock(return_value=AIMessage(content="", tool_calls=[{"name": "metadata_tool", "args": {}, "id": "c1"}]))
+    node = specialists._make_agent_node(specialists.SPECIALISTS["digital_authenticity"])
+    tools.clear_context("doc-1")
+    with (
+        patch("app.langgraph._anthropic.build_chat_anthropic", return_value=model),
+        patch.object(tools.document_repository, "get_guard_result", return_value=_guard(HIDDEN_SPAN)),
+        patch.object(tools, "document_fields", AsyncMock(return_value=[])),
+        patch.object(tools, "file_facts", AsyncMock(return_value=None)),
+    ):
+        out = await node({"document_id": "doc-1", "specialist": "digital_authenticity", "brief": "b", "document_type": "payslip"})
+
+    sent = model.ainvoke.call_args.args[0]
+    [result] = [m for m in sent if isinstance(m, ToolMessage)]
+    assert result.name == "prompt_injection_tool"
+    assert json.loads(result.content)["findings"][0]["severity_floor"] == "high"
+    final = AIMessage(content=json.dumps({"summary": "done", "assessments": []}))
+    report = specialists._collect_node({"messages": [*out["messages"], final], "specialist": "digital_authenticity"})["report"]
+    assert "prompt_injection_tool" in report["tools_called"]
+    assert [f["severity"] for f in report["findings"]] == ["high"]
 
 
 def _collect(finding: dict, assessment: dict) -> dict:

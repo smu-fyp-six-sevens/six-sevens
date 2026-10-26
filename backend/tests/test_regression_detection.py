@@ -109,7 +109,8 @@ class DetectionAI:
         second_look = "SECOND LOOK requested" in system
         script = self.second_looks[name] if second_look else self.specialists[name]
         step = f"{name}:second_look" if second_look else name
-        if not any(isinstance(m, ToolMessage) for m in messages) and script.tools:
+        # Its own tools, once: a result already there from another tool (the pre-run injection check) doesn't count.
+        if not any(isinstance(m, ToolMessage) and m.name in script.tools for m in messages) and script.tools:
             self.calls.append(f"{step}:tools")
             return AIMessage(content="", tool_calls=[
                 {"name": tool, "args": {}, "id": f"{step}-{tool}"} for tool in script.tools
@@ -166,6 +167,7 @@ class FakeStore:
         self.fields: dict[str, list[ExtractedField]] = {}
         self.files: dict[str, bytes] = {}
         self.statuses: dict[str, list[str]] = {}
+        self.guard_results: dict[str, dict] = {}
 
     def add(self, filename: str, document_type: str, file: bytes, *, fields: dict | None = None,
             metadata: dict | None = None) -> str:
@@ -199,6 +201,13 @@ class FakeStore:
     # document_repository
     def get_document(self, document_id, include_fields=True, include_metadata=False):
         return self.documents.get(document_id)
+
+    def get_guard_result(self, document_id):
+        """What the content guard saved at ingest: clean, unless a test sets one."""
+        return self.guard_results.get(document_id, {
+            "version": 2, "risk": "none", "checks_run": ["hidden_text", "image_text", "dictionary"],
+            "spans": [], "spans_dropped": 0,
+        })
 
     def list_documents(self, case_id=None, **kwargs):
         return [d for d in self.documents.values() if d.case_id == case_id]
@@ -724,7 +733,8 @@ async def test_the_report_lists_each_specialist_with_its_brief_and_the_tools_it_
         assert consulted(report, name)["title"] == SPECIALISTS[name].title
     assert consulted(report, LAYOUT)["tools_called"] == ["font_consistency_tool", "image_tampering_tool"]
     assert consulted(report, CONTENT)["tools_called"] == ["date_consistency_tool"]
-    assert consulted(report, DIGITAL)["tools_called"] == ["metadata_tool"]
+    # The injection check runs for digital_authenticity on every document, before its own choice of tools.
+    assert consulted(report, DIGITAL)["tools_called"] == ["prompt_injection_tool", "metadata_tool"]
     # A check with nothing to look at is listed with its reason, as a pass.
     assert any(n["tool"] == "image_tampering_tool" for n in report["nothing_to_check"])
 

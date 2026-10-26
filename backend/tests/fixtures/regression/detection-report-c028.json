@@ -33,9 +33,10 @@
       "summary": "Reviewed within my expertise. | Second look: Reviewed within my expertise.",
       "title": "Digital Authenticity Analyst",
       "tools_called": [
-        "metadata_tool"
+        "metadata_tool",
+        "prompt_injection_tool"
       ],
-      "uncertain": true
+      "uncertain": false
     }
   ],
   "document_id": "doc-1",
