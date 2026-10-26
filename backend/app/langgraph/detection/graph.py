@@ -477,9 +477,8 @@ def _record_run_audit(document_id: str) -> None:
     run = run_context.current()
     if run is not None:
         trace.record(
-            document_id, "run_audit", run_kind="detection run",
-            model_calls=run.calls, call_ceiling=run.max_model_calls,
-            tokens=run.tokens, token_budget=run.max_tokens, output_repairs=run.repairs,
+            document_id, "run_audit",
+            model_calls=run.calls, call_ceiling=run.max_model_calls, output_repairs=run.repairs,
         )
 
 
@@ -490,12 +489,12 @@ async def synthesize_node(state: DetectionState) -> dict:
         unable = [*result["unable_to_assess"], {
             "specialist": "Run limit",
             "tool": None,
-            "reason": f"The run reached {run.limit_reached()}, so some checks or reviews did not finish.",
+            "reason": f"The run reached its limit of {run.max_model_calls} model calls, so some checks or reviews did not finish.",
         }]
         result = {**result, "unable_to_assess": unable}
         if result["verdict"] == "clean":
             result["verdict"] = "inconclusive"
-            result["summary"] = f"No findings, but the run reached {run.limit_reached()} before every check finished."
+            result["summary"] = "No findings, but the run hit its model call limit before every check finished."
     result = {**result, "schema_version": SCHEMA_VERSION}
     _record_run_audit(state["document_id"])
     flags_repository.assign_flag_ids(result["findings"])
@@ -554,7 +553,7 @@ async def _store_flags(document_id: str, case_id: str | None, report: dict) -> N
 
 async def run_detection(document_id: str) -> dict:
     """Investigates one document and returns the combined report. Raises DetectionError if it can't be investigated."""
-    with run_context.run_context(settings.DETECTION_MAX_MODEL_CALLS, settings.DETECTION_MAX_TOKENS or None):
+    with run_context.run_context(settings.DETECTION_MAX_MODEL_CALLS):
         return await _run_detection(document_id)
 
 

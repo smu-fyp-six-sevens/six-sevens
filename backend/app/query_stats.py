@@ -25,7 +25,7 @@ from typing import Any, Iterator
 import httpx
 from langchain_core.callbacks import AsyncCallbackHandler
 
-from . import metrics, pricing, run_context, telemetry
+from . import metrics, pricing, telemetry
 
 logger = logging.getLogger("perf")
 
@@ -188,7 +188,6 @@ class _LLMUsage(AsyncCallbackHandler):
                     agent, used.model, used.uncached_input, used.output, used.cache_read, used.cache_write, seconds,
                 )
                 _active().add_llm(used.total_input, used.output, used.cache_read, used.cache_write, cost)
-                run_context.add_model_tokens(used.total_input + used.output)
 
     async def on_llm_error(self, error: BaseException, *, run_id: Any = None, **kwargs: Any) -> None:
         _, agent = self._started.pop(run_id, (None, telemetry.current_agent()))

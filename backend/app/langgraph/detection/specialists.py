@@ -443,7 +443,7 @@ def _collect_node(state: SpecialistState) -> dict:
         "uncertainty_reason": assessment.uncertainty_reason
         or (
             None if complete else
-            "The run's model call ceiling or token budget was reached before this review finished." if _budget_exhausted() else
+            "The run's model call ceiling was reached before this review finished." if _budget_exhausted() else
             "The specialist's reply was cut off; only the assessments that finished were used." if cut_off else
             "Specialist output was incomplete or no tool was run."
         ),
