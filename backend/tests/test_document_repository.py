@@ -588,3 +588,21 @@ def test_moved_document_takes_its_notes_to_the_new_case() -> None:
     assert mock_notes.move_with_documents.call_args_list == [
         call(["doc-1"], "case-2"), call(["doc-2", "doc-3"], "case-2"),
     ]
+
+
+def test_document_statuses_are_read_for_100_cases_at_a_time() -> None:
+    row = {"id": "d", "case_id": "c", "filename": "a.pdf", "status": "analyzed", "retry_count": 0,
+           "uploaded_at": "2026-08-26T00:00:00Z", "queued_at": None, "processing_started_at": None}
+    with patch("app.document_repository.fetch_all", return_value=[row]) as fetch:
+        documents = document_repository.list_document_statuses([f"case-{n}" for n in range(250)])
+
+    assert fetch.call_count == 3  # 100 + 100 + 50
+    assert len(documents) == 3
+    assert document_repository.list_document_statuses([]) == []
+
+
+def test_every_documents_status_is_read_a_page_at_a_time() -> None:
+    row = {"id": "d", "case_id": "c", "filename": "a.pdf", "status": "analyzed", "retry_count": 0,
+           "uploaded_at": "2026-08-26T00:00:00Z", "queued_at": None, "processing_started_at": None}
+    with patch("app.document_repository.fetch_all", return_value=[row, row]):
+        assert len(document_repository.list_all_document_statuses()) == 2

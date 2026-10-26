@@ -2,62 +2,77 @@ import type {
   DocumentRecord,
 } from './types';
 
-// Mirrors REQUIRED_DOCUMENT_TYPES in backend/app/models.py.
-export const REQUIRED_DOCUMENT_TYPES: { value: string; label: string }[] = [
-  { value: 'id_document', label: 'Identity document (NRIC/Passport)' },
-  { value: 'bank_statement', label: 'Corporate bank statement' },
-  { value: 'proof_of_address', label: 'Personal proof of address' },
-  { value: 'fatca_crs_declaration', label: 'FATCA/CRS' },
-  { value: 'certificate_of_incorporation', label: 'Certificate of incorporation' },
-  { value: 'certificate_of_incumbency', label: 'Certificate of incumbency' },
-  { value: 'company_constitution', label: 'Company constitution' },
-  { value: 'credit_report', label: 'Credit report' },
-  { value: 'payslip', label: 'Payslip(s)' },
-  { value: 'source_of_wealth', label: 'Source of (corporate) wealth' },
-  { value: 'notice_of_assessment', label: 'NOA' },
-];
-
-// Mirrors ADDITIONAL_DOCUMENT_TYPES in backend/app/models.py.
-export const ADDITIONAL_DOCUMENT_TYPES: { value: string; label: string }[] = [
-  { value: 'company_proof_of_address', label: 'Company proof of address' },
-  { value: 'list_of_loans', label: 'List of loans' },
-  { value: 'source_of_personal_wealth', label: 'Source of (personal) wealth' },
-];
-
-// Mirrors KNOWN_DOCUMENT_TYPES in backend/app/extraction_prompts.py.
-export const DOCUMENT_TYPE_OPTIONS: { value: string; label: string }[] = [
-  { value: 'bank_statement', label: 'Bank statement' },
-  { value: 'certificate_of_incorporation', label: 'Certificate of incorporation' },
+// The one list of document types (the code the backend stores, and how it reads in the UI). The table labels,
+// the type dropdown and the checklist all come from it, so a type is named or renamed here and nowhere else.
+const DOCUMENT_TYPES = [
+  { value: 'bank_statement', label: 'Bank Statement' },
+  { value: 'certificate_of_incorporation', label: 'Certificate of Incorporation' },
   { value: 'payslip', label: 'Payslip' },
   { value: 'passport', label: 'Passport' },
   { value: 'nric', label: 'NRIC' },
-  { value: 'fatca_crs_declaration', label: 'FATCA/CRS declaration' },
-  { value: 'certificate_of_incumbency', label: 'Certificate of incumbency' },
-  { value: 'company_constitution', label: 'Company constitution' },
-  { value: 'proof_of_address', label: 'Proof of address' },
-  { value: 'source_of_wealth', label: 'Source of wealth' },
-  { value: 'credit_report', label: 'Credit report' },
-  { value: 'list_of_loans', label: 'List of loans' },
-  { value: 'notice_of_assessment', label: 'Notice of assessment' },
-  { value: 'unrecognised', label: 'Other' },
+  { value: 'fatca_crs_declaration', label: 'FATCA/CRS Declaration' },
+  { value: 'certificate_of_incumbency', label: 'Certificate of Incumbency' },
+  { value: 'company_constitution', label: 'Company Constitution' },
+  { value: 'proof_of_address', label: 'Proof of Address' },
+  { value: 'source_of_wealth', label: 'Source of Wealth' },
+  { value: 'credit_report', label: 'Credit Report' },
+  { value: 'list_of_loans', label: 'List of Loans' },
+  { value: 'notice_of_assessment', label: 'Notice of Assessment' },
+  { value: 'unrecognised', label: 'Unrecognised' },
 ];
 
-export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
-  bank_statement: 'Bank statement',
-  certificate_of_incorporation: 'Certificate of incorporation',
-  payslip: 'Payslip',
-  passport: 'Passport',
-  nric: 'NRIC',
-  fatca_crs_declaration: 'FATCA/CRS Declaration',
-  certificate_of_incumbency: 'Certificate of incumbency',
-  company_constitution: 'Company constitution',
-  proof_of_address: 'Proof of address',
-  source_of_wealth: 'Source of wealth',
-  credit_report: 'Credit report',
-  list_of_loans: 'List of loans',
-  notice_of_assessment: 'Notice of assessment',
-  unrecognised: 'Unrecognised',
+export const DOCUMENT_TYPE_LABELS: Record<string, string> = Object.fromEntries(
+  DOCUMENT_TYPES.map(({ value, label }) => [value, label]),
+);
+
+// The type dropdown: the same list, with the "couldn't tell" type offered as the catch-all "Other".
+export const DOCUMENT_TYPE_OPTIONS: { value: string; label: string }[] = DOCUMENT_TYPES.map((type) =>
+  type.value === 'unrecognised' ? { ...type, label: 'Other' } : type,
+);
+
+function sentenceCase(code: string): string {
+  const words = code.replace(/_/g, ' ');
+
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+// The checklist names what a case needs, which is not always one document type, so a few read differently from
+// the type they are met by. Every other requirement is named like its document type.
+const REQUIREMENT_LABELS: Record<string, string> = {
+  id_document: 'Identity Document (NRIC/Passport)',
+  bank_statement: 'Corporate Bank Statement',
+  proof_of_address: 'Personal Proof of Address',
+  payslip: 'Payslips',
+  source_of_wealth: 'Source of Corporate Wealth',
+  company_proof_of_address: 'Company Proof of Address',
+  source_of_personal_wealth: 'Source of Personal Wealth',
 };
+
+function requirement(value: string): { value: string; label: string } {
+  return { value, label: REQUIREMENT_LABELS[value] ?? DOCUMENT_TYPE_LABELS[value] ?? sentenceCase(value) };
+}
+
+// Mirrors REQUIRED_DOCUMENT_TYPES in backend/app/models.py (the codes, in checklist order).
+export const REQUIRED_DOCUMENT_TYPES = [
+  'id_document',
+  'bank_statement',
+  'proof_of_address',
+  'fatca_crs_declaration',
+  'certificate_of_incorporation',
+  'certificate_of_incumbency',
+  'company_constitution',
+  'credit_report',
+  'payslip',
+  'source_of_wealth',
+  'notice_of_assessment',
+].map(requirement);
+
+// Mirrors ADDITIONAL_DOCUMENT_TYPES in backend/app/models.py.
+export const ADDITIONAL_DOCUMENT_TYPES = [
+  'company_proof_of_address',
+  'list_of_loans',
+  'source_of_personal_wealth',
+].map(requirement);
 
 // 'unrecognised' starts out as the classifier's "couldn't tell" result and only becomes "Other" once.
 export function isConfirmedOther(
@@ -78,13 +93,8 @@ export function formatDocumentType(
   }
 
   if (documentType === 'unrecognised') {
-    return classificationConfidence === 1 ? 'Other' : 'Unrecognised';
+    return classificationConfidence === 1 ? 'Other' : DOCUMENT_TYPE_LABELS.unrecognised;
   }
 
-  return (
-    DOCUMENT_TYPE_LABELS[documentType] ??
-    documentType
-      .replace(/_/g, ' ')
-      .replace(/\b\w/g, (char) => char.toUpperCase())
-  );
+  return DOCUMENT_TYPE_LABELS[documentType] ?? sentenceCase(documentType);
 }

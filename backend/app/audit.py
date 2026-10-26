@@ -63,15 +63,22 @@ _COSTED = [
 def case_cost(case_id: str) -> dict:
     """
     A case's Claude spend from its audit trail: each costed run, a total per document, and the case total.
-    Runs from before the trail carried cost are absent. Sync: run on a worker thread.
+    Runs from before the trail carried cost are absent. Also how long each finished run took (`timings`, whether
+    or not it was costed). Sync: run on a worker thread.
     """
     rows = (
         service_supabase_client().table(_TABLE).select("*").eq("case_id", case_id).in_("action", _COSTED)
         .order("occurred_at").limit(1000).execute().data or []
     )
     runs = []
+    timings = []
     per_document: dict[str, float] = {}
     for event in (Event.from_audit_row(_row(row)) for row in rows):
+        if event.outcome == "success" and event.duration_ms is not None:
+            timings.append({
+                "occurred_at": event.occurred_at, "type": event.type, "document_id": event.document_id,
+                "duration_ms": event.duration_ms,
+            })
         cost = event.detail.get("llm_cost_usd")
         if cost is None:
             continue
@@ -87,7 +94,7 @@ def case_cost(case_id: str) -> dict:
         "case_id": case_id, "total_usd": round(total, 6),
         "documents_usd": {doc: round(usd, 6) for doc, usd in per_document.items()},
         "case_analysis_usd": round(sum(float(r["llm_cost_usd"]) for r in runs if r["run"] == "case_analysis"), 6),
-        "runs": runs,
+        "runs": runs, "timings": timings,
     }
 
 

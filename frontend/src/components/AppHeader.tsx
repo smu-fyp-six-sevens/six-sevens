@@ -1,10 +1,11 @@
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import type { CaseRecord } from '../App';
-import { useCases } from '../casesContext';
 import { clearToken, getUsername } from '../lib/api';
 import { officerLabel } from '../lib/officers';
-import { caseNumberLabel, findExactCase, matchesCaseQuery } from '../utils/caseSearch';
+import { searchCases } from '../services/uploadService';
+import { toCaseRecord } from '../utils/caseRecord';
+import { caseNumberLabel, findExactCase } from '../utils/caseSearch';
 import BrandLink from './BrandLink';
 
 const NAV_LINKS = [
@@ -14,36 +15,51 @@ const NAV_LINKS = [
 ];
 
 const MAX_SUGGESTIONS = 6;
+// Typing waits this long before asking the server, so a burst of keystrokes is one request.
+const SEARCH_DELAY_MS = 200;
 
-// Exact case number first, then names/numbers starting with the query, then the rest.
-function rankMatch(caseRecord: CaseRecord, query: string): number {
-  const number = caseNumberLabel(caseRecord).toLowerCase();
-  const name = caseRecord.applicant.toLowerCase();
-  if (number === query) return 0;
-  if (number.startsWith(query) || name.startsWith(query)) return 1;
-  return 2;
+interface SearchResults {
+  query: string;
+  items: CaseRecord[];
+  total: number;
 }
 
 // Jump-to-case search (an ARIA combobox): typing lists matching cases to open directly,
-// and the last option shows every match in the case queue (/cases?q=…).
+// and the last option shows every match in the case queue (/cases?q=…). The server finds and ranks
+// the matches (exact number first, then names and numbers starting with the query, then the rest).
 function HeaderSearch() {
-  const cases = useCases();
   const navigate = useNavigate();
   const listId = useId();
   const [value, setValue] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
-  const query = value.trim().toLowerCase();
+  const [results, setResults] = useState<SearchResults | null>(null);
+  const term = value.trim();
+  const query = term.toLowerCase();
 
-  const { suggestions, total } = useMemo(() => {
-    if (!query) return { suggestions: [], total: 0 };
-    const matching = cases.filter((item) => matchesCaseQuery(item, query));
-    const ranked = matching
-      .map((item, index) => ({ item, index, rank: rankMatch(item, query) }))
-      .sort((a, b) => a.rank - b.rank || a.index - b.index)
-      .map(({ item }) => item);
-    return { suggestions: ranked.slice(0, MAX_SUGGESTIONS), total: matching.length };
-  }, [cases, query]);
+  useEffect(() => {
+    if (!term) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      searchCases(term, MAX_SUGGESTIONS, controller.signal)
+        .then((result) => setResults({ query: term.toLowerCase(), items: result.items.map(toCaseRecord), total: result.total }))
+        .catch((err: unknown) => {
+          if (err instanceof DOMException && err.name === 'AbortError') return;
+          setResults({ query: term.toLowerCase(), items: [], total: 0 });
+        });
+    }, SEARCH_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [term]);
+
+  // Results of an earlier query don't count: until the current one answers, the list says so.
+  const current = results !== null && results.query === query ? results : null;
+  const suggestions = current?.items ?? [];
+  const total = current?.total ?? 0;
+  const isSearching = query !== '' && current === null;
 
   // The suggestions, then "See all results" as the last option (only when something matched).
   const hasShowAll = total > 0;
@@ -59,7 +75,7 @@ function HeaderSearch() {
 
   function openCase(caseRecord: CaseRecord) {
     reset();
-    navigate(`/cases/${caseRecord.caseNumber ?? caseRecord.id}`);
+    navigate(`/cases/${caseRecord.caseNumber ?? caseRecord.id}`, { state: { caseRecord } });
   }
 
   function showAll() {
@@ -87,7 +103,7 @@ function HeaderSearch() {
       if (showList && activeIndex >= 0) {
         choose(activeIndex);
       } else {
-        const exact = findExactCase(cases, query);
+        const exact = current ? findExactCase(current.items, query) : undefined;
         if (exact) openCase(exact);
         else showAll();
       }
@@ -100,7 +116,10 @@ function HeaderSearch() {
   return (
     <div className="header-search">
       <label className="search-box">
-        <span aria-hidden="true">⌕</span>
+        <svg className="search-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-3.5-3.5" />
+        </svg>
 
         <input
           role="combobox"
@@ -126,7 +145,9 @@ function HeaderSearch() {
         // mousedown is prevented so the input keeps focus (and the list stays open) until the click lands.
         <ul id={listId} role="listbox" className="header-search-list" onMouseDown={(event) => event.preventDefault()}>
           {suggestions.length === 0 && (
-            <li className="header-search-empty">No cases match “{value.trim()}”</li>
+            <li className="header-search-empty">
+              {isSearching ? 'Searching…' : `No cases match “${value.trim()}”`}
+            </li>
           )}
 
           {suggestions.map((item, index) => (
@@ -162,7 +183,74 @@ function HeaderSearch() {
   );
 }
 
+// The officer's name opens a small menu; sign out lives in it.
+function AccountMenu() {
+  const menuId = useId();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const username = getUsername();
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    function closeOnOutsideClick(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setIsOpen(false);
+    }
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') setIsOpen(false);
+    }
+
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutsideClick);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [isOpen]);
+
+  return (
+    <div className="officer-tag" ref={rootRef}>
+      <button
+        type="button"
+        className="officer-trigger"
+        aria-label="Account menu"
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        aria-controls={isOpen ? menuId : undefined}
+        onClick={() => setIsOpen((open) => !open)}
+      >
+        <span className="officer-avatar" aria-hidden="true">{(username ?? '?').charAt(0).toUpperCase()}</span>
+        <span className="officer-name">{officerLabel(username)}</span>
+        <svg className="officer-caret" viewBox="0 0 10 6" aria-hidden="true">
+          <path d="m1 1 4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div id={menuId} className="officer-menu" role="menu">
+          <div className="officer-menu-name">{officerLabel(username)}</div>
+          <button
+            type="button"
+            role="menuitem"
+            className="officer-menu-item"
+            onClick={() => {
+              clearToken();
+              window.location.assign('/login');
+            }}
+          >
+            Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AppHeader() {
+  const navigate = useNavigate();
+
   return (
     <header className="app-header">
       <BrandLink />
@@ -180,21 +268,17 @@ export default function AppHeader() {
       </nav>
 
       <div className="app-header-right">
-        <HeaderSearch />
+        <div className="header-tools">
+          <HeaderSearch />
 
-        <div className="officer-tag">
-          <span className="officer-name">{officerLabel(getUsername())}</span>
-          <button
-            type="button"
-            className="signout-btn"
-            onClick={() => {
-              clearToken();
-              window.location.assign('/login');
-            }}
-          >
-            Sign out
+          <button type="button" className="header-new-case" aria-label="New case" title="New case" onClick={() => navigate('/create-case')}>
+            <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M8 3v10M3 8h10" />
+            </svg>
           </button>
         </div>
+
+        <AccountMenu />
       </div>
     </header>
   );

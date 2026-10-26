@@ -125,11 +125,72 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Cases */
+        /**
+         * List Cases
+         * @description One page of the case queue: newest or oldest first, or by risk either way; optionally only these documents
+         *     statuses, only these risk levels and only cases whose number or name contains q.
+         */
         get: operations["list_cases_cases_get"];
         put?: never;
         /** Create Case */
         post: operations["create_case_cases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cases/by-number/{number}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Case By Number
+         * @description The case behind a URL such as /cases/GLDB-137.
+         */
+        get: operations["get_case_by_number_cases_by_number__number__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cases/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Case Counts */
+        get: operations["case_counts_cases_counts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cases/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Cases
+         * @description Jump-to-case suggestions, best match first; without q, the newest cases.
+         */
+        get: operations["search_cases_cases_search_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1639,6 +1700,18 @@ export interface components {
             status: "running" | "complete" | "failed" | "superseded";
         };
         /**
+         * CaseCounts
+         * @description What the queue's sidebar shows: every case, and how many are in each documents status.
+         */
+        CaseCounts: {
+            /** By Status */
+            by_status: {
+                [key: string]: number;
+            };
+            /** Total */
+            total: number;
+        };
+        /**
          * CaseDocumentsStatus
          * @description Rollup of every document under a case, worst-first: a single stuck
          *     document outranks nine analyzed ones. Computed live from the documents
@@ -1683,6 +1756,20 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * CaseListPage
+         * @description One page of the case queue. `total` counts every case matching the search and status filter.
+         */
+        CaseListPage: {
+            /** Items */
+            items: components["schemas"]["CaseListItem"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
         };
         /** CaseMatchResult */
         CaseMatchResult: {
@@ -1789,6 +1876,16 @@ export interface components {
             state: "scored" | "pending" | "failed" | "no_documents";
             /** Unassessed Checks */
             unassessed_checks: components["schemas"]["UnassessedCheck"][];
+        };
+        /**
+         * CaseSearchResult
+         * @description Jump-to-case suggestions: the best matches (exact number first), and how many cases match in all.
+         */
+        CaseSearchResult: {
+            /** Items */
+            items: components["schemas"]["CaseRecord"][];
+            /** Total */
+            total: number;
         };
         /**
          * CaseSummary
@@ -3567,7 +3664,14 @@ export interface operations {
     };
     list_cases_cases_get: {
         parameters: {
-            query?: never;
+            query?: {
+                limit?: number;
+                offset?: number;
+                sort?: "newest" | "oldest" | "risk" | "lowest_risk";
+                status?: components["schemas"]["CaseDocumentsStatus"][];
+                risk?: ("Critical" | "High" | "Medium" | "Low" | "unscored")[];
+                q?: string | null;
+            };
             header?: {
                 authorization?: string | null;
             };
@@ -3582,7 +3686,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CaseListItem"][];
+                    "application/json": components["schemas"]["CaseListPage"];
                 };
             };
             /** @description Validation Error */
@@ -3618,6 +3722,104 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CaseRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_case_by_number_cases_by_number__number__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseListItem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    case_counts_cases_counts_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseCounts"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_cases_cases_search_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseSearchResult"];
                 };
             };
             /** @description Validation Error */

@@ -23,7 +23,7 @@ export default function CaseHeader({ crumbs, children }: CaseHeaderProps) {
 export function CaseTitle({ caseRecord }: { caseRecord: CaseRecord }) {
   return (
     <div className="case-title">
-      <h1>{caseRecord.applicant}</h1>
+      <h1 title={caseRecord.applicant}>{caseRecord.applicant}</h1>
     </div>
   );
 }

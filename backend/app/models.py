@@ -492,6 +492,29 @@ class CaseListItem(CaseRecord):
     risk: CaseRisk | None = None
 
 
+class CaseListPage(BaseModel):
+    """One page of the case queue. `total` counts every case matching the search and status filter."""
+
+    items: list[CaseListItem]
+    total: int
+    limit: int
+    offset: int
+
+
+class CaseCounts(BaseModel):
+    """What the queue's sidebar shows: every case, and how many are in each documents status."""
+
+    total: int
+    by_status: dict[str, int]
+
+
+class CaseSearchResult(BaseModel):
+    """Jump-to-case suggestions: the best matches (exact number first), and how many cases match in all."""
+
+    items: list[CaseRecord]
+    total: int
+
+
 # The same limit as the case forms in the frontend (utils/caseValidation.ts).
 MAX_COMPANY_NAME_LENGTH = 100
 

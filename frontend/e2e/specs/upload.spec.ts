@@ -12,7 +12,7 @@ import { browseFiles, dropFiles, jpg, oversizedPdf, pdf, png, text } from '../su
 async function openCase(page: Page, backend: MockBackend) {
   const theCase = makeCase({ id: 'case-upload', greenlink_case_id: 'GLDB-1001' });
   backend.cases.push(theCase);
-  await page.goto(`/cases/${theCase.greenlink_case_id}`);
+  await page.goto(`/cases/${theCase.greenlink_case_id}?section=documents`);
   await expect(page.getByRole('heading', { name: 'Upload supporting documents' })).toBeVisible();
   return theCase;
 }
@@ -278,7 +278,7 @@ test.describe('Upload documents @sprint1 @SCRUM-6', () => {
     await page.getByRole('button', { name: 'Document actions' }).click();
     await page.getByRole('menuitem', { name: 'Delete document' }).click();
     await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
-    await expect(page).toHaveURL(`/cases/${theCase.greenlink_case_id}`);
+    await expect(page).toHaveURL(`/cases/${theCase.greenlink_case_id}?section=documents`);
 
     await browseFiles(page, [pdf('payslip.pdf')]);
     await uploadButton(page).click();
