@@ -477,7 +477,7 @@ def _record_run_audit(document_id: str) -> None:
     run = run_context.current()
     if run is not None:
         trace.record(
-            document_id, "run_audit",
+            document_id, "run_audit", run_kind="detection run",
             model_calls=run.calls, call_ceiling=run.max_model_calls,
             tokens=run.tokens, token_budget=run.max_tokens, output_repairs=run.repairs,
         )

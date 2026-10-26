@@ -21,12 +21,12 @@ from ..models import DocumentStatus
 logger = logging.getLogger("classifier_pipeline.langgraph.pipeline")
 
 
-async def _record_run_audit(document_id: str, run: RunContext) -> None:
+async def _record_run_audit(document_id: str, run: RunContext, run_kind: str = "document run") -> None:
     """What the run spent, and every model output that was repaired: the raw reply next to what was used."""
     # A rerun starts with no trace in memory, and recording into a fresh one would overwrite the saved row.
     await asyncio.to_thread(trace.resume, document_id)
     trace.record(
-        document_id, "run_audit",
+        document_id, "run_audit", run_kind=run_kind,
         model_calls=run.calls, call_ceiling=run.max_model_calls,
         tokens=run.tokens, token_budget=run.max_tokens, output_repairs=run.repairs,
     )
@@ -89,7 +89,7 @@ async def rerun_extraction(document_id: str) -> None:
                 try:
                     await _rerun_extraction(document_id)
                 finally:
-                    await _record_run_audit(document_id, run)
+                    await _record_run_audit(document_id, run, "extraction rerun")
         except Exception as exc:
             reason = _failure_reason(document_id, exc)
             text_cache.discard(document_id)
