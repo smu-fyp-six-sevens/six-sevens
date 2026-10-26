@@ -322,6 +322,23 @@ def scan(
     return result, removals
 
 
+def blocking_reason(result: dict[str, Any]) -> str | None:
+    """
+    Why the document is stopped at ingest, before any model reads it, or None. Any text worded as an instruction
+    to the AI stops it, wherever it was. Hidden text with no such wording does not: it goes on, to manual review.
+    """
+    span = next((s for s in result.get("spans") or [] if s.get("caught_by") == "dictionary"), None)
+    if span is None:
+        return None
+    where = {
+        "hidden": f"hidden text on page {span.get('page')}",
+        "metadata": f"the metadata field {span.get('field')}",
+        "visible": "text in the document",
+    }.get(str(span.get("where")), "text in the document")
+    quote = " ".join(str(span.get("quote") or "").split())[:120]
+    return f'Blocked by the content guard: {where} is worded as an instruction to the AI ("{quote}"). No AI model read this document.'
+
+
 _MARKERS = re.compile(rf"(?:{re.escape(REMOVED_MARKER)}\s*)+")
 
 

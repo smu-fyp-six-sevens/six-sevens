@@ -53,6 +53,7 @@ work_input = Counter("work_llm_input_tokens_total", "All input tokens (cached or
 detection_tool_calls = Counter("detection_tool_calls_total", "Detection tool results", ["tool", "outcome"])
 detection_verdicts = Counter("detection_verdicts_total", "Detection runs by verdict", ["verdict"])
 content_guard_results = Counter("content_guard_results_total", "Content guard results by risk", ["risk"])
+content_guard_blocks = Counter("content_guard_blocks_total", "Documents stopped at ingest by the content guard")
 
 supabase_calls = Counter("supabase_calls_total", "Supabase calls", ["target"])
 

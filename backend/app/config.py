@@ -132,6 +132,9 @@ class Settings:
     # Most model calls one document's classify and extract run may make (agent turns, the two classifier
     # tools, a repair, extraction and its one retry, and one reclassification).
     DOCUMENT_MAX_MODEL_CALLS: int = int(os.environ.get("DOCUMENT_MAX_MODEL_CALLS", "24"))
+    # A document the content guard finds worded as an instruction to the AI fails at ingest, before classification
+    # or extraction (guardrails/content_guard.blocking_reason). "false" lets it through, flagged instead.
+    GUARD_BLOCK_INJECTION: bool = os.environ.get("GUARD_BLOCK_INJECTION", "true").lower() == "true"
     # Most tokens (input, cached or not, plus output) one run may use; past it the run stops asking, as at its
     # call ceiling. About 10x the largest runs in the audit trail on 2026-10-26 (document 16k, detection 27k,
     # case 10k, from 14 runs): placeholders until there are more. 0 turns one off.

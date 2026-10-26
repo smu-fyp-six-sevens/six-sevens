@@ -112,12 +112,18 @@ async def _rerun_extraction(document_id: str) -> None:
     document_type = document.document_type or "unrecognised"
 
     try:
-        raw_text, _ = await nodes.ingest_document_text(document_id, document)
+        raw_text, guard = await nodes.ingest_document_text(document_id, document)
     except nodes.IngestError as exc:
         await nodes.fail_document(document_id, str(exc), document_type=document_type)
         return
     finally:
         text_cache.discard(document_id)
+
+    # A rerun re-reads the file, so the guard can stop it here too, before extraction.
+    blocked = nodes.guard_block_reason(guard)
+    if blocked:
+        await nodes.fail_document(document_id, blocked, document_type=document_type)
+        return
 
     if not raw_text.strip():
         await nodes.fail_document(

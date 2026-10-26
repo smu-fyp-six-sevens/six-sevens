@@ -82,9 +82,9 @@ async def persist_extracted_fields(document_id: str, document_type: str, extract
     )
 
 
-async def ingest_document_text(document_id: str, document) -> tuple[str, str | None]:
+async def ingest_document_text(document_id: str, document) -> tuple[str, dict]:
     """
-    The text the models will read, and the content guard's risk for the document (see _guard_document).
+    The text the models will read, and the content guard's result for the document (see _guard_document).
 
     Downloads the stored file and runs text extraction (native PDF text, or
     OCR for scans/images) once, up front — before classification, so the
@@ -130,12 +130,13 @@ async def ingest_document_text(document_id: str, document) -> tuple[str, str | N
 
 async def _guard_document(
     document_id: str, file_bytes: bytes, content_type: str, raw_text: str, metadata: dict | None,
-) -> tuple[str, str | None]:
+) -> tuple[str, dict]:
     """
     Layer 1 of the guardrails (guardrails/content_guard.py): records what the content guard found as the
     document's guard_result, for detection to report, and returns the text the models will read, with flagged
-    hidden text taken out, plus the risk. Never fails the ingest: a guard that could not run is saved with no
-    checks run, which detection reads as unable to assess.
+    hidden text taken out, plus the result. Never fails the ingest itself: a guard that could not run is saved
+    with no checks run, which detection reads as unable to assess. Whether the result stops the document is
+    the caller's call (guard_block_reason).
     """
     try:
         result, removals = await run_cpu(content_guard.scan, file_bytes, content_type, raw_text, metadata)
@@ -156,7 +157,15 @@ async def _guard_document(
     except Exception as exc:
         # Until the documents.guard_result column exists the write fails; the ingest carries on regardless.
         logger.warning("Document %s: guard_result not saved: %s", document_id, exc)
-    return content_guard.clean_text(raw_text, removals), result["risk"]
+    return content_guard.clean_text(raw_text, removals), result
+
+
+def guard_block_reason(guard: dict) -> str | None:
+    """Why the content guard stops this document before classification and extraction, or None."""
+    reason = content_guard.blocking_reason(guard) if settings.GUARD_BLOCK_INJECTION else None
+    if reason:
+        metrics.content_guard_blocks.inc()
+    return reason
 
 
 def _is_unrecognised(document_type: str | None) -> bool:
@@ -232,10 +241,17 @@ async def ingest_node(state: DocumentGraphState) -> dict:
         return {"status": "failed", "failure_reason": f"Document {document_id} not found"}
 
     try:
-        raw_text, guard_risk = await ingest_document_text(document_id, document)
+        raw_text, guard = await ingest_document_text(document_id, document)
     except IngestError as exc:
         trace.record(document_id, "ingest", case_id=document.case_id, error=str(exc))
         return {"status": "failed", "failure_reason": str(exc)}
+
+    # Instructions aimed at the AI: stop here, so no model reads the document (the graph routes to fail).
+    blocked = guard_block_reason(guard)
+    if blocked:
+        trace.record(document_id, "ingest", case_id=document.case_id, filename=document.filename, blocked=blocked)
+        return {"status": "failed", "failure_reason": blocked, "case_id": document.case_id,
+                "filename": document.filename, "guard_risk": guard["risk"]}
 
     text_hash = text_cache.put(document_id, raw_text)
     trace.record(document_id, "ingest", case_id=document.case_id, filename=document.filename, text_available=bool(raw_text.strip()))
@@ -245,7 +261,7 @@ async def ingest_node(state: DocumentGraphState) -> dict:
         "storage_path": document.storage_path,
         "text_hash": text_hash,
         "text_available": bool(raw_text.strip()),
-        "guard_risk": guard_risk,
+        "guard_risk": guard["risk"],
     }
 
 
