@@ -173,7 +173,7 @@ def _margin_mismatch_pdf() -> bytes:
             page = doc.new_page(width=612, height=792)
             # Third page inset on every side relative to the first two.
             inset = 50 if page_index == 2 else 0
-            left, top, right, bottom = 72 + inset, 90 + inset, 540 - inset, 700 - inset
+            left, top, right = 72 + inset, 90 + inset, 540 - inset
             y = top
             for _ in range(3):
                 _textbox(page, pymupdf.Rect(left, y, right, y + 70), BODY, align=0)

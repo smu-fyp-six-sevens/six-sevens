@@ -8,19 +8,23 @@ import {
   useParams,
 } from 'react-router-dom';
 
+import { CasePageSkeleton, DocumentPageSkeleton, PageSkeleton } from './components/Skeletons';
 import CaseQueuePage from './pages/CaseQueuePage';
 import CreateCasePage from './pages/CreateCasePage';
 import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
 import NotFoundState from './components/NotFoundState';
-import { CasesContext } from './casesContext';
+import { useCaseByNumber, type CaseHandover } from './pages/useCaseByNumber';
+import { useRecentCases } from './pages/useRecentCases';
 
 // Loaded on first visit to keep the initial bundle small.
-const UploadPage = lazy(() => import('./pages/UploadPage'));
-const DocumentDetailsPage = lazy(() => import('./pages/DocumentDetailsPage'));
+const loadUploadPage = () => import('./pages/UploadPage');
+const loadDocumentDetailsPage = () => import('./pages/DocumentDetailsPage');
+const UploadPage = lazy(loadUploadPage);
+const DocumentDetailsPage = lazy(loadDocumentDetailsPage);
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
-import { authFetch, getToken } from './lib/api';
-import type { CaseRisk, CaseRiskLevel } from './services/uploadService';
+import { getToken } from './lib/api';
+import type { CaseRiskLevel } from './services/uploadService';
 
 export interface CaseRecord {
   id: string;
@@ -35,79 +39,65 @@ export interface CaseRecord {
   riskDescription?: string | null;
 }
 
-function mapStatus(status: string): string {
-  switch (status) {
-    case 'no_documents':
-      return 'Documents pending';
-    case 'stuck':
-      return 'Processing stuck';
-    case 'failed':
-      return 'Documents failed';
-    case 'in_progress':
-      return 'In progress';
-    case 'analyzed':
-      return 'Ready for review';
-    default:
-      return status || 'Open';
-  }
-}
-
-function CaseQueueRoute({
-  cases,
-  isLoading,
-  error,
-  onRetry,
-  onCaseUpdated,
-  onCaseDeleted,
-}: {
-  cases: CaseRecord[];
-  isLoading: boolean;
-  error: string | null;
-  onRetry: () => void;
-  onCaseUpdated: (caseId: string, companyName: string) => void;
-  onCaseDeleted: (caseId: string) => void;
-}) {
+function CaseQueueRoute() {
   const navigate = useNavigate();
+
+  // Once the queue has settled, fetch the code of the pages a click leads to, so opening one doesn't wait for it.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadUploadPage();
+      void loadDocumentDetailsPage();
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   return (
     <CaseQueuePage
-      cases={cases}
-      isLoading={isLoading}
-      error={error}
-      onRetry={onRetry}
       onOpenCase={(selectedCase) =>
-        navigate(`/cases/${selectedCase.caseNumber ?? selectedCase.id}`)
+        navigate(`/cases/${selectedCase.caseNumber ?? selectedCase.id}`, { state: { caseRecord: selectedCase } satisfies CaseHandover })
       }
-      onCreateCase={() => navigate('/create-case')}
-      onCaseUpdated={onCaseUpdated}
-      onCaseDeleted={onCaseDeleted}
     />
   );
 }
 
-function CaseDetailsRoute({
-  cases,
-  onCaseUpdated,
-  onCaseDeleted,
-}: {
-  cases: CaseRecord[];
-  onCaseUpdated: (caseId: string, companyName: string) => void;
-  onCaseDeleted: (caseId: string) => void;
-}) {
+function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="shell">
+      <div className="no-results">
+        <div>{message}</div>
+
+        <button type="button" className="go-btn queue-retry" onClick={onRetry}>
+          Retry
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CaseDetailsRoute() {
   const { caseNumber } = useParams();
   const navigate = useNavigate();
+  const { lookup, retry, rename } = useCaseByNumber(caseNumber);
 
-  const selectedCase = cases.find(
-    (item) =>
-      item.caseNumber === caseNumber ||
-      item.id === caseNumber
-  );
+  // The page's code loads while the case is looked up, so the two waits overlap instead of following each other.
+  useEffect(() => {
+    void loadUploadPage();
+  }, []);
 
-  if (!selectedCase) {
+  if (lookup.status === 'loading') {
+    return <CasePageSkeleton />;
+  }
+
+  if (lookup.status === 'error') {
+    return <LoadError message={lookup.message} onRetry={retry} />;
+  }
+
+  if (lookup.status === 'notFound') {
     return (
       <NotFoundState
         title="We couldn't find that case"
-        description={"The case you're looking for doesn't exist or may have been\u00a0deleted."}
+        description={"The case you're looking for doesn't exist or may have been deleted."}
         hints={[
           'Check that the case number in the URL is correct.',
           'The case may have been deleted.',
@@ -117,38 +107,41 @@ function CaseDetailsRoute({
     );
   }
 
+  const selectedCase = lookup.caseRecord;
+
   return (
     <UploadPage
       selectedCase={selectedCase}
       onOpenDocument={(documentId) =>
         navigate(
-          `/cases/${selectedCase.caseNumber ?? selectedCase.id}/documents/${documentId}`
+          `/cases/${selectedCase.caseNumber ?? selectedCase.id}/documents/${documentId}`,
+          { state: { caseRecord: selectedCase } satisfies CaseHandover },
         )
       }
-      onCaseUpdated={(companyName) => onCaseUpdated(selectedCase.id, companyName)}
-      onCaseDeleted={() => {
-        onCaseDeleted(selectedCase.id);
-        navigate('/cases');
-      }}
+      onCaseUpdated={rename}
+      onCaseDeleted={() => navigate('/cases')}
     />
   );
 }
 
-function DocumentDetailsRoute({
-  cases,
-}: {
-  cases: CaseRecord[];
-}) {
+function DocumentDetailsRoute() {
   const { caseNumber, documentId } = useParams();
   const navigate = useNavigate();
+  const { lookup, retry } = useCaseByNumber(caseNumber);
 
-  const selectedCase = cases.find(
-    (item) =>
-      item.caseNumber === caseNumber ||
-      item.id === caseNumber
-  );
+  useEffect(() => {
+    void loadDocumentDetailsPage();
+  }, []);
 
-  if (!selectedCase || !documentId) {
+  if (lookup.status === 'loading') {
+    return <DocumentPageSkeleton />;
+  }
+
+  if (lookup.status === 'error') {
+    return <LoadError message={lookup.message} onRetry={retry} />;
+  }
+
+  if (lookup.status === 'notFound' || !documentId) {
     return (
       <NotFoundState
         title="We couldn't find that document"
@@ -162,36 +155,35 @@ function DocumentDetailsRoute({
     );
   }
 
+  const selectedCase = lookup.caseRecord;
+
   return (
     <DocumentDetailsPage
       selectedCase={selectedCase}
       documentId={documentId}
+      // Back to the case's document list, where the officer was working.
       onDocumentDeleted={() =>
         navigate(
-          `/cases/${selectedCase.caseNumber ?? selectedCase.id}`
+          `/cases/${selectedCase.caseNumber ?? selectedCase.id}?section=documents`
         )
       }
     />
   );
 }
 
-function CreateCaseRoute({
-  onCreated,
-  onReloadCases,
-}: {
-  onCreated: () => void;
-  onReloadCases: () => void;
-}) {
+function DashboardRoute() {
+  const { cases, isLoading } = useRecentCases(50);
+
+  return <DashboardPage cases={cases} isLoading={isLoading} />;
+}
+
+function CreateCaseRoute() {
   const navigate = useNavigate();
 
   return (
     <CreateCasePage
       onBack={() => navigate('/cases')}
-      onCreated={() => {
-        onCreated();
-        onReloadCases();
-        navigate('/cases');
-      }}
+      onCreated={() => navigate('/cases')}
     />
   );
 }
@@ -224,78 +216,11 @@ function LoginRoute({ onLoggedIn }: { onLoggedIn: () => void }) {
 }
 
 export default function App() {
-  const [cases, setCases] = useState<CaseRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [isAuthed, setIsAuthed] = useState(() => getToken() !== null);
-
-  async function loadCases(signal?: AbortSignal) {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await authFetch('/cases', { signal });
-
-      if (!response.ok) {
-        throw new Error(`Failed to load cases (${response.status}).`);
-      }
-
-      const data = (await response.json()) as Array<{
-        id: string;
-        greenlink_case_id?: string | null;
-        company_name?: string | null;
-        status?: string | null;
-        documents_status?: string | null;
-        created_at?: string | null;
-        risk?: CaseRisk | null;
-      }>;
-
-      setCases(
-        data.map((item) => ({
-          id: item.id,
-          caseNumber: item.greenlink_case_id ?? null,
-          applicant: item.company_name ?? 'Unnamed company',
-          status: mapStatus(
-            item.documents_status ?? item.status ?? 'open'
-          ),
-          caseStatus: item.status ?? 'open',
-          created_at: item.created_at ?? null,
-          riskLevel: item.risk?.state === 'scored' ? item.risk.level : null,
-          riskScore: item.risk?.state === 'scored' ? item.risk.score : null,
-          riskDescription: item.risk?.state === 'scored' ? item.risk.reasons?.[0] ?? null : null,
-        }))
-      );
-    } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        return;
-      }
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Failed to load cases.'
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    if (!isAuthed) {
-      return;
-    }
-
-    const controller = new AbortController();
-
-    void loadCases(controller.signal);
-
-    return () => controller.abort();
-  }, [isAuthed]);
 
   return (
     <BrowserRouter>
-      <CasesContext.Provider value={cases}>
-      <Suspense fallback={<p className="loading">Loading…</p>}>
+      <Suspense fallback={<PageSkeleton />}>
       <Routes>
         <Route
           path="/"
@@ -311,22 +236,7 @@ export default function App() {
           path="/cases"
           element={
             <RequireAuth isAuthed={isAuthed}>
-              <CaseQueueRoute
-                cases={cases}
-                isLoading={isLoading}
-                error={error}
-                onRetry={() => void loadCases()}
-                onCaseUpdated={(caseId, companyName) =>
-                  setCases((current) =>
-                    current.map((item) =>
-                      item.id === caseId ? { ...item, applicant: companyName } : item
-                    )
-                  )
-                }
-                onCaseDeleted={(caseId) =>
-                  setCases((current) => current.filter((item) => item.id !== caseId))
-                }
-              />
+              <CaseQueueRoute />
             </RequireAuth>
           }
         />
@@ -335,25 +245,10 @@ export default function App() {
           path="/cases/:caseNumber"
           element={
             <RequireAuth isAuthed={isAuthed}>
-              {isLoading ? (
-                <div className="shell">
-                  <p>Loading case...</p>
-                </div>
-              ) : (
-                <CaseDetailsRoute
-                  cases={cases}
-                  onCaseUpdated={(caseId, companyName) =>
-                    setCases((current) =>
-                      current.map((item) =>
-                        item.id === caseId ? { ...item, applicant: companyName } : item
-                      )
-                    )
-                  }
-                  onCaseDeleted={(caseId) =>
-                    setCases((current) => current.filter((item) => item.id !== caseId))
-                  }
-                />
-              )}
+              {/* The same skeleton as the lookup's, so waiting for the page's code doesn't swap it for another. */}
+              <Suspense fallback={<CasePageSkeleton />}>
+                <CaseDetailsRoute />
+              </Suspense>
             </RequireAuth>
           }
         />
@@ -362,13 +257,9 @@ export default function App() {
           path="/cases/:caseNumber/documents/:documentId"
           element={
             <RequireAuth isAuthed={isAuthed}>
-              {isLoading ? (
-                <div className="shell">
-                  <p>Loading document...</p>
-                </div>
-              ) : (
-                <DocumentDetailsRoute cases={cases} />
-              )}
+              <Suspense fallback={<DocumentPageSkeleton />}>
+                <DocumentDetailsRoute />
+              </Suspense>
             </RequireAuth>
           }
         />
@@ -377,7 +268,7 @@ export default function App() {
           path="/dashboard"
           element={
             <RequireAuth isAuthed={isAuthed}>
-              <DashboardPage cases={cases} isLoading={isLoading} />
+              <DashboardRoute />
             </RequireAuth>
           }
         />
@@ -395,10 +286,7 @@ export default function App() {
           path="/create-case"
           element={
             <RequireAuth isAuthed={isAuthed}>
-              <CreateCaseRoute
-                onCreated={() => undefined}
-                onReloadCases={() => void loadCases()}
-              />
+              <CreateCaseRoute />
             </RequireAuth>
           }
         />
@@ -409,7 +297,6 @@ export default function App() {
         />
       </Routes>
       </Suspense>
-      </CasesContext.Provider>
     </BrowserRouter>
   );
 }

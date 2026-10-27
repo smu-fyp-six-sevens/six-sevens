@@ -109,7 +109,7 @@ Terraform owns everything else about a service (`deploy/terraform`); `apply` is 
 **Settled:** push delivery for Stage 1 (detection takes 1-2 min, inside the 600 s ack deadline; revisit if a stage's p95 passes 8 minutes); ingestion inside api; Grafana as our own Cloud Run service; `uvicorn` + `npm run dev` stays the default for everyone, compose is opt-in; tests stub Anthropic and Supabase; the injection tool only in uvicorn mode; case match stays in api; no Redis until a measured need; Snyk scans `requirements.txt`.
 
 **Open:**
-1. **Supervisor check:** does Stage 1 on Cloud Run count as "genuinely decoupled" for the award, or is Kubernetes expected before November? This decides whether Stage 2 moves earlier.
+1. **Award check:** the supervisor accepted the Cloud Run architecture (2026-10-26, section 10); confirm the Cloud Native award assessment is fine with Kubernetes designed but deliberately not built.
 2. **Automatic case analysis** before November (the case-worker gate, `CROSS_DOCUMENT_AND_RISK_PLAN.md` Step 0).
 3. **Login:** keep `AUTH_USERS` as a documented limitation, or move to Supabase Auth (touches login, token checks, WebSocket tickets, tests).
 4. **Staging** (section 9): approval before production or fully automatic; Grafana in staging; who approves; a smoke test per merge or nightly only.
@@ -119,9 +119,8 @@ Terraform owns everything else about a service (`deploy/terraform`); `apply` is 
 **Stage 1**
 - **Failure tests** (a deliverable): kill a worker mid-run (redelivered, the document recovers); flood uploads (scale out, the queue drains); stop audit-metrics (events wait, then catch up); a poison message goes to the dead-letter topic without blocking; a lost publish (set a document to `queued` without publishing; the sweeper recovers it and the audit trail shows `recovery.requested` then `document.recovered`).
 - **Case dashboard in the app:** cases by stage, risk distribution, stuck or failed, "needs attention", from audit-metrics. (`/dashboard` is mock data owned by teammates.)
-- **Nightly eval job** (a Cloud Run Job; a CronJob in Stage 2) writing results the dashboard reads; guardrail checks.
 - **Shared Anthropic rate budget** across instances: today each instance caps itself (max instances times concurrency).
-- **A Kong config test in CI:** the rendered `kong.yml` in front of stub upstreams (routes, CORS, rate limits, WebSocket upgrade). See `backend_tests.md` step 1 for the other missing infrastructure checks.
+- **A Kong config test in CI:** the rendered `kong.yml` in front of stub upstreams (routes, CORS, rate limits, WebSocket upgrade). See `backend_tests.md` step 3 for the other missing infrastructure checks.
 - **Optional:** ingestion out of api; the frontend reading Kong's URL at runtime (needed for staging anyway).
 
 **Staging** (planned, not started). A second GCP project (`fyp-six-sevens-staging`) and a second free Supabase project, run by the same Terraform with a second variables file and state. Rejected: suffixing every resource in one project (shared IAM, easy to cross-wire) and tagged Cloud Run revisions (same database and topic).
@@ -135,18 +134,49 @@ Terraform owns everything else about a service (`deploy/terraform`); `apply` is 
 
 Cost: about $0 idle, cents per merge, under $1 a night.
 
-**Stage 2** (after Stage 1, each step deployable on its own): GKE Autopilot module and a Helm chart with a values file per role; pull subscribers behind the existing handlers, KEDA on Pub/Sub backlog; Kong as ingress controller, Managed Prometheus on the pods, Workload Identity; Argo CD in place of the deploy workflow, Checkov on the charts; Litmus chaos tests.
+**Stage 2 (original plan, replaced by section 10):** GKE Autopilot module and a Helm chart with a values file per role; pull subscribers behind the existing handlers, KEDA on Pub/Sub backlog; Kong as ingress controller, Managed Prometheus on the pods, Workload Identity; Argo CD in place of the deploy workflow, Checkov on the charts; Litmus chaos tests.
 
-## 10. Risks
+## 10. Stage 2, revised after the supervisor's feedback (2026-10-26)
+
+**Feedback in short:** the current architecture (decoupled roles, containers, one Pub/Sub topic) is acceptable. Expected usage is a handful of users, so heavier infrastructure isn't justified without a measured need: document it as a scaling option instead. Load and concurrency testing should drive infrastructure decisions. Spend the remaining time on testing, productionisation, usability and business value. He approved a staging environment, liked `docker compose up` as the way to run it, accepted that on-prem deployment is hard for now, and asked for a deployment document (server, model, RAM, storage).
+
+**What changed at a glance**
+
+| Original Stage 2 | Now |
+|---|---|
+| GKE Autopilot, Helm chart per role | Documented option, with the triggers below; not built |
+| Pull subscribers, KEDA on Pub/Sub backlog | Documented option; Cloud Run push stays |
+| Kong as ingress controller, Managed Prometheus on pods | Documented option; Kong on Cloud Run stays |
+| Argo CD instead of the deploy workflow | Staging and promotion in the existing GitHub Actions pipeline (step 1) |
+| Litmus chaos tests | Scripted failure tests on staging (step 4) |
+| (none) | Load testing that doesn't call Claude or write to Supabase (step 2), autoscaling tuned from it (step 3), service-level targets (step 5), Claude through Vertex AI (step 6), cost guardrails (step 7), self-host kit and a recovery drill (step 8) |
+
+**Steps, in order** (6 can run alongside the others):
+1. **Staging and promotion.** The staging plan in section 9: a second GCP and Supabase project, the same image promoted after an approval step, Terraform plan and apply in the pipeline, schema migrations. First, because load and failure tests against the shared production database would pollute real cases.
+2. **Load-test harness as code.** k6 or Locust scripts in the repo, run against staging on demand or nightly, results stored and charted, written up as a capacity report ("handles X concurrent officers and Y cases in flight; the limit is Z"). Two hard rules:
+   - **No Claude API calls.** Model calls are replaced by canned responses (a stub at the `langgraph/_anthropic.py` boundary, switched on by a setting that production never sets), so the run spends no tokens.
+   - **Supabase reads only, no writes.** The read paths are loaded for real: queue pages, search, counts, case lookups, case snapshots, WebSocket connections. Paths that write (upload, approval, status changes, audit rows) run against an in-memory store instead, so the event pipeline, Pub/Sub delivery and worker scaling are loaded without changing any data.
+3. **Autoscaling tuned from the measurements.** Cloud Run concurrency and min and max instances per role, Pub/Sub flow control, `DETECTION_CONCURRENCY`; each change recorded with its before and after numbers.
+4. **Scripted failure tests on staging.** The section 9 list (kill a worker mid-run, flood uploads, stop audit-metrics, a poison message, a lost publish), automated and run nightly on staging.
+5. **Service-level targets and alerts.** Latency and success targets per stage, with burn-rate alerts in Cloud Monitoring and Grafana.
+6. **Claude through Vertex AI.** Google Cloud identity (Workload Identity, no Anthropic key in Secret Manager), Google billing, and regional processing for the bank's data-residency question (`PENDING_WORK.md`, "Deployment note"). Check first that Vertex AI serves the models we use in a region we want.
+7. **Cost guardrails.** The shared Anthropic rate budget from section 9, a spend cap per case, and budget alerts.
+8. **Self-host kit and a recovery drill.** The compose setup packaged as a `docker compose up` install for the deployment document; one Supabase backup-and-restore test with recovery time and data loss recorded.
+
+**Not doing:** a nightly evaluation job or a model-comparison run (they spend tokens for little return). The evaluation framework (`PENDING_WORK.md`, "Evals and verification") is run on demand when a prompt or model changes, not on a schedule.
+
+**Triggers for Kubernetes** (any one, measured, not expected): sustained load above what step 2 shows Cloud Run handles; a stage's p95 near the 600 s push deadline, which would need pull workers; Cloud Run cost above what the same load would cost on GKE Autopilot; a sponsor requirement to run on their own cluster.
+
+## 11. Risks
 
 - **Dual write** (database updated, publish lost): the sweeper.
 - **Supabase Realtime** carries all live updates; its limits under load are untested.
 - **Kong** is a single entry point: a wrong `Host` or CORS rule breaks the whole frontend; test with compose first.
 - **One environment** until staging exists: the post-deploy check and automatic rollback are the safety net.
 - **Shared Supabase:** local runs and the cloud see each other's cases and stuck documents. Anything that scans the whole database runs only in the cloud (the sweeper; a local run must name a case).
-- **Scope:** Stage 2 alongside Stage 1 would put too much new surface in play before November, unless decision 1 says otherwise.
+- **Scope:** staging, load testing and failure tests (section 10) all need time before November; Kubernetes stays out of scope unless a trigger in section 10 fires.
 
-## 11. Running it
+## 12. Running it
 
 **Daily development (unchanged):** `cd backend && uvicorn app.main:app --reload` and `cd frontend && npm run dev`. One process runs every role; no Docker, Pub/Sub or Kong needed.
 

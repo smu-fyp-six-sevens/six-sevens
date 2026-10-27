@@ -3,11 +3,11 @@ import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
 import CaseHeader, { CaseTitle } from '../components/CaseHeader';
 import { caseCrumb, caseQueueCrumb, documentCrumb } from '../components/caseCrumbs';
-import { useCases } from '../casesContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DocumentPreviewModal from '../components/DocumentPreviewModal';
 import DocumentPreviewPane, { ShowDocumentButton } from '../components/DocumentPreviewPane';
 import KebabMenu from '../components/KebabMenu';
+import { DocumentBodySkeleton } from '../components/Skeletons';
 import {
   canCancelDocument,
   canRetryDocument,
@@ -75,7 +75,6 @@ export default function DocumentDetailsPage({
   documentId,
   onDocumentDeleted,
 }: DocumentDetailsPageProps) {
-  const cases = useCases();
   const {
     document,
     setDocument,
@@ -208,28 +207,7 @@ export default function DocumentDetailsPage({
     (document?.status === 'analyzed' || document?.status === 'failed') &&
     !isTypeConfirmed;
 
-  const {
-    isAddFieldOpen,
-    setIsAddFieldOpen,
-    newFieldName,
-    setNewFieldName,
-    newFieldValue,
-    setNewFieldValue,
-    isAddingField,
-    setIsAddingField,
-    addFieldError,
-    setAddFieldError,
-    deletingFieldId,
-    setDeletingFieldId,
-    deleteFieldError,
-    setDeleteFieldError,
-    isSaving,
-    saveMessage,
-    saveError,
-    handleFieldChange,
-    handleSaveFields,
-    clearSaveMessages,
-  } = useFieldEditing({
+  const fieldEditing = useFieldEditing({
     document,
     setDocument,
     fieldDraft,
@@ -240,6 +218,7 @@ export default function DocumentDetailsPage({
     absentRequiredFields,
     needsAttention,
   });
+  const { isSaving, saveMessage, saveError, handleFieldChange, handleSaveFields, clearSaveMessages } = fieldEditing;
 
   const {
     setSelectedType,
@@ -263,6 +242,7 @@ export default function DocumentDetailsPage({
     isRefreshingDetection,
     refreshDetectionReport,
     isCancellingDetection,
+    cancelDetectionError,
     handleCancelDetection,
     isRetryingDetection,
     handleRetryDetection,
@@ -270,7 +250,7 @@ export default function DocumentDetailsPage({
     individualCheckError,
     individualCheckResults,
     handleRunIndividualCheck,
-  } = useDetection(documentId);
+  } = useDetection(documentId, document?.status);
 
   const { langGraphTrace, isRefreshingTrace, refreshLangGraphTrace } = useLangGraphTrace(documentId);
 
@@ -317,7 +297,7 @@ export default function DocumentDetailsPage({
     <CaseHeader
       crumbs={[
         caseQueueCrumb,
-        caseCrumb(cases, selectedCase),
+        caseCrumb(selectedCase),
         // The filename is known once the document has loaded.
         ...(document ? [documentCrumb(selectedCase, documentId, document.filename)] : []),
       ]}
@@ -333,11 +313,7 @@ export default function DocumentDetailsPage({
 
         {caseHeader}
 
-        <div className="document-details-body">
-          <div className="document-details-loading">
-            Loading document details…
-          </div>
-        </div>
+        <DocumentBodySkeleton />
       </div>
     );
   }
@@ -452,27 +428,14 @@ export default function DocumentDetailsPage({
         {/* Extracted information */}
 
         <ExtractedInformationCard
-          addFieldError={addFieldError}
-          canEditFields={canEditFields}
-          deleteFieldError={deleteFieldError}
-          deletingFieldId={deletingFieldId}
+          canAddOrDeleteFields={!isLocked}
           document={document}
           extractedFields={extractedFields}
-          isAddFieldOpen={isAddFieldOpen}
-          isAddingField={isAddingField}
           isInFlight={isInFlight}
           lowestConfidence={lowestConfidence}
-          newFieldName={newFieldName}
-          newFieldValue={newFieldValue}
-          setAddFieldError={setAddFieldError}
-          setDeleteFieldError={setDeleteFieldError}
-          setDeletingFieldId={setDeletingFieldId}
           setDocument={setDocument}
           setFieldDraft={setFieldDraft}
-          setIsAddFieldOpen={setIsAddFieldOpen}
-          setIsAddingField={setIsAddingField}
-          setNewFieldName={setNewFieldName}
-          setNewFieldValue={setNewFieldValue}
+          editing={fieldEditing}
         />
 
         {/* Manual review */}
@@ -513,6 +476,7 @@ export default function DocumentDetailsPage({
             isApproved={isApproved}
             isRetryingDetection={isRetryingDetection}
             isCancellingDetection={isCancellingDetection}
+            cancelError={cancelDetectionError}
             isRefreshingDetection={isRefreshingDetection}
             refreshDetectionReport={refreshDetectionReport}
             handleRetryDetection={handleRetryDetection}

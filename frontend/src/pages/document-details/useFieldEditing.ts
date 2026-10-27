@@ -18,6 +18,8 @@ interface FieldEditingParams {
 }
 
 // Manual review save path plus the add and delete field state for the extracted-information card.
+export type FieldEditing = ReturnType<typeof useFieldEditing>;
+
 export function useFieldEditing({
   document,
   setDocument,

@@ -4,10 +4,11 @@ on:
   push:
     branches:
       - main
-    # A docs-only push neither tests nor redeploys anything.
+    # A push of only docs or workflow files neither tests nor redeploys anything.
     paths-ignore:
       - '**.md'
       - 'docs/**'
+      - '.github/workflows/**'
   pull_request:
   workflow_dispatch:
 
@@ -119,6 +120,10 @@ jobs:
 
       - name: Lint frontend
         run: npm run lint
+
+      # vite build doesn't type-check, so a type error would otherwise ship.
+      - name: Type-check frontend
+        run: npm run typecheck
 
       - name: Build frontend
         run: npm run build

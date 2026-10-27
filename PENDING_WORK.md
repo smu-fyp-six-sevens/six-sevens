@@ -1,6 +1,10 @@
 # Pending work
 
-Open product and platform work only: remove an item once it's done. Elsewhere: code smells and optimisations in `REFACTORING_AUDIT.md`; test work in `backend_tests.md`; detection bugs in `FRAUD_DETECTION_MAP.md` §6; the cloud to-do list (failure tests, case dashboard, eval job, shared Anthropic rate budget, Kong config test, staging, Stage 2) in `CLOUD_ARCHITECTURE_PLAN.md` section 9. Updated 2026-10-24.
+Open product and platform work only: remove an item once it's done. Elsewhere: code smells and optimisations in `REFACTORING_AUDIT.md`; test work in `backend_tests.md`; detection bugs in `FRAUD_DETECTION_MAP.md` §6; the cloud to-do list (failure tests, case dashboard, shared Anthropic rate budget, Kong config test, staging) in `CLOUD_ARCHITECTURE_PLAN.md` section 9, and the revised Stage 2 in section 10. Updated 2026-10-26.
+
+## my notes
+
+check if audit trail watches for cancel/retry etc.
 
 ## Product
 
@@ -11,14 +15,22 @@ Open product and platform work only: remove an item once it's done. Elsewhere: c
 - **Flags for older documents.** Documents detected before `flags` was wired have a report but no flag rows, and approved documents can't re-run detection.
 - **Agent-raised findings.** A specialist can only assess findings a tool returns; something it notices itself (a "modified copy" subject) appears in its summary but never scores. Needs a way to raise a finding that cites the field it read.
 
+## Claude models
+
+- **Newer models are cheaper; we still default to the older ones.** `config.py` defaults to `claude-sonnet-4-6` ($3 / $15 per million input / output tokens) and `claude-haiku-4-5-20251001` ($1 / $5); `backend/.env` may override them. The current generation lists `claude-sonnet-5-5` at $2 / $10 (about a third cheaper) and `claude-haiku-5-5` at $0.10 / $0.50 (about 10× cheaper, for prompts up to 100K tokens). Switching isn't a one-line change:
+  - `temperature=0` in `langgraph/_anthropic.py`: the new models accept only the default sampling settings, so those requests are rejected.
+  - Forced tool calls (`with_structured_output` or `tool_choice` in `langgraph/_anthropic.py`, `langgraph/detection/specialists.py`, `case_pipeline/cross_document/agents.py`, `case_pipeline/risk/outlook.py`): Sonnet 5.5 rejects them; move to a non-forced call or structured outputs.
+  - Thinking is always on in the new models, so a call can produce more tokens: compare cost per case on real runs, not the price table.
+  - `pricing.py` lists the Sonnet 5 and Haiku 5 families at $3 / $15 and $1 / $5, so the cost logs would be wrong after a switch until it's corrected.
+  - Decide per agent (classifier, extraction, detection lead and specialists, cross-document planner and judge) whether to switch, checking a few known cases by hand before and after.
+
+## Deployment note (report and commercialisation document)
+
+- **Data residency asterisk.** Put this wherever the report describes the model calls, and carry it into the commercialisation document the supervisor asked for (server, model, RAM, storage requirements): *"This prototype calls the public Claude API. In production, GLDB would reach Claude through an enterprise agreement or its cloud provider (for example Vertex AI), with regional processing and zero data retention, subject to its outsourcing and MAS requirements."* Before relying on it: check whether Vertex AI serves Claude in Singapore (`asia-southeast1`); the Claude API's own residency option is global or US only. Don't name banks that have signed such contracts without a source.
+
 ## Detection and the document pipeline
 
-- **Payslip 7 pt shift not detected** (caught on the balance sheet and credit report). Probably no reference layout for the payslip template; check `layout_anomalies` and the payslip generator.
-- **Re-scan a case to confirm the latest detection changes** (the row and foreign-font checks, the hard-breach rule, metadata subject and title, cross-document leads `cross-doc-v7`, file-contents guidance), all tested on synthetic inputs only. After a live run, image tools should mostly stop returning "nothing to check" (before: 15 of 19 calls), and the leads should produce a tested hypothesis.
-- **Install `exiftool` locally.** Without it the metadata check and the AI-provenance check report "could not run" and never score. Optional: a startup warning when it's missing, a PyMuPDF fallback for basic metadata.
 - **Watch the new CPU process pool** on the first deployed runs (`CPU_WORKER_PROCESSES=2` on doc-worker and detection-worker): memory per instance (each process loads PyMuPDF and the OCR model), and the "CPU worker process died" log line.
-- **Very long bank statements** can overflow the extraction cap (`_EXTRACTION_MAX_TOKENS` 16,000); the document fails cleanly with the complete fields kept. Chunked transaction extraction would fix it.
-- **Credit report total check** (`CR.AGGREGATE_SUM`) allows 1%, which would pass a 2,000 difference on 1.8M. Tighten if it proves too loose.
 - **A cross-document finding's category:** a share-capital conflict is labelled `unsupported_claim`; a `cross_document_variance` label for verdicts needs a schema change.
 - **Vertical text:** `text_overlay.py` skips it by an aspect-ratio guess; reading the direction from PyMuPDF would replace the guess.
 - **Detection specialist prompts don't cache** (Haiku's minimum cacheable prefix is longer than their prompts). Accept it unless the cost logs show a large Haiku input bill.
@@ -34,15 +46,16 @@ Design: `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
 
 ## Evals and verification
 
-- **Evals aren't built:** golden-set nightly runs from `documents_generated/` (classification accuracy, per-field extraction, escalation rate, cost per document, cache hit rate); detection precision and recall per defect type from `injection_manifest.json` (a case may upload the clean, non-`_F` file; check names first); for case analysis, false positives on clean cases, recall on planted contradictions, parity across subgroups. Synthetic companies always fail the ACRA check (8 points once per case). Keep the synthetic-to-real caveat.
+- **Evals aren't built** (next few days): an evaluation framework run on demand when a prompt or model changes, not nightly, as the reference for quality. Golden-set runs from `documents_generated/` (classification accuracy, per-field extraction, escalation rate, cost per document, cache hit rate); detection precision and recall per defect type from `injection_manifest.json` (a case may upload the clean, non-`_F` file; check names first); for case analysis, false positives on clean cases, recall on planted contradictions, parity across subgroups. Synthetic companies always fail the ACRA check (8 points once per case). Keep the synthetic-to-real caveat.
 - **Checks that exist only as scratch scripts,** worth turning into tests: the verifier rules, the bias screens (`bias.py`), year-less statement dates (`tools/common.row_date`), the single-flight detection cache and snapshot builder, the flag write-on-change memo, `flags_repository.build_rows`.
 
 ## Performance
 
 Budgets are in `HOW_IT_WORKS.md` §8; query-level fixes are in `REFACTORING_AUDIT.md` §3.
-- `GET /cases/{id}/analysis` costs 5 queries per card reload; `GET /documents/{id}/detection/case-match` costs 7 and runs after each field edit.
+- `GET /cases/{id}/analysis` and `GET /documents/{id}/detection/case-match` read more than they need: fixes in `REFACTORING_AUDIT.md` §3 (1 and 2).
 - A burst of changes can chain snapshot builds, and the first requester waits for the follow-up.
-- The case list has no pagination (search, filters and sort run in the browser).
+- **Opening a case still waits in sequence on a direct link or refresh:** the case lookup, then the WebSocket ticket, connection and first snapshot. (From the queue the case is handed over and the page code is prefetched.) Not done yet: fetching the first snapshot over a plain request alongside the socket, and putting the case's own details in the snapshot so a direct load needs one request.
+- **The queue's status filter, risk filter and risk sort read every matching case** (and `/cases/counts` reads every document's status) because status and risk are computed, not stored. Fine at today's volume; a stored rollup or index would be needed if the case count grows a lot.
 
 ## Cloud operations
 
@@ -58,8 +71,5 @@ Budgets are in `HOW_IT_WORKS.md` §8; query-level fixes are in `REFACTORING_AUDI
 
 ## Frontend
 
-- **`tsc` fails on `CaseOverview.tsx:72`** (a teammate's code: a finding's severity can be `info`, but the sort table lists only high, medium and low; add `info: 3`). CI doesn't run `tsc --noEmit`; add it to the frontend job.
-- **Group card props:** `ExtractedInformationCard` on `DocumentDetailsPage.tsx` still takes many props (the case page's list now takes its hooks as two objects).
-- **Loading pages** (not urgent): the `Suspense` fallback, `Loading case...` and `Loading document...` are bare text; give them the not-found page's design. The case and document routes also wait for the whole case list first.
 - **Dev StrictMode** fires some document-page requests twice.
 - **`submission_finalized`** is remembered per process (`case_service._synced_finalized`), so with several instances or a hand edit the stored value is only corrected on the next change.

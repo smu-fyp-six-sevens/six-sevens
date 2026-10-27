@@ -20,6 +20,8 @@ DOCUMENT_DELETED = "document.deleted"
 
 DETECTION_RETRY_REQUESTED = "detection.retry_requested"
 DETECTION_CANCEL_REQUESTED = "detection.cancel_requested"
+# An officer re-ran one check on its own (routers/detection.py): audit only, nothing consumes it.
+DETECTION_CHECK_RUN = "detection.check_run"
 DOCUMENT_DETECTED = "document.detected"
 DETECTION_FAILED = "detection.failed"
 
