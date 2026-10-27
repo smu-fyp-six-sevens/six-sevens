@@ -13,7 +13,7 @@ from ..langgraph import trace as langgraph_trace
 from ..langgraph.detection_report import read_report
 from ..models import DocumentRecord, DocumentStatus, skips_detection
 from .. import case_service, document_repository, events, extracted_fields_repository, storage_service
-from ..events import officer_event, types
+from ..events import Stopwatch, officer_event, types
 from ..cpu_pool import run_cpu
 from ._dependencies import get_document_or_404, get_document_with_metadata_or_404, to_thread_or_502
 from ..case_match import DocumentCaseMatch
@@ -275,15 +275,38 @@ _CHECKS = [
 ]
 
 
+def _check_summary(check: _Check, result: Any) -> dict[str, Any]:
+    """What a check found, for its audit entry: the same counts its trace step records, and AI generation's likelihood."""
+    summary = check.trace(result) if check.trace else {}
+    likelihood = getattr(result, "likelihood", None)
+    if likelihood is not None:
+        summary["likelihood"] = str(likelihood)
+    return summary
+
+
 def _add_check_route(check: _Check) -> None:
     gate = _require_detection_has_run_with_metadata if check.metadata else _require_detection_has_run
 
     async def endpoint(document_id: str, document: DocumentRecord = Depends(gate)) -> Any:
-        file_bytes = await _download_document_bytes(document) if check.file else b""
-        fields = await _fetch_extracted_fields(document_id) if check.fields else []
-        result = await check.run(document, file_bytes, fields)
+        # Audited even though read-only: the officer chose to look again, and some checks call outside services.
+        timer = Stopwatch()
+        try:
+            file_bytes = await _download_document_bytes(document) if check.file else b""
+            fields = await _fetch_extracted_fields(document_id) if check.fields else []
+            result = await check.run(document, file_bytes, fields)
+        except Exception as exc:
+            error = exc.detail if isinstance(exc, HTTPException) else f"{type(exc).__name__}: {exc}"
+            await events.record(officer_event(
+                types.DETECTION_CHECK_RUN, document_id=document_id, case_id=document.case_id, outcome="failed",
+                detail={"check": check.path, "error": str(error)[:300]}, **timer.fields(),
+            ))
+            raise
         if check.step and check.trace:
             await _trace_check(document_id, check.step, **check.trace(result))
+        await events.record(officer_event(
+            types.DETECTION_CHECK_RUN, document_id=document_id, case_id=document.case_id,
+            detail={"check": check.path, **_check_summary(check, result)}, **timer.fields(),
+        ))
         return result
 
     router.add_api_route(
