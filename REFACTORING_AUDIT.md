@@ -106,13 +106,42 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 
 ---
 
+## 4. Deletes, the audit trail and the schema
+
+Checked 2026-10-27 by reading the code and PostgREST's table listing (no rows read). The listing doesn't show grants, RLS or foreign-key delete rules; the two queries below do (Supabase SQL editor).
+
+**What a delete removes:**
+- A document: `extracted_fields`, `flags`, `langgraph_trace`, its `case_notes` (replies carry the note's `document_id`), the stored file (best effort), then the row (`document_repository._delete_document_children`).
+- A case: its documents as above, then `risk_scores`, `case_analysis_runs`, `flags`, `case_notes`, then the row (`case_repository.delete_case`).
+- `audit_events` is never deleted: it has no foreign keys, so events outlive what they name. Intended.
+
+| # | Finding | Fix | Effort |
+|---|---|---|---|
+| 1 | **Flag inserts may be failing.** The listing marks `flags.related_document_ids` NOT NULL with no default, and `flags_repository.build_rows` never sets it. The failure would be invisible: `graph._store_flags` catches it into the trace as `flags_error`, and nothing reads `flags`. Unconfirmed (needs a look at real data) | Write `"related_document_ids": []`, or give the column a default | S |
+| 2 | **`case_status_history` blocks a case delete** if it has rows: it has a foreign key to `cases` and nothing clears it (no code on any branch uses the table; it belongs to other developers). `finding_reviews` (branch `SCRUM-284-precision-recall`) declares `on delete cascade` and its branch adds it to both delete paths | Check the delete rule; clear it in `delete_case`, or cascade | S |
+| 3 | **Delete audit events are fire-and-forget** (`events.record`): if publishing fails, the delete stands with no audit row. A case delete logs one `case.deleted` with a count, not a `document.deleted` per document | `publish` for deletes (fail the request), or accept; per-document events on case delete | S |
+| 4 | **`audit_events` can't be edited or removed only if grants say so.** `audit.py` says the service role has INSERT and SELECT only; Supabase's default gives `service_role` everything, so this holds only if someone revoked it by hand. The dashboard owner can always delete. No retention policy | Run the grants query; revoke UPDATE and DELETE if missing | S |
+| 5 | **Deletes aren't a transaction:** a failure partway leaves the rest (a retry finishes the job). A stored file that fails to delete is only logged, so it stays in storage | Accept; or a Postgres function per delete once the schema is in the repo | M, later |
+
+```sql
+select grantee, privilege_type from information_schema.role_table_grants where table_name = 'audit_events';
+select conrelid::regclass as tbl, conname, confdeltype from pg_constraint where contype = 'f';  -- c = cascade, a/r = blocks
+```
+
+**Unused schema on `main`:**
+- Not used at all: `finding_reviews` (branch `SCRUM-284-precision-recall`), `documents.guard_result` (branch `scrum-288-guardrails`), `case_status_history` (no code), `flags.reviewed_by` and `reviewed_at` (`status` is only filtered on in the delete).
+- Written, never read: the whole `flags` table (risk and the UI read the detection report), `risk_scores.flag_ids` and `scored_at`, `extracted_fields.field_category` and `extracted_at`.
+
+---
+
 ## Suggested order
 
-1. **Quick wins, one at a time:** the 502 wrappers (backend 2.6), the two queries (optimisations 1 and 2), the `decode_field_value` copies (backend 1.1), the `CaseCost` model and the filter types (frontend types 1). Each S and separately testable.
-2. **The generator checks in CI** (repo 1), S.
-3. **Lock the Python dependencies** (repo 2). It protects every deploy, and keeps the OpenAPI export stable between machines.
-4. **Rules out of `routers/documents.py`** (backend 2.1), the biggest structural win left.
-5. **Public field-value helpers** (backend 2.2).
-6. **The Audit Trail card and the mock dashboard** (frontend 2.1) before any demo.
-7. **The `rgba()` tokens and the one-off colours** (frontend 1.1, 1.2), as you restyle each component.
-8. **Decide `submission_finalized`** (backend 2.4) as part of automatic case analysis.
+1. **Confirm the flag insert** (§4.1) and the two SQL queries (§4.2, 4.4): a possibly silent data bug.
+2. **Quick wins, one at a time:** the 502 wrappers (backend 2.6), the two queries (optimisations 1 and 2), the `decode_field_value` copies (backend 1.1), the `CaseCost` model and the filter types (frontend types 1). Each S and separately testable.
+3. **The generator checks in CI** (repo 1), S.
+4. **Lock the Python dependencies** (repo 2). It protects every deploy, and keeps the OpenAPI export stable between machines.
+5. **Rules out of `routers/documents.py`** (backend 2.1), the biggest structural win left.
+6. **Public field-value helpers** (backend 2.2).
+7. **The Audit Trail card and the mock dashboard** (frontend 2.1) before any demo.
+8. **The `rgba()` tokens and the one-off colours** (frontend 1.1, 1.2), as you restyle each component.
+9. **Decide `submission_finalized`** (backend 2.4) as part of automatic case analysis.

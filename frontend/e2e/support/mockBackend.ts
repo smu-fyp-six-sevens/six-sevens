@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Page, Route, WebSocketRoute } from '@playwright/test';
-import type { CaseAnalysis, CaseRisk } from '../../src/services/uploadService/types';
+import type { AuditEvent, CaseRisk } from '../../src/services/uploadService/types';
 
 /**
  * Each document type's required extraction fields, exported from the
@@ -83,9 +83,6 @@ export interface CaseRow {
   supporting_document_recommendations: unknown[];
   // Computed by backend/app/case_pipeline/risk/additional_documents.py when a case analysis runs.
   additional_documents?: unknown;
-  // Computed by case_service.build_summary on every read: readiness.is_ready_for_analysis, and the latest run in brief.
-  analysis_ready?: boolean;
-  analysis?: { run_id: string; status: CaseAnalysis['status']; stale: boolean; finished_at: string | null; finding_count: number } | null;
 }
 
 export interface DocumentRow {
@@ -176,29 +173,6 @@ export function makeRisk(overrides: Partial<CaseRisk> = {}): CaseRisk {
   };
 }
 
-/** A case analysis run as GET /cases/:id/analysis returns it (backend case_pipeline/models.py CaseAnalysis). */
-export function makeAnalysis(overrides: Partial<CaseAnalysis> & Pick<CaseAnalysis, 'case_id'>): CaseAnalysis {
-  return {
-    run_id: `run-${Math.random().toString(36).slice(2, 10)}`,
-    status: 'complete',
-    fingerprint: 'fingerprint',
-    started_at: ISO,
-    finished_at: ISO,
-    error: null,
-    findings: [],
-    outlook: null,
-    summary: null,
-    risk: null,
-    supporting_documents: [],
-    additional_documents: null,
-    consistent_checks: [],
-    audit: { models: {}, prompt_version: '', hypotheses_tried: 0, findings_discarded: 0, tool_calls: [] },
-    trace: [],
-    stale: false,
-    ...overrides,
-  };
-}
-
 export function makeDocument(overrides: Partial<DocumentRow> = {}): DocumentRow {
   return {
     id: `doc-${Math.random().toString(36).slice(2, 10)}`,
@@ -239,8 +213,8 @@ export class MockBackend {
   timings: Record<string, { type: string; document_id: string | null; occurred_at: string; duration_ms: number }[]> = {};
   /** Notes on cases and documents (GET/POST /cases/:id/notes), signed by the logged-in officer. */
   notes: NoteRow[] = [];
-  /** Each case's latest analysis run (GET /cases/:id/analysis); none = 404. POST .../analysis/run starts one. */
-  analyses: Record<string, CaseAnalysis> = {};
+  /** Audit trail entries (GET /audit/events?case_id=), in any order: served newest first, like the backend. */
+  auditEvents: AuditEvent[] = [];
   /** Per-filename upload results; files not listed here upload successfully. */
   uploadOutcomes: Record<string, UploadOutcome> = {};
   /** When set, upload-batch waits for this before answering (to observe "Uploading"). */
@@ -418,29 +392,13 @@ export class MockBackend {
         return route.fulfill({ status: 204, headers: corsHeaders() });
       }
     }
-    // Same rules as routers/cases.py run_case_analysis: only once every approved document is scanned (the
-    // snapshot's analysis_ready), and never while a run is going. The run then stays "running" until a test
-    // finishes it (the case-worker's part) and pushes a snapshot.
-    const analysisMatch = path.match(/^\/cases\/([^/]+)\/analysis(\/run)?$/);
-    if (analysisMatch) {
-      const theCase = this.cases.find((c) => c.id === analysisMatch[1]);
-      if (!theCase) return json({ detail: 'Case not found' }, 404);
-      const latest = this.analyses[theCase.id];
-      if (method === 'GET' && !analysisMatch[2]) {
-        return latest ? json(latest) : json({ detail: 'No analysis has been run for this case' }, 404);
-      }
-      if (method === 'POST' && analysisMatch[2]) {
-        if (!theCase.analysis_ready) {
-          return json({ detail: 'Every approved document must finish scanning before the case can be analysed.' }, 409);
-        }
-        if (latest?.status === 'running') {
-          return json({ detail: 'An analysis is already running for this case.' }, 409);
-        }
-        const started = makeAnalysis({ case_id: theCase.id, status: 'running', finished_at: null });
-        this.analyses[theCase.id] = started;
-        theCase.analysis = { run_id: started.run_id, status: 'running', stale: false, finished_at: null, finding_count: 0 };
-        return json(started, 202);
-      }
+    if (path === '/audit/events' && method === 'GET') {
+      const caseId = url.searchParams.get('case_id');
+      return json(
+        this.auditEvents
+          .filter((e) => caseId === null || e.case_id === caseId)
+          .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at)),
+      );
     }
     const notesMatch = path.match(/^\/cases\/([^/]+)\/notes$/);
     if (notesMatch) {
