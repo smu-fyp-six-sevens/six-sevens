@@ -250,6 +250,10 @@ def build_summary(
         overview = CaseAnalysisOverview(
             run_id=analysis.run_id, status=analysis.status, stale=analysis.stale,
             finished_at=analysis.finished_at, finding_count=len(analysis.findings),
+            # Without full reports, a document counts as scanned once its status says so.
+            waiting_documents=analysis_state.waiting_documents(
+                documents, reports if reports is not None else {d.id: {} for d in documents if d.status == "detected"},
+            ),
         )
     if completed is None and analysis is not None and analysis.status == "complete":
         completed = analysis

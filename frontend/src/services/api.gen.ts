@@ -1698,6 +1698,8 @@ export interface components {
              * @enum {string}
              */
             status: "running" | "complete" | "failed" | "superseded";
+            /** Waiting Documents */
+            waiting_documents: components["schemas"]["WaitingDocument"][];
         };
         /**
          * CaseCounts
@@ -3448,6 +3450,23 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /**
+         * WaitingDocument
+         * @description A document the case's risk score counts that isn't scanned yet, and what it is waiting for: still being
+         *     processed, an officer's approval, its detection scan, or a retry after it failed. A rerun before these are
+         *     done can't produce a score.
+         */
+        WaitingDocument: {
+            /** Document Id */
+            document_id: string;
+            /** Filename */
+            filename: string;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "processing" | "needs_approval" | "scanning" | "failed";
         };
     };
     responses: never;

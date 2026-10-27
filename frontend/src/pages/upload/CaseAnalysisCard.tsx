@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { CaseAnalysis, CaseAnalysisOverview } from '../../services/uploadService';
 import { getCaseAnalysis, runCaseAnalysis } from '../../services/uploadService';
 import { CaseAnalysisTracePanel } from './CaseAnalysisTracePanel';
+import { outOfDateMessage } from './caseSections';
 
 const CATEGORY_LABELS: Record<string, string> = {
   identity_entity_conflict: 'Identity conflict',
@@ -107,7 +108,8 @@ export function CaseAnalysisCard({
           <span className="summary-message-icon">⚠</span>
           <div>
             <strong>Out of date.</strong>
-            <p>Documents changed since this analysis ran. The risk score and recommendations are from before that; run it again to update them.</p>
+            <p title={outOfDateMessage(overview).waitingList || undefined}>{outOfDateMessage(overview).detail}</p>
+            <p>The risk score and recommendations below are from before the documents changed.</p>
           </div>
         </div>
       )}

@@ -140,6 +140,8 @@ export type CaseOption = Pick<Schemas['CaseListItem'], 'id' | 'greenlink_case_id
 export type AdditionalDocument = Schemas['AdditionalDocument'];
 export type AdditionalDocuments = Schemas['AdditionalDocuments'];
 export type CaseAnalysisOverview = Schemas['CaseAnalysisOverview'];
+// A document the risk score counts that isn't scanned yet, and what it's waiting for.
+export type WaitingDocument = Schemas['WaitingDocument'];
 export type CrossDocFinding = Schemas['CrossDocFinding'];
 export type OutlookRequest = Schemas['OutlookRequest'];
 export type RiskOutlook = Schemas['RiskOutlook'];

@@ -440,6 +440,18 @@ class AdditionalDocuments(BaseModel):
 CaseRecord.model_rebuild()  # now that AdditionalDocuments exists
 
 
+class WaitingDocument(BaseModel):
+    """
+    A document the case's risk score counts that isn't scanned yet, and what it is waiting for: still being
+    processed, an officer's approval, its detection scan, or a retry after it failed. A rerun before these are
+    done can't produce a score.
+    """
+
+    document_id: str
+    filename: str
+    reason: Literal["processing", "needs_approval", "scanning", "failed"]
+
+
 class CaseAnalysisOverview(BaseModel):
     """The latest per-case analysis in brief; the full result is GET /cases/{id}/analysis."""
 
@@ -449,6 +461,8 @@ class CaseAnalysisOverview(BaseModel):
     stale: bool = False
     finished_at: datetime | None = None
     finding_count: int = 0
+    # What a rerun would still wait on (empty: every document the score uses is scanned).
+    waiting_documents: list[WaitingDocument] = Field(default_factory=list)
 
 
 class CaseSummary(CaseRecord):

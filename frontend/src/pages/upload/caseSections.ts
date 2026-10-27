@@ -1,4 +1,4 @@
-import type { CaseAnalysisOverview, CaseRisk, CaseRiskLevel } from '../../services/uploadService';
+import type { CaseAnalysisOverview, CaseRisk, CaseRiskLevel, WaitingDocument } from '../../services/uploadService';
 
 export type CaseSection =
   | 'summary'
@@ -36,6 +36,58 @@ export type SectionTone = 'done' | 'action' | 'progress' | 'error' | 'idle' | `r
 export interface SectionStatus {
   tone: SectionTone;
   text: string;
+}
+
+const WAITING_FOR: Record<WaitingDocument['reason'], string> = {
+  processing: 'still being processed',
+  needs_approval: 'waiting for approval',
+  scanning: 'still being scanned',
+  failed: 'failed processing',
+};
+
+export interface OutOfDateMessage {
+  // For the side menu and Case Summary: "Out of Date · <short>".
+  short: string;
+  // The full sentence: which document, what it's waiting for, and what to do next.
+  detail: string;
+  // One line per waiting document, for a hover.
+  waitingList: string;
+}
+
+// Why an out-of-date analysis can or can't be rerun yet, naming the documents the risk score is waiting on.
+export function outOfDateMessage(overview: CaseAnalysisOverview): OutOfDateMessage {
+  const waiting = overview.waiting_documents ?? [];
+  const waitingList = waiting.map((d) => `${d.filename}: ${WAITING_FOR[d.reason]}`).join('\n');
+  if (waiting.length === 0) {
+    return {
+      short: 'Run Again',
+      detail: 'The documents changed since the last run: run again to update the score.',
+      waitingList,
+    };
+  }
+  if (waiting.length === 1) {
+    const [{ filename, reason }] = waiting;
+    const byReason: Record<WaitingDocument['reason'], [string, string]> = {
+      processing: ['Processing', `${filename} is still being processed. Approve it once it's ready, then run again when it's scanned.`],
+      needs_approval: ['1 to Approve', `Approve ${filename}, then run again once it's scanned.`],
+      scanning: ['Scanning', `${filename} is still being scanned; run again when it finishes.`],
+      failed: ['1 Failed', `${filename} failed processing: retry or reject it, then run again.`],
+    };
+    const [short, detail] = byReason[reason];
+    return { short, detail, waitingList };
+  }
+  const failed = waiting.filter((d) => d.reason === 'failed').length;
+  return failed > 0
+    ? {
+        short: `${failed} Failed`,
+        detail: `${waiting.length} documents are holding up the score, ${failed} of them failed processing: retry or reject ${failed === 1 ? 'it' : 'them'}, and run again once the rest are approved and scanned.`,
+        waitingList,
+      }
+    : {
+        short: `${waiting.length} Pending`,
+        detail: `${waiting.length} documents still need approving or scanning; run again once they're done.`,
+        waitingList,
+      };
 }
 
 export function caseSectionStatuses({
@@ -85,7 +137,7 @@ export function caseSectionStatuses({
       : analysisOverview.status === 'failed'
         ? { tone: 'error', text: 'Did Not Finish' }
         : analysisOverview.stale || analysisOverview.status === 'superseded'
-          ? { tone: 'action', text: 'Out of Date' }
+          ? { tone: 'action', text: `Out of Date · ${outOfDateMessage(analysisOverview).short}` }
           : { tone: 'done', text: plural(analysisOverview.finding_count, 'Finding') };
 
   const riskStatus: SectionStatus = !risk
