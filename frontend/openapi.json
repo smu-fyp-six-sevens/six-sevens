@@ -1375,6 +1375,38 @@
         "title": "CaseDocumentsStatus",
         "type": "string"
       },
+      "CaseFlagCount": {
+        "description": "One detection check's flags in a case: how many, the worst severity, and the document types they're on.",
+        "properties": {
+          "check": {
+            "title": "Check",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "document_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Document Types",
+            "type": "array"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "check",
+          "severity",
+          "count",
+          "document_types"
+        ],
+        "title": "CaseFlagCount",
+        "type": "object"
+      },
       "CaseListItem": {
         "description": "One row of the case queue: only what the list shows, so it needs no extracted fields.",
         "properties": {
@@ -1394,6 +1426,13 @@
             "title": "Created At",
             "type": "string"
           },
+          "document_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Document Types",
+            "type": "array"
+          },
           "documents_status": {
             "$ref": "#/components/schemas/CaseDocumentsStatus"
           },
@@ -1409,6 +1448,13 @@
             ],
             "title": "Finalized At"
           },
+          "flags": {
+            "items": {
+              "$ref": "#/components/schemas/CaseFlagCount"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
           "greenlink_case_id": {
             "title": "Greenlink Case Id",
             "type": "string"
@@ -1416,6 +1462,31 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "processing_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Ms"
+          },
+          "recommended_documents": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Documents"
           },
           "risk": {
             "anyOf": [
@@ -1453,7 +1524,11 @@
           "created_at",
           "updated_at",
           "documents_status",
-          "risk"
+          "risk",
+          "processing_ms",
+          "recommended_documents",
+          "document_types",
+          "flags"
         ],
         "title": "CaseListItem",
         "type": "object"

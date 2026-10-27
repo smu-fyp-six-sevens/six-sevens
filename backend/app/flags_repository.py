@@ -16,8 +16,10 @@ from typing import Any
 from .case_pipeline.categories import category_for_finding
 from .case_pipeline.models import FindingCategory
 from .supabase_client import service_supabase_client, supabase_client
+from .supabase_rows import fetch_all
 
 _TABLE = "flags"
+_CASE_CHUNK = 100
 _CASE_LEVEL = frozenset({FindingCategory.CROSS_DOCUMENT_VARIANCE, FindingCategory.IDENTITY_ENTITY_CONFLICT})
 # Keys stored as columns or under named evidence keys; everything else a tool returned goes in evidence.details.
 _COLUMN_KEYS = frozenset({
@@ -84,3 +86,16 @@ def replace_for_document(document_id: str, case_id: str | None, findings: list[d
     if rows:
         supabase_client.table(_TABLE).insert(rows).execute()
     return len(rows)
+
+
+def list_for_cases(case_ids: list[str]) -> list[dict[str, Any]]:
+    """These cases' flags, only what the dashboard counts: a query per 100 cases (and per 1,000 flags)."""
+    rows: list[dict[str, Any]] = []
+    for start in range(0, len(case_ids), _CASE_CHUNK):
+        chunk = case_ids[start : start + _CASE_CHUNK]
+        rows += fetch_all(
+            lambda chunk=chunk: supabase_client.table(_TABLE).select("id, case_id, document_id, check_name, severity")
+            .in_("case_id", chunk),
+            "id",
+        )
+    return rows

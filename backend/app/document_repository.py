@@ -495,8 +495,8 @@ def list_documents(
     return _attach_extracted_fields(documents) if include_fields else documents
 
 
-# What the case queue's status rollup reads (the status and monitoring.is_stuck's timestamps).
-_STATUS_COLUMNS = "id, case_id, filename, status, retry_count, uploaded_at, queued_at, processing_started_at"
+# What the case queue's status rollup reads (the status and monitoring.is_stuck's timestamps), and the type the dashboard counts.
+_STATUS_COLUMNS = "id, case_id, filename, document_type, status, retry_count, uploaded_at, queued_at, processing_started_at"
 _CASE_CHUNK = 100
 
 

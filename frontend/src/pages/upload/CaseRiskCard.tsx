@@ -1,13 +1,8 @@
 import { useState } from 'react';
 import type { CaseRisk, CaseRiskFinding } from '../../services/uploadService';
 import { formatDocumentType } from '../../services/uploadService';
+import { formatCheck } from '../../utils/checkLabel';
 
-// "font_consistency_tool" -> "Font consistency"
-function formatTool(tool: string | null): string {
-  if (!tool) return 'Check';
-  const words = tool.replace(/_tool$/, '').replace(/_/g, ' ');
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
 
 type Severity = CaseRiskFinding['severity'];
 const SEVERITY_ORDER: Severity[] = ['high', 'medium', 'low'];
@@ -299,7 +294,7 @@ export function CaseRiskCard({ risk }: { risk: CaseRisk | null }) {
                                 {finding.severity}
                               </span>
                               <span className="risk-finding-text">
-                                <span className="risk-finding-check">{formatTool(finding.tool)}</span>
+                                <span className="risk-finding-check">{formatCheck(finding.tool)}</span>
                                 <span className="risk-finding-summary">
                                   {finding.summary}
                                   {count > 1 && <span className="risk-repeat">×{count}</span>}
@@ -345,7 +340,7 @@ export function CaseRiskCard({ risk }: { risk: CaseRisk | null }) {
               <ul>
                 {scored.unassessed_checks.map((check, index) => (
                   <li key={`${check.document_id}-${check.tool}-${index}`}>
-                    {check.filename} — {formatTool(check.tool)}
+                    {check.filename} — {formatCheck(check.tool)}
                     {check.reason ? `: ${check.reason}` : ''}
                   </li>
                 ))}

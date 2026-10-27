@@ -8,7 +8,7 @@ from collections import Counter, defaultdict
 from collections.abc import Callable
 from typing import Any, Literal, TypeVar
 
-from . import case_repository, document_repository, extracted_fields_repository
+from . import audit, case_repository, document_repository, extracted_fields_repository, flags_repository
 from .case_match import CaseMatchResult, DocumentCaseMatch, check_case_match
 from .case_pipeline import repository as analysis_repository, state as analysis_state
 from .case_pipeline.models import CaseAnalysis
@@ -31,6 +31,7 @@ from .models import (
     CaseAnalysisOverview,
     CaseCounts,
     CaseDocumentsStatus,
+    CaseFlagCount,
     CaseListItem,
     CaseListPage,
     CaseRecord,
@@ -534,14 +535,59 @@ def _group_by_case(documents: list[DocumentRecord]) -> dict[str, list[DocumentRe
     return grouped
 
 
+def _load_processing_times(case_ids: list[str]) -> dict[str, int]:
+    """Empty when the audit trail can't be read: the list then shows no processing times."""
+    try:
+        return audit.processing_ms_many(case_ids)
+    except Exception:
+        logger.exception("Failed to load processing times for %d case(s)", len(case_ids))
+        return {}
+
+
+_SEVERITY_RANK = {"high": 3, "medium": 2, "low": 1}
+
+
+def _load_flag_counts(documents_by_case: dict[str, list[DocumentRecord]]) -> dict[str, list[CaseFlagCount]]:
+    """
+    Each case's flags grouped by check, counting only flags on documents the case still has. Empty when the
+    flags can't be read: the list then shows no flags.
+    """
+    try:
+        rows = flags_repository.list_for_cases(list(documents_by_case))
+    except Exception:
+        logger.exception("Failed to load flags for %d case(s)", len(documents_by_case))
+        return {}
+    types = {doc.id: doc.document_type for docs in documents_by_case.values() for doc in docs}
+    grouped: dict[str, dict[str, list[dict[str, Any]]]] = defaultdict(lambda: defaultdict(list))
+    for row in rows:
+        if row.get("document_id") in types:
+            grouped[row["case_id"]][row.get("check_name") or "unknown"].append(row)
+    return {
+        case_id: sorted(
+            (
+                CaseFlagCount(
+                    check=check,
+                    severity=max((str(r.get("severity") or "medium") for r in flags), key=lambda v: _SEVERITY_RANK.get(v, 0)),
+                    count=len(flags),
+                    document_types=sorted({t for r in flags if (t := types.get(r["document_id"]))}),
+                )
+                for check, flags in checks.items()
+            ),
+            key=lambda flag: -flag.count,
+        )
+        for case_id, checks in grouped.items()
+    }
+
+
 def _list_items(
     cases: list[CaseRecord],
     documents_by_case: dict[str, list[DocumentRecord]] | None = None,
     saved: dict[str, CaseRisk] | None = None,
 ) -> list[CaseListItem]:
     """
-    Queue rows for these cases: two queries (their documents' statuses, their latest saved scores) however many
-    there are. The score is whatever the case's last analysis run saved; nothing is recomputed here.
+    Queue rows for these cases: four queries (their documents' statuses and types, their latest saved scores, their
+    stage timings, their flags) however many there are. The score is whatever the case's last analysis run saved;
+    nothing is recomputed here.
     """
     if not cases:
         return []
@@ -550,11 +596,19 @@ def _list_items(
         documents_by_case = _group_by_case(document_repository.list_document_statuses(ids))
     if saved is None:
         saved = _load_saved_risks(ids)
+    processing = _load_processing_times(ids)
+    flags = _load_flag_counts({case_id: documents_by_case.get(case_id, []) for case_id in ids})
     return [
         CaseListItem(
             **case.model_dump(),
             documents_status=compute_documents_status(documents_by_case.get(case.id, [])),
             risk=saved.get(case.id),
+            processing_ms=processing.get(case.id),
+            recommended_documents=(
+                [item.title for item in case.additional_documents.items] if case.additional_documents else None
+            ),
+            document_types=sorted({doc.document_type for doc in documents_by_case.get(case.id, []) if doc.document_type}),
+            flags=flags.get(case.id, []),
         )
         for case in cases
     ]

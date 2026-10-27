@@ -1722,6 +1722,20 @@ export interface components {
          */
         CaseDocumentsStatus: "no_documents" | "stuck" | "failed" | "in_progress" | "analyzed";
         /**
+         * CaseFlagCount
+         * @description One detection check's flags in a case: how many, the worst severity, and the document types they're on.
+         */
+        CaseFlagCount: {
+            /** Check */
+            check: string;
+            /** Count */
+            count: number;
+            /** Document Types */
+            document_types: string[];
+            /** Severity */
+            severity: string;
+        };
+        /**
          * CaseListItem
          * @description One row of the case queue: only what the list shows, so it needs no extracted fields.
          */
@@ -1733,13 +1747,21 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Document Types */
+            document_types: string[];
             documents_status: components["schemas"]["CaseDocumentsStatus"];
             /** Finalized At */
             finalized_at: string | null;
+            /** Flags */
+            flags: components["schemas"]["CaseFlagCount"][];
             /** Greenlink Case Id */
             greenlink_case_id: string;
             /** Id */
             id: string;
+            /** Processing Ms */
+            processing_ms: number | null;
+            /** Recommended Documents */
+            recommended_documents: string[] | null;
             risk: components["schemas"]["CaseRisk"] | null;
             /**
              * Status
