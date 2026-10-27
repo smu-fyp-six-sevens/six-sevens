@@ -4,11 +4,12 @@ Regression tests (SCRUM-296) for officer notes — "Test Cases - Sprint
 CM-029 – CM-036.
 
 Backend half: the real notes endpoints (routers/notes.py) over an in-memory
-case_notes table, so a note saved through the API is the one read back on
-reload, as on case GLDB-130 in the live run. The UI half (the notes section,
-who/when/which document, reload) is in frontend/e2e/specs/notes.spec.ts.
-Existing tests in test_notes.py that cover these cases are tagged sprint4
-centrally in conftest.py.
+case_notes table, for what only a stored note shows: a note saved through the
+API is the one read back on reload (as on case GLDB-130 in the live run), and a
+note on an approved document can be added to while the document is only ever
+read. The rules for a single request (signed by the officer, a document from
+another case refused, ...) are test_notes.py's, tagged sprint4 per test in
+conftest.py. The UI half is in frontend/e2e/specs/notes.spec.ts.
 """
 from __future__ import annotations
 
@@ -104,79 +105,18 @@ def reload() -> list[dict]:
 
 
 @pytest.mark.sprint4
-@pytest.mark.story("SCRUM-81", "CM-029")
-def test_a_note_can_be_added_to_a_case(notes):
-    response = add_note("Directors match the incumbency certificate.")
-
-    assert response.status_code == 201
-    assert [n["body"] for n in reload()] == ["Directors match the incumbency certificate."]
-
-
-@pytest.mark.sprint4
-@pytest.mark.story("SCRUM-81", "CM-030")
-def test_a_note_can_be_added_to_a_single_document(notes):
-    response = add_note("Net pay matches the salary credits.", PAYSLIP_ID)
-
-    assert response.status_code == 201
-    assert response.json()["document_id"] == PAYSLIP_ID
-    [saved] = reload()
-    assert saved["document_id"] == PAYSLIP_ID
-
-
-@pytest.mark.sprint4
-@pytest.mark.story("SCRUM-81", "CM-030")
-def test_a_note_cannot_be_added_to_a_document_that_is_not_in_the_case(notes):
-    response = add_note("Wrong document.", "99999999-0000-0000-0000-000000000000")
-
-    assert response.status_code == 404
-    assert notes.rows == []
-
-
-@pytest.mark.sprint4
-@pytest.mark.story("SCRUM-81", "CM-031")
-def test_a_saved_case_note_shows_its_author_and_when_it_was_saved(notes):
-    body = add_note("Called the employer to confirm.").json()
-
-    assert body["author"] == TEST_USER
-    assert datetime.fromisoformat(body["created_at"]) == notes.clock
-
-
-@pytest.mark.sprint4
-@pytest.mark.story("SCRUM-81", "CM-032")
-def test_a_saved_document_note_shows_its_author_time_and_document(notes):
-    body = add_note("CPF figure checked against the CPF statement.", PAYSLIP_ID).json()
-
-    assert (body["author"], body["document_id"]) == (TEST_USER, PAYSLIP_ID)
-    assert body["created_at"]
-
-
-@pytest.mark.sprint4
-@pytest.mark.story("SCRUM-81", "CM-033")
-def test_a_case_level_note_has_no_document(notes):
-    body = add_note("Case-wide: all documents received.").json()
-
-    assert body["document_id"] is None
-    assert (body["author"], bool(body["created_at"])) == (TEST_USER, True)
-
-
-@pytest.mark.sprint4
-@pytest.mark.story("SCRUM-81", "CM-034")
-def test_a_saved_case_note_is_unchanged_after_reloading_the_case(notes):
-    saved = add_note("Directors match the incumbency certificate.").json()
-
-    assert reload() == [saved]
-
-
-@pytest.mark.sprint4
-@pytest.mark.story("SCRUM-81", "CM-035")
-def test_a_saved_document_note_is_unchanged_and_still_on_its_document_after_reloading(notes):
-    case_note = add_note("Case-wide note.").json()
-    document_note = add_note("Net pay matches the salary credits.", PAYSLIP_ID).json()
+@pytest.mark.story("SCRUM-81", "CM-029 – CM-035")
+def test_case_and_document_notes_are_read_back_unchanged_on_reload(notes):
+    case_note = add_note("Directors match the incumbency certificate.")
+    document_note = add_note("Net pay matches the salary credits.", PAYSLIP_ID)
+    assert (case_note.status_code, document_note.status_code) == (201, 201)
 
     reloaded = reload()
 
-    assert reloaded == [case_note, document_note]
-    assert [n["document_id"] for n in reloaded] == [None, PAYSLIP_ID]
+    # Exactly what was saved, oldest first: each signed by the officer, timestamped, and on its own document.
+    assert reloaded == [case_note.json(), document_note.json()]
+    assert [(n["author"], n["document_id"]) for n in reloaded] == [(TEST_USER, None), (TEST_USER, PAYSLIP_ID)]
+    assert [datetime.fromisoformat(n["created_at"]) for n in reloaded] == [n.created_at for n in notes.rows]
 
 
 @pytest.mark.sprint4

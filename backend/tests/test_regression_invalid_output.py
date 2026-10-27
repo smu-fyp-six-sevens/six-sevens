@@ -28,9 +28,11 @@ from app.models import DocumentStatus
 from tests import test_regression_ai_pipeline as pipeline_harness
 from tests.test_regression_ai_pipeline import classification, extraction, real_extraction, run, steps
 
-# The Sprint 2 harness's fixtures: scripted Claude and the in-memory storage, database and OCR.
+# The Sprint 2 harness's fixtures: scripted Claude, the in-memory storage, database and OCR, and the cleanup of
+# each run's trace and text cache.
 ai = pipeline_harness.ai
 store = pipeline_harness.store
+_clear_pipeline_memory = pipeline_harness._clear_pipeline_memory
 
 client = TestClient(app)
 

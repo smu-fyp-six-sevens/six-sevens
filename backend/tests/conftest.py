@@ -234,7 +234,14 @@ _EXISTING_REGRESSION_TESTS: dict[str, list[tuple[str, str, str]]] = {
     "test_company_identity.py": [("sprint3", "SCRUM-70", "FD-025"), ("sprint4", "SCRUM-255", "CD-001 – CD-007")],
     # --- Sprint 4 (SCRUM-296) ---
     # SCRUM-81 Attach officer notes (CM-029 – CM-036)
-    "test_notes.py": [("sprint4", "SCRUM-81", "CM-029 – CM-036")],
+    "test_notes.py::test_note_is_signed_by_the_officer_and_timestamped": [("sprint4", "SCRUM-81", "CM-031 / CM-033")],
+    "test_notes.py::test_note_on_a_document_from_another_case_is_refused": [("sprint4", "SCRUM-81", "CM-030")],
+    "test_notes.py::test_reload_returns_the_saved_notes_unchanged": [("sprint4", "SCRUM-81", "CM-034 / CM-035")],
+    "test_notes.py::test_note_on_an_approved_document_is_saved_and_leaves_the_document_alone": [
+        ("sprint4", "SCRUM-81", "CM-036"),
+    ],
+    "test_notes.py::test_reply_takes_its_notes_document_and_keeps_the_original": [("sprint4", "SCRUM-81", "CM-036")],
+    "test_notes.py::test_author_can_edit_their_note_and_it_shows_as_edited": [("sprint4", "SCRUM-81", "CM-036")],
     # SCRUM-84 / SCRUM-90 Case risk score and its reasons (RS-001 – RS-008)
     "test_case_risk.py": [("sprint4", "SCRUM-84", "RS-001 – RS-008")],
     # SCRUM-52 Run case analysis only once every approved document is scanned (MA-013 / MA-014)

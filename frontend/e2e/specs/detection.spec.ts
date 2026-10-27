@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../support/test';
-import { loadFixture, readRegressionFixture } from '../support/fixtures';
-import type { MockBackend } from '../support/mockBackend';
+import { loadFixture, readFixture, readRegressionFixture } from '../support/fixtures';
+import type { DocumentRow, MockBackend } from '../support/mockBackend';
 
 /**
  * Detection (Sprint 3) — "Test Cases - Sprint 3.xlsx":
@@ -27,6 +27,9 @@ type Report = {
 };
 
 const C028_REPORT = readRegressionFixture<Report>('detection-report-c028.json');
+// What the real graph reports for a clean certificate, and for an image-only page the font check can't read.
+const CLEAN_REPORT = readRegressionFixture<Report>('detection-report-clean.json');
+const INCONCLUSIVE_REPORT = readRegressionFixture<Report>('detection-report-inconclusive.json');
 
 const approveButton = (page: Page) => page.getByRole('button', { name: '✓ Approve Document' });
 const rejectButton = (page: Page) => page.getByRole('button', { name: '✕ Reject Document' });
@@ -63,17 +66,32 @@ async function expectLocked(page: Page) {
 }
 
 test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
-  test('MA-005 an approved document moves to Approved Documents with status Approved @MA-005', async ({ page, backend }) => {
+  test('MA-005 / MA-007 / MA-009 approving starts detection, locks the document and moves it to Approved Documents @MA-005 @MA-007 @MA-009', async ({ page, backend }) => {
     const { fixture, document } = creditReport(backend);
     await page.goto(fixture.documentUrl(document));
 
     await approveButton(page).click();
 
+    // MA-009: approved and not yet reported on, the page says it's scanning, and offers to cancel.
     await expect(page.locator('.details-label', { hasText: 'Routing Outcome' }).locator('xpath=following-sibling::strong')).toHaveText('Approved');
     expect(backend.requestsTo('POST', `/documents/${document.id}/approve`)).toHaveLength(1);
+    await expect(documentStatus(page)).toHaveText('Scanning…', { timeout: 5000 });
+    await expect(detectionPanel(page)).toContainText('Scanning…');
+    await expect(detectionPanel(page).getByRole('button', { name: 'Cancel detection' })).toBeVisible();
+
+    // MA-007: it can no longer be edited, deleted or re-typed, before and after a reload.
+    await expectLocked(page);
+
+    document.status = 'detected';
+    backend.detectionReports[document.id] = { ...C028_REPORT, document_id: document.id };
+    await page.getByRole('button', { name: 'Refresh detection' }).click();
+    await expect(detectionPanel(page)).toContainText('Verdict: FLAGGED');
+    await page.reload();
+    await expectLocked(page);
+
+    // MA-005: it has left Extracted Files for its own tab.
     await page.goto(`${fixture.caseUrl}?section=documents`);
     await expect(extractedCard(page)).not.toContainText(document.filename);
-    // Approved documents have their own tab.
     await page.goto(`${fixture.caseUrl}?section=approved`);
     await expect(approvedCard(page)).toContainText(document.filename);
   });
@@ -91,18 +109,6 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     await expect(approvedCard(page)).toHaveCount(0);
   });
 
-  test('MA-007 an approved document can no longer be edited, deleted or re-typed @MA-007', async ({ page, backend }) => {
-    const { fixture, document } = creditReport(backend);
-    await page.goto(fixture.documentUrl(document));
-
-    await approveButton(page).click();
-    await expect(approveButton(page)).toHaveCount(0);
-
-    await expectLocked(page);
-    await page.reload();
-    await expectLocked(page);
-  });
-
   test('MA-008 a document with an unreviewed low-confidence field cannot be approved @MA-008', async ({ page, backend }) => {
     const { fixture, payslip } = payslipPendingReview(backend);
     await page.goto(fixture.documentUrl(payslip));
@@ -111,23 +117,6 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     await expect(page.locator('.approval-warning', { hasText: 'low confidence' })).toContainText('Cannot approve yet');
     await expect(page.locator('.approval-warning', { hasText: 'low confidence' }).locator('strong').first()).toHaveText('Net Pay');
     expect(backend.requestsTo('POST', `/documents/${payslip.id}/approve`)).toHaveLength(0);
-  });
-
-  test('MA-009 detection starts as soon as the document is approved, then shows its result @MA-009', async ({ page, backend }) => {
-    const { fixture, document } = creditReport(backend);
-    await page.goto(fixture.documentUrl(document));
-
-    await approveButton(page).click();
-
-    // Approved and not yet reported on: the page says it's scanning, and offers to cancel.
-    await expect(documentStatus(page)).toHaveText('Scanning…', { timeout: 5000 });
-    await expect(detectionPanel(page)).toContainText('Scanning…');
-    await expect(detectionPanel(page).getByRole('button', { name: 'Cancel detection' })).toBeVisible();
-
-    document.status = 'detected';
-    backend.detectionReports[document.id] = { ...C028_REPORT, document_id: document.id };
-    await page.getByRole('button', { name: 'Refresh detection' }).click();
-    await expect(detectionPanel(page)).toContainText('Verdict: FLAGGED');
   });
 
   test('MA-010 a rejected document can no longer be edited, and is shown as rejected @MA-010', async ({ page, backend }) => {
@@ -161,7 +150,7 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     await expect(page.getByRole('button', { name: '+ Add field' })).toHaveCount(0);
   });
 
-  test('cancelling a scan ends in "Detection failed" with a retry, not "Scanning" @SCRUM-299', async ({ page, backend }) => {
+  test('cancelling a scan ends in "Detection failed", and Retry detection starts it again @SCRUM-299', async ({ page, backend }) => {
     const { fixture, document } = creditReport(backend);
     document.status = 'detecting';
     await page.goto(fixture.documentUrl(document));
@@ -169,14 +158,21 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
 
     await detectionPanel(page).getByRole('button', { name: 'Cancel detection' }).click();
 
+    // The cancel is accepted; the worker stops the run a moment later and the page hears of it with the snapshot.
+    await expect(detectionPanel(page).getByRole('button', { name: 'Cancelling…' })).toBeDisabled();
     expect(backend.requestsTo('POST', `/documents/${document.id}/detection/cancel`)).toHaveLength(1);
-    // The worker has stopped the run and left the document approved; the page hears of it with the snapshot.
     backend.push(document.case_id!);
-
     await expect(documentStatus(page)).toHaveText('Detection failed');
     await expect(detectionPanel(page)).toContainText('The last detection run did not finish.');
-    await expect(detectionPanel(page).getByRole('button', { name: 'Retry detection' })).toBeVisible();
     await expect(detectionPanel(page).getByRole('button', { name: 'Cancel detection' })).toHaveCount(0);
+
+    await detectionPanel(page).getByRole('button', { name: 'Retry detection' }).click();
+
+    await expect.poll(() => backend.requestsTo('POST', `/documents/${document.id}/detection/retry`).length).toBe(1);
+    backend.push(document.case_id!);
+    await expect(documentStatus(page)).toHaveText('Scanning…');
+    await expect(detectionPanel(page).getByRole('button', { name: 'Retry detection' })).toHaveCount(0);
+    await expect(detectionPanel(page).getByRole('button', { name: 'Cancel detection' })).toBeVisible();
   });
 
   test('MA-011 detection does not run on a rejected document @MA-011', async ({ page, backend }) => {
@@ -250,14 +246,7 @@ test.describe('Lead detection agent @sprint3 @SCRUM-119', () => {
   });
 
   test('FD-018 a clean report reads CLEAN with no findings @FD-018', async ({ page, backend }) => {
-    const panel = await openReport(page, backend, {
-      ...C028_REPORT,
-      verdict: 'clean',
-      summary: 'Nothing worth flagging was found.',
-      findings: [],
-      second_look: null,
-      unable_to_assess: [],
-    });
+    const panel = await openReport(page, backend, CLEAN_REPORT);
 
     await expect(panel).toContainText('Verdict: CLEAN — Nothing worth flagging was found.');
     await expect(panel).toContainText('Findings (0):');
@@ -265,19 +254,13 @@ test.describe('Lead detection agent @sprint3 @SCRUM-119', () => {
   });
 
   test('FD-019 no findings with a check that could not run reads INCONCLUSIVE and lists the check @FD-019', async ({ page, backend }) => {
-    const panel = await openReport(page, backend, {
-      ...C028_REPORT,
-      verdict: 'inconclusive',
-      summary: 'No findings. The metadata check passed, but the fonts could not be checked.',
-      findings: [],
-      second_look: null,
-      unable_to_assess: [{ specialist: 'layout_rendering', tool: 'font_consistency_tool', reason: 'No extractable text in this PDF' }],
-    });
+    const panel = await openReport(page, backend, INCONCLUSIVE_REPORT);
+    const [unassessed] = INCONCLUSIVE_REPORT.unable_to_assess;
 
     await expect(panel).toContainText('Verdict: INCONCLUSIVE');
     await expect(panel).toContainText('Findings (0):');
     await expect(panel).toContainText('Could not assess:');
-    await expect(panel).toContainText('layout_rendering / font_consistency_tool — No extractable text in this PDF');
+    await expect(panel).toContainText(`layout_rendering / font_consistency_tool — ${unassessed.reason}`);
   });
 
   test('FD-020 a second look is shown once, to a different specialist, with the lead\'s question @FD-020', async ({ page, backend }) => {
@@ -292,58 +275,39 @@ test.describe('Lead detection agent @sprint3 @SCRUM-119', () => {
 });
 
 test.describe('Case match @sprint3 @SCRUM-110', () => {
-  test('DI-045 an identity mismatch appears in detection after approval @DI-045', async ({ page, backend }) => {
-    // GLDB-16's real passport is TEO KAI MING's, who is not on the certificate of incumbency.
+  const triage = (page: Page) => page.locator('.review-message--warning', { hasText: 'Sent to manual review' });
+
+  test('DI-045 a person not on the case shows their ID against the case\'s IDs @DI-045', async ({ page, backend }) => {
+    // GLDB-16's real passport is TEO KAI MING's, who is not on the certificate of incumbency. The case match is
+    // the one production computed when the case was captured: sent to manual review, not to detection.
     const fixture = loadFixture(backend, 'harbor-light');
     const passport = fixture.document('Passport_5187');
     passport.status = 'analyzed';
 
-    const caseMatch = backend.caseMatch[fixture.case.id] as {
-      documents: { document_id: string; status: string; can_proceed_to_fraud_detection: boolean }[];
-    };
-    const passportMatch = caseMatch.documents.find((entry) => entry.document_id === passport.id);
-    expect(passportMatch).toBeDefined();
-    passportMatch!.status = 'mismatch';
-    passportMatch!.can_proceed_to_fraud_detection = true;
-
     await page.goto(fixture.documentUrl(passport));
 
-    await expect(page.locator('.review-message--warning', { hasText: 'Case mismatch' })).toHaveCount(0);
+    await expect(triage(page)).toContainText('TEO KAI MING');
+    await expect(triage(page)).toContainText('ID S7273147P (TEO KAI MING)'); // the document's value
+    // The case's values, from the certificate of incumbency.
+    await expect(triage(page)).toContainText('(certificate of incumbency: S7634564N, S8081681J, S8001781P)');
+  });
+
+  test('a document from another company is sent to manual review, and an officer can still approve it @DI-041 @DI-043', async ({ page, backend }) => {
+    // Harbor Light's statement filed into the Anchorpoint case: the case match is what the real check_case_match
+    // gives it (case-match-foreign-company.json, kept in step by backend/tests/test_regression_case_match.py).
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const foreign = readRegressionFixture<{ document: Partial<DocumentRow>; case_match: unknown }>('case-match-foreign-company.json');
+    const harbor = readFixture('harbor-light');
+    const statement = Object.values(harbor.documents).find((d) => d.filename === foreign.document.filename)!;
+    const misfiled = { ...structuredClone(statement), ...foreign.document, status: 'analyzed' } as DocumentRow;
+    backend.documents.push(misfiled);
+    backend.caseMatch[fixture.case.id] = foreign.case_match;
+
+    await page.goto(fixture.documentUrl(misfiled));
+
+    await expect(triage(page)).toContainText('UEN 201634564N does not match the certificate of incumbency');
+    await expect(approveButton(page)).toBeEnabled();
     await approveButton(page).click();
-
-    passport.status = 'detected';
-    backend.detectionReports[passport.id] = {
-      ...C028_REPORT,
-      document_id: passport.id,
-      verdict: 'flagged',
-      summary: 'Identity field mismatch found after approval.',
-      findings: [
-        ...C028_REPORT.findings,
-        {
-          severity: 'high',
-          summary: 'ID S7273147P for TEO KAI MING in Passport_5187.jpeg is not listed among IDs S7634564N, S8081681J, S8001781P in C014_CertIncumbency.pdf.',
-          rationale: 'The extracted individual identifier differs from the certificate of incumbency.',
-          specialists: ['identity_matching'],
-        },
-      ],
-      consulted: [
-        ...C028_REPORT.consulted,
-        {
-          specialist: 'identity_matching',
-          title: 'Identity Matching',
-          brief: 'Compare extracted names and identifiers with the other documents in this case.',
-          tools_called: ['case_identity_match'],
-          second_look: false,
-        },
-      ],
-    };
-    backend.push(fixture.case.id);
-    await page.getByRole('button', { name: 'Refresh detection' }).click();
-
-    const panel = detectionPanel(page);
-    await expect(panel).toContainText('Verdict: FLAGGED');
-    await expect(panel).toContainText('TEO KAI MING');
-    await expect(panel).toContainText('S7634564N');
-    await expect(panel).toContainText('Identity Matching');
+    expect(backend.requestsTo('POST', `/documents/${misfiled.id}/approve`)).toHaveLength(1);
   });
 });

@@ -2,7 +2,7 @@
 
 **Story:** SCRUM-296 Sprint 4 Regression Testing
 **Branch:** `SCRUM-296-Sprint-4-Regression-Testing`, from `main` at `4542eac`
-**Run date:** 2026-10-26
+**Run date:** 2026-10-27
 **Source test cases:** `Test Cases - Sprint 4.xlsx`
 
 ## Summary
@@ -19,16 +19,16 @@ Out of scope: TD-001 – TD-006 (test-data tooling: the masterlist and generated
 
 | Suite | Tests | Passed | Known defects (expected failures) |
 |---|---|---|---|
-| Backend — pytest (all) | 2304 | 2302 (+2 skipped) | 0 |
-| └ tagged `sprint4` | 407 | 405 (+2 skipped) | 0 |
-| └ tagged `sprint1` / `sprint2` / `sprint3` (re-run) | 925 | 925 | 0 |
-| Frontend — Playwright (all) | 159 | 159 | 0 |
-| └ tagged `@sprint4` | 28 | 28 | 0 |
-| └ tagged `@sprint1` / `@sprint2` / `@sprint3` (re-run) | 115 | 115 | 0 |
+| Backend — pytest (all) | 2325 | 2323 (+2 skipped) | 0 |
+| └ tagged `sprint4` | 381 | 379 (+2 skipped) | 0 |
+| └ tagged `sprint1` / `sprint2` / `sprint3` (re-run) | 931 | 931 | 0 |
+| Frontend — Playwright (all) | 155 | 155 | 0 |
+| └ tagged `@sprint4` | 24 | 24 | 0 |
+| └ tagged `@sprint1` / `@sprint2` / `@sprint3` (re-run) | 102 | 102 | 0 |
 
 **Sprints 1 – 3 still pass.** REG-005 from the Sprint 3 report (an over-long company name accepted by the API) was fixed on `main`: its expected-failure marker is gone and the test passes. REG-006 – REG-012 were re-tested in the Sprint 4 live retest (the workbook's retest tab) and pass; FD-016 there is still "Not tested" live, but stays covered by the suite.
 
-**Defects:** 1 new (REG-013), found by this regression, fixed in this story (`frontend/src/pages/upload/CaseRiskCard.tsx`) and re-tested. 2 more were found in the Sprint 4 live run (CD-007, CD-016), fixed by their owners and re-tested. The suite now keeps all three fixed.
+**Defects:** 1 new (REG-013), found by this regression, fixed in this story (`frontend/src/pages/upload/CaseRiskCard.tsx`) and re-tested. 2 more were found in the Sprint 4 live run (CD-007, CD-016), fixed by their owners and re-tested. The suite now keeps all three fixed. 1 more (REG-014, a race in the detection panel) is open for its owner.
 
 ### Acceptance criteria
 
@@ -36,8 +36,8 @@ Out of scope: TD-001 – TD-006 (test-data tooling: the masterlist and generated
 |---|---|
 | AC1 — all completed Sprint 4 functionalities regression tested | ✅ All 54 in-scope cases automated (backend and/or Playwright), AI steps scripted |
 | AC2 — previously passed Sprint 4 cases still pass | ✅ Every case that passed in the live run passes in the suite; both suites run on every PR |
-| AC3 — defects documented and tracked | ✅ REG-013 below, with test case, example and owner story; CD-007 and CD-016 recorded with their fixes |
-| AC4 — regression re-run after defects are fixed | ✅ REG-013, CD-007, CD-016 (Sprint 4) and REG-005 – REG-012 (Sprint 3) re-tested and passing |
+| AC3 — defects documented and tracked | ✅ REG-013 and REG-014 below, with test case, example and owner story; CD-007 and CD-016 recorded with their fixes |
+| AC4 — regression re-run after defects are fixed | ✅ REG-013, CD-007, CD-016 (Sprint 4) and REG-005 – REG-012 (Sprint 3) re-tested and passing. ⏳ REG-014 waiting on a fix |
 
 ## How the Sprint 4 suite works
 
@@ -49,8 +49,8 @@ Same approach as Sprints 1 – 3:
 - **Invalid agent output:** `tests/test_regression_invalid_output.py` reuses Sprint 2's real LangGraph pipeline harness. The scripted extraction reply is prose instead of JSON, once (MA-024) or on both attempts (MA-025 – MA-027): no `FORCE_BAD_EXTRACTION` hook is needed.
 - **Cross-document validation:** `tests/test_regression_cross_document.py` runs the case analysis's code comparisons (company names, people, addresses, UENs) with the live run's names, IDs and addresses. CD-008 – CD-011 run the document's real external validation, with OneMap's and HDB's answers faked as they came back in the live run. SWIFT BICs come from the bundled reference table.
 - **AI-generated content:** `tests/test_regression_ai_generation.py` reuses Sprint 3's detection harness (real graph, real tools, scripted specialists) on uploaded scans generated in the test: one with a generator's upsampling checkerboard, one with ordinary sensor noise.
-- **Notes:** `tests/test_regression_notes.py` runs the real notes endpoints over an in-memory `case_notes` table, so a note saved through the API is the one read back on reload.
-- **Frontend:** `frontend/e2e/specs/case-analysis.spec.ts` (new), and a Sprint 4 block in `notes.spec.ts`. `mockBackend.ts` now answers `GET /cases/{id}/analysis` and `POST …/analysis/run` with the backend's rules (not ready → 409, already running → 409).
+- **Notes:** `tests/test_regression_notes.py` runs the real notes endpoints over an in-memory `case_notes` table, for what only a stored note shows: a note saved through the API is the one read back on reload, and a note on an approved document can be added to while the document is only read. The single-request rules stay in `test_notes.py`, tagged `sprint4` per test.
+- **Frontend:** `frontend/e2e/specs/case-analysis.spec.ts` (new), and a Sprint 4 block in `notes.spec.ts`. `mockBackend.ts` answers `GET /cases/{id}/analysis` and `POST …/analysis/run` with the backend's rules (not ready → 409, already running → 409), and works out `analysis_ready` and the documents status from the case's documents on every read, as the backend does. What it can't compute it serves from fixtures that backend tests keep in step: the checklist and coverage for a set of documents (`checklist-variants.json`) and a misfiled document's case match (`case-match-foreign-company.json`). Its error messages match the server's word for word. The e2e code is now typechecked (`tsconfig.e2e.json`, part of `npm run typecheck`).
 - **No real AI calls:** whether Claude still picks the right tools and ratings on the real documents is checked by the **manual live run at the end of each sprint**.
 
 Existing tests that already cover Sprint 4 cases (`test_notes.py`, `test_case_risk.py`, `test_case_analysis.py`, `test_output_validation.py`, `test_company_identity.py`, `test_cross_document_*.py`, `test_address_matching.py`, `test_registry_lookups.py`, `test_ai_generation.py`) are tagged `sprint4` centrally in `conftest.py`.
@@ -86,10 +86,12 @@ REG-013 was fixed in this story; the others by their owners.
 | REG-013 | Low | Fixed and re-tested | When a document's detection run failed, the Customer Risk Summary showed only "Detection failed on a document." The case's risk carries how many documents were scanned (the API returns 2 of 3), and the pending state showed that count, but the failed state never did. Fixed: the failed state now reads "2 of 3 documents scanned. Retry detection on the failed document…". | Case with 3 documents, 1 failed | RS-002 | SCRUM-84 / SCRUM-90 |
 | CD-007 (live) | Medium | Fixed and re-tested | "Zenith Renewable Energy LLP" matched "… Pte Ltd": a different entity type wasn't flagged. | COI vs bank statement | CD-007 | SCRUM-255 |
 | CD-016 (live) | Medium | Fixed and re-tested | The same NRIC with a different name (Tan Wei Ming / Lim Wei Ming) wasn't flagged. | NRIC vs bank statement | CD-016 | SCRUM-253 |
+| REG-014 | Low | Open | After an officer cancels detection, the panel can stay on "Cancelling…" for good. `useDetection.ts` sets its cancel-pending flag when the cancel request answers, and clears it when the document leaves `detecting`. If the worker's snapshot (run stopped) reaches the page before that answer, the flag is cleared first and set after, and nothing clears it again: once Retry detection starts a new run, the panel shows a disabled "Cancelling…" instead of "Cancel detection". Found from an intermittent failure of the cancel-and-retry browser test. | Cancel detection, the snapshot arrives first, then Retry detection | Cancel/Retry detection (SCRUM-299) | `frontend/src/pages/document-details/useDetection.ts` |
 
 ### Re-testing (AC4)
 
 - **REG-013:** fixed in `CaseRiskCard.tsx`. `RS-002 a failed detection run shows no score, says detection failed and how many were scanned` in `case-analysis.spec.ts` now passes as a normal test.
+- **REG-014:** not fixed. The browser test waits for the cancel to be accepted before the worker's snapshot (the usual order), so it is stable and doesn't hide the defect. Once fixed (e.g. clearing the flag when a new run starts), add a test where the snapshot arrives first and re-run.
 - **CD-007, CD-016:** fixed during the sprint and passed on re-test. `test_a_different_entity_type_is_flagged` and `test_the_same_id_with_different_names_is_flagged` keep them fixed.
 - **Sprint 3's REG-005 – REG-012:** REG-005 is fixed and its test is a normal test. REG-006 – REG-012 passed in the Sprint 4 live retest of FD-001 – FD-026.
 

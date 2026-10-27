@@ -1,0 +1,364 @@
+{
+  "no reducible findings": {
+    "additional_documents": {
+      "best_case_level": "High",
+      "best_case_score": 50,
+      "current_level": "High",
+      "current_score": 50,
+      "items": [
+        {
+          "addresses": [
+            "0c33c33c:external_validation_tool-1"
+          ],
+          "affects_score": false,
+          "level_if_supports": null,
+          "recommendation": null,
+          "score_if_supports": null,
+          "source": "finding",
+          "title": "UEN Registration Confirmation Letter",
+          "why": "Confirms the UEN printed on the incorporation certificate."
+        }
+      ],
+      "reason": "no_reducible_findings"
+    },
+    "risk": {
+      "contributing_findings": [
+        {
+          "also_on": 0,
+          "category": "registry_discrepancy",
+          "document_id": "0c33c33c-0000-0000-0000-000000000001",
+          "document_type": "certificate_of_incorporation",
+          "filename": "C058_CertIncorp.pdf",
+          "finding_id": "0c33c33c:external_validation_tool-1",
+          "flag_id": null,
+          "points": 8.0,
+          "rationale": "A registered company is always on ACRA's register.",
+          "repeat_of": null,
+          "severity": "high",
+          "source": "document",
+          "summary": "ACRA has no record of UEN 202736160G.",
+          "tool": "external_validation_tool",
+          "unreviewed": false
+        }
+      ],
+      "documents_scanned": 1,
+      "documents_total": 1,
+      "level": "High",
+      "points": 8.0,
+      "reasons": [
+        "Rated High from the combined severity of 1 finding(s)."
+      ],
+      "score": 50,
+      "state": "scored",
+      "unassessed_checks": []
+    },
+    "supporting_document_recommendations": []
+  },
+  "nothing needed": {
+    "additional_documents": {
+      "best_case_level": "Low",
+      "best_case_score": 0,
+      "current_level": "Low",
+      "current_score": 0,
+      "items": [],
+      "reason": "none_needed"
+    },
+    "risk": {
+      "contributing_findings": [],
+      "documents_scanned": 1,
+      "documents_total": 1,
+      "level": "Low",
+      "points": 0.0,
+      "reasons": [
+        "Rated Low: detection found nothing worth flagging."
+      ],
+      "score": 0,
+      "state": "scored",
+      "unassessed_checks": []
+    },
+    "supporting_document_recommendations": []
+  },
+  "recommendations": {
+    "additional_documents": {
+      "best_case_level": "Low",
+      "best_case_score": 0,
+      "current_level": "Low",
+      "current_score": 0,
+      "items": [
+        {
+          "addresses": [],
+          "affects_score": false,
+          "level_if_supports": null,
+          "recommendation": {
+            "document_type": "purchase_order",
+            "items": [
+              {
+                "amount": -22506.48,
+                "breakdown": [],
+                "counterparty": "UNITED PAPER SUPPLY PTE. LTD.",
+                "date": "11-Jun-26",
+                "description": "REMITTANCE TRANSFER OF FUNDS RTF UNITED PAPER SUPPLY PTE. LTD. SGD 22,506",
+                "prior_amount": null,
+                "reason": "Payment of 22,506.48 on 11-Jun-26 to UNITED PAPER SUPPLY PTE. LTD."
+              }
+            ],
+            "reason": "C001_BankStatement.pdf shows 1 large supplier payment (of at least 20,000.00).",
+            "request": "Request a purchase order for this transaction:",
+            "source_document_id": "0d44d44d-0000-0000-0000-000000000001",
+            "source_filename": "C001_BankStatement.pdf",
+            "title": "Purchase Order"
+          },
+          "score_if_supports": null,
+          "source": "checklist",
+          "title": "Purchase Order",
+          "why": "C001_BankStatement.pdf shows 1 large supplier payment (of at least 20,000.00)."
+        },
+        {
+          "addresses": [],
+          "affects_score": false,
+          "level_if_supports": null,
+          "recommendation": {
+            "document_type": "bank_loan_evidence",
+            "items": [
+              {
+                "amount": 1850790.0,
+                "breakdown": [
+                  {
+                    "amount": 516090.0,
+                    "breakdown": [],
+                    "counterparty": null,
+                    "date": null,
+                    "description": "Bank borrowings, current portion",
+                    "prior_amount": 343330.0,
+                    "reason": "Bank borrowings, current portion: 516,090.00 (prior year: 343,330.00)."
+                  },
+                  {
+                    "amount": 1334700.0,
+                    "breakdown": [],
+                    "counterparty": null,
+                    "date": null,
+                    "description": "Bank borrowings, non-current portion",
+                    "prior_amount": 948200.0,
+                    "reason": "Bank borrowings, non-current portion: 1,334,700.00 (prior year: 948,200.00)."
+                  }
+                ],
+                "counterparty": null,
+                "date": null,
+                "description": "Total bank borrowings",
+                "prior_amount": 1291530.0,
+                "reason": "Total bank borrowings: 1,850,790.00 (prior year: 1,291,530.00)."
+              }
+            ],
+            "reason": "C001_Financials.pdf shows a 43.3% increase in total bank borrowings compared with the prior year, exceeding the 40% threshold.",
+            "request": "Request bank loan statements or bank loan repayment schedules for this amount:",
+            "source_document_id": "0d44d44d-0000-0000-0000-000000000002",
+            "source_filename": "C001_Financials.pdf",
+            "title": "Bank Loan Statements or Bank Loan Repayment Schedules"
+          },
+          "score_if_supports": null,
+          "source": "checklist",
+          "title": "Bank Loan Statements or Bank Loan Repayment Schedules",
+          "why": "C001_Financials.pdf shows a 43.3% increase in total bank borrowings compared with the prior year, exceeding the 40% threshold."
+        }
+      ],
+      "reason": "none_needed"
+    },
+    "risk": {
+      "contributing_findings": [],
+      "documents_scanned": 2,
+      "documents_total": 2,
+      "level": "Low",
+      "points": 0.0,
+      "reasons": [
+        "Rated Low: detection found nothing worth flagging."
+      ],
+      "score": 0,
+      "state": "scored",
+      "unassessed_checks": []
+    },
+    "supporting_document_recommendations": [
+      {
+        "document_type": "purchase_order",
+        "items": [
+          {
+            "amount": -22506.48,
+            "breakdown": [],
+            "counterparty": "UNITED PAPER SUPPLY PTE. LTD.",
+            "date": "11-Jun-26",
+            "description": "REMITTANCE TRANSFER OF FUNDS RTF UNITED PAPER SUPPLY PTE. LTD. SGD 22,506",
+            "prior_amount": null,
+            "reason": "Payment of 22,506.48 on 11-Jun-26 to UNITED PAPER SUPPLY PTE. LTD."
+          }
+        ],
+        "reason": "C001_BankStatement.pdf shows 1 large supplier payment (of at least 20,000.00).",
+        "request": "Request a purchase order for this transaction:",
+        "source_document_id": "0d44d44d-0000-0000-0000-000000000001",
+        "source_filename": "C001_BankStatement.pdf",
+        "title": "Purchase Order"
+      },
+      {
+        "document_type": "bank_loan_evidence",
+        "items": [
+          {
+            "amount": 1850790.0,
+            "breakdown": [
+              {
+                "amount": 516090.0,
+                "breakdown": [],
+                "counterparty": null,
+                "date": null,
+                "description": "Bank borrowings, current portion",
+                "prior_amount": 343330.0,
+                "reason": "Bank borrowings, current portion: 516,090.00 (prior year: 343,330.00)."
+              },
+              {
+                "amount": 1334700.0,
+                "breakdown": [],
+                "counterparty": null,
+                "date": null,
+                "description": "Bank borrowings, non-current portion",
+                "prior_amount": 948200.0,
+                "reason": "Bank borrowings, non-current portion: 1,334,700.00 (prior year: 948,200.00)."
+              }
+            ],
+            "counterparty": null,
+            "date": null,
+            "description": "Total bank borrowings",
+            "prior_amount": 1291530.0,
+            "reason": "Total bank borrowings: 1,850,790.00 (prior year: 1,291,530.00)."
+          }
+        ],
+        "reason": "C001_Financials.pdf shows a 43.3% increase in total bank borrowings compared with the prior year, exceeding the 40% threshold.",
+        "request": "Request bank loan statements or bank loan repayment schedules for this amount:",
+        "source_document_id": "0d44d44d-0000-0000-0000-000000000002",
+        "source_filename": "C001_Financials.pdf",
+        "title": "Bank Loan Statements or Bank Loan Repayment Schedules"
+      }
+    ]
+  },
+  "scored": {
+    "risk": {
+      "contributing_findings": [
+        {
+          "also_on": 0,
+          "category": "tampering_forensic",
+          "document_id": "0a11a11a-0000-0000-0000-000000000001",
+          "document_type": "payslip",
+          "filename": "C011_Payslip.pdf",
+          "finding_id": "0a11a11a:font_consistency_tool-1",
+          "flag_id": null,
+          "points": 8.0,
+          "rationale": "Only the figure that matters differs.",
+          "repeat_of": null,
+          "severity": "high",
+          "source": "document",
+          "summary": "Net pay is in a different font from the rest of the payslip.",
+          "tool": "font_consistency_tool",
+          "unreviewed": false
+        },
+        {
+          "also_on": 0,
+          "category": "tampering_forensic",
+          "document_id": "0a11a11a-0000-0000-0000-000000000001",
+          "document_type": "payslip",
+          "filename": "C011_Payslip.pdf",
+          "finding_id": "0a11a11a:layout_anomalies_tool-1",
+          "flag_id": null,
+          "points": 3.0,
+          "rationale": "Rows elsewhere on the payslip line up.",
+          "repeat_of": null,
+          "severity": "medium",
+          "source": "document",
+          "summary": "This label and amount on the same row are vertically offset by 20 pt.",
+          "tool": "layout_anomalies_tool",
+          "unreviewed": false
+        },
+        {
+          "also_on": 0,
+          "category": "tampering_forensic",
+          "document_id": "0a11a11a-0000-0000-0000-000000000001",
+          "document_type": "payslip",
+          "filename": "C011_Payslip.pdf",
+          "finding_id": "0a11a11a:font_consistency_tool-2",
+          "flag_id": null,
+          "points": 2.0,
+          "rationale": "Employer CPF is in a different font from the rest of the payslip. The edit hides an underpayment.",
+          "repeat_of": null,
+          "severity": "high",
+          "source": "document",
+          "summary": "Employer CPF is in a different font from the rest of the payslip.",
+          "tool": "font_consistency_tool",
+          "unreviewed": false
+        },
+        {
+          "also_on": 0,
+          "category": "tampering_forensic",
+          "document_id": "0a11a11a-0000-0000-0000-000000000002",
+          "document_type": "bank_statement",
+          "filename": "C011_BankStatement.pdf",
+          "finding_id": "0a11a11a:spelling_tool-1",
+          "flag_id": null,
+          "points": 1.0,
+          "rationale": "A bank's own template is proofread.",
+          "repeat_of": null,
+          "severity": "low",
+          "source": "document",
+          "summary": "Possible misspelling \"Statment\".",
+          "tool": "spelling_tool",
+          "unreviewed": false
+        },
+        {
+          "also_on": 0,
+          "category": "tampering_forensic",
+          "document_id": "0a11a11a-0000-0000-0000-000000000001",
+          "document_type": "payslip",
+          "filename": "C011_Payslip.pdf",
+          "finding_id": "0a11a11a:layout_anomalies_tool-2",
+          "flag_id": null,
+          "points": 0.75,
+          "rationale": "Rows elsewhere on the payslip line up.",
+          "repeat_of": null,
+          "severity": "medium",
+          "source": "document",
+          "summary": "This label and amount on the same row are vertically offset by 20 pt.",
+          "tool": "layout_anomalies_tool",
+          "unreviewed": false
+        },
+        {
+          "also_on": 0,
+          "category": "tampering_forensic",
+          "document_id": "0a11a11a-0000-0000-0000-000000000001",
+          "document_type": "payslip",
+          "filename": "C011_Payslip.pdf",
+          "finding_id": "0a11a11a:layout_anomalies_tool-3",
+          "flag_id": null,
+          "points": 0.75,
+          "rationale": "Rows elsewhere on the payslip line up.",
+          "repeat_of": null,
+          "severity": "medium",
+          "source": "document",
+          "summary": "This label and amount on the same row are vertically offset by 20 pt.",
+          "tool": "layout_anomalies_tool",
+          "unreviewed": false
+        }
+      ],
+      "documents_scanned": 2,
+      "documents_total": 2,
+      "level": "High",
+      "points": 15.5,
+      "reasons": [
+        "Rated High from the combined severity of 6 finding(s)."
+      ],
+      "score": 58,
+      "state": "scored",
+      "unassessed_checks": [
+        {
+          "document_id": "0a11a11a-0000-0000-0000-000000000002",
+          "filename": "C011_BankStatement.pdf",
+          "reason": "No metadata",
+          "tool": "metadata_tool"
+        }
+      ]
+    }
+  }
+}

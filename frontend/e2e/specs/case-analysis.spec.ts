@@ -36,8 +36,6 @@ function c001Case(backend: MockBackend, { scanning = 0 }: { scanning?: number } 
     id: 'case-c001',
     greenlink_case_id: 'GLDB-1001',
     company_name: 'Golden Harvest Trading Pte Ltd',
-    documents_status: 'analyzed',
-    analysis_ready: scanning === 0,
     risk: null,
   });
   backend.cases.push(theCase);
@@ -58,10 +56,14 @@ function c001Case(backend: MockBackend, { scanning = 0 }: { scanning?: number } 
 }
 
 /** The case's run as the case-worker leaves it, then the snapshot that tells the open page. */
-function finishRun(backend: MockBackend, theCase: CaseRow, overrides: Partial<CaseAnalysis>) {
+function finishRun(
+  backend: MockBackend,
+  theCase: CaseRow,
+  { risk, ...overrides }: Omit<Partial<CaseAnalysis>, 'risk'> & { risk?: CaseRisk },
+) {
   const run = makeAnalysis({
     ...backend.analyses[theCase.id], case_id: theCase.id, status: 'complete', finished_at: new Date().toISOString(),
-    ...overrides,
+    ...overrides, risk: risk ?? null,
   });
   backend.analyses[theCase.id] = run;
   theCase.analysis = {
@@ -71,7 +73,7 @@ function finishRun(backend: MockBackend, theCase: CaseRow, overrides: Partial<Ca
     finished_at: run.finished_at,
     finding_count: run.findings.length,
   };
-  if (run.risk) theCase.risk = run.risk;
+  if (risk) theCase.risk = risk;
   backend.push(theCase.id);
 }
 
@@ -165,6 +167,22 @@ test.describe('Trigger case analysis @sprint4 @SCRUM-52', () => {
     await expect(sectionStatus(page, 'Case Analysis')).toContainText('Did Not Finish');
     await expect(runButton(page)).toHaveText('Run again');
     await expect(tracePanel(page)).toContainText('status: failed');
+  });
+  test('a run whose documents changed since it ran says it is out of date and offers to run again @SCRUM-52', async ({ page, backend }) => {
+    const theCase = c001Case(backend);
+    // The backend marks a run stale when its fingerprint no longer matches the case's documents (state.py), on
+    // both reads: the case summary's overview and GET .../analysis.
+    const run = makeAnalysis({ case_id: theCase.id, risk: CASE_RISK['RS-005'].risk, stale: true });
+    backend.analyses[theCase.id] = run;
+    theCase.analysis = { run_id: run.run_id, status: 'complete', stale: true, finished_at: run.finished_at, finding_count: 0 };
+
+    await page.goto(`/cases/${theCase.greenlink_case_id}?section=analysis`);
+
+    await expect(analysisCard(page)).toContainText('Out of date.');
+    await expect(analysisCard(page)).toContainText('Documents changed since this analysis ran.');
+    await expect(sectionStatus(page, 'Case Analysis')).toContainText('Out of Date');
+    await expect(runButton(page)).toHaveText('Run again');
+    await expect(tracePanel(page)).toContainText('status: complete (stale)');
   });
 });
 
@@ -329,24 +347,28 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     await expect(tracePanel(page).locator('.debug-table tbody tr td:first-child')).toHaveText(['8', '3', '1']);
   });
 
-  test('RS-008 an unscored case shows no score and no findings @RS-008', async ({ page, backend }) => {
-    const theCase = makeCase({ greenlink_case_id: 'GLDB-4008', risk: null, analysis_ready: false });
+  test('RS-008 / CM-007 the risk summary is reached from case details, and an unscored case shows no score and no findings @RS-008 @CM-007 @sprint2 @SCRUM-83', async ({ page, backend }) => {
+    const theCase = makeCase({ greenlink_case_id: 'GLDB-4008', risk: null });
     backend.cases.push(theCase);
+    await page.goto(`/cases/${theCase.greenlink_case_id}?section=documents`);
 
-    await page.goto(`/cases/${theCase.greenlink_case_id}?section=risk`);
+    await sectionStatus(page, 'Risk Summary').click();
 
     const card = riskCard(page);
     await expect(card).toContainText('Not scored yet.');
+    await expect(card.locator('.risk-badge')).toHaveCount(0);
     await expect(card).toContainText('Run the case analysis once every approved document has been scanned.');
     await expect(card.locator('.risk-score-value')).toHaveCount(0);
     await expect(card.locator('.risk-document')).toHaveCount(0);
   });
 
-  test('RS-008 a case with 1 of 2 documents scanned shows the count and no findings @RS-008', async ({ page, backend }) => {
+  test('RS-008 / CM-007 a case with 1 of 2 documents scanned shows the count and no findings @RS-008 @CM-007 @sprint2 @SCRUM-83', async ({ page, backend }) => {
     await openRisk(page, backend, 'RS-008');
 
     const card = riskCard(page);
     await expect(card).toContainText('1 of 2 documents scanned.');
+    await expect(sectionStatus(page, 'Risk Summary')).toContainText('1/2 Scanned');
+    await expect(card.locator('.risk-badge')).toHaveCount(0);
     await expect(card.locator('.risk-score-value')).toHaveCount(0);
     await expect(card.locator('.risk-document')).toHaveCount(0);
   });
