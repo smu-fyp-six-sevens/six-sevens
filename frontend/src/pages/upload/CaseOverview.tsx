@@ -31,10 +31,15 @@ function dateLabel(value: string | null | undefined): string {
     : date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+function fileExtension(filename: string): string {
+  const dot = filename.lastIndexOf('.');
+  return dot > 0 ? filename.slice(dot + 1, dot + 5).toUpperCase() : 'FILE';
+}
+
 function Stat({ label, value, detail, tone = 'blue', onClick }: { label: string; value: string | number; detail: string; tone?: string; onClick?: () => void }) {
   const className = `case-overview-stat case-overview-stat--${tone}${onClick ? ' case-overview-stat--interactive' : ''}`;
   const content = <>
-      <span className="case-overview-stat-label">{label}</span>
+      <span className="case-overview-stat-label">{label}{onClick && <span className="case-overview-stat-arrow" aria-hidden="true">→</span>}</span>
       <strong className="case-overview-stat-value">{value}</strong>
       <span className="case-overview-stat-detail">{detail}</span>
     </>;
@@ -128,7 +133,6 @@ export function CaseOverview({
               <div className="case-overview-progress-track" aria-label={`${detectedCount} of ${documents.length} documents detected`}>
                 <span style={{ width: `${documents.length ? (detectedCount / documents.length) * 100 : 0}%` }} />
               </div>
-              <div className="case-overview-progress-labels"><span>{detectedCount} of {documents.length} documents detected</span><span>{approvedDocuments.length} approved</span></div>
               <ol className="case-overview-stages">
                 {progressStages.map((stage) => (
                   <li className={`case-overview-stage case-overview-stage--${stage.tone}`} key={stage.label}>
@@ -163,32 +167,35 @@ export function CaseOverview({
           <section className="case-overview-metrics" aria-label="Processing and classification metrics">
             <article className="case-overview-panel case-overview-timing">
               <div className="case-overview-panel-heading">
-                <div><h2>Processing Time</h2><p>Example timings to show the intended metric</p></div>
-                <span className="case-overview-metric-tag">SAMPLE</span>
+                <div><h2>Processing Time</h2><p>Example timings for this case</p></div>
+                <span className="case-overview-metric-tag">Sample</span>
               </div>
-              <div className="case-overview-timing-values">
+              <dl className="case-overview-timing-values">
                 {SAMPLE_PROCESSING_TIMES.map((metric) => (
-                  <div key={metric.label}><span>{metric.label}</span><strong>{metric.value}</strong></div>
+                  <div key={metric.label}><dt>{metric.label}</dt><dd>{metric.value}</dd></div>
                 ))}
-              </div>
+              </dl>
               <p className="case-overview-metric-note">Sample placeholders only; measured case timings are not available yet.</p>
             </article>
 
             <article className="case-overview-panel case-overview-classification">
               <div className="case-overview-panel-heading">
                 <div><h2>Classification Metrics</h2><p>Quality measures by predicted risk level</p></div>
-                <span className="case-overview-metric-tag">PLACEHOLDERS</span>
+                <span className="case-overview-metric-tag">Placeholder</span>
               </div>
-              <div className="case-overview-accuracy"><span>Overall Accuracy</span><strong>—</strong></div>
-              <div className="case-overview-classification-grid">
-                {RISK_LEVELS.map((level) => (
-                  <div className={`case-overview-classification-card case-overview-classification-card--${level.toLowerCase()}`} key={level}>
-                    <strong>{level}</strong>
-                    <span>Precision <b>—</b></span>
-                    <span>Recall <b>—</b></span>
-                  </div>
-                ))}
-              </div>
+              <table className="case-overview-classification-table">
+                <thead><tr><th scope="col">Risk level</th><th scope="col">Precision</th><th scope="col">Recall</th></tr></thead>
+                <tbody>
+                  {RISK_LEVELS.map((level) => (
+                    <tr key={level}>
+                      <th scope="row"><span className={`case-overview-level-dot case-overview-level-dot--${level.toLowerCase()}`} aria-hidden="true" />{level}</th>
+                      <td>—</td>
+                      <td>—</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot><tr><th scope="row">Overall accuracy</th><td colSpan={2}>—</td></tr></tfoot>
+              </table>
               <p className="case-overview-metric-note">Placeholder values; metric definitions and calculations are pending.</p>
             </article>
           </section>
@@ -202,7 +209,7 @@ export function CaseOverview({
               <ul className="case-overview-document-list">
                 {recentDocuments.map((document) => {
                   const status = documentStatus(document);
-                  return <li key={document.id}><span className="case-overview-document-icon" aria-hidden="true">▤</span><span className="case-overview-document-copy"><strong>{document.filename}</strong><small>{document.document_type ? formatDocumentType(document.document_type) : 'Type not classified'} · {dateLabel(document.uploaded_at)}</small></span><span className={`case-overview-document-status case-overview-document-status--${status.tone}`}>{status.label}</span></li>;
+                  return <li key={document.id}><span className="case-overview-document-icon" aria-hidden="true">{fileExtension(document.filename)}</span><span className="case-overview-document-copy"><strong>{document.filename}</strong><small>{document.document_type ? formatDocumentType(document.document_type) : 'Type not classified'} · {dateLabel(document.uploaded_at)}</small></span><span className={`case-overview-document-status case-overview-document-status--${status.tone}`}>{status.label}</span></li>;
                 })}
               </ul>
             ) : (
