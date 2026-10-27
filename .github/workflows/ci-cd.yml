@@ -4,10 +4,11 @@ on:
   push:
     branches:
       - main
-    # A docs-only push neither tests nor redeploys anything.
+    # A push of only docs or workflow files neither tests nor redeploys anything.
     paths-ignore:
       - '**.md'
       - 'docs/**'
+      - '.github/workflows/**'
   pull_request:
   workflow_dispatch:
 
@@ -221,42 +222,11 @@ jobs:
           terraform init -backend=false -input=false
           terraform validate
 
-  changes:
-    # A push that only touches backend tests (or docs) is tested but not redeployed.
-    name: Deployable changes
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    outputs:
-      deploy: ${{ steps.diff.outputs.deploy }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Compare with the previous push
-        id: diff
-        env:
-          BEFORE: ${{ github.event.before }}
-        run: |
-          # No usable previous commit (first push, force push): deploy to be safe.
-          if ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
-            echo "deploy=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          deployable=$(git diff --name-only "$BEFORE" "$GITHUB_SHA" | grep -vE '^backend/tests/|\.md$|^docs/' || true)
-          if [ -n "$deployable" ]; then
-            echo "deploy=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Only backend tests or docs changed: not deploying."
-            echo "deploy=false" >> "$GITHUB_OUTPUT"
-          fi
-
   deploy:
     # Continuous deployment: every push to main whose checks all pass goes to Cloud Run.
     name: Deploy to Cloud Run
-    needs: [changes, backend-ci, frontend-ci, security, terraform]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.deploy == 'true'
+    needs: [backend-ci, frontend-ci, security, terraform]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
       id-token: write # Workload Identity Federation, used inside deploy.yml

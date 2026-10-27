@@ -78,7 +78,7 @@ Pub/Sub redelivery covers a worker that dies mid-request. The sweeper covers the
 
 ## 6. Delivery and security
 
-**CI** (`.github/workflows/ci-cd.yml`, on every PR and every push to `main`, except docs-only pushes; a push that only changes `backend/tests` runs CI but doesn't deploy): backend (ruff, pyright, pytest with coverage; pip and exiftool cached), frontend (lint, build, Playwright in Microsoft's Playwright container, version pinned to the lockfile), security (Checkov on Terraform, Dockerfiles and workflows; Snyk on `requirements.txt` and npm, or pip-audit and npm audit without a token; **blocking**), and Terraform `fmt` and `validate`.
+**CI** (`.github/workflows/ci-cd.yml`, on every PR and every push to `main`, except docs-only pushes): backend (ruff, pyright, pytest with coverage; pip and exiftool cached), frontend (lint, build, Playwright in Microsoft's Playwright container, version pinned to the lockfile), security (Checkov on Terraform, Dockerfiles and workflows; Snyk on `requirements.txt` and npm, or pip-audit and npm audit without a token; **blocking**), and Terraform `fmt` and `validate`.
 
 **Deploy** (`deploy.yml`, called by CI when all four pass on `main`, or run by hand; one at a time, never cancelled halfway):
 1. Build each image once (role targets of the backend Dockerfile, Kong, frontend, Grafana) into Artifact Registry `app`, skipping any this commit already has; a registry build cache keeps it fast. One service list at the top of the workflow drives every step.

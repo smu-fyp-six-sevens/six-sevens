@@ -56,7 +56,7 @@ terraform apply
 
 ## Deploying and checking a deploy
 
-**Automatic:** a push to `main` runs CI (backend, frontend, security, Terraform fmt/validate) and, when all pass, `deploy.yml`. Docs-only pushes run nothing; a push that only changes `backend/tests` (and docs) runs CI but doesn't deploy. Deploys queue one at a time and are never cancelled halfway. **By hand:** Actions → **Deploy to Cloud Run** → Run workflow.
+**Automatic:** a push to `main` runs CI (backend, frontend, security, Terraform fmt/validate) and, when all pass, `deploy.yml`. Docs-only pushes run nothing. Deploys queue one at a time and are never cancelled halfway. **By hand:** Actions → **Deploy to Cloud Run** → Run workflow.
 
 - Each job mints one Google access token at its start (20 minutes for build, 10 for deploy), so nothing returns to GitHub's token service mid-run.
 - An image the commit already has isn't rebuilt; unchanged layers come from the registry cache (`buildcache:<image>`). A change under `backend/app` rebuilds the zoning index (about a minute).
