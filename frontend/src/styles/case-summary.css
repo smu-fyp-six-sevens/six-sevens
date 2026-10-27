@@ -916,6 +916,84 @@
   font-size: 12.5px;
 }
 
+.review-summary-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 20px;
+  margin-top: 12px;
+  padding: 16px 18px;
+  border: 1px dashed var(--slate-88);
+  border-radius: 10px;
+  background: var(--slate-97);
+}
+
+.review-summary-empty-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--slate-94a);
+  color: var(--steel);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.review-summary-empty-copy {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.review-summary-empty-copy strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.review-summary-empty-copy p {
+  margin: 2px 0 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.review-summary-empty-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: review-step;
+}
+
+.review-summary-empty-steps li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px 6px 6px;
+  border: 1px solid var(--slate-88);
+  border-radius: 99px;
+  background: var(--white);
+  color: var(--ink);
+  font-size: 12px;
+  counter-increment: review-step;
+}
+
+.review-summary-empty-steps li::before {
+  content: counter(review-step);
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--slate-94a);
+  color: var(--steel);
+  font-size: 10.5px;
+  font-weight: 800;
+}
+
 .review-summary-figures {
   display: flex;
   flex-wrap: wrap;
@@ -986,19 +1064,64 @@
   margin: 0 20px 12px;
 }
 
-/* A precision or recall (components/Rate.tsx): hovering explains it. When there's nothing to measure yet it
-   shows a soft grey dash, and hovering says why. */
-.rate {
-  cursor: help;
-}
-
-.rate--empty {
+/* A precision or recall (components/Rate.tsx). When there's nothing to measure yet it says "Not measured": in a
+   table, soft grey and dotted underneath to show it explains itself; in the big figures, styled like the figures. */
+.rate--empty:not(.review-summary-value, .stat-number) {
   color: var(--ink-soft);
+  font-weight: 500;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
 }
 
-.review-summary-caption[title],
-.review-check-table th[title] {
-  cursor: help;
+/* components/InfoTip.tsx: a short explanation that opens on hover or focus. */
+.info-tip-trigger {
+  border-radius: 3px;
+}
+
+.info-tip-trigger:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 2px;
+}
+
+.info-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.info-tip-icon {
+  flex: none;
+  color: var(--ink-soft);
+  opacity: 0.75;
+}
+
+.info-label:hover .info-tip-icon,
+.info-label:focus-visible .info-tip-icon {
+  color: var(--steel);
+  opacity: 1;
+}
+
+.info-tip {
+  position: fixed;
+  z-index: 1000;
+  max-width: 280px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: var(--ink);
+  box-shadow: 0 6px 20px rgba(18, 32, 61, 0.22);
+  color: var(--white);
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+  white-space: normal;
+  pointer-events: none;
+}
+
+.info-tip strong {
+  font-weight: 700;
 }
 
 .missed-issue-edit {

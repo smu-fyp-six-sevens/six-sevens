@@ -3,6 +3,7 @@ import type { DetectionMetrics } from '../services/uploadService';
 import { getDetectionMetrics } from '../services/uploadService';
 import { Rate } from '../components/Rate';
 import { RATE_MEANING, formatCheck } from '../utils/checkLabels';
+import { InfoLabel } from '../components/InfoTip';
 
 // The dashboard's Accuracy tab: precision and recall per detection check, from officers' reviews on case pages.
 export function DetectionAccuracyPanel() {
@@ -34,12 +35,12 @@ export function DetectionAccuracyPanel() {
     <>
       <section className="flag-summary-grid" aria-label="Detection accuracy overall">
         <article className="dashboard-stat-card">
-          <span className="stat-caption" title={RATE_MEANING.precision}>Precision</span>
+          <span className="stat-caption"><InfoLabel label="Precision" tip={RATE_MEANING.precision} /></span>
           <Rate rate={overall.precision} kind="precision" className="stat-number" />
           <span className="stat-caption">{overall.correct} correct of {overall.correct + overall.wrong} reviewed findings</span>
         </article>
         <article className="dashboard-stat-card">
-          <span className="stat-caption" title={RATE_MEANING.recall}>Recall</span>
+          <span className="stat-caption"><InfoLabel label="Recall" tip={RATE_MEANING.recall} /></span>
           <Rate rate={overall.recall} kind="recall" className="stat-number" />
           <span className="stat-caption">{overall.correct} caught of {overall.correct + overall.missed} real issues</span>
         </article>
@@ -72,8 +73,8 @@ export function DetectionAccuracyPanel() {
                 <th>CORRECT</th>
                 <th>WRONG</th>
                 <th>MISSED</th>
-                <th title={RATE_MEANING.precision}>PRECISION</th>
-                <th title={RATE_MEANING.recall}>RECALL</th>
+                <th><InfoLabel label="PRECISION" tip={RATE_MEANING.precision} /></th>
+                <th><InfoLabel label="RECALL" tip={RATE_MEANING.recall} /></th>
                 <th>FLAG</th>
               </tr>
             </thead>
@@ -157,8 +158,8 @@ export function DetectionAccuracySummary({ onViewAll }: { onViewAll: () => void 
       ) : (
         <>
           <div className="classification-overall">
-            <span title={RATE_MEANING.precision}>Precision <strong><Rate rate={overall?.precision ?? null} kind="precision" /></strong></span>
-            <span title={RATE_MEANING.recall}>Recall <strong><Rate rate={overall?.recall ?? null} kind="recall" /></strong></span>
+            <span><InfoLabel label="Precision" tip={RATE_MEANING.precision} /> <strong><Rate rate={overall?.precision ?? null} kind="precision" /></strong></span>
+            <span><InfoLabel label="Recall" tip={RATE_MEANING.recall} /> <strong><Rate rate={overall?.recall ?? null} kind="recall" /></strong></span>
           </div>
           {attention.length > 0 && (
             <div className="classification-grid">

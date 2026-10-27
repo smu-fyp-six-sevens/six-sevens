@@ -3,6 +3,7 @@ import type { FindingReview, MetricsSummary, ReviewScope } from '../../services/
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { Rate } from '../../components/Rate';
 import { RATE_MEANING, formatCheck } from '../../utils/checkLabels';
+import { InfoLabel } from '../../components/InfoTip';
 
 export type GroupReviewStatus = 'not_reviewed' | 'saved' | 'unsaved';
 
@@ -245,22 +246,36 @@ export function ReviewSummary({ caseSummary }: { caseSummary: MetricsSummary }) 
     <section className="review-summary" aria-label="Detection accuracy for this case">
       <div className="review-summary-head">
         <h3>Detection accuracy</h3>
-        <span className="review-summary-hint">
-          {reviewed === 0
-            ? 'Open a document, tick the findings that are real issues and save its review. Report anything detection missed.'
-            : `${caseSummary.correct} correct · ${caseSummary.wrong} wrong · ${caseSummary.missed} missed`}
-        </span>
+        {reviewed > 0 && (
+          <span className="review-summary-hint">
+            {`${caseSummary.correct} correct · ${caseSummary.wrong} wrong · ${caseSummary.missed} missed`}
+          </span>
+        )}
       </div>
+      {reviewed === 0 && (
+        <div className="review-summary-empty">
+          <span className="review-summary-empty-icon" aria-hidden="true">✓</span>
+          <div className="review-summary-empty-copy">
+            <strong>No findings reviewed yet</strong>
+            <p>Precision and recall for this case appear here once its findings are reviewed.</p>
+          </div>
+          <ol className="review-summary-empty-steps">
+            <li>Open a document</li>
+            <li>Tick the findings that are real issues and report anything detection missed</li>
+            <li>Save the reviews</li>
+          </ol>
+        </div>
+      )}
       {reviewed > 0 && (
         <>
           <div className="review-summary-figures">
             <div>
               <Rate rate={caseSummary.precision} kind="precision" className="review-summary-value" />
-              <span className="review-summary-caption" title={RATE_MEANING.precision}>Precision</span>
+              <span className="review-summary-caption"><InfoLabel label="Precision" tip={RATE_MEANING.precision} /></span>
             </div>
             <div>
               <Rate rate={caseSummary.recall} kind="recall" className="review-summary-value" />
-              <span className="review-summary-caption" title={RATE_MEANING.recall}>Recall</span>
+              <span className="review-summary-caption"><InfoLabel label="Recall" tip={RATE_MEANING.recall} /></span>
             </div>
           </div>
           <table className="review-check-table">
@@ -270,8 +285,8 @@ export function ReviewSummary({ caseSummary }: { caseSummary: MetricsSummary }) 
                 <th>Correct</th>
                 <th>Wrong</th>
                 <th>Missed</th>
-                <th title={RATE_MEANING.precision}>Precision</th>
-                <th title={RATE_MEANING.recall}>Recall</th>
+                <th><InfoLabel label="Precision" tip={RATE_MEANING.precision} /></th>
+                <th><InfoLabel label="Recall" tip={RATE_MEANING.recall} /></th>
               </tr>
             </thead>
             <tbody>

@@ -1,25 +1,26 @@
-import { RATE_MEANING, formatRate } from '../utils/checkLabels';
+import { InfoTip } from './InfoTip';
+import { formatRate } from '../utils/checkLabels';
 
 type RateKind = 'precision' | 'recall';
 
-// Why a rate can't be calculated yet, shown on hover instead of a misleading 0% or 100%.
+// Why a rate can't be calculated yet, shown instead of a misleading 0% or 100%.
 const NOTHING_TO_MEASURE: Record<RateKind, string> = {
-  precision:
-    'Not measured yet: none of this check’s findings have been marked correct or wrong, so there is nothing to judge it on.',
-  recall:
-    'Not measured yet: no real issue of this kind has been found (nothing marked correct, nothing reported missed), so there was nothing for this check to catch.',
+  precision: 'Precision needs at least one of this check’s findings marked correct or wrong. None has been yet.',
+  recall: 'Recall needs at least one real issue of this kind (marked correct or reported missed). None has been found for this check.',
 };
 
-// A precision or recall as a percentage, with what it means on hover. When there is nothing to measure it shows
-// a dash, underlined, with the reason on hover.
+// A precision or recall as a percentage. What the rate means is explained by its heading (InfoLabel); when there is
+// nothing to measure yet it says "Not measured", and the reason opens on hover or focus.
 export function Rate({ rate, kind, className }: { rate: number | null; kind: RateKind; className?: string }) {
-  const empty = rate === null;
-  return (
-    <span
-      className={`rate${empty ? ' rate--empty' : ''}${className ? ` ${className}` : ''}`}
-      title={empty ? NOTHING_TO_MEASURE[kind] : RATE_MEANING[kind]}
-    >
-      {formatRate(rate)}
-    </span>
-  );
+  if (rate === null) {
+    return (
+      <InfoTip
+        className={`rate rate--empty${className ? ` ${className}` : ''}`}
+        tip={<><strong>Not measured yet.</strong> {NOTHING_TO_MEASURE[kind]}</>}
+      >
+        Not measured
+      </InfoTip>
+    );
+  }
+  return <span className={`rate${className ? ` ${className}` : ''}`}>{formatRate(rate)}</span>;
 }

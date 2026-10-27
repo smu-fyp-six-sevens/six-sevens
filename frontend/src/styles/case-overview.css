@@ -65,49 +65,69 @@
 .case-overview-stat--amber .case-overview-stat-value { color: var(--amber); }
 .case-overview-stat--red .case-overview-stat-value { color: var(--red); }
 .case-overview-stat--green .case-overview-stat-value { color: var(--teal); }
-.case-overview-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 14px; align-items: stretch; }
+/* Recent Documents and Key Findings side by side. */
+.case-overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
 .case-overview-panel { min-width: 0; padding: 19px 20px; }
 .case-overview-panel-heading { align-items: center; margin-bottom: 17px; }
 .case-overview-panel-heading h2 { margin: 0; font-size: 16px; line-height: 1.3; }
 .case-overview-panel-heading p { margin: 4px 0 0; color: var(--ink-soft); font-size: 12px; }
+.case-overview-panel-heading .case-overview-accuracy-stale { margin-top: 6px; color: var(--amber); font-weight: 600; }
 .case-overview-panel-heading .case-overview-text-button { flex: none; padding: 3px 0; }
-.case-overview-pill { flex: none; padding: 4px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; }
-.case-overview-pill--green { color: var(--teal); background: var(--teal-bg); }
-.case-overview-pill--blue { color: var(--steel); background: var(--slate-94a); }
-.case-overview-progress-track { height: 8px; overflow: hidden; border-radius: 99px; background: var(--slate-94); }
-.case-overview-progress-track > span { display: block; height: 100%; border-radius: inherit; background: var(--steel); transition: width .2s ease; }
-.case-overview-stages { display: grid; gap: 0; margin: 16px 0 0; padding: 0; list-style: none; }
-.case-overview-stage { display: grid; grid-template-columns: 20px auto minmax(0, 1fr); align-items: center; gap: 8px 10px; min-height: 39px; padding: 6px 0; border-top: 1px solid var(--sand-92); }
-.case-overview-stage-marker { display: grid; place-items: center; width: 17px; height: 17px; border: 1px solid var(--slate-84a); border-radius: 50%; color: var(--white); font-size: 10px; font-weight: 800; }
-.case-overview-stage strong { font-size: 12px; font-weight: 650; white-space: nowrap; }
-.case-overview-stage > span:last-child { color: var(--ink-soft); font-size: 11px; text-align: right; }
-.case-overview-stage--done .case-overview-stage-marker { border-color: var(--teal); background: var(--teal); }
-.case-overview-stage--action .case-overview-stage-marker { border-color: var(--amber); background: var(--amber); }
-.case-overview-stage--progress .case-overview-stage-marker { border-color: var(--steel); background: var(--steel); }
-.case-overview-stage--error .case-overview-stage-marker { border-color: var(--red); background: var(--red); }
-.case-overview-stage--done strong { color: var(--teal); }
-.case-overview-stage--action strong { color: var(--amber); }
-.case-overview-stage--progress strong { color: var(--steel); }
-.case-overview-stage--error strong { color: var(--red); }
+/* No card: the stepper sits on the page as the summary's header. */
+.case-overview-progress { padding: 6px 0 4px; }
+/* Case Progress: the stages in a row, each a marker on a line that fills as the case moves along. */
+.case-overview-stepper { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; margin: 0; padding: 4px 0 0; list-style: none; }
+.case-overview-step { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0 6px; text-align: center; }
+.case-overview-step:not(:first-child)::before { content: ''; position: absolute; top: 15px; right: calc(50% + 22px); left: calc(-50% + 22px); height: 2px; border-radius: 2px; background: var(--slate-91); }
+.case-overview-step--reached::before { background: var(--teal) !important; }
+.case-overview-step-marker { display: grid; place-items: center; width: 32px; height: 32px; margin-bottom: 8px; border: 2px solid var(--slate-91); border-radius: 9px; background: var(--white); color: var(--white); font-size: 15px; font-weight: 800; }
+.case-overview-step-marker > span { width: 10px; height: 10px; border-radius: 3px; background: var(--slate-91); }
+.case-overview-step strong { color: var(--ink); font-size: 12.5px; font-weight: 700; }
+.case-overview-step-detail { color: var(--ink-soft); font-size: 11px; line-height: 1.4; }
+.case-overview-step--done .case-overview-step-marker { border-color: var(--teal); background: var(--teal); }
+/* The step the case is on: a filled square in a ring of its colour. */
+.case-overview-step--action .case-overview-step-marker,
+.case-overview-step--progress .case-overview-step-marker,
+.case-overview-step--error .case-overview-step-marker { border-color: currentColor; box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 18%, transparent); }
+.case-overview-step--action .case-overview-step-marker { color: var(--amber); }
+.case-overview-step--progress .case-overview-step-marker { color: var(--steel); }
+.case-overview-step--error .case-overview-step-marker { color: var(--red); }
+.case-overview-step--action .case-overview-step-marker > span,
+.case-overview-step--progress .case-overview-step-marker > span,
+.case-overview-step--error .case-overview-step-marker > span { background: currentColor; }
+.case-overview-step--action strong { color: var(--amber); }
+.case-overview-step--progress strong { color: var(--steel); }
+.case-overview-step--error strong { color: var(--red); }
+.case-overview-step--idle strong { color: var(--ink-soft); }
 .case-overview-document-icon { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 8px; background: var(--slate-94a); color: var(--steel); font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: .03em; }
 .case-overview-findings { display: flex; flex-direction: column; }
-.case-overview-finding-list,
+.case-overview-flagged-list,
 .case-overview-document-list { margin: 0; padding: 0; list-style: none; }
-.case-overview-finding-list { display: grid; gap: 0; }
-.case-overview-finding-list li { display: flex; align-items: flex-start; gap: 10px; min-width: 0; padding: 10px 0; border-top: 1px solid var(--sand-92); }
-.case-overview-finding-list li:first-child { padding-top: 0; border-top: 0; }
+.case-overview-flagged-list li + li { border-top: 1px solid var(--sand-92); }
+.case-overview-flagged-document { display: flex; align-items: center; gap: 12px; width: calc(100% + 20px); min-width: 0; margin: 0 -10px; padding: 10px; border: 0; border-radius: 8px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.case-overview-flagged-document:hover { background: var(--slate-97); }
+.case-overview-flagged-document:focus-visible { outline: 2px solid var(--steel); outline-offset: -2px; }
+.case-overview-flagged-copy { display: grid; flex: 1; gap: 4px; min-width: 0; }
+.case-overview-flagged-copy > strong { overflow: hidden; font-size: 12.5px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.case-overview-flagged-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--ink-soft); font-size: 11px; }
+.case-overview-flagged-meta .case-overview-severity { min-width: 0; padding: 2px 7px; }
+.case-overview-flagged-chevron { flex: none; color: var(--slate-54); font-size: 18px; }
+.case-overview-flagged-more { margin: 8px 0 0; color: var(--ink-soft); font-size: 11px; }
 .case-overview-severity { flex: none; min-width: 57px; padding: 3px 7px; border-radius: 5px; text-align: center; text-transform: uppercase; font-size: 9px; font-weight: 800; letter-spacing: .04em; }
-.case-overview-severity--high { color: var(--white); background: var(--red); }
-.case-overview-severity--medium { color: #713b12; background: #f7c7a9; }
-.case-overview-severity--low { color: var(--green-25); background: #dcefe7; }
-.case-overview-finding-copy,
+/* The Risk Summary's severity colours (case-summary.css .risk-severity), so a level reads the same on both. */
+.case-overview-severity--high { color: var(--white); background: #b83c22; }
+.case-overview-severity--medium { color: #4d1a07; background: var(--orange-74); }
+.case-overview-severity--low { color: #8a3f20; background: var(--orange-91); }
 .case-overview-document-copy { display: grid; min-width: 0; gap: 3px; }
-.case-overview-finding-copy strong { display: -webkit-box; overflow: hidden; font-size: 12px; font-weight: 650; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
-.case-overview-finding-copy small { overflow: hidden; color: var(--ink-soft); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .case-overview-empty { display: flex; align-items: flex-start; gap: 10px; padding: 14px; border-radius: 9px; background: var(--slate-97); color: var(--ink-soft); }
 .case-overview-empty > span { color: var(--teal); font-size: 17px; font-weight: 700; }
 .case-overview-empty strong { color: var(--ink); font-size: 12px; }
 .case-overview-empty p { margin: 3px 0 0; font-size: 11px; }
+/* Detection Accuracy before any review: centred in the panel's space rather than a note at its foot. */
+.case-overview-accuracy-empty { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 18px 12px; border: 1px dashed var(--slate-88); border-radius: 10px; background: var(--slate-97); text-align: center; }
+.case-overview-accuracy-empty-icon { display: grid; place-items: center; width: 36px; height: 36px; margin-bottom: 4px; border-radius: 10px; background: var(--slate-94a); color: var(--steel); font-size: 16px; font-weight: 800; }
+.case-overview-accuracy-empty strong { color: var(--ink); font-size: 13px; }
+.case-overview-accuracy-empty p { max-width: 36ch; margin: 0; color: var(--ink-soft); font-size: 12px; line-height: 1.5; }
 .case-overview-document-list li { display: flex; align-items: center; gap: 11px; min-width: 0; padding: 10px 0; border-top: 1px solid var(--sand-92); }
 .case-overview-document-list li:first-child { padding-top: 0; border-top: 0; }
 .case-overview-document-copy { flex: 1; }
@@ -143,6 +163,7 @@
 
 @media (max-width: 1050px) {
   .case-overview-topline { grid-template-columns: 1fr; }
+  .case-overview-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 1280px) {
   .case-overview-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -152,7 +173,6 @@
   .case-overview-metrics { grid-template-columns: 1fr; }
 }
 @media (max-width: 760px) {
-  .case-overview-grid { grid-template-columns: 1fr; }
   .case-overview-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .case-overview-stats { gap: 7px; }
   .case-overview-stat { padding: 12px 10px; }
@@ -162,8 +182,10 @@
 @media (max-width: 520px) {
   .case-overview-panel { padding: 16px 14px; }
   .case-overview-panel-heading { align-items: flex-start; gap: 12px; }
-  .case-overview-stage { grid-template-columns: 20px minmax(0, 1fr); }
-  .case-overview-stage > span:last-child { grid-column: 2; text-align: left; }
+  .case-overview-stepper { grid-auto-flow: row; gap: 18px; }
+  .case-overview-step { display: grid; grid-template-columns: 32px minmax(0, 1fr); column-gap: 12px; align-items: center; padding: 0; text-align: left; }
+  .case-overview-step-marker { grid-row: 1 / span 2; margin: 0; }
+  .case-overview-step:not(:first-child)::before { top: -18px; bottom: auto; left: 15px; right: auto; width: 2px; height: 18px; }
   .case-overview-document-list li { flex-wrap: wrap; }
   .case-overview-document-status { margin-left: 45px; }
 }

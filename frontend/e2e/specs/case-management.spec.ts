@@ -439,6 +439,20 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     await expect(page.getByRole('navigation', { name: 'Case sections' }).getByRole('button', { name: /^Case Summary/i })).toHaveAttribute('aria-current', 'page');
   });
 
+  test('the breadcrumb dropdown lists 50 cases, then loads the rest on request', async ({ page, backend }) => {
+    for (let index = 0; index < 60; index += 1) {
+      backend.cases.push(makeCase({ id: `case-${index}`, greenlink_case_id: `GLDB-${5000 + index}`, company_name: `Company ${index}` }));
+    }
+    await page.goto('/cases/GLDB-5000?section=documents');
+
+    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button', { name: /GLDB-5000: switch case/ }).click();
+    const menu = page.getByRole('menu');
+    await expect(menu.getByRole('menuitem', { name: /^GLDB-/ })).toHaveCount(50);
+    await menu.getByRole('menuitem', { name: 'Load more cases' }).click();
+    await expect(menu.getByRole('menuitem', { name: /^GLDB-/ })).toHaveCount(60);
+    await expect(menu.getByRole('menuitem', { name: 'Load more cases' })).toHaveCount(0);
+  });
+
   test('CM-006 case details show only the selected case\'s information @CM-006', async ({ page, backend }) => {
     const { harbor, meridian } = seedQueue(backend);
     backend.documents.push(
@@ -1155,5 +1169,52 @@ test.describe('Delete case and documents @sprint3 @SCRUM-117', () => {
 
     expect(backend.requestsTo('DELETE', /./)).toHaveLength(0);
     await expect(page.locator('.documents-table').getByText('C035_NOA.pdf')).toBeVisible();
+  });
+});
+
+test.describe('Case summary progress', () => {
+  // One document with one finding, its review saved; the case analysis either up to date or out of date.
+  async function openSummary(page: Page, backend: MockBackend, stale: boolean) {
+    const finding: CaseRiskFinding = {
+      document_id: 'doc-payslip', filename: 'C011_Payslip.pdf', document_type: 'payslip',
+      finding_id: 'numerical_checks_tool-1', tool: 'numerical_checks_tool', severity: 'high',
+      summary: 'Net pay does not add up.', rationale: '', points: 8, unreviewed: false,
+    };
+    const harbor = Object.assign(
+      makeCase({
+        greenlink_case_id: 'GLDB-3003',
+        documents_status: 'analyzed',
+        risk: makeRisk({ state: 'scored', level: 'High', score: 57, documents_scanned: 1, documents_total: 1, contributing_findings: [finding] }),
+      }),
+      { analysis: { run_id: 'run-1', status: 'complete', stale, finding_count: 1, finished_at: '2026-10-27T00:00:00Z' } },
+    );
+    backend.cases.push(harbor);
+    backend.documents.push(makeDocument({ id: 'doc-payslip', case_id: harbor.id, filename: 'C011_Payslip.pdf', document_type: 'payslip', status: 'detected' }));
+    const metrics = { correct: 1, wrong: 0, missed: 0, precision: 1, recall: 1, by_check: [] };
+    await page.route(/\/finding-reviews$/, (route) => route.fulfill({ json: {
+      reviews: [{
+        id: 'review-1', case_id: harbor.id, document_id: 'doc-payslip', scope: 'document', kind: 'verdict',
+        finding_id: finding.finding_id, check_name: 'numerical_checks_tool', check_code: null, summary: finding.summary,
+        verdict: 'correct', note: null, reviewer: 'bob', created_at: '2026-10-27T00:00:00Z', updated_at: '2026-10-27T00:00:00Z',
+      }],
+      documents: {}, cross_document: metrics, case: metrics, checks: { document: [], case: [] },
+    } }));
+    await page.goto(`/cases/${harbor.greenlink_case_id}?section=summary`);
+    return page.locator('.case-overview-step');
+  }
+
+  test('reviewing every finding completes the review once the case analysis is up to date', async ({ page, backend }) => {
+    const steps = await openSummary(page, backend, false);
+    await expect(steps.filter({ hasText: 'Review Findings' })).toHaveClass(/case-overview-step--done/);
+    await expect(steps.filter({ hasText: 'Review Findings' })).toContainText('1 of 1 document reviewed');
+    await expect(steps.filter({ hasText: 'Finalise Case' })).toContainText('Ready to finalise');
+  });
+
+  test('an out-of-date case analysis keeps the review open, however many of its findings are reviewed', async ({ page, backend }) => {
+    const steps = await openSummary(page, backend, true);
+    await expect(steps.filter({ hasText: 'Case Analysis' })).toContainText('Out of date · rerun needed');
+    await expect(steps.filter({ hasText: 'Review Findings' })).toHaveClass(/case-overview-step--idle/);
+    await expect(steps.filter({ hasText: 'Review Findings' })).toContainText('Waiting for the analysis rerun');
+    await expect(steps.filter({ hasText: 'Finalise Case' })).toContainText('After all findings are reviewed');
   });
 });
