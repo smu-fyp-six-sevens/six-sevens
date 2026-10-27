@@ -11,7 +11,7 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 | Backend | 43,500 lines in 191 files under `app/` (4,300 of them in `injection/`); 58 route handlers |
 | Frontend | 10,300 lines of TS/TSX in 75 files; 5,800 lines of CSS in 15 files |
 | Deployment | Terraform 1,000 lines in 12 files, 2 workflows, 7 compose files, Kong and Grafana images |
-| Tests | 1,733 backend test functions in 89 files; 154 Playwright tests in 7 specs |
+| Tests | 1,753 backend test functions in 91 files; 155 Playwright tests in 9 specs |
 | Backend gates | ruff clean on `app/` (16 old issues in `doc_gen_scripts/`, `scripts/` and one test, outside CI's scope), pyright clean, 0 `type: ignore`, 14 `noqa` (all re-export `F401`) |
 | Frontend gates | lint 0 errors, 0 warnings; CI runs `npm run typecheck` (not re-run for this update) |
 
