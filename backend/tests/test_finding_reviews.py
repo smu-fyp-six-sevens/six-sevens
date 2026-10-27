@@ -221,3 +221,49 @@ def test_detection_metrics_cover_every_reviewed_case(repos) -> None:
     assert body["cases_reviewed"] == 2 and body["documents_reviewed"] == 2
     assert body["overall"]["precision"] == 0.5
     assert body["target_precision"] == detection_metrics.TARGET_PRECISION
+
+
+# --- audit trail ---------------------------------------------------------------------------------------------
+
+
+def test_a_saved_review_is_recorded_per_document_with_the_officer(repos, published_events) -> None:
+    response = client.put(f"/cases/{CASE_ID}/finding-reviews/verdicts", json={"verdicts": [
+        _VERDICT,
+        {**_VERDICT, "finding_id": "33333333:spelling_tool-1", "check_name": "spelling_tool", "verdict": "wrong"},
+        {**_VERDICT, "finding_id": "33333333:metadata_tool-1", "check_name": "metadata_tool", "verdict": "wrong"},
+        {"scope": "case", "finding_id": "xd-1", "check_name": "cross_document_variance", "verdict": "correct"},
+    ]})
+    assert response.status_code == 200
+    saved = [event for event in published_events if event.type == "finding_review.saved"]
+    assert [(event.document_id, event.actor, event.actor_type) for event in saved] == [
+        (DOCUMENT_ID, TEST_USER, "user"), (None, TEST_USER, "user"),
+    ]
+    detail = saved[0].detail
+    assert (detail["scope"], detail["real"], detail["false_alarms"], detail["cleared"]) == ("document", 1, 2, 0)
+    assert (saved[1].detail["scope"], saved[1].detail["real"]) == ("case", 1)
+
+
+def test_a_review_that_fails_to_save_records_nothing(repos, published_events) -> None:
+    reviews_repo, _ = repos
+    reviews_repo.set_verdict.side_effect = RuntimeError("supabase down")
+    assert client.put(f"/cases/{CASE_ID}/finding-reviews/verdict", json=_VERDICT).status_code == 502
+    assert published_events == []
+
+
+def test_missed_issues_reported_edited_and_removed_are_recorded(repos, published_events) -> None:
+    reviews_repo, _ = repos
+    client.post(f"/cases/{CASE_ID}/finding-reviews/missed", json={
+        "scope": "document", "document_id": DOCUMENT_ID, "check_name": "metadata_tool", "note": "Author was edited",
+    })
+    reviews_repo.get.return_value = _review(kind="missed", verdict=None, finding_id=None, check_name="metadata_tool")
+    client.patch(f"/cases/{CASE_ID}/finding-reviews/{REVIEW_ID}", json={"check_name": "font_consistency_tool"})
+    client.delete(f"/cases/{CASE_ID}/finding-reviews/{REVIEW_ID}")
+    assert [(event.type, event.document_id, event.actor) for event in published_events] == [
+        ("finding_review.missed_reported", DOCUMENT_ID, TEST_USER),
+        ("finding_review.missed_edited", DOCUMENT_ID, TEST_USER),
+        ("finding_review.removed", DOCUMENT_ID, TEST_USER),
+    ]
+    assert published_events[1].detail["from_check"] == "metadata_tool"
+    assert published_events[1].detail["check_name"] == "font_consistency_tool"
+    # Events carry ids, not the officer's free text.
+    assert "note" not in published_events[0].detail

@@ -550,19 +550,26 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     await expect(section.locator('.risk-gauge')).toHaveAttribute('aria-label', 'Score 57 out of 100, High risk');
     await expect(section).toContainText('2 high · 3 medium · 1 low');
 
-    // Documents start collapsed, and every one is listed, the low-only bank statement included; the
-    // cross-document group follows with a green "No findings" badge, still open to report a miss.
-    const documents = section.locator('.risk-document');
+    // The documents are a card of their own. Those with findings, none reviewed yet, are listed collapsed
+    // (the low-only bank statement included); the cross-document group, with nothing to review, is folded
+    // into Reviewed with a green "No findings" badge, still there to report a miss.
+    const review = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Documents to Review' }) });
+    await expect(section.locator('.risk-document')).toHaveCount(0);
+    const documents = review.locator('.risk-document');
     await expect(documents).toHaveCount(3);
     await expect(documents.first()).toContainText('C011_Payslip.pdf');
+    await expect(documents.first().locator('.risk-review-tag')).toHaveText('Not reviewed');
     await expect(documents.nth(1)).toContainText('C011_BankStatement.pdf');
+    await expect(review.getByText('Reviewed (1)')).toBeVisible();
+    await expect(documents.nth(2)).toBeHidden();
+    await review.getByText('Reviewed (1)').click();
     await expect(documents.nth(2)).toContainText('Across documents');
     await expect(documents.nth(2).locator('.risk-document-none')).toHaveText('✓ No findings');
-    await expect(section.locator('.risk-findings')).toHaveCount(0);
+    await expect(review.locator('.risk-findings')).toHaveCount(0);
 
     // Expanding lists highs before mediums, and merges the three identical layout findings into one ×3 row.
     await documents.first().getByRole('button').click();
-    const rows = section.locator('.risk-findings li');
+    const rows = review.locator('.risk-findings li');
     await expect(rows).toHaveCount(3);
     await expect(rows.locator('.risk-severity')).toHaveText(['high', 'high', 'medium']);
     await expect(rows.nth(2)).toContainText('×3');
@@ -571,7 +578,7 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     await expect(rows.nth(1).locator('.risk-finding-rationale')).toHaveText('This is impossible for this product.');
 
     // There is nothing to show or hide: low findings are listed with the rest.
-    await expect(section.getByRole('button', { name: /Show .* finding|Show less/ })).toHaveCount(0);
+    await expect(review.getByRole('button', { name: /Show .* finding|Show less/ })).toHaveCount(0);
 
     await section.getByText("Couldn't verify (1)").click();
     await expect(section).toContainText('C011_BankStatement.pdf — Metadata: No metadata');

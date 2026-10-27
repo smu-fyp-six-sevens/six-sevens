@@ -744,12 +744,6 @@
   font-weight: 600;
 }
 
-.review-metrics-label {
-  margin-right: 6px;
-  color: var(--ink-soft);
-  font-family: inherit;
-}
-
 /* Detection found nothing on this document: a green badge in the severity badges' place. */
 .risk-document-none {
   padding: 2px 8px;
@@ -1037,4 +1031,81 @@
 /* A missed issue being corrected: its form takes the whole row. */
 .missed-issue-list li > .missed-issue-form {
   flex: 1;
+}
+
+/* A document's officer review in its header, so what's done reads at a glance. */
+.risk-review-tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.risk-review-tag--saved {
+  background: var(--teal-bg);
+  color: var(--teal);
+}
+
+.risk-review-tag--unsaved {
+  background: #fdf0d8;
+  color: #8a5a00;
+}
+
+.risk-review-tag--not_reviewed {
+  border: 1px dashed #c4ccd8;
+  color: var(--ink-soft);
+}
+
+/* Reviewed documents, and ones with nothing to review, folded away under the ones still to do. */
+.risk-reviewed {
+  margin-bottom: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.risk-reviewed > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  background: var(--slate-97a);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  list-style: none;
+  cursor: pointer;
+}
+
+.risk-reviewed > summary::-webkit-details-marker {
+  display: none;
+}
+
+.risk-reviewed > summary:focus-visible {
+  outline: 2px solid var(--slate-20);
+  outline-offset: -2px;
+}
+
+.risk-reviewed > summary .risk-chevron {
+  transition: transform 0.15s ease;
+}
+
+.risk-reviewed[open] > summary .risk-chevron {
+  transform: rotate(90deg);
+}
+
+.risk-reviewed-hint {
+  margin-left: auto;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.risk-reviewed .risk-document-toggle {
+  opacity: 0.85;
+}
+
+.risk-review-count {
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 600;
 }

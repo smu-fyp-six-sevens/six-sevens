@@ -14,8 +14,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from .. import detection_metrics, document_repository, finding_reviews_repository
+from .. import detection_metrics, document_repository, events, finding_reviews_repository
 from ..auth import CurrentUser
+from ..events import officer_event, types
 from ..models import (
     CaseFindingReviews, CaseRecord, DetectionMetrics, ReportMissedIssueRequest, SetFindingVerdictRequest,
     SetFindingVerdictsRequest, UpdateMissedIssueRequest,
@@ -45,6 +46,22 @@ async def _check_target(case_id: str, scope: str, document_id: UUID | None, chec
     return str(document_id)
 
 
+async def _record_saved(case_id: str, verdicts: list[tuple[str, str | None, str | None]]) -> None:
+    """One audit entry per document (or the cross-document group) reviewed: who, and how many findings they
+    marked real, false alarms, or cleared. `verdicts` is (scope, document id, verdict) per finding."""
+    groups: dict[tuple[str, str | None], list[str | None]] = {}
+    for scope, document_id, verdict in verdicts:
+        groups.setdefault((scope, document_id), []).append(verdict)
+    for (scope, document_id), marks in groups.items():
+        await events.record(officer_event(
+            types.FINDING_REVIEW_SAVED, case_id=case_id, document_id=document_id,
+            detail={
+                "scope": scope, "real": marks.count("correct"), "false_alarms": marks.count("wrong"),
+                "cleared": marks.count(None),
+            },
+        ))
+
+
 @router.get("/cases/{case_id}/finding-reviews", response_model=CaseFindingReviews)
 async def get_case_finding_reviews(case_id: str, case: CaseRecord = Depends(get_case_or_404)) -> CaseFindingReviews:
     """Every review in the case, with precision and recall per document, across documents and for the case."""
@@ -71,7 +88,9 @@ async def set_finding_verdict(
                 check_name=request.check_name, check_code=request.check_code, summary=request.summary,
                 verdict=request.verdict, reviewer=user,
             )
-        return await _case_reviews(case_id)
+        reviews = await _case_reviews(case_id)
+    await _record_saved(case_id, [(request.scope, document_id, request.verdict)])
+    return reviews
 
 
 @router.put("/cases/{case_id}/finding-reviews/verdicts", response_model=CaseFindingReviews)
@@ -95,7 +114,11 @@ async def set_finding_verdicts(
                 finding_id=item.finding_id, check_name=item.check_name, check_code=item.check_code,
                 summary=item.summary, verdict=item.verdict, reviewer=user,
             )
-        return await _case_reviews(case_id)
+        reviews = await _case_reviews(case_id)
+    await _record_saved(
+        case_id, [(item.scope, documents[(item.scope, item.document_id)], item.verdict) for item in request.verdicts],
+    )
+    return reviews
 
 
 @router.post(
@@ -112,7 +135,12 @@ async def report_missed_issue(
             case_id=case_id, scope=request.scope, document_id=document_id, check_name=request.check_name,
             note=request.note, reviewer=user,
         )
-        return await _case_reviews(case_id)
+        reviews = await _case_reviews(case_id)
+    await events.record(officer_event(
+        types.MISSED_ISSUE_REPORTED, case_id=case_id, document_id=document_id,
+        detail={"scope": request.scope, "check_name": request.check_name},
+    ))
+    return reviews
 
 
 @router.patch("/cases/{case_id}/finding-reviews/{review_id}", response_model=CaseFindingReviews)
@@ -133,7 +161,15 @@ async def update_missed_issue(
             finding_reviews_repository.update_missed, str(review_id),
             check_name=request.check_name, note=request.note, reviewer=user,
         )
-        return await _case_reviews(case_id)
+        reviews = await _case_reviews(case_id)
+    await events.record(officer_event(
+        types.MISSED_ISSUE_EDITED, case_id=case_id, document_id=review.document_id,
+        detail={
+            "review_id": review.id, "scope": review.scope, "from_check": review.check_name,
+            "check_name": request.check_name,
+        },
+    ))
+    return reviews
 
 
 @router.delete("/cases/{case_id}/finding-reviews/{review_id}", response_model=CaseFindingReviews)
@@ -146,7 +182,15 @@ async def delete_finding_review(
         if review is None or review.case_id != case_id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review not found in this case")
         await asyncio.to_thread(finding_reviews_repository.delete, str(review_id))
-        return await _case_reviews(case_id)
+        reviews = await _case_reviews(case_id)
+    await events.record(officer_event(
+        types.FINDING_REVIEW_REMOVED, case_id=case_id, document_id=review.document_id,
+        detail={
+            "review_id": review.id, "scope": review.scope, "kind": review.kind, "check_name": review.check_name,
+            "verdict": review.verdict,
+        },
+    ))
+    return reviews
 
 
 @router.get("/detection-metrics", response_model=DetectionMetrics)

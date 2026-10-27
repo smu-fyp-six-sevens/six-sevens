@@ -53,11 +53,10 @@ export function GroupReviewBar({
 }
 
 // "Precision 67% · Recall 50%", once anything in this group has been reviewed.
-export function MetricsLine({ summary, label }: { summary: MetricsSummary | undefined; label?: string }) {
+export function MetricsLine({ summary }: { summary: MetricsSummary | undefined }) {
   if (!summary || summary.correct + summary.wrong + summary.missed === 0) return null;
   return (
     <span className="review-metrics-line">
-      {label && <span className="review-metrics-label">{label}</span>}
       Precision <Rate rate={summary.precision} kind="precision" /> · Recall <Rate rate={summary.recall} kind="recall" />
     </span>
   );
@@ -240,7 +239,7 @@ export function MissedIssues({
 }
 
 // The case's precision and recall: overall, per document vs across documents, and per check.
-export function ReviewSummary({ caseSummary, crossDocument }: { caseSummary: MetricsSummary; crossDocument: MetricsSummary }) {
+export function ReviewSummary({ caseSummary }: { caseSummary: MetricsSummary }) {
   const reviewed = caseSummary.correct + caseSummary.wrong + caseSummary.missed;
   return (
     <section className="review-summary" aria-label="Detection accuracy for this case">
@@ -263,7 +262,6 @@ export function ReviewSummary({ caseSummary, crossDocument }: { caseSummary: Met
               <Rate rate={caseSummary.recall} kind="recall" className="review-summary-value" />
               <span className="review-summary-caption" title={RATE_MEANING.recall}>Recall</span>
             </div>
-            <MetricsLine summary={crossDocument} label="Across documents" />
           </div>
           <table className="review-check-table">
             <thead>

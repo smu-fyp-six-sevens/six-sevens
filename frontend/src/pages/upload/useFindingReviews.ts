@@ -46,13 +46,16 @@ export function useFindingReviews(caseId: string, enabled: boolean) {
     };
   }, [caseId, enabled]);
 
+  // Resolves true once saved; a failure is shown through `error` instead.
   const run = useCallback(async (key: string, action: () => Promise<CaseFindingReviews>) => {
     setSavingKey(key);
     setError(null);
     try {
       setData(await action());
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save the review');
+      return false;
     } finally {
       setSavingKey(null);
     }

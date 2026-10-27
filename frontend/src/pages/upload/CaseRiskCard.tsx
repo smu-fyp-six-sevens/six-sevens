@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { CaseRisk, CaseRiskFinding, DocumentRecord, ReviewScope } from '../../services/uploadService';
+import { officerName } from '../../lib/officers';
+import type { CaseRisk, CaseRiskFinding, DocumentRecord, FindingReview, ReviewScope } from '../../services/uploadService';
 import { formatDocumentType } from '../../services/uploadService';
 import { formatCheck as formatTool } from '../../utils/checkLabels';
 import type { GroupReviewStatus } from './FindingReviewControls';
@@ -163,6 +164,25 @@ function countBySeverity(findings: CaseRiskFinding[]): [Severity, number][] {
   ).filter(([, count]) => count > 0);
 }
 
+function reviewedOn(value: string): string {
+  return new Date(value).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+// `latest` is the group's most recently saved verdict: who last reviewed it, and when.
+function ReviewTag({ status, latest }: { status: GroupReviewStatus; latest?: FindingReview }) {
+  return (
+    <span className={`risk-review-tag risk-review-tag--${status}`}>
+      {status === 'saved'
+        ? latest
+          ? `✓ Reviewed by ${officerName(latest.reviewer)} · ${reviewedOn(latest.updated_at)}`
+          : '✓ Reviewed'
+        : status === 'unsaved'
+          ? 'Unsaved changes'
+          : 'Not reviewed'}
+    </span>
+  );
+}
+
 function NotScoredMessage({ risk }: { risk: CaseRisk | null }) {
   // The score only comes from a case analysis run, never computed on its own.
   const [title, body, tone] = !risk
@@ -263,7 +283,7 @@ export function CaseRiskCard({
   }
 
   async function saveGroup(group: DocumentGroup) {
-    await reviews.saveGroup(
+    const saved = await reviews.saveGroup(
       `group:${group.documentId}`,
       group.rows.map((row) => ({ members: row.members, verdict: isChecked(group, row) ? 'correct' : 'wrong' })),
     );
@@ -271,6 +291,29 @@ export function CaseRiskCard({
     setDrafts((current) =>
       Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(`${group.documentId}:`))),
     );
+    // Done with it: close it, so it moves into the reviewed list rather than jumping down the page open.
+    if (saved) {
+      setExpanded((current) => {
+        const next = new Set(current);
+        next.delete(group.documentId);
+        return next;
+      });
+    }
+  }
+
+  function latestVerdict(group: DocumentGroup): FindingReview | undefined {
+    return group.rows
+      .map((row) => verdictFor(allReviews, row.finding))
+      .filter((review): review is FindingReview => review !== undefined)
+      .reduce<FindingReview | undefined>((latest, review) => (!latest || review.updated_at > latest.updated_at ? review : latest), undefined);
+  }
+
+  // Still the officer's to do: it has findings and they aren't all saved. Unknown until the reviews load, so the
+  // list waits for them rather than showing every document first; if they fail to load, every document is listed.
+  const reviewsLoading = scored !== null && reviews.data === null && reviews.error === null;
+
+  function needsReview(group: DocumentGroup) {
+    return !reviews.data || (group.rows.length > 0 && groupStatus(group) !== 'saved');
   }
 
   // One group: Select all and Save review, its findings with a tick each, then the issues reported as missed.
@@ -296,6 +339,7 @@ export function CaseRiskCard({
                 </span>
               ))}
               {document.findings.length === 0 && <span className="risk-document-none">✓ No findings</span>}
+              {reviews.data && document.rows.length > 0 && <ReviewTag status={groupStatus(document)} latest={latestVerdict(document)} />}
               <MetricsLine summary={metricsFor(document)} />
             </span>
             {!isOpen && document.rows.length > 0 && (
@@ -388,82 +432,131 @@ export function CaseRiskCard({
     );
   }
 
+  const allGroups = [...documents, ...reviewGroups];
+  const toReview = allGroups.filter(needsReview);
+  const done = allGroups.filter((group) => !needsReview(group));
+
   return (
-    <section className="summary-card">
-      <div className="summary-card-header">
-        <div className="summary-card-title">
-          <span className="summary-icon summary-icon--risk">▥</span>
-          <h2>Customer Risk Summary</h2>
-        </div>
-
-        {scored && (
-          <span className={`risk-badge risk-badge--${scored.level!.toLowerCase()}`}>
-            {scored.level} risk
-          </span>
-        )}
-      </div>
-
-      {!scored ? (
-        <NotScoredMessage risk={risk} />
-      ) : (
-        <>
-          {scored.score !== null && scored.score !== undefined && (
-            <ScoreGauge score={scored.score} level={scored.level!} />
-          )}
-          <div className="risk-overview">
-            <span>
-              Based on {scored.documents_scanned}{' '}
-              {scored.documents_scanned === 1 ? 'document' : 'documents'}
-            </span>
-            {findings.length > 0 && (
-              <span>
-                {countBySeverity(findings)
-                  .map(([severity, count]) => `${count} ${severity}`)
-                  .join(' · ')}
-              </span>
-            )}
-            {scored.reasons.map((reason) => (
-              <span key={reason} className="risk-reason">
-                {reason}
-              </span>
-            ))}
+    <>
+      <section className="summary-card">
+        <div className="summary-card-header">
+          <div className="summary-card-title">
+            <span className="summary-icon summary-icon--risk">▥</span>
+            <h2>Customer Risk Summary</h2>
           </div>
 
-          {findings.length === 0 && (
+          {scored && (
+            <span className={`risk-badge risk-badge--${scored.level!.toLowerCase()}`}>
+              {scored.level} risk
+            </span>
+          )}
+        </div>
+
+        {!scored ? (
+          <NotScoredMessage risk={risk} />
+        ) : (
+          <>
+            {scored.score !== null && scored.score !== undefined && (
+              <ScoreGauge score={scored.score} level={scored.level!} />
+            )}
+            <div className="risk-overview">
+              <span>
+                Based on {scored.documents_scanned}{' '}
+                {scored.documents_scanned === 1 ? 'document' : 'documents'}
+              </span>
+              {findings.length > 0 && (
+                <span>
+                  {countBySeverity(findings)
+                    .map(([severity, count]) => `${count} ${severity}`)
+                    .join(' · ')}
+                </span>
+              )}
+              {scored.reasons.map((reason) => (
+                <span key={reason} className="risk-reason">
+                  {reason}
+                </span>
+              ))}
+            </div>
+
+            {findings.length === 0 && (
+              <div className="summary-message summary-message--success">
+                <span className="summary-message-icon">✓</span>
+                <div>
+                  <strong>No contributing findings.</strong>
+                  <p>Detection found nothing worth flagging across this case's documents.</p>
+                </div>
+              </div>
+            )}
+
+            {scored.unassessed_checks.length > 0 && (
+              <details className="risk-unassessed">
+                <summary>Couldn't verify ({scored.unassessed_checks.length})</summary>
+                <ul>
+                  {scored.unassessed_checks.map((check, index) => (
+                    <li key={`${check.document_id}-${check.tool}-${index}`}>
+                      {check.filename} — {formatTool(check.tool)}
+                      {check.reason ? `: ${check.reason}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </>
+        )}
+      </section>
+
+      {/* The officer's review of each document's findings: what's left to do, then what's done folded away
+          (still there to open, to change a verdict or report a miss). */}
+      {scored && allGroups.length > 0 && (
+        <section className="summary-card">
+          <div className="summary-card-header">
+            <div className="summary-card-title">
+              <span className="summary-icon">▤</span>
+              <h2>Documents to Review</h2>
+            </div>
+            {reviews.data && (
+              <span className="risk-review-count">
+                {toReview.length === 0 ? 'All reviewed' : `${toReview.length} of ${allGroups.length} to review`}
+              </span>
+            )}
+          </div>
+
+          {reviewsLoading ? (
+            <div className="summary-message summary-message--info" role="status">
+              <span className="summary-message-icon">ⓘ</span>
+              <div>
+                <strong>Loading reviews…</strong>
+              </div>
+            </div>
+          ) : toReview.length > 0 ? (
+            <div className="flagged-list">{toReview.map(renderGroup)}</div>
+          ) : (
             <div className="summary-message summary-message--success">
               <span className="summary-message-icon">✓</span>
               <div>
-                <strong>No contributing findings.</strong>
-                <p>Detection found nothing worth flagging across this case's documents.</p>
+                <strong>No more documents to review.</strong>
+                <p>Every document's findings have been reviewed. Open one below to change a verdict or report a missed issue.</p>
               </div>
             </div>
           )}
-          {/* Documents with findings first, then the ones detection found nothing on (still open, to report a miss). */}
-          {documents.length + reviewGroups.length > 0 && (
-            <div className="flagged-list">{[...documents, ...reviewGroups].map(renderGroup)}</div>
+          {!reviewsLoading && done.length > 0 && (
+            <details className="risk-reviewed">
+              <summary>
+                <span className="risk-chevron" aria-hidden="true">›</span>
+                Reviewed ({done.length})
+                <span className="risk-reviewed-hint">Reviewed, or nothing to review</span>
+              </summary>
+              <div className="flagged-list">{done.map(renderGroup)}</div>
+            </details>
           )}
           {reviews.error && (
             <div className="save-error" role="alert">
               {reviews.error}
             </div>
           )}
-          {reviews.data && <ReviewSummary caseSummary={reviews.data.case} crossDocument={reviews.data.cross_document} />}
-
-          {scored.unassessed_checks.length > 0 && (
-            <details className="risk-unassessed">
-              <summary>Couldn't verify ({scored.unassessed_checks.length})</summary>
-              <ul>
-                {scored.unassessed_checks.map((check, index) => (
-                  <li key={`${check.document_id}-${check.tool}-${index}`}>
-                    {check.filename} — {formatTool(check.tool)}
-                    {check.reason ? `: ${check.reason}` : ''}
-                  </li>
-                ))}
-              </ul>
-            </details>
-          )}
-        </>
+          {reviews.data && <ReviewSummary caseSummary={reviews.data.case} />}
+        </section>
       )}
-    </section>
+    </>
   );
 }
