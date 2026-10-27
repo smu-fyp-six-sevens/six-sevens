@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timezone
 
@@ -151,8 +152,98 @@ async def delete_document(
 
 
 async def _audit(event_type: str, document: DocumentRecord, **detail: object) -> None:
-    """An officer action on one document, for the audit trail. Field names only, never their values."""
+    """An officer action on one document, for the audit trail."""
     await events.record(officer_event(event_type, document_id=document.id, case_id=document.case_id, detail=detail))
+
+
+def _normalise_value(value: object) -> str:
+    """The frontend sends strings; the database may hold numbers or lists."""
+    if value is None:
+        return ""
+
+    if isinstance(value, str):
+        return value.strip()
+
+    return str(value).strip()
+
+
+# A field value kept in an audit entry is cut to this many characters.
+_AUDIT_VALUE_CHARS = 500
+
+
+def _whole_numbers(value: object) -> object:
+    """6300.0 as 6300, at any depth: the database keeps floats, the page sends back what it displayed."""
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, list):
+        return [_whole_numbers(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _whole_numbers(item) for key, item in value.items()}
+    return value
+
+
+def _canonical_value(value: object) -> str:
+    """
+    One spelling per value, so a save only records what the officer actually changed: 6300.0, 6300 and "6300"
+    match, and a list or object is compared as JSON with its keys in order.
+    """
+    value = _whole_numbers(value)
+    # True as "true", as the page displays and sends it back.
+    if isinstance(value, (list, dict, bool)):
+        return json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
+    return _normalise_value(value)
+
+
+def _audit_value(value: object) -> str:
+    return _canonical_value(value)[:_AUDIT_VALUE_CHARS]
+
+
+def _items(count: int) -> str:
+    return f"{count} item{'' if count == 1 else 's'}"
+
+
+def _list_change(name: str, before: list, after: list) -> dict[str, object]:
+    """
+    A list field (accounts, transactions, ...) is too long to show whole: its item counts, and the items the edit
+    added or removed. An edited item is both: removed as it was, added as it is now.
+    """
+    old_items = [_canonical_value(item) for item in before]
+    new_items = [_canonical_value(item) for item in after]
+    remaining = list(old_items)
+    added = []
+    for item in new_items:
+        if item in remaining:
+            remaining.remove(item)
+        else:
+            added.append(item[:_AUDIT_VALUE_CHARS])
+    return {
+        "field": name, "from": _items(len(before)), "to": _items(len(after)),
+        "added": added, "removed": [item[:_AUDIT_VALUE_CHARS] for item in remaining],
+    }
+
+
+def _field_changes(before: dict[str, object], after: dict[str, object]) -> list[dict[str, object]]:
+    """
+    Each field whose value an edit changed, with its old and new value (None: the field wasn't there), so the
+    audit trail shows what the officer changed. Whole values are compared; only the stored copies are cut.
+    """
+    changes: list[dict[str, object]] = []
+    for name in sorted(before.keys() | after.keys()):
+        old = _canonical_value(before[name]) if name in before else None
+        new = _canonical_value(after[name]) if name in after else None
+        # A blank field the save drops (an optional one left empty) changed nothing.
+        if (old or "") == (new or ""):
+            continue
+        old_value, new_value = before.get(name), after.get(name)
+        if isinstance(old_value, list) and isinstance(new_value, list):
+            changes.append(_list_change(name, old_value, new_value))
+            continue
+        changes.append({
+            "field": name,
+            "from": None if old is None else old[:_AUDIT_VALUE_CHARS],
+            "to": None if new is None else new[:_AUDIT_VALUE_CHARS],
+        })
+    return changes
 
 
 async def _resync_case(case_id: str) -> None:
@@ -350,16 +441,6 @@ async def update_extracted_fields(
             document_id,
         )
 
-        def normalise_value(value: object) -> str:
-            """The frontend sends strings; the database may hold numbers or lists."""
-            if value is None:
-                return ""
-
-            if isinstance(value, str):
-                return value.strip()
-
-            return str(value).strip()
-
         existing_by_name = {
             field.field_name: field
             for field in existing_fields
@@ -379,7 +460,7 @@ async def update_extracted_fields(
                 field_confidences[name] = 1.0
                 continue
 
-            old_value = normalise_value(existing_field.field_value)
+            old_value = _normalise_value(existing_field.field_value)
 
             # Fields the officer could edit.
             was_editable = (
@@ -423,7 +504,12 @@ async def update_extracted_fields(
             extracted_fields_repository.get_extracted_fields, document_id
         )
 
-    await _audit(types.DOCUMENT_FIELD_EDITED, document, action="saved", fields=sorted(request.extracted_fields))
+    await _audit(
+        types.DOCUMENT_FIELD_EDITED, document, action="saved", fields=sorted(request.extracted_fields),
+        changes=_field_changes(
+            {field.field_name: field.field_value for field in existing_fields}, request.extracted_fields
+        ),
+    )
     return _present(updated or document, saved_fields)
 
 
@@ -498,7 +584,10 @@ async def add_extracted_field(
             fulfilled_requirements,
         )
 
-    await _audit(types.DOCUMENT_FIELD_EDITED, document, action="added", fields=[field_name])
+    await _audit(
+        types.DOCUMENT_FIELD_EDITED, document, action="added", fields=[field_name],
+        changes=[{"field": field_name, "from": None, "to": _audit_value(request.field_value)}],
+    )
     return _present(updated or document, all_fields)
 
 
@@ -562,7 +651,10 @@ async def delete_extracted_field(
             fulfilled_requirements,
         )
 
-    await _audit(types.DOCUMENT_FIELD_EDITED, document, action="deleted", fields=[field_to_delete.field_name])
+    await _audit(
+        types.DOCUMENT_FIELD_EDITED, document, action="deleted", fields=[field_to_delete.field_name],
+        changes=[{"field": field_to_delete.field_name, "from": _audit_value(field_to_delete.field_value), "to": None}],
+    )
     return _present(updated or document, remaining_fields)
 
 

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Page, Route, WebSocketRoute } from '@playwright/test';
-import type { CaseRisk } from '../../src/services/uploadService/types';
+import type { AuditEvent, CaseRisk } from '../../src/services/uploadService/types';
 
 /**
  * Each document type's required extraction fields, exported from the
@@ -213,6 +213,8 @@ export class MockBackend {
   timings: Record<string, { type: string; document_id: string | null; occurred_at: string; duration_ms: number }[]> = {};
   /** Notes on cases and documents (GET/POST /cases/:id/notes), signed by the logged-in officer. */
   notes: NoteRow[] = [];
+  /** Audit trail entries (GET /audit/events?case_id=), in any order: served newest first, like the backend. */
+  auditEvents: AuditEvent[] = [];
   /** Per-filename upload results; files not listed here upload successfully. */
   uploadOutcomes: Record<string, UploadOutcome> = {};
   /** When set, upload-batch waits for this before answering (to observe "Uploading"). */
@@ -389,6 +391,14 @@ export class MockBackend {
         this.cases = this.cases.filter((c) => c.id !== found.id);
         return route.fulfill({ status: 204, headers: corsHeaders() });
       }
+    }
+    if (path === '/audit/events' && method === 'GET') {
+      const caseId = url.searchParams.get('case_id');
+      return json(
+        this.auditEvents
+          .filter((e) => caseId === null || e.case_id === caseId)
+          .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at)),
+      );
     }
     const notesMatch = path.match(/^\/cases\/([^/]+)\/notes$/);
     if (notesMatch) {
