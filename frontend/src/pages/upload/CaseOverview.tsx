@@ -9,8 +9,6 @@ import { formatUsd, processingTimes } from './processingTimes';
 import { useCaseCost } from './useCaseCost';
 import { CaseOverviewSkeleton } from '../../components/Skeletons';
 
-const RISK_LEVELS = ['Low', 'Medium', 'High', 'Critical'] as const;
-
 function riskTone(level: string | null | undefined): string {
   return level ? level.toLowerCase() : 'unknown';
 }
@@ -33,10 +31,15 @@ function dateLabel(value: string | null | undefined): string {
     : date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+function fileExtension(filename: string): string {
+  const dot = filename.lastIndexOf('.');
+  return dot > 0 ? filename.slice(dot + 1, dot + 5).toUpperCase() : 'FILE';
+}
+
 function Stat({ label, value, detail, tone = 'blue', onClick }: { label: string; value: string | number; detail: string; tone?: string; onClick?: () => void }) {
   const className = `case-overview-stat case-overview-stat--${tone}${onClick ? ' case-overview-stat--interactive' : ''}`;
   const content = <>
-      <span className="case-overview-stat-label">{label}</span>
+      <span className="case-overview-stat-label">{label}{onClick && <span className="case-overview-stat-arrow" aria-hidden="true">→</span>}</span>
       <strong className="case-overview-stat-value">{value}</strong>
       <span className="case-overview-stat-detail">{detail}</span>
     </>;
@@ -140,7 +143,6 @@ export function CaseOverview({
               <div className="case-overview-progress-track" aria-label={`${detectedCount} of ${documents.length} documents detected`}>
                 <span style={{ width: `${documents.length ? (detectedCount / documents.length) * 100 : 0}%` }} />
               </div>
-              <div className="case-overview-progress-labels"><span>{detectedCount} of {documents.length} documents detected</span><span>{approvedDocuments.length} approved</span></div>
               <ol className="case-overview-stages">
                 {progressStages.map((stage) => (
                   <li className={`case-overview-stage case-overview-stage--${stage.tone}`} key={stage.label}>
@@ -209,20 +211,26 @@ export function CaseOverview({
                 <div><h2>Detection Accuracy</h2><p>How often this case's findings were right, from the officer's review</p></div>
                 <button type="button" className="case-overview-text-button" onClick={() => onSelectSection('risk')}>Review findings →</button>
               </div>
-              <div className="case-overview-accuracy">
-                <span title={RATE_MEANING.precision}>Precision <strong><Rate rate={accuracy?.case.precision ?? null} kind="precision" /></strong></span>
-                <span title={RATE_MEANING.recall}>Recall <strong><Rate rate={accuracy?.case.recall ?? null} kind="recall" /></strong></span>
-              </div>
-              {checksByReviews.length > 0 && (
-                <div className="case-overview-classification-grid">
-                  {checksByReviews.map((check) => (
-                    <div className="case-overview-classification-card case-overview-classification-card--check" key={`${check.scope}-${check.check_name}`}>
-                      <strong>{formatCheck(check.check_name)}</strong>
-                      <span>Precision <b><Rate rate={check.precision} kind="precision" /></b></span>
-                      <span>Recall <b><Rate rate={check.recall} kind="recall" /></b></span>
-                    </div>
-                  ))}
-                </div>
+              {reviewed > 0 && (
+                <table className="case-overview-classification-table">
+                  <thead><tr><th scope="col">Check</th><th scope="col" title={RATE_MEANING.precision}>Precision</th><th scope="col" title={RATE_MEANING.recall}>Recall</th></tr></thead>
+                  <tbody>
+                    {checksByReviews.map((check) => (
+                      <tr key={`${check.scope}-${check.check_name}`}>
+                        <th scope="row">{formatCheck(check.check_name)}</th>
+                        <td><Rate rate={check.precision} kind="precision" /></td>
+                        <td><Rate rate={check.recall} kind="recall" /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <th scope="row">All checks</th>
+                      <td><Rate rate={accuracy?.case.precision ?? null} kind="precision" /></td>
+                      <td><Rate rate={accuracy?.case.recall ?? null} kind="recall" /></td>
+                    </tr>
+                  </tfoot>
+                </table>
               )}
               <p className="case-overview-metric-note">
                 {reviewed === 0
@@ -241,7 +249,7 @@ export function CaseOverview({
               <ul className="case-overview-document-list">
                 {recentDocuments.map((document) => {
                   const status = documentStatus(document);
-                  return <li key={document.id}><span className="case-overview-document-icon" aria-hidden="true">▤</span><span className="case-overview-document-copy"><strong>{document.filename}</strong><small>{document.document_type ? formatDocumentType(document.document_type) : 'Type not classified'} · {dateLabel(document.uploaded_at)}</small></span><span className={`case-overview-document-status case-overview-document-status--${status.tone}`}>{status.label}</span></li>;
+                  return <li key={document.id}><span className="case-overview-document-icon" aria-hidden="true">{fileExtension(document.filename)}</span><span className="case-overview-document-copy"><strong>{document.filename}</strong><small>{document.document_type ? formatDocumentType(document.document_type) : 'Type not classified'} · {dateLabel(document.uploaded_at)}</small></span><span className={`case-overview-document-status case-overview-document-status--${status.tone}`}>{status.label}</span></li>;
                 })}
               </ul>
             ) : (

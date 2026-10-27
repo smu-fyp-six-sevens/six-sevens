@@ -40,6 +40,13 @@ check if audit trail watches for cancel/retry etc.
 ## Case analysis
 
 Design: `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
+- **Earlier runs are stored but never shown.** Every run keeps its row in `case_analysis_runs` (result, trace, fingerprint, times) and its score in `risk_scores`, but `GET /cases/{id}/analysis` and the card read only the latest. Needs a list route (newest first: time, who started it, status, score and level, finding count, out of date or not), a "Previous runs" list on the Case Analysis card that opens an earlier result read-only, and the score change between runs. The audit trail already has who ran each one (`case.analysis.requested`).
+- **The case summary is long and hard to read** (sponsor feedback). `risk/summary.py` asks Haiku for 3 to 6 sentences of prose, and the card prints it as one paragraph that repeats the score, the findings and the evidence requests already shown around it. Make it structured:
+  - The model returns `headline` (one sentence, at most 20 words), `reasons` (2 to 4 short items, each citing one finding id) and `would_help` (at most one line). Code enforces the limits and falls back to the deterministic summary when they're broken, as it already does for a wrong citation; a reason without a citation fails the grounding check.
+  - The card shows the risk level as a coloured pill with the headline in bold, the reasons as a short list with a severity dot each, linked to their finding below, "Checked and fine" as small chips, and "Would help" as one line linking to the Additional Documents card.
+  - No score restated and no finding text pasted back in.
+  - Example: a High pill, "Two documents disagree on the company's address, and the payslip doesn't match the bank credits.", two linked reasons, chips "UEN ✓ · Names ✓ · Dates ✓", and "A recent utility bill would help."
+  - A prompt and model change, regenerated API types and one restyled card; detection and scoring are untouched. Old runs keep their prose `summary`, which the card shows as a fallback.
 - **Plan-then-judge has no follow-up round;** add one optional round if the evals show low recall.
 - **The run trace lists dropped hypotheses,** while the design says unproven ones are never shown. Decide before exposing it beyond developers.
 - **Guardrails still open:** a dismissal flow for cross-document findings, audit retention, the three sponsor questions in the plan.
@@ -71,5 +78,22 @@ Budgets are in `HOW_IT_WORKS.md` §8; query-level fixes are in `REFACTORING_AUDI
 
 ## Frontend
 
+- **Raw error messages are shown on the page.** Move the raw text to `console.error` and show an informative, user-friendly message instead (what failed, and what the officer can do: try again, cancel first, refresh, sign in again).
+  - **The root:** `services/uploadService/assertOk` (`request.ts`) throws `"<message> (<status>): <response body>"`, so the UI shows the status code and FastAPI's JSON, e.g. `Failed to save case (502): {"detail":"Failed to save the case. Check Supabase table access."}`. Every service function uses it (`cases.ts`, `documents.ts`, `detection.ts`, `notes.ts`, `caseMatch.ts`, `audit.ts`, about 35 calls), and about 30 places print `err.message` as is: `useCaseQueue`, `CaseQueuePage` (delete), `CaseRow`, `useCaseSettings`, `useCaseByNumber` → `App.tsx` `LoadError`, `useDocumentRowActions`, `useDocumentSelection` (delete, move), `useUploadSelection`, `useDocumentActions`, `useDocumentRecord`, `useDocumentTypeEditing`, `useFieldEditing`, `ExtractedInformationCard`, `useDetection` (five errors), `CaseAnalysisCard` (start), `NotesCard`, `AuditTrailCard`, `useCaseCost`, `Breadcrumbs`, `useDocumentPreviewUrl`, `DocumentPreviewModal`.
+  - **The fix:** one error class in `request.ts` that keeps the status and the parsed `detail`, logs the raw body to the console, and picks the message:
+    - 409 and 400: the backend's `detail` (already written for officers, e.g. "cancel it first");
+    - 401: "Your session has expired. Sign in again.";
+    - 404: "This case or document no longer exists.";
+    - 5xx or no response: "<what failed>. Something went wrong on our side; try again, and tell the team if it keeps happening."
+  - **Same pattern outside it:** `CreateCasePage.tsx` builds its own `(<status>): <body>` message; `detection.ts` `runIndividualDetectionCheck` shows a 409's raw body.
+  - **Backend errors stored and shown as is:**
+    - `CaseAnalysisCard` prints `analysis.error`, which `case_pipeline/service.py` stores as `"<ExceptionType>: <message>"`;
+    - `DocumentSummaryCard` shows `failure_reason` under a friendly title (`formatters.describeFailureReason`) but also prints the raw reason (e.g. `Unhandled processing error: ...`);
+    - `AuditTrailCard` shows `failure_reason` and stringifies object values in field changes;
+    - a crashed detection report comes back as a 502 `"Detection failed: <ExceptionType>: ..."`.
+
+    Show a plain sentence, and keep the raw text in the console (or behind a "Details" toggle).
+  - **Leave alone:** the developer panels that print JSON on purpose (`LangGraphTracePanel`, `CaseAnalysisTracePanel`, the individual check results in `DetectionPanel`, all `debug-*`).
+  - The mock backend (`e2e/support/mockBackend.ts`) and any spec that matches error text change with it.
 - **Dev StrictMode** fires some document-page requests twice.
 - **`submission_finalized`** is remembered per process (`case_service._synced_finalized`), so with several instances or a hand edit the stored value is only corrected on the next change.
