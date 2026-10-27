@@ -16,11 +16,10 @@ export function formatCheck(check: string | null): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-// A rate as a percentage, or what's missing: "no reviews" for precision (nothing it raised was reviewed),
-// "no examples" for recall (nothing it should have caught), never 0% or 100% by default.
-export function formatRate(rate: number | null, kind: 'precision' | 'recall'): string {
-  if (rate === null) return kind === 'precision' ? 'no reviews' : 'no examples';
-  return `${Math.round(rate * 100)}%`;
+// A rate as a percentage, or a dash when there is nothing to measure yet (never 0% or 100% by default). Rate.tsx
+// explains the dash on hover.
+export function formatRate(rate: number | null): string {
+  return rate === null ? '—' : `${Math.round(rate * 100)}%`;
 }
 
 // What each rate measures, shown on hover over a rate or its heading.

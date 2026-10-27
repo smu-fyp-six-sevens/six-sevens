@@ -992,16 +992,14 @@
   margin: 0 20px 12px;
 }
 
-/* A precision or recall (components/Rate.tsx): hovering explains it. When there's nothing to measure yet
-   ("no reviews" / "no examples") it's underlined so the explanation is easy to find. */
+/* A precision or recall (components/Rate.tsx): hovering explains it. When there's nothing to measure yet it
+   shows a soft grey dash, and hovering says why. */
 .rate {
   cursor: help;
 }
 
 .rate--empty {
   color: var(--ink-soft);
-  text-decoration: underline dotted;
-  text-underline-offset: 3px;
 }
 
 .review-summary-caption[title],

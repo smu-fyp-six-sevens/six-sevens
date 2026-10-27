@@ -589,6 +589,7 @@ def test_moved_document_takes_its_notes_and_reviews_to_the_new_case() -> None:
     assert mock_notes.move_with_documents.call_args_list == [
         call(["doc-1"], "case-2"), call(["doc-2", "doc-3"], "case-2"),
     ]
+    assert mock_reviews.move_with_documents.call_args_list == mock_notes.move_with_documents.call_args_list
 
 
 def test_document_statuses_are_read_for_100_cases_at_a_time() -> None:
@@ -607,4 +608,3 @@ def test_every_documents_status_is_read_a_page_at_a_time() -> None:
            "uploaded_at": "2026-08-26T00:00:00Z", "queued_at": None, "processing_started_at": None}
     with patch("app.document_repository.fetch_all", return_value=[row, row]):
         assert len(document_repository.list_all_document_statuses()) == 2
-    assert mock_reviews.move_with_documents.call_args_list == mock_notes.move_with_documents.call_args_list
