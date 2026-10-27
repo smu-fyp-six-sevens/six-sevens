@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from .. import case_repository, document_repository, events
+from .. import case_repository, document_repository, events, finding_reviews_repository
 from ..config import settings
 from ..snapshots import push_case_snapshot
 from ..langgraph import trace as langgraph_trace
@@ -196,6 +196,11 @@ async def _store_result(analysis: CaseAnalysis) -> None:
     """Saves a finished run; only the case's newest complete run also updates the case's score and requested documents."""
     published = await asyncio.to_thread(repository.finish_run, analysis)
     if published and analysis.status == "complete":
+        # Officers' reviews of cross-document findings named the previous run's findings, which this one replaces.
+        try:
+            await asyncio.to_thread(finding_reviews_repository.clear_case_scope, analysis.case_id)
+        except Exception:
+            logger.exception("Failed to clear the previous analysis's finding reviews for case %s", analysis.case_id)
         # The case list reads the score from here rather than opening every run.
         await asyncio.to_thread(risk_store.save, analysis.case_id, analysis.risk)
         await asyncio.to_thread(

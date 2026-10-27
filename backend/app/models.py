@@ -318,6 +318,8 @@ class ContributingFinding(BaseModel):
     document_type: str | None = None
     finding_id: str
     tool: str | None = None
+    # The tool's own check code where it reports one (e.g. "PAY.NET", "PAGE.NUMBERING").
+    check_code: str | None = None
     severity: str
     summary: str
     rationale: str
@@ -594,6 +596,137 @@ class UpdateNoteRequest(BaseModel):
     @classmethod
     def body_must_not_be_blank(cls, value: str) -> str:
         return _note_body(value)
+
+
+# --- Finding reviews: precision and recall per check (finding_reviews_repository, detection_metrics) ----------
+
+ReviewScope = Literal["document", "case"]
+ReviewVerdict = Literal["correct", "wrong"]
+MAX_REVIEW_NOTE_LENGTH = 1000
+
+
+class FindingReview(BaseModel):
+    """
+    An officer's verdict on one finding (kind "verdict": correct or wrong), or an issue the officer found that
+    no finding raised (kind "missed"). scope "document" is a finding on one document; "case" a cross-document
+    finding from the case analysis. check_name is the tool for a document finding, the category for a case one.
+    """
+
+    id: str
+    case_id: str
+    document_id: str | None = None
+    scope: ReviewScope
+    kind: Literal["verdict", "missed"]
+    finding_id: str | None = None
+    check_name: str
+    check_code: str | None = None
+    summary: str = ""
+    verdict: ReviewVerdict | None = None
+    note: str | None = None
+    reviewer: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class _ReviewTarget(BaseModel):
+    """Where a review sits: a document finding names its document; a case finding has none."""
+
+    scope: ReviewScope
+    document_id: UUID | None = None
+    check_name: str = Field(min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def document_matches_scope(self) -> "_ReviewTarget":
+        if (self.scope == "document") != (self.document_id is not None):
+            raise ValueError("A document review names its document; a case review doesn't")
+        return self
+
+
+class SetFindingVerdictRequest(_ReviewTarget):
+    """Marks one finding correct or wrong; verdict null clears the officer's mark."""
+
+    finding_id: str = Field(min_length=1, max_length=200)
+    check_code: str | None = Field(default=None, max_length=100)
+    # The finding's summary when it was reviewed, so a verdict is only shown against the same finding.
+    summary: str = Field(default="", max_length=4000)
+    verdict: ReviewVerdict | None = None
+
+
+class SetFindingVerdictsRequest(BaseModel):
+    """A whole group's review at once: every finding the officer looked at, each correct or wrong."""
+
+    verdicts: list[SetFindingVerdictRequest] = Field(min_length=1, max_length=200)
+
+
+class ReportMissedIssueRequest(_ReviewTarget):
+    """An issue the officer found that no finding raised, against the check that should have caught it."""
+
+    note: str | None = Field(default=None, max_length=MAX_REVIEW_NOTE_LENGTH)
+
+    @field_validator("note")
+    @classmethod
+    def blank_note_is_none(cls, value: str | None) -> str | None:
+        return (value.strip() or None) if value is not None else None
+
+
+class UpdateMissedIssueRequest(BaseModel):
+    """Corrects a reported missed issue: the check it's filed against, and its note. Where it sits never changes."""
+
+    check_name: str = Field(min_length=1, max_length=100)
+    note: str | None = Field(default=None, max_length=MAX_REVIEW_NOTE_LENGTH)
+
+    @field_validator("note")
+    @classmethod
+    def blank_note_is_none(cls, value: str | None) -> str | None:
+        return (value.strip() or None) if value is not None else None
+
+
+class CheckMetrics(BaseModel):
+    """
+    One check's counts and rates. precision is correct / (correct + wrong): None when no finding of the check
+    was reviewed. recall is correct / (correct + missed): None when there is nothing it should have caught.
+    """
+
+    check_name: str
+    scope: ReviewScope
+    correct: int
+    wrong: int
+    missed: int
+    precision: float | None
+    recall: float | None
+    # Below target, or too few reviews for the rates to mean much.
+    flags: list[str] = []
+
+
+class MetricsSummary(BaseModel):
+    correct: int
+    wrong: int
+    missed: int
+    precision: float | None
+    recall: float | None
+    by_check: list[CheckMetrics]
+
+
+class CaseFindingReviews(BaseModel):
+    """Every review in a case, and the precision and recall they give: per document, across documents and for the case."""
+
+    reviews: list[FindingReview]
+    case: MetricsSummary
+    documents: dict[str, MetricsSummary]
+    cross_document: MetricsSummary
+    # The checks a missed issue can be reported against, per scope.
+    checks: dict[str, list[str]]
+
+
+class DetectionMetrics(BaseModel):
+    """Precision and recall per check across every reviewed case."""
+
+    overall: MetricsSummary
+    cases_reviewed: int
+    documents_reviewed: int
+    target_precision: float
+    target_recall: float
+    min_reviews: int
 
 
 class DocumentRecord(BaseModel):
