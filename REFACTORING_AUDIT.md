@@ -2,7 +2,7 @@
 
 Code smells, cleanup and optimisations across the repo: `backend/app`, `frontend/src`, and the deployment (`deploy/`, `.github/workflows`). Tests are covered in `backend_tests.md`.
 
-Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22, by reading the code and running static measurements; updated 2026-10-24. Nothing was profiled against production data. Only open items are listed: remove one once it's done.
+Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22, by reading the code and running static measurements; updated 2026-10-26 against `main` (`4542eac`). Nothing was profiled against production data. Only open items are listed: remove one once it's done.
 
 ## Where we are
 
@@ -13,15 +13,20 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 | Deployment | Terraform 1,000 lines in 12 files, 2 workflows, 7 compose files, Kong and Grafana images |
 | Tests | 1,644 backend test functions in 82 files; 107 Playwright tests plus the notes spec |
 | Backend gates | ruff clean on `app/` (16 old issues in `doc_gen_scripts/`, `scripts/` and one test, outside CI's scope), pyright clean, 0 `type: ignore`, 14 `noqa` (all re-export `F401`) |
-| Frontend gates | lint 0 errors, 0 warnings; `tsc` fails on `CaseOverview.tsx:72` (a teammate's `info` severity missing from a sort table; `PENDING_WORK.md`), and CI doesn't run `tsc` |
+| Frontend gates | lint 0 errors, 0 warnings; CI runs `npm run typecheck` (not re-run for this update) |
 
 ---
 
 ## 1. Duplicated code
 
+### Backend
+
+1. **Two copies of `decode_field_value`.** `font_consistency._field_search_text` and `shared/field_catalogue.array_rows` each `json.loads` a field value themselves. Call `shared/field_values.decode_field_value` instead. S
+
 ### Frontend
 
-1. **105 one-off hex colours** are still written inline in the stylesheets (each appears once, so they were not merged into a token). Every repeated colour is a token in `styles/tokens.css`. When you restyle a component, move its one-offs into the palette (or onto the nearest existing token). S, as you go
+1. **Repeated `rgba()` shadows and tints aren't tokens.** The token pass covered hex only: 14 `rgba()` values are used more than once (about 45 uses), mostly slate `rgba(61, 90, 128, …)` and navy `rgba(18, 32, 61, …)` at a few alphas, across `base`, `case-queue`, `upload`, `login`, `create-case`, `document-details` and `documents-table`. Add shadow and overlay tokens to `tokens.css` (`--shadow-sm`, `--slate-tint-08`, …). S
+2. **105 one-off hex colours** are still written inline in the stylesheets (each appears once, so they were not merged into a token). Every repeated colour is a token in `styles/tokens.css`. When you restyle a component, move its one-offs into the palette (or onto the nearest existing token). S, as you go
 
    | Group | Count | What they are |
    |---|---|---|
@@ -45,10 +50,18 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 ### Backend
 
 1. **Business rules in the routers.** `routers/documents.py` (903 lines): `approve_document` (101 lines, longer now that it undoes an unpublished approval), `update_extracted_fields` (99) and `update_document_type`. Move them to a document service so the router only translates HTTP. M
-2. **Private helpers shared across packages.** `case_pipeline/*` and the external validation checks import `_as_number`, `_rows` and `_parse_field_date` from `fraud_detection/numerical_validation/common.py`. Those are a public field-value API in practice: make them public in `fraud_detection/shared/field_values.py`, as `decode_field_value` already is. Similarly, `field_checks/*` and `tool_timeout.py` import `_result` and `_with_ids` from `detection/tools.py`. M
+2. **Private helpers shared across packages.** `case_pipeline/*` (6 modules), `dates/date_anomalies.py`, `giro.py`, the `reference_checks` and two `registry_lookups` modules import `_as_number`, `_rows`, `_parse_field_date` (and `_money`, `_CURRENCY_WORDS`, `_fields_by_name`, …) from `fraud_detection/numerical_validation/common.py`. Those are a public field-value API in practice: make them public in `fraud_detection/shared/field_values.py`, as `decode_field_value` already is. Similarly, `field_checks/*` and `tool_timeout.py` import `_result` and `_with_ids` from `detection/tools.py`. M
 3. **`case_service.py` (516 lines) mixes jobs:** the documents-status rollup, pass-throughs (`get_case`, `create_case`, `update_case`), the snapshot builder, and `submission_finalized`. The required-documents rules are split across `models.py`, `case_service.py` and `mapper.py`. M
 4. **`submission_finalized` machinery.** A debounce with timer threads (`document_repository`), a flush before each request returns, and a per-process "last written" cache (`case_service._synced_finalized`), all for a flag nothing reads yet. Decide its shape when automatic case analysis is built: keep it stored, or compute it inside the gate and delete the machinery. Decision pending this sprint
 5. **`models.py` (665 lines)** mixes enums and business rules, API schemas, and risk models that have a twin in `case_pipeline/models.py`. M
+6. **Blocking calls in routers without the 502 wrapper.** A Supabase error at these becomes a bare 500 with no log line, instead of `to_thread_or_502` / `bad_gateway_on_error`'s logged 502: `cases.py` (the summary re-read in `update_case`); `documents.py` (the target-case read in move and bulk move, the `update_status` and re-read in `cancel_document`, the re-read after retry); `detection.py` (`langgraph_trace.load` in the check gate, the report and retry; `list_documents` in the company-name check; `get_case_match_for_document`; `langgraph_trace.resume`); `upload.py` (the case lookup in single and bulk upload). S
+
+### Frontend (types)
+
+1. **Hand-written API types.**
+   - `CaseCost`, `CaseCostRun`, `CaseCostTiming` (`types.ts`): `GET /audit/cases/{id}/cost` returns a plain `dict`, so nothing is generated, and `timings` drifted to optional. Give the route a Pydantic response model, regenerate, and alias it. S
+   - `CaseSort`, `CaseRiskFilter`: copies of the backend's `Literal`s. Read them from `api.gen.ts`'s `operations` (the `list_cases` query parameters). S
+   - `DetectionReport`, `LangGraphTrace`: their routes return `dict` too. A response model for the detection report is the larger job. M
 
 ### Frontend
 
@@ -76,7 +89,10 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 
 | # | Where | What happens now | Fix | Effort |
 |---|---|---|---|---|
-| 1 | Cancel polling (`workers/recovery.cancel_when`) | One Supabase read every 5 s per running pipeline or detection in Pub/Sub mode (at most about 12 a minute per run) | Fine at today's volume; if it grows, push cancels to the run instead (a Realtime subscription on its document row) | S, later |
+| 1 | `GET /documents/{id}/detection/case-match` (runs after each field edit) | 6 queries in sequence: the route's document read, then `get_case_match_for_document` reads the same document again with its fields, then the case, then the case's documents and their fields | Pass the route's document in instead of re-reading it, and read the case and its documents side by side (`case_service._submit`): 4 queries in 2 rounds | S |
+| 2 | `GET /cases/{id}/analysis` (each card reload) | 5 queries in 4 rounds: the case (dependency), the run, the documents and fields, the traces. The fingerprint hashes the fields, so none can be dropped | Read the run and the documents side by side: one round fewer | S |
+| 3 | Spelling dictionary warm-up (`main.py`) | Built in the background on detection-worker only; the api's first on-demand spelling check waits about 6 s | Warm it on api too (costs its memory), or accept it | S |
+| 4 | Cancel polling (`workers/recovery.cancel_when`) | One Supabase read every 5 s per running pipeline or detection in Pub/Sub mode (at most about 12 a minute per run) | Fine at today's volume; if it grows, push cancels to the run instead (a Realtime subscription on its document row) | S, later |
 
 **Considered and left alone:**
 - **The snapshot payload** (every document on each push): pushes are debounced and built only for open cases. Measure a real case before designing deltas.
@@ -92,10 +108,11 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 
 ## Suggested order
 
-1. **The generator checks in CI** (repo 1), S.
-2. **Lock the Python dependencies** (repo 2). It protects every deploy, and keeps the OpenAPI export stable between machines.
-3. **Rules out of `routers/documents.py`** (backend 2.1), the biggest structural win left.
-4. **Public field-value helpers** (backend 2.2).
-5. **The Audit Trail card and the mock dashboard** (frontend 2.1) before any demo.
-6. **The one-off colours** (frontend 1.1), as you restyle each component.
-7. **Decide `submission_finalized`** (backend 2.4) as part of automatic case analysis.
+1. **Quick wins, one at a time:** the 502 wrappers (backend 2.6), the two queries (optimisations 1 and 2), the `decode_field_value` copies (backend 1.1), the `CaseCost` model and the filter types (frontend types 1). Each S and separately testable.
+2. **The generator checks in CI** (repo 1), S.
+3. **Lock the Python dependencies** (repo 2). It protects every deploy, and keeps the OpenAPI export stable between machines.
+4. **Rules out of `routers/documents.py`** (backend 2.1), the biggest structural win left.
+5. **Public field-value helpers** (backend 2.2).
+6. **The Audit Trail card and the mock dashboard** (frontend 2.1) before any demo.
+7. **The `rgba()` tokens and the one-off colours** (frontend 1.1, 1.2), as you restyle each component.
+8. **Decide `submission_finalized`** (backend 2.4) as part of automatic case analysis.
