@@ -1,6 +1,6 @@
 # Tests: where we are and what's next
 
-Backend unit tests (`backend/tests`), Playwright (`frontend/e2e`), and the checks CI runs. Updated 2026-10-26 against `main` (`4542eac`).
+Backend unit tests (`backend/tests`), Playwright (`frontend/e2e`), and the checks CI runs. Updated 2026-10-27 against `SCRUM-296-Sprint-4-Regression-Testing` (`ba11815`, with `main` merged in).
 
 This comes from reading every test file and measuring them with static scripts (test counts, mocks, assertions, which `app` module and which numerical rule code each test names). It does **not** come from a full run, and CI's coverage report hasn't been read yet.
 
@@ -12,7 +12,7 @@ This comes from reading every test file and measuring them with static scripts (
 
 ## 1. How healthy is the suite?
 
-**Backend:** 1,644 test functions in 82 files (recounted 2026-10-24, after the never-collected injection tests were deleted). 105 are parametrised, so the suite runs well over 1,900 cases. There are 3,339 plain `assert`s, 235 mock-call assertions and 778 `patch(...)` calls. Every file is collected.
+**Backend:** 1,733 test functions in 89 files (recounted 2026-10-27). 105 are parametrised, so the suite runs well over 2,000 cases. There are 3,595 plain `assert`s, 252 mock-call assertions and 774 `patch(...)` calls. 165 tests carry their own sprint marker (sprint 1: 10, 2: 39, 3: 57, 4: 59); `conftest.py` tags more files centrally.
 
 | Group | Share | What to do |
 |---|---|---|
@@ -36,6 +36,12 @@ This comes from reading every test file and measuring them with static scripts (
 **Noise:** some `test_ws` tests reach the snapshot code's trace reads, which the guard turns into logged "real Supabase call" errors. They pass, but the log looks like failures. Mock `langgraph_trace` in those tests too.
 
 **Need pytest, not a direct-call script:** `test_auth` (its autouse `_real_auth` undoes the auth bypass; without it the two missing-token and garbage-token 401 tests fail), `test_layout_profiles` and `test_layout_reference` (`monkeypatch`, `tmp_path`, parametrize), `test_land_use` and `test_registry_lookups` (conftest's land-use index and URA key blocks), `test_ai_generation` (`exiftool`, skipped without it). Their direct-run failures are expected to be runner limits; confirm with a pytest run of those six files.
+
+**Sprint 4 regression files** (`test_regression_case_analysis`, `_case_risk`, `_cross_document`, `_invalid_output`, `_notes`, `_ai_generation`): all fully mocked (in-memory tables, scripted Claude, registry answers from fixtures; the AI-generation check scores pixels without `exiftool`). They run the real endpoint, worker, pipeline and scoring code, and assert outcomes rather than mock calls. To tidy:
+- **Check codes that don't exist** in `test_regression_case_risk.critical_case`: `PS.CPF_RATE` (the rule is `PAY.CPF_RATE`), `TAX.YEAR_OF_ASSESSMENT`, `REG.ISSUER`. Scores are unaffected today (a code only matters when the same check and stated value repeat across documents), but the fixture claims to mirror the live run. Use real codes and regenerate `case-risk-sprint4.json`.
+- **Each test case ID is tagged twice.** `conftest.py` tags `test_cross_document_deterministic` (CD-001 – CD-021), `test_cross_document_mismatches`, `test_address_matching`, `test_company_identity`, `test_registry_lookups` (CD-008 / CD-009), `test_ai_generation` (FD-027 / FD-028) and `test_notes` (CM-029 – CM-036) as sprint 4, while the new files cover the same IDs one by one. Keep the central tags only for IDs no regression file covers.
+- **Harnesses are shared by importing other test modules** (`from tests import test_regression_ai_pipeline`, `test_regression_detection`, `test_ai_generation`). With no `tests/__init__.py`, pytest imports each test file by its basename, so `tests.X` is a second copy of the module: harmless while the fixtures only patch `app` modules, wrong as soon as a harness keeps module-level state. Move the harnesses to a support module (`tests/support/`).
+- `test_regression_case_analysis` waits on `case_pipeline.trace._writer`, a private name.
 
 ## 2. Income documents and bank statements
 
@@ -80,22 +86,24 @@ Also untested, lower weight: `CR.TENOR`, `FATCA.TIN_FORMAT`, `case_pipeline/risk
 
 ## 4. Playwright
 
-107 tests in 5 specs, plus main's `notes` spec:
+154 tests in 7 specs:
 
 | Spec | Tests |
 |---|---|
-| `case-management` | 41 |
+| `case-management` | 53 |
 | `upload` | 24 |
-| `document-review` | 17 |
-| `detection` | 15 |
+| `case-analysis` | 20 |
+| `document-review` | 18 |
+| `detection` | 17 |
+| `notes` | 12 |
 | `checklist` | 10 |
 
 They run the real frontend against `e2e/support/mockBackend.ts`; CI runs them on every push.
 
 **Not covered by any spec:**
-- the **case analysis card** ("Run analysis", running, result, out of date);
+- the case analysis card's **out of date** notice (a run whose documents changed since);
 - **clicking Cancel detection** (only that the button shows) and **Retry detection**;
-- **document retry and cancel** during extraction. The mock backend already answers `/retry` and `/cancel`, but no spec calls them;
+- **document cancel** during extraction (retry is covered by `MA-027`);
 - **login failure and the redirect when logged out.** The mock answers a bad login with 401, but no spec tries one;
 - the move-documents dialog;
 - WebSocket reconnect;
@@ -108,10 +116,10 @@ They run the real frontend against `e2e/support/mockBackend.ts`; CI runs them on
 - **`CM-026`** sets the checklist answer in the mock itself, so it tests the re-render, not the rule.
 - **`DI-045`** forces a case-match state the backend no longer produces for that document.
 
-**Overlap to merge** (keep every test ID as a tag): upload `DI-007/011/015`, `DI-008` into `DT-031`, `DI-002 – DI-006`, the three fill-UEN-and-save tests, `DI-032/034`, `CM-003/005`, `MA-005/007/009`, `CM-025/028/029`.
+**Overlap to merge** (keep every test ID as a tag): upload `DI-007/011/015`, `DI-008` into `DT-031`, `DI-002 – DI-006`, the three fill-UEN-and-save tests, `DI-032/034`, `CM-003/005`, `MA-005/007/009`, `CM-025/028/029`; in `notes`, the first two tests and `CM-031 – CM-036` (and their backend twins, `test_notes` and `test_regression_notes`).
 
 **Structure:**
-- `mockBackend.ts` re-implements some backend rules, so it can drift. Two fixtures are kept in step by backend tests (`test_regression_fixtures.py`).
+- `mockBackend.ts` re-implements some backend rules, so it can drift. Three fixtures are kept in step by backend tests (`test_regression_fixtures.py`, and `case-risk-sprint4.json` by `test_regression_case_risk`). Known drift: an unanalysed case's 404 says "No analysis has been run for this case" (the server says "This case has not been analysed."), and `analysis_ready` is set by each spec by hand instead of computed from the documents' statuses as `case_pipeline/readiness.py` does.
 - Selectors are CSS classes and roles; there are no `data-testid`s.
 - There are no frontend unit tests (no Vitest), so helpers like `useCaseSnapshot` and `canApprove` are only tested through the browser.
 - `/dashboard` is mock data, so there's nothing real to test there yet.
@@ -126,7 +134,8 @@ In the suggested order: 1 and 2 cover the documents the sponsor weights highest;
 | 2 | **Cross-document transaction tools** (section 2), on a `ToolKit` built from `build_context` as `test_company_identity` does | The payslip-to-bank-credit evidence has no test | M |
 | 3 | **More infrastructure checks in CI:** Kong config parse, compose config, dashboard PromQL and provisioning, image builds, the generated API type checks (the table in section 3) | Each has broken silently once and been caught by hand | S-M |
 | 4 | **Tests for the service-code gaps** in section 3: push token 401s, the approve rollback, trace propagation, the LLM callback and `/metrics`, `flush_pending_syncs`, the two `/audit` routes | The cloud behaviour is otherwise checked only by hand | M |
-| 5 | **Playwright:** the case analysis card; cancel and retry for detection and documents (the mock already supports them); login failure and redirect; the triage chip and a faithful `DI-045`; merge the overlaps; add `data-testid`s | Fills the biggest UI gaps | M-L |
+| 5 | **Playwright:** the stale analysis notice; cancel and retry for detection, cancel for documents (the mock already supports them); login failure and redirect; the triage chip and a faithful `DI-045`; merge the overlaps; add `data-testid`s | Fills the biggest UI gaps | M-L |
 | 6 | **Repository tests on an in-memory fake Supabase client,** asserting stored state instead of mock call chains. Start with `test_document_repository` and `test_extracted_fields_repository` (most mock asserts) | The biggest brittleness left | L |
 | 7 | **Vitest** for the pure frontend helpers (`useCaseSnapshot`, `canApprove`) | Logic with no test below the browser | M |
 | 8 | **Read CI's coverage report** (the "Show coverage report" step lists the least-covered modules first), then add tests where it shows holes (start with `query_stats`, `telemetry`, `vision_tool`, `metrics`, `case_pipeline/risk/summary`) | Turns "no test names it" into facts | M |
+| 9 | **Tidy the Sprint 4 regression files** (section 1): real check codes in the risk fixture, one tag per test case ID, the shared harnesses in `tests/support/`, the mock's 404 text and computed `analysis_ready` | Keeps the regression sheet's mapping honest and the harnesses safe to grow | S |
