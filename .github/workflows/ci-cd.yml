@@ -4,6 +4,11 @@ on:
   push:
     branches:
       - main
+    # A push of only docs or workflow files neither tests nor redeploys anything.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/workflows/**'
   pull_request:
   workflow_dispatch:
 
@@ -29,6 +34,11 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.13'
+          # pip's download cache, reused until either file changes.
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/pyproject.toml
 
       # Cached between runs, so apt-get update (the slow part) only runs when the cache is empty.
       - name: Install exiftool (the metadata and AI-provenance tests need it)
@@ -111,6 +121,10 @@ jobs:
       - name: Lint frontend
         run: npm run lint
 
+      # vite build doesn't type-check, so a type error would otherwise ship.
+      - name: Type-check frontend
+        run: npm run typecheck
+
       - name: Build frontend
         run: npm run build
 
@@ -128,11 +142,10 @@ jobs:
           retention-days: 14
 
   security:
-    # Non-blocking until the first findings are reviewed (CLOUD_ARCHITECTURE_PLAN.md section 6); then
-    # remove continue-on-error so a high-severity finding fails the build.
+    # Blocking: a high-severity finding fails the build and stops the deploy. Findings that don't apply are
+    # skipped inline with a reason (#checkov:skip=...), never by making this job optional.
     name: Security (Checkov, Snyk)
     runs-on: ubuntu-latest
-    continue-on-error: true
     env:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
@@ -184,3 +197,38 @@ jobs:
           python -m pip install pip-audit
           pip-audit -r backend/requirements.txt
           cd frontend && npm ci && npm audit --audit-level=high
+
+  terraform:
+    # Format and validity only: no state, no credentials. `apply` stays a manual step (deploy/terraform/README.md).
+    name: Terraform (fmt, validate)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy/terraform
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          # The version `terraform apply` runs with locally; keep them the same.
+          terraform_version: 1.16.6
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive
+
+      - name: terraform validate
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+  deploy:
+    # Continuous deployment: every push to main whose checks all pass goes to Cloud Run.
+    name: Deploy to Cloud Run
+    needs: [backend-ci, frontend-ci, security, terraform]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      id-token: write # Workload Identity Federation, used inside deploy.yml
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit

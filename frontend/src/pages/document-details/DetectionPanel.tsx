@@ -10,6 +10,7 @@ export function DetectionPanel({
   isApproved,
   isRetryingDetection,
   isCancellingDetection,
+  cancelError,
   isRefreshingDetection,
   refreshDetectionReport,
   handleRetryDetection,
@@ -26,6 +27,7 @@ export function DetectionPanel({
   isApproved: boolean;
   isRetryingDetection: boolean;
   isCancellingDetection: boolean;
+  cancelError: string | null;
   isRefreshingDetection: boolean;
   refreshDetectionReport: () => void | Promise<void>;
   handleRetryDetection: () => void | Promise<void>;
@@ -36,11 +38,11 @@ export function DetectionPanel({
   handleRunIndividualCheck: (checkId: IndividualCheckId) => void | Promise<void>;
 }) {
   return (
-        <section className="details-card" style={{ fontFamily: 'monospace', fontSize: '0.85em', position: 'relative' }}>
+        <section className="details-card debug-card">
           <RefreshButton isRefreshing={isRefreshingDetection} onClick={() => void refreshDetectionReport()} label="detection" />
-          <h2 style={{ marginTop: 0 }}>Detection</h2>
+          <h2>Detection</h2>
         {detectionError && (
-          <p style={{ color: 'crimson' }}>{detectionError}</p>
+          <p className="debug-error">{detectionError}</p>
         )}
         {status === 'rejected' ? (
           // Reject only works on an extracted, unapproved document, so a rejected one has never been scanned.
@@ -69,6 +71,7 @@ export function DetectionPanel({
                 </button>
               )
             )}
+            {cancelError && <p className="debug-error">{cancelError}</p>}
           </>
         ) : (
           <>
@@ -129,7 +132,7 @@ export function DetectionPanel({
           </>
         )}
 
-        <h3 style={{ marginBottom: '0.25em' }}>Run an individual check</h3>
+        <h3>Run an individual check</h3>
         {status === 'rejected' ? (
           <p>Not available for rejected documents.</p>
         ) : detectionSkipped && !detectionReport ? (
@@ -138,7 +141,7 @@ export function DetectionPanel({
           <p>Run full detection above first — individual checks unlock once a report exists.</p>
         ) : (
           <>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5em' }}>
+            <div className="debug-actions">
               {INDIVIDUAL_DETECTION_CHECKS.map((check) => (
                 <button
                   key={check.id}
@@ -151,13 +154,13 @@ export function DetectionPanel({
               ))}
             </div>
             {individualCheckError && (
-              <p style={{ color: 'crimson' }}>{individualCheckError}</p>
+              <p className="debug-error">{individualCheckError}</p>
             )}
             {INDIVIDUAL_DETECTION_CHECKS.map((check) =>
               individualCheckResults[check.id] !== undefined ? (
-                <details key={check.id} style={{ marginTop: '0.5em' }}>
+                <details key={check.id} className="debug-section">
                   <summary>{check.label} result</summary>
-                  <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                  <pre className="debug-json">
                     {JSON.stringify(individualCheckResults[check.id], null, 2)}
                   </pre>
                 </details>

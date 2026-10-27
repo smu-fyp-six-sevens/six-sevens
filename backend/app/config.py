@@ -122,6 +122,8 @@ class Settings:
 
     # Threads for PDF/OCR/forensic work (cpu_pool.py). 1 = PyMuPDF only ever runs on one thread.
     CPU_WORKER_CONCURRENCY: int = int(os.environ.get("CPU_WORKER_CONCURRENCY", "1"))
+    # Processes for that work instead (each with its own PyMuPDF); 0 keeps the thread. Set on the deployed workers.
+    CPU_WORKER_PROCESSES: int = int(os.environ.get("CPU_WORKER_PROCESSES", "0"))
     # Detection runs (lead + 3 specialists each) allowed at once; the rest wait their turn.
     DETECTION_CONCURRENCY: int = int(os.environ.get("DETECTION_CONCURRENCY", "2"))
     # Most model calls one detection run may make (lead, specialists, reviews, binders). Past it the run

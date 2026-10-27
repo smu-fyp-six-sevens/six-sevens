@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from . import extracted_fields_repository, finding_reviews_repository, notes_repository, storage_service
 from .models import DocumentRecord, DocumentStatus
 from .supabase_client import service_supabase_client, supabase_client
-from .supabase_rows import row as _row
+from .supabase_rows import fetch_all, row as _row
 
 logger = logging.getLogger(__name__)
 
@@ -495,3 +495,24 @@ def list_documents(
     result = query.execute()
     documents = [DocumentRecord(**_row(row)) for row in result.data]
     return _attach_extracted_fields(documents) if include_fields else documents
+
+
+# What the case queue's status rollup reads (the status and monitoring.is_stuck's timestamps).
+_STATUS_COLUMNS = "id, case_id, filename, status, retry_count, uploaded_at, queued_at, processing_started_at"
+_CASE_CHUNK = 100
+
+
+def list_document_statuses(case_ids: list[str]) -> list[DocumentRecord]:
+    """These cases' documents with only their status columns, a query per 100 cases (and per 1,000 documents)."""
+    documents: list[DocumentRecord] = []
+    for start in range(0, len(case_ids), _CASE_CHUNK):
+        chunk = case_ids[start : start + _CASE_CHUNK]
+        rows = fetch_all(lambda: supabase_client.table("documents").select(_STATUS_COLUMNS).in_("case_id", chunk), "id")
+        documents.extend(DocumentRecord(**item) for item in rows)
+    return documents
+
+
+def list_all_document_statuses() -> list[DocumentRecord]:
+    """Every document's status columns, a page of 1,000 per query: what the queue's status counts roll up."""
+    rows = fetch_all(lambda: supabase_client.table("documents").select(_STATUS_COLUMNS), "id")
+    return [DocumentRecord(**item) for item in rows]

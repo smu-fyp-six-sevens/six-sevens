@@ -11,7 +11,8 @@ import re
 from dataclasses import dataclass, field
 
 from ...identifiers import COMPANY_ONLY_DOCUMENT_TYPES, Person, id_key, individual_names_match, linked_people
-from ...fraud_detection.numerical_validation.common import _decode, _parse_field_date
+from ...fraud_detection.numerical_validation.common import _parse_field_date
+from ...fraud_detection.shared.field_values import decode_field_value
 from .evidence import CaseContext, DocView
 
 # Every document that names a person is compared with every other (an NRIC, a credit report, a payslip, the
@@ -68,7 +69,7 @@ _ATTRIBUTES = (
 
 
 def _stated(view: DocView, name: str) -> str | None:
-    value = _decode(view.fields.get(name))
+    value = decode_field_value(view.fields.get(name))
     return str(value).strip() if value not in (None, "") and not isinstance(value, (list, dict)) else None
 
 

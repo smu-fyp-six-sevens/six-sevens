@@ -5,7 +5,16 @@ from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.models import CaseDocumentsStatus, CaseRecord, CaseSummary, DocumentStatus
+from app.models import (
+    CaseCounts,
+    CaseDocumentsStatus,
+    CaseListItem,
+    CaseListPage,
+    CaseRecord,
+    CaseSearchResult,
+    CaseSummary,
+    DocumentStatus,
+)
 
 
 client = TestClient(app)
@@ -95,28 +104,130 @@ def test_get_case_db_failure_returns_502() -> None:
     assert response.status_code == 502
 
 
+def _make_item(case_id: str, documents_status: CaseDocumentsStatus) -> CaseListItem:
+    return CaseListItem(**_make_case(case_id).model_dump(), documents_status=documents_status)
+
+
 def test_list_cases() -> None:
     with patch("app.routers.cases.case_service") as mock_case_service:
-        mock_case_service.list_case_summaries.return_value = [
-            _make_summary("case-1", CaseDocumentsStatus.ANALYZED),
-            _make_summary("case-2", CaseDocumentsStatus.STUCK),
-        ]
+        mock_case_service.list_cases_page.return_value = CaseListPage(
+            items=[_make_item("case-1", CaseDocumentsStatus.ANALYZED), _make_item("case-2", CaseDocumentsStatus.STUCK)],
+            total=40, limit=25, offset=0,
+        )
 
         response = client.get("/cases")
 
     assert response.status_code == 200
     body = response.json()
-    assert len(body) == 2
-    assert body[1]["documents_status"] == "stuck"
+    assert (body["total"], body["limit"], body["offset"]) == (40, 25, 0)
+    assert body["items"][1]["documents_status"] == "stuck"
+    # Nothing asked for: the first 25, newest first, no filter.
+    mock_case_service.list_cases_page.assert_called_once_with(
+        limit=25, offset=0, sort="newest", statuses=[], risks=[], q=None,
+    )
+
+
+def test_list_cases_passes_the_page_sort_filter_and_search_through() -> None:
+    with patch("app.routers.cases.case_service") as mock_case_service:
+        mock_case_service.list_cases_page.return_value = CaseListPage(items=[], total=0, limit=10, offset=20)
+
+        response = client.get(
+            "/cases?limit=10&offset=20&sort=risk&status=stuck&status=failed&risk=High&risk=unscored&q=acme"
+        )
+
+    assert response.status_code == 200
+    mock_case_service.list_cases_page.assert_called_once_with(
+        limit=10, offset=20, sort="risk",
+        statuses=[CaseDocumentsStatus.STUCK, CaseDocumentsStatus.FAILED], risks=["High", "unscored"], q="acme",
+    )
+
+
+def test_list_cases_accepts_the_lowest_risk_order_and_rejects_an_unknown_risk_level() -> None:
+    with patch("app.routers.cases.case_service") as mock_case_service:
+        mock_case_service.list_cases_page.return_value = CaseListPage(items=[], total=0, limit=25, offset=0)
+
+        accepted = client.get("/cases?sort=lowest_risk")
+        rejected = client.get("/cases?risk=Severe")
+
+    assert (accepted.status_code, rejected.status_code) == (200, 422)
+
+
+def test_list_cases_rejects_a_page_outside_its_limits() -> None:
+    with patch("app.routers.cases.case_service") as mock_case_service:
+        responses = [
+            client.get("/cases?limit=0"),
+            client.get("/cases?limit=101"),
+            client.get("/cases?offset=-1"),
+            client.get("/cases?sort=cheapest"),
+            client.get("/cases?status=open"),
+            client.get("/cases?q=" + "x" * 101),
+        ]
+
+    assert [r.status_code for r in responses] == [422] * 6
+    mock_case_service.list_cases_page.assert_not_called()
 
 
 def test_list_cases_db_failure_returns_502() -> None:
     with patch("app.routers.cases.case_service") as mock_case_service:
-        mock_case_service.list_case_summaries.side_effect = RuntimeError("connection refused")
+        mock_case_service.list_cases_page.side_effect = RuntimeError("connection refused")
 
         response = client.get("/cases")
 
     assert response.status_code == 502
+
+
+def test_case_counts() -> None:
+    with patch("app.routers.cases.case_service") as mock_case_service:
+        mock_case_service.case_counts.return_value = CaseCounts(total=3, by_status={"analyzed": 2, "stuck": 1})
+
+        response = client.get("/cases/counts")
+
+    # "counts" is a path of its own, not a case id.
+    assert response.status_code == 200
+    assert response.json() == {"total": 3, "by_status": {"analyzed": 2, "stuck": 1}}
+    mock_case_service.get_case_summary.assert_not_called()
+
+
+def test_search_cases() -> None:
+    with patch("app.routers.cases.case_service") as mock_case_service:
+        mock_case_service.search_cases.return_value = CaseSearchResult(items=[_make_case("case-1")], total=12)
+
+        response = client.get("/cases/search?q=acme&limit=5")
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 12
+    assert response.json()["items"][0]["id"] == "case-1"
+    mock_case_service.search_cases.assert_called_once_with("acme", 5)
+
+
+def test_search_cases_defaults_to_eight_and_rejects_too_many() -> None:
+    with patch("app.routers.cases.case_service") as mock_case_service:
+        mock_case_service.search_cases.return_value = CaseSearchResult(items=[], total=0)
+
+        assert client.get("/cases/search").status_code == 200
+        assert client.get("/cases/search?limit=51").status_code == 422
+
+    mock_case_service.search_cases.assert_called_once_with(None, 8)
+
+
+def test_get_case_by_number() -> None:
+    with patch("app.routers.cases.case_service") as mock_case_service:
+        mock_case_service.get_case_item.return_value = _make_item("case-1", CaseDocumentsStatus.ANALYZED)
+
+        response = client.get("/cases/by-number/GLDB-1")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == "case-1"
+    mock_case_service.get_case_item.assert_called_once_with("GLDB-1")
+
+
+def test_get_case_by_number_unknown_is_404() -> None:
+    with patch("app.routers.cases.case_service") as mock_case_service:
+        mock_case_service.get_case_item.return_value = None
+
+        response = client.get("/cases/by-number/GLDB-404")
+
+    assert response.status_code == 404
 
 
 # --- PATCH /cases/{case_id} (officer renaming a case) -------------------

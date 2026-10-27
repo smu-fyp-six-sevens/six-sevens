@@ -1,7 +1,7 @@
 .dropzone {
   border: 1.5px dashed #b7af9c;
   border-radius: 10px;
-  background: #fffefb;
+  background: var(--orange-99);
   padding: 28px 20px;
   text-align: center;
   cursor: pointer;
@@ -11,7 +11,7 @@
 .dropzone:hover,
 .dropzone--dragging {
   border-color: var(--steel);
-  background: #fbfaf6;
+  background: var(--orange-97);
 }
 
 .dropzone--dragging {
@@ -52,7 +52,7 @@
 }
 
 .file-row {
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px 14px;
@@ -66,7 +66,7 @@
   height: 32px;
   border-radius: 6px;
   background: var(--ink);
-  color: #fff;
+  color: var(--white);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -139,7 +139,7 @@
 }
 
 .badge.pending {
-  background: #eeede7;
+  background: var(--sand-92);
   color: var(--ink-soft);
 }
 
@@ -176,7 +176,7 @@
   gap: 16px;
   margin-top: 14px;
   padding: 12px 14px;
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 8px;
 }
@@ -198,7 +198,7 @@
 }
 
 .upload-btn:disabled {
-  background: #b9c2ce;
+  background: var(--slate-77);
   cursor: not-allowed;
 }
 
@@ -252,8 +252,8 @@
   font-size: 9.5px;
   padding: 2.5px 7px;
   border-radius: 10px;
-  background: #eeede7;
-  color: #9ba2ae;
+  background: var(--sand-92);
+  color: var(--slate-65a);
   white-space: nowrap;
 }
 
@@ -263,7 +263,7 @@
 }
 
 .pstage.pending {
-  background: #eeede7;
+  background: var(--sand-92);
   color: var(--ink-soft);
 }
 
@@ -283,20 +283,95 @@
 
 .shell--upload {
   width: calc(100% - 48px);
+  /* The usual 60px of room under the page would make a page that fits still scroll. */
+  padding-bottom: 24px;
 }
 
-/* Case page: section nav on the left, one section shown at a time. */
+/* Case page: section nav on the left (collapsible to its icons), one section shown at a time. */
 .case-layout {
+  --case-nav-width: 236px;
+
   display: grid;
-  grid-template-columns: 236px minmax(0, 1fr);
+  grid-template-columns: var(--case-nav-width) minmax(0, 1fr);
   margin-top: 24px;
   gap: 36px;
   align-items: start;
 }
 
+.case-layout--collapsed {
+  --case-nav-width: 52px;
+}
+
 .case-nav {
   position: sticky;
-  top: calc(var(--topbar-height) + 24px);
+  top: calc(var(--topbar-height) + var(--case-header-height) + 24px);
+}
+
+.case-nav-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.case-nav-toggle:hover {
+  background: rgba(61, 90, 128, 0.08);
+  color: var(--ink);
+}
+
+.case-nav-toggle:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 1px;
+}
+
+.case-nav-toggle svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.case-layout--collapsed .case-nav-toggle {
+  justify-content: center;
+  padding: 7px 0;
+}
+
+.case-layout--collapsed .case-nav-toggle-label,
+.case-layout--collapsed .case-nav-text {
+  display: none;
+}
+
+.case-layout--collapsed .case-nav-item {
+  justify-content: center;
+  min-height: 40px;
+  padding: 8px 0;
+}
+
+.case-layout--collapsed .case-nav-item .case-nav-icon {
+  position: relative;
+  align-self: center;
+  margin-top: 0;
+}
+
+/* A collapsed item has no status line, so its dot sits on the icon. */
+.case-nav-badge {
+  position: absolute;
+  top: -3px;
+  right: -6px;
+  box-shadow: 0 0 0 2px var(--paper);
 }
 
 .case-nav ul {
@@ -323,6 +398,11 @@
   font-size: 14.5px;
   text-align: left;
   cursor: pointer;
+}
+
+/* An item with no status line under its label (Notes, Audit Trail, Claude Cost) needs less height. */
+.case-nav-item:not(:has(.case-nav-status)) {
+  min-height: 40px;
 }
 
 .case-nav-item:hover {
@@ -413,11 +493,11 @@
 }
 
 .case-nav-dot--risk-high {
-  background: #c4442a;
+  background: var(--red-47);
 }
 
 .case-nav-dot--risk-critical {
-  background: #7f1414;
+  background: var(--red-29);
 }
 
 @keyframes case-nav-pulse {
@@ -436,22 +516,40 @@
   min-width: 0;
 }
 
-/* Same columns as .case-layout: the breadcrumbs sit over the section nav and the
-   case number + company name (the page title) start in line with each section's heading. */
+/* The top bar's usual gap below it would make the header taller at the top of the page than when stuck. */
+.app-header:has(~ .case-header) {
+  margin-bottom: 0;
+}
+
+/* One short row, the same height at the top of the page and stuck under the top bar while it scrolls.
+   Same columns as .case-layout (at its expanded width): the breadcrumbs sit over the section nav and the
+   company name (the page title) starts in line with each section's heading. */
 .case-header {
+  position: sticky;
+  top: var(--topbar-height);
+  z-index: 15;
   display: grid;
   grid-template-columns: 236px minmax(0, 1fr);
   column-gap: 36px;
-  align-items: start;
-  padding-bottom: 20px;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: var(--case-header-height);
+  padding: 8px 0;
+  background: var(--paper);
   border-bottom: 1px solid var(--line);
+}
+
+@media (max-width: 860px) {
+  .case-header {
+    position: static;
+  }
 }
 
 /* Breadcrumbs (components/Breadcrumbs.tsx): the case number and filename are switchers that list
    the other items at their level. Offset to sit on the company name's first line. */
 .breadcrumbs {
   min-width: 0;
-  margin-top: 7px;
+  flex: 0 1 auto;
 }
 
 .breadcrumbs ol {
@@ -627,7 +725,7 @@
   margin: 0;
   padding: 6px;
   list-style: none;
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 10px;
   box-shadow: 0 12px 32px rgba(18, 32, 61, 0.16);
@@ -678,9 +776,10 @@
 
 .case-title-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
+  min-width: 0;
 }
 
 .case-title-editing {
@@ -712,10 +811,12 @@
 }
 
 .case-title h1 {
-  font-size: 28px;
+  font-size: 22px;
   margin: 0;
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .case-title .add-field-form-actions {
@@ -730,12 +831,12 @@
   padding: 0 8px;
   /* Cancels the border so switching to edit mode doesn't shift the page. */
   margin: -1px 0;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--slate-84);
   border-radius: 6px;
-  background: #ffffff;
+  background: var(--white);
   color: var(--ink);
   font: inherit;
-  font-size: 28px;
+  font-size: 22px;
   font-weight: 700;
   line-height: 1.2;
   letter-spacing: -0.01em;
@@ -743,7 +844,7 @@
 
 .case-title-input:focus {
   outline: none;
-  border-color: #6b7280;
+  border-color: var(--slate-46);
   box-shadow: 0 0 0 2px rgba(107, 114, 128, 0.12);
 }
 
@@ -775,7 +876,7 @@
 .upload-sidebar {
   position: sticky;
   top: calc(var(--topbar-height) + 24px);
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 9px;
   padding: 16px;
@@ -898,7 +999,7 @@
   }
 }
 
-.mock-badge {
+.live-badge {
   font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
   font-size: 9.5px;
   padding: 2.5px 7px;
@@ -910,7 +1011,7 @@
   gap: 5px;
 }
 
-.mock-badge::before {
+.live-badge::before {
   content: '';
   width: 6px;
   height: 6px;
@@ -918,12 +1019,12 @@
   background: var(--amber);
 }
 
-.mock-badge.live {
+.live-badge.live {
   background: var(--teal-bg);
   color: var(--teal);
 }
 
-.mock-badge.live::before {
+.live-badge.live::before {
   background: var(--teal);
   animation: live-pulse 1.6s ease-in-out infinite;
 }
@@ -941,16 +1042,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mock-badge.live::before {
+  .live-badge.live::before {
     animation: none;
   }
-}
-
-.mock-failure-reason {
-  margin: 4px 0 0;
-  font-size: 11px;
-  color: var(--red);
-  white-space: pre-wrap;
 }
 
 .fulfils-row {
@@ -974,71 +1068,6 @@
   white-space: nowrap;
 }
 
-.mock-evidence {
-  margin: 8px 0 0;
-  padding-left: 18px;
-  font-size: 12px;
-  color: var(--ink-soft);
-  line-height: 1.6;
-}
-
-.mock-note {
-  margin: 8px 0 0;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: var(--teal-bg);
-  color: var(--teal);
-  font-size: 11.5px;
-  line-height: 1.5;
-}
-
-.mock-note.warning {
-  background: var(--amber-bg);
-  color: var(--amber);
-}
-
-.mock-classification-row {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-}
-
-.mock-classification-row:first-of-type {
-  border-top: none;
-  padding-top: 0;
-}
-
-.mock-filename {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ink);
-}
-
-.mock-classification {
-  display: flex;
-  gap: 24px;
-  margin-top: 6px;
-}
-
-.mock-classification > div {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.mock-label {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ink-soft);
-}
-
-.mock-value {
-  font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
-  font-size: 13px;
-  color: var(--ink);
-}
-
 .page-tabs {
   display: flex;
   gap: 6px;
@@ -1053,7 +1082,7 @@
   padding: 5px 10px;
   border-radius: 20px;
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--white);
   color: var(--ink-soft);
   cursor: pointer;
   white-space: nowrap;
@@ -1067,13 +1096,13 @@
 .page-tab--active {
   background: var(--steel);
   border-color: var(--steel);
-  color: #fff;
+  color: var(--white);
 }
 
 .extraction-text-panel {
   margin: 8px 0 0;
   padding: 12px 14px;
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 8px;
   font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
@@ -1090,7 +1119,7 @@
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
-  background: #fff;
+  background: var(--white);
 }
 
 .kv-row {
@@ -1129,7 +1158,7 @@
   font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
   font-size: 12px;
   color: var(--ink);
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 5px;
   padding: 4px 7px;
@@ -1170,7 +1199,7 @@
     font-size: 16px;
   }
 
-  /* Sign out stays; the officer name doesn't fit beside the brand. */
+  /* The avatar stays as the menu's button; the officer name doesn't fit beside the brand. */
   .officer-name {
     display: none;
   }

@@ -731,7 +731,7 @@ def test_case_snapshot_includes_case_match_computed_from_plain_fields() -> None:
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = docs
         trace.get_detection_states.return_value = ({}, set())
-        analyses.get_latest_many.return_value = {}
+        analyses.get_latest_summary.return_value = None
         # Enrichment rewrites extracted_fields into {value, confidence}
         # wrappers — the case match must not see that shape.
         fields_repo.get_extracted_fields_for_documents.return_value = stored

@@ -11,7 +11,7 @@ from collections import deque
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 
-from .. import document_repository, events, metrics, query_stats
+from .. import document_repository, events, query_stats
 from ..config import settings
 from ..events import Event, Stopwatch, types
 from ..langgraph import pipeline as langgraph_pipeline
@@ -22,9 +22,7 @@ logger = logging.getLogger("classifier_pipeline.doc_worker")
 
 _ACTOR = "doc-worker"
 _slots = asyncio.Semaphore(settings.QUEUE_WORKER_CONCURRENCY)
-# document_id -> the task running it here, so an officer's cancel can interrupt it.
-_active: dict[str, asyncio.Task] = {}
-_officer_cancels: set[str] = set()
+_runs = recovery.RunTracker("document")
 # Failures with no document row to write to; lost on restart.
 _recent_errors: deque[ProcessingErrorEntry] = deque(maxlen=100)
 
@@ -69,35 +67,23 @@ async def _cancelled_elsewhere(document_id: str) -> bool:
     return document is not None and document.status == DocumentStatus.CANCELLED
 
 
-def _note_remote_cancel(document_id: str) -> None:
-    _officer_cancels.add(document_id)
-    metrics.cancels_seen_remotely.labels("document").inc()
-
-
 async def _run(document_id: str, work: Callable[[], Awaitable[None]], label: str, kind: str = "document") -> None:
     """`label` names the unit in the perf log; `kind` is its work label in the cost metrics."""
-    task = asyncio.current_task()
-    watcher: asyncio.Task | None = None
-    if task is not None:
-        _active[document_id] = task
-        # The cancel route writes CANCELLED; a run in another instance notices it here.
-        watcher = asyncio.create_task(recovery.cancel_when(
-            task, lambda: _cancelled_elsewhere(document_id), lambda: _note_remote_cancel(document_id),
-        ))
     timer = Stopwatch()
     usage: dict[str, float | int] = {}
     try:
-        async with _slots:
-            with query_stats.scope(f"{label} doc={document_id[:8]}", work=kind) as unit:
-                try:
-                    await work()
-                finally:
-                    usage = unit.llm_detail()
+        # The cancel route writes CANCELLED; a run in another instance notices it here.
+        with _runs.track(document_id, lambda: _cancelled_elsewhere(document_id)):
+            async with _slots:
+                with query_stats.scope(f"{label} doc={document_id[:8]}", work=kind) as unit:
+                    try:
+                        await work()
+                    finally:
+                        usage = unit.llm_detail()
     except asyncio.CancelledError:
-        if document_id not in _officer_cancels:
+        if not _runs.cancelled_by_officer(document_id):
             raise
         # The officer's cancel already wrote CANCELLED and its own event.
-        _officer_cancels.discard(document_id)
         logger.info("Processing of document %s was cancelled", document_id)
         return
     except Exception as exc:
@@ -110,10 +96,6 @@ async def _run(document_id: str, work: Callable[[], Awaitable[None]], label: str
             )
         except Exception:
             logger.exception("Failed to mark document %s FAILED after an unhandled error", document_id)
-    finally:
-        _active.pop(document_id, None)
-        if watcher is not None:
-            watcher.cancel()
     await _announce(document_id, timer, {"run": kind, **usage})
 
 
@@ -155,10 +137,7 @@ async def on_retyped(event: Event) -> None:
 
 async def on_cancelled(event: Event) -> None:
     """Interrupts the run if it is in this process. Elsewhere, its compare-and-swap writes no longer match."""
-    task = _active.get(event.document_id or "")
-    if task is not None and not task.done() and event.document_id is not None:
-        _officer_cancels.add(event.document_id)
-        task.cancel()
+    _runs.cancel(event.document_id)
 
 
 async def on_recovery_requested(event: Event) -> None:

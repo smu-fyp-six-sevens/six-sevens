@@ -22,9 +22,7 @@ logger = logging.getLogger("classifier_pipeline.detection_worker")
 _ACTOR = "detection-worker"
 # A bulk approval waits here instead of starting every detection graph at once.
 _slots = asyncio.Semaphore(settings.DETECTION_CONCURRENCY)
-# document_id -> its running detection task here, so an officer's cancel can interrupt it.
-_active: dict[str, asyncio.Task] = {}
-_officer_cancels: set[str] = set()
+_runs = recovery.RunTracker("detection")
 
 
 async def _cancel_requested_since(document_id: str, since: datetime) -> bool:
@@ -32,38 +30,25 @@ async def _cancel_requested_since(document_id: str, since: datetime) -> bool:
     return bool(found)
 
 
-def _note_remote_cancel(document_id: str) -> None:
-    _officer_cancels.add(document_id)
-    metrics.cancels_seen_remotely.labels("detection").inc()
-
-
 async def run(document_id: str, case_id: str | None) -> None:
     """One detection run, its end event, and a live refresh. An interrupted run goes back to approved, retryable."""
-    task = asyncio.current_task()
     timer = Stopwatch()
-    watcher: asyncio.Task | None = None
-    if task is not None:
-        _active[document_id] = task
-        # The cancel event is the flag: the audit trail shows one made through another instance.
-        watcher = asyncio.create_task(recovery.cancel_when(
-            task, lambda: _cancel_requested_since(document_id, timer.started_at),
-            lambda: _note_remote_cancel(document_id),
-        ))
     outcome: Outcome = "success"
     detail: dict[str, Any] = {}
     usage: dict[str, float | int] = {}
     try:
-        async with _slots:
-            with query_stats.scope(f"detection doc={document_id[:8]}", work="detection") as unit:
-                try:
-                    result = await run_detection(document_id)
-                finally:
-                    usage = unit.llm_detail()
+        # The cancel event is the flag: the audit trail shows one made through another instance.
+        with _runs.track(document_id, lambda: _cancel_requested_since(document_id, timer.started_at)):
+            async with _slots:
+                with query_stats.scope(f"detection doc={document_id[:8]}", work="detection") as unit:
+                    try:
+                        result = await run_detection(document_id)
+                    finally:
+                        usage = unit.llm_detail()
         detail = {"verdict": result.get("verdict"), "findings": len(result.get("findings") or [])}
         metrics.detection_verdicts.labels(str(detail["verdict"] or "none")).inc()
     except asyncio.CancelledError:
-        by_officer = document_id in _officer_cancels
-        _officer_cancels.discard(document_id)
+        by_officer = _runs.cancelled_by_officer(document_id)
         # Not an Exception, so run_detection's own handler never ran; revert DETECTING -> APPROVED here.
         logger.info("Detection cancelled for document %s", document_id)
         reason = "Cancelled by loan officer" if by_officer else "Interrupted: the service was stopping"
@@ -76,9 +61,6 @@ async def run(document_id: str, case_id: str | None) -> None:
         logger.exception("Fraud detection failed for approved document %s", document_id)
         outcome, detail = "failed", {"error": f"{type(exc).__name__}: {exc}"[:300]}
     finally:
-        _active.pop(document_id, None)
-        if watcher is not None:
-            watcher.cancel()
         if case_id:
             await push_case_snapshot(case_id)
     await events.record(Event(
@@ -97,10 +79,7 @@ async def on_requested(event: Event) -> None:
 
 async def on_cancel_requested(event: Event) -> None:
     """Interrupts the run if it is in this process."""
-    task = _active.get(event.document_id or "")
-    if task is not None and not task.done() and event.document_id is not None:
-        _officer_cancels.add(event.document_id)
-        task.cancel()
+    _runs.cancel(event.document_id)
 
 
 async def on_recovery_requested(event: Event) -> None:

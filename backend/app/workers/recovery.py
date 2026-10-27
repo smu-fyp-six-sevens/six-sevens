@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterator
+from contextlib import contextmanager
 
 from .. import events, metrics
 from ..config import settings
@@ -53,3 +54,48 @@ async def cancel_when(task: asyncio.Task, cancelled: Callable[[], Awaitable[bool
                 return
         except Exception:
             logger.debug("Cancel check failed; trying again", exc_info=True)
+
+
+class RunTracker:
+    """A worker's runs in this process (document_id -> task), so an officer's cancel can interrupt one."""
+
+    def __init__(self, kind: str) -> None:
+        self._kind = kind  # label on the remote-cancel metric
+        self._active: dict[str, asyncio.Task] = {}
+        self._officer_cancels: set[str] = set()
+
+    @contextmanager
+    def track(self, document_id: str, cancelled: Callable[[], Awaitable[bool]]) -> Iterator[None]:
+        """Registers the current task and watches `cancelled` for a cancel made through another instance."""
+        task = asyncio.current_task()
+        watcher: asyncio.Task | None = None
+        if task is not None:
+            self._active[document_id] = task
+            watcher = asyncio.create_task(cancel_when(task, cancelled, lambda: self._note_remote_cancel(document_id)))
+        try:
+            yield
+        finally:
+            self._active.pop(document_id, None)
+            if watcher is not None:
+                watcher.cancel()
+
+    def _note_remote_cancel(self, document_id: str) -> None:
+        self._officer_cancels.add(document_id)
+        metrics.cancels_seen_remotely.labels(self._kind).inc()
+
+    def cancel(self, document_id: str | None) -> None:
+        """An officer's cancel: interrupts the run if it is in this process."""
+        task = self._active.get(document_id or "")
+        if task is not None and not task.done() and document_id is not None:
+            self._officer_cancels.add(document_id)
+            task.cancel()
+
+    def cancelled_by_officer(self, document_id: str) -> bool:
+        """Whether a CancelledError came from an officer's cancel (rather than shutdown); clears the mark."""
+        if document_id not in self._officer_cancels:
+            return False
+        self._officer_cancels.discard(document_id)
+        return True
+
+    def is_running(self, document_id: str) -> bool:
+        return document_id in self._active

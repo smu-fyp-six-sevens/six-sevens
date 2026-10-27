@@ -189,20 +189,19 @@ Each check module has its own test file under `backend/tests/`; `test_detection.
 
 ## 6. Known bugs: Detection Agent
 
-Found by reading the code (2026-10-05); statuses re-checked 2026-10-19. None has been reproduced in the app.
+Found by reading the code (2026-10-05); re-checked 2026-10-24. None has been reproduced in the app. Remove a row once it's fixed.
 
 | # | Severity | Where | What happens |
 |---|---|---|---|
 | 1 | Low | `graph.py` `_normalise_plan` | If the lead's JSON can't be parsed, every specialist runs with the generic brief and nothing records the lead's failure |
-| 2 | High | `routers/detection.py` cancel/retry, `DetectionPanel.tsx` | If a run is lost (server restart, dropped task) before recording an error, the panel shows "Scanning…" forever: cancel returns 409 (no task), retry returns 409 (needs a recorded error), and nothing can restart it |
+| 2 | Medium (local only) | `routers/detection.py` cancel/retry, `DetectionPanel.tsx` | If a run is lost before recording an error, cancel and retry both return 409. In the cloud the sweeper recovers a document `detecting` for over 15 minutes; locally (uvicorn, sweeper off) the panel shows "Scanning…" until `python -m app.sweeper --once --case <id>` is run |
 | 3 | Medium–High | `specialists.py` `_collect_node`, merge | An unassessed finding becomes `medium` and can flag a document and count towards case risk ("unreviewed"); it is no longer stored as a flag |
 | 4 | Medium | `tools.py` `metadata_tool` | Calls the synchronous `check_metadata_anomalies` inside an `async` function, blocking the event loop while it runs (the other tools use `asyncio.to_thread`) |
 | 5 | Medium | `tools.py` `_with_ids`, `specialists.py` `_collect_node` | Finding ids are numbered per tool call; if a specialist calls the same tool twice, `_collect_node` keys by id and silently overwrites the first, and the second-look lookup assumes unique ids |
-| 6 | Low | `routers/documents.py` `_run_detection_task` | Its `finally` removes `_detection_tasks[document_id]`; if a new run started meanwhile, cancel can no longer find it |
 | 7 | Low | `specialists.py` `_collect_node` | `uncertain` is set whenever no tool ran, even when the specialist correctly judged none applicable; the lead may read that as doubt about the document |
 
 Design questions: a second look can only raise severity (the merge keeps the highest), so it can never clear a finding; "call each tool at most once" is in the prompt but not enforced; a wrongly dismissed finding disappears from the lead's view and the report (the raw output stays on the trace and the panel lists each dismissal with its reason). Check how often real documents get dismissals before trusting this.
 
 ## 7. Synthetic fraud data: `backend/app/injection/`
 
-Generates the test data the checks are validated against: `injectors.py` (defect classes that inject layout, font, text and metadata manipulations into PDFs, on `pdf.py` and `field_text.py`), `schemas.py`, `service.py`, `store.py`. Exposed through `routers/injection.py`. It ships in the production API today (see `REFACTORING_AUDIT.md` §2.6).
+Generates the test data the checks are validated against: `injectors.py` (defect classes that inject layout, font, text and metadata manipulations into PDFs, on `pdf.py` and `field_text.py`), `schemas.py`, `service.py`, `store.py`. Exposed through `routers/injection.py`, mounted only in uvicorn mode; no image ships it.
