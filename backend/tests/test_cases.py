@@ -12,6 +12,7 @@ from app.models import (
     CaseListPage,
     CaseRecord,
     CaseSearchResult,
+    CaseStage,
     CaseSummary,
     DocumentStatus,
 )
@@ -132,13 +133,13 @@ def test_list_cases_passes_the_page_sort_filter_and_search_through() -> None:
         mock_case_service.list_cases_page.return_value = CaseListPage(items=[], total=0, limit=10, offset=20)
 
         response = client.get(
-            "/cases?limit=10&offset=20&sort=risk&status=stuck&status=failed&risk=High&risk=unscored&q=acme"
+            "/cases?limit=10&offset=20&sort=risk&status=failed&status=pending_review&risk=High&risk=unscored&q=acme"
         )
 
     assert response.status_code == 200
     mock_case_service.list_cases_page.assert_called_once_with(
         limit=10, offset=20, sort="risk",
-        statuses=[CaseDocumentsStatus.STUCK, CaseDocumentsStatus.FAILED], risks=["High", "unscored"], q="acme",
+        statuses=[CaseStage.FAILED, CaseStage.PENDING_REVIEW], risks=["High", "unscored"], q="acme",
     )
 
 
@@ -159,7 +160,7 @@ def test_list_cases_rejects_a_page_outside_its_limits() -> None:
             client.get("/cases?limit=101"),
             client.get("/cases?offset=-1"),
             client.get("/cases?sort=cheapest"),
-            client.get("/cases?status=open"),
+            client.get("/cases?status=stuck"),
             client.get("/cases?q=" + "x" * 101),
         ]
 

@@ -28,6 +28,7 @@ DETECTION_FAILED = "detection.failed"
 CASE_CREATED = "case.created"
 CASE_RENAMED = "case.renamed"
 CASE_DELETED = "case.deleted"
+CASE_FINALISED = "case.finalised"
 CASE_ANALYSIS_REQUESTED = "case.analysis.requested"
 CASE_ANALYSIS_COMPLETED = "case.analysis.completed"
 

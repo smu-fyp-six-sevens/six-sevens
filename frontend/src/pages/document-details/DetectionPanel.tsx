@@ -19,6 +19,7 @@ export function DetectionPanel({
   individualCheckError,
   individualCheckResults,
   handleRunIndividualCheck,
+  readOnly = false,
 }: {
   status: string;
   detectionError: string | null;
@@ -36,6 +37,8 @@ export function DetectionPanel({
   individualCheckError: string | null;
   individualCheckResults: Partial<Record<IndividualCheckId, unknown>>;
   handleRunIndividualCheck: (checkId: IndividualCheckId) => void | Promise<void>;
+  // A finalised case: the report shows, but detection can't be retried or cancelled.
+  readOnly?: boolean;
 }) {
   return (
         <section className="details-card debug-card">
@@ -60,7 +63,7 @@ export function DetectionPanel({
                 ? 'The last detection run did not finish.'
                 : 'Scanning… detection starts automatically once the document is approved.'}
             </p>
-            {detectionError ? (
+            {readOnly ? null : detectionError ? (
               <button type="button" disabled={isRetryingDetection} onClick={() => void handleRetryDetection()}>
                 {isRetryingDetection ? 'Retrying…' : 'Retry detection'}
               </button>

@@ -97,7 +97,7 @@ async def get_case_or_404(case_id: str) -> CaseRecord:
     return case
 
 
-FINALISED_DETAIL = "This case is finalised. Reopen it to make changes."
+FINALISED_DETAIL = "This case is finalised and view-only, so it can't be changed."
 
 
 def raise_if_finalised(case: CaseRecord) -> None:
@@ -106,7 +106,7 @@ def raise_if_finalised(case: CaseRecord) -> None:
 
 
 async def ensure_case_editable(case_id: str | None) -> None:
-    """A 409 when the case is finalised: it accepts no changes until an officer reopens it."""
+    """A 409 when the case is finalised: it is view-only and accepts no changes."""
     if case_id is None:
         return
     finalised = await to_thread_or_502(

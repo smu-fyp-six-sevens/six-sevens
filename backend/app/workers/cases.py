@@ -59,6 +59,8 @@ async def on_recovery_requested(event: Event) -> None:
         analysis_repository.fail_if_running, str(run_id), "The analysis stopped responding before it finished. Run it again.",
     )
     if failed:
+        if event.case_id is not None:
+            await analysis_service.sync_stage(event.case_id)
         await recovery.report(event, _ACTOR, types.RECOVERY_EXHAUSTED, "failed", reason="marked failed; not rerun automatically")
 
 

@@ -1,15 +1,55 @@
 /* =========================================================
-   Case Progress (stage and its history)
+   Stage tones: one colour per group of stages, by who acts next
+   (see caseStageTone in utils/caseStages.ts), shared by the case
+   queue's dots and the Case Status badge.
    ========================================================= */
 
-.case-stage-card > .case-stage-steps,
-.case-stage-card > .case-stage-history-title,
-.case-stage-card > .case-stage-history,
-.case-stage-card > .case-stage-empty,
-.case-stage-card > .case-stage-error,
-.case-stage-card > .case-stage-problem {
-  margin-left: 20px;
-  margin-right: 20px;
+/* --tone fills dots and the card's edge; --tone-ink is for text, dark enough to read on the tint even for the
+   lightest shade. A group's shades run light to deep in the order a case reaches them. */
+.tone-grey    { --tone: #8a93a6; --tone-ink: #4b5565; --tone-tint: #f2f4f7; --tone-border: #d5d9e0; }
+.tone-blue-1  { --tone: #6ea0e6; --tone-ink: #2f5fa8; --tone-tint: #edf3fc; --tone-border: #c4d8f5; }
+.tone-blue-2  { --tone: #1d4ed8; --tone-ink: #1d3f9e; --tone-tint: #e6edfc; --tone-border: #a9c0f2; }
+.tone-amber-1 { --tone: #f5c35c; --tone-ink: #8a5a00; --tone-tint: #fff8e8; --tone-border: #f6dc9e; }
+.tone-amber-2 { --tone: #f0a020; --tone-ink: #8a5300; --tone-tint: #fff3dd; --tone-border: #f5cf8a; }
+.tone-amber-3 { --tone: #d97706; --tone-ink: #8f4a05; --tone-tint: #fdeedb; --tone-border: #f0c48b; }
+.tone-amber-4 { --tone: #a85203; --tone-ink: #7a3a02; --tone-tint: #f9e6d6; --tone-border: #e2b08a; }
+.tone-green   { --tone: #1f7a4d; --tone-ink: #17603c; --tone-tint: #e8f5ee; --tone-border: #a7e3c5; }
+.tone-slate   { --tone: #1e3a5f; --tone-ink: #1e3a5f; --tone-tint: #e8edf3; --tone-border: #b7c4d4; }
+.tone-red     { --tone: #b33131; --tone-ink: #962626; --tone-tint: #fbeaea; --tone-border: #f0b8b8; }
+
+/* =========================================================
+   Case Status: where the case stands, what to do next, and a
+   slim track of the steps a case moves through.
+   ========================================================= */
+
+.case-status-card {
+  margin-bottom: 16px;
+  padding: 16px 20px 14px;
+  border-left: 4px solid var(--tone, var(--line));
+}
+
+.case-status-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.case-status-summary {
+  min-width: 0;
+}
+
+.case-status-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.case-status-heading h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
 }
 
 .case-stage-badge {
@@ -21,82 +61,118 @@
   font-weight: 600;
   border: 1px solid var(--tone-border, var(--line));
   background: var(--tone-tint, #eef1f6);
-  color: var(--tone, var(--steel-dark));
+  color: var(--tone-ink, var(--steel-dark));
 }
 
-.case-stage-steps {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.case-status-next {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.case-status-next--failed {
+  color: var(--red);
+  font-weight: 600;
+}
+
+.case-status-link {
+  margin-left: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--steel);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.case-status-link:hover {
+  text-decoration: underline;
+}
+
+.case-status-link:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* One dot per step on a line; the line before a step fills in once the case has reached it. */
+.case-status-track {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  margin: 14px 0 0;
   padding: 0;
   list-style: none;
-  margin-top: 0;
-  margin-bottom: 16px;
 }
 
-.case-stage-step {
-  padding: 4px 10px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  font-size: 12px;
-  color: var(--ink-soft);
-  background: #fff;
+.case-status-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  text-align: center;
 }
 
-.case-stage-step--done {
-  border-color: var(--teal-bg);
-  background: var(--teal-bg);
-  color: var(--teal);
+.case-status-step + .case-status-step::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  right: calc(50% + 11px);
+  left: calc(-50% + 11px);
+  height: 2px;
+  border-radius: 1px;
+  background: var(--line);
 }
 
-.case-stage-step--current {
-  border-color: var(--steel);
-  background: var(--steel);
-  color: #fff;
-  font-weight: 600;
+.case-status-step--done + .case-status-step::before {
+  background: var(--teal);
 }
 
-.case-stage-history-title {
-  margin-top: 0;
-  margin-bottom: 8px;
-  font-size: 13px;
+.case-status-step-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--line);
+  border-radius: 50%;
+  background: var(--white);
+  color: var(--white);
+  font-size: 10px;
   font-weight: 700;
-  color: var(--ink);
+  line-height: 1;
+  box-sizing: border-box;
 }
 
-.case-stage-history {
-  width: calc(100% - 40px);
-  margin-bottom: 18px;
-  border-collapse: collapse;
-  font-size: 12.5px;
-}
-
-.case-stage-history th,
-.case-stage-history td {
-  padding: 7px 8px;
-  border-bottom: 1px solid var(--line);
-  text-align: left;
-  color: var(--ink);
-}
-
-.case-stage-history th {
+.case-status-step-label {
   font-size: 11.5px;
-  font-weight: 600;
+  line-height: 1.25;
   color: var(--ink-soft);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
 }
 
-.case-stage-empty {
-  margin-top: 0;
-  margin-bottom: 18px;
-  font-size: 12.5px;
-  color: var(--ink-soft);
+.case-status-step--done .case-status-step-dot {
+  border-color: var(--teal);
+  background: var(--teal);
+}
+
+.case-status-step--current .case-status-step-dot,
+.case-status-step--detour .case-status-step-dot,
+.case-status-step--failed .case-status-step-dot {
+  border-color: var(--tone);
+  background: var(--tone);
+  box-shadow: 0 0 0 4px var(--tone-tint);
+}
+
+.case-status-step--current .case-status-step-label,
+.case-status-step--detour .case-status-step-label,
+.case-status-step--failed .case-status-step-label {
+  color: var(--tone-ink);
+  font-weight: 700;
 }
 
 .case-stage-error {
-  margin-top: 0;
-  margin-bottom: 12px;
+  margin: 10px 0 0;
   padding: 8px 10px;
   border-radius: 6px;
   background: var(--red-bg);
@@ -104,35 +180,79 @@
   font-size: 12.5px;
 }
 
-.case-stage-problem {
-  margin-top: 0;
-  margin-bottom: 12px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: var(--amber-bg);
-  color: var(--amber);
-  font-size: 12.5px;
-  font-weight: 600;
+@media (max-width: 720px) {
+  .case-status-top {
+    flex-direction: column;
+  }
+
+  .case-status-step-label {
+    font-size: 10.5px;
+  }
 }
 
-.case-stage-moved-back {
-  display: inline-block;
-  margin-left: 8px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: var(--amber-bg);
-  color: var(--amber);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.case-finalised-notice {
-  margin: 14px 0;
-  padding: 12px 14px;
-  border: 1px solid var(--teal-bg);
+/* The officer's last decision on a case: the confident primary action. */
+.case-status-finalise {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  padding: 8px 16px;
   border-radius: 8px;
-  background: var(--teal-bg);
-  color: var(--teal);
+  font: inherit;
   font-size: 13px;
   font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, box-shadow 0.12s, transform 0.06s;
+}
+
+.case-status-finalise svg {
+  width: 15px;
+  height: 15px;
+}
+
+.case-status-finalise {
+  border: 1px solid #17603c;
+  background: linear-gradient(180deg, #23875a 0%, #1f7a4d 100%);
+  color: var(--white);
+  box-shadow: 0 1px 2px rgba(23, 96, 60, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+.case-status-finalise:hover:not(:disabled) {
+  background: linear-gradient(180deg, #1f7a4d 0%, #17603c 100%);
+  box-shadow: 0 3px 8px rgba(23, 96, 60, 0.28);
+}
+
+.case-status-finalise:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.case-status-finalise:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.case-status-finalise:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(31, 122, 77, 0.3);
+}
+
+.case-finalised-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 16px 0 0;
+  padding: 11px 14px;
+  border: 1px solid var(--tone-border, #b7c4d4);
+  border-radius: 8px;
+  background: #e8edf3;
+  color: #1e3a5f;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.case-finalised-banner svg {
+  flex-shrink: 0;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
 }

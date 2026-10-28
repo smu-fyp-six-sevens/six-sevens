@@ -778,8 +778,19 @@
   background: #9a3522;
 }
 
+.confirm-dialog-primary {
+  border: 0;
+  background: #1f7a4d;
+  color: var(--white);
+}
+
+.confirm-dialog-primary:hover:not(:disabled) {
+  background: #17603c;
+}
+
 .confirm-dialog-cancel:disabled,
-.confirm-dialog-danger:disabled {
+.confirm-dialog-danger:disabled,
+.confirm-dialog-primary:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }

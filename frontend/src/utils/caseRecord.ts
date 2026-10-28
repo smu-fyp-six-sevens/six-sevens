@@ -1,6 +1,6 @@
 import type { CaseRecord } from '../App';
 import type { CaseRiskLevel } from '../services/uploadService';
-import { statusLabel } from './caseStatus';
+import { caseStageLabel, caseStageTone } from './caseStages';
 
 // What a case's saved risk is read for here: whether it is scored, and its level, score and first reason.
 interface ApiRisk {
@@ -28,8 +28,11 @@ export function toCaseRecord(item: ApiCase): CaseRecord {
     id: item.id,
     caseNumber: item.greenlink_case_id ?? null,
     applicant: item.company_name ?? 'Unnamed company',
-    status: statusLabel(item.documents_status ?? item.status ?? 'open'),
+    status: caseStageLabel(item.status),
+    statusTone: caseStageTone(item.status),
     caseStatus: item.status ?? 'open',
+    // A document held up past its time limit (backend monitoring.is_stuck): flagged next to the stage.
+    stuck: item.documents_status === 'stuck',
     created_at: item.created_at ?? null,
     riskLevel: scored ? scored.level : null,
     riskScore: scored ? scored.score : null,

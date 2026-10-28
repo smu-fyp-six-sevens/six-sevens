@@ -100,7 +100,9 @@ async def start_analysis(case_id: str) -> CaseAnalysis:
         # Nothing will run it, so it must not block the next attempt for the whole time limit.
         analysis.status, analysis.error = "failed", "The analysis could not be started. Run it again."
         await asyncio.to_thread(repository.finish_run, analysis)
+        await sync_stage(case_id)
         raise
+    await sync_stage(case_id)
     return analysis
 
 
@@ -189,7 +191,18 @@ async def _execute(
             await _store_result(analysis)
         except Exception:
             logger.exception("Failed to store the case analysis result for case %s", case_id)
+        await sync_stage(case_id)
         await push_case_snapshot(case_id)
+
+
+async def sync_stage(case_id: str) -> None:
+    """A run started or finished, which moves the case's stage. Never raises: the run itself is unaffected."""
+    from .. import case_stage
+
+    try:
+        await asyncio.to_thread(case_stage.sync_case_stage, case_id)
+    except Exception:
+        logger.exception("Failed to update the stage of case %s", case_id)
 
 
 async def _store_result(analysis: CaseAnalysis) -> None:

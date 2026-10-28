@@ -5,6 +5,10 @@ interface ConfirmDialogProps {
   title: string;
   message: string;
   confirmLabel?: string;
+  // What the confirm button says while it works.
+  busyLabel?: string;
+  // Red for a destructive action (the default), the primary colour for one that isn't.
+  tone?: 'danger' | 'primary';
   isConfirming?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -14,6 +18,8 @@ export default function ConfirmDialog({
   title,
   message,
   confirmLabel = 'Delete',
+  busyLabel = 'Deleting…',
+  tone = 'danger',
   isConfirming = false,
   onConfirm,
   onCancel,
@@ -47,11 +53,11 @@ export default function ConfirmDialog({
         <div className="confirm-dialog-actions">
           <button
             type="button"
-            className="confirm-dialog-danger"
+            className={tone === 'danger' ? 'confirm-dialog-danger' : 'confirm-dialog-primary'}
             onClick={onConfirm}
             disabled={isConfirming}
           >
-            {isConfirming ? 'Deleting…' : confirmLabel}
+            {isConfirming ? busyLabel : confirmLabel}
           </button>
           <button
             type="button"

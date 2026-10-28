@@ -45,11 +45,31 @@ The database is Supabase, and its schema is changed directly there; the repo kee
 | `risk_scores` and the `latest_risk_scores` view (newest row per case) | saved scores and the case list |
 | `flags` | per-document findings a specialist approved |
 | `case_notes` | loan officers' notes on a case or one of its documents (a reply is a row with `parent_id`); only a note's author can edit (sets `edited_at`) or delete it, and a deleted note with replies stays as a placeholder (`deleted_at`, text erased) |
+| `case_status_history` | every change of a case's status: from, to, when and by whom (SQL below) |
 | sequence `greenlink_case_id_seq` and trigger `set_greenlink_case_id` on `cases` | readable case ids (`GLDB-<n>`); the trigger skips any id already taken |
 | `audit_events` | the audit trail: every domain event, keyed by the event's id (the service role needs `select, insert`) |
 | the `supabase_realtime` publication with `documents`, `cases` and `case_analysis_runs` | live updates, including a case analysis finished by the case-worker |
 
-The backend role needs `select, insert` on `risk_scores` and `flags` (with row level security policies for insert and read if it is on). Every delete goes through the service key, so no delete *policy* is required, but the service role still needs the `DELETE` privilege on the tables the backend deletes from: `documents`, `extracted_fields`, `flags`, `case_notes`, `langgraph_trace`, `case_analysis_runs`, `risk_scores` and `cases` (for example `grant delete on public.case_analysis_runs to service_role;`). Without it a delete fails with Postgres error 42501 ("permission denied for table ..."). Deleting a document removes its `extracted_fields`, `flags`, `case_notes` and `langgraph_trace` rows and its stored file; deleting a case removes its documents, then its `risk_scores`, `case_analysis_runs`, `flags` and `case_notes` rows. On `case_notes` the service role needs `select, insert, delete` and `update (body, edited_at, deleted_at, case_id)`: an author's edit, a deleted note kept as a placeholder above its replies, and a moved document taking its notes to the new case. The backend deletes each child itself before the parent, so it works whether or not the foreign keys cascade. Deleting one document leaves the case's analysis runs and scores in place; the run is marked out of date.
+The backend role needs `select, insert` on `risk_scores`, `flags` and `case_status_history` (with row level security policies for insert and read if it is on). Every delete goes through the service key, so no delete *policy* is required, but the service role still needs the `DELETE` privilege on the tables the backend deletes from: `documents`, `extracted_fields`, `flags`, `case_notes`, `langgraph_trace`, `case_analysis_runs`, `risk_scores`, `case_status_history` and `cases` (for example `grant delete on public.case_analysis_runs to service_role;`). Without it a delete fails with Postgres error 42501 ("permission denied for table ..."). Deleting a document removes its `extracted_fields`, `flags`, `case_notes` and `langgraph_trace` rows and its stored file; deleting a case removes its documents, then its `risk_scores`, `case_analysis_runs`, `flags`, `case_notes` and `case_status_history` rows. On `case_notes` the service role needs `select, insert, delete` and `update (body, edited_at, deleted_at, case_id)`: an author's edit, a deleted note kept as a placeholder above its replies, and a moved document taking its notes to the new case. The backend deletes each child itself before the parent, so it works whether or not the foreign keys cascade. Deleting one document leaves the case's analysis runs and scores in place; the run is marked out of date.
+
+A case's status lives in the existing `cases.status` column (see `CaseStage` in `backend/app/models.py`); at startup the api moves every case to its current status, so cases still at an older status name catch up. Its history needs this table:
+
+```sql
+create table public.case_status_history (
+  id uuid primary key,
+  case_id text not null references public.cases (id) on delete cascade,
+  from_status text,
+  to_status text not null,
+  changed_by text not null,
+  changed_at timestamptz not null default now()
+);
+create index case_status_history_case_id_idx on public.case_status_history (case_id, changed_at);
+alter table public.case_status_history enable row level security;
+create policy "read history" on public.case_status_history for select to anon, authenticated using (true);
+create policy "add history" on public.case_status_history for insert to anon, authenticated with check (true);
+grant select, insert on public.case_status_history to anon, authenticated;
+grant delete on public.case_status_history to service_role;
+```
 
 `exiftool` should be on the `PATH`; without it the metadata checks report that they could not run. Every setting and its default is in `HOW_IT_WORKS.md` §7, including the public-registry keys (a registry check that can't run is skipped, never a finding) and `CASE_ANALYSIS_ENABLED`. `python -m scripts.build_land_use_index` builds the URA zoning index ahead of time. The backend logs one `perf` line per request, snapshot and background job (§8).
 

@@ -139,6 +139,7 @@ export function MissedIssues({
   onAdd,
   onEdit,
   onRemove,
+  readOnly = false,
 }: {
   scope: ReviewScope;
   missed: FindingReview[];
@@ -147,6 +148,8 @@ export function MissedIssues({
   onAdd: (checkName: string, note: string) => void;
   onEdit: (reviewId: string, checkName: string, note: string) => void;
   onRemove: (reviewId: string) => void;
+  // A finalised case: reported issues show, but none can be added, corrected or removed.
+  readOnly?: boolean;
 }) {
   // 'new' while reporting one, a review's id while correcting it, null otherwise.
   const [editing, setEditing] = useState<string | null>(null);
@@ -181,6 +184,8 @@ export function MissedIssues({
                   {review.note && <span> — {review.note}</span>}
                   <small> · reported by {review.reviewer}</small>
                 </span>
+                {!readOnly && (
+                <>
                 <button
                   type="button"
                   className="missed-issue-edit"
@@ -198,6 +203,8 @@ export function MissedIssues({
                 >
                   ×
                 </button>
+                </>
+                )}
               </li>
             ),
           )}
@@ -216,7 +223,7 @@ export function MissedIssues({
           }}
           onCancel={() => setEditing(null)}
         />
-      ) : (
+      ) : readOnly ? null : (
         <button type="button" className="missed-issue-add" disabled={editing !== null} onClick={() => setEditing('new')}>
           + Report a missed issue
         </button>

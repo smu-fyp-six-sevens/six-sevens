@@ -3,7 +3,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from app import case_service
-from app.models import CaseDocumentsStatus, CaseRecord, CaseRisk, DocumentRecord, DocumentStatus
+from app.models import CaseDocumentsStatus, CaseRecord, CaseRisk, CaseStage, DocumentRecord, DocumentStatus
 
 
 def _make_case(case_id: str = "case-1", greenlink_case_id: str = "GLDB-1") -> CaseRecord:
@@ -89,7 +89,7 @@ def test_the_default_page_reads_only_its_own_cases_and_their_documents() -> None
         ("case-1", CaseDocumentsStatus.ANALYZED), ("case-2", CaseDocumentsStatus.FAILED),
     ]
     assert (page.total, page.limit, page.offset) == (40, 25, 25)
-    case_repo.list_cases_page.assert_called_once_with("acme", newest=True, limit=25, offset=25)
+    case_repo.list_cases_page.assert_called_once_with("acme", newest=True, limit=25, offset=25, statuses=[])
     doc_repo.list_document_statuses.assert_called_once_with(["case-1", "case-2"])
     case_repo.list_matching_cases.assert_not_called()
 
@@ -107,7 +107,7 @@ def test_a_blank_search_is_no_search_and_oldest_first_reaches_the_database() -> 
         page = _page(sort="oldest", q="   ")
 
     assert page.items == [] and page.total == 0
-    case_repo.list_cases_page.assert_called_once_with(None, newest=False, limit=25, offset=0)
+    case_repo.list_cases_page.assert_called_once_with(None, newest=False, limit=25, offset=0, statuses=[])
     doc_repo.list_document_statuses.assert_not_called()
 
 
@@ -120,44 +120,23 @@ def _three_cases() -> list[CaseRecord]:
     ]
 
 
-def test_a_status_filter_ranks_every_case_then_pages_the_matches() -> None:
-    documents = [
-        _make_document("d1", case_id="case-1", status=DocumentStatus.ANALYZED),
-        _make_document("d2", case_id="case-2", status=DocumentStatus.FAILED),
-        _make_document("d3", case_id="case-3", status=DocumentStatus.ANALYZED),
-    ]
+def test_a_stage_filter_pages_in_the_database() -> None:
     with (
         patch("app.case_service.case_repository") as case_repo,
         patch("app.case_service.document_repository") as doc_repo,
         patch("app.case_service.risk_store") as store,
     ):
-        case_repo.list_matching_cases.return_value = _three_cases()
-        doc_repo.list_document_statuses.return_value = documents
+        case_repo.list_cases_page.return_value = ([_make_case("case-2")], 3)
+        doc_repo.list_document_statuses.return_value = []
         store.latest_many.return_value = {}
 
-        everything = _page(statuses=[CaseDocumentsStatus.ANALYZED])
-        second = _page(statuses=[CaseDocumentsStatus.ANALYZED], offset=1, limit=1)
+        page = _page(statuses=[CaseStage.FAILED, CaseStage.PENDING_REVIEW], offset=1, limit=1, sort="oldest")
 
-    assert [i.id for i in everything.items] == ["case-1", "case-3"]
-    assert everything.total == 2
-    assert [i.id for i in second.items] == ["case-3"]
-    assert second.total == 2
-    case_repo.list_cases_page.assert_not_called()
-
-
-def test_a_case_with_no_documents_matches_the_no_documents_filter() -> None:
-    with (
-        patch("app.case_service.case_repository") as case_repo,
-        patch("app.case_service.document_repository") as doc_repo,
-        patch("app.case_service.risk_store") as store,
-    ):
-        case_repo.list_matching_cases.return_value = _three_cases()
-        doc_repo.list_document_statuses.return_value = [_make_document("d1", case_id="case-1")]
-        store.latest_many.return_value = {}
-
-        page = _page(statuses=[CaseDocumentsStatus.NO_DOCUMENTS])
-
-    assert [i.id for i in page.items] == ["case-2", "case-3"]
+    assert [i.id for i in page.items] == ["case-2"] and page.total == 3
+    case_repo.list_cases_page.assert_called_once_with(
+        None, newest=False, limit=1, offset=1, statuses=["failed", "pending_review"],
+    )
+    case_repo.list_matching_cases.assert_not_called()
 
 
 def test_highest_risk_first_puts_unscored_last_and_the_newest_first_among_equals() -> None:
@@ -233,63 +212,52 @@ def test_a_risk_filter_keeps_only_those_levels_and_pages_the_matches() -> None:
     case_repo.list_cases_page.assert_not_called()
 
 
-def test_status_risk_and_search_filters_combine_and_share_one_total() -> None:
+def test_stage_risk_and_search_filters_combine_and_share_one_total() -> None:
     cases, risks = _risk_cases()
-    documents = [
-        _make_document(f"d{n}", case_id=f"case-{n}", status=DocumentStatus.ANALYZED if n != 2 else DocumentStatus.FAILED)
-        for n in (1, 2, 3, 4)
-    ]
+    # The database has already kept only the analysed cases: case-2 is not one.
+    analysed = [case for case in cases if case.id != "case-2"]
+    with (
+        patch("app.case_service.case_repository") as case_repo,
+        patch("app.case_service.document_repository") as doc_repo,
+        patch("app.case_service.risk_store") as store,
+    ):
+        case_repo.list_matching_cases.return_value = analysed
+        doc_repo.list_document_statuses.return_value = []
+        store.latest_many.return_value = risks
+
+        page = _page(statuses=[CaseStage.CASE_ANALYSED], risks=["High", "Low"], q="gldb", sort="risk")
+        second = _page(statuses=[CaseStage.CASE_ANALYSED], risks=["High", "Low"], q="gldb", sort="risk", offset=1, limit=1)
+
+    # High before Low.
+    assert [i.id for i in page.items] == ["case-4", "case-3"] and page.total == 2
+    assert [i.id for i in second.items] == ["case-3"] and second.total == 2
+    case_repo.list_matching_cases.assert_called_with("gldb", statuses=["case_analysed"])
+
+
+def test_oldest_first_with_a_risk_filter_reverses_the_newest_first_list() -> None:
+    cases, risks = _risk_cases()
     with (
         patch("app.case_service.case_repository") as case_repo,
         patch("app.case_service.document_repository") as doc_repo,
         patch("app.case_service.risk_store") as store,
     ):
         case_repo.list_matching_cases.return_value = cases
-        doc_repo.list_document_statuses.return_value = documents
+        doc_repo.list_document_statuses.return_value = []
         store.latest_many.return_value = risks
 
-        page = _page(statuses=[CaseDocumentsStatus.ANALYZED], risks=["High", "Low"], q="gldb", sort="risk")
-        second = _page(statuses=[CaseDocumentsStatus.ANALYZED], risks=["High", "Low"], q="gldb", sort="risk", offset=1, limit=1)
+        page = _page(sort="oldest", risks=["High", "Low"])
 
-    # case-2 is High but failed, so it is out; High before Low.
-    assert [i.id for i in page.items] == ["case-4", "case-3"] and page.total == 2
-    assert [i.id for i in second.items] == ["case-3"] and second.total == 2
-    case_repo.list_matching_cases.assert_called_with("gldb")
+    assert [i.id for i in page.items] == ["case-4", "case-3", "case-2"]
 
 
-def test_oldest_first_with_a_filter_reverses_the_newest_first_list() -> None:
-    with (
-        patch("app.case_service.case_repository") as case_repo,
-        patch("app.case_service.document_repository") as doc_repo,
-        patch("app.case_service.risk_store") as store,
-    ):
-        case_repo.list_matching_cases.return_value = _three_cases()
-        doc_repo.list_document_statuses.return_value = [
-            _make_document(f"d{n}", case_id=f"case-{n}", status=DocumentStatus.ANALYZED) for n in (1, 2, 3)
-        ]
-        store.latest_many.return_value = {}
-
-        page = _page(sort="oldest", statuses=[CaseDocumentsStatus.ANALYZED])
-
-    assert [i.id for i in page.items] == ["case-3", "case-2", "case-1"]
-
-
-def test_counts_roll_up_every_case_and_ignore_documents_of_no_case() -> None:
-    with (
-        patch("app.case_service.case_repository") as case_repo,
-        patch("app.case_service.document_repository") as doc_repo,
-    ):
-        case_repo.list_case_ids.return_value = ["case-1", "case-2", "case-3"]
-        doc_repo.list_all_document_statuses.return_value = [
-            _make_document("d1", case_id="case-1", status=DocumentStatus.ANALYZED),
-            _make_document("d2", case_id="case-2", status=DocumentStatus.FAILED),
-            _make_document("d3", case_id=None, status=DocumentStatus.FAILED),
-        ]
+def test_counts_roll_up_every_case_by_stage() -> None:
+    with patch("app.case_service.case_repository") as case_repo:
+        case_repo.list_case_statuses.return_value = ["case_analysed", "failed", "case_analysed"]
 
         counts = case_service.case_counts()
 
     assert counts.total == 3
-    assert counts.by_status == {"analyzed": 1, "failed": 1, "no_documents": 1}
+    assert counts.by_status == {"case_analysed": 2, "failed": 1}
 
 
 def test_search_lists_the_best_match_first() -> None:
@@ -359,14 +327,18 @@ def test_get_case_delegates_to_case_repository() -> None:
         mock_case_repo.get_case.assert_called_once_with("case-1")
 
 
-def test_create_case_delegates_to_case_repository() -> None:
-    with patch("app.case_service.case_repository") as mock_case_repo:
+def test_create_case_delegates_to_case_repository_and_records_the_opening_stage() -> None:
+    with (
+        patch("app.case_service.case_repository") as mock_case_repo,
+        patch("app.case_service.case_stage.record_created") as record_created,
+    ):
         mock_case_repo.create_case.return_value = _make_case("case-1")
 
-        result = case_service.create_case("Acme Pte Ltd")
+        result = case_service.create_case("Acme Pte Ltd", "officer-a")
 
         assert result == _make_case("case-1")
         mock_case_repo.create_case.assert_called_once_with("Acme Pte Ltd")
+        record_created.assert_called_once_with(_make_case("case-1"), "officer-a")
 
 
 def test_update_case_delegates_to_case_repository() -> None:
@@ -392,48 +364,3 @@ def test_delete_case_removes_its_documents_then_the_case() -> None:
         mock_doc_repo.list_documents.assert_called_once_with(case_id="case-1", include_fields=False)
         mock_doc_repo.remove_documents.assert_called_once_with(documents)
         mock_case_repo.delete_case.assert_called_once_with("case-1")
-
-
-def test_several_statuses_with_a_search_share_one_total_and_one_page_sequence() -> None:
-    # The cases a search for "acme" finds, newest first (the database applies the search).
-    acme = [
-        _case_at("case-7", "2026-10-07T00:00:00Z"),
-        _case_at("case-6", "2026-10-06T00:00:00Z"),
-        _case_at("case-5", "2026-10-05T00:00:00Z"),
-        _case_at("case-3", "2026-10-03T00:00:00Z"),
-        _case_at("case-2", "2026-10-02T00:00:00Z"),
-        _case_at("case-1", "2026-10-01T00:00:00Z"),
-    ]
-    documents = [
-        _make_document("d7", case_id="case-7", status=DocumentStatus.APPROVED),  # in progress
-        _make_document("d6", case_id="case-6", status=DocumentStatus.QUEUED),  # long queued: stuck
-        _make_document("d5", case_id="case-5", status=DocumentStatus.FAILED),
-        _make_document("d3", case_id="case-3", status=DocumentStatus.ANALYZED),
-        _make_document("d2", case_id="case-2", status=DocumentStatus.QUEUED),  # stuck
-        _make_document("d1", case_id="case-1", status=DocumentStatus.FAILED),
-    ]
-    either = [CaseDocumentsStatus.FAILED, CaseDocumentsStatus.STUCK]
-
-    def page(offset: int, limit: int):
-        with (
-            patch("app.case_service.case_repository") as case_repo,
-            patch("app.case_service.document_repository") as doc_repo,
-            patch("app.case_service.risk_store") as store,
-        ):
-            case_repo.list_matching_cases.return_value = acme
-            doc_repo.list_document_statuses.return_value = documents
-            store.latest_many.return_value = {}
-            result = _page(statuses=either, q="acme", offset=offset, limit=limit)
-            case_repo.list_matching_cases.assert_called_once_with("acme")
-            return result
-
-    first, second, third = page(0, 2), page(2, 2), page(4, 2)
-
-    # Failed or stuck, among the acme cases: 6, 5, 2 and 1. The in-progress and analyzed ones never appear.
-    assert [i.id for i in first.items] == ["case-6", "case-5"]
-    assert [i.id for i in second.items] == ["case-2", "case-1"]
-    assert third.items == []
-    assert first.total == second.total == third.total == 4
-    assert {i.documents_status for i in first.items + second.items} == {
-        CaseDocumentsStatus.FAILED, CaseDocumentsStatus.STUCK,
-    }

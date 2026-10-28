@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { CaseRecord } from '../App';
 import { getCaseCounts, listCasesPage } from '../services/uploadService';
-import type { CaseCounts, CaseDocumentsStatus, CaseRiskFilter, CaseSort } from '../services/uploadService';
+import type { CaseCounts, CaseStage, CaseRiskFilter, CaseSort } from '../services/uploadService';
 import { toCaseRecord } from '../utils/caseRecord';
 
 export interface CaseQueueQuery {
   q: string;
   sort: CaseSort;
-  statuses: CaseDocumentsStatus[];
+  statuses: CaseStage[];
   risks: CaseRiskFilter[];
   page: number;
   pageSize: number;
@@ -41,7 +41,7 @@ export function useCaseQueue({ q, sort, statuses, risks, page, pageSize }: CaseQ
         limit: pageSize,
         offset: (page - 1) * pageSize,
         sort,
-        statuses: statusKey ? (statusKey.split(',') as CaseDocumentsStatus[]) : [],
+        statuses: statusKey ? (statusKey.split(',') as CaseStage[]) : [],
         risks: riskKey ? (riskKey.split(',') as CaseRiskFilter[]) : [],
         q,
       },

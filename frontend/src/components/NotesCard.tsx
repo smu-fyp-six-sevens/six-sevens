@@ -24,6 +24,7 @@ export function NotesCard({
   documents,
   documentId,
   lockedNotice,
+  readOnly = false,
 }: {
   caseId: string;
   // The case's GLDB number, naming notes on the whole case.
@@ -33,6 +34,8 @@ export function NotesCard({
   // Set on a document's page: only its notes are shown, and new ones are attached to it.
   documentId?: string;
   lockedNotice?: string;
+  // A finalised case: notes can be read but not added, replied to, edited or deleted.
+  readOnly?: boolean;
 }) {
   const me = getUsername();
   const [notes, setNotes] = useState<CaseNote[] | null>(null);
@@ -173,7 +176,7 @@ export function NotesCard({
 
   // Reply on a note (not on a reply), plus Edit and Delete for the officer's own notes and replies.
   function noteActions(note: CaseNote) {
-    if (note.deleted_at) return null;
+    if (note.deleted_at || readOnly) return null;
     const canAdd = note.parent_id === null && !(editor?.kind === 'reply' && editor.noteId === note.id);
     return (
       <>
@@ -205,9 +208,14 @@ export function NotesCard({
           <span className="summary-icon">✎</span>
           <h2>Notes{threads.length > 0 && <span className="notes-count"> · {threads.length}</span>}</h2>
         </div>
-        {lockedNotice && <span className="notes-locked">{lockedNotice}</span>}
+        {readOnly ? (
+          <span className="notes-locked">Case finalised · notes are view-only</span>
+        ) : (
+          lockedNotice && <span className="notes-locked">{lockedNotice}</span>
+        )}
       </div>
 
+      {!readOnly && (
       <form
         className="notes-composer notes-composer--new"
         onSubmit={(event) => {
@@ -248,6 +256,7 @@ export function NotesCard({
           </button>
         </div>
       </form>
+      )}
 
       {saveError && (
         <p className="analysis-error" role="alert">

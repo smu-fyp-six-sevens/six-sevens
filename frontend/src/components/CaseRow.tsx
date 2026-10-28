@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { CaseRecord } from '../App';
 import KebabMenu from './KebabMenu';
-import { caseStatusTone } from '../utils/caseStatusTone';
 import { updateCase } from '../services/uploadService';
 import { MAX_COMPANY_NAME_LENGTH, validateCompanyName } from '../utils/caseValidation';
 
@@ -41,7 +40,6 @@ export default function CaseRow({
   isDeleting,
 }: CaseRowProps) {
   const caseLabel = caseRecord.caseNumber || caseRecord.id;
-  const tone = caseStatusTone(caseRecord.status);
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState(caseRecord.applicant);
   const [isSaving, setIsSaving] = useState(false);
@@ -134,8 +132,13 @@ export default function CaseRow({
         <span className="case-row-name">{caseRecord.applicant}</span>
 
         <span className="case-row-status">
-          <span className={`case-status-dot case-status-dot--${tone}`} aria-hidden="true" />
+          <span className={`case-status-dot tone-${caseRecord.statusTone}`} aria-hidden="true" />
           {caseRecord.status}
+          {caseRecord.stuck && (
+            <span className="case-row-stuck" title="A document has been processing longer than expected">
+              Stuck
+            </span>
+          )}
         </span>
 
         <span className="case-row-risk">

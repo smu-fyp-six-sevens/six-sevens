@@ -60,6 +60,8 @@ test.describe('Classify optional documents @sprint2 @SCRUM-114', () => {
 
   test('DI-032 a case is not incomplete just because an optional document is missing @DI-032', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
+    // The stage the backend gives a case whose documents wait for the officer (the capture predates stages).
+    fixture.case.status = 'pending_review';
     // Same case with none of the optional documents provided.
     fixture.case.fulfilled_requirements = fixture.case.fulfilled_requirements.filter(
       (value) => !['list_of_loans', 'company_proof_of_address', 'source_of_personal_wealth'].includes(value),
@@ -71,7 +73,7 @@ test.describe('Classify optional documents @sprint2 @SCRUM-114', () => {
       await expect(requirement(additionalList(page), label)).not.toHaveClass(/fulfilled/);
     }
     await page.goto('/cases');
-    await expect(page.locator('.case-row').filter({ hasText: 'Anchorpoint' })).toContainText('Ready for review');
+    await expect(page.locator('.case-row').filter({ hasText: 'Anchorpoint' })).toContainText('Pending Review');
   });
 
   test('DI-033 uploaded optional documents are mapped to their optional requirement @DI-033', async ({ page, backend }) => {

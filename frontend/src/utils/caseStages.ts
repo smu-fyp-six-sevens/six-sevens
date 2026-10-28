@@ -1,107 +1,95 @@
-import type { CaseStage } from '../services/uploadService';
+import type { CaseFailure, CaseStage } from '../services/uploadService';
 
 // In the order a case moves through them (see CaseStage in backend/app/models.py).
 export const CASE_STAGES: CaseStage[] = [
   'open',
-  'documents_uploaded',
-  'documents_classified',
-  'documents_extracted',
-  'documents_failed',
-  'manual_review',
+  'processing_documents',
+  'pending_review',
   'documents_incomplete',
-  'documents_approved',
-  'documents_rejected',
-  'detection_triggered',
-  'detection_failed',
+  'fraud_detection',
   'ready_for_analysis',
-  'additional_documents_required',
+  'pending_evaluation',
   'case_analysed',
   'finalised',
+  'failed',
 ];
 
 // Detours rather than steps every case passes through: shown in the progress steps only while the case is there.
-export const BRANCH_STAGES = new Set<CaseStage>([
-  'documents_failed',
-  'manual_review',
-  'documents_incomplete',
-  'documents_rejected',
-  'detection_failed',
-  'additional_documents_required',
-]);
+export const BRANCH_STAGES = new Set<CaseStage>(['documents_incomplete', 'failed']);
 
 const CASE_STAGE_LABELS: Record<CaseStage, string> = {
   open: 'Open',
-  documents_uploaded: 'Documents Uploaded',
-  documents_classified: 'Documents Classified',
-  documents_extracted: 'Documents Extracted',
-  documents_failed: 'Documents Failed',
-  manual_review: 'Manual Review',
-  documents_incomplete: 'Incomplete Documents',
-  documents_approved: 'Documents Approved',
-  documents_rejected: 'Documents Rejected',
-  detection_triggered: 'Detection Triggered',
-  detection_failed: 'Detection Failed',
+  processing_documents: 'Processing Documents',
+  pending_review: 'Pending Review',
+  documents_incomplete: 'Documents Incomplete',
+  fraud_detection: 'Fraud Detection',
   ready_for_analysis: 'Ready for Analysis',
-  additional_documents_required: 'Additional Documents Required',
   case_analysed: 'Case Analysed',
+  pending_evaluation: 'Pending Evaluation',
   finalised: 'Finalised',
+  failed: 'Failed',
 };
 
-// One colour per stage, shared by the case queue's filter and cards and the case page's Case Progress badge.
+// Stages from before these ones, which a case can still hold until the backend brings it up to date.
+const LEGACY_STAGE_LABELS: Record<string, string> = {
+  documents_uploaded: 'Processing Documents',
+  documents_classified: 'Processing Documents',
+  documents_extracted: 'Pending Review',
+  manual_review: 'Pending Review',
+  documents_approved: 'Fraud Detection',
+  documents_rejected: 'Documents Incomplete',
+  detection_triggered: 'Fraud Detection',
+  documents_failed: 'Failed',
+  detection_failed: 'Failed',
+  analysing: 'Ready for Analysis',
+  completed: 'Case Analysed',
+  additional_documents_required: 'Pending Evaluation',
+};
+
+// One colour per group of stages, by who acts next, shared by the case queue's dots and filter and the case
+// page's Case Status badge: grey nothing yet, blue the system is working, amber the officer has something to do,
+// green analysed, slate closed, red something failed. Within a group the shade deepens as the case moves on.
 export type StatusTone =
-  | 'grey' | 'sky' | 'blue' | 'indigo' | 'red' | 'orange' | 'amber' | 'gold'
-  | 'teal' | 'rose' | 'purple' | 'maroon' | 'lime' | 'cyan' | 'green' | 'slate';
+  | 'grey' | 'blue-1' | 'blue-2' | 'amber-1' | 'amber-2' | 'amber-3' | 'amber-4' | 'green' | 'slate' | 'red';
 
 const CASE_STAGE_TONES: Record<CaseStage, StatusTone> = {
   open: 'grey',
-  documents_uploaded: 'sky',
-  documents_classified: 'blue',
-  documents_extracted: 'indigo',
-  documents_failed: 'red',
-  manual_review: 'orange',
-  documents_incomplete: 'gold',
-  documents_approved: 'teal',
-  documents_rejected: 'rose',
-  detection_triggered: 'purple',
-  detection_failed: 'maroon',
-  ready_for_analysis: 'lime',
-  additional_documents_required: 'cyan',
+  processing_documents: 'blue-1',
+  fraud_detection: 'blue-2',
+  pending_review: 'amber-1',
+  documents_incomplete: 'amber-2',
+  ready_for_analysis: 'amber-3',
+  pending_evaluation: 'amber-4',
   case_analysed: 'green',
   finalised: 'slate',
+  failed: 'red',
 };
+
+// What a failed case needs fixed, and how (see CaseFailure in backend/app/models.py).
+const FAILURE_MESSAGES: Record<CaseFailure, string> = {
+  document_processing: 'Document processing failed. Retry or remove the failed document.',
+  fraud_detection: 'Fraud detection failed on a document. Retry it from the document page.',
+  case_analysis: 'The case analysis failed. Run it again.',
+};
+
+export function caseFailureMessage(failure: CaseFailure | null | undefined): string | null {
+  return failure ? FAILURE_MESSAGES[failure] : null;
+}
+
+export function isCaseStage(value: string): value is CaseStage {
+  return (CASE_STAGES as string[]).includes(value);
+}
 
 export function caseStageTone(stage: string | null | undefined): StatusTone {
   return CASE_STAGE_TONES[stage as CaseStage] ?? 'grey';
 }
 
-export interface QueueStatus {
-  label: string;
-  tone: StatusTone;
-  // Where it sits among the queue's filter chips: the order a case moves through them.
-  rank: number;
-}
-
-// A case's status in the queue: its stage, except while a document is stuck in processing (computed
-// live from how long it has been there, see backend monitoring.is_stuck), which needs attention first.
-export function queueStatus(stage: string | null | undefined, documentsStatus: string | null | undefined): QueueStatus {
-  if (documentsStatus === 'stuck') {
-    return { label: 'Processing Stuck', tone: 'amber', rank: CASE_STAGES.indexOf('documents_classified') + 0.5 };
-  }
-  const rank = CASE_STAGES.indexOf(stage as CaseStage);
-  return { label: caseStageLabel(stage), tone: caseStageTone(stage), rank: rank >= 0 ? rank : CASE_STAGES.length };
-}
-
-// A value from before these stages existed reads as itself ("some_stage" -> "Some stage").
+// A value from before these stages reads as the stage it became; anything else as itself ("some_stage" -> "Some stage").
 export function caseStageLabel(stage: string | null | undefined): string {
   if (!stage) return 'Open';
-  return CASE_STAGE_LABELS[stage as CaseStage] ?? stage.charAt(0).toUpperCase() + stage.slice(1).replace(/_/g, ' ');
-}
-
-// Whether a change took the case back to an earlier stage (e.g. a document added to an analysed case).
-// Reopening a finalised case isn't a step back, and an unknown stage can't be placed, so neither counts.
-export function isMovedBack(fromStage: string | null, toStage: string): boolean {
-  if (!fromStage || fromStage === 'finalised') return false;
-  const from = CASE_STAGES.indexOf(fromStage as CaseStage);
-  const to = CASE_STAGES.indexOf(toStage as CaseStage);
-  return from >= 0 && to >= 0 && to < from;
+  return (
+    CASE_STAGE_LABELS[stage as CaseStage] ??
+    LEGACY_STAGE_LABELS[stage] ??
+    stage.charAt(0).toUpperCase() + stage.slice(1).replace(/_/g, ' ')
+  );
 }

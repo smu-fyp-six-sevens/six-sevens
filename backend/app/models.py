@@ -231,28 +231,32 @@ def compute_fulfilled_requirements(
 
 class CaseStage(str, Enum):
     """
-    Where a case stands, in the order a case normally moves through them.
-    Stored in cases.status. Every stage but FINALISED follows from the case's
-    documents and its latest analysis (see case_stage.derive_stage);
-    FINALISED is set by a loan officer once the case is analysed, and holds
-    until they reopen it. Each change is recorded in case_status_history.
+    Where a case stands, in the order a case normally moves through them
+    (the loan officer's flowchart). Stored in cases.status. Every stage but
+    FINALISED follows from the case's documents and its latest analysis (see
+    case_stage.derive); FINALISED is set by a loan officer once the case
+    is analysed, and is permanent: the case is view-only. Each change is recorded in
+    case_status_history.
     """
 
     OPEN = "open"                                  # created, no documents yet
-    DOCUMENTS_UPLOADED = "documents_uploaded"      # a document is uploaded, queued or being classified
-    DOCUMENTS_CLASSIFIED = "documents_classified"  # every document is classified; one is still being extracted
-    DOCUMENTS_EXTRACTED = "documents_extracted"    # every document is extracted and waits for the officer's decision
-    DOCUMENTS_FAILED = "documents_failed"          # a document failed processing and needs a retry or removal
-    MANUAL_REVIEW = "manual_review"                # the classifier sent a document to manual review
-    DOCUMENTS_INCOMPLETE = "documents_incomplete"  # every document is decided, a required one is missing; detection not started
-    DOCUMENTS_APPROVED = "documents_approved"      # every document is decided, some approved; detection not started
-    DOCUMENTS_REJECTED = "documents_rejected"      # every document was rejected, so there is nothing to scan
-    DETECTION_TRIGGERED = "detection_triggered"    # detection has started on the approved documents
-    DETECTION_FAILED = "detection_failed"          # detection crashed (or was cancelled) on an approved document
-    READY_FOR_ANALYSIS = "ready_for_analysis"      # every approved document is scanned; no current analysis yet
-    ADDITIONAL_DOCUMENTS_REQUIRED = "additional_documents_required"  # the current analysis asks the client for more
-    CASE_ANALYSED = "case_analysed"                # the latest case analysis is complete and current
-    FINALISED = "finalised"                        # an officer closed the case — terminal until reopened
+    PROCESSING_DOCUMENTS = "processing_documents"  # a document is uploaded, queued, classified or extracted
+    PENDING_REVIEW = "pending_review"              # a document waits for the officer to approve or reject it
+    DOCUMENTS_INCOMPLETE = "documents_incomplete"  # every document was rejected, so the case needs new ones
+    FRAUD_DETECTION = "fraud_detection"            # an approved document is being scanned for fraud
+    READY_FOR_ANALYSIS = "ready_for_analysis"      # every approved document is scanned; the analysis is not done (or is running)
+    PENDING_EVALUATION = "pending_evaluation"      # analysed; the officer still has findings to mark correct or wrong (precision and recall)
+    CASE_ANALYSED = "case_analysed"                # analysed, and every finding has the officer's verdict
+    FINALISED = "finalised"                        # an officer closed the case — permanent, view-only
+    FAILED = "failed"                              # document processing, fraud detection or the analysis failed (see CaseFailure)
+
+
+class CaseFailure(str, Enum):
+    """What a FAILED case needs fixed: each has its own remedy for the officer."""
+
+    DOCUMENT_PROCESSING = "document_processing"    # retry or remove the document
+    FRAUD_DETECTION = "fraud_detection"            # retry the detection
+    CASE_ANALYSIS = "case_analysis"                # run the analysis again
 
 
 class CaseStageChange(BaseModel):
@@ -524,6 +528,10 @@ class CaseSummary(CaseRecord):
     analysis: CaseAnalysisOverview | None = None
     # Every stage change, oldest first. Empty when the history couldn't be loaded.
     status_history: list[CaseStageChange] = Field(default_factory=list)
+    # Only while the case is FAILED: which step failed.
+    failure: CaseFailure | None = None
+    # Only while the case is analysed: how many of its findings still have no verdict (Pending Evaluation until 0).
+    findings_to_review: int | None = None
 
 
 class CaseListItem(CaseRecord):

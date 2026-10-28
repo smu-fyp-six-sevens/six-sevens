@@ -12,8 +12,8 @@ import {
 import type {
   AdditionalDocuments,
   CaseAnalysisOverview,
+  CaseFailure,
   CaseRisk,
-  CaseStageChange,
   DocumentCaseMatch,
   DocumentRecord,
   SupportingDocumentRecommendation,
@@ -41,9 +41,11 @@ export function useCaseSnapshot(caseId: string) {
     SupportingDocumentRecommendation[]
   >([]);
   const [additionalDocuments, setAdditionalDocuments] = useState<AdditionalDocuments | null>(null);
-  // The case's stage and its history of changes (see backend/app/case_stage.py).
+  // The case's stage, and which step failed while it is at Failed (see backend/app/case_stage.py).
   const [stage, setStage] = useState<string>('open');
-  const [stageHistory, setStageHistory] = useState<CaseStageChange[]>([]);
+  const [stageFailure, setStageFailure] = useState<CaseFailure | null>(null);
+  // Findings still without the officer's verdict, while the case is analysed.
+  const [findingsToReview, setFindingsToReview] = useState<number | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
   // Whether documentDetails holds this case's documents yet, not the empty start or the previous case's.
   const [snapshotLoaded, setSnapshotLoaded] = useState(false);
@@ -114,7 +116,8 @@ export function useCaseSnapshot(caseId: string) {
         setSupportingDocumentRecommendations(caseSummary.supporting_document_recommendations ?? []);
         setAdditionalDocuments(caseSummary.additional_documents ?? null);
         setStage(caseSummary.status ?? 'open');
-        setStageHistory(caseSummary.status_history ?? []);
+        setStageFailure(caseSummary.failure ?? null);
+        setFindingsToReview(caseSummary.findings_to_review ?? null);
       },
       (connected) => {
         if (isMountedRef.current) setWsConnected(connected);
@@ -179,8 +182,10 @@ export function useCaseSnapshot(caseId: string) {
     additionalDocuments,
     stage,
     setStage,
-    stageHistory,
-    setStageHistory,
+    stageFailure,
+    setStageFailure,
+    findingsToReview,
+    setFindingsToReview,
     wsConnected,
     snapshotLoaded,
     caseMatches,
