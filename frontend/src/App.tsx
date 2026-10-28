@@ -45,6 +45,8 @@ export interface CaseRecord {
   documentTypes?: string[];
   // Its flags grouped by detection check, most flags first.
   flags?: CaseFlagCount[];
+  // The username of the officer who created it; null when the audit trail has no record.
+  createdBy?: string | null;
 }
 
 export interface CaseFlagCount {

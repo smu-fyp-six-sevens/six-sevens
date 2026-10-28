@@ -46,11 +46,6 @@
 .panel-heading p { margin: 4px 0 0; color: var(--slate-58); font-size: 13px; }
 .text-button { display: inline-flex; align-items: center; gap: 7px; padding: 0; border: 0; background: transparent; color: var(--slate-50); font: inherit; font-size: 13px; font-weight: 650; text-decoration: none; white-space: nowrap; cursor: pointer; }
 .text-button:hover { color: #274d7e; }
-.sort-header { display: inline-flex; align-items: center; gap: 5px; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; cursor: pointer; }
-.sort-header span { color: var(--slate-70); font-size: 12px; letter-spacing: 0; }
-.sort-header:hover, .sort-header.active { color: var(--ink); }
-.sort-header.active span { color: var(--steel); }
-.sort-header:focus-visible { outline: 2px solid var(--steel); outline-offset: 2px; border-radius: 3px; }
 .panel-kicker { color: var(--slate-65); font-size: 11px; font-weight: 750; letter-spacing: .1em; white-space: nowrap; }
 .bar-list { display: grid; gap: 13px; }
 .bar-row { display: grid; grid-template-columns: 23px minmax(120px, 1fr) minmax(75px, 1.2fr) 22px; align-items: center; gap: 10px; color: var(--slate-34); font-size: 13px; }
@@ -206,11 +201,6 @@
 .processing-pending { color: var(--ink-soft); }
 .dashboard-case-table .center-col { text-align: center; }
 .dashboard-case-table .center-col .risk-score { align-items: center; }
-.th-with-info { display: inline-flex; align-items: center; gap: 6px; }
-.info-tip { position: relative; display: inline-grid; place-items: center; width: 15px; height: 15px; border: 1px solid currentColor; border-radius: 50%; font-size: 10px; font-weight: 700; line-height: 1; letter-spacing: 0; text-transform: none; cursor: help; opacity: .75; }
-.info-tip:hover, .info-tip:focus-visible { opacity: 1; outline: none; color: var(--steel); }
-.info-tip-bubble { position: absolute; top: calc(100% + 8px); left: 50%; z-index: 10; width: 240px; padding: 9px 11px; border-radius: 7px; background: var(--ink); color: var(--white); font-family: inherit; font-size: 12.5px; font-style: normal; font-weight: 500; line-height: 1.45; text-align: left; white-space: normal; box-shadow: 0 6px 18px #14233a2e; opacity: 0; pointer-events: none; transform: translate(-50%, -3px); transition: opacity .15s, transform .15s; }
-.info-tip:hover .info-tip-bubble, .info-tip:focus-visible .info-tip-bubble { opacity: 1; transform: translate(-50%, 0); }
 @media (max-width: 760px) {
   .flag-summary-grid { grid-template-columns: 1fr; gap: 8px; }.flag-summary-grid .dashboard-stat-card { min-height: 83px; }
   .case-register-intro { align-items: flex-start; gap: 6px; flex-direction: column; }.case-register-intro div { align-items: flex-start; gap: 3px; flex-direction: column; }
@@ -260,3 +250,40 @@
 .classification-overall > span { display: inline-flex; align-items: baseline; gap: 8px; cursor: help; }
 .class-check { border-left-color: var(--steel); }
 .class-check .classification-risk { overflow: hidden; color: var(--steel-dark); text-overflow: ellipsis; white-space: nowrap; }
+
+/* Accuracy: a rate as a bar against its target line (DetectionAccuracyPanel RateMeter), in the dashboard's
+   own steel; only the review mix is coloured. */
+.rate-meter { display: grid; grid-template-columns: 42px minmax(60px, 1fr); align-items: center; gap: 12px; min-width: 0; }
+.rate-meter--empty { display: block; }
+.rate-meter-value { color: var(--ink); font-size: 13px; font-weight: 650; white-space: nowrap; }
+.rate-meter-track { position: relative; height: 6px; border-radius: 4px; background: var(--slate-94); }
+.rate-meter-track i { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--steel); }
+.rate-meter-target { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--ink); opacity: .45; }
+.rate-meter--large { grid-template-columns: 1fr; gap: 10px; margin: 6px 0 26px; }
+/* The target's name hangs under its line on the big bars, so the card needs no separate label. */
+.rate-meter-target-label { position: absolute; top: calc(100% + 5px); right: 0; color: var(--ink-soft); font-size: 11.5px; font-weight: 600; white-space: nowrap; transform: translateX(50%); }
+.accuracy-rate { color: var(--ink); font-size: 14px; font-weight: 650; }
+.rate-meter--large .rate-meter-value { font-size: 28px; letter-spacing: -.03em; line-height: 1; }
+.rate-meter--large .rate-meter-track { height: 8px; }
+.accuracy-card .stat-of { color: var(--ink-soft); font-size: 15px; font-weight: 600; }
+
+.review-mix { display: grid; gap: 7px; max-width: 330px; min-width: 0; }
+.review-mix-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; }
+.review-mix-total { color: var(--ink-soft); font-size: 12px; white-space: nowrap; }
+.review-mix-total strong { color: var(--ink); font-size: 13px; font-weight: 700; }
+.review-mix-bar { display: flex; height: 6px; overflow: hidden; border-radius: 4px; background: var(--slate-94); }
+.review-mix-bar i { height: 100%; }
+.review-mix-correct { background: #48a486; }.review-mix-wrong { background: #d4715f; }.review-mix-missed { background: #d79d3d; }
+.review-mix-counts { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--ink-soft); font-size: 12px; }
+.review-mix-counts span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.review-mix-dot { width: 7px; height: 7px; border-radius: 50%; }
+
+.accuracy-scope { display: block; margin-top: 3px; color: var(--ink-soft); font-size: 12px; }
+.accuracy-standing { display: inline-grid; gap: 2px; cursor: help; }
+.accuracy-standing strong { color: var(--ink); font-size: 13px; font-weight: 650; }
+.accuracy-standing--ok strong, .accuracy-standing--few strong { color: var(--ink-soft); font-weight: 600; }
+.accuracy-standing small { color: var(--ink-soft); font-size: 12px; }
+.accuracy-table td { padding-top: 18px; padding-bottom: 18px; vertical-align: middle; }
+.accuracy-table th:nth-child(1) { width: 24%; }
+.accuracy-table th:nth-child(2) { width: 32%; }
+.accuracy-table th:nth-child(3), .accuracy-table th:nth-child(4) { width: 14%; }

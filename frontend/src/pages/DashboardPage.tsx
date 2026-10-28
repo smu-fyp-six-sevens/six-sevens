@@ -2,11 +2,14 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
+import { getUsername } from '../lib/api';
+import { InfoLabel } from '../components/InfoTip';
 import { DetectionAccuracyPanel, DetectionAccuracySummary } from './DetectionAccuracyPanel';
 import { caseStatusTone } from '../utils/caseStatusTone';
 import { formatDuration } from './upload/processingTimes';
-import { formatDocumentType } from '../services/uploadService';
-import { formatCheck } from '../utils/checkLabel';
+import { formatDocumentType, type DetectionMetricsFilters } from '../services/uploadService';
+import { statusValue } from '../utils/caseStatus';
+import { formatCheck } from '../utils/checkLabels';
 
 // The case queue's statuses (utils/caseStatus.ts), so both pages name and count cases the same way.
 type Status = 'Ready for review' | 'In progress' | 'Documents pending' | 'Documents failed' | 'Processing stuck';
@@ -31,7 +34,10 @@ interface MockCase {
   recommendedDocs?: string[] | null;
   // Automated processing time in ms; null until the case has been analysed.
   processingMs?: number | null;
-  analyst: string;
+  // Preview rows only: who the sample case is assigned to. Live cases use createdBy.
+  analyst?: string;
+  // The username of the officer who created the case, which counts as its assignee.
+  createdBy?: string | null;
   documentTypes: string[];
   flags: string[];
   // Per flag name: its worst severity in this case and the document types it's on; absent for preview rows.
@@ -78,6 +84,8 @@ const FLAG_SEVERITY: Record<string, FlagSummary['severity']> = {
   'Font anomaly': 'Medium',
 };
 
+// Cases created before the audit trail have no recorded creator; they count as this officer's.
+const UNRECORDED_CASE_OWNER = 'greenlink-tester';
 const CASES_PER_PAGE = 10;
 // Rows in each Overview insight panel, so the side-by-side panels stay the same height.
 const INSIGHT_ROWS = 6;
@@ -104,7 +112,7 @@ function CaseTable({ cases, heading, onOpenCase, showRiskAnalysis = false, showP
           <thead><tr>
             <th>CASE / APPLICANT</th><th className="center-col">SUBMITTED</th><th className="center-col">STATUS</th>
             <th className="center-col">RISK</th>
-            {showProcessingTime && <th className="center-col"><span className="th-with-info">PROCESSING TIME<span className="info-tip" tabIndex={0} role="img" aria-label={PROCESSING_TIME_HELP}>i<span className="info-tip-bubble" aria-hidden="true">{PROCESSING_TIME_HELP}</span></span></span></th>}
+            {showProcessingTime && <th className="center-col"><InfoLabel label="PROCESSING TIME" tip={PROCESSING_TIME_HELP} /></th>}
             <th>{showRiskAnalysis ? 'RECOMMENDED ADDITIONAL DOCUMENTS' : 'TOP FLAGS'}</th>
           </tr></thead>
           <tbody>
@@ -191,6 +199,7 @@ function dashboardStatus(label: string): Status {
 export default function DashboardPage({ cases: caseRecords, isLoading }: { cases: CaseRecord[]; isLoading: boolean }) {
   const navigate = useNavigate();
   const [role, setRole] = useState<Role>('Analyst');
+  const username = getUsername();
   const [tab, setTab] = useState<DashboardTab>('Overview');
   const [range, setRange] = useState('Last 30 days');
   const [statusFilter, setStatusFilter] = useState('All statuses');
@@ -213,6 +222,8 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
         score: record.riskScore ?? null,
         processingMs: record.processingMs ?? null,
         recommendedDocs: record.recommendedDocuments ?? null,
+        analyst: undefined,
+        createdBy: record.createdBy ?? UNRECORDED_CASE_OWNER,
         documentTypes: (record.documentTypes ?? []).map((type) => formatDocumentType(type)),
         flags: (record.flags ?? []).map((flag) => formatCheck(flag.check)),
         flagInfo: Object.fromEntries((record.flags ?? []).map((flag) => [formatCheck(flag.check), {
@@ -231,11 +242,18 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
   const visibleCases = useMemo(() => {
     const since = dateLimit(range);
     return dashboardCases.filter((item) =>
-      (role === 'Manager' || item.analyst === 'J. Tan') &&
+      // Assigned means created by the signed-in officer; preview rows keep their sample analyst.
+      (role === 'Manager' || (caseRecords.length ? item.createdBy === username : item.analyst === 'J. Tan')) &&
       (statusFilter === 'All statuses' || item.status === statusFilter) &&
       (!since || item.submitted >= since),
     );
-  }, [dashboardCases, range, role, statusFilter]);
+  }, [caseRecords.length, dashboardCases, range, role, statusFilter, username]);
+
+  // The same date and status choice for the accuracy figures, which the backend filters (cases are the reviews' own).
+  const accuracyFilters = useMemo<DetectionMetricsFilters>(() => {
+    const status = statusFilter === 'All statuses' ? undefined : statusValue(statusFilter);
+    return { since: dateLimit(range), statuses: status ? [status] : [] };
+  }, [range, statusFilter]);
 
   const statusCounts = useMemo(() => Object.fromEntries(
     STATUSES.map((status) => [status, visibleCases.filter((item) => item.status === status).length]),
@@ -281,13 +299,27 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
     if (current?.key !== key) return { key, descending: true };
     return current.descending ? { key, descending: false } : null;
   });
-  const sortHeader = (key: 'severity' | 'cases', label: string) => (
-    <th aria-sort={flagSort?.key === key ? (flagSort.descending ? 'descending' : 'ascending') : undefined}>
-      <button type="button" className={`sort-header${flagSort?.key === key ? ' active' : ''}`} onClick={() => sortFlagsBy(key)}>
-        {label}<span aria-hidden="true">{flagSort?.key === key ? (flagSort.descending ? '↓' : '↑') : '↕'}</span>
-      </button>
-    </th>
-  );
+  // The case queue's sort header (CaseQueuePage SortHeader): both arrows, the current direction's one dark.
+  const sortHeader = (key: 'severity' | 'cases', label: string) => {
+    const direction = flagSort?.key === key ? (flagSort.descending ? 'desc' : 'asc') : undefined;
+    return (
+      <th aria-sort={direction === 'desc' ? 'descending' : direction === 'asc' ? 'ascending' : undefined}>
+        <button
+          type="button"
+          className="case-sort"
+          data-direction={direction}
+          aria-label={`Sort by ${label.toLowerCase()} (${direction === 'desc' ? 'high to low' : direction === 'asc' ? 'low to high' : 'not sorted'})`}
+          onClick={() => sortFlagsBy(key)}
+        >
+          {label}
+          <svg className="case-sort-arrows" viewBox="0 0 8 14" aria-hidden="true">
+            <path className="case-sort-up" d="M4 0 8 5H0z" />
+            <path className="case-sort-down" d="M4 14 0 9h8z" />
+          </svg>
+        </button>
+      </th>
+    );
+  };
 
   const maxFlagCount = Math.max(1, ...commonFlags.map(([, count]) => count));
   const maxDocCount = Math.max(1, ...byDocumentType.map(([, count]) => count));
@@ -305,36 +337,18 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
     <main className="shell dashboard-shell">
       <AppHeader />
       <div className="dashboard-app">
-      <aside className="dashboard-sidebar">
-        <div className="dashboard-sidebar-label">WORKSPACE</div>
-        <nav className="dashboard-nav" aria-label="Dashboard sections">
-          {DASHBOARD_TABS.map((item) => (
-            <button key={item} className={tab === item ? 'active' : ''} onClick={() => setTab(item)}>
-              <span className="nav-icon">{item === 'Overview' ? '▦' : item === 'Cases' ? '▤' : item === 'Flags' ? '⚑' : item === 'Accuracy' ? '✓' : '◎'}</span>{item}
-              {item === 'Cases' && <span className="nav-count">{visibleCases.length}</span>}
-            </button>
-          ))}
-        </nav>
-        <div className="dashboard-sidebar-bottom">
-          <div className="sidebar-user-avatar">{role === 'Manager' ? 'MT' : 'JT'}</div>
-          <div><strong>{role === 'Manager' ? 'M. Tan' : 'J. Tan'}</strong><span>{role}</span></div>
-          <span className="sidebar-more">•••</span>
-        </div>
-      </aside>
-
       <main className="dashboard-main">
         <div className="dashboard-content">
           <section className="dashboard-title-row">
             <div>
-              <p className="dashboard-eyebrow">{role === 'Manager' ? 'PORTFOLIO MONITORING' : 'YOUR WORKSPACE'}</p>
-              <h1>{tab === 'Overview' ? (role === 'Manager' ? 'Portfolio overview' : 'My review overview') : tab === 'Cases' ? (role === 'Manager' ? 'Case register' : 'My assigned cases') : tab === 'Accuracy' ? 'Detection accuracy' : 'Flag explorer'}</h1>
+              <h1>{role === 'Manager' ? 'Portfolio overview' : 'My workspace'}</h1>
               <p className="dashboard-subtitle">{tab === 'Overview' ? 'A summary of case progress, risk signals and common findings.' : tab === 'Cases' ? 'Review case status and priority across the selected period.' : tab === 'Accuracy' ? 'How often each detection check is right, and how much it misses, from officer reviews.' : 'Explore recurring findings and the cases and documents they affect.'}</p>
             </div>
-            {tab !== 'Accuracy' && <div className="dashboard-filters">
+            <div className="dashboard-filters">
               <label><span>Date range</span><select value={range} onChange={(event) => setRange(event.target.value)}><option>Last 7 days</option><option>Last 30 days</option><option>Last 90 days</option><option>All time</option></select></label>
               <label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option>All statuses</option>{STATUSES.map((status) => <option key={status}>{status}</option>)}</select></label>
               {tab === 'Cases' && <label className="risk-sort-filter"><span>Sort by risk</span><select value={riskOrder} onChange={(event) => setRiskOrder(event.target.value as 'highest' | 'lowest')}><option value="highest">Critical first</option><option value="lowest">Low first</option></select></label>}
-            </div>}
+            </div>
           </section>
           <div className="dashboard-section-bar">
             <nav className="dashboard-tabs" aria-label="Dashboard sections">
@@ -342,7 +356,7 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
                 const count = item === 'Cases' ? visibleCases.length : item === 'Flags' ? flagRows.length : null;
                 return (
                   <button key={item} className={tab === item ? 'active' : ''} aria-current={tab === item ? 'page' : undefined} onClick={() => setTab(item)}>
-                    <span className="nav-icon" aria-hidden="true">{item === 'Overview' ? '▦' : item === 'Cases' ? '▤' : item === 'Flags' ? '⚑' : '◎'}</span>{item}
+                    <span className="nav-icon" aria-hidden="true">{item === 'Overview' ? '▦' : item === 'Cases' ? '▤' : item === 'Flags' ? '⚑' : item === 'Accuracy' ? '✓' : '◎'}</span>{item}
                     {count !== null && <span className="nav-count">{count}</span>}
                   </button>
                 );
@@ -381,7 +395,7 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
               <div className="snapshot-note"><span>i</span> Consider document findings, case status and review context alongside the risk score.</div>
             </article>
           </section>
-          <DetectionAccuracySummary onViewAll={() => setTab('Accuracy')} />
+          <DetectionAccuracySummary filters={accuracyFilters} onViewAll={() => setTab('Accuracy')} />
           <CaseTable cases={visibleCases.slice(0, 5)} heading="Recent cases" onOpenCase={openCase} showRiskAnalysis />
           </>}
 
@@ -401,7 +415,7 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
               <footer className="table-footer"><span>Showing <strong>{flagRows.length}</strong> flag categories</span></footer>
             </section>
           </>}
-          {tab === 'Accuracy' && <DetectionAccuracyPanel />}
+          {tab === 'Accuracy' && <DetectionAccuracyPanel filters={accuracyFilters} />}
         </div>
       </main>
       </div>

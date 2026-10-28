@@ -478,104 +478,15 @@ export function CaseRiskCard({
               ))}
             </div>
 
-          {findings.length === 0 ? (
-            <div className="summary-message summary-message--success">
-              <span className="summary-message-icon">✓</span>
-              <div>
-                <strong>No contributing findings.</strong>
-                <p>Detection found nothing worth flagging across this case's documents.</p>
+            {findings.length === 0 && (
+              <div className="summary-message summary-message--success">
+                <span className="summary-message-icon">✓</span>
+                <div>
+                  <strong>No contributing findings.</strong>
+                  <p>Detection found nothing worth flagging across this case's documents.</p>
+                </div>
               </div>
-            </div>
-          ) : documents.length === 0 ? (
-            <div className="summary-message summary-message--info">
-              <span className="summary-message-icon">ⓘ</span>
-              <div>
-                <strong>Only minor findings.</strong>
-                <p>Every finding is low severity or unreviewed. They're hidden below.</p>
-              </div>
-            </div>
-          ) : (
-            <div className="flagged-list">
-              {documents.map((document) => {
-                const isOpen = expanded.has(document.documentId);
-                return (
-                  <div key={document.documentId} className="risk-document">
-                    <button
-                      type="button"
-                      className="risk-document-toggle"
-                      aria-expanded={isOpen}
-                      onClick={() => toggleDocument(document.documentId)}
-                    >
-                      <span className="risk-document-heading">
-                        <strong>{document.filename}</strong>
-                        <span className="risk-document-meta">
-                          {formatDocumentType(document.documentType)}
-                          {countBySeverity(document.findings).map(([severity, count]) => (
-                            <span key={severity} className={`risk-severity risk-severity--${severity}`}>
-                              {count} {severity}
-                            </span>
-                          ))}
-                        </span>
-                        {!isOpen && (
-                          <span className="risk-document-preview">{document.rows[0].finding.summary}</span>
-                        )}
-                      </span>
-                      <span className={`risk-chevron ${isOpen ? 'risk-chevron--open' : ''}`} aria-hidden="true">
-                        ›
-                      </span>
-                    </button>
-
-                    {isOpen && (
-                      <ul className="risk-findings">
-                        {document.rows.map(({ finding, count }) => {
-                          const detail = finding.unreviewed
-                            ? 'Not reviewed by a specialist.'
-                            : addedDetail(finding.rationale, finding.summary);
-                          return (
-                            <li key={finding.finding_id}>
-                              <span className={`risk-severity risk-severity--${finding.severity}`}>
-                                {finding.severity}
-                              </span>
-                              <span className="risk-finding-text">
-                                <span className="risk-finding-check">{formatCheck(finding.tool)}</span>
-                                <span className="risk-finding-summary">
-                                  {finding.summary}
-                                  {count > 1 && <span className="risk-repeat">×{count}</span>}
-                                </span>
-                                {detail && <span className="risk-finding-rationale">{detail}</span>}
-                                {finding.repeat_of && (
-                                  <span className="risk-finding-rationale">
-                                    Also found on another document; counted once there, not again here.
-                                  </span>
-                                )}
-                                {(finding.also_on ?? 0) > 0 && (
-                                  <span className="risk-finding-rationale">
-                                    Also found on {finding.also_on} other{' '}
-                                    {finding.also_on === 1 ? 'document' : 'documents'}; counted once.
-                                  </span>
-                                )}
-                              </span>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {lowCount + unreviewedCount > 0 && (
-            <button
-              type="button"
-              className="risk-toggle"
-              aria-expanded={showMinor}
-              onClick={() => setShowMinor((current) => !current)}
-            >
-              {showMinor ? 'Show less' : hiddenLabel(lowCount, unreviewedCount)}
-            </button>
-          )}
+            )}
 
             {scored.unassessed_checks.length > 0 && (
               <details className="risk-unassessed">
@@ -583,7 +494,7 @@ export function CaseRiskCard({
                 <ul>
                   {scored.unassessed_checks.map((check, index) => (
                     <li key={`${check.document_id}-${check.tool}-${index}`}>
-                      {check.filename} — {formatCheck(check.tool)}
+                      {check.filename} — {formatTool(check.tool)}
                       {check.reason ? `: ${check.reason}` : ''}
                     </li>
                   ))}

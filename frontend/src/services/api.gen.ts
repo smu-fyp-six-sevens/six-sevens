@@ -479,7 +479,8 @@ export interface paths {
         };
         /**
          * Get Detection Metrics
-         * @description Precision and recall per check across every reviewed case, with targets (the dashboard).
+         * @description Precision and recall per check across every reviewed case, with targets (the dashboard). Optionally only
+         *     cases created on or after `since` and in these documents statuses, as the dashboard's filters pick.
          */
         get: operations["get_detection_metrics_detection_metrics_get"];
         put?: never;
@@ -1892,6 +1893,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Created By */
+            created_by: string | null;
             /** Document Types */
             document_types: string[];
             documents_status: components["schemas"]["CaseDocumentsStatus"];
@@ -4768,7 +4771,10 @@ export interface operations {
     };
     get_detection_metrics_detection_metrics_get: {
         parameters: {
-            query?: never;
+            query?: {
+                since?: string | null;
+                status?: components["schemas"]["CaseDocumentsStatus"][];
+            };
             header?: {
                 authorization?: string | null;
             };

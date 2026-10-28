@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from datetime import date
+
 from unittest.mock import patch
 
 from app import audit, case_service
 from app.events import types
-from app.models import AdditionalDocument, AdditionalDocuments, CaseRecord, DocumentRecord, DocumentStatus
+from app.models import (
+    AdditionalDocument, AdditionalDocuments, CaseDocumentsStatus, CaseRecord, DocumentRecord, DocumentStatus,
+)
 
 
 def _row(case_id: str, action: str, ms: int, at: str = "2026-10-01T00:00:00Z") -> dict:
@@ -40,6 +44,7 @@ def test_the_case_list_carries_each_case_processing_time() -> None:
         doc_repo.list_document_statuses.return_value = []
         store.latest_many.return_value = {}
         trail.processing_ms_many.return_value = {"case-1": 184_000}
+        trail.created_by_many.return_value = {}
 
         page = case_service.list_cases_page(limit=25, offset=0, sort="newest", statuses=[], q=None)
 
@@ -66,6 +71,7 @@ def test_the_case_list_carries_the_titles_its_analysis_recommends() -> None:
         doc_repo.list_document_statuses.return_value = []
         store.latest_many.return_value = {}
         trail.processing_ms_many.return_value = {}
+        trail.created_by_many.return_value = {}
 
         page = case_service.list_cases_page(limit=25, offset=0, sort="newest", statuses=[], q=None)
 
@@ -95,6 +101,7 @@ def test_the_case_list_carries_its_document_types_and_flags_grouped_by_check() -
         ]
         store.latest_many.return_value = {}
         trail.processing_ms_many.return_value = {}
+        trail.created_by_many.return_value = {}
         flags.list_for_cases.return_value = [
             flag("doc-1", "spelling_tool", "low"),
             flag("doc-2", "numerical_checks_tool", "medium"), flag("doc-1", "numerical_checks_tool", "high"),
@@ -109,3 +116,35 @@ def test_the_case_list_carries_its_document_types_and_flags_grouped_by_check() -
         ("numerical_checks_tool", "high", 2, ["bank_statement", "payslip"]),
         ("spelling_tool", "low", 1, ["payslip"]),
     ]
+
+
+def test_the_accuracy_filters_pick_cases_by_creation_date_and_documents_status() -> None:
+    def case(case_id: str, created: str) -> CaseRecord:
+        return CaseRecord(id=case_id, greenlink_case_id=case_id.upper(), created_at=created, updated_at=created)
+
+    with (
+        patch("app.case_service.case_repository") as case_repo,
+        patch("app.case_service.document_repository") as doc_repo,
+    ):
+        case_repo.list_matching_cases.return_value = [
+            case("new-ready", "2026-10-20T00:00:00Z"), case("new-empty", "2026-10-21T00:00:00Z"),
+            case("old-ready", "2026-09-01T00:00:00Z"),
+        ]
+        doc_repo.list_document_statuses.return_value = [
+            DocumentRecord(id="d1", case_id="new-ready", filename="a.pdf", status=DocumentStatus.ANALYZED, uploaded_at="2026-10-20T00:00:00Z"),
+        ]
+
+        recent = case_service.case_ids_matching(date(2026, 10, 1), [])
+        recent_ready = case_service.case_ids_matching(date(2026, 10, 1), [CaseDocumentsStatus.ANALYZED])
+
+    assert recent == {"new-ready", "new-empty"}
+    assert recent_ready == {"new-ready"}
+
+
+def test_a_case_creator_is_the_officer_behind_its_case_created_event() -> None:
+    rows = [
+        {"id": "e1", "case_id": "case-1", "actor": "greenlink-tester"},
+        {"id": "e2", "case_id": "case-2", "actor": ""},
+    ]
+    with patch("app.audit.fetch_all", return_value=rows), patch("app.audit.service_supabase_client"):
+        assert audit.created_by_many(["case-1", "case-2", "case-3"]) == {"case-1": "greenlink-tester"}

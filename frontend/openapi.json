@@ -1470,6 +1470,17 @@
             "title": "Created At",
             "type": "string"
           },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
           "document_types": {
             "items": {
               "type": "string"
@@ -1572,7 +1583,8 @@
           "processing_ms",
           "recommended_documents",
           "document_types",
-          "flags"
+          "flags",
+          "created_by"
         ],
         "title": "CaseListItem",
         "type": "object"
@@ -8378,9 +8390,39 @@
     },
     "/detection-metrics": {
       "get": {
-        "description": "Precision and recall per check across every reviewed case, with targets (the dashboard).",
+        "description": "Precision and recall per check across every reviewed case, with targets (the dashboard). Optionally only\ncases created on or after `since` and in these documents statuses, as the dashboard's filters pick.",
         "operationId": "get_detection_metrics_detection_metrics_get",
         "parameters": [
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/CaseDocumentsStatus"
+              },
+              "title": "Status",
+              "type": "array"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",

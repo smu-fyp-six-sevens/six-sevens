@@ -92,6 +92,22 @@ def processing_ms_many(case_ids: list[str]) -> dict[str, int]:
     return totals
 
 
+def created_by_many(case_ids: list[str]) -> dict[str, str]:
+    """
+    The officer who created each case, from its case.created event. Cases created before the trail existed, or by
+    the system, are absent. Sync: run on a worker thread.
+    """
+    rows: list[dict] = []
+    for start in range(0, len(case_ids), _CASE_CHUNK):
+        chunk = case_ids[start : start + _CASE_CHUNK]
+        rows += fetch_all(
+            lambda chunk=chunk: service_supabase_client().table(_TABLE).select("id, case_id, actor")
+            .in_("case_id", chunk).eq("action", types.CASE_CREATED).eq("actor_type", "user"),
+            "id",
+        )
+    return {row["case_id"]: row["actor"] for row in rows if row.get("actor")}
+
+
 # End-of-run events that carry a run's Claude usage (detail.llm_cost_usd and the token counts).
 _COSTED = [
     types.DOCUMENT_ANALYZED, types.DOCUMENT_FAILED, types.DOCUMENT_DETECTED, types.DETECTION_FAILED,

@@ -1,6 +1,6 @@
 import { assertOk } from './request';
 import { authFetch } from '../../lib/api';
-import type { CaseFindingReviews, DetectionMetrics, ReviewScope, ReviewVerdict } from './types';
+import type { CaseDocumentsStatus, CaseFindingReviews, DetectionMetrics, ReviewScope, ReviewVerdict } from './types';
 
 // Every review in the case, with precision and recall per document, across documents and for the case.
 export async function getCaseFindingReviews(caseId: string): Promise<CaseFindingReviews> {
@@ -123,9 +123,19 @@ export async function deleteFindingReview(caseId: string, reviewId: string): Pro
   return (await response.json()) as CaseFindingReviews;
 }
 
-// Precision and recall per check across every reviewed case (the dashboard).
-export async function getDetectionMetrics(): Promise<DetectionMetrics> {
-  const response = await authFetch('/detection-metrics');
+// The dashboard's filters for the metrics: cases created on or after `since` (YYYY-MM-DD), in these statuses.
+export interface DetectionMetricsFilters {
+  since?: string | null;
+  statuses?: CaseDocumentsStatus[];
+}
+
+// Precision and recall per check across every reviewed case matching the filters (the dashboard).
+export async function getDetectionMetrics(filters: DetectionMetricsFilters = {}): Promise<DetectionMetrics> {
+  const params = new URLSearchParams();
+  if (filters.since) params.set('since', filters.since);
+  for (const status of filters.statuses ?? []) params.append('status', status);
+  const query = params.toString();
+  const response = await authFetch(`/detection-metrics${query ? `?${query}` : ''}`);
 
   await assertOk(response, 'Failed to load the detection metrics');
 

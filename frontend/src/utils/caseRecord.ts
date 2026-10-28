@@ -24,6 +24,7 @@ interface ApiCase {
   recommended_documents?: string[] | null;
   document_types?: string[];
   flags?: { check: string; severity: string; count: number; document_types?: string[] }[];
+  created_by?: string | null;
 }
 
 export function toCaseRecord(item: ApiCase): CaseRecord {
@@ -45,5 +46,6 @@ export function toCaseRecord(item: ApiCase): CaseRecord {
     flags: (item.flags ?? []).map((flag) => ({
       check: flag.check, severity: flag.severity, count: flag.count, documentTypes: flag.document_types ?? [],
     })),
+    createdBy: item.created_by ?? null,
   };
 }

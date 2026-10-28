@@ -509,6 +509,8 @@ class CaseListItem(CaseRecord):
     document_types: list[str] = Field(default_factory=list)
     # The case's flags (flags_repository), one entry per check, most flags first.
     flags: list[CaseFlagCount] = Field(default_factory=list)
+    # The username of the officer who created the case (its case.created event); None when the trail has no record.
+    created_by: str | None = None
 
 
 class CaseListPage(BaseModel):

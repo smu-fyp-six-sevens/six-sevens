@@ -1,18 +1,27 @@
 import { useEffect, useState } from 'react';
-import type { DetectionMetrics } from '../services/uploadService';
+import type { CheckMetrics, DetectionMetrics, DetectionMetricsFilters } from '../services/uploadService';
 import { getDetectionMetrics } from '../services/uploadService';
 import { Rate } from '../components/Rate';
 import { RATE_MEANING, formatCheck } from '../utils/checkLabels';
-import { InfoLabel } from '../components/InfoTip';
+import { InfoLabel, InfoTip } from '../components/InfoTip';
 
-// The dashboard's Accuracy tab: precision and recall per detection check, from officers' reviews on case pages.
-export function DetectionAccuracyPanel() {
+type RateKind = 'precision' | 'recall';
+type CheckStatus = 'below' | 'few' | 'ok';
+
+const FEW_REVIEWS = 'Few reviews';
+const STATUS_RANK: Record<CheckStatus, number> = { below: 2, few: 1, ok: 0 };
+
+// The metrics for the dashboard's current date and status filters, reloaded whenever they change.
+function useDetectionMetrics(filters: DetectionMetricsFilters) {
   const [metrics, setMetrics] = useState<DetectionMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const key = JSON.stringify([filters.since ?? null, filters.statuses ?? []]);
 
   useEffect(() => {
     let cancelled = false;
-    getDetectionMetrics()
+    const [since, statuses] = JSON.parse(key) as [string | null, DetectionMetricsFilters['statuses']];
+    setError(null);
+    getDetectionMetrics({ since, statuses })
       .then((loaded) => {
         if (!cancelled) setMetrics(loaded);
       })
@@ -22,34 +31,120 @@ export function DetectionAccuracyPanel() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [key]);
+
+  return { metrics, error };
+}
+
+const reviewCount = (check: Pick<CheckMetrics, 'correct' | 'wrong' | 'missed'>) => check.correct + check.wrong + check.missed;
+
+function checkStatus(check: CheckMetrics): CheckStatus {
+  if (check.flags.some((flag) => flag !== FEW_REVIEWS)) return 'below';
+  return check.flags.includes(FEW_REVIEWS) ? 'few' : 'ok';
+}
+
+const asPercent = (rate: number) => `${Math.round(rate * 100)}%`;
+
+// A rate as a bar against its target line. With nothing to measure yet, only the reason (Rate explains it on hover).
+function RateMeter({ rate, kind, target, large = false }: { rate: number | null; kind: RateKind; target: number; large?: boolean }) {
+  if (rate === null) {
+    return <div className="rate-meter rate-meter--empty"><Rate rate={null} kind={kind} className="rate-meter-value" /></div>;
+  }
+  return (
+    <div className={`rate-meter${large ? ' rate-meter--large' : ''}`}>
+      <Rate rate={rate} kind={kind} className="rate-meter-value" />
+      <span className="rate-meter-track" aria-hidden="true">
+        <i style={{ width: `${Math.max(rate * 100, 2)}%` }} />
+        <span className="rate-meter-target" style={{ left: `${target * 100}%` }}>
+          {large && <span className="rate-meter-target-label">Target {asPercent(target)}</span>}
+        </span>
+      </span>
+    </div>
+  );
+}
+
+// Correct, wrong and missed as one stacked bar with their total beside it, and the counts beneath.
+function ReviewMix({ check }: { check: Pick<CheckMetrics, 'correct' | 'wrong' | 'missed'> }) {
+  const total = reviewCount(check);
+  const parts = [
+    { key: 'correct', count: check.correct, label: 'correct' },
+    { key: 'wrong', count: check.wrong, label: 'wrong' },
+    { key: 'missed', count: check.missed, label: 'missed' },
+  ];
+  return (
+    <div className="review-mix">
+      <span className="review-mix-top">
+        <span className="review-mix-bar" aria-hidden="true">
+          {total > 0 && parts.map((part) => part.count > 0 && (
+            <i key={part.key} className={`review-mix-${part.key}`} style={{ width: `${part.count / total * 100}%` }} />
+          ))}
+        </span>
+        <span className="review-mix-total"><strong>{total}</strong> {total === 1 ? 'review' : 'reviews'}</span>
+      </span>
+      <span className="review-mix-counts">
+        {parts.map((part) => (
+          <span key={part.key}><i className={`review-mix-dot review-mix-${part.key}`} aria-hidden="true" />{part.count} {part.label}</span>
+        ))}
+      </span>
+    </div>
+  );
+}
+
+// Where a check stands, in plain text; the tip gives each reason with its figure and target.
+function CheckStanding({ check, targets }: { check: CheckMetrics; targets: { precision: number; recall: number; minReviews: number } }) {
+  const status = checkStatus(check);
+  const few = check.flags.includes(FEW_REVIEWS);
+  const reasons = [
+    check.precision !== null && check.precision < targets.precision
+      && `Precision ${asPercent(check.precision)}, below the ${asPercent(targets.precision)} target.`,
+    check.recall !== null && check.recall < targets.recall
+      && `Recall ${asPercent(check.recall)}, below the ${asPercent(targets.recall)} target.`,
+    few && `Only ${reviewCount(check)} of ${targets.minReviews} reviews needed for reliable rates.`,
+  ].filter(Boolean);
+  return (
+    <InfoTip
+      className={`accuracy-standing accuracy-standing--${status}`}
+      tip={reasons.length ? reasons.join(' ') : `Precision and recall both meet the ${asPercent(targets.precision)} and ${asPercent(targets.recall)} targets.`}
+    >
+      <strong>{status === 'ok' ? 'On target' : status === 'below' ? 'Below target' : 'Few reviews'}</strong>
+      {status === 'below' && few && <small>Few reviews</small>}
+    </InfoTip>
+  );
+}
+
+// The dashboard's Accuracy tab: precision and recall per detection check, from officers' reviews on case pages.
+export function DetectionAccuracyPanel({ filters }: { filters: DetectionMetricsFilters }) {
+  const { metrics, error } = useDetectionMetrics(filters);
 
   if (error) return <p className="dashboard-data-note" role="alert">{error}</p>;
   if (!metrics) return <p className="dashboard-data-note" role="status">Loading detection accuracy…</p>;
 
   const { overall } = metrics;
-  const reviewed = overall.correct + overall.wrong + overall.missed;
-  const target = (rate: number) => `${Math.round(rate * 100)}%`;
+  const reviewed = reviewCount(overall);
+  const checks = [...overall.by_check].sort(
+    (a, b) => STATUS_RANK[checkStatus(b)] - STATUS_RANK[checkStatus(a)] || reviewCount(b) - reviewCount(a),
+  );
+  const onTarget = checks.filter((check) => checkStatus(check) === 'ok').length;
 
   return (
     <>
       <section className="flag-summary-grid" aria-label="Detection accuracy overall">
-        <article className="dashboard-stat-card">
+        <article className="dashboard-stat-card accuracy-card">
           <span className="stat-caption"><InfoLabel label="Precision" tip={RATE_MEANING.precision} /></span>
-          <Rate rate={overall.precision} kind="precision" className="stat-number" />
+          <RateMeter rate={overall.precision} kind="precision" target={metrics.target_precision} large />
           <span className="stat-caption">{overall.correct} correct of {overall.correct + overall.wrong} reviewed findings</span>
         </article>
-        <article className="dashboard-stat-card">
+        <article className="dashboard-stat-card accuracy-card">
           <span className="stat-caption"><InfoLabel label="Recall" tip={RATE_MEANING.recall} /></span>
-          <Rate rate={overall.recall} kind="recall" className="stat-number" />
+          <RateMeter rate={overall.recall} kind="recall" target={metrics.target_recall} large />
           <span className="stat-caption">{overall.correct} caught of {overall.correct + overall.missed} real issues</span>
         </article>
-        <article className="dashboard-stat-card">
-          <span className="stat-caption">Reviewed</span>
-          <span className="stat-number">{metrics.cases_reviewed}</span>
+        <article className="dashboard-stat-card accuracy-card">
+          <span className="stat-caption">Checks on target</span>
+          <span className="stat-number">{onTarget}<small className="stat-of"> / {checks.length}</small></span>
           <span className="stat-caption">
-            {metrics.cases_reviewed === 1 ? 'case' : 'cases'} · {metrics.documents_reviewed}{' '}
-            {metrics.documents_reviewed === 1 ? 'document' : 'documents'}
+            From {metrics.cases_reviewed} {metrics.cases_reviewed === 1 ? 'case' : 'cases'} · {metrics.documents_reviewed}{' '}
+            {metrics.documents_reviewed === 1 ? 'document' : 'documents'} reviewed
           </span>
         </article>
       </section>
@@ -58,63 +153,47 @@ export function DetectionAccuracyPanel() {
         <div className="panel-heading">
           <div>
             <h2>Precision and recall per check</h2>
-            <p>
-              From officers marking findings correct or wrong, and reporting what detection missed. Targets:
-              precision {target(metrics.target_precision)}, recall {target(metrics.target_recall)}.
-            </p>
+            <p>From officers marking findings correct or wrong, and reporting what detection missed.</p>
           </div>
-          <span className="panel-kicker">ALL REVIEWED CASES</span>
         </div>
         <div className="case-table-wrap">
           <table className="dashboard-case-table flag-table accuracy-table">
             <thead>
               <tr>
                 <th>CHECK</th>
-                <th>CORRECT</th>
-                <th>WRONG</th>
-                <th>MISSED</th>
+                <th>REVIEWS</th>
                 <th><InfoLabel label="PRECISION" tip={RATE_MEANING.precision} /></th>
                 <th><InfoLabel label="RECALL" tip={RATE_MEANING.recall} /></th>
-                <th>FLAG</th>
+                <th>
+                  <InfoLabel
+                    label="FLAGS"
+                    tip={`Below target: precision under ${asPercent(metrics.target_precision)} or recall under ${asPercent(metrics.target_recall)}. Few reviews: fewer than ${metrics.min_reviews}, so the rates aren't reliable yet.`}
+                  />
+                </th>
               </tr>
             </thead>
             <tbody>
-              {overall.by_check.map((check) => (
+              {checks.map((check) => (
                 <tr key={`${check.scope}-${check.check_name}`}>
                   <td data-label="Check">
                     <strong className="flag-name">{formatCheck(check.check_name)}</strong>
-                    {check.scope === 'case' && <span className="flag-doc-types"> Across documents</span>}
+                    {check.scope === 'case' && <span className="accuracy-scope">Across documents</span>}
                   </td>
-                  <td data-label="Correct">{check.correct}</td>
-                  <td data-label="Wrong">{check.wrong}</td>
-                  <td data-label="Missed">{check.missed}</td>
-                  <td data-label="Precision"><strong><Rate rate={check.precision} kind="precision" /></strong></td>
-                  <td data-label="Recall"><strong><Rate rate={check.recall} kind="recall" /></strong></td>
-                  <td data-label="Flag">
-                    {check.flags.length === 0
-                      ? <span className="no-flag">On target</span>
-                      : check.flags.map((flag) => (
-                          <span key={flag} className={`flag-severity ${flag === 'Few reviews' ? 'medium' : 'high'}`}>
-                            {flag}
-                          </span>
-                        ))}
-                  </td>
+                  <td data-label="Reviews"><ReviewMix check={check} /></td>
+                  <td data-label="Precision"><Rate rate={check.precision} kind="precision" className="accuracy-rate" /></td>
+                  <td data-label="Recall"><Rate rate={check.recall} kind="recall" className="accuracy-rate" /></td>
+                  <td data-label="Flags"><CheckStanding check={check} targets={{ precision: metrics.target_precision, recall: metrics.target_recall, minReviews: metrics.min_reviews }} /></td>
                 </tr>
               ))}
             </tbody>
           </table>
           {reviewed === 0 && (
             <p className="empty-insight table-empty">
-              No findings reviewed yet. On a case's Risk section, mark each finding correct or wrong and report anything
-              detection missed.
+              No findings reviewed for these cases yet. On a case's Risk section, mark each finding correct or wrong and
+              report anything detection missed.
             </p>
           )}
         </div>
-        <footer className="table-footer">
-          <span>
-            A check with fewer than {metrics.min_reviews} reviews is flagged “Few reviews”: its rates aren't meaningful yet.
-          </span>
-        </footer>
       </section>
     </>
   );
@@ -122,29 +201,13 @@ export function DetectionAccuracyPanel() {
 
 // The dashboard Overview's panel: overall precision and recall, and the checks most in need of attention
 // (flagged first, then the most reviewed). The Accuracy tab has the full table.
-export function DetectionAccuracySummary({ onViewAll }: { onViewAll: () => void }) {
-  const [metrics, setMetrics] = useState<DetectionMetrics | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    getDetectionMetrics()
-      .then((loaded) => {
-        if (!cancelled) setMetrics(loaded);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load the detection metrics');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+export function DetectionAccuracySummary({ filters, onViewAll }: { filters: DetectionMetricsFilters; onViewAll: () => void }) {
+  const { metrics, error } = useDetectionMetrics(filters);
 
   const overall = metrics?.overall;
-  const reviewed = overall ? overall.correct + overall.wrong + overall.missed : 0;
-  const reviews = (check: { correct: number; wrong: number; missed: number }) => check.correct + check.wrong + check.missed;
+  const reviewed = overall ? reviewCount(overall) : 0;
   const attention = [...(overall?.by_check ?? [])]
-    .sort((a, b) => b.flags.filter((f) => f !== 'Few reviews').length - a.flags.filter((f) => f !== 'Few reviews').length || reviews(b) - reviews(a))
+    .sort((a, b) => b.flags.filter((f) => f !== FEW_REVIEWS).length - a.flags.filter((f) => f !== FEW_REVIEWS).length || reviewCount(b) - reviewCount(a))
     .slice(0, 4);
 
   return (
