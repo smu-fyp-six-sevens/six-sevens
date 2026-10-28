@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { CaseAnalysis, CaseAnalysisOverview } from '../../services/uploadService';
 import { getCaseAnalysis, runCaseAnalysis } from '../../services/uploadService';
 import { CaseAnalysisTracePanel } from './CaseAnalysisTracePanel';
+import { ErrorMessage } from '../../components/ErrorMessage';
 
 const CATEGORY_LABELS: Record<string, string> = {
   identity_entity_conflict: 'Identity conflict',
@@ -52,6 +53,12 @@ export function CaseAnalysisCard({
     }
   }, [hasOverview, runId, runStatus, stale, load]);
 
+  // A failed run's stored error is an exception's text: the console has it, the card says to run it again.
+  const failedError = analysis?.status === 'failed' ? analysis.error : null;
+  useEffect(() => {
+    if (failedError) console.error(`Case analysis for case ${caseId} failed:`, failedError);
+  }, [caseId, failedError]);
+
   const running = starting || overview?.status === 'running';
 
   async function start() {
@@ -96,11 +103,7 @@ export function CaseAnalysisCard({
         </div>
       )}
 
-      {error && (
-        <p className="analysis-error" role="alert">
-          {error}
-        </p>
-      )}
+      {error && <ErrorMessage className="card-error" message={error} />}
 
       {overview?.stale && (
         <div className="summary-message summary-message--warning">
@@ -117,7 +120,7 @@ export function CaseAnalysisCard({
           <span className="summary-message-icon">⚠</span>
           <div>
             <strong>The analysis did not finish.</strong>
-            <p>{analysis.error ?? 'Run it again.'}</p>
+            <p>Run it again.</p>
           </div>
         </div>
       )}

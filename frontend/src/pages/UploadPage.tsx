@@ -37,6 +37,7 @@ import {
 import {
   MAX_COMPANY_NAME_LENGTH,
 } from '../utils/caseValidation';
+import { ErrorMessage } from '../components/ErrorMessage';
 
 
 const NAV_COLLAPSED_KEY = 'caseNav.collapsed';
@@ -211,9 +212,7 @@ export default function UploadPage({
               </span>
             </div>
             {saveCaseError && (
-              <p id="case-company-name-error" className="add-field-error" role="alert">
-                {saveCaseError}
-              </p>
+              <ErrorMessage inline id="case-company-name-error" className="add-field-error" message={saveCaseError} />
             )}
           </div>
         ) : (
@@ -241,11 +240,7 @@ export default function UploadPage({
         )}
       </CaseHeader>
 
-      {deleteError && (
-        <div className="toast show mixed" role="alert">
-          ⚠ {deleteError}
-        </div>
-      )}
+      {deleteError && <ErrorMessage className="toast-error" message={deleteError} />}
 
       <div className={`case-layout${navCollapsed ? ' case-layout--collapsed' : ''}`}>
         <CaseSectionNav
@@ -361,13 +356,9 @@ export default function UploadPage({
                   </div>
                 )}
 
-                {countError && (
-                  <div className="toast show mixed">⚠ {countError}</div>
-                )}
+                {countError && <ErrorMessage className="toast-error" message={countError} />}
 
-                {error && (
-                  <div className="toast show mixed">⚠ {error}</div>
-                )}
+                {error && <ErrorMessage className="toast-error" message={error} />}
 
                 {justSubmitted && hasOutcome && !error && !isSubmitting && (
                   <div

@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react';
 import type { CaseOption } from '../../services/uploadService';
+import { ErrorMessage } from '../../components/ErrorMessage';
 
 export function MoveDocumentsDialog({
   caseOptions,
@@ -38,7 +39,7 @@ export function MoveDocumentsDialog({
               {isLoadingCaseOptions ? (
                 <p>Loading cases…</p>
               ) : moveError && !caseOptions ? (
-                <p className="save-error">{moveError}</p>
+                <ErrorMessage message={moveError} />
               ) : (
                 <>
                   <select
@@ -53,7 +54,7 @@ export function MoveDocumentsDialog({
                       </option>
                     ))}
                   </select>
-                  {moveError && <p className="save-error">{moveError}</p>}
+                  {moveError && <ErrorMessage className="action-error" message={moveError} />}
                 </>
               )}
               <div className="confirm-dialog-actions">

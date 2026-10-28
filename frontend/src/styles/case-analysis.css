@@ -37,13 +37,9 @@
   color: var(--ink-soft);
 }
 
-.analysis-error {
+/* An ErrorMessage inside a summary card, inset like the card's content. */
+.card-error {
   margin: 0 20px 16px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: var(--red-bg);
-  color: var(--red);
-  font-size: 12.5px;
 }
 
 .analysis-action {

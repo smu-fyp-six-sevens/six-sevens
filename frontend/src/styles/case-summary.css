@@ -1060,10 +1060,6 @@
 
 /* Documents with no findings, and the cross-document group: only for reporting what detection missed. */
 
-.summary-card .save-error {
-  margin: 0 20px 12px;
-}
-
 /* A precision or recall (components/Rate.tsx). When there's nothing to measure yet it says "Not measured": in a
    table, soft grey and dotted underneath to show it explains itself; in the big figures, styled like the figures. */
 .rate--empty:not(.review-summary-value, .stat-number) {

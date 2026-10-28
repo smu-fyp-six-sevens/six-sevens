@@ -175,6 +175,8 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
 
     await expect(documentStatus(page)).toHaveText('Detection failed');
     await expect(detectionPanel(page)).toContainText('The last detection run did not finish.');
+    // The stored error ("Detection failed: Cancelled by loan officer...") stays in the console.
+    await expect(detectionPanel(page)).not.toContainText('Detection failed:');
     await expect(detectionPanel(page).getByRole('button', { name: 'Retry detection' })).toBeVisible();
     await expect(detectionPanel(page).getByRole('button', { name: 'Cancel detection' })).toHaveCount(0);
   });

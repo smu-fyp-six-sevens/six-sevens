@@ -11,6 +11,7 @@ import {
 import {
   formatDate,
 } from './formatters';
+import { ErrorMessage } from '../../components/ErrorMessage';
 
 type StatusTone = 'success' | 'failed' | 'rejected' | 'cancelled' | 'stuck';
 
@@ -145,9 +146,7 @@ export function DocumentSummaryCard({
                         : 'Confirm document type and rerun'}
                   </button>
 
-                  {typeError && (
-                    <span className="save-error">{typeError}</span>
-                  )}
+                  {typeError && <ErrorMessage inline message={typeError} />}
                 </div>
               ) : (
                 <strong>

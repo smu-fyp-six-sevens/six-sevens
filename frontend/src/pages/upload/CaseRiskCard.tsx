@@ -6,6 +6,7 @@ import { formatCheck as formatTool } from '../../utils/checkLabels';
 import type { GroupReviewStatus } from './FindingReviewControls';
 import { GroupReviewBar, MetricsLine, MissedIssues, ReviewSummary } from './FindingReviewControls';
 import { findingScope, useFindingReviews, verdictFor } from './useFindingReviews';
+import { ErrorMessage } from '../../components/ErrorMessage';
 
 // The group cross-document findings sit in: they belong to the case, not to one document.
 const CASE_GROUP_ID = '__case__';
@@ -549,11 +550,7 @@ export function CaseRiskCard({
               <div className="flagged-list">{done.map(renderGroup)}</div>
             </details>
           )}
-          {reviews.error && (
-            <div className="save-error" role="alert">
-              {reviews.error}
-            </div>
-          )}
+          {reviews.error && <ErrorMessage className="card-error" message={reviews.error} />}
           {reviews.data && <ReviewSummary caseSummary={reviews.data.case} />}
         </section>
       )}

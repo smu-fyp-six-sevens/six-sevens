@@ -314,7 +314,7 @@ test.describe('Upload documents @sprint1 @SCRUM-6', () => {
     const twentyOne = Array.from({ length: 21 }, (_, index) => pdf(`statement-${index + 1}.pdf`));
     await browseFiles(page, twentyOne);
 
-    await expect(page.locator('.toast.mixed')).toContainText('Too many files selected (21). Maximum is 20 per upload.');
+    await expect(page.locator('.toast-error')).toContainText('Too many files selected (21). Maximum is 20 per upload.');
     await expect(page.locator('.file-row')).toHaveCount(20);
   });
 });
