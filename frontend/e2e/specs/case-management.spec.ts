@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../support/test';
 import { makeCase, makeDocument, type CaseRow, type MockBackend } from '../support/mockBackend';
-import type { AuditEvent, CaseRisk } from '../../src/services/uploadService/types';
+import type { AuditEvent, CaseRisk, CaseRiskFinding } from '../../src/services/uploadService/types';
 import { loadFixture, readRegressionFixture } from '../support/fixtures';
 
 /**
@@ -1150,6 +1150,7 @@ test.describe('Case summary progress', () => {
   // One document with one finding, its review saved; the case analysis either up to date or out of date.
   async function openSummary(page: Page, backend: MockBackend, stale: boolean) {
     const finding: CaseRiskFinding = {
+      ...CASE_VIEWS.scored.risk.contributing_findings[0],
       document_id: 'doc-payslip', filename: 'C011_Payslip.pdf', document_type: 'payslip',
       finding_id: 'numerical_checks_tool-1', tool: 'numerical_checks_tool', severity: 'high',
       summary: 'Net pay does not add up.', rationale: '', points: 8, unreviewed: false,
@@ -1157,8 +1158,8 @@ test.describe('Case summary progress', () => {
     const harbor = Object.assign(
       makeCase({
         greenlink_case_id: 'GLDB-3003',
-        documents_status: 'analyzed',
-        risk: makeRisk({ state: 'scored', level: 'High', score: 57, documents_scanned: 1, documents_total: 1, contributing_findings: [finding] }),
+        // Only the review steps are checked, so a real scored risk narrowed to this one finding is enough.
+        risk: { ...CASE_VIEWS.scored.risk, documents_scanned: 1, documents_total: 1, contributing_findings: [finding] },
       }),
       { analysis: { run_id: 'run-1', status: 'complete', stale, finding_count: 1, finished_at: '2026-10-27T00:00:00Z' } },
     );

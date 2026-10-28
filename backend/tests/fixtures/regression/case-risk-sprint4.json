@@ -73,6 +73,7 @@
         {
           "also_on": 0,
           "category": "cross_document_variance",
+          "check_code": null,
           "document_id": "c002c002-0000-0000-0000-000000000001",
           "document_type": "payslip",
           "filename": "AisyahRazak_Payslip_CpfOverCeiling.pdf",
@@ -90,6 +91,7 @@
         {
           "also_on": 0,
           "category": "registry_discrepancy",
+          "check_code": "PS.CPF_RATE",
           "document_id": "c002c002-0000-0000-0000-000000000001",
           "document_type": "payslip",
           "filename": "AisyahRazak_Payslip_CpfOverCeiling.pdf",
@@ -107,6 +109,7 @@
         {
           "also_on": 0,
           "category": "tampering_forensic",
+          "check_code": null,
           "document_id": "c002c002-0000-0000-0000-000000000002",
           "document_type": "nric",
           "filename": "C002-P1_NRICPassport.pdf",
@@ -124,6 +127,7 @@
         {
           "also_on": 0,
           "category": "registry_discrepancy",
+          "check_code": "REG.ISSUER",
           "document_id": "c002c002-0000-0000-0000-000000000002",
           "document_type": "nric",
           "filename": "C002-P1_NRICPassport.pdf",
@@ -141,6 +145,7 @@
         {
           "also_on": 0,
           "category": "tampering_forensic",
+          "check_code": null,
           "document_id": "c002c002-0000-0000-0000-000000000003",
           "document_type": "certificate_of_incorporation",
           "filename": "C002_CertIncorp.pdf",
@@ -158,6 +163,7 @@
         {
           "also_on": 0,
           "category": "registry_discrepancy",
+          "check_code": "REG.UEN_EXISTS",
           "document_id": "c002c002-0000-0000-0000-000000000003",
           "document_type": "certificate_of_incorporation",
           "filename": "C002_CertIncorp.pdf",
@@ -175,6 +181,7 @@
         {
           "also_on": 0,
           "category": "registry_discrepancy",
+          "check_code": "TAX.YEAR_OF_ASSESSMENT",
           "document_id": "c002c002-0000-0000-0000-000000000004",
           "document_type": "notice_of_assessment",
           "filename": "C002_NOA.pdf",
@@ -332,6 +339,7 @@
         {
           "also_on": 0,
           "category": "tampering_forensic",
+          "check_code": null,
           "document_id": "7a4a7a4a-0000-0000-0000-000000000001",
           "document_type": "nric",
           "filename": "TanAhKow_NRIC.pdf",
@@ -417,6 +425,7 @@
         {
           "also_on": 0,
           "category": "tampering_forensic",
+          "check_code": null,
           "document_id": "11c911c9-0000-0000-0000-000000000001",
           "document_type": "passport",
           "filename": "LimCG_Passport_scan.jpeg",
@@ -502,6 +511,7 @@
         {
           "also_on": 0,
           "category": "tampering_forensic",
+          "check_code": null,
           "document_id": "e5e5e5e5-0000-0000-0000-000000000001",
           "document_type": "payslip",
           "filename": "C011_Payslip.pdf",
@@ -519,6 +529,7 @@
         {
           "also_on": 0,
           "category": "tampering_forensic",
+          "check_code": null,
           "document_id": "e5e5e5e5-0000-0000-0000-000000000002",
           "document_type": "bank_statement",
           "filename": "C011_BankStatement.pdf",
@@ -536,6 +547,7 @@
         {
           "also_on": 0,
           "category": "tampering_forensic",
+          "check_code": null,
           "document_id": "e5e5e5e5-0000-0000-0000-000000000003",
           "document_type": "certificate_of_incorporation",
           "filename": "C011_CertIncorp.pdf",

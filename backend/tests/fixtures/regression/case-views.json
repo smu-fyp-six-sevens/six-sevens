@@ -26,6 +26,7 @@
         {
           "also_on": 0,
           "category": "registry_discrepancy",
+          "check_code": "REG.UEN_EXISTS",
           "document_id": "0c33c33c-0000-0000-0000-000000000001",
           "document_type": "certificate_of_incorporation",
           "filename": "C058_CertIncorp.pdf",
@@ -242,6 +243,7 @@
         {
           "also_on": 0,
           "category": "tampering_forensic",
+          "check_code": null,
           "document_id": "0a11a11a-0000-0000-0000-000000000001",
           "document_type": "payslip",
           "filename": "C011_Payslip.pdf",
@@ -259,6 +261,7 @@
         {
           "also_on": 0,
           "category": "tampering_forensic",
+          "check_code": null,
           "document_id": "0a11a11a-0000-0000-0000-000000000001",
           "document_type": "payslip",
           "filename": "C011_Payslip.pdf",
@@ -276,6 +279,7 @@
         {
           "also_on": 0,
           "category": "tampering_forensic",
+          "check_code": null,
           "document_id": "0a11a11a-0000-0000-0000-000000000001",
           "document_type": "payslip",
           "filename": "C011_Payslip.pdf",
@@ -293,6 +297,7 @@
         {
           "also_on": 0,
           "category": "tampering_forensic",
+          "check_code": null,
           "document_id": "0a11a11a-0000-0000-0000-000000000002",
           "document_type": "bank_statement",
           "filename": "C011_BankStatement.pdf",
@@ -310,6 +315,7 @@
         {
           "also_on": 0,
           "category": "tampering_forensic",
+          "check_code": null,
           "document_id": "0a11a11a-0000-0000-0000-000000000001",
           "document_type": "payslip",
           "filename": "C011_Payslip.pdf",
@@ -327,6 +333,7 @@
         {
           "also_on": 0,
           "category": "tampering_forensic",
+          "check_code": null,
           "document_id": "0a11a11a-0000-0000-0000-000000000001",
           "document_type": "payslip",
           "filename": "C011_Payslip.pdf",
