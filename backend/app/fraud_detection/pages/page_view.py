@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any, cast
 
 import pymupdf
 
 from ...ingestion.ingestion_service import ingest_document
+from ..font_consistency import _font_family
 from ..numerical_validation.common import _as_number, _field_number, _rows, row_amount
 from ..shared.pdf_pages import pages as _pdf_pages
 
@@ -41,6 +43,7 @@ class PageView:
     size: tuple[int, int]         # width, height in points, rounded (orientation included)
     rotation: int
     image_cover: float            # share of the page covered by its largest image
+    font_chars: tuple[tuple[str, int], ...] = ()  # font family -> characters set in it; empty for OCR text
 
     @property
     def text(self) -> str:
@@ -86,12 +89,18 @@ def _page_view(page: pymupdf.Page, number: int, ocr_text: str | None = None) -> 
     source = ocr_text if ocr_text is not None else native
     lines = tuple(line for line in (collapse(raw) for raw in source.splitlines()) if line)
     placed: tuple[PlacedLine, ...] = ()
+    font_chars: Counter[str] = Counter()
     if ocr_text is None:
+        layout_lines = text_lines(page)
         placed = tuple(
             PlacedLine(joined, *line["bbox"])
-            for line in text_lines(page)
+            for line in layout_lines
             if (joined := collapse("".join(span["text"] for span in line["spans"])))
         )
+        for line in layout_lines:
+            for span in line["spans"]:
+                if chars := len(span["text"].strip()):
+                    font_chars[_font_family(span["font"])] += chars
         band_height = rect.height * PAGE_BAND_FRACTION
         band = [
             str(block[4]) for block in cast(list, page.get_text("blocks"))
@@ -107,7 +116,7 @@ def _page_view(page: pymupdf.Page, number: int, ocr_text: str | None = None) -> 
     return PageView(
         number=number, lines=lines, placed=placed, band_text=band_text, has_text_layer=bool(native.strip()),
         size=(round(rect.width), round(rect.height)), rotation=page.rotation,
-        image_cover=max(covers, default=0.0),
+        image_cover=max(covers, default=0.0), font_chars=tuple(font_chars.most_common()),
     )
 
 

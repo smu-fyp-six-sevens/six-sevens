@@ -5,14 +5,15 @@ Five deterministic checks, no model calls:
 * PAGE.NUMBERING        "Page x of y" runs 1..y with no gaps, repeats or reordering (numbering.py)
 * PAGE.CARRY_FORWARD    balances carried between pages agree with each other and the page (carry_forward.py)
 * PAGE.HEADER_IDENTITY  account number, names, UEN... are the same on every page that prints them (identity.py)
-* PAGE.SOURCE           a page of a different size or orientation, or a scan among digital pages (source.py)
+* PAGE.SOURCE           a page of a different size or orientation, a scan among digital pages, or a page in
+                        fonts no other page uses (source.py)
 * PAGE.DUPLICATE        two pages with the same content (duplicates.py)
 
 Each check reports evidence about a page or a boundary between pages. Evidence about the same page or
 boundary is one cause and becomes one finding, so a deleted page that shows up in the numbering and the
 carry lines is reported once. These checks stay out of what others already cover: transaction arithmetic
-and opening/closing balances (BS.*), periods (BS.PERIOD_BOUNDS), fonts, header positions and image
-resolution (the layout and image checks).
+and opening/closing balances (BS.*), periods (BS.PERIOD_BOUNDS), odd runs of text in another font, header
+positions and image resolution (the layout and image checks).
 """
 
 from __future__ import annotations

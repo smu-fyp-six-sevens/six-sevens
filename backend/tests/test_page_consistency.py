@@ -35,15 +35,16 @@ class Statement:
         ]
 
 
-def _right(page: pymupdf.Page, y: float, text: str, size: float = 9) -> None:
-    page.insert_text((_RIGHT - pymupdf.get_text_length(text, fontsize=size), y), text, fontsize=size)
+def _right(page: pymupdf.Page, y: float, text: str, size: float = 9, font: str = "helv") -> None:
+    x = _RIGHT - pymupdf.get_text_length(text, fontname=font, fontsize=size)
+    page.insert_text((x, y), text, fontsize=size, fontname=font)
 
 
 def make_statement(
     pages: int = 3, rows_per_page: int = 4, *, account: str = "012-345678-9", holder: str = "ACME TRADING PTE. LTD.",
     opening: float = 10_000.00, start_amount: float = 100.0, numbering: bool = True, carry: bool = True,
     page_sizes: dict[int, tuple[int, int]] | None = None, account_on_page: dict[int, str] | None = None,
-    terms_page: bool = False,
+    terms_page: bool = False, font_on_page: dict[int, str] | None = None,
 ) -> Statement:
     """A statement as a bank prints one: page numbers, the account header on every page, and the balance
     brought and carried forward on the same row as its label, in the balance column."""
@@ -53,28 +54,29 @@ def make_statement(
     for number in range(1, pages + 1):
         width, height = (page_sizes or {}).get(number, A4)
         page = doc.new_page(width=width, height=height)
+        font = (font_on_page or {}).get(number, "helv")
         if numbering:
-            page.insert_text((470, 30), f"Page {number} of {pages + (1 if terms_page else 0)}", fontsize=8)
-        page.insert_text((50, 80), f"Account No: {(account_on_page or {}).get(number, account)}", fontsize=9)
-        page.insert_text((50, 95), f"Account Holder: {holder}", fontsize=9)
+            page.insert_text((470, 30), f"Page {number} of {pages + (1 if terms_page else 0)}", fontsize=8, fontname=font)
+        page.insert_text((50, 80), f"Account No: {(account_on_page or {}).get(number, account)}", fontsize=9, fontname=font)
+        page.insert_text((50, 95), f"Account Holder: {holder}", fontsize=9, fontname=font)
         y = 140
         if carry:
-            page.insert_text((50, y), "Balance Brought Forward", fontsize=9)
-            _right(page, y, f"{balance:,.2f}")
+            page.insert_text((50, y), "Balance Brought Forward", fontsize=9, fontname=font)
+            _right(page, y, f"{balance:,.2f}", font=font)
             y += 18
         for row in range(rows_per_page):
             amount = round(start_amount + number * 10 + row, 2)
             balance = round(balance + amount, 2)
             date = f"{number:02d}-Jun-26"
             description = f"GIRO PAYMENT {number}{row}"
-            page.insert_text((50, y), f"{date}  {description}", fontsize=9)
-            page.insert_text((330, y), f"{amount:,.2f}", fontsize=9)
-            _right(page, y, f"{balance:,.2f}")
+            page.insert_text((50, y), f"{date}  {description}", fontsize=9, fontname=font)
+            page.insert_text((330, y), f"{amount:,.2f}", fontsize=9, fontname=font)
+            _right(page, y, f"{balance:,.2f}", font=font)
             rows.append({"date": date, "description": description, "amount": amount, "balance": balance})
             y += 18
         if carry:
-            page.insert_text((50, y), "Balance Carried Forward", fontsize=9)
-            _right(page, y, f"{balance:,.2f}")
+            page.insert_text((50, y), "Balance Carried Forward", fontsize=9, fontname=font)
+            _right(page, y, f"{balance:,.2f}", font=font)
     if terms_page:
         page = doc.new_page(width=420, height=595)  # a smaller insert at the back, as some banks print
         page.insert_text((50, 60), "Terms and conditions apply. Please check this statement carefully.", fontsize=8)
@@ -234,6 +236,31 @@ def test_a_page_of_another_size_is_a_signal() -> None:
     statement = make_statement(page_sizes={2: (612, 792)})  # US Letter among A4
     [finding] = _check(statement.pdf, statement.fields()).findings
     assert (finding.check_code, finding.severity, finding.pages) == ("PAGE.SOURCE", "signal", [2])
+
+
+def test_a_page_in_fonts_no_other_page_uses_is_a_signal() -> None:
+    # Page 1 in Helvetica, page 2 in Courier, page 3 swapped in from a document set in Times.
+    statement = make_statement(font_on_page={2: "cour", 3: "tiro"})
+    pdf = statement.pdf
+    doc = pymupdf.open(stream=pdf, filetype="pdf")
+    doc[0].insert_text((50, 110), "Statement period 01-Jun-26 to 30-Jun-26", fontsize=9, fontname="cour")
+    doc[1].insert_text((50, 110), "Statement period 01-Jun-26 to 30-Jun-26", fontsize=9, fontname="helv")
+    findings = _check(doc.tobytes(), statement.fields()).findings
+    assert [(f.check_code, f.severity, f.pages) for f in findings] == [("PAGE.SOURCE", "signal", [3])]
+    assert "Times-Roman" in findings[0].summary
+
+
+def test_a_page_sharing_one_font_with_the_others_is_genuine() -> None:
+    statement = make_statement(font_on_page={3: "tiro"})
+    doc = pymupdf.open(stream=statement.pdf, filetype="pdf")
+    for line in range(8):  # a Helvetica footer that is a fair share of page 3
+        doc[2].insert_text((50, 600 + line * 12), "Deposit Insurance Scheme protects eligible deposits", fontsize=8)
+    assert _check(doc.tobytes(), statement.fields()).findings == []
+
+
+def test_fonts_are_not_compared_on_a_two_page_statement() -> None:
+    statement = make_statement(pages=2, font_on_page={2: "tiro"})
+    assert _check(statement.pdf, statement.fields()).findings == []
 
 
 def test_a_scanned_page_among_digital_pages_is_a_signal() -> None:
