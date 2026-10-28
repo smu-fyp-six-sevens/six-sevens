@@ -10,6 +10,12 @@ export interface BreadcrumbMenuItem {
   current?: boolean;
 }
 
+// One page of a long menu: `hasMore` adds a "load more" button that asks for the next page.
+export interface BreadcrumbMenuPage {
+  items: BreadcrumbMenuItem[];
+  hasMore: boolean;
+}
+
 export interface Breadcrumb {
   label: string;
   to: string;
@@ -17,9 +23,12 @@ export interface Breadcrumb {
   current?: boolean;
   // Makes the crumb a switcher: hovering it (or clicking its caret) lists the other items at its
   // level (e.g. every case) to jump between, while its label still links back to `to`. Called when
-  // the list opens, so it can fetch.
-  loadMenu?: () => BreadcrumbMenuItem[] | Promise<BreadcrumbMenuItem[]>;
+  // the list opens, so it can fetch. A paged menu returns a page, and is called again with how many
+  // items it already has when the officer asks for more.
+  loadMenu?: (offset: number) => BreadcrumbMenuItem[] | BreadcrumbMenuPage | Promise<BreadcrumbMenuItem[] | BreadcrumbMenuPage>;
   menuLabel?: string;
+  // What the load more button says, e.g. "Load more cases".
+  loadMoreLabel?: string;
 }
 
 // Hover opens the list after a short pause (so passing over the bar doesn't flash it) and closes it
@@ -39,6 +48,8 @@ function CaretIcon() {
 function CrumbMenu({ crumb }: { crumb: Breadcrumb }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<BreadcrumbMenuItem[] | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const rootRef = useRef<HTMLSpanElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -93,9 +104,12 @@ function CrumbMenu({ crumb }: { crumb: Breadcrumb }) {
 
     let cancelled = false;
     setError(null);
-    Promise.resolve(loadMenu())
+    Promise.resolve(loadMenu(0))
       .then((loaded) => {
-        if (!cancelled) setItems(loaded);
+        if (cancelled) return;
+        const page = Array.isArray(loaded) ? { items: loaded, hasMore: false } : loaded;
+        setItems(page.items);
+        setHasMore(page.hasMore);
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load the list.');
@@ -105,6 +119,25 @@ function CrumbMenu({ crumb }: { crumb: Breadcrumb }) {
       cancelled = true;
     };
   }, [open]);
+
+  async function handleLoadMore() {
+    const loadMenu = loadMenuRef.current;
+    if (!loadMenu || !items || loadingMore) return;
+    const firstNew = items.length;
+    setLoadingMore(true);
+    try {
+      const loaded = await loadMenu(firstNew);
+      const page = Array.isArray(loaded) ? { items: loaded, hasMore: false } : loaded;
+      setItems([...items, ...page.items]);
+      setHasMore(page.hasMore);
+      // Keep keyboard focus moving down the list: onto the first of the new items.
+      requestAnimationFrame(() => listRef.current?.querySelectorAll<HTMLAnchorElement>('a')[firstNew]?.focus());
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not load more.');
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -119,14 +152,15 @@ function CrumbMenu({ crumb }: { crumb: Breadcrumb }) {
 
   // Opened by click or keyboard: start on the current item (scrolled into view), or the first one.
   // Opened by hover: only scroll it into view, so focus stays where it was.
+  const listShown = open && items !== null;
   useEffect(() => {
-    if (!open || !items) return;
+    if (!listShown) return;
     if (openedByHoverRef.current) {
       listRef.current?.querySelector('a[aria-current="page"]')?.scrollIntoView({ block: 'nearest' });
       return;
     }
     focusCurrentItem();
-  }, [open, items]);
+  }, [listShown]);
 
   function handleKeyDown(event: React.KeyboardEvent) {
     if (event.key === 'Escape') {
@@ -137,10 +171,10 @@ function CrumbMenu({ crumb }: { crumb: Breadcrumb }) {
     }
 
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-    const links = Array.from(listRef.current?.querySelectorAll<HTMLAnchorElement>('a') ?? []);
+    const links = Array.from(listRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
     if (!links.length) return;
     event.preventDefault();
-    const index = links.indexOf(document.activeElement as HTMLAnchorElement);
+    const index = links.indexOf(document.activeElement as HTMLElement);
     const step = event.key === 'ArrowDown' ? 1 : -1;
     links[(index + step + links.length) % links.length].focus();
   }
@@ -213,6 +247,19 @@ function CrumbMenu({ crumb }: { crumb: Breadcrumb }) {
                 </Link>
               </li>
             ))
+          )}
+          {items && items.length > 0 && hasMore && !error && (
+            <li role="none">
+              <button
+                type="button"
+                role="menuitem"
+                className="breadcrumb-list-more"
+                disabled={loadingMore}
+                onClick={handleLoadMore}
+              >
+                {loadingMore ? 'Loading…' : (crumb.loadMoreLabel ?? 'Load more')}
+              </button>
+            </li>
           )}
         </ul>
       )}

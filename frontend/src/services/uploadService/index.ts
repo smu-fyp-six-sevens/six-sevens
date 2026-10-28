@@ -7,3 +7,4 @@ export * from './documents';
 export * from './detection';
 export * from './notes';
 export * from './audit';
+export * from './findingReviews';

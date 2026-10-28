@@ -564,6 +564,23 @@ export class MockBackend {
     if (costMatch && method === 'GET') {
       return json(this.caseCost(costMatch[1]));
     }
+    // Officers' reviews of findings (precision/recall): none recorded, so every rate is "nothing to measure".
+    if (method === 'GET' && /^\/cases\/[^/]+\/finding-reviews$/.test(path)) {
+      return json({
+        reviews: [],
+        case: emptyMetrics(),
+        documents: {},
+        cross_document: emptyMetrics(),
+        checks: { document: [], case: [] },
+      });
+    }
+    if (method === 'GET' && path === '/detection-metrics') {
+      return json({
+        overall: emptyMetrics(), cases_reviewed: 0, documents_reviewed: 0,
+        target_precision: 0.8, target_recall: 0.8, min_reviews: 5,
+      });
+    }
+
     const caseMatch = path.match(/^\/cases\/([^/]+)$/);
     if (caseMatch) {
       const found = this.cases.find((c) => c.id === caseMatch[1]);
@@ -903,6 +920,10 @@ export class MockBackend {
     this.unmockedRequests.push(`${method} ${path}${url.search}`);
     return route.fulfill({ status: 599, headers: corsHeaders(), body: `Unmocked request: ${method} ${path}` });
   }
+}
+
+function emptyMetrics() {
+  return { correct: 0, wrong: 0, missed: 0, precision: null, recall: null, by_check: [] };
 }
 
 function corsHeaders(): Record<string, string> {

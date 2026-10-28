@@ -1,6 +1,6 @@
 # Tests: where we are and what's next
 
-Backend unit tests (`backend/tests`), Playwright (`frontend/e2e`), and the checks CI runs. Updated 2026-10-27 against `SCRUM-296-Sprint-4-Regression-Testing` (`8c31be0`, with `main` merged in).
+Backend unit tests (`backend/tests`), Playwright (`frontend/e2e`), and the checks CI runs. Updated 2026-10-28 against `SCRUM-296-Sprint-4-Regression-Testing` (`0afb6a6`, with `main` merged in, including the finding reviews work).
 
 This comes from reading the test files and measuring them with static scripts (test counts, mocks, assertions, which `app` module and which numerical rule code each test names), plus the Sprint 4 developer's own full run (below). CI's coverage report hasn't been read yet.
 
@@ -13,7 +13,7 @@ This comes from reading the test files and measuring them with static scripts (t
 
 ## 1. How healthy is the suite?
 
-**Backend:** 1,753 test functions in 91 files (recounted 2026-10-27). 106 are parametrised; the Sprint 4 developer's full pytest run collected 2,325 cases: 2,323 pass, 2 skipped (AI-generation provenance, which needs `exiftool`; CI installs it). There are 3,639 plain `assert`s, 252 mock-call assertions and 802 `patch(...)` calls. 163 tests carry their own sprint marker (sprint 1: 10, 2: 41, 3: 60, 4: 52); `conftest.py` tags existing tests centrally on top (sprint 4 tagged: 381 cases; sprints 1–3: 931).
+**Backend:** 1,783 test functions in 93 files (recounted 2026-10-28; `main` added `test_finding_reviews` and `test_value_locations`). 106 are parametrised; the Sprint 4 developer's full pytest run, before that merge, collected 2,325 cases: 2,323 pass, 2 skipped (AI-generation provenance, which needs `exiftool`; CI installs it). There are 3,639 plain `assert`s, 252 mock-call assertions and 802 `patch(...)` calls. 163 tests carry their own sprint marker (sprint 1: 10, 2: 41, 3: 60, 4: 52); `conftest.py` tags existing tests centrally on top (sprint 4 tagged: 381 cases; sprints 1–3: 931).
 
 | Group | Share | What to do |
 |---|---|---|
@@ -88,16 +88,16 @@ Also untested, lower weight: `CR.TENOR`, `FATCA.TIN_FORMAT`, `case_pipeline/risk
 
 ## 4. Playwright
 
-155 tests in 9 specs (the developer's run; a few are generated in loops):
+155 tests in 9 specs in the developer's run (a few are generated in loops); `main` has since added 4 definitions (finding reviews, the audit trail):
 
 | Spec | Test definitions |
 |---|---|
-| `case-management` | 52 |
+| `case-management` | 55 |
 | `case-analysis` | 21 |
 | `upload` | 17 |
 | `detection` | 16 |
 | `document-review` | 16 |
-| `audit-trail` | 10 |
+| `audit-trail` | 11 |
 | `checklist` | 9 |
 | `notes` | 5 |
 | `login` | 4 |
