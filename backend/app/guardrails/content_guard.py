@@ -16,7 +16,8 @@ Three checks, all deterministic:
   next to an outcome only a fraud check uses ("no findings", "classify as").
 
 Hidden runs the dictionary flags are also removed from the text the models read. An injection attempt is
-evidence of fraud on its own, so detection turns `guard_result` into a finding (prompt_injection_tool).
+evidence of fraud on its own, so detection turns `guard_result` into findings: instruction wording through
+prompt_injection_tool, hidden text with no such wording through hidden_text_tool (layout and rendering).
 """
 
 from __future__ import annotations

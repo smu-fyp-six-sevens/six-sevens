@@ -51,7 +51,8 @@ _MIN_SEVERITY_BY_TOOL = {
 
 def _severity_floor(finding: dict) -> str | None:
     """The lowest severity the specialist may give a finding, or None when it may dismiss it: set per tool, or
-    on the finding by the tool itself (prompt_injection_tool, whose floor depends on where the text was)."""
+    on the finding by the tool itself (prompt_injection_tool, whose floor depends on where the text was, and
+    hidden_text_tool)."""
     floor = finding.get("severity_floor")
     return floor if floor in SEVERITIES else _MIN_SEVERITY_BY_TOOL.get(finding.get("tool") or "")
 
@@ -92,7 +93,10 @@ SPECIALISTS: dict[str, Specialist] = {
             "or compression doesn't match the rest of the document (a spliced-in photo, signature "
             "or figure, or one enlarged from a smaller source), or that were edited in after the "
             "fact (painted over and replaced, stretched or rotated, pasted with a visible seam or "
-            "halo, or with altered brightness, colour, sharpness or noise). The font check needs a "
+            "halo, or with altered brightness, colour, sharpness or noise), and text a reader can't see "
+            "but extraction still reads (invisible, white on white, under 2pt, off the page), often left "
+            "behind when a figure or name was replaced: hidden_text_tool has already run on every document "
+            "when the review starts; assess its findings. The font check needs a "
             "PDF with native text; the layout check also reads PNG/JPEG uploads and scans by OCR "
             "(an ID card's fields against its standard layout), and the two image checks work on "
             "both. Most useful on "
@@ -100,11 +104,13 @@ SPECIALISTS: dict[str, Specialist] = {
             "(statements, payslips, certificates, IDs)."
         ),
         tools=(
+            detection_tools.hidden_text_tool,
             detection_tools.font_consistency_tool,
             detection_tools.layout_anomalies_tool,
             detection_tools.image_manipulation_tool,
             detection_tools.image_tampering_tool,
         ),
+        first_tool="hidden_text_tool",
     ),
     "content_validation": Specialist(
         name="content_validation",
@@ -143,8 +149,9 @@ SPECIALISTS: dict[str, Specialist] = {
             "noise and compression statistics, plus any declared provenance such as C2PA or IPTC). "
             "Applies to any uploaded file; the AI-generation check needs at least one photo, scan "
             "or image upload rather than only logos and rendered text. Also whether the file carries text "
-            "written to steer the AI reviewing it (hidden text, or wording addressed to an AI): "
-            "prompt_injection_tool has already run on every document when the review starts; assess its findings."
+            "written to steer the AI reviewing it (wording addressed to an AI, in the text, hidden text, "
+            "metadata, an embedded image or the file name): prompt_injection_tool has already run on every "
+            "document when the review starts; assess its findings."
         ),
         tools=(detection_tools.prompt_injection_tool, detection_tools.metadata_tool, detection_tools.ai_generation_tool),
         first_tool="prompt_injection_tool",

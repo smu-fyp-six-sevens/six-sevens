@@ -8,6 +8,7 @@
       "summary": "Reviewed within my expertise.",
       "title": "Layout & Rendering Analyst",
       "tools_called": [
+        "hidden_text_tool",
         "font_consistency_tool",
         "image_tampering_tool"
       ],

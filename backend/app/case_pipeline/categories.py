@@ -7,6 +7,7 @@ from .models import FindingCategory
 TOOL_CATEGORIES: dict[str, FindingCategory] = {
     "font_consistency_tool": FindingCategory.TAMPERING_FORENSIC,
     "layout_anomalies_tool": FindingCategory.TAMPERING_FORENSIC,
+    "hidden_text_tool": FindingCategory.TAMPERING_FORENSIC,
     "spelling_tool": FindingCategory.TAMPERING_FORENSIC,
     "date_consistency_tool": FindingCategory.TAMPERING_FORENSIC,
     "metadata_tool": FindingCategory.TAMPERING_FORENSIC,

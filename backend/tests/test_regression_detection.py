@@ -731,7 +731,7 @@ async def test_the_report_lists_each_specialist_with_its_brief_and_the_tools_it_
     for name, brief in ai.briefs.items():
         assert consulted(report, name)["brief"] == brief
         assert consulted(report, name)["title"] == SPECIALISTS[name].title
-    assert consulted(report, LAYOUT)["tools_called"] == ["font_consistency_tool", "image_tampering_tool"]
+    assert consulted(report, LAYOUT)["tools_called"] == ["hidden_text_tool", "font_consistency_tool", "image_tampering_tool"]
     assert consulted(report, CONTENT)["tools_called"] == ["date_consistency_tool"]
     # The injection check runs for digital_authenticity on every document, before its own choice of tools.
     assert consulted(report, DIGITAL)["tools_called"] == ["prompt_injection_tool", "metadata_tool"]

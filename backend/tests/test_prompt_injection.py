@@ -56,14 +56,58 @@ async def test_a_hidden_instruction_becomes_a_high_finding_that_cannot_go_lower(
 
 async def test_severities_follow_where_the_text_was() -> None:
     spans = [
-        {**HIDDEN_SPAN, "caught_by": "hidden_text", "score": 1},
+        {**HIDDEN_SPAN, "caught_by": "hidden_text", "score": 1},  # hidden_text_tool's, not this tool's
         {"quote": ATTACK, "where": "metadata", "field": "Title", "page": None, "caught_by": "dictionary", "score": 3},
         {"quote": ATTACK, "where": "visible", "page": None, "caught_by": "dictionary", "score": 3},
     ]
     output = await _run_tool(_guard(*spans))
 
-    assert [f["severity_floor"] for f in output["findings"]] == ["medium", "high", "low"]
-    assert "Metadata field Title" in output["findings"][1]["summary"]
+    assert [f["severity_floor"] for f in output["findings"]] == ["high", "low"]
+    assert "Metadata field Title" in output["findings"][0]["summary"]
+
+
+# --- hidden text (layout and rendering) -------------------------------------------------------------
+
+
+async def _run_hidden_text_tool(stored: dict | None) -> dict:
+    tools.clear_context("doc-1")
+    with patch.object(tools.document_repository, "get_guard_result", return_value=stored):
+        return await tools.hidden_text_tool.ainvoke({"document_id": "doc-1"})
+
+
+async def test_hidden_text_without_instruction_wording_is_a_layout_finding_that_cannot_go_lower() -> None:
+    plain = {**HIDDEN_SPAN, "quote": "Net pay SGD 5,680.00", "why_hidden": ["white_on_white"], "caught_by": "hidden_text"}
+    output = await _run_hidden_text_tool(_guard(plain, HIDDEN_SPAN, risk="high"))
+
+    [finding] = output["findings"]  # the instruction-worded span is prompt_injection_tool's
+    assert finding["id"] == "hidden_text_tool-1" and finding["severity_floor"] == "medium"
+    assert finding["summary"] == 'Hidden text (white on white, page 1): "Net pay SGD 5,680.00"'
+    assert category_for_finding({"tool": "hidden_text_tool"}) == FindingCategory.TAMPERING_FORENSIC
+
+
+async def test_hidden_text_is_unable_to_assess_without_a_text_layer() -> None:
+    output = await _run_hidden_text_tool(_guard(risk="none", checks_run=("dictionary",)))
+
+    assert output["unable_to_assess"] and output["findings"] == []
+
+
+async def test_layout_rendering_runs_the_hidden_text_check_before_its_first_turn() -> None:
+    model = MagicMock()
+    model.bind_tools.return_value = model
+    model.ainvoke = AsyncMock(return_value=AIMessage(content="", tool_calls=[{"name": "font_consistency_tool", "args": {}, "id": "c1"}]))
+    node = specialists._make_agent_node(specialists.SPECIALISTS["layout_rendering"])
+    plain = {**HIDDEN_SPAN, "caught_by": "hidden_text", "score": 1}
+    tools.clear_context("doc-1")
+    with (
+        patch("app.langgraph._anthropic.build_chat_anthropic", return_value=model),
+        patch.object(tools.document_repository, "get_guard_result", return_value=_guard(plain, risk="medium")),
+        patch.object(tools, "document_fields", AsyncMock(return_value=[])),
+        patch.object(tools, "file_facts", AsyncMock(return_value=None)),
+    ):
+        await node({"document_id": "doc-1", "specialist": "layout_rendering", "brief": "b", "document_type": "payslip"})
+
+    [result] = [m for m in model.ainvoke.call_args.args[0] if isinstance(m, ToolMessage)]
+    assert result.name == "hidden_text_tool" and len(json.loads(result.content)["findings"]) == 1
 
 
 async def test_a_clean_document_has_no_findings() -> None:
@@ -121,14 +165,15 @@ async def test_digital_authenticity_runs_the_injection_check_before_its_first_tu
     assert [f["severity"] for f in report["findings"]] == ["high"]
 
 
-def _collect(finding: dict, assessment: dict) -> dict:
-    result = {"tool": "prompt_injection_tool", "findings": [finding]}
+def _collect(finding: dict, assessment: dict, *, tool: str = "prompt_injection_tool",
+             specialist: str = "digital_authenticity") -> dict:
+    result = {"tool": tool, "findings": [finding]}
     messages = [
-        AIMessage(content="", tool_calls=[{"name": "prompt_injection_tool", "args": {}, "id": "call-1"}]),
-        ToolMessage(content=json.dumps(result), tool_call_id="call-1", name="prompt_injection_tool"),
+        AIMessage(content="", tool_calls=[{"name": tool, "args": {}, "id": "call-1"}]),
+        ToolMessage(content=json.dumps(result), tool_call_id="call-1", name=tool),
         AIMessage(content=json.dumps({"summary": "done", "assessments": [assessment]})),
     ]
-    return specialists._collect_node({"messages": messages, "specialist": "digital_authenticity"})["report"]
+    return specialists._collect_node({"messages": messages, "specialist": specialist})["report"]
 
 
 def test_a_specialist_cannot_dismiss_the_finding() -> None:
@@ -142,13 +187,18 @@ def test_a_specialist_cannot_dismiss_the_finding() -> None:
     assert kept["severity"] == "high"
 
 
-def test_a_specialist_cannot_rate_it_below_its_floor() -> None:
-    finding = tools._injection_finding({**HIDDEN_SPAN, "caught_by": "hidden_text"}) | {"id": "prompt_injection_tool-1"}
+def test_a_specialist_cannot_rate_hidden_text_below_its_floor_or_dismiss_it() -> None:
+    finding = {"id": "hidden_text_tool-1", "page": 1, "summary": "Hidden text (tiny, page 1)",
+               "severity_hint": "medium", "severity_floor": "medium"}
 
-    report = _collect(finding, {"finding_id": "prompt_injection_tool-1", "dismiss": False, "severity": "info",
-                                "rationale": "minor"})
+    rated = _collect(finding, {"finding_id": "hidden_text_tool-1", "dismiss": False, "severity": "info",
+                               "rationale": "minor"}, tool="hidden_text_tool", specialist="layout_rendering")
+    dismissed = _collect(finding, {"finding_id": "hidden_text_tool-1", "dismiss": True, "severity": None,
+                                   "rationale": "probably a template artefact"},
+                         tool="hidden_text_tool", specialist="layout_rendering")
 
-    assert report["findings"][0]["severity"] == "medium"
+    assert rated["findings"][0]["severity"] == "medium"
+    assert dismissed["dismissed"] == [] and dismissed["findings"][0]["severity"] == "medium"
 
 
 async def test_a_document_with_the_finding_is_flagged_not_clean() -> None:
