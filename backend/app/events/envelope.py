@@ -64,6 +64,11 @@ class Event(BaseModel):
         )
 
 
+def officer_of(event: Event) -> str | None:
+    """The loan officer whose action this event is, if an officer's: an agent's run event names them as requested_by."""
+    return event.actor if event.actor_type == "user" else None
+
+
 # Kong's X-Request-ID for the current request (main.py sets it), so one request can be followed through the trail.
 request_id: ContextVar[str | None] = ContextVar("request_id", default=None)
 

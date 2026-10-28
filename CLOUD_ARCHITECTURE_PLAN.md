@@ -120,7 +120,7 @@ Terraform owns everything else about a service (`deploy/terraform`); `apply` is 
 - **Failure tests** (a deliverable): kill a worker mid-run (redelivered, the document recovers); flood uploads (scale out, the queue drains); stop audit-metrics (events wait, then catch up); a poison message goes to the dead-letter topic without blocking; a lost publish (set a document to `queued` without publishing; the sweeper recovers it and the audit trail shows `recovery.requested` then `document.recovered`).
 - **Case dashboard in the app:** cases by stage, risk distribution, stuck or failed, "needs attention", from audit-metrics. (`/dashboard` is mock data owned by teammates.)
 - **Shared Anthropic rate budget** across instances: today each instance caps itself (max instances times concurrency).
-- **A Kong config test in CI:** the rendered `kong.yml` in front of stub upstreams (routes, CORS, rate limits, WebSocket upgrade). See `backend_tests.md` step 1 for the other missing infrastructure checks.
+- **A Kong config test in CI:** the rendered `kong.yml` in front of stub upstreams (routes, CORS, rate limits, WebSocket upgrade). See `backend_tests.md` step 3 for the other missing infrastructure checks.
 - **Optional:** ingestion out of api; the frontend reading Kong's URL at runtime (needed for staging anyway).
 
 **Staging** (planned, not started). A second GCP project (`fyp-six-sevens-staging`) and a second free Supabase project, run by the same Terraform with a second variables file and state. Rejected: suffixing every resource in one project (shared IAM, easy to cross-wire) and tagged Cloud Run revisions (same database and topic).

@@ -1375,6 +1375,50 @@
         "title": "CaseDocumentsStatus",
         "type": "string"
       },
+      "CaseFindingReviews": {
+        "description": "Every review in a case, and the precision and recall they give: per document, across documents and for the case.",
+        "properties": {
+          "case": {
+            "$ref": "#/components/schemas/MetricsSummary"
+          },
+          "checks": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Checks",
+            "type": "object"
+          },
+          "cross_document": {
+            "$ref": "#/components/schemas/MetricsSummary"
+          },
+          "documents": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/MetricsSummary"
+            },
+            "title": "Documents",
+            "type": "object"
+          },
+          "reviews": {
+            "items": {
+              "$ref": "#/components/schemas/FindingReview"
+            },
+            "title": "Reviews",
+            "type": "array"
+          }
+        },
+        "required": [
+          "reviews",
+          "case",
+          "documents",
+          "cross_document",
+          "checks"
+        ],
+        "title": "CaseFindingReviews",
+        "type": "object"
+      },
       "CaseListItem": {
         "description": "One row of the case queue: only what the list shows, so it needs no extracted fields.",
         "properties": {
@@ -1964,6 +2008,77 @@
         "title": "CheckAssessment",
         "type": "object"
       },
+      "CheckMetrics": {
+        "description": "One check's counts and rates. precision is correct / (correct + wrong): None when no finding of the check\nwas reviewed. recall is correct / (correct + missed): None when there is nothing it should have caught.",
+        "properties": {
+          "check_name": {
+            "title": "Check Name",
+            "type": "string"
+          },
+          "correct": {
+            "title": "Correct",
+            "type": "integer"
+          },
+          "flags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
+          "missed": {
+            "title": "Missed",
+            "type": "integer"
+          },
+          "precision": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precision"
+          },
+          "recall": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recall"
+          },
+          "scope": {
+            "enum": [
+              "document",
+              "case"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "wrong": {
+            "title": "Wrong",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "check_name",
+          "scope",
+          "correct",
+          "wrong",
+          "missed",
+          "precision",
+          "recall",
+          "flags"
+        ],
+        "title": "CheckMetrics",
+        "type": "object"
+      },
       "CheckOutcome": {
         "enum": [
           "match",
@@ -2129,6 +2244,17 @@
             ],
             "title": "Category"
           },
+          "check_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Check Code"
+          },
           "document_id": {
             "title": "Document Id",
             "type": "string"
@@ -2222,6 +2348,7 @@
           "document_type",
           "finding_id",
           "tool",
+          "check_code",
           "severity",
           "summary",
           "rationale",
@@ -2547,6 +2674,44 @@
           "occurrence_count"
         ],
         "title": "DetectedStyle",
+        "type": "object"
+      },
+      "DetectionMetrics": {
+        "description": "Precision and recall per check across every reviewed case.",
+        "properties": {
+          "cases_reviewed": {
+            "title": "Cases Reviewed",
+            "type": "integer"
+          },
+          "documents_reviewed": {
+            "title": "Documents Reviewed",
+            "type": "integer"
+          },
+          "min_reviews": {
+            "title": "Min Reviews",
+            "type": "integer"
+          },
+          "overall": {
+            "$ref": "#/components/schemas/MetricsSummary"
+          },
+          "target_precision": {
+            "title": "Target Precision",
+            "type": "number"
+          },
+          "target_recall": {
+            "title": "Target Recall",
+            "type": "number"
+          }
+        },
+        "required": [
+          "overall",
+          "cases_reviewed",
+          "documents_reviewed",
+          "target_precision",
+          "target_recall",
+          "min_reviews"
+        ],
+        "title": "DetectionMetrics",
         "type": "object"
       },
       "DocumentCaseMatch": {
@@ -3255,6 +3420,135 @@
         ],
         "title": "FindingCategory",
         "type": "string"
+      },
+      "FindingReview": {
+        "description": "An officer's verdict on one finding (kind \"verdict\": correct or wrong), or an issue the officer found that\nno finding raised (kind \"missed\"). scope \"document\" is a finding on one document; \"case\" a cross-document\nfinding from the case analysis. check_name is the tool for a document finding, the category for a case one.",
+        "properties": {
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "check_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Check Code"
+          },
+          "check_name": {
+            "title": "Check Name",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "finding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finding Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "verdict",
+              "missed"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "reviewer": {
+            "title": "Reviewer",
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "document",
+              "case"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "summary": {
+            "default": "",
+            "title": "Summary",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "verdict": {
+            "anyOf": [
+              {
+                "enum": [
+                  "correct",
+                  "wrong"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verdict"
+          }
+        },
+        "required": [
+          "id",
+          "case_id",
+          "document_id",
+          "scope",
+          "kind",
+          "finding_id",
+          "check_name",
+          "check_code",
+          "summary",
+          "verdict",
+          "note",
+          "reviewer",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "FindingReview",
+        "type": "object"
       },
       "FontAnomalyV2": {
         "description": "One deviation pattern, fact-only (no confidence scoring).",
@@ -4744,6 +5038,61 @@
         "title": "MetadataAnomaly",
         "type": "object"
       },
+      "MetricsSummary": {
+        "properties": {
+          "by_check": {
+            "items": {
+              "$ref": "#/components/schemas/CheckMetrics"
+            },
+            "title": "By Check",
+            "type": "array"
+          },
+          "correct": {
+            "title": "Correct",
+            "type": "integer"
+          },
+          "missed": {
+            "title": "Missed",
+            "type": "integer"
+          },
+          "precision": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precision"
+          },
+          "recall": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recall"
+          },
+          "wrong": {
+            "title": "Wrong",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "correct",
+          "wrong",
+          "missed",
+          "precision",
+          "recall",
+          "by_check"
+        ],
+        "title": "MetricsSummary",
+        "type": "object"
+      },
       "MonitoringIssues": {
         "properties": {
           "failed": {
@@ -5354,6 +5703,55 @@
         "title": "RegistryFinding",
         "type": "object"
       },
+      "ReportMissedIssueRequest": {
+        "description": "An issue the officer found that no finding raised, against the check that should have caught it.",
+        "properties": {
+          "check_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Check Name",
+            "type": "string"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "scope": {
+            "enum": [
+              "document",
+              "case"
+            ],
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "check_name"
+        ],
+        "title": "ReportMissedIssueRequest",
+        "type": "object"
+      },
       "RiskOutlook": {
         "properties": {
           "best_case_level": {
@@ -5434,6 +5832,102 @@
         ],
         "title": "RoutingStatus",
         "type": "string"
+      },
+      "SetFindingVerdictRequest": {
+        "description": "Marks one finding correct or wrong; verdict null clears the officer's mark.",
+        "properties": {
+          "check_code": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Check Code"
+          },
+          "check_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Check Name",
+            "type": "string"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "finding_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "document",
+              "case"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "summary": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Summary",
+            "type": "string"
+          },
+          "verdict": {
+            "anyOf": [
+              {
+                "enum": [
+                  "correct",
+                  "wrong"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verdict"
+          }
+        },
+        "required": [
+          "scope",
+          "check_name",
+          "finding_id"
+        ],
+        "title": "SetFindingVerdictRequest",
+        "type": "object"
+      },
+      "SetFindingVerdictsRequest": {
+        "description": "A whole group's review at once: every finding the officer looked at, each correct or wrong.",
+        "properties": {
+          "verdicts": {
+            "items": {
+              "$ref": "#/components/schemas/SetFindingVerdictRequest"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Verdicts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "verdicts"
+        ],
+        "title": "SetFindingVerdictsRequest",
+        "type": "object"
       },
       "SkippedCheck": {
         "properties": {
@@ -5861,6 +6355,34 @@
           "extracted_fields"
         ],
         "title": "UpdateExtractedFieldsRequest",
+        "type": "object"
+      },
+      "UpdateMissedIssueRequest": {
+        "description": "Corrects a reported missed issue: the check it's filed against, and its note. Where it sits never changes.",
+        "properties": {
+          "check_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Check Name",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "required": [
+          "check_name"
+        ],
+        "title": "UpdateMissedIssueRequest",
         "type": "object"
       },
       "UpdateNoteRequest": {
@@ -7098,6 +7620,418 @@
         ]
       }
     },
+    "/cases/{case_id}/finding-reviews": {
+      "get": {
+        "description": "Every review in the case, with precision and recall per document, across documents and for the case.",
+        "operationId": "get_case_finding_reviews_cases__case_id__finding_reviews_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseFindingReviews"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Case Finding Reviews",
+        "tags": [
+          "finding-reviews"
+        ]
+      }
+    },
+    "/cases/{case_id}/finding-reviews/missed": {
+      "post": {
+        "description": "Records an issue no finding raised, against the check that should have caught it: a false negative.",
+        "operationId": "report_missed_issue_cases__case_id__finding_reviews_missed_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportMissedIssueRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseFindingReviews"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Report Missed Issue",
+        "tags": [
+          "finding-reviews"
+        ]
+      }
+    },
+    "/cases/{case_id}/finding-reviews/verdict": {
+      "put": {
+        "description": "Marks one finding correct or wrong, signed by the officer; a null verdict clears the mark. Any officer\ncan change a verdict; the latest one stands.",
+        "operationId": "set_finding_verdict_cases__case_id__finding_reviews_verdict_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetFindingVerdictRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseFindingReviews"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Finding Verdict",
+        "tags": [
+          "finding-reviews"
+        ]
+      }
+    },
+    "/cases/{case_id}/finding-reviews/verdicts": {
+      "put": {
+        "description": "Saves one group's review in one request: the officer ticked the findings that are real (correct) and left\nthe rest (wrong). Every target is checked before anything is written, so a bad entry saves nothing.",
+        "operationId": "set_finding_verdicts_cases__case_id__finding_reviews_verdicts_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetFindingVerdictsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseFindingReviews"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Finding Verdicts",
+        "tags": [
+          "finding-reviews"
+        ]
+      }
+    },
+    "/cases/{case_id}/finding-reviews/{review_id}": {
+      "delete": {
+        "description": "Removes a verdict or a missed issue (e.g. one reported by mistake).",
+        "operationId": "delete_finding_review_cases__case_id__finding_reviews__review_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "review_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Review Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseFindingReviews"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Finding Review",
+        "tags": [
+          "finding-reviews"
+        ]
+      },
+      "patch": {
+        "description": "Corrects a reported missed issue (its check or note), e.g. one filed against the wrong check. A verdict\non a finding is changed by reviewing the finding again, not here.",
+        "operationId": "update_missed_issue_cases__case_id__finding_reviews__review_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "review_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Review Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMissedIssueRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseFindingReviews"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Missed Issue",
+        "tags": [
+          "finding-reviews"
+        ]
+      }
+    },
     "/cases/{case_id}/notes": {
       "get": {
         "description": "Every note on the case and on its documents, oldest first.",
@@ -7364,6 +8298,56 @@
         "summary": "Edit Case Note",
         "tags": [
           "notes"
+        ]
+      }
+    },
+    "/detection-metrics": {
+      "get": {
+        "description": "Precision and recall per check across every reviewed case, with targets (the dashboard).",
+        "operationId": "get_detection_metrics_detection_metrics_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectionMetrics"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Detection Metrics",
+        "tags": [
+          "finding-reviews"
         ]
       }
     },

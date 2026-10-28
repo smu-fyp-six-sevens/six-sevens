@@ -36,7 +36,10 @@ async def create_case(company_name: str | None = Body(None, embed=True, max_leng
         detail="Failed to create the case. Check Supabase table access.",
         log=("Failed to create case",),
     )
-    await events.record(officer_event(types.CASE_CREATED, case_id=case.id, detail={"company_name": company_name}))
+    await events.record(officer_event(
+        types.CASE_CREATED, case_id=case.id,
+        detail={"company_name": company_name, "greenlink_case_id": case.greenlink_case_id},
+    ))
     return case
 
 

@@ -10,6 +10,7 @@ from .. import events, query_stats
 from ..case_pipeline import repository as analysis_repository
 from ..case_pipeline import service as analysis_service
 from ..events import Event, Stopwatch, types
+from ..events.envelope import officer_of
 from . import recovery
 
 logger = logging.getLogger("classifier_pipeline.case_worker")
@@ -40,6 +41,7 @@ async def on_analysis_requested(event: Event) -> None:
             "error": analysis.error,
             "run": "case_analysis",
             **unit.llm_detail(),
+            "requested_by": officer_of(event),
         },
         **timer.fields(),
     ))

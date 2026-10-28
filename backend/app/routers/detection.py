@@ -10,10 +10,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from ..langgraph import trace as langgraph_trace
+from ..langgraph.detection import tools as detection_tools
 from ..langgraph.detection_report import read_report
 from ..models import DocumentRecord, DocumentStatus, skips_detection
 from .. import case_service, document_repository, events, extracted_fields_repository, storage_service
-from ..events import officer_event, types
+from ..events import Stopwatch, officer_event, types
 from ..cpu_pool import run_cpu
 from ._dependencies import get_document_or_404, get_document_with_metadata_or_404, to_thread_or_502
 from ..case_match import DocumentCaseMatch
@@ -275,15 +276,38 @@ _CHECKS = [
 ]
 
 
+def _check_summary(check: _Check, result: Any) -> dict[str, Any]:
+    """What a check found, for its audit entry: the same counts its trace step records, and AI generation's likelihood."""
+    summary = check.trace(result) if check.trace else {}
+    likelihood = getattr(result, "likelihood", None)
+    if likelihood is not None:
+        summary["likelihood"] = str(likelihood)
+    return summary
+
+
 def _add_check_route(check: _Check) -> None:
     gate = _require_detection_has_run_with_metadata if check.metadata else _require_detection_has_run
 
     async def endpoint(document_id: str, document: DocumentRecord = Depends(gate)) -> Any:
-        file_bytes = await _download_document_bytes(document) if check.file else b""
-        fields = await _fetch_extracted_fields(document_id) if check.fields else []
-        result = await check.run(document, file_bytes, fields)
+        # Audited even though read-only: the officer chose to look again, and some checks call outside services.
+        timer = Stopwatch()
+        try:
+            file_bytes = await _download_document_bytes(document) if check.file else b""
+            fields = await _fetch_extracted_fields(document_id) if check.fields else []
+            result = await check.run(document, file_bytes, fields)
+        except Exception as exc:
+            error = exc.detail if isinstance(exc, HTTPException) else f"{type(exc).__name__}: {exc}"
+            await events.record(officer_event(
+                types.DETECTION_CHECK_RUN, document_id=document_id, case_id=document.case_id, outcome="failed",
+                detail={"check": check.path, "error": str(error)[:300]}, **timer.fields(),
+            ))
+            raise
         if check.step and check.trace:
             await _trace_check(document_id, check.step, **check.trace(result))
+        await events.record(officer_event(
+            types.DETECTION_CHECK_RUN, document_id=document_id, case_id=document.case_id,
+            detail={"check": check.path, **_check_summary(check, result)}, **timer.fields(),
+        ))
         return result
 
     router.add_api_route(
@@ -296,12 +320,52 @@ for _check in _CHECKS:
     _add_check_route(_check)
 
 
+# Reports placed on the page, by document and run: a report doesn't change until detection runs again,
+# so the file isn't downloaded and searched on every read.
+_placed_reports: dict[tuple[str, str], dict] = {}
+_PLACED_REPORTS_KEPT = 64
+
+
+async def _with_finding_locations(document_id: str, report: dict) -> dict:
+    """The report with the findings it can't place itself (older font, spelling and layout findings;
+    numerical and date findings) placed on the page for the preview to highlight. Best effort: the
+    report is returned as stored if the file can't be read."""
+    if not detection_tools.needs_locations(report):
+        return report
+    key = (document_id, str(report.get("generated_at")))
+    if key in _placed_reports:
+        return _placed_reports[key]
+    try:
+        document = await get_document_or_404(document_id)
+        file_bytes = await _download_document_bytes(document)
+        fields = (
+            await asyncio.to_thread(extracted_fields_repository.get_extracted_fields_dict, document_id)
+            if detection_tools.needs_fields(report)
+            else {}
+        )
+        placed = await run_cpu(
+            detection_tools.add_missing_locations,
+            report,
+            file_bytes,
+            fields,
+            document.document_type,
+            document.classification_confidence,
+        )
+    except Exception:
+        logger.warning("Could not place the findings of document %s's report", document_id, exc_info=True)
+        return report
+    if len(_placed_reports) >= _PLACED_REPORTS_KEPT:
+        _placed_reports.pop(next(iter(_placed_reports)))
+    _placed_reports[key] = placed
+    return placed
+
+
 @router.get("/{document_id}/detection/report")
 async def get_document_detection_report(document_id: str) -> dict:
     trace = await asyncio.to_thread(langgraph_trace.load, document_id)
     report = read_report((trace or {}).get("detection_report"))
     if report:
-        return report
+        return await _with_finding_locations(document_id, report)
     # A report always wins over a stale error from an earlier failed attempt
     # (above) — only fall back to reporting the error when there's no report
     # at all, so the frontend can tell "crashed" apart from "never run yet"

@@ -219,12 +219,13 @@ def test_delete_case_deletes_the_row() -> None:
 
     # What hangs off the case first (a foreign key can block the case delete), then the case itself.
     assert [c.args for c in mock_client.table.call_args_list] == [
-        ("risk_scores",), ("case_analysis_runs",), ("flags",), ("case_notes",), ("cases",),
+        ("risk_scores",), ("case_analysis_runs",), ("flags",), ("case_notes",), ("finding_reviews",), ("cases",),
     ]
     assert [c.args for c in mock_client.table.return_value.delete.return_value.eq.call_args_list] == [
-        ("case_id", "case-1"), ("case_id", "case-1"), ("case_id", "case-1"), ("case_id", "case-1"), ("id", "case-1"),
+        ("case_id", "case-1"), ("case_id", "case-1"), ("case_id", "case-1"), ("case_id", "case-1"),
+        ("case_id", "case-1"), ("id", "case-1"),
     ]
-    assert mock_client.table.return_value.delete.return_value.eq.return_value.execute.call_count == 5
+    assert mock_client.table.return_value.delete.return_value.eq.return_value.execute.call_count == 6
 
 
 def test_delete_case_raises_when_no_row_was_removed() -> None:

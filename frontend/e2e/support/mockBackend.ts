@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Page, Route, WebSocketRoute } from '@playwright/test';
-import type { CaseRisk } from '../../src/services/uploadService/types';
+import type { AuditEvent, CaseRisk } from '../../src/services/uploadService/types';
 
 /**
  * Each document type's required extraction fields, exported from the
@@ -213,6 +213,8 @@ export class MockBackend {
   timings: Record<string, { type: string; document_id: string | null; occurred_at: string; duration_ms: number }[]> = {};
   /** Notes on cases and documents (GET/POST /cases/:id/notes), signed by the logged-in officer. */
   notes: NoteRow[] = [];
+  /** Audit trail entries (GET /audit/events?case_id=), in any order: served newest first, like the backend. */
+  auditEvents: AuditEvent[] = [];
   /** Per-filename upload results; files not listed here upload successfully. */
   uploadOutcomes: Record<string, UploadOutcome> = {};
   /** When set, upload-batch waits for this before answering (to observe "Uploading"). */
@@ -376,6 +378,23 @@ export class MockBackend {
         timings: this.timings[costMatch[1]] ?? [],
       });
     }
+    // Officers' reviews of findings (precision/recall): none recorded, so every rate is "nothing to measure".
+    if (method === 'GET' && /^\/cases\/[^/]+\/finding-reviews$/.test(path)) {
+      return json({
+        reviews: [],
+        case: emptyMetrics(),
+        documents: {},
+        cross_document: emptyMetrics(),
+        checks: { document: [], case: [] },
+      });
+    }
+    if (method === 'GET' && path === '/detection-metrics') {
+      return json({
+        overall: emptyMetrics(), cases_reviewed: 0, documents_reviewed: 0,
+        target_precision: 0.8, target_recall: 0.8, min_reviews: 5,
+      });
+    }
+
     const caseMatch = path.match(/^\/cases\/([^/]+)$/);
     if (caseMatch) {
       const found = this.cases.find((c) => c.id === caseMatch[1]);
@@ -389,6 +408,14 @@ export class MockBackend {
         this.cases = this.cases.filter((c) => c.id !== found.id);
         return route.fulfill({ status: 204, headers: corsHeaders() });
       }
+    }
+    if (path === '/audit/events' && method === 'GET') {
+      const caseId = url.searchParams.get('case_id');
+      return json(
+        this.auditEvents
+          .filter((e) => caseId === null || e.case_id === caseId)
+          .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at)),
+      );
     }
     const notesMatch = path.match(/^\/cases\/([^/]+)\/notes$/);
     if (notesMatch) {
@@ -600,6 +627,10 @@ export class MockBackend {
     this.unmockedRequests.push(`${method} ${path}${url.search}`);
     return route.fulfill({ status: 599, headers: corsHeaders(), body: `Unmocked request: ${method} ${path}` });
   }
+}
+
+function emptyMetrics() {
+  return { correct: 0, wrong: 0, missed: 0, precision: null, recall: null, by_check: [] };
 }
 
 function corsHeaders(): Record<string, string> {

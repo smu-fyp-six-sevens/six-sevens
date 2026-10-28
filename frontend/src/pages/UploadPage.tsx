@@ -439,7 +439,7 @@ export default function UploadPage({
             )
           )}
 
-          {activeSection === 'risk' && <CaseRiskCard risk={risk} />}
+          {activeSection === 'risk' && <CaseRiskCard risk={risk} caseId={selectedCase.id} caseDocuments={documents} />}
 
           {activeSection === 'analysis' && (
             <CaseAnalysisCard caseId={selectedCase.id} analysisReady={analysisReady} overview={analysisOverview} />
@@ -456,7 +456,7 @@ export default function UploadPage({
 
           {activeSection === 'notes' && <NotesCard caseId={selectedCase.id} caseNumber={selectedCase.caseNumber} documents={documents} />}
 
-          {activeSection === 'audit' && <AuditTrailCard />}
+          {activeSection === 'audit' && <AuditTrailCard caseId={selectedCase.id} caseNumber={selectedCase.caseNumber} documents={documents} />}
 
           {activeSection === 'cost' && <CaseCostCard caseId={selectedCase.id} documents={documents} />}
         </div>
