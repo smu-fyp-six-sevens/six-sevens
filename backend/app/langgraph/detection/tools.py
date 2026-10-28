@@ -29,6 +29,7 @@ import logging
 import re
 from typing import Annotated, Any, Awaitable, Callable
 
+import pymupdf
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
@@ -39,6 +40,7 @@ from ...fraud_detection.dates.date_anomalies import check_date_anomalies
 from ...fraud_detection.font_consistency import check_font_consistency
 from ...fraud_detection.images.image_manipulation import check_image_manipulation, check_image_tampering
 from ...fraud_detection.layout_anomalies import check_layout_anomalies
+from ...fraud_detection.layout_anomalies.extraction import _open_document as _open_layout_document
 from ...fraud_detection.shared.file_facts import describe_file
 from ...fraud_detection.authenticity.metadata_analysis import (
     DESCRIPTIVE_METADATA_FIELDS,
@@ -46,6 +48,7 @@ from ...fraud_detection.authenticity.metadata_analysis import (
     check_metadata_anomalies,
 )
 from ...fraud_detection.spelling.spelling_anomaly import check_spelling_anomalies
+from . import value_locations
 
 logger = logging.getLogger("classifier_pipeline.langgraph.detection.tools")
 
@@ -246,8 +249,11 @@ async def font_consistency_tool(document_id: Annotated[str, InjectedState("docum
             "expected": anomaly.expected,
             "occurrence_count": anomaly.occurrence_count,
             "field_name": anomaly.field_name,
+            # bbox (PDF points) is for the preview to highlight.
+            "bbox_units": "pt",
             "locations": [
-                {"page": loc.page + 1, "text": _short(loc.text)} for loc in anomaly.locations[:5]
+                {"page": loc.page + 1, "bbox": [round(v, 2) for v in loc.bbox], "text": _short(loc.text)}
+                for loc in anomaly.locations[:5]
             ],
             "summary": _font_deviation_summary(
                 anomaly.deviation_type, anomaly.detected, anomaly.expected,
@@ -280,8 +286,24 @@ async def layout_anomalies_tool(document_id: Annotated[str, InjectedState("docum
             "layout_anomalies_tool", [], unable=result.unable_to_assess_reason or "Unable to assess"
         )
 
-    findings = [anomaly.model_dump() for anomaly in result.anomalies]
+    # The JSON body leaves the bbox out, so it's added here for the preview to highlight; a photo's page
+    # is sized by its DPI, not its pixels, so the page size it was measured on goes with it.
+    page_sizes = await run_cpu(_layout_page_sizes, file_bytes) if result.anomalies else []
+    findings = [
+        {
+            **anomaly.model_dump(),
+            "bbox": list(anomaly.bbox),
+            "bbox_units": "pt",
+            "page_size": page_sizes[anomaly.page - 1] if 0 < anomaly.page <= len(page_sizes) else None,
+        }
+        for anomaly in result.anomalies
+    ]
     return _result("layout_anomalies_tool", _with_ids("layout_anomalies_tool", findings))
+
+
+def _layout_page_sizes(file_bytes: bytes) -> list[list[float]]:
+    with _open_layout_document(file_bytes) as doc:
+        return [[round(page.rect.width, 2), round(page.rect.height, 2)] for page in doc]
 
 
 # --- Content Validation -----------------------------------------------------
@@ -303,6 +325,13 @@ async def spelling_tool(document_id: Annotated[str, InjectedState("document_id")
     if result.unable_to_assess:
         return _result("spelling_tool", [], unable=result.unable_to_assess_reason or "Unable to assess")
 
+    # Where each word sits, for the preview to highlight. Only a PDF's own text has positions.
+    word_locations = (
+        await run_cpu(_word_locations, file_bytes, [anomaly.word for anomaly in result.anomalies])
+        if result.anomalies and file_bytes.startswith(b"%PDF")
+        else {}
+    )
+
     findings = [
         {
             "word": anomaly.word,
@@ -311,6 +340,8 @@ async def spelling_tool(document_id: Annotated[str, InjectedState("document_id")
             # One finding per distinct word; how often it appears is for the specialist to weigh.
             "occurrences": anomaly.occurrences,
             "other_contexts": [_short(text) for text in anomaly.other_contexts],
+            "bbox_units": "pt",
+            "locations": word_locations.get(anomaly.word, []),
             "summary": (
                 f'Possible misspelling "{anomaly.word}"'
                 + (f' (suggested: "{anomaly.suggested_correction}")' if anomaly.suggested_correction else "")
@@ -321,6 +352,177 @@ async def spelling_tool(document_id: Annotated[str, InjectedState("document_id")
         for anomaly in result.anomalies
     ]
     return _result("spelling_tool", _with_ids("spelling_tool", findings))
+
+
+_MAX_WORD_LOCATIONS = 5
+
+
+def _word_locations(file_bytes: bytes, words: list[str]) -> dict[str, list[dict]]:
+    """Each word's first few places in the PDF's text, as whole words ignoring case and punctuation."""
+    wanted = {word.casefold(): word for word in words}
+    found: dict[str, list[dict]] = {}
+    with pymupdf.open(stream=file_bytes, filetype="pdf") as doc:
+        for page_index, page in enumerate(doc):
+            for x0, y0, x1, y1, text, *_ in page.get_text("words"):
+                word = wanted.get(re.sub(r"^\W+|\W+$", "", text).casefold())
+                if word is None:
+                    continue
+                places = found.setdefault(word, [])
+                if len(places) < _MAX_WORD_LOCATIONS:
+                    places.append({"page": page_index + 1, "bbox": [round(v, 2) for v in (x0, y0, x1, y1)]})
+    return found
+
+
+def _missing_locations(finding: dict) -> bool:
+    if finding.get("tool") == "spelling_tool":
+        return "locations" not in finding and bool(finding.get("word"))
+    if finding.get("tool") == "font_consistency_tool":
+        return any("bbox" not in loc for loc in finding.get("locations") or [])
+    if finding.get("tool") == "layout_anomalies_tool":
+        return "bbox" not in finding and bool(finding.get("text"))
+    return value_locations.needs_locations(finding)
+
+
+def needs_locations(report: dict) -> bool:
+    """Whether a report has findings it can't place on the page by itself: font, spelling and layout
+    findings stored before they carried their places, and numerical and date findings, which never do."""
+    return any(_missing_locations(finding) for finding in report.get("findings", []))
+
+
+def needs_fields(report: dict) -> bool:
+    """Whether placing the report's findings needs the document's extracted fields."""
+    return any(value_locations.needs_locations(finding) for finding in report.get("findings", []))
+
+
+def add_missing_locations(
+    report: dict,
+    file_bytes: bytes,
+    fields: dict | None = None,
+    document_type: str | None = None,
+    classification_confidence: float | None = None,
+) -> dict:
+    """The report with its findings placed on the page. A font or layout finding stored before it carried
+    its area gets the exact one by running its check again (both are deterministic) and matching the
+    finding by page and text; a misspelt word is placed by its whole-word matches, a numerical, date or
+    registry finding by its value (value_locations). Not saved; worked out again on each read."""
+    if not file_bytes.startswith(b"%PDF"):
+        return report
+    findings = report.get("findings", [])
+    missing = {f.get("tool") for f in findings if _missing_locations(f)}
+    words = [f["word"] for f in findings if f.get("tool") == "spelling_tool" and _missing_locations(f)]
+    word_locations = _word_locations(file_bytes, words) if words else {}
+    font_areas = _font_areas(file_bytes) if "font_consistency_tool" in missing else {}
+    layout_areas = (
+        _layout_areas(file_bytes, document_type, classification_confidence)
+        if "layout_anomalies_tool" in missing
+        else {}
+    )
+    located = []
+    with pymupdf.open(stream=file_bytes, filetype="pdf") as doc:
+        for finding in findings:
+            if not _missing_locations(finding):
+                located.append(finding)
+            elif value_locations.needs_locations(finding):
+                located.append(value_locations.locate(doc, finding, fields or {}))
+            elif finding["tool"] == "spelling_tool":
+                located.append({**finding, "bbox_units": "pt", "locations": word_locations.get(finding["word"], [])})
+            elif finding["tool"] == "font_consistency_tool":
+                located.append({
+                    **finding,
+                    "bbox_units": "pt",
+                    "locations": [
+                        {**loc, "bbox": area} if (area := font_areas.get((loc.get("page"), loc.get("text"))))
+                        else _text_location(doc, loc)
+                        for loc in finding["locations"]
+                    ],
+                })
+            else:
+                area = layout_areas.get((finding.get("page"), finding["text"])) or _page_text_area(
+                    doc, finding.get("page"), finding["text"]
+                )
+                located.append({**finding, "bbox": area, "bbox_units": "pt"} if area else finding)
+    return {**report, "findings": located}
+
+
+def _font_areas(file_bytes: bytes) -> dict[tuple[int, str], list[float]]:
+    """Each place the font check flags, by (1-based page, text as the tool reports it)."""
+    try:
+        result = check_font_consistency("locations", file_bytes, [])
+    except Exception:
+        logger.warning("Font check failed while placing an older report's findings", exc_info=True)
+        return {}
+    return {
+        (loc.page + 1, _short(loc.text)): [round(v, 2) for v in loc.bbox]
+        for anomaly in result.anomalies
+        for loc in anomaly.locations
+    }
+
+
+def _layout_areas(
+    file_bytes: bytes, document_type: str | None, classification_confidence: float | None
+) -> dict[tuple[int, str], list[float]]:
+    """Each area the layout check flags, by (1-based page, text as the tool reports it)."""
+    try:
+        result = check_layout_anomalies("locations", file_bytes, document_type, classification_confidence)
+    except Exception:
+        logger.warning("Layout check failed while placing an older report's findings", exc_info=True)
+        return {}
+    return {(a.page, a.text): list(a.bbox) for a in result.anomalies}
+
+
+def _text_location(doc: pymupdf.Document, location: dict) -> dict:
+    area = _page_text_area(doc, location.get("page"), str(location.get("text") or ""))
+    return {**location, "bbox": area} if area else location
+
+
+def _page_text_area(doc: pymupdf.Document, page_number: Any, text: str) -> list[float] | None:
+    """Where text from a finding sits on its (1-based) page, when its check can't say: None unless it
+    is printed there once. Text overlay findings join the two overlapping texts with " ↔ ": the area
+    is the closest pair of their matches together."""
+    if not isinstance(page_number, int) or not 0 < page_number <= len(doc):
+        return None
+    page = doc[page_number - 1]
+    parts = [_text_matches(page, part) for part in text.split(" ↔ ")]
+    if not all(parts):
+        return None
+    if len(parts) == 1:
+        # Text printed more than once on the page (a figure repeated in a statement) could be any of
+        # them, so it isn't placed.
+        if len(parts[0]) > 1:
+            return None
+        area = parts[0][0]
+    else:
+        # Repeated text (a date, a name) matches in several places; the overlapping copies are the
+        # ones nearest each other.
+        area = min(
+            (a | b for a in parts[0] for b in parts[1]),
+            key=lambda rect: rect.width * rect.height,
+        )
+    return [round(v, 2) for v in (area.x0, area.y0, area.x1, area.y1)]
+
+
+def _text_matches(page: pymupdf.Page, text: str) -> list[pymupdf.Rect]:
+    """Each place the text appears on the page, a match wrapped over lines as one rect. Stored text is
+    cut short with an ellipsis and its line breaks become spaces, so if the whole of it isn't found,
+    its first few words are looked for instead."""
+    words = text.rstrip("…").split()
+    for count in (len(words), 6, 3):
+        needle = " ".join(words[:count])
+        if not needle:
+            return []
+        hits = page.search_for(needle)
+        if hits:
+            break
+    else:
+        return []
+    matches: list[pymupdf.Rect] = []
+    for rect in hits:
+        # The next line of the same match starts just below the last.
+        if matches and 0 <= rect.y0 - matches[-1].y1 <= 4 and count > 3:
+            matches[-1] |= rect
+        else:
+            matches.append(pymupdf.Rect(rect))
+    return matches
 
 
 @tool

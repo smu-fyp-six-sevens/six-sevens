@@ -18,6 +18,7 @@ from app.fraud_detection.images.image_manipulation import (
     TamperingTolerances,
     Tolerances,
 )
+from app.fraud_detection.layout_anomalies.common import LayoutAnomaly
 from app.fraud_detection.authenticity.metadata_analysis import MetadataAnalysisResult, MetadataAnomaly
 from app.fraud_detection.spelling.spelling_anomaly import SpellingAnomaly, SpellingAnomalyResult
 from app.langgraph.detection import tools
@@ -57,6 +58,7 @@ async def test_font_consistency_tool_findings_include_summary() -> None:
         output = await tools.font_consistency_tool.ainvoke({"document_id": "doc-1"})
 
     assert output["findings"][0]["summary"]
+    assert output["findings"][0]["locations"] == [{"page": 1, "bbox": [0, 0, 1, 1], "text": "x"}]
 
 
 @pytest.mark.asyncio
@@ -75,6 +77,98 @@ async def test_spelling_tool_findings_include_summary() -> None:
         output = await tools.spelling_tool.ainvoke({"document_id": "doc-1"})
 
     assert output["findings"][0]["summary"] == 'Possible misspelling "Helllo" (suggested: "hello").'
+
+
+@pytest.mark.asyncio
+async def test_spelling_tool_locates_the_word_on_the_page_for_the_preview() -> None:
+    import pymupdf
+
+    doc = pymupdf.open()
+    page = doc.new_page()
+    page.insert_text((72, 100), "Damage, whether accidantal or not.")
+    page.insert_text((72, 140), "Accidantal loss is excluded.")
+    pdf = doc.tobytes()
+    result = SpellingAnomalyResult(
+        document_id="doc-1",
+        anomalies=[SpellingAnomaly(word="accidantal", surrounding_text="whether accidantal or not", occurrences=2)],
+        unable_to_assess=False,
+    )
+    with (
+        patch.object(tools, "_document", AsyncMock(return_value=_document(filename="f.pdf", document_type="nric"))),
+        patch.object(tools, "_file_bytes", AsyncMock(return_value=pdf)),
+        patch.object(tools, "_extracted_fields", AsyncMock(return_value=[])),
+        patch.object(tools, "check_spelling_anomalies", AsyncMock(return_value=result)),
+    ):
+        output = await tools.spelling_tool.ainvoke({"document_id": "doc-1"})
+
+    [finding] = output["findings"]
+    assert finding["bbox_units"] == "pt"
+    # Both places, whatever the case or trailing punctuation.
+    assert [loc["page"] for loc in finding["locations"]] == [1, 1]
+    first, second = (loc["bbox"] for loc in finding["locations"])
+    assert first[1] < 100 < first[3] and second[1] < 140 < second[3]
+
+
+def test_an_older_reports_font_and_spelling_findings_are_placed_from_the_pdf() -> None:
+    import pymupdf
+
+    doc = pymupdf.open()
+    page = doc.new_page()
+    page.insert_text((72, 100), "Signed by Lakshmi d/o Rajendram")
+    page.insert_text((72, 140), "Any accidantal omission.")
+    pdf = doc.tobytes()
+    report = {"findings": [
+        {"tool": "font_consistency_tool", "locations": [{"page": 1, "text": "Lakshmi d/o Rajendram"}]},
+        {"tool": "spelling_tool", "word": "accidantal"},
+        {"tool": "metadata_tool", "summary": "Producer changed"},
+    ]}
+
+    assert tools.needs_locations(report)
+    placed = tools.add_missing_locations(report, pdf)
+
+    font, spelling, metadata = placed["findings"]
+    assert font["locations"][0]["bbox"][1] < 100 < font["locations"][0]["bbox"][3]
+    assert spelling["locations"][0]["bbox"][1] < 140 < spelling["locations"][0]["bbox"][3]
+    assert metadata == report["findings"][2]
+    assert not tools.needs_locations(placed)
+
+
+def test_an_older_reports_font_finding_on_repeated_text_is_not_guessed() -> None:
+    # Three copies of the figure and nothing to say which one the font check flagged: a box on the
+    # wrong copy would send the officer to the wrong place, so there is none.
+    import pymupdf
+
+    doc = pymupdf.open()
+    page = doc.new_page()
+    for y in (100, 140, 180):
+        page.insert_text((72, y), "81,872.00")
+    report = {"findings": [{"tool": "font_consistency_tool", "locations": [{"page": 1, "text": "81,872.00"}]}]}
+
+    [finding] = tools.add_missing_locations(report, doc.tobytes())["findings"]
+
+    assert "bbox" not in finding["locations"][0]
+
+
+def test_an_older_reports_text_overlay_is_placed_on_the_overlapping_copies() -> None:
+    import pymupdf
+
+    doc = pymupdf.open()
+    doc.new_page()
+    page = doc.new_page()
+    page.insert_text((72, 100), "04/05/2025")
+    # The overlay: a second date drawn over a copy further down.
+    page.insert_text((72, 300), "04/05/2026")
+    page.insert_text((72, 300), "04/05/2025")
+    pdf = doc.tobytes()
+    report = {"findings": [
+        {"tool": "layout_anomalies_tool", "page": 2, "type": "Text Overlay", "text": "04/05/2026 ↔ 04/05/2025"},
+    ]}
+
+    [finding] = tools.add_missing_locations(report, pdf)["findings"]
+
+    assert finding["bbox_units"] == "pt"
+    # Not the lone copy at y=100.
+    assert finding["bbox"][1] < 300 < finding["bbox"][3]
 
 
 @pytest.mark.asyncio
@@ -154,6 +248,44 @@ async def test_image_manipulation_tool_maps_indicators_to_findings() -> None:
     assert finding["page"] == 1
     assert finding["severity_hint"] == "high"
     assert "evidence" not in finding
+
+
+@pytest.mark.asyncio
+async def test_layout_anomalies_tool_findings_carry_their_area_and_page_size() -> None:
+    # A 300 DPI photo: PyMuPDF sizes its page in points from the DPI (1200 px -> 288 pt), so the
+    # preview needs that page size, not the image's pixels, to place the bbox.
+    from io import BytesIO
+
+    from PIL import Image
+
+    buffer = BytesIO()
+    Image.new("RGB", (1200, 800), "white").save(buffer, "PNG", dpi=(300, 300))
+    anomaly = LayoutAnomaly(
+        anomaly_type="Alignment",
+        page=1,
+        location="Body line near y=40",
+        bbox=(10.0, 40.0, 200.0, 52.0),
+        text="Amount due",
+        detected="x=10",
+        expected="x=24",
+        deviation="-14 pt",
+        confidence=0.9,
+        evidence={},
+        summary="This line starts 14 pt left of the lines around it.",
+    )
+    result = type("Result", (), {"unable_to_assess": False, "anomalies": [anomaly]})()
+    with (
+        patch.object(tools, "_file_bytes", AsyncMock(return_value=buffer.getvalue())),
+        patch.object(tools, "_document", AsyncMock(return_value=_document(document_type=None, classification_confidence=None))),
+        patch.object(tools, "check_layout_anomalies", return_value=result),
+    ):
+        output = await tools.layout_anomalies_tool.ainvoke({"document_id": "doc-1"})
+
+    finding = output["findings"][0]
+    assert finding["type"] == "Alignment"
+    assert finding["bbox"] == [10.0, 40.0, 200.0, 52.0]
+    assert finding["bbox_units"] == "pt"
+    assert finding["page_size"] == [288.0, 192.0]
 
 
 @pytest.mark.asyncio
