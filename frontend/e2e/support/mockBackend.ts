@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Page, Route, WebSocketRoute } from '@playwright/test';
-import type { AuditEvent, CaseRisk } from '../../src/services/uploadService/types';
+import type { AuditEvent, CaseAnalysis, CaseRisk } from '../../src/services/uploadService/types';
 
 /**
  * Each document type's required extraction fields, exported from the
@@ -21,7 +21,7 @@ const REQUIRED_FIELDS: Record<
 );
 
 /** Same rule as backend case_service.missing_required_fields. */
-export function missingRequiredFields(document: { document_type: string | null; extracted_fields: Record<string, unknown> | null }): string[] {
+function missingRequiredFields(document: { document_type: string | null; extracted_fields: Record<string, unknown> | null }): string[] {
   const fields = document.extracted_fields ?? {};
   const schema = REQUIRED_FIELDS[document.document_type ?? ''] ?? {
     required: [],
@@ -58,9 +58,24 @@ export function missingRequiredFields(document: { document_type: string | null; 
  * Anything a test didn't expect answers 599 and is recorded in
  * `unmockedRequests`; the shared fixture in test.ts fails the test if that
  * list isn't empty, so a missing mock can't silently pass.
+ *
+ * Keeping it from drifting from the backend: where a rule is too involved to
+ * copy, the mock serves what the real backend computed, from a fixture a
+ * backend test keeps in step (it fails when the backend changes; regenerate
+ * with REGENERATE_REGRESSION_FIXTURES=1):
+ *   required_fields.json            test_regression_fixtures.py (approval's required fields)
+ *   checklist-variants.json         test_regression_checklist.py (the checklist for a set of documents)
+ *   case-match-foreign-company.json test_regression_case_match.py
+ *   detection-report-{c028,clean,inconclusive}.json  test_regression_detection.py
+ *   case-risk-sprint4.json          test_regression_case_risk.py
+ *   case-views.json                 test_regression_case_views.py (a case's risk and additional documents)
+ * The simpler rules are mirrored here, each marked with the backend function
+ * it copies (analysis readiness, the documents status, which documents can be
+ * approved, rejected, edited, re-typed, deleted, moved, retried or cancelled,
+ * the case cost and timings): change both together.
  */
 
-export const API_URL = 'http://api.test';
+const API_URL = 'http://api.test';
 
 export interface CaseRow {
   id: string;
@@ -73,7 +88,6 @@ export interface CaseRow {
   created_at: string;
   updated_at: string;
   dev: boolean;
-  documents_status: string;
   fulfilled_requirements: string[];
   proof_of_address_coverage: { covered: number; total: number; unmatched_names: string[] };
   id_document_coverage: { covered: number; total: number; missing_side: string | null };
@@ -83,6 +97,9 @@ export interface CaseRow {
   supporting_document_recommendations: unknown[];
   // Computed by backend/app/case_pipeline/risk/additional_documents.py when a case analysis runs.
   additional_documents?: unknown;
+  // The latest case analysis run in brief (case_service.build_summary). analysis_ready isn't stored: like the
+  // backend, the mock computes it from the documents on every read (see isReadyForAnalysis).
+  analysis?: { run_id: string; status: CaseAnalysis['status']; stale: boolean; finished_at: string | null; finding_count: number } | null;
 }
 
 export interface DocumentRow {
@@ -121,6 +138,21 @@ export interface NoteRow {
   deleted_at: string | null;
 }
 
+/**
+ * The checklist the real backend computes for one exact set of a case's documents (build_summary), written by
+ * backend/tests/test_regression_checklist.py into checklist-variants.json. The mock can't run the backend's
+ * checklist rules, so it serves this whenever the case holds exactly these documents.
+ */
+export interface ChecklistVariant {
+  name: string;
+  case_id: string;
+  document_ids: string[];
+  fulfilled_requirements: string[];
+  missing_requirements: string[];
+  proof_of_address_coverage: CaseRow['proof_of_address_coverage'];
+  id_document_coverage: CaseRow['id_document_coverage'];
+}
+
 export interface UploadOutcome {
   success: boolean;
   error?: string;
@@ -147,30 +179,98 @@ export function makeCase(overrides: Partial<CaseRow> = {}): CaseRow {
     created_at: ISO,
     updated_at: ISO,
     dev: true,
-    documents_status: 'no_documents',
     fulfilled_requirements: [],
     proof_of_address_coverage: { covered: 0, total: 0, unmatched_names: [] },
     id_document_coverage: { covered: 0, total: 0, missing_side: null },
-    risk: makeRisk(),
+    // Only a completed case analysis sets a case's risk; until then the backend reads null.
+    risk: null,
     supporting_document_recommendations: [],
     ...overrides,
   };
 }
 
-/** Defaults to what the backend reports for a case with nothing to scan yet. */
-export function makeRisk(overrides: Partial<CaseRisk> = {}): CaseRisk {
+/** A case analysis run as GET /cases/:id/analysis returns it (backend case_pipeline/models.py CaseAnalysis). */
+export function makeAnalysis(overrides: Partial<CaseAnalysis> & Pick<CaseAnalysis, 'case_id'>): CaseAnalysis {
   return {
-    state: 'no_documents',
-    level: null,
-    score: null,
-    points: null,
-    contributing_findings: [],
-    unassessed_checks: [],
-    reasons: [],
-    documents_scanned: 0,
-    documents_total: 0,
+    run_id: `run-${Math.random().toString(36).slice(2, 10)}`,
+    status: 'complete',
+    fingerprint: 'fingerprint',
+    started_at: ISO,
+    finished_at: ISO,
+    error: null,
+    findings: [],
+    outlook: null,
+    summary: null,
+    risk: null,
+    supporting_documents: [],
+    additional_documents: null,
+    consistent_checks: [],
+    audit: { models: {}, prompt_version: '', hypotheses_tried: 0, findings_discarded: 0, tool_calls: [] },
+    trace: [],
+    stale: false,
     ...overrides,
   };
+}
+
+const IN_FLIGHT = ['uploaded', 'queued', 'processing', 'extracting'];
+const APPROVED = ['approved', 'detecting', 'detected'];
+// The officer's decision is final: approved (and later) and rejected documents are locked (routers/documents.py).
+const LOCKED = [...APPROVED, 'rejected'];
+
+/** Same rule as backend models.is_classification_confirmed: an Other or untyped document needs the officer. */
+function isClassificationConfirmed(document: DocumentRow): boolean {
+  const confidence = document.classification_confidence;
+  if (confidence === null) return false;
+  if (!document.document_type || document.document_type === 'unrecognised') return confidence >= 1.0;
+  return confidence >= 0.85;
+}
+
+/** Same rule as backend case_service.has_extracted_information: at least one non-empty value. */
+function hasExtractedInformation(document: DocumentRow): boolean {
+  const value = (field: unknown) => (field && typeof field === 'object' && 'value' in field ? field.value : field);
+  return Object.values(document.extracted_fields ?? {}).some((field) => {
+    const v = value(field);
+    if (v === null || v === undefined) return false;
+    if (typeof v === 'string') return v.trim() !== '';
+    if (Array.isArray(v)) return v.length > 0;
+    if (typeof v === 'object') return Object.keys(v).length > 0;
+    return true;
+  });
+}
+
+// The finished runs backend audit.case_cost reads (its _COSTED).
+const COSTED_EVENTS = new Set([
+  'document.analyzed', 'document.failed', 'document.detected', 'detection.failed', 'case.analysis.completed',
+]);
+
+// STUCK_THRESHOLD_SECONDS and STUCK_PROCESSING_RETRY_THRESHOLD_SECONDS in backend config.py (both 600).
+const STUCK_THRESHOLD_MS = 600_000;
+const sinceLastProgress = (document: DocumentRow) =>
+  Date.now() - new Date(document.processing_started_at ?? document.queued_at ?? document.uploaded_at).getTime();
+
+/** Same rule as backend monitoring.is_stuck: still in flight, with no progress for the threshold. */
+function isStuck(document: DocumentRow): boolean {
+  return IN_FLIGHT.includes(document.status) && sinceLastProgress(document) > STUCK_THRESHOLD_MS;
+}
+
+/** Same rule as backend monitoring.is_stuck_processing_for_retry: processing, with no progress for the threshold. */
+function isStuckProcessing(document: DocumentRow): boolean {
+  return document.status === 'processing' && sinceLastProgress(document) > STUCK_THRESHOLD_MS;
+}
+
+/** Same rule as backend case_service.compute_documents_status: the worst state among the case's documents. */
+function documentsStatus(documents: DocumentRow[]): string {
+  if (documents.length === 0) return 'no_documents';
+  if (documents.some(isStuck)) return 'stuck';
+  if (documents.some((d) => d.status === 'failed')) return 'failed';
+  if (documents.every((d) => d.status === 'analyzed')) return 'analyzed';
+  return 'in_progress';
+}
+
+/** Same rule as backend case_pipeline/readiness.py: at least one approved document, and every approved one scanned. */
+function isReadyForAnalysis(documents: Pick<DocumentRow, 'status'>[]): boolean {
+  const approved = documents.filter((d) => APPROVED.includes(d.status));
+  return approved.length > 0 && approved.every((d) => d.status === 'detected');
 }
 
 export function makeDocument(overrides: Partial<DocumentRow> = {}): DocumentRow {
@@ -184,8 +284,9 @@ export function makeDocument(overrides: Partial<DocumentRow> = {}): DocumentRow 
     storage_path: 'placeholder/path.pdf',
     status: 'queued',
     retry_count: 0,
-    uploaded_at: ISO,
-    queued_at: ISO,
+    // Just uploaded: an older in-flight document would read as stuck (monitoring.is_stuck).
+    uploaded_at: new Date().toISOString(),
+    queued_at: new Date().toISOString(),
     processing_started_at: null,
     failure_reason: null,
     evidence: [],
@@ -209,18 +310,22 @@ export class MockBackend {
   detectionErrors: Record<string, string> = {};
   /** LangGraph pipeline trace per document id (GET .../langgraph-trace); none = 404. */
   traces: Record<string, unknown> = {};
-  /** Finished-run timings per case id, served in GET /audit/cases/:id/cost (the summary's Processing Time). */
-  timings: Record<string, { type: string; document_id: string | null; occurred_at: string; duration_ms: number }[]> = {};
   /** Notes on cases and documents (GET/POST /cases/:id/notes), signed by the logged-in officer. */
   notes: NoteRow[] = [];
   /** Audit trail entries (GET /audit/events?case_id=), in any order: served newest first, like the backend. */
   auditEvents: AuditEvent[] = [];
+  /** Each case's latest analysis run (GET /cases/:id/analysis); none = 404. POST .../analysis/run starts one. */
+  analyses: Record<string, CaseAnalysis> = {};
   /** Per-filename upload results; files not listed here upload successfully. */
   uploadOutcomes: Record<string, UploadOutcome> = {};
   /** When set, upload-batch waits for this before answering (to observe "Uploading"). */
   uploadGate: Promise<void> | null = null;
+  /** Backend-computed checklists for exact document sets (see ChecklistVariant); loadFixture registers them. */
+  checklists: ChecklistVariant[] = [];
   /** Credentials /auth/login accepts. */
   credentials = { username: 'officer', password: 'correct-password' };
+  /** When true the session has expired: like require_auth, every call but /auth/login answers 401. */
+  sessionExpired = false;
 
   requests: RecordedRequest[] = [];
   unmockedRequests: string[] = [];
@@ -241,6 +346,13 @@ export class MockBackend {
   /** Push a fresh snapshot to the open case page, e.g. after changing a document's status. */
   push(caseId: string): void {
     this.sockets.get(caseId)?.send(JSON.stringify(this.snapshot(caseId)));
+  }
+
+  /** Drop the case page's live connection from the server side, as a backend restart or network blip would. */
+  async dropConnection(caseId: string): Promise<void> {
+    const socket = this.sockets.get(caseId);
+    this.sockets.delete(caseId);
+    await socket?.close();
   }
 
   requestsTo(method: string, path: string | RegExp): RecordedRequest[] {
@@ -271,18 +383,21 @@ export class MockBackend {
     const riskValue = (c: CaseRow) => (rank(c) ? c.risk!.level! : 'unscored');
 
     let cases = this.newestFirst(this.matching(params.get('q')));
-    if (statuses.length) cases = cases.filter((c) => statuses.includes(c.documents_status));
+    if (statuses.length) cases = cases.filter((c) => statuses.includes(this.documentsStatusOf(c)));
     if (risks.length) cases = cases.filter((c) => risks.includes(riskValue(c)));
     if (sort === 'oldest') cases.reverse();
     // Stable sorts: newest first among equals.
     if (sort === 'risk') cases = [...cases].sort((a, b) => rank(b) - rank(a));
     if (sort === 'lowest_risk') cases = [...cases].sort((a, b) => rank(a) - rank(b));
-    return { items: cases.slice(offset, offset + limit), total: cases.length, limit, offset };
+    return { items: cases.slice(offset, offset + limit).map((c) => this.listItem(c)), total: cases.length, limit, offset };
   }
 
   private caseCounts() {
     const by_status: Record<string, number> = {};
-    for (const c of this.cases) by_status[c.documents_status] = (by_status[c.documents_status] ?? 0) + 1;
+    for (const c of this.cases) {
+      const status = this.documentsStatusOf(c);
+      by_status[status] = (by_status[status] ?? 0) + 1;
+    }
     return { total: this.cases.length, by_status };
   }
 
@@ -296,15 +411,85 @@ export class MockBackend {
     };
     const matches = this.newestFirst(this.matching(q));
     const ranked = q ? [...matches].sort((a, b) => rank(a) - rank(b)) : matches;
-    return { items: ranked.slice(0, limit), total: matches.length };
+    return { items: ranked.slice(0, limit).map((c) => this.listItem(c)), total: matches.length };
+  }
+
+  /**
+   * Same as backend audit.case_cost: each run in the case's audit trail that recorded its Claude spend, a total
+   * per document, and the case total; and how long each finished run took (the summary's Processing Time).
+   */
+  private caseCost(caseId: string) {
+    const recorded = this.auditEvents
+      .filter((e) => e.case_id === caseId && COSTED_EVENTS.has(e.type))
+      .sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
+    const timings = recorded
+      .filter((e) => e.outcome === 'success' && e.duration_ms !== null)
+      .map((e) => ({ occurred_at: e.occurred_at, type: e.type, document_id: e.document_id, duration_ms: e.duration_ms }));
+    const runs = recorded
+      .filter((e) => typeof e.detail.llm_cost_usd === 'number')
+      .map((e) => ({
+        occurred_at: e.occurred_at,
+        type: e.type,
+        run: (e.detail.run as string | undefined) ?? null,
+        document_id: e.document_id,
+        llm_cost_usd: e.detail.llm_cost_usd as number,
+        llm_calls: (e.detail.llm_calls as number | undefined) ?? null,
+        llm_cache_read_tokens: (e.detail.llm_cache_read_tokens as number | undefined) ?? null,
+      }));
+    const round = (usd: number) => Math.round(usd * 1e6) / 1e6;
+    const documents_usd: Record<string, number> = {};
+    for (const run of runs) {
+      if (run.document_id) documents_usd[run.document_id] = round((documents_usd[run.document_id] ?? 0) + run.llm_cost_usd);
+    }
+    return {
+      case_id: caseId,
+      total_usd: round(runs.reduce((sum, r) => sum + r.llm_cost_usd, 0)),
+      documents_usd,
+      case_analysis_usd: round(runs.filter((r) => r.run === 'case_analysis').reduce((sum, r) => sum + r.llm_cost_usd, 0)),
+      runs,
+      timings,
+    };
+  }
+
+  private caseDocuments(caseId: string): DocumentRow[] {
+    return this.documents.filter((d) => d.case_id === caseId);
+  }
+
+  private documentsStatusOf(theCase: CaseRow): string {
+    return documentsStatus(this.caseDocuments(theCase.id));
+  }
+
+  /** A case as the case list returns it: its documents' rollup computed on every read, like the backend. */
+  private listItem(theCase: CaseRow) {
+    return { ...theCase, documents_status: this.documentsStatusOf(theCase) };
+  }
+
+  /**
+   * The case as the backend's case summary reads: analysis_ready computed from its documents, never stored, and
+   * the checklist the backend computed for exactly these documents when a test has left the case with one of them.
+   */
+  private summary(theCase: CaseRow) {
+    const documents = this.caseDocuments(theCase.id);
+    const ids = documents.map((d) => d.id).sort().join(',');
+    const checklist = this.checklists.find((c) => c.case_id === theCase.id && c.document_ids.join(',') === ids);
+    return {
+      ...this.listItem(theCase),
+      ...(checklist && {
+        fulfilled_requirements: checklist.fulfilled_requirements,
+        missing_requirements: checklist.missing_requirements,
+        proof_of_address_coverage: checklist.proof_of_address_coverage,
+        id_document_coverage: checklist.id_document_coverage,
+      }),
+      analysis_ready: isReadyForAnalysis(documents),
+    };
   }
 
   private snapshot(caseId: string) {
     const found = this.cases.find((c) => c.id === caseId);
     return {
       type: 'snapshot',
-      case: found ?? null,
-      documents: this.documents.filter((d) => d.case_id === caseId),
+      case: found ? this.summary(found) : null,
+      documents: this.caseDocuments(caseId),
       case_match: this.caseMatch[caseId] ?? null,
     };
   }
@@ -329,6 +514,10 @@ export class MockBackend {
 
     const json = (data: unknown, status = 200) =>
       route.fulfill({ status, headers: corsHeaders(), contentType: 'application/json', body: JSON.stringify(data) });
+
+    if (this.sessionExpired && path !== '/auth/login') {
+      return json({ detail: 'Invalid or expired token' }, 401);
+    }
 
     // --- auth -------------------------------------------------------------
     if (method === 'POST' && path === '/auth/login') {
@@ -358,7 +547,7 @@ export class MockBackend {
     if (byNumber && method === 'GET') {
       const number = decodeURIComponent(byNumber[1]);
       const found = this.cases.find((c) => c.greenlink_case_id === number || c.id === number);
-      return found ? json(found) : json({ detail: 'Case not found' }, 404);
+      return found ? json(this.listItem(found)) : json({ detail: 'Case not found' }, 404);
     }
     if (path === '/cases' && method === 'POST') {
       const companyName = (body as { company_name?: string } | null)?.company_name ?? null;
@@ -373,10 +562,7 @@ export class MockBackend {
     }
     const costMatch = path.match(/^\/audit\/cases\/([^/]+)\/cost$/);
     if (costMatch && method === 'GET') {
-      return json({
-        case_id: costMatch[1], total_usd: 0, documents_usd: {}, case_analysis_usd: 0, runs: [],
-        timings: this.timings[costMatch[1]] ?? [],
-      });
+      return json(this.caseCost(costMatch[1]));
     }
     // Officers' reviews of findings (precision/recall): none recorded, so every rate is "nothing to measure".
     if (method === 'GET' && /^\/cases\/[^/]+\/finding-reviews$/.test(path)) {
@@ -399,14 +585,38 @@ export class MockBackend {
     if (caseMatch) {
       const found = this.cases.find((c) => c.id === caseMatch[1]);
       if (!found) return json({ detail: 'Case not found' }, 404);
-      if (method === 'GET') return json(found);
+      if (method === 'GET') return json(this.summary(found));
       if (method === 'PATCH') {
         found.company_name = (body as { company_name: string }).company_name;
-        return json(found);
+        return json(this.summary(found));
       }
       if (method === 'DELETE') {
         this.cases = this.cases.filter((c) => c.id !== found.id);
         return route.fulfill({ status: 204, headers: corsHeaders() });
+      }
+    }
+    // Same rules as routers/cases.py run_case_analysis: only once every approved document is scanned, and never
+    // while a run is going. The run then stays "running" until a test finishes it (the case-worker's part) and
+    // pushes a snapshot.
+    const analysisMatch = path.match(/^\/cases\/([^/]+)\/analysis(\/run)?$/);
+    if (analysisMatch) {
+      const theCase = this.cases.find((c) => c.id === analysisMatch[1]);
+      if (!theCase) return json({ detail: 'Case not found' }, 404);
+      const latest = this.analyses[theCase.id];
+      if (method === 'GET' && !analysisMatch[2]) {
+        return latest ? json(latest) : json({ detail: 'This case has not been analysed.' }, 404);
+      }
+      if (method === 'POST' && analysisMatch[2]) {
+        if (!isReadyForAnalysis(this.caseDocuments(theCase.id))) {
+          return json({ detail: 'Every approved document must finish scanning before the case can be analysed.' }, 409);
+        }
+        if (latest?.status === 'running') {
+          return json({ detail: 'An analysis is already running for this case.' }, 409);
+        }
+        const started = makeAnalysis({ case_id: theCase.id, status: 'running', finished_at: null });
+        this.analyses[theCase.id] = started;
+        theCase.analysis = { run_id: started.run_id, status: 'running', stale: false, finished_at: null, finding_count: 0 };
+        return json(started, 202);
       }
     }
     if (path === '/audit/events' && method === 'GET') {
@@ -450,7 +660,9 @@ export class MockBackend {
       const note = this.notes.find((n) => n.id === noteMatch[2] && n.case_id === noteMatch[1]);
       if (!note) return json({ detail: 'Note not found in this case' }, 404);
       // Like the backend: only the officer who wrote a note can change it.
-      if (note.author !== this.credentials.username) return json({ detail: 'Only the officer who wrote a note can change it.' }, 403);
+      if (note.author !== this.credentials.username) {
+        return json({ detail: `Only the officer who wrote a note can ${method === 'PATCH' ? 'edit' : 'delete'} it.` }, 403);
+      }
       if (note.deleted_at) return json({ detail: 'This note was already deleted.' }, 409);
       if (method === 'PATCH') {
         note.body = (body as { body: string }).body.trim();
@@ -489,6 +701,34 @@ export class MockBackend {
       });
       return json({ results });
     }
+    // Same rules as routers/documents.py bulk_move_documents: approved, rejected or in-flight documents, and
+    // ones already in the target case, are refused one by one; the rest move.
+    if (method === 'POST' && path === '/documents/bulk-move') {
+      const { document_ids, case_id } = body as { document_ids: string[]; case_id: string };
+      if (document_ids.length === 0) return json({ detail: 'No documents specified.' }, 400);
+      if (!this.cases.some((c) => c.id === case_id)) return json({ detail: 'Target case not found' }, 404);
+      const moved: string[] = [];
+      const failed: { document_id: string; reason: string }[] = [];
+      for (const id of document_ids) {
+        const document = this.documents.find((d) => d.id === id);
+        const refusal = !document
+          ? 'Document not found'
+          : LOCKED.includes(document.status)
+            ? `An ${document.status} document cannot be moved.`
+            : IN_FLIGHT.includes(document.status)
+              ? 'Document is still being processed.'
+              : document.case_id === case_id
+                ? 'Document is already in that case.'
+                : null;
+        if (refusal) {
+          failed.push({ document_id: id, reason: refusal });
+        } else {
+          document!.case_id = case_id;
+          moved.push(id);
+        }
+      }
+      return json({ moved, failed });
+    }
     if (method === 'GET' && path === '/documents') {
       const caseId = url.searchParams.get('case_id');
       return json(this.documents.filter((d) => d.case_id === caseId));
@@ -499,13 +739,31 @@ export class MockBackend {
       const document = this.documents.find((d) => d.id === documentId);
       if (!document) return json({ detail: 'Document not found' }, 404);
       if (method === 'GET' && rest === '') return json({ ...document, missing_required_fields: missingRequiredFields(document) });
+      // Same rules as routers/documents.py: an approved document can't be deleted, an in-flight one is cancelled
+      // first; a locked (approved or rejected) document can't be edited or re-typed.
+      const locked = (action: string) =>
+        json({ detail: `An ${document.status} document is locked and cannot be ${action}.` }, 409);
       if (method === 'DELETE' && rest === '') {
+        if (APPROVED.includes(document.status)) {
+          return json({ detail: `An ${document.status} document cannot be deleted.` }, 409);
+        }
+        if (IN_FLIGHT.includes(document.status)) {
+          return json({
+            detail: 'Document is still being processed; cancel it first, or wait for it to finish, before deleting.',
+          }, 409);
+        }
         this.documents = this.documents.filter((d) => d.id !== documentId);
         return route.fulfill({ status: 204, headers: corsHeaders() });
       }
       if (method === 'POST' && rest === '/approve') {
         if (document.status !== 'analyzed') {
           return json({ detail: 'Only completed documents can be approved.' }, 400);
+        }
+        if (!isClassificationConfirmed(document)) {
+          return json({ detail: 'Cannot approve document. Confirm the document type first.' }, 400);
+        }
+        if (!hasExtractedInformation(document)) {
+          return json({ detail: 'Cannot approve document. No information was extracted from it.' }, 400);
         }
         const missing = missingRequiredFields(document);
         if (missing.length > 0) {
@@ -515,9 +773,13 @@ export class MockBackend {
         return json(document);
       }
       if (method === 'POST' && rest === '/reject') {
+        if (document.status !== 'analyzed') {
+          return json({ detail: 'Only completed documents can be rejected.' }, 400);
+        }
         document.status = 'rejected';
         return json(document);
       }
+      if (rest.startsWith('/extracted-fields') && LOCKED.includes(document.status)) return locked('edited');
       if (method === 'PATCH' && rest === '/extracted-fields') {
         // Same rule as routers/documents.py's update_extracted_fields: a
         // field the officer could edit (empty, below the 0.9 threshold, or
@@ -561,11 +823,25 @@ export class MockBackend {
         document.extracted_fields = remaining;
         return json(document);
       }
+      // Same rules as routers/documents.py update_document_type: only an unconfirmed type can be set, and only a
+      // changed type (or a first pass extracted generically) re-runs extraction.
       if (method === 'PATCH' && rest === '/document-type') {
-        document.document_type = (body as { document_type: string }).document_type;
+        if (LOCKED.includes(document.status)) return locked('re-typed');
+        if (IN_FLIGHT.includes(document.status)) {
+          return json({ detail: 'Document is still being processed; try again once it finishes.' }, 409);
+        }
+        if (isClassificationConfirmed(document)) {
+          return json({ detail: "Classification confidence is above the threshold; the type can't be overridden." }, 400);
+        }
+        const documentType = (body as { document_type: string }).document_type;
+        const firstPassGeneric =
+          document.routing_status === 'manual_review' && !['', 'unrecognised'].includes(document.document_type ?? '');
+        const needsExtraction =
+          documentType !== document.document_type || (firstPassGeneric && documentType !== 'unrecognised');
+        document.document_type = documentType;
         document.routing_status = 'accepted';
         document.classification_confidence = 1.0;
-        document.status = 'extracting';
+        if (needsExtraction) document.status = 'extracting';
         return json(document);
       }
       // Fraud-detection report and LangGraph trace: the real backend answers
@@ -576,7 +852,7 @@ export class MockBackend {
         const error = this.detectionErrors[documentId];
         return error
           ? json({ detail: `Detection failed: ${error}. Run detection again.` }, 502)
-          : json({ detail: 'No detection report' }, 404);
+          : json({ detail: 'No detection report for this document yet.' }, 404);
       }
       // Like the worker: the run stops, leaves its error and the document returns to approved. The page only
       // hears of it with the next snapshot, so a test pushes one.
@@ -589,18 +865,35 @@ export class MockBackend {
         document.has_detection_error = true;
         return json({ status: 'cancelling' });
       }
+      // Same rules as routers/detection.py retry_document_detection: only after a cancelled or failed run that
+      // left no report, and never while one is running. The run then starts, as the detection-worker would.
+      if (method === 'POST' && rest === '/detection/retry') {
+        if (document.status === 'detecting') {
+          return json({ detail: 'Detection is already running for this document.' }, 409);
+        }
+        if (this.detectionReports[documentId] || !this.detectionErrors[documentId]) {
+          return json({ detail: 'Detection can only be retried after a cancelled or failed run.' }, 409);
+        }
+        delete this.detectionErrors[documentId];
+        document.status = 'detecting';
+        document.has_detection_error = false;
+        return json({ status: 'retrying' });
+      }
       if (method === 'GET' && rest === '/langgraph-trace') {
         const trace = this.traces[documentId];
-        return trace ? json(trace) : json({ detail: 'No trace' }, 404);
+        return trace ? json(trace) : json({ detail: 'No langgraph trace found for this document.' }, 404);
       }
       // Same rules as routers/documents.py: retry a failed document back
       // into the queue; cancel one that's still in flight.
       if (method === 'POST' && rest === '/retry') {
-        if (document.status !== 'failed') {
-          return json({ detail: 'Only failed or stuck documents can be retried.' }, 409);
+        if (document.status !== 'failed' && !isStuckProcessing(document)) {
+          return json({
+            detail: 'Document can only be retried when it has failed, or has been processing for an unusually long time (possibly orphaned).',
+          }, 409);
         }
         document.status = 'queued';
         document.failure_reason = null;
+        document.retry_count += 1;
         return json(document);
       }
       if (method === 'POST' && rest === '/cancel') {
@@ -615,12 +908,12 @@ export class MockBackend {
       if (method === 'GET' && rest === '/download') {
         return json({ document_id: documentId, signed_url: 'about:blank', expires_in: 3600 });
       }
+      // Same answers as routers/detection.py get_case_match.
       if (method === 'GET' && rest === '/detection/case-match') {
-        const result = this.caseMatch[document.case_id ?? ''] as
-          | { documents?: { document_id: string }[] }
-          | undefined;
+        if (document.case_id === null) return json({ detail: 'Document is not attached to a case' }, 404);
+        const result = this.caseMatch[document.case_id] as { documents?: { document_id: string }[] } | undefined;
         const entry = result?.documents?.find((d) => d.document_id === documentId);
-        return entry ? json(entry) : json({ detail: 'No case match' }, 404);
+        return entry ? json(entry) : json({ detail: 'Document not found' }, 404);
       }
     }
 

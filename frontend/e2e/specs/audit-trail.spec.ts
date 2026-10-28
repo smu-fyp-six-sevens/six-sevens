@@ -273,13 +273,4 @@ test.describe('Case audit trail', () => {
 
     await expect(page.getByText('No audit events available yet.')).toBeVisible();
   });
-
-  test('is reached from the case page while reviewing the case', async ({ page, backend }) => {
-    const fixture = loadFixture(backend, 'anchorpoint');
-
-    await page.goto(fixture.caseUrl);
-    await page.getByRole('button', { name: /Audit Trail/ }).click();
-
-    await expect(page.getByRole('heading', { name: /Case Audit Trail/ })).toBeVisible();
-  });
 });

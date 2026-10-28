@@ -756,17 +756,31 @@ async def test_findings_the_specialist_rates_info_or_dismisses_do_not_flag(ai, s
     assert [d["id"] for d in consulted(report, DIGITAL)["dismissed"]] == ["metadata_tool-1"]
 
 
-@pytest.mark.sprint3
-@pytest.mark.story("SCRUM-119", "FD-018")
-async def test_a_clean_document_where_every_check_runs_is_clean(ai, store):
+async def clean_report(ai: DetectionAI, store: FakeStore) -> dict:
+    """FD-018: a clean certificate where every check runs."""
     document_id = store.add("C004-P1_NRICPassport.pdf", "certificate_of_incorporation",
                             certificate_pdf("ACME PTE LTD"), metadata=CLEAN_METADATA,
                             fields={"incorporation_date": "2016-03-26", "uen": "201634564N"})
     ai.specialists[LAYOUT] = Specialist(tools=["font_consistency_tool"])
     ai.specialists[CONTENT] = Specialist(tools=["date_consistency_tool"])
     ai.specialists[DIGITAL] = Specialist(tools=["metadata_tool"])
+    return await run_detection(document_id)
 
-    report = await run_detection(document_id)
+
+async def inconclusive_report(ai: DetectionAI, store: FakeStore) -> dict:
+    """FD-019: a page that is one picture, so the font check can't read any text."""
+    document_id = store.add("clean_test.pdf", "certificate_of_incorporation", image_only_pdf(),
+                            metadata=CLEAN_METADATA)
+    ai.specialists[LAYOUT] = Specialist(tools=["font_consistency_tool"])
+    ai.specialists[DIGITAL] = Specialist(tools=["metadata_tool"])
+    ai.reviews = [Review("No findings. The metadata check passed, but the fonts could not be checked.")]
+    return await run_detection(document_id)
+
+
+@pytest.mark.sprint3
+@pytest.mark.story("SCRUM-119", "FD-018")
+async def test_a_clean_document_where_every_check_runs_is_clean(ai, store):
+    report = await clean_report(ai, store)
 
     assert report["findings"] == []
     assert report["unable_to_assess"] == []
@@ -777,14 +791,7 @@ async def test_a_clean_document_where_every_check_runs_is_clean(ai, store):
 @pytest.mark.sprint3
 @pytest.mark.story("SCRUM-119", "FD-019")
 async def test_no_findings_but_a_check_that_could_not_run_is_inconclusive(ai, store):
-    # A page that is one picture: the font check can't read any text.
-    document_id = store.add("clean_test.pdf", "certificate_of_incorporation", image_only_pdf(),
-                            metadata=CLEAN_METADATA)
-    ai.specialists[LAYOUT] = Specialist(tools=["font_consistency_tool"])
-    ai.specialists[DIGITAL] = Specialist(tools=["metadata_tool"])
-    ai.reviews = [Review("No findings. The metadata check passed, but the fonts could not be checked.")]
-
-    report = await run_detection(document_id)
+    report = await inconclusive_report(ai, store)
 
     assert report["findings"] == []
     assert [u["tool"] for u in report["unable_to_assess"]] == ["font_consistency_tool"]
@@ -958,4 +965,19 @@ async def test_the_playwright_suites_detection_report_matches_the_graph(ai, stor
         DETECTION_REPORT_FIXTURE.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     assert json.loads(DETECTION_REPORT_FIXTURE.read_text()) == json.loads(json.dumps(report)), (
         "detection-report-c028.json is out of date with the detection graph — regenerate it (see above)"
+    )
+
+
+@pytest.mark.sprint3
+@pytest.mark.story("SCRUM-119", "FD-018 / FD-019")
+@pytest.mark.parametrize("verdict, scenario", [("clean", clean_report), ("inconclusive", inconclusive_report)])
+async def test_the_playwright_suites_clean_and_inconclusive_reports_match_the_graph(ai, store, verdict, scenario):
+    """detection-report-clean.json and detection-report-inconclusive.json, which the browser suite renders."""
+    fixture = FIXTURES / f"detection-report-{verdict}.json"
+    report = {**await scenario(ai, store), "generated_at": "2026-10-14T00:00:00+00:00"}
+
+    if os.environ.get("REGENERATE_REGRESSION_FIXTURES"):
+        fixture.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    assert json.loads(fixture.read_text()) == json.loads(json.dumps(report)), (
+        f"{fixture.name} is out of date with the detection graph — regenerate it (see above)"
     )
