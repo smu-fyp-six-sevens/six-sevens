@@ -1,6 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 /* Order matters: later files override earlier ones. */
+@import './styles/tokens.css';
 @import './styles/base.css';
 @import './styles/case-queue.css';
 @import './styles/upload.css';
@@ -14,4 +15,6 @@
 @import './styles/not-found.css';
 @import './styles/dashboard.css';
 @import './styles/case-overview.css';
+@import './styles/skeleton.css';
 @import './styles/notes.css';
+@import './styles/audit.css';

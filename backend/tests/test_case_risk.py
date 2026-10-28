@@ -485,11 +485,11 @@ def test_case_list_reads_saved_scores_and_never_detection_reports() -> None:
         patch("app.case_service.langgraph_trace") as trace,
         patch("app.case_service.risk_store") as store,
     ):
-        case_repo.list_cases.return_value = [_case(), other_case]
+        case_repo.list_cases_page.return_value = ([_case(), other_case], 2)
         doc_repo.list_document_statuses.return_value = [_document("doc")]
         store.latest_many.return_value = {"case-1": CaseRisk(state="scored", level="High", score=70)}
 
-        items = case_service.list_case_summaries()
+        items = case_service.list_cases_page(limit=25, offset=0, sort="newest", statuses=[], q=None).items
 
     assert [(i.id, i.risk.level if i.risk else None) for i in items] == [("case-1", "High"), ("case-2", None)]
     trace.get_detection_states.assert_not_called()

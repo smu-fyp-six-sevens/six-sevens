@@ -125,11 +125,72 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Cases */
+        /**
+         * List Cases
+         * @description One page of the case queue: newest or oldest first, or by risk either way; optionally only these documents
+         *     statuses, only these risk levels and only cases whose number or name contains q.
+         */
         get: operations["list_cases_cases_get"];
         put?: never;
         /** Create Case */
         post: operations["create_case_cases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cases/by-number/{number}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Case By Number
+         * @description The case behind a URL such as /cases/GLDB-137.
+         */
+        get: operations["get_case_by_number_cases_by_number__number__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cases/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Case Counts */
+        get: operations["case_counts_cases_counts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cases/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Cases
+         * @description Jump-to-case suggestions, best match first; without q, the newest cases.
+         */
+        get: operations["search_cases_cases_search_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -251,6 +312,113 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cases/{case_id}/finding-reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Case Finding Reviews
+         * @description Every review in the case, with precision and recall per document, across documents and for the case.
+         */
+        get: operations["get_case_finding_reviews_cases__case_id__finding_reviews_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cases/{case_id}/finding-reviews/missed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report Missed Issue
+         * @description Records an issue no finding raised, against the check that should have caught it: a false negative.
+         */
+        post: operations["report_missed_issue_cases__case_id__finding_reviews_missed_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cases/{case_id}/finding-reviews/verdict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Finding Verdict
+         * @description Marks one finding correct or wrong, signed by the officer; a null verdict clears the mark. Any officer
+         *     can change a verdict; the latest one stands.
+         */
+        put: operations["set_finding_verdict_cases__case_id__finding_reviews_verdict_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cases/{case_id}/finding-reviews/verdicts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Finding Verdicts
+         * @description Saves one group's review in one request: the officer ticked the findings that are real (correct) and left
+         *     the rest (wrong). Every target is checked before anything is written, so a bad entry saves nothing.
+         */
+        put: operations["set_finding_verdicts_cases__case_id__finding_reviews_verdicts_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cases/{case_id}/finding-reviews/{review_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Finding Review
+         * @description Removes a verdict or a missed issue (e.g. one reported by mistake).
+         */
+        delete: operations["delete_finding_review_cases__case_id__finding_reviews__review_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Missed Issue
+         * @description Corrects a reported missed issue (its check or note), e.g. one filed against the wrong check. A verdict
+         *     on a finding is changed by reviewing the finding again, not here.
+         */
+        patch: operations["update_missed_issue_cases__case_id__finding_reviews__review_id__patch"];
+        trace?: never;
+    };
     "/cases/{case_id}/notes": {
         parameters: {
             query?: never;
@@ -300,6 +468,26 @@ export interface paths {
          * @description Replaces the text of the officer's own note and stamps edited_at. Its document is never touched.
          */
         patch: operations["edit_case_note_cases__case_id__notes__note_id__patch"];
+        trace?: never;
+    };
+    "/detection-metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Detection Metrics
+         * @description Precision and recall per check across every reviewed case, with targets (the dashboard).
+         */
+        get: operations["get_detection_metrics_detection_metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/documents": {
@@ -1639,6 +1827,18 @@ export interface components {
             status: "running" | "complete" | "failed" | "superseded";
         };
         /**
+         * CaseCounts
+         * @description What the queue's sidebar shows: every case, and how many are in each documents status.
+         */
+        CaseCounts: {
+            /** By Status */
+            by_status: {
+                [key: string]: number;
+            };
+            /** Total */
+            total: number;
+        };
+        /**
          * CaseDocumentsStatus
          * @description Rollup of every document under a case, worst-first: a single stuck
          *     document outranks nine analyzed ones. Computed live from the documents
@@ -1648,6 +1848,24 @@ export interface components {
          * @enum {string}
          */
         CaseDocumentsStatus: "no_documents" | "stuck" | "failed" | "in_progress" | "analyzed";
+        /**
+         * CaseFindingReviews
+         * @description Every review in a case, and the precision and recall they give: per document, across documents and for the case.
+         */
+        CaseFindingReviews: {
+            case: components["schemas"]["MetricsSummary"];
+            /** Checks */
+            checks: {
+                [key: string]: string[];
+            };
+            cross_document: components["schemas"]["MetricsSummary"];
+            /** Documents */
+            documents: {
+                [key: string]: components["schemas"]["MetricsSummary"];
+            };
+            /** Reviews */
+            reviews: components["schemas"]["FindingReview"][];
+        };
         /**
          * CaseListItem
          * @description One row of the case queue: only what the list shows, so it needs no extracted fields.
@@ -1683,6 +1901,20 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * CaseListPage
+         * @description One page of the case queue. `total` counts every case matching the search and status filter.
+         */
+        CaseListPage: {
+            /** Items */
+            items: components["schemas"]["CaseListItem"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
         };
         /** CaseMatchResult */
         CaseMatchResult: {
@@ -1791,6 +2023,16 @@ export interface components {
             unassessed_checks: components["schemas"]["UnassessedCheck"][];
         };
         /**
+         * CaseSearchResult
+         * @description Jump-to-case suggestions: the best matches (exact number first), and how many cases match in all.
+         */
+        CaseSearchResult: {
+            /** Items */
+            items: components["schemas"]["CaseRecord"][];
+            /** Total */
+            total: number;
+        };
+        /**
          * CaseSummary
          * @description documents_status, fulfilled_requirements and missing_requirements are all
          *     computed live from the documents table on every read, never stored — see
@@ -1855,6 +2097,35 @@ export interface components {
             unable_to_assess_reason: string | null;
         };
         /**
+         * CheckMetrics
+         * @description One check's counts and rates. precision is correct / (correct + wrong): None when no finding of the check
+         *     was reviewed. recall is correct / (correct + missed): None when there is nothing it should have caught.
+         */
+        CheckMetrics: {
+            /** Check Name */
+            check_name: string;
+            /** Correct */
+            correct: number;
+            /**
+             * Flags
+             * @default []
+             */
+            flags: string[];
+            /** Missed */
+            missed: number;
+            /** Precision */
+            precision: number | null;
+            /** Recall */
+            recall: number | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "document" | "case";
+            /** Wrong */
+            wrong: number;
+        };
+        /**
          * CheckOutcome
          * @enum {string}
          */
@@ -1915,6 +2186,8 @@ export interface components {
             also_on: number;
             /** Category */
             category: string | null;
+            /** Check Code */
+            check_code: string | null;
             /** Document Id */
             document_id: string;
             /** Document Type */
@@ -2055,6 +2328,23 @@ export interface components {
             size: number;
             /** Underline */
             underline: boolean;
+        };
+        /**
+         * DetectionMetrics
+         * @description Precision and recall per check across every reviewed case.
+         */
+        DetectionMetrics: {
+            /** Cases Reviewed */
+            cases_reviewed: number;
+            /** Documents Reviewed */
+            documents_reviewed: number;
+            /** Min Reviews */
+            min_reviews: number;
+            overall: components["schemas"]["MetricsSummary"];
+            /** Target Precision */
+            target_precision: number;
+            /** Target Recall */
+            target_recall: number;
         };
         /** DocumentCaseMatch */
         DocumentCaseMatch: {
@@ -2295,6 +2585,57 @@ export interface components {
          * @enum {string}
          */
         FindingCategory: "tampering_forensic" | "registry_discrepancy" | "identity_entity_conflict" | "cross_document_variance" | "behavioural_anomaly" | "unsupported_claim";
+        /**
+         * FindingReview
+         * @description An officer's verdict on one finding (kind "verdict": correct or wrong), or an issue the officer found that
+         *     no finding raised (kind "missed"). scope "document" is a finding on one document; "case" a cross-document
+         *     finding from the case analysis. check_name is the tool for a document finding, the category for a case one.
+         */
+        FindingReview: {
+            /** Case Id */
+            case_id: string;
+            /** Check Code */
+            check_code: string | null;
+            /** Check Name */
+            check_name: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Document Id */
+            document_id: string | null;
+            /** Finding Id */
+            finding_id: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "verdict" | "missed";
+            /** Note */
+            note: string | null;
+            /** Reviewer */
+            reviewer: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "document" | "case";
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Verdict */
+            verdict: ("correct" | "wrong") | null;
+        };
         /**
          * FontAnomalyV2
          * @description One deviation pattern, fact-only (no confidence scoring).
@@ -2840,6 +3181,21 @@ export interface components {
             /** Value */
             value: string | null;
         };
+        /** MetricsSummary */
+        MetricsSummary: {
+            /** By Check */
+            by_check: components["schemas"]["CheckMetrics"][];
+            /** Correct */
+            correct: number;
+            /** Missed */
+            missed: number;
+            /** Precision */
+            precision: number | null;
+            /** Recall */
+            recall: number | null;
+            /** Wrong */
+            wrong: number;
+        };
         /** MonitoringIssues */
         MonitoringIssues: {
             /** Failed */
@@ -3072,6 +3428,23 @@ export interface components {
             /** Summary */
             summary: string;
         };
+        /**
+         * ReportMissedIssueRequest
+         * @description An issue the officer found that no finding raised, against the check that should have caught it.
+         */
+        ReportMissedIssueRequest: {
+            /** Check Name */
+            check_name: string;
+            /** Document Id */
+            document_id?: string | null;
+            /** Note */
+            note?: string | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "document" | "case";
+        };
         /** RiskOutlook */
         RiskOutlook: {
             /** Best Case Level */
@@ -3097,6 +3470,40 @@ export interface components {
          * @enum {string}
          */
         RoutingStatus: "accepted" | "manual_review";
+        /**
+         * SetFindingVerdictRequest
+         * @description Marks one finding correct or wrong; verdict null clears the officer's mark.
+         */
+        SetFindingVerdictRequest: {
+            /** Check Code */
+            check_code?: string | null;
+            /** Check Name */
+            check_name: string;
+            /** Document Id */
+            document_id?: string | null;
+            /** Finding Id */
+            finding_id: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "document" | "case";
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+            /** Verdict */
+            verdict?: ("correct" | "wrong") | null;
+        };
+        /**
+         * SetFindingVerdictsRequest
+         * @description A whole group's review at once: every finding the officer looked at, each correct or wrong.
+         */
+        SetFindingVerdictsRequest: {
+            /** Verdicts */
+            verdicts: components["schemas"]["SetFindingVerdictRequest"][];
+        };
         /** SkippedCheck */
         SkippedCheck: {
             /** Check Code */
@@ -3330,6 +3737,16 @@ export interface components {
             extracted_fields: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * UpdateMissedIssueRequest
+         * @description Corrects a reported missed issue: the check it's filed against, and its note. Where it sits never changes.
+         */
+        UpdateMissedIssueRequest: {
+            /** Check Name */
+            check_name: string;
+            /** Note */
+            note?: string | null;
         };
         /**
          * UpdateNoteRequest
@@ -3567,7 +3984,14 @@ export interface operations {
     };
     list_cases_cases_get: {
         parameters: {
-            query?: never;
+            query?: {
+                limit?: number;
+                offset?: number;
+                sort?: "newest" | "oldest" | "risk" | "lowest_risk";
+                status?: components["schemas"]["CaseDocumentsStatus"][];
+                risk?: ("Critical" | "High" | "Medium" | "Low" | "unscored")[];
+                q?: string | null;
+            };
             header?: {
                 authorization?: string | null;
             };
@@ -3582,7 +4006,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CaseListItem"][];
+                    "application/json": components["schemas"]["CaseListPage"];
                 };
             };
             /** @description Validation Error */
@@ -3618,6 +4042,104 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CaseRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_case_by_number_cases_by_number__number__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseListItem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    case_counts_cases_counts_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseCounts"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_cases_cases_search_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseSearchResult"];
                 };
             };
             /** @description Validation Error */
@@ -3866,6 +4388,222 @@ export interface operations {
             };
         };
     };
+    get_case_finding_reviews_cases__case_id__finding_reviews_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseFindingReviews"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    report_missed_issue_cases__case_id__finding_reviews_missed_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportMissedIssueRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseFindingReviews"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_finding_verdict_cases__case_id__finding_reviews_verdict_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetFindingVerdictRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseFindingReviews"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_finding_verdicts_cases__case_id__finding_reviews_verdicts_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetFindingVerdictsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseFindingReviews"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_finding_review_cases__case_id__finding_reviews__review_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                case_id: string;
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseFindingReviews"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_missed_issue_cases__case_id__finding_reviews__review_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                case_id: string;
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMissedIssueRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseFindingReviews"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_case_notes_cases__case_id__notes_get: {
         parameters: {
             query?: never;
@@ -3993,6 +4731,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CaseNote"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_detection_metrics_detection_metrics_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DetectionMetrics"];
                 };
             };
             /** @description Validation Error */

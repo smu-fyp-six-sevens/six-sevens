@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Page, Route, WebSocketRoute } from '@playwright/test';
-import type { CaseRisk } from '../../src/services/uploadService/types';
+import type { AuditEvent, CaseRisk } from '../../src/services/uploadService/types';
 
 /**
  * Each document type's required extraction fields, exported from the
@@ -86,6 +86,8 @@ export interface CaseRow {
 }
 
 export interface DocumentRow {
+  /** Set by the snapshot when the last detection run left an error and no report. */
+  has_detection_error?: boolean;
   id: string;
   case_id: string | null;
   filename: string;
@@ -203,10 +205,16 @@ export class MockBackend {
   caseMatch: Record<string, unknown> = {};
   /** Fraud-detection report per document id (GET/POST .../detection/...); none = 404. */
   detectionReports: Record<string, unknown> = {};
+  /** Why a document's last detection run left no report (cancelled or crashed), per document id: the report GET answers 502. */
+  detectionErrors: Record<string, string> = {};
   /** LangGraph pipeline trace per document id (GET .../langgraph-trace); none = 404. */
   traces: Record<string, unknown> = {};
+  /** Finished-run timings per case id, served in GET /audit/cases/:id/cost (the summary's Processing Time). */
+  timings: Record<string, { type: string; document_id: string | null; occurred_at: string; duration_ms: number }[]> = {};
   /** Notes on cases and documents (GET/POST /cases/:id/notes), signed by the logged-in officer. */
   notes: NoteRow[] = [];
+  /** Audit trail entries (GET /audit/events?case_id=), in any order: served newest first, like the backend. */
+  auditEvents: AuditEvent[] = [];
   /** Per-filename upload results; files not listed here upload successfully. */
   uploadOutcomes: Record<string, UploadOutcome> = {};
   /** When set, upload-batch waits for this before answering (to observe "Uploading"). */
@@ -239,6 +247,56 @@ export class MockBackend {
     return this.requests.filter(
       (r) => r.method === method && (typeof path === 'string' ? r.path === path : path.test(r.path)),
     );
+  }
+
+  // The case endpoints below mirror backend/app/case_service.py (list_cases_page, case_counts, search_cases).
+  private matching(q: string | null): CaseRow[] {
+    const needle = (q ?? '').trim().toLowerCase();
+    return this.cases.filter(
+      (c) => !needle || c.greenlink_case_id.toLowerCase().includes(needle) || (c.company_name ?? '').toLowerCase().includes(needle),
+    );
+  }
+
+  private newestFirst(cases: CaseRow[]): CaseRow[] {
+    return [...cases].sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id));
+  }
+
+  private casePage(params: URLSearchParams) {
+    const limit = Number(params.get('limit') ?? 25);
+    const offset = Number(params.get('offset') ?? 0);
+    const sort = params.get('sort') ?? 'newest';
+    const statuses = params.getAll('status');
+    const risks = params.getAll('risk');
+    const rank = (c: CaseRow) => (c.risk?.state === 'scored' ? ({ Critical: 4, High: 3, Medium: 2, Low: 1 } as Record<string, number>)[c.risk.level ?? ''] ?? 0 : 0);
+    const riskValue = (c: CaseRow) => (rank(c) ? c.risk!.level! : 'unscored');
+
+    let cases = this.newestFirst(this.matching(params.get('q')));
+    if (statuses.length) cases = cases.filter((c) => statuses.includes(c.documents_status));
+    if (risks.length) cases = cases.filter((c) => risks.includes(riskValue(c)));
+    if (sort === 'oldest') cases.reverse();
+    // Stable sorts: newest first among equals.
+    if (sort === 'risk') cases = [...cases].sort((a, b) => rank(b) - rank(a));
+    if (sort === 'lowest_risk') cases = [...cases].sort((a, b) => rank(a) - rank(b));
+    return { items: cases.slice(offset, offset + limit), total: cases.length, limit, offset };
+  }
+
+  private caseCounts() {
+    const by_status: Record<string, number> = {};
+    for (const c of this.cases) by_status[c.documents_status] = (by_status[c.documents_status] ?? 0) + 1;
+    return { total: this.cases.length, by_status };
+  }
+
+  private caseSearch(params: URLSearchParams) {
+    const limit = Number(params.get('limit') ?? 8);
+    const q = (params.get('q') ?? '').trim().toLowerCase();
+    const rank = (c: CaseRow) => {
+      const number = c.greenlink_case_id.toLowerCase();
+      if (q === number || q === c.id.toLowerCase()) return 0;
+      return number.startsWith(q) || (c.company_name ?? '').toLowerCase().startsWith(q) ? 1 : 2;
+    };
+    const matches = this.newestFirst(this.matching(q));
+    const ranked = q ? [...matches].sort((a, b) => rank(a) - rank(b)) : matches;
+    return { items: ranked.slice(0, limit), total: matches.length };
   }
 
   private snapshot(caseId: string) {
@@ -288,7 +346,19 @@ export class MockBackend {
 
     // --- cases ------------------------------------------------------------
     if (path === '/cases' && method === 'GET') {
-      return json(this.cases);
+      return json(this.casePage(url.searchParams));
+    }
+    if (path === '/cases/counts' && method === 'GET') {
+      return json(this.caseCounts());
+    }
+    if (path === '/cases/search' && method === 'GET') {
+      return json(this.caseSearch(url.searchParams));
+    }
+    const byNumber = path.match(/^\/cases\/by-number\/([^/]+)$/);
+    if (byNumber && method === 'GET') {
+      const number = decodeURIComponent(byNumber[1]);
+      const found = this.cases.find((c) => c.greenlink_case_id === number || c.id === number);
+      return found ? json(found) : json({ detail: 'Case not found' }, 404);
     }
     if (path === '/cases' && method === 'POST') {
       const companyName = (body as { company_name?: string } | null)?.company_name ?? null;
@@ -301,6 +371,30 @@ export class MockBackend {
       this.cases.push(created);
       return json(created, 201);
     }
+    const costMatch = path.match(/^\/audit\/cases\/([^/]+)\/cost$/);
+    if (costMatch && method === 'GET') {
+      return json({
+        case_id: costMatch[1], total_usd: 0, documents_usd: {}, case_analysis_usd: 0, runs: [],
+        timings: this.timings[costMatch[1]] ?? [],
+      });
+    }
+    // Officers' reviews of findings (precision/recall): none recorded, so every rate is "nothing to measure".
+    if (method === 'GET' && /^\/cases\/[^/]+\/finding-reviews$/.test(path)) {
+      return json({
+        reviews: [],
+        case: emptyMetrics(),
+        documents: {},
+        cross_document: emptyMetrics(),
+        checks: { document: [], case: [] },
+      });
+    }
+    if (method === 'GET' && path === '/detection-metrics') {
+      return json({
+        overall: emptyMetrics(), cases_reviewed: 0, documents_reviewed: 0,
+        target_precision: 0.8, target_recall: 0.8, min_reviews: 5,
+      });
+    }
+
     const caseMatch = path.match(/^\/cases\/([^/]+)$/);
     if (caseMatch) {
       const found = this.cases.find((c) => c.id === caseMatch[1]);
@@ -314,6 +408,14 @@ export class MockBackend {
         this.cases = this.cases.filter((c) => c.id !== found.id);
         return route.fulfill({ status: 204, headers: corsHeaders() });
       }
+    }
+    if (path === '/audit/events' && method === 'GET') {
+      const caseId = url.searchParams.get('case_id');
+      return json(
+        this.auditEvents
+          .filter((e) => caseId === null || e.case_id === caseId)
+          .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at)),
+      );
     }
     const notesMatch = path.match(/^\/cases\/([^/]+)\/notes$/);
     if (notesMatch) {
@@ -470,7 +572,22 @@ export class MockBackend {
       // 404 until the document has one, which the page shows as "none yet".
       if (method === 'GET' && rest === '/detection/report') {
         const report = this.detectionReports[documentId];
-        return report ? json(report) : json({ detail: 'No detection report' }, 404);
+        if (report) return json(report);
+        const error = this.detectionErrors[documentId];
+        return error
+          ? json({ detail: `Detection failed: ${error}. Run detection again.` }, 502)
+          : json({ detail: 'No detection report' }, 404);
+      }
+      // Like the worker: the run stops, leaves its error and the document returns to approved. The page only
+      // hears of it with the next snapshot, so a test pushes one.
+      if (method === 'POST' && rest === '/detection/cancel') {
+        if (document.status !== 'detecting') {
+          return json({ detail: 'No detection run is currently in progress for this document.' }, 409);
+        }
+        this.detectionErrors[documentId] = 'Cancelled by loan officer';
+        document.status = 'approved';
+        document.has_detection_error = true;
+        return json({ status: 'cancelling' });
       }
       if (method === 'GET' && rest === '/langgraph-trace') {
         const trace = this.traces[documentId];
@@ -510,6 +627,10 @@ export class MockBackend {
     this.unmockedRequests.push(`${method} ${path}${url.search}`);
     return route.fulfill({ status: 599, headers: corsHeaders(), body: `Unmocked request: ${method} ${path}` });
   }
+}
+
+function emptyMetrics() {
+  return { correct: 0, wrong: 0, missed: 0, precision: null, recall: null, by_check: [] };
 }
 
 function corsHeaders(): Record<string, string> {

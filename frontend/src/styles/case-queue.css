@@ -3,10 +3,17 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px 14px;
+}
+
+.search-box .search-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--slate-58);
 }
 
 .search-box:focus-within {
@@ -25,42 +32,14 @@
 }
 
 .search-box input::placeholder {
-  color: #9ea6b5;
-}
-
-.filter-label {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: #8a93a6;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-.sort-toggle-arrow {
-  color: var(--steel);
-  font-weight: 700;
+  color: var(--slate-66);
 }
 
 .go-btn,
 .upload-btn {
   font-size: 13px;
   font-weight: 600;
-  color: #fff;
+  color: var(--white);
   border: none;
   cursor: pointer;
 }
@@ -76,24 +55,12 @@
   background: var(--steel-dark);
 }
 
-.queue-label,
 .section-label {
   margin: 22px 0 10px;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
-
-
-
-
-
-
-
-
-
-
-
 
 .kebab-menu {
   position: relative;
@@ -122,7 +89,7 @@
 
 .kebab-menu-button:hover:not(:disabled),
 .kebab-menu-button[aria-expanded='true'] {
-  background: #efede5;
+  background: var(--sand-92);
   color: var(--ink);
 }
 
@@ -149,7 +116,7 @@
   padding: 4px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fff;
+  background: var(--white);
   box-shadow: 0 8px 24px rgba(18, 32, 61, 0.12);
 }
 
@@ -174,7 +141,7 @@
 
 .kebab-menu-item:hover:not(:disabled),
 .kebab-menu-item:focus-visible {
-  background: #f6f4ef;
+  background: var(--paper);
 }
 
 .kebab-menu-item--danger:hover:not(:disabled),
@@ -187,7 +154,6 @@
   cursor: not-allowed;
 }
 
-
 .case-row-open:focus-visible,
 .dropzone:focus-visible,
 .back-link:focus-visible,
@@ -198,22 +164,14 @@
   box-shadow: 0 0 0 3px rgba(61, 90, 128, 0.2);
 }
 
-
-
-
-
-
-
-
-
 .case-name-input {
   width: 100%;
   box-sizing: border-box;
   padding: 7px 9px;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--slate-84);
   border-radius: 6px;
-  background: #ffffff;
-  color: #111827;
+  background: var(--white);
+  color: var(--slate-11);
   font-size: 13.5px;
   font-weight: 600;
   font-family: inherit;
@@ -221,19 +179,18 @@
 
 .case-name-input:focus {
   outline: none;
-  border-color: #6b7280;
+  border-color: var(--slate-46);
   box-shadow: 0 0 0 2px rgba(107, 114, 128, 0.12);
 }
 
 .case-edit-error {
   font-size: 12px;
-  color: #b91c1c;
+  color: var(--red-42);
 }
 
 .case-edit-actions {
   flex-shrink: 0;
 }
-
 
 .no-results,
 .empty {
@@ -243,7 +200,7 @@
   padding: 20px 0;
   border: 1px dashed var(--line);
   border-radius: 8px;
-  background: #fffefb;
+  background: var(--orange-99);
 }
 
 .back-link {
@@ -253,11 +210,12 @@
   background: none;
   border: none;
   color: var(--ink-soft);
-  font-size: 12.5px;
+  font-size: 16px;
+  font-weight: 500;
   cursor: pointer;
   /* Padding gives the hover background room; the negative margin keeps the text where it was. */
-  padding: 4px 8px;
-  margin: -4px -8px 12px;
+  padding: 6px 10px;
+  margin: -6px -10px 14px;
   border-radius: 6px;
   transition: background-color 0.15s, color 0.15s;
 }
@@ -267,91 +225,20 @@
   background: rgba(61, 90, 128, 0.08);
 }
 
-/* Case queue: filter/sort sidebar on the left, cases as table rows on the right.
-   Same width and sidebar style as the case page (.shell--upload, .case-nav). */
+/* Case queue: the cases as table rows, centred at about three quarters of the page. */
 .shell--queue {
   width: calc(100% - 48px);
 }
 
-.queue-layout {
-  display: grid;
-  grid-template-columns: 236px minmax(0, 1fr);
-  gap: 36px;
-  align-items: start;
-  margin-top: 22px;
+.queue-view {
+  width: 78%;
+  margin: 0 auto;
 }
 
-.queue-sidebar {
-  position: sticky;
-  top: calc(var(--topbar-height) + 24px);
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
-}
-
-.queue-sidebar-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.queue-sidebar-group .filter-label {
-  padding: 0 12px;
-}
-
-.queue-filter-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.queue-filter {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 12px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--ink);
-  font: inherit;
-  font-size: 14.5px;
-  text-align: left;
-  cursor: pointer;
-  transition: background-color 0.12s;
-}
-
-.queue-filter:hover {
-  background: rgba(61, 90, 128, 0.08);
-}
-
-.queue-filter:focus-visible {
-  outline: 2px solid var(--steel);
-  outline-offset: 1px;
-}
-
-.queue-filter[aria-pressed='true'] {
-  background: rgba(61, 90, 128, 0.14);
-  color: var(--steel-dark);
-  font-weight: 600;
-  box-shadow: inset 3px 0 0 var(--steel);
-}
-
-.queue-filter-label {
-  flex: 1;
-  min-width: 0;
-}
-
-.queue-filter-count {
-  font-family: var(--mono);
-  font-size: 11.5px;
-  color: var(--ink-soft);
-  font-weight: 400;
-  font-variant-numeric: tabular-nums;
+@media (max-width: 1280px) {
+  .queue-view {
+    width: 100%;
+  }
 }
 
 .case-status-dot {
@@ -359,27 +246,23 @@
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
-  background: #98a2b3;
+  background: var(--slate-65);
 }
 
 .case-status-dot--green {
-  background: #1f7a4d;
+  background: var(--green-30);
 }
 
 .case-status-dot--blue {
-  background: #2563b8;
+  background: var(--blue-43);
 }
 
 .case-status-dot--red {
-  background: #b33131;
+  background: var(--red-45a);
 }
 
 .case-status-dot--amber {
   background: #b26a00;
-}
-
-.queue-main {
-  min-width: 0;
 }
 
 .queue-search-chip {
@@ -390,7 +273,7 @@
   padding: 4px 5px 4px 12px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: #fff;
+  background: var(--white);
   font-size: 14px;
   color: var(--ink-soft);
 }
@@ -419,15 +302,79 @@
   color: var(--ink);
 }
 
-.queue-main .queue-label {
-  margin-top: 0;
+/* The title, the active search and the New case button share one row above the table. */
+/* Empty on a wide screen unless a search is active, so it only takes room when it has something to show. */
+/* The title and active search on the left, the page controls on the right. */
+.queue-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  min-height: 34px;
+  margin-bottom: 12px;
+}
+
+.queue-title {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.queue-bar .queue-search-chip {
+  max-width: 40%;
+}
+
+/* The header's filters and sorts, for screens where the table has no header. */
+.queue-controls {
+  display: none;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 12px;
+  font-size: 13.5px;
+}
+
+.queue-controls .header-filter-trigger {
+  padding: 7px 12px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--ink);
+}
+
+.queue-controls .header-filter-list {
+  z-index: 25;
+}
+
+.queue-sort-select select {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+}
+
+@media (max-width: 620px) {
+  .queue-sort-select select {
+    max-width: 118px;
+  }
+
+  .queue-controls .header-filter-trigger {
+    padding: 7px 9px;
+  }
 }
 
 /* Columns shared by the header and every row. The header's right padding leaves room for each row's ⋮ menu. */
 .case-table {
   --case-cols: 120px minmax(0, 2.4fr) 180px 112px 120px;
 
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 10px;
   overflow: visible;
@@ -445,7 +392,7 @@
   /* 48px = the row's ⋮ menu (32px button + 8px margin each side). */
   padding: 12px 48px 12px 20px;
   border-bottom: 1px solid var(--line);
-  background: #faf9f5;
+  background: var(--orange-97);
   border-radius: 10px 10px 0 0;
   font-family: var(--mono);
   font-size: 11.5px;
@@ -460,11 +407,166 @@
   padding: 0;
 }
 
+/* The next page is loading: the current rows stay, a little faded, so the table doesn't flash empty. */
+.case-table--busy .case-table-body {
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+
+.skeleton-bar {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--slate-91);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-bar {
+    animation: none;
+  }
+}
+
+/* A line of text is 22px tall (14.5px at 1.5), so a row of these is as tall as a real one. */
+.skeleton-cell {
+  display: flex;
+  align-items: center;
+  height: 22px;
+}
+
+.skeleton-cell--center {
+  justify-content: center;
+}
+
+.skeleton-bar--id {
+  width: 72px;
+}
+
+.skeleton-bar--name {
+  width: 55%;
+}
+
+.skeleton-bar--status {
+  width: 90px;
+}
+
+.skeleton-bar--pill {
+  width: 92px;
+  height: 20px;
+  border-radius: 999px;
+}
+
+.skeleton-bar--date {
+  width: 80px;
+}
+
+.case-row-menu-space {
+  /* The room a real row gives its menu button: 32px plus 8px each side. */
+  flex-shrink: 0;
+  width: 48px;
+}
+
+/* Page controls, at the right of the bar above the table. */
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.pagination-range {
+  font-variant-numeric: tabular-nums;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pagination-page,
+.pagination-step {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--slate-46);
+  font: inherit;
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+/* The same quiet, transparent buttons as the bulk actions on the case page; round, with a tint on hover. */
+.pagination-page:hover:not(:disabled),
+.pagination-step:hover:not(:disabled) {
+  background: rgba(18, 32, 61, 0.08);
+  color: var(--slate-17);
+}
+
+.pagination-page:focus-visible,
+.pagination-step:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 1px;
+}
+
+/* The page you're on is told by its darker, bolder number; no fill until hovered, like the rest. */
+.pagination-page[aria-current='page'] {
+  color: var(--slate-17);
+  font-weight: 700;
+}
+
+.pagination-step {
+  width: 34px;
+  padding: 0;
+}
+
+.pagination-chevron {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pagination-step:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.pagination-gap {
+  min-width: 20px;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .pagination-page:not([aria-current='page']) {
+    display: none;
+  }
+
+  .pagination-gap {
+    display: none;
+  }
+}
+
 .case-row {
   position: relative;
   display: flex;
   align-items: center;
-  border-bottom: 1px solid #ece8de;
+  border-bottom: 1px solid var(--orange-90);
   transition: background-color 0.12s;
 }
 
@@ -475,7 +577,7 @@
 
 .case-row:hover,
 .case-row:focus-within {
-  background: #f7f6f1;
+  background: var(--paper);
 }
 
 .case-row-open {
@@ -494,6 +596,21 @@
 
 .case-row > .kebab-menu {
   margin: 0 8px;
+}
+
+/* The row menu shows when the pointer is over the row, or something in it has keyboard focus or its menu is open.
+   Without a hover (touch screens) it stays visible. */
+@media (hover: hover) {
+  .case-row .kebab-menu-button {
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+
+  .case-row:hover .kebab-menu-button,
+  .case-row:focus-within .kebab-menu-button,
+  .case-row .kebab-menu-button[aria-expanded='true'] {
+    opacity: 1;
+  }
 }
 
 .case-row-id {
@@ -534,7 +651,191 @@
 
 .case-row-risk {
   display: flex;
+  justify-content: flex-start;
+}
+
+.case-table-head-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* A column header's filter: a funnel (and the title, for Status) that opens a list of checkboxes. */
+.header-filter {
+  position: relative;
+  display: inline-flex;
+}
+
+.header-filter-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.header-filter-trigger:disabled {
+  cursor: default;
+}
+
+.header-filter-trigger:hover:not(:disabled),
+.header-filter-trigger[aria-expanded='true'],
+.header-filter-trigger[data-active] {
+  color: var(--ink);
+}
+
+.header-filter-trigger:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 2px;
+}
+
+.header-filter-icon {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+}
+
+.header-filter-trigger[data-active] .header-filter-icon {
+  fill: var(--steel);
+  stroke: var(--steel);
+}
+
+.header-filter-list {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 20;
+  min-width: 210px;
+  padding: 6px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(18, 32, 61, 0.16);
+  font-family: var(--sans, inherit);
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--ink);
+}
+
+.header-filter-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.header-filter-option:hover {
+  background: rgba(61, 90, 128, 0.08);
+}
+
+.header-filter-option input {
+  flex-shrink: 0;
+  margin: 0;
+  accent-color: var(--steel);
+}
+
+.header-filter-label {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.header-filter-count {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.header-filter-clear {
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: 0;
+  border-top: 1px solid var(--orange-90);
+  border-radius: 0 0 6px 6px;
+  background: transparent;
+  color: var(--steel);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.header-filter-clear:hover {
+  background: rgba(61, 90, 128, 0.08);
+}
+
+/* A column header that sorts. Both arrows show; the current direction's is dark. */
+.case-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.case-sort:disabled {
+  cursor: default;
+}
+
+.case-sort:hover:not(:disabled),
+.case-sort[data-direction] {
+  color: var(--ink);
+}
+
+.case-sort:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.case-sort-arrows {
+  width: 7px;
+  height: 12px;
+  fill: var(--slate-66);
+  opacity: 0.55;
+}
+
+.case-sort[data-direction] .case-sort-arrows {
+  opacity: 1;
+}
+
+.case-sort[data-direction='desc'] .case-sort-down,
+.case-sort[data-direction='asc'] .case-sort-up {
+  fill: var(--ink);
+}
+
+.queue-risk-badge {
+  margin-left: 0;
+  min-width: 92px;
   justify-content: center;
+  box-sizing: border-box;
 }
 
 /* One width for every level so the column reads as a tidy stack of pills. */
@@ -546,7 +847,7 @@
 }
 
 .risk-badge--none {
-  background: #ecebe7;
+  background: var(--sand-92);
   color: var(--ink-soft);
   font-weight: 600;
 }
@@ -571,6 +872,10 @@
     display: none;
   }
 
+  .queue-controls {
+    display: flex;
+  }
+
   .case-row-open {
     display: flex;
     flex-wrap: wrap;
@@ -592,39 +897,3 @@
   }
 }
 
-@media (max-width: 760px) {
-  .queue-layout {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 14px;
-  }
-
-  .queue-sidebar {
-    position: static;
-    gap: 10px;
-  }
-
-  .queue-sidebar-group {
-    flex-direction: row;
-    align-items: center;
-    min-width: 0;
-    overflow-x: auto;
-  }
-
-  .queue-sidebar-group .filter-label {
-    flex-shrink: 0;
-    padding: 0;
-    min-width: 52px;
-  }
-
-  .queue-filter-list {
-    flex-direction: row;
-  }
-
-  .queue-filter {
-    white-space: nowrap;
-  }
-
-  .queue-filter[aria-pressed='true'] {
-    box-shadow: inset 0 -2px 0 var(--steel);
-  }
-}

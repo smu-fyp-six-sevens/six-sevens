@@ -1,5 +1,6 @@
 import type { CaseRecord } from '../App';
-import { listCaseDocuments } from '../services/uploadService';
+import { listCaseDocuments, listCasesPage } from '../services/uploadService';
+import { toCaseRecord } from '../utils/caseRecord';
 import { caseNumberLabel } from '../utils/caseSearch';
 import type { Breadcrumb } from './Breadcrumbs';
 
@@ -12,9 +13,11 @@ function casePath(caseRecord: CaseRecord): string {
 
 export const caseQueueCrumb: Breadcrumb = { label: 'Case Queue', to: '/cases' };
 
-// The case number: click it to switch to any other case.
+// How many cases the switch-case menu lists at a time; "Load more cases" adds the next lot.
+const MENU_CASES = 50;
+
+// The case number: click it to switch to another case. The menu lists the newest cases, fetched when it opens.
 export function caseCrumb(
-  cases: CaseRecord[],
   caseRecord: CaseRecord,
   { current = false }: { current?: boolean } = {},
 ): Breadcrumb {
@@ -23,17 +26,19 @@ export function caseCrumb(
     to: `${casePath(caseRecord)}?section=summary`,
     current,
     menuLabel: 'switch case',
-    // Newest case first, by number compared as a number (GLDB-134, GLDB-133, … GLDB-77), not the list's own order.
-    loadMenu: () =>
-      [...cases]
-        .sort((a, b) => caseNumberLabel(b).localeCompare(caseNumberLabel(a), undefined, { numeric: true }))
-        .map((item) => ({
+    loadMoreLabel: 'Load more cases',
+    loadMenu: async (offset) => {
+      const page = await listCasesPage({ limit: MENU_CASES, offset, sort: 'newest', statuses: [], risks: [], q: '' });
+
+      const items = page.items.map(toCaseRecord).map((item) => ({
         key: item.id,
         to: `${casePath(item)}?section=summary`,
         tag: caseNumberLabel(item),
         label: item.applicant,
         current: item.id === caseRecord.id,
-      })),
+      }));
+      return { items, hasMore: offset + page.items.length < page.total };
+    },
   };
 }
 

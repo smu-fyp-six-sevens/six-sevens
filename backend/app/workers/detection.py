@@ -10,7 +10,7 @@ from typing import Any
 from .. import audit, document_repository, events, metrics, query_stats
 from ..config import settings
 from ..events import Event, Stopwatch, types
-from ..events.envelope import Outcome
+from ..events.envelope import Outcome, officer_of
 from ..langgraph import trace as langgraph_trace
 from ..langgraph.detection.graph import run_detection
 from ..models import DocumentStatus
@@ -30,8 +30,11 @@ async def _cancel_requested_since(document_id: str, since: datetime) -> bool:
     return bool(found)
 
 
-async def run(document_id: str, case_id: str | None) -> None:
-    """One detection run, its end event, and a live refresh. An interrupted run goes back to approved, retryable."""
+async def run(document_id: str, case_id: str | None, requested_by: str | None = None) -> None:
+    """
+    One detection run, its end event, and a live refresh. An interrupted run goes back to approved, retryable.
+    `requested_by` is the officer whose approval or retry started it, for the audit trail.
+    """
     timer = Stopwatch()
     outcome: Outcome = "success"
     detail: dict[str, Any] = {}
@@ -63,6 +66,8 @@ async def run(document_id: str, case_id: str | None) -> None:
     finally:
         if case_id:
             await push_case_snapshot(case_id)
+    if requested_by is not None:
+        detail["requested_by"] = requested_by
     await events.record(Event(
         type=types.DOCUMENT_DETECTED if outcome == "success" else types.DETECTION_FAILED,
         actor_type="agent", actor=_ACTOR, case_id=case_id, document_id=document_id,
@@ -74,7 +79,7 @@ async def on_requested(event: Event) -> None:
     """An approval (unless the document has no type) or an officer's retry after a failed run."""
     if event.document_id is None or event.detail.get("skip_detection"):
         return
-    await run(event.document_id, event.case_id)
+    await run(event.document_id, event.case_id, officer_of(event))
 
 
 async def on_cancel_requested(event: Event) -> None:

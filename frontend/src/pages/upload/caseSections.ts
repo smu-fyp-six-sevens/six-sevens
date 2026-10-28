@@ -3,7 +3,7 @@ import type { CaseAnalysisOverview, CaseRisk, CaseRiskLevel } from '../../servic
 export type CaseSection =
   | 'summary'
   | 'documents'
-  | 'flagged'
+  | 'approved'
   | 'risk'
   | 'analysis'
   | 'additional'
@@ -14,7 +14,7 @@ export type CaseSection =
 export const CASE_SECTIONS: { id: CaseSection; label: string; icon: string }[] = [
   { id: 'summary', label: 'Case Summary', icon: '◫' },
   { id: 'documents', label: 'Documents', icon: '▤' },
-  { id: 'flagged', label: 'Flagged Items', icon: '△' },
+  { id: 'approved', label: 'Approved Documents', icon: '✓' },
   { id: 'analysis', label: 'Case Analysis', icon: '◇' },
   { id: 'risk', label: 'Risk Summary', icon: '▥' },
   { id: 'additional', label: 'Additional Documents', icon: '⊕' },
@@ -22,6 +22,9 @@ export const CASE_SECTIONS: { id: CaseSection; label: string; icon: string }[] =
   { id: 'audit', label: 'Audit Trail', icon: '◴' },
   { id: 'cost', label: 'Claude Cost', icon: '$' },
 ];
+
+// The sections whose menu item has a status line under its label, which only the live snapshot can fill in.
+export const SECTIONS_WITH_STATUS: CaseSection[] = ['documents', 'approved', 'analysis', 'risk', 'additional'];
 
 export function isCaseSection(value: string | null): value is CaseSection {
   return CASE_SECTIONS.some((section) => section.id === value);
@@ -56,21 +59,22 @@ export function caseSectionStatuses({
 }): Partial<Record<CaseSection, SectionStatus>> {
   const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
+  // The upload and review tab: what still needs the officer, flagged items first.
   const documents: SectionStatus =
     documentCount === 0
       ? { tone: 'idle', text: 'None Uploaded' }
       : hasInFlightDocument
-        ? { tone: 'progress', text: `Processing · ${approvedCount}/${documentCount} Approved` }
-        : approvedCount < documentCount
-          ? { tone: 'action', text: `${approvedCount}/${documentCount} Approved` }
-          : { tone: 'done', text: `All ${documentCount} Approved` };
+        ? { tone: 'progress', text: 'Processing' }
+        : flaggedCount > 0
+          ? { tone: 'action', text: `${flaggedCount} To Review` }
+          : approvedCount < documentCount
+            ? { tone: 'action', text: `${documentCount - approvedCount} To Approve` }
+            : { tone: 'done', text: 'All Reviewed' };
 
-  const flagged: SectionStatus =
-    flaggedCount > 0
-      ? { tone: 'action', text: `${flaggedCount} To Review` }
-      : documentCount === 0
-        ? { tone: 'idle', text: 'Nothing Yet' }
-        : { tone: 'done', text: 'None Flagged' };
+  const approved: SectionStatus =
+    approvedCount === 0
+      ? { tone: 'idle', text: 'None Yet' }
+      : { tone: approvedCount === documentCount ? 'done' : 'idle', text: `${approvedCount}/${documentCount} Approved` };
 
   const analysis: SectionStatus = !analysisOverview
     ? analysisReady
@@ -104,5 +108,5 @@ export function caseSectionStatuses({
       ? { tone: 'action', text: `${additionalDocumentCount} To Request` }
       : { tone: 'done', text: 'None Needed' };
 
-  return { documents, flagged, analysis, risk: riskStatus, additional };
+  return { documents, approved, analysis, risk: riskStatus, additional };
 }

@@ -3,9 +3,11 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
+from postgrest import CountMethod
+
 from .models import AdditionalDocuments, CaseRecord
 from .supabase_client import service_supabase_client, supabase_client
-from .supabase_rows import row as _row
+from .supabase_rows import fetch_all, row as _row
 
 
 def create_case(company_name: str | None = None) -> CaseRecord:
@@ -36,9 +38,67 @@ def get_case(case_id: str) -> CaseRecord | None:
     return CaseRecord(**_row(result.data[0]))
 
 
-def list_cases() -> list[CaseRecord]:
-    result = supabase_client.table("cases").select("*").execute()
-    return [CaseRecord(**_row(row)) for row in result.data]
+def get_case_by_number(number: str) -> CaseRecord | None:
+    """By the number officers see (GLDB-137); the id also works, for a case that has no number."""
+    for column in ("greenlink_case_id", "id"):
+        result = supabase_client.table("cases").select("*").eq(column, number).limit(1).execute()
+        if result.data:
+            return CaseRecord(**_row(result.data[0]))
+    return None
+
+
+def _quoted(value: str) -> str:
+    """A value inside a PostgREST filter list, double-quoted so commas and brackets in it aren't read as syntax."""
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _matching(pattern: str) -> str:
+    """The case number or the company name matches the pattern (* is the wildcard; ilike ignores case)."""
+    quoted = _quoted(pattern)
+    return f"company_name.ilike.{quoted},greenlink_case_id.ilike.{quoted}"
+
+
+def list_cases_page(q: str | None, *, newest: bool, limit: int, offset: int) -> tuple[list[CaseRecord], int]:
+    """One page of cases by creation date, and how many cases match in all. `q` is a part of a number or name."""
+    query = supabase_client.table("cases").select("*", count=CountMethod.exact)
+    if q:
+        query = query.or_(_matching(f"*{q}*"))
+    result = query.order("created_at", desc=newest).order("id").range(offset, offset + limit - 1).execute()
+    return [CaseRecord(**_row(item)) for item in result.data], result.count or 0
+
+
+def list_matching_cases(q: str | None) -> list[CaseRecord]:
+    """Every matching case, newest first. Only for what the database can't sort or filter itself (status, risk)."""
+
+    def build():
+        query = supabase_client.table("cases").select("*")
+        return query.or_(_matching(f"*{q}*")) if q else query
+
+    cases = [CaseRecord(**item) for item in fetch_all(build, "id")]
+    return sorted(cases, key=lambda case: case.created_at, reverse=True)
+
+
+def list_case_ids() -> list[str]:
+    return [item["id"] for item in fetch_all(lambda: supabase_client.table("cases").select("id"), "id")]
+
+
+def find_cases_starting_with(q: str, limit: int) -> list[CaseRecord]:
+    """Newest first: the cases whose number or name begins with q."""
+    result = (
+        supabase_client.table("cases").select("*").or_(_matching(f"{q}*"))
+        .order("created_at", desc=True).order("id").limit(limit).execute()
+    )
+    return [CaseRecord(**_row(item)) for item in result.data]
+
+
+def find_case_numbered(q: str) -> CaseRecord | None:
+    """The case whose number (or id) is exactly q, ignoring case."""
+    quoted = _quoted(q)
+    result = (
+        supabase_client.table("cases").select("*")
+        .or_(f"greenlink_case_id.ilike.{quoted},id.eq.{quoted}").limit(1).execute()
+    )
+    return CaseRecord(**_row(result.data[0])) if result.data else None
 
 
 def update_case(case_id: str, company_name: str) -> CaseRecord | None:
@@ -60,7 +120,7 @@ def update_case(case_id: str, company_name: str) -> CaseRecord | None:
 
 def delete_case(case_id: str) -> None:
     """
-    Removes the case's analysis runs, saved risk history, flags and notes, and then its row. Callers delete
+    Removes the case's analysis runs, saved risk history, flags, notes and finding reviews, and then its row. Callers delete
     its documents first. These are historical per-analysis rows, but a foreign key can prevent
     deleting the case until they are removed.
 
@@ -69,7 +129,7 @@ def delete_case(case_id: str) -> None:
     still there.
     """
     client = service_supabase_client()
-    for table in ("risk_scores", "case_analysis_runs", "flags", "case_notes"):
+    for table in ("risk_scores", "case_analysis_runs", "flags", "case_notes", "finding_reviews"):
         client.table(table).delete().eq("case_id", case_id).execute()
     result = client.table("cases").delete().eq("id", case_id).execute()
     if not result.data:

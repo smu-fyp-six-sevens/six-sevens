@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { CaseRecord } from '../App';
 import {
@@ -13,6 +13,7 @@ import { DocumentListPanel } from './upload/DocumentListPanel';
 import { MoveDocumentsDialog } from './upload/MoveDocumentsDialog';
 import { RequirementsSidebar } from './upload/RequirementsSidebar';
 import { AdditionalDocumentsCard } from './upload/AdditionalDocumentsCard';
+import { ApprovedDocumentsCard } from './upload/ApprovedDocumentsCard';
 import { AuditTrailCard } from './upload/AuditTrailCard';
 import { CaseCostCard } from './upload/CaseCostCard';
 import { CaseAnalysisCard } from './upload/CaseAnalysisCard';
@@ -25,7 +26,6 @@ import { NotesCard } from '../components/NotesCard';
 import AppHeader from '../components/AppHeader';
 import CaseHeader, { CaseTitle } from '../components/CaseHeader';
 import { caseCrumb, caseQueueCrumb } from '../components/caseCrumbs';
-import { useCases } from '../casesContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DropZone from '../components/DropZone';
 import FileRow from '../components/FileRow';
@@ -38,6 +38,17 @@ import {
   MAX_COMPANY_NAME_LENGTH,
 } from '../utils/caseValidation';
 
+
+const NAV_COLLAPSED_KEY = 'caseNav.collapsed';
+
+// Per-browser, like the queue's filters; storage can throw (private mode), so it is only a convenience.
+function loadNavCollapsed(): boolean {
+  try {
+    return localStorage.getItem(NAV_COLLAPSED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
 
 interface UploadPageProps {
   selectedCase: CaseRecord;
@@ -52,7 +63,6 @@ export default function UploadPage({
   onCaseUpdated,
   onCaseDeleted,
 }: UploadPageProps) {
-  const cases = useCases();
   const {
     setDocumentDetails,
     fulfilledRequirements,
@@ -81,10 +91,19 @@ export default function UploadPage({
   // Kept in the URL so a refresh or a trip to a document and back lands on the same section.
   const [searchParams, setSearchParams] = useSearchParams();
   const sectionParam = searchParams.get('section');
-  const activeSection: CaseSection = isCaseSection(sectionParam) ? sectionParam : 'documents';
+  const activeSection: CaseSection = isCaseSection(sectionParam) ? sectionParam : 'summary';
   const selectSection = (section: CaseSection) => {
-    setSearchParams(section === 'documents' ? {} : { section }, { replace: true });
+    setSearchParams(section === 'summary' ? {} : { section }, { replace: true });
   };
+
+  const [navCollapsed, setNavCollapsed] = useState(loadNavCollapsed);
+  useEffect(() => {
+    try {
+      localStorage.setItem(NAV_COLLAPSED_KEY, String(navCollapsed));
+    } catch {
+      // Not remembering the menu is fine.
+    }
+  }, [navCollapsed]);
 
   const liveDocumentIds = useMemo(
     () => (snapshotLoaded ? new Set(documents.map((document) => document.id)) : null),
@@ -165,7 +184,7 @@ export default function UploadPage({
     <main className="shell shell--upload">
       <AppHeader />
 
-      <CaseHeader crumbs={[caseQueueCrumb, caseCrumb(cases, selectedCase, { current: true })]}>
+      <CaseHeader crumbs={[caseQueueCrumb, caseCrumb(selectedCase, { current: true })]}>
         {isEditingCase ? (
           <div className="case-title-editing">
             <label htmlFor="case-company-name" className="sr-only">Company name</label>
@@ -228,8 +247,11 @@ export default function UploadPage({
         </div>
       )}
 
-      <div className="case-layout">
+      <div className={`case-layout${navCollapsed ? ' case-layout--collapsed' : ''}`}>
         <CaseSectionNav
+          collapsed={navCollapsed}
+          statusesLoading={!snapshotLoaded}
+          onToggleCollapsed={() => setNavCollapsed((collapsed) => !collapsed)}
           activeSection={activeSection}
           statuses={caseSectionStatuses({
             documentCount: documents.length,
@@ -257,6 +279,7 @@ export default function UploadPage({
               analysisReady={analysisReady}
               analysisOverview={analysisOverview}
               snapshotLoaded={snapshotLoaded}
+              caseId={selectedCase.id}
               onSelectSection={selectSection}
             />
           )}
@@ -369,13 +392,21 @@ export default function UploadPage({
                 <DocumentListPanel
                   documents={documents}
                   extractedDocuments={extractedDocuments}
-                  approvedDocuments={approvedDocuments}
                   caseMatches={caseMatches}
                   wsConnected={wsConnected}
                   onOpenDocument={onOpenDocument}
                   selection={selection}
                   rowActions={rowActions}
                 />
+
+                {flaggedDocuments.length > 0 && (
+                  <FlaggedItemsCard
+                    caseMatchNeedsReview={caseMatchNeedsReview}
+                    caseMatches={caseMatches}
+                    flaggedDocuments={flaggedDocuments}
+                    onOpenDocument={onOpenDocument}
+                  />
+                )}
               </section>
 
               <RequirementsSidebar
@@ -387,16 +418,28 @@ export default function UploadPage({
             </div>
           )}
 
-          {activeSection === 'flagged' && (
-            <FlaggedItemsCard
-              caseMatchNeedsReview={caseMatchNeedsReview}
-              caseMatches={caseMatches}
-              flaggedDocuments={flaggedDocuments}
-              onOpenDocument={onOpenDocument}
-            />
+          {activeSection === 'approved' && (
+            approvedDocuments.length > 0 ? (
+              <ApprovedDocumentsCard approvedDocuments={approvedDocuments} wsConnected={wsConnected} onOpenDocument={onOpenDocument} />
+            ) : (
+              <section className="summary-card">
+                <div className="summary-card-header">
+                  <div className="summary-card-title">
+                    <span className="summary-icon">✓</span>
+                    <h2>Approved Documents</h2>
+                  </div>
+                </div>
+                <div className="summary-message">
+                  <div>
+                    <strong>No approved documents yet.</strong>
+                    <p>Documents appear here once an officer approves them from the Documents tab.</p>
+                  </div>
+                </div>
+              </section>
+            )
           )}
 
-          {activeSection === 'risk' && <CaseRiskCard risk={risk} />}
+          {activeSection === 'risk' && <CaseRiskCard risk={risk} caseId={selectedCase.id} caseDocuments={documents} />}
 
           {activeSection === 'analysis' && (
             <CaseAnalysisCard caseId={selectedCase.id} analysisReady={analysisReady} overview={analysisOverview} />
@@ -413,7 +456,7 @@ export default function UploadPage({
 
           {activeSection === 'notes' && <NotesCard caseId={selectedCase.id} caseNumber={selectedCase.caseNumber} documents={documents} />}
 
-          {activeSection === 'audit' && <AuditTrailCard />}
+          {activeSection === 'audit' && <AuditTrailCard caseId={selectedCase.id} caseNumber={selectedCase.caseNumber} documents={documents} />}
 
           {activeSection === 'cost' && <CaseCostCard caseId={selectedCase.id} documents={documents} />}
         </div>

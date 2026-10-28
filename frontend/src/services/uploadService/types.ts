@@ -50,6 +50,16 @@ export type UpdatedCase = Pick<Schemas['CaseSummary'], 'id' | 'greenlink_case_id
 
 export type DocumentDownloadResponse = Schemas['DocumentDownloadResponse'];
 
+// The case queue: one page of rows, the counts for its sidebar, and jump-to-case suggestions.
+export type CaseDocumentsStatus = Schemas['CaseDocumentsStatus'];
+export type CaseListPage = Schemas['CaseListPage'];
+export type CaseCounts = Schemas['CaseCounts'];
+export type CaseSearchResult = Schemas['CaseSearchResult'];
+export type CaseListItem = Schemas['CaseListItem'];
+export type CaseSort = 'newest' | 'oldest' | 'risk' | 'lowest_risk';
+// "unscored" is a case no analysis run has scored yet.
+export type CaseRiskFilter = 'Critical' | 'High' | 'Medium' | 'Low' | 'unscored';
+
 // PDF -> <iframe> (native browser PDF viewer), image -> <img>.
 export type PreviewKind = 'pdf' | 'image' | 'unsupported';
 
@@ -119,6 +129,9 @@ export type IndividualCheckId =
   | 'ai-generation';
 
 export type BulkActionFailure = Schemas['BulkActionFailure'];
+
+// One audit trail entry (backend/app/events/envelope.py). An agent's run names its officer in detail.requested_by.
+export type AuditEvent = Schemas['Event'];
 export type BulkMoveResponse = Schemas['BulkMoveResponse'];
 export type BulkDeleteResponse = Schemas['BulkDeleteResponse'];
 
@@ -152,14 +165,37 @@ export interface CaseCostRun {
   llm_cache_read_tokens: number | null;
 }
 
+// A finished run and how long it took (success only; document.analyzed, document.detected, case.analysis.completed).
+export interface CaseCostTiming {
+  occurred_at: string;
+  type: string;
+  document_id: string | null;
+  duration_ms: number;
+}
+
 export interface CaseCost {
   case_id: string;
   total_usd: number;
   documents_usd: Record<string, number>;
   case_analysis_usd: number;
   runs: CaseCostRun[];
+  timings?: CaseCostTiming[];
 }
 
 // parent_id marks a reply; edited_at is set once its author edits it; deleted_at marks a deleted note kept
 // (text erased) as a placeholder above its replies.
 export type CaseNote = Schemas['CaseNote'];
+
+// Finding reviews (backend/app/detection_metrics.py). "document": a finding on one document (check_name is its
+// tool). "case": a cross-document finding from the case analysis (check_name is its category).
+// precision = correct / (correct + wrong); recall = correct / (correct + missed); null: nothing to measure yet.
+export type FindingReview = Schemas['FindingReview'];
+export type ReviewScope = FindingReview['scope'];
+export type ReviewVerdict = NonNullable<FindingReview['verdict']>;
+export type CheckMetrics = Schemas['CheckMetrics'];
+export type MetricsSummary = Schemas['MetricsSummary'];
+// The backend keys checks by scope as a plain dict; it always has both scopes.
+export type CaseFindingReviews = Omit<Schemas['CaseFindingReviews'], 'checks'> & {
+  checks: Record<ReviewScope, string[]>;
+};
+export type DetectionMetrics = Schemas['DetectionMetrics'];

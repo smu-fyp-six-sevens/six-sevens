@@ -71,20 +71,24 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
 
     await expect(page.locator('.details-label', { hasText: 'Routing Outcome' }).locator('xpath=following-sibling::strong')).toHaveText('Approved');
     expect(backend.requestsTo('POST', `/documents/${document.id}/approve`)).toHaveLength(1);
-    await page.goto(fixture.caseUrl);
-    await expect(approvedCard(page)).toContainText(document.filename);
+    await page.goto(`${fixture.caseUrl}?section=documents`);
     await expect(extractedCard(page)).not.toContainText(document.filename);
+    // Approved documents have their own tab.
+    await page.goto(`${fixture.caseUrl}?section=approved`);
+    await expect(approvedCard(page)).toContainText(document.filename);
   });
 
   test('MA-006 a document not yet approved stays in Extracted Files @MA-006', async ({ page, backend }) => {
     const { fixture } = creditReport(backend);
     const constitution = fixture.document('Constitution');
 
-    await page.goto(fixture.caseUrl);
+    await page.goto(`${fixture.caseUrl}?section=documents`);
 
     await expect(extractedCard(page)).toContainText(constitution.filename);
-    // No document is approved yet, so the Approved Documents card isn't shown at all.
-    await expect(approvedCard(page).getByText(constitution.filename)).toHaveCount(0);
+    // No document is approved yet, so the Approved Documents tab has nothing to list.
+    await page.goto(`${fixture.caseUrl}?section=approved`);
+    await expect(page.getByText('No approved documents yet.')).toBeVisible();
+    await expect(approvedCard(page)).toHaveCount(0);
   });
 
   test('MA-007 an approved document can no longer be edited, deleted or re-typed @MA-007', async ({ page, backend }) => {
@@ -138,6 +142,41 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     await expect(page.locator('.delete-field-button')).toHaveCount(0);
     await expect(page.locator('.details-type-select')).toHaveCount(0);
     await expect(approveButton(page)).toHaveCount(0);
+  });
+
+  test('a confident document with nothing to review can still have a field added, until it is approved @SCRUM-299', async ({ page, backend }) => {
+    const { fixture, document } = creditReport(backend);
+    await page.goto(fixture.documentUrl(document));
+
+    // Nothing needs review here, so there is no Save fields, but the officer can add what is missing.
+    await expect(page.getByRole('button', { name: 'Save fields' })).toHaveCount(0);
+    await page.getByRole('button', { name: '+ Add field' }).click();
+    await page.locator('#new-field-name').fill('broker_reference');
+    await page.locator('#new-field-value').fill('BR-1');
+    await page.getByRole('button', { name: 'Add field', exact: true }).click();
+
+    await expect(page.locator('.extracted-table-row', { hasText: 'Broker Reference' })).toBeVisible();
+
+    await approveButton(page).click();
+    await expect(page.getByRole('button', { name: '+ Add field' })).toHaveCount(0);
+  });
+
+  test('cancelling a scan ends in "Detection failed" with a retry, not "Scanning" @SCRUM-299', async ({ page, backend }) => {
+    const { fixture, document } = creditReport(backend);
+    document.status = 'detecting';
+    await page.goto(fixture.documentUrl(document));
+    await expect(documentStatus(page)).toHaveText('Scanning…');
+
+    await detectionPanel(page).getByRole('button', { name: 'Cancel detection' }).click();
+
+    expect(backend.requestsTo('POST', `/documents/${document.id}/detection/cancel`)).toHaveLength(1);
+    // The worker has stopped the run and left the document approved; the page hears of it with the snapshot.
+    backend.push(document.case_id!);
+
+    await expect(documentStatus(page)).toHaveText('Detection failed');
+    await expect(detectionPanel(page)).toContainText('The last detection run did not finish.');
+    await expect(detectionPanel(page).getByRole('button', { name: 'Retry detection' })).toBeVisible();
+    await expect(detectionPanel(page).getByRole('button', { name: 'Cancel detection' })).toHaveCount(0);
   });
 
   test('MA-011 detection does not run on a rejected document @MA-011', async ({ page, backend }) => {

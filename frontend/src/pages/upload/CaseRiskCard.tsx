@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import type { CaseRisk, CaseRiskFinding } from '../../services/uploadService';
+import { officerName } from '../../lib/officers';
+import type { CaseRisk, CaseRiskFinding, DocumentRecord, FindingReview, ReviewScope } from '../../services/uploadService';
 import { formatDocumentType } from '../../services/uploadService';
+import { formatCheck as formatTool } from '../../utils/checkLabels';
+import type { GroupReviewStatus } from './FindingReviewControls';
+import { GroupReviewBar, MetricsLine, MissedIssues, ReviewSummary } from './FindingReviewControls';
+import { findingScope, useFindingReviews, verdictFor } from './useFindingReviews';
 
-// "font_consistency_tool" -> "Font consistency"
-function formatTool(tool: string | null): string {
-  if (!tool) return 'Check';
-  const words = tool.replace(/_tool$/, '').replace(/_/g, ' ');
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
+// The group cross-document findings sit in: they belong to the case, not to one document.
+const CASE_GROUP_ID = '__case__';
 
 type Severity = CaseRiskFinding['severity'];
 const SEVERITY_ORDER: Severity[] = ['high', 'medium', 'low'];
@@ -84,42 +85,42 @@ function ScoreGauge({ score, level }: { score: number; level: string }) {
   );
 }
 
-// Hidden behind "Show more": lows are "odd but plausibly innocent", and an
-// unreviewed finding only got its severity by default (the specialist never
-// assessed it). Both still count towards the score.
-function isMinor(finding: CaseRiskFinding): boolean {
-  return finding.severity === 'low' || finding.unreviewed;
-}
-
 interface FindingRow {
   finding: CaseRiskFinding;
   // How many findings on this document share this check and summary.
   count: number;
+  // Those findings: a verdict on the row goes on each of them.
+  members: CaseRiskFinding[];
 }
 
 interface DocumentGroup {
+  // A document's id, or CASE_GROUP_ID for the cross-document findings.
   documentId: string;
+  scope: ReviewScope;
   filename: string;
   documentType: string | null;
   findings: CaseRiskFinding[];
   rows: FindingRow[];
 }
 
-// Grouped per document, most severe first (documents by their most severe finding, then total points);
-// identical findings (same check, same summary) collapse into one row.
+// Grouped per document (cross-document findings in a group of their own), most severe first (documents by their
+// most severe finding, then total points); identical findings (same check, same summary) collapse into one row.
 function groupByDocument(findings: CaseRiskFinding[]): DocumentGroup[] {
   const groups = new Map<string, DocumentGroup>();
   for (const finding of [...findings].sort(compareFindings)) {
-    let group = groups.get(finding.document_id);
+    const scope = findingScope(finding);
+    const key = scope === 'case' ? CASE_GROUP_ID : finding.document_id;
+    let group = groups.get(key);
     if (!group) {
       group = {
-        documentId: finding.document_id,
-        filename: finding.filename,
-        documentType: finding.document_type,
+        documentId: key,
+        scope,
+        filename: scope === 'case' ? 'Across documents' : finding.filename,
+        documentType: scope === 'case' ? null : finding.document_type,
         findings: [],
         rows: [],
       };
-      groups.set(finding.document_id, group);
+      groups.set(key, group);
     }
     group.findings.push(finding);
     const repeat = group.rows.find(
@@ -127,8 +128,9 @@ function groupByDocument(findings: CaseRiskFinding[]): DocumentGroup[] {
     );
     if (repeat) {
       repeat.count += 1;
+      repeat.members.push(finding);
     } else {
-      group.rows.push({ finding, count: 1 });
+      group.rows.push({ finding, count: 1, members: [finding] });
     }
   }
   const total = (group: DocumentGroup) => group.findings.reduce((sum, f) => sum + f.points, 0);
@@ -137,18 +139,48 @@ function groupByDocument(findings: CaseRiskFinding[]): DocumentGroup[] {
   );
 }
 
+// Scanned documents with no findings, and the cross-document group, so an officer can still report an issue
+// detection missed on them (recall needs the misses). `skip` holds the groups already shown or hidden as minor.
+function emptyGroups(skip: Set<string>, documents: DocumentRecord[]): DocumentGroup[] {
+  const groups: DocumentGroup[] = documents
+    .filter((document) => document.status === 'detected' && !skip.has(document.id))
+    .map((document) => ({
+      documentId: document.id,
+      scope: 'document' as const,
+      filename: document.filename,
+      documentType: document.document_type,
+      findings: [],
+      rows: [],
+    }));
+  if (!skip.has(CASE_GROUP_ID)) {
+    groups.push({ documentId: CASE_GROUP_ID, scope: 'case', filename: 'Across documents', documentType: null, findings: [], rows: [] });
+  }
+  return groups;
+}
+
 function countBySeverity(findings: CaseRiskFinding[]): [Severity, number][] {
   return SEVERITY_ORDER.map(
     (severity): [Severity, number] => [severity, findings.filter((f) => f.severity === severity).length],
   ).filter(([, count]) => count > 0);
 }
 
-function hiddenLabel(lowCount: number, unreviewedCount: number): string {
-  const parts = [
-    lowCount > 0 ? `${lowCount} low-severity` : null,
-    unreviewedCount > 0 ? `${unreviewedCount} unreviewed` : null,
-  ].filter(Boolean);
-  return `Show ${parts.join(' and ')} ${lowCount + unreviewedCount === 1 ? 'finding' : 'findings'}`;
+function reviewedOn(value: string): string {
+  return new Date(value).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+// `latest` is the group's most recently saved verdict: who last reviewed it, and when.
+function ReviewTag({ status, latest }: { status: GroupReviewStatus; latest?: FindingReview }) {
+  return (
+    <span className={`risk-review-tag risk-review-tag--${status}`}>
+      {status === 'saved'
+        ? latest
+          ? `✓ Reviewed by ${officerName(latest.reviewer)} · ${reviewedOn(latest.updated_at)}`
+          : '✓ Reviewed'
+        : status === 'unsaved'
+          ? 'Unsaved changes'
+          : 'Not reviewed'}
+    </span>
+  );
 }
 
 function NotScoredMessage({ risk }: { risk: CaseRisk | null }) {
@@ -176,16 +208,44 @@ function NotScoredMessage({ risk }: { risk: CaseRisk | null }) {
   );
 }
 
-export function CaseRiskCard({ risk }: { risk: CaseRisk | null }) {
+export function CaseRiskCard({
+  risk,
+  caseId,
+  caseDocuments = [],
+}: {
+  risk: CaseRisk | null;
+  caseId: string;
+  caseDocuments?: DocumentRecord[];
+}) {
   const scored = risk?.state === 'scored' && risk.level ? risk : null;
-  const [showMinor, setShowMinor] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Ticks the officer changed but hasn't saved, by row key. A row without one shows its saved verdict.
+  const [drafts, setDrafts] = useState<Record<string, boolean>>({});
+  const reviews = useFindingReviews(caseId, scored !== null);
+  const allReviews = reviews.data?.reviews ?? [];
 
   const findings = scored?.contributing_findings ?? [];
-  const lowCount = findings.filter((finding) => finding.severity === 'low').length;
-  const unreviewedCount = findings.filter((finding) => finding.unreviewed && finding.severity !== 'low').length;
-  const visibleFindings = showMinor ? findings : findings.filter((finding) => !isMinor(finding));
-  const documents = groupByDocument(visibleFindings);
+  // Every finding is listed, lows and ones a specialist didn't assess included: all of them count towards the
+  // score, and all of them are the officer's to review.
+  const documents = groupByDocument(findings);
+  // Every group that has findings, shown or hidden as minor: only the rest are added as empty groups.
+  const withFindings = new Set(
+    findings.map((finding) => (findingScope(finding) === 'case' ? CASE_GROUP_ID : finding.document_id)),
+  );
+  const reviewGroups = emptyGroups(withFindings, caseDocuments);
+
+  function metricsFor(group: DocumentGroup) {
+    return group.scope === 'case' ? reviews.data?.cross_document : reviews.data?.documents[group.documentId];
+  }
+
+  function missedFor(group: DocumentGroup) {
+    return allReviews.filter(
+      (review) =>
+        review.kind === 'missed' &&
+        review.scope === group.scope &&
+        (group.scope === 'case' || review.document_id === group.documentId),
+    );
+  }
 
   function toggleDocument(documentId: string) {
     setExpanded((current) => {
@@ -199,161 +259,304 @@ export function CaseRiskCard({ risk }: { risk: CaseRisk | null }) {
     });
   }
 
-  return (
-    <section className="summary-card">
-      <div className="summary-card-header">
-        <div className="summary-card-title">
-          <span className="summary-icon summary-icon--risk">▥</span>
-          <h2>Customer Risk Summary</h2>
-        </div>
+  function rowKey(group: DocumentGroup, row: FindingRow) {
+    return `${group.documentId}:${row.finding.finding_id}`;
+  }
 
-        {scored && (
-          <span className={`risk-badge risk-badge--${scored.level!.toLowerCase()}`}>
-            {scored.level} risk
+  function isChecked(group: DocumentGroup, row: FindingRow) {
+    const draft = drafts[rowKey(group, row)];
+    return draft ?? verdictFor(allReviews, row.finding)?.verdict === 'correct';
+  }
+
+  function groupStatus(group: DocumentGroup): GroupReviewStatus {
+    const saved = group.rows.map((row) => verdictFor(allReviews, row.finding)?.verdict ?? null);
+    const changed = group.rows.some((row, index) => {
+      const draft = drafts[rowKey(group, row)];
+      return draft !== undefined && draft !== (saved[index] === 'correct');
+    });
+    if (changed) return 'unsaved';
+    return saved.every((verdict) => verdict !== null) ? 'saved' : 'not_reviewed';
+  }
+
+  function setChecked(group: DocumentGroup, rows: FindingRow[], checked: boolean) {
+    setDrafts((current) => ({ ...current, ...Object.fromEntries(rows.map((row) => [rowKey(group, row), checked])) }));
+  }
+
+  async function saveGroup(group: DocumentGroup) {
+    const saved = await reviews.saveGroup(
+      `group:${group.documentId}`,
+      group.rows.map((row) => ({ members: row.members, verdict: isChecked(group, row) ? 'correct' : 'wrong' })),
+    );
+    // Saved: the rows show their saved verdicts again.
+    setDrafts((current) =>
+      Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(`${group.documentId}:`))),
+    );
+    // Done with it: close it, so it moves into the reviewed list rather than jumping down the page open.
+    if (saved) {
+      setExpanded((current) => {
+        const next = new Set(current);
+        next.delete(group.documentId);
+        return next;
+      });
+    }
+  }
+
+  function latestVerdict(group: DocumentGroup): FindingReview | undefined {
+    return group.rows
+      .map((row) => verdictFor(allReviews, row.finding))
+      .filter((review): review is FindingReview => review !== undefined)
+      .reduce<FindingReview | undefined>((latest, review) => (!latest || review.updated_at > latest.updated_at ? review : latest), undefined);
+  }
+
+  // Still the officer's to do: it has findings and they aren't all saved. Unknown until the reviews load, so the
+  // list waits for them rather than showing every document first; if they fail to load, every document is listed.
+  const reviewsLoading = scored !== null && reviews.data === null && reviews.error === null;
+
+  function needsReview(group: DocumentGroup) {
+    return !reviews.data || (group.rows.length > 0 && groupStatus(group) !== 'saved');
+  }
+
+  // One group: Select all and Save review, its findings with a tick each, then the issues reported as missed.
+  function renderGroup(document: DocumentGroup) {
+    const isOpen = expanded.has(document.documentId);
+    const checkedCount = document.rows.filter((row) => isChecked(document, row)).length;
+    const saving = reviews.savingKey !== null || reviews.data === null;
+    return (
+      <div key={document.documentId} className="risk-document">
+        <button
+          type="button"
+          className="risk-document-toggle"
+          aria-expanded={isOpen}
+          onClick={() => toggleDocument(document.documentId)}
+        >
+          <span className="risk-document-heading">
+            <strong>{document.filename}</strong>
+            <span className="risk-document-meta">
+              {document.scope === 'case' ? 'Cross-document findings' : formatDocumentType(document.documentType)}
+              {countBySeverity(document.findings).map(([severity, count]) => (
+                <span key={severity} className={`risk-severity risk-severity--${severity}`}>
+                  {count} {severity}
+                </span>
+              ))}
+              {document.findings.length === 0 && <span className="risk-document-none">✓ No findings</span>}
+              {reviews.data && document.rows.length > 0 && <ReviewTag status={groupStatus(document)} latest={latestVerdict(document)} />}
+              <MetricsLine summary={metricsFor(document)} />
+            </span>
+            {!isOpen && document.rows.length > 0 && (
+              <span className="risk-document-preview">{document.rows[0].finding.summary}</span>
+            )}
           </span>
+          <span className={`risk-chevron ${isOpen ? 'risk-chevron--open' : ''}`} aria-hidden="true">
+            ›
+          </span>
+        </button>
+
+        {isOpen && (
+          <>
+          {document.rows.length > 0 && reviews.data && (
+            <GroupReviewBar
+              checkedCount={checkedCount}
+              total={document.rows.length}
+              status={groupStatus(document)}
+              saving={saving}
+              onToggleAll={(checked) => setChecked(document, document.rows, checked)}
+              onSave={() => void saveGroup(document)}
+            />
+          )}
+          <ul className="risk-findings">
+            {document.rows.map((row) => {
+              const { finding, count } = row;
+              const detail = finding.unreviewed
+                ? 'Not reviewed by a specialist.'
+                : addedDetail(finding.rationale, finding.summary);
+              return (
+                <li key={finding.finding_id}>
+                  {reviews.data && (
+                    <input
+                      type="checkbox"
+                      className="review-tick risk-finding-tick"
+                      aria-label={`Real issue: ${finding.summary}`}
+                      checked={isChecked(document, row)}
+                      disabled={saving}
+                      onChange={(event) => setChecked(document, [row], event.target.checked)}
+                    />
+                  )}
+                  <span className={`risk-severity risk-severity--${finding.severity}`}>
+                    {finding.severity}
+                  </span>
+                  <span className="risk-finding-text">
+                    <span className="risk-finding-check">{formatTool(finding.tool)}</span>
+                    <span className="risk-finding-summary">
+                      {finding.summary}
+                      {count > 1 && <span className="risk-repeat">×{count}</span>}
+                    </span>
+                    {detail && <span className="risk-finding-rationale">{detail}</span>}
+                    {finding.repeat_of && (
+                      <span className="risk-finding-rationale">
+                        Also found on another document; counted once there, not again here.
+                      </span>
+                    )}
+                    {(finding.also_on ?? 0) > 0 && (
+                      <span className="risk-finding-rationale">
+                        Also found on {finding.also_on} other{' '}
+                        {finding.also_on === 1 ? 'document' : 'documents'}; counted once.
+                      </span>
+                    )}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          {reviews.data && (
+            <MissedIssues
+              scope={document.scope}
+              missed={missedFor(document)}
+              checks={reviews.data.checks[document.scope]}
+              saving={reviews.savingKey !== null}
+              onAdd={(checkName, note) =>
+                void reviews.addMissed(
+                  `missed:${document.documentId}`,
+                  document.scope,
+                  document.scope === 'case' ? null : document.documentId,
+                  checkName,
+                  note,
+                )
+              }
+              onEdit={(reviewId, checkName, note) => void reviews.editMissed(reviewId, checkName, note)}
+              onRemove={(reviewId) => void reviews.removeReview(reviewId)}
+            />
+          )}
+          </>
         )}
       </div>
+    );
+  }
 
-      {!scored ? (
-        <NotScoredMessage risk={risk} />
-      ) : (
-        <>
-          {scored.score !== null && scored.score !== undefined && (
-            <ScoreGauge score={scored.score} level={scored.level!} />
-          )}
-          <div className="risk-overview">
-            <span>
-              Based on {scored.documents_scanned}{' '}
-              {scored.documents_scanned === 1 ? 'document' : 'documents'}
-            </span>
-            {findings.length > 0 && (
-              <span>
-                {countBySeverity(findings)
-                  .map(([severity, count]) => `${count} ${severity}`)
-                  .join(' · ')}
-              </span>
-            )}
-            {scored.reasons.map((reason) => (
-              <span key={reason} className="risk-reason">
-                {reason}
-              </span>
-            ))}
+  const allGroups = [...documents, ...reviewGroups];
+  const toReview = allGroups.filter(needsReview);
+  const done = allGroups.filter((group) => !needsReview(group));
+
+  return (
+    <>
+      <section className="summary-card">
+        <div className="summary-card-header">
+          <div className="summary-card-title">
+            <span className="summary-icon summary-icon--risk">▥</span>
+            <h2>Customer Risk Summary</h2>
           </div>
 
-          {findings.length === 0 ? (
+          {scored && (
+            <span className={`risk-badge risk-badge--${scored.level!.toLowerCase()}`}>
+              {scored.level} risk
+            </span>
+          )}
+        </div>
+
+        {!scored ? (
+          <NotScoredMessage risk={risk} />
+        ) : (
+          <>
+            {scored.score !== null && scored.score !== undefined && (
+              <ScoreGauge score={scored.score} level={scored.level!} />
+            )}
+            <div className="risk-overview">
+              <span>
+                Based on {scored.documents_scanned}{' '}
+                {scored.documents_scanned === 1 ? 'document' : 'documents'}
+              </span>
+              {findings.length > 0 && (
+                <span>
+                  {countBySeverity(findings)
+                    .map(([severity, count]) => `${count} ${severity}`)
+                    .join(' · ')}
+                </span>
+              )}
+              {scored.reasons.map((reason) => (
+                <span key={reason} className="risk-reason">
+                  {reason}
+                </span>
+              ))}
+            </div>
+
+            {findings.length === 0 && (
+              <div className="summary-message summary-message--success">
+                <span className="summary-message-icon">✓</span>
+                <div>
+                  <strong>No contributing findings.</strong>
+                  <p>Detection found nothing worth flagging across this case's documents.</p>
+                </div>
+              </div>
+            )}
+
+            {scored.unassessed_checks.length > 0 && (
+              <details className="risk-unassessed">
+                <summary>Couldn't verify ({scored.unassessed_checks.length})</summary>
+                <ul>
+                  {scored.unassessed_checks.map((check, index) => (
+                    <li key={`${check.document_id}-${check.tool}-${index}`}>
+                      {check.filename} — {formatTool(check.tool)}
+                      {check.reason ? `: ${check.reason}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </>
+        )}
+      </section>
+
+      {/* The officer's review of each document's findings: what's left to do, then what's done folded away
+          (still there to open, to change a verdict or report a miss). */}
+      {scored && allGroups.length > 0 && (
+        <section className="summary-card">
+          <div className="summary-card-header">
+            <div className="summary-card-title">
+              <span className="summary-icon">▤</span>
+              <h2>Documents to Review</h2>
+            </div>
+            {reviews.data && (
+              <span className="risk-review-count">
+                {toReview.length === 0 ? 'All reviewed' : `${toReview.length} of ${allGroups.length} to review`}
+              </span>
+            )}
+          </div>
+
+          {reviewsLoading ? (
+            <div className="summary-message summary-message--info" role="status">
+              <span className="summary-message-icon">ⓘ</span>
+              <div>
+                <strong>Loading reviews…</strong>
+              </div>
+            </div>
+          ) : toReview.length > 0 ? (
+            <div className="flagged-list">{toReview.map(renderGroup)}</div>
+          ) : (
             <div className="summary-message summary-message--success">
               <span className="summary-message-icon">✓</span>
               <div>
-                <strong>No contributing findings.</strong>
-                <p>Detection found nothing worth flagging across this case's documents.</p>
+                <strong>No more documents to review.</strong>
+                <p>Every document's findings have been reviewed. Open one below to change a verdict or report a missed issue.</p>
               </div>
             </div>
-          ) : documents.length === 0 ? (
-            <div className="summary-message summary-message--info">
-              <span className="summary-message-icon">ⓘ</span>
-              <div>
-                <strong>Only minor findings.</strong>
-                <p>Every finding is low severity or unreviewed. They're hidden below.</p>
-              </div>
-            </div>
-          ) : (
-            <div className="flagged-list">
-              {documents.map((document) => {
-                const isOpen = expanded.has(document.documentId);
-                return (
-                  <div key={document.documentId} className="risk-document">
-                    <button
-                      type="button"
-                      className="risk-document-toggle"
-                      aria-expanded={isOpen}
-                      onClick={() => toggleDocument(document.documentId)}
-                    >
-                      <span className="risk-document-heading">
-                        <strong>{document.filename}</strong>
-                        <span className="risk-document-meta">
-                          {formatDocumentType(document.documentType)}
-                          {countBySeverity(document.findings).map(([severity, count]) => (
-                            <span key={severity} className={`risk-severity risk-severity--${severity}`}>
-                              {count} {severity}
-                            </span>
-                          ))}
-                        </span>
-                        {!isOpen && (
-                          <span className="risk-document-preview">{document.rows[0].finding.summary}</span>
-                        )}
-                      </span>
-                      <span className={`risk-chevron ${isOpen ? 'risk-chevron--open' : ''}`} aria-hidden="true">
-                        ›
-                      </span>
-                    </button>
-
-                    {isOpen && (
-                      <ul className="risk-findings">
-                        {document.rows.map(({ finding, count }) => {
-                          const detail = finding.unreviewed
-                            ? 'Not reviewed by a specialist.'
-                            : addedDetail(finding.rationale, finding.summary);
-                          return (
-                            <li key={finding.finding_id}>
-                              <span className={`risk-severity risk-severity--${finding.severity}`}>
-                                {finding.severity}
-                              </span>
-                              <span className="risk-finding-text">
-                                <span className="risk-finding-check">{formatTool(finding.tool)}</span>
-                                <span className="risk-finding-summary">
-                                  {finding.summary}
-                                  {count > 1 && <span className="risk-repeat">×{count}</span>}
-                                </span>
-                                {detail && <span className="risk-finding-rationale">{detail}</span>}
-                                {finding.repeat_of && (
-                                  <span className="risk-finding-rationale">
-                                    Also found on another document; counted once there, not again here.
-                                  </span>
-                                )}
-                                {(finding.also_on ?? 0) > 0 && (
-                                  <span className="risk-finding-rationale">
-                                    Also found on {finding.also_on} other{' '}
-                                    {finding.also_on === 1 ? 'document' : 'documents'}; counted once.
-                                  </span>
-                                )}
-                              </span>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
           )}
-
-          {lowCount + unreviewedCount > 0 && (
-            <button
-              type="button"
-              className="risk-toggle"
-              aria-expanded={showMinor}
-              onClick={() => setShowMinor((current) => !current)}
-            >
-              {showMinor ? 'Show less' : hiddenLabel(lowCount, unreviewedCount)}
-            </button>
-          )}
-
-          {scored.unassessed_checks.length > 0 && (
-            <details className="risk-unassessed">
-              <summary>Couldn't verify ({scored.unassessed_checks.length})</summary>
-              <ul>
-                {scored.unassessed_checks.map((check, index) => (
-                  <li key={`${check.document_id}-${check.tool}-${index}`}>
-                    {check.filename} — {formatTool(check.tool)}
-                    {check.reason ? `: ${check.reason}` : ''}
-                  </li>
-                ))}
-              </ul>
+          {!reviewsLoading && done.length > 0 && (
+            <details className="risk-reviewed">
+              <summary>
+                <span className="risk-chevron" aria-hidden="true">›</span>
+                Reviewed ({done.length})
+                <span className="risk-reviewed-hint">Reviewed, or nothing to review</span>
+              </summary>
+              <div className="flagged-list">{done.map(renderGroup)}</div>
             </details>
           )}
-        </>
+          {reviews.error && (
+            <div className="save-error" role="alert">
+              {reviews.error}
+            </div>
+          )}
+          {reviews.data && <ReviewSummary caseSummary={reviews.data.case} />}
+        </section>
       )}
-    </section>
+    </>
   );
 }
