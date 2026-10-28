@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { officerName } from '../../lib/officers';
 import type { CaseRisk, CaseRiskFinding, DocumentRecord, FindingReview, ReviewScope } from '../../services/uploadService';
 import { formatDocumentType } from '../../services/uploadService';
@@ -235,6 +236,24 @@ export function CaseRiskCard({
   );
   const reviewGroups = emptyGroups(withFindings, caseDocuments);
 
+  // A reason in the case analysis summary links here as #risk-finding-<document>-<finding>: open that document's
+  // group, then bring the finding into view (from the reviewed list too, once the reviews have sorted the groups).
+  const { hash } = useLocation();
+  const linkedId = hash.startsWith('#risk-finding-') ? decodeURIComponent(hash.slice(1)) : null;
+  const linkedGroupId =
+    findings.find((finding) => findingScope(finding) !== 'case' && linkedId === `risk-finding-${finding.document_id}-${finding.finding_id}`)
+      ?.document_id ?? null;
+  useEffect(() => {
+    if (linkedGroupId) setExpanded((current) => (current.has(linkedGroupId) ? current : new Set(current).add(linkedGroupId)));
+  }, [linkedGroupId]);
+  const reviewsSettled = reviews.data !== null || reviews.error !== null;
+  useEffect(() => {
+    if (!linkedId || !reviewsSettled) return;
+    const row = window.document.getElementById(linkedId);
+    row?.closest('details')?.setAttribute('open', '');
+    row?.scrollIntoView({ block: 'center' });
+  }, [linkedId, expanded, reviewsSettled]);
+
   function metricsFor(group: DocumentGroup) {
     return group.scope === 'case' ? reviews.data?.cross_document : reviews.data?.documents[group.documentId];
   }
@@ -371,7 +390,11 @@ export function CaseRiskCard({
                 ? 'Not reviewed by a specialist.'
                 : addedDetail(finding.rationale, finding.summary);
               return (
-                <li key={finding.finding_id}>
+                <li
+                  key={finding.finding_id}
+                  id={`risk-finding-${document.documentId}-${finding.finding_id}`}
+                  className={linkedId === `risk-finding-${document.documentId}-${finding.finding_id}` ? 'risk-finding--linked' : undefined}
+                >
                   {reviews.data && (
                     <input
                       type="checkbox"

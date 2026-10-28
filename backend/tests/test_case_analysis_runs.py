@@ -144,3 +144,29 @@ def test_who_started_a_run_is_read_by_the_event_type_column_the_audit_trail_stor
 
     # Event.to_audit_row stores the type as `action`; there is no `type` column.
     query.eq.assert_any_call("action", "case.analysis.requested")
+
+
+def test_a_stored_structured_summary_and_clean_checks_are_read_back() -> None:
+    from unittest.mock import MagicMock
+
+    from app.case_pipeline import repository
+
+    row = {
+        "run_id": RUN_1, "case_id": "case-1", "status": "complete", "fingerprint": "f", "started_at": NOW.isoformat(),
+        "result": {
+            "structured_summary": {"headline": "H.", "reasons": [{"text": "R", "finding_id": "x", "document_id": "d"}],
+                                   "would_help": None, "source": "model"},
+            "clean_checks": ["metadata_tool"],
+        },
+    }
+    query = MagicMock()
+    query.execute.return_value.data = [row]
+    for step in ("select", "eq", "limit"):
+        getattr(query, step).return_value = query
+    with patch.object(repository, "supabase_client") as supabase:
+        supabase.table.return_value = query
+        analysis = repository.get_run("case-1", RUN_1)
+
+    assert analysis is not None and analysis.structured_summary is not None
+    assert (analysis.structured_summary.reasons[0].document_id, analysis.structured_summary.reasons[0].finding_id) == ("d", "x")
+    assert analysis.clean_checks == ["metadata_tool"]

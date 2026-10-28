@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import type { CaseAnalysis, CaseAnalysisOverview } from '../../services/uploadService';
 import type { CaseAnalysisRunItem } from '../../services/uploadService';
 import { getCaseAnalysis, getCaseAnalysisRun, listCaseAnalysisRuns, runCaseAnalysis } from '../../services/uploadService';
+import { AnalysisSummaryBlock } from './AnalysisSummaryBlock';
+import { analysisFindingAnchor } from './analysisSummary';
 import { PreviousRuns } from './PreviousRuns';
 import { CaseAnalysisTracePanel } from './CaseAnalysisTracePanel';
 import { ErrorMessage } from '../../components/ErrorMessage';
@@ -15,7 +17,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const SEVERITY_RANK: Record<string, number> = { high: 3, medium: 2, low: 1 };
 
-// "Run case analysis": cross-document findings, a plain-language summary, and every earlier run to open read-only.
+// "Run case analysis": a structured summary, cross-document findings, and every earlier run to open read-only.
 export function CaseAnalysisCard({
   caseId,
   analysisReady,
@@ -187,7 +189,7 @@ export function CaseAnalysisCard({
 
       {showResult && shown && (
         <>
-          {shown.summary && <p className="analysis-summary">{shown.summary}</p>}
+          <AnalysisSummaryBlock analysis={shown} linkToRiskTab={!viewing} />
 
           {findings.length === 0 ? (
             <div className="summary-message summary-message--success">
@@ -200,7 +202,7 @@ export function CaseAnalysisCard({
           ) : (
             <ul className="risk-findings">
               {findings.map((finding) => (
-                <li key={finding.id}>
+                <li key={finding.id} id={analysisFindingAnchor(finding.id)}>
                   <span className={`risk-severity risk-severity--${finding.severity}`}>{finding.severity}</span>
                   <span className="risk-finding-text">
                     <span className="risk-finding-summary">
@@ -214,21 +216,6 @@ export function CaseAnalysisCard({
                 </li>
               ))}
             </ul>
-          )}
-
-          {(shown.consistent_checks ?? []).length > 0 && (
-            <>
-              <h3 className="analysis-heading">Checked and consistent</h3>
-              <ul className="risk-findings">
-                {(shown.consistent_checks ?? []).map((line) => (
-                  <li key={line}>
-                    <span className="risk-finding-text">
-                      <span className="risk-finding-rationale">{line}</span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </>
           )}
         </>
       )}

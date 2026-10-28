@@ -4,8 +4,8 @@ import { makeCase, makeDocument, makeRisk, type MockBackend } from '../support/m
 import type { CaseRiskFinding } from '../../src/services/uploadService/types';
 
 /**
- * The Case Analysis card's earlier runs: listed newest first with who started each, its score and the change from the
- * run before, and opened read-only.
+ * The Case Analysis card: the structured summary (level, headline, cited reasons, checked and fine, would help), and
+ * the case's earlier runs, listed newest first with who started each and the score change, each opened read-only.
  */
 
 const ADDRESS = 'Registered address differs between the BizFile and the bank statement.';
@@ -30,8 +30,8 @@ const risk = makeRisk({
 function analysis(runId: string, overrides: Record<string, unknown> = {}) {
   return {
     run_id: runId, case_id: 'case-analysis', status: 'complete', fingerprint: 'f', started_at: '2026-10-27T02:00:00Z',
-    finished_at: '2026-10-27T02:03:00Z', error: null, outlook: null, summary: null,
-    risk, supporting_documents: [], additional_documents: null, consistent_checks: [],
+    finished_at: '2026-10-27T02:03:00Z', error: null, outlook: null, summary: null, structured_summary: null,
+    risk, supporting_documents: [], additional_documents: null, consistent_checks: [], clean_checks: [],
     audit: { models: {}, prompt_version: '', hypotheses_tried: 0, findings_discarded: 0, tool_calls: [] },
     trace: [], stale: false,
     findings: [{
@@ -42,7 +42,19 @@ function analysis(runId: string, overrides: Record<string, unknown> = {}) {
   };
 }
 
-const latest = analysis(LATEST, { summary: 'The latest summary, in prose.' });
+const latest = analysis(LATEST, {
+  structured_summary: {
+    headline: "Two documents disagree on the company's address, and the payslip doesn't match the bank credits.",
+    reasons: [
+      { text: "The address on file isn't the same everywhere.", finding_id: 'xdoc-1', document_id: 'doc-bizfile' },
+      { text: "Declared pay isn't reflected in the account.", finding_id: 'numerical_checks_tool-1', document_id: 'doc-payslip' },
+    ],
+    would_help: 'A recent utility bill would help.',
+    source: 'model',
+  },
+  consistent_checks: ['UEN is the same on 3 documents', 'The name is the same on C001_BizFile.pdf and C002_NRIC.pdf'],
+  clean_checks: ['metadata_tool'],
+});
 const earlier = analysis(EARLIER, {
   started_at: '2026-10-26T02:00:00Z', summary: 'The case was rated High risk. An older summary in prose.', stale: true,
 });
@@ -68,9 +80,46 @@ async function openAnalysis(page: Page, backend: MockBackend) {
   await page.route(/\/cases\/case-analysis\/analysis\/runs\/run-1$/, (route) => route.fulfill({ json: earlier }));
   await page.route(/\/finding-reviews$/, (route) => route.fulfill({ status: 503, json: { detail: 'off' } }));
   await page.goto(`/cases/${theCase.greenlink_case_id}?section=analysis`);
+  return page.locator('.analysis-brief');
 }
 
-test.describe('Case analysis earlier runs', () => {
+test.describe('Case analysis summary and earlier runs', () => {
+  test('the summary is a level, a headline, cited reasons, checked-and-fine chips and what would help', async ({ page, backend }) => {
+    const brief = await openAnalysis(page, backend);
+
+    await expect(brief.locator('.analysis-brief-level')).toHaveText('High');
+    await expect(brief.locator('.analysis-brief-headline strong')).toHaveText(latest.structured_summary.headline);
+    await expect(brief.locator('.analysis-brief-reasons li')).toHaveText([
+      "The address on file isn't the same everywhere.",
+      "Declared pay isn't reflected in the account.",
+    ]);
+    await expect(brief.locator('.analysis-brief-dot')).toHaveClass([/--high/, /--medium/]);
+    await expect(brief.locator('.analysis-brief-chips li')).toHaveText(['Metadata ✓', 'UEN ✓', 'Name ✓']);
+    await expect(brief.locator('.analysis-brief-help a')).toHaveText('A recent utility bill would help.');
+    // No score restated and no finding text pasted back in.
+    await expect(brief).not.toContainText('48');
+    await expect(brief).not.toContainText(ADDRESS);
+  });
+
+  test('a reason opens the finding it cites: on this card, or on the Risk Summary tab', async ({ page, backend }) => {
+    const brief = await openAnalysis(page, backend);
+
+    await brief.getByRole('button', { name: "The address on file isn't the same everywhere." }).click();
+    await expect(page.locator('#analysis-finding-xdoc-1')).toBeInViewport();
+
+    await brief.getByRole('link', { name: "Declared pay isn't reflected in the account." }).click();
+    await expect(page).toHaveURL(/section=risk#risk-finding-doc-payslip-numerical_checks_tool-1$/);
+    await expect(page.locator('#risk-finding-doc-payslip-numerical_checks_tool-1')).toHaveClass(/risk-finding--linked/);
+  });
+
+  test('"Would help" goes to the Additional Documents card', async ({ page, backend }) => {
+    const brief = await openAnalysis(page, backend);
+
+    await brief.getByRole('link', { name: 'A recent utility bill would help.' }).click();
+
+    await expect(page).toHaveURL(/section=additional/);
+  });
+
   test('earlier runs are listed newest first and open read-only, with their own summary', async ({ page, backend }) => {
     await openAnalysis(page, backend);
 
@@ -86,12 +135,12 @@ test.describe('Case analysis earlier runs', () => {
     await rows.nth(1).getByRole('button', { name: 'Open' }).click();
 
     await expect(page.getByText(/Earlier run from .*read-only\./)).toBeVisible();
-    // The earlier run shows its own result, not the latest one.
+    // A run from before the structured summary shows its prose.
     await expect(page.locator('.analysis-summary')).toHaveText(earlier.summary as string);
     await expect(rows.nth(1).locator('.analysis-run-viewing')).toHaveText('Showing');
 
     await page.getByRole('button', { name: 'Back to the latest' }).click();
-    await expect(page.locator('.analysis-summary')).toHaveText(latest.summary as string);
+    await expect(page.locator('.analysis-brief-headline strong')).toHaveText(latest.structured_summary.headline);
     await expect(page.getByText(/Earlier run from/)).toHaveCount(0);
   });
 });

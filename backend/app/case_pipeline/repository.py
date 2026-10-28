@@ -8,7 +8,7 @@ from typing import Any
 from ..models import CaseRisk, SupportingDocumentRecommendation
 from ..supabase_client import supabase_client
 from ..supabase_rows import row as _row
-from .models import AnalysisAudit, CaseAnalysis, CrossDocFinding, RiskOutlook
+from .models import AnalysisAudit, AnalysisSummary, CaseAnalysis, CrossDocFinding, RiskOutlook
 
 _TABLE = "case_analysis_runs"
 # What a snapshot or summary needs from a run: no trace, outlook or audit, which are large.
@@ -38,9 +38,11 @@ def _to_analysis(row: dict) -> CaseAnalysis:
         findings=[CrossDocFinding(**f) for f in result.get("findings") or []],
         outlook=RiskOutlook(**result["outlook"]) if result.get("outlook") else None,
         summary=result.get("summary"),
+        structured_summary=AnalysisSummary(**result["structured_summary"]) if result.get("structured_summary") else None,
         risk=CaseRisk(**result["risk"]) if result.get("risk") else None,
         supporting_documents=[SupportingDocumentRecommendation(**s) for s in result.get("supporting_documents") or []],
         consistent_checks=[str(c) for c in result.get("consistent_checks") or []],
+        clean_checks=[str(c) for c in result.get("clean_checks") or []],
         audit=AnalysisAudit(**(result.get("audit") or {})),
         trace=row.get("trace") or [],
     )
@@ -112,9 +114,11 @@ def finish_run(analysis: CaseAnalysis) -> bool:
         "findings": [f.model_dump(mode="json") for f in analysis.findings],
         "outlook": analysis.outlook.model_dump(mode="json") if analysis.outlook else None,
         "summary": analysis.summary,
+        "structured_summary": analysis.structured_summary.model_dump(mode="json") if analysis.structured_summary else None,
         "risk": analysis.risk.model_dump(mode="json") if analysis.risk else None,
         "supporting_documents": [s.model_dump(mode="json") for s in analysis.supporting_documents],
         "consistent_checks": analysis.consistent_checks,
+        "clean_checks": analysis.clean_checks,
         "audit": analysis.audit.model_dump(mode="json"),
     }
     supabase_client.table(_TABLE).update({

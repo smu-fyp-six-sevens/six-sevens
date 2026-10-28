@@ -1691,6 +1691,24 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        /**
+         * AnalysisSummary
+         * @description The explanation an officer reads first (risk/summary.py): what the result comes down to, and why.
+         */
+        AnalysisSummary: {
+            /** Headline */
+            headline: string;
+            /** Reasons */
+            reasons: components["schemas"]["SummaryReason"][];
+            /**
+             * Source
+             * @default model
+             * @enum {string}
+             */
+            source: "model" | "fallback";
+            /** Would Help */
+            would_help: string | null;
+        };
         /** AnomalyLocation */
         AnomalyLocation: {
             /** Bbox */
@@ -1803,6 +1821,8 @@ export interface components {
             audit: components["schemas"]["AnalysisAudit"];
             /** Case Id */
             case_id: string;
+            /** Clean Checks */
+            clean_checks: string[];
             /** Consistent Checks */
             consistent_checks: string[];
             /** Error */
@@ -1832,6 +1852,7 @@ export interface components {
              * @enum {string}
              */
             status: "running" | "complete" | "failed" | "superseded";
+            structured_summary: components["schemas"]["AnalysisSummary"] | null;
             /** Summary */
             summary: string | null;
             /** Supporting Documents */
@@ -3635,6 +3656,18 @@ export interface components {
              */
             seconds_in_current_status: number;
             status: components["schemas"]["DocumentStatus"];
+        };
+        /** SummaryReason */
+        SummaryReason: {
+            /**
+             * Document Id
+             * @default
+             */
+            document_id: string;
+            /** Finding Id */
+            finding_id: string;
+            /** Text */
+            text: string;
         };
         /**
          * SupportingDocumentRecommendation

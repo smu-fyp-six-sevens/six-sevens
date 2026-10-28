@@ -770,6 +770,50 @@
         "title": "AnalysisAudit",
         "type": "object"
       },
+      "AnalysisSummary": {
+        "description": "The explanation an officer reads first (risk/summary.py): what the result comes down to, and why.",
+        "properties": {
+          "headline": {
+            "title": "Headline",
+            "type": "string"
+          },
+          "reasons": {
+            "items": {
+              "$ref": "#/components/schemas/SummaryReason"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "source": {
+            "default": "model",
+            "enum": [
+              "model",
+              "fallback"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "would_help": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Would Help"
+          }
+        },
+        "required": [
+          "headline",
+          "reasons",
+          "would_help",
+          "source"
+        ],
+        "title": "AnalysisSummary",
+        "type": "object"
+      },
       "AnomalyLocation": {
         "properties": {
           "bbox": {
@@ -1157,6 +1201,13 @@
             "title": "Case Id",
             "type": "string"
           },
+          "clean_checks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Clean Checks",
+            "type": "array"
+          },
           "consistent_checks": {
             "items": {
               "type": "string"
@@ -1242,6 +1293,16 @@
             "title": "Status",
             "type": "string"
           },
+          "structured_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnalysisSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "summary": {
             "anyOf": [
               {
@@ -1280,10 +1341,12 @@
           "findings",
           "outlook",
           "summary",
+          "structured_summary",
           "risk",
           "supporting_documents",
           "additional_documents",
           "consistent_checks",
+          "clean_checks",
           "audit",
           "trace",
           "stale"
@@ -6168,6 +6231,30 @@
           "seconds_in_current_status"
         ],
         "title": "StuckDocument",
+        "type": "object"
+      },
+      "SummaryReason": {
+        "properties": {
+          "document_id": {
+            "default": "",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "finding_id": {
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "finding_id",
+          "document_id"
+        ],
+        "title": "SummaryReason",
         "type": "object"
       },
       "SupportingDocumentRecommendation": {

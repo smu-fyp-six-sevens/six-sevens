@@ -158,15 +158,16 @@ async def _execute(
                      items=[{"title": i.title, "source": i.source, "affects_score": i.affects_score} for i in additional.items])
         clean_checks, unrun_checks = _check_outcomes(reports)
         summary = await write_summary(risk, outlook, clean_checks, unrun_checks)
-        trace.record("summary", text=summary)
+        trace.record("summary", **summary.model_dump())
 
         analysis.findings = findings
         analysis.outlook = outlook
-        analysis.summary = summary
+        analysis.structured_summary = summary
         analysis.risk = risk
         analysis.supporting_documents = supporting_documents
         analysis.additional_documents = additional
         analysis.consistent_checks = result.get("consistent_checks") or []
+        analysis.clean_checks = clean_checks
         analysis.audit = AnalysisAudit(
             models={"analysis": settings.LANGGRAPH_SONNET_MODEL},
             prompt_version=PROMPT_VERSION,

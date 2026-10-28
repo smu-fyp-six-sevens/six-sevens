@@ -98,6 +98,129 @@
 
 /* Tighter, easier-to-scan finding rows everywhere */
 
+/* The structured summary (pages/upload/AnalysisSummaryBlock.tsx): level and headline, cited reasons, what was
+   checked and fine, what would help. */
+.analysis-brief {
+  display: grid;
+  gap: 12px;
+  margin: 0 20px 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--slate-97);
+}
+
+.analysis-brief .analysis-summary {
+  margin: 0;
+}
+
+.analysis-brief-headline {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.analysis-brief-level.risk-badge {
+  flex: 0 0 auto;
+  margin: 1px 0 0;
+  padding: 3px 10px;
+  font-size: 11.5px;
+}
+
+.analysis-brief-reasons {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.analysis-brief-reasons li {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+}
+
+/* The severity colours of the finding rows (.risk-severity), as a dot. */
+.analysis-brief-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transform: translateY(-1px);
+}
+
+.analysis-brief-dot--high { background: #b83c22; }
+.analysis-brief-dot--medium { background: var(--orange-74); }
+.analysis-brief-dot--low { background: var(--orange-91); border: 1px solid #e3b79e; }
+
+.analysis-brief-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: var(--slate-77);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.analysis-brief-link:hover {
+  color: var(--steel-dark);
+  text-decoration-color: currentColor;
+}
+
+.analysis-brief-label {
+  margin-right: 8px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.analysis-brief-checked {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.analysis-brief-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.analysis-brief-chips li {
+  padding: 2px 9px;
+  border: 1px solid var(--slate-88);
+  border-radius: 999px;
+  background: var(--white);
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+
+.analysis-brief-chips li span {
+  color: var(--teal);
+  font-weight: 700;
+}
+
+.analysis-brief-help {
+  margin: 0;
+  font-size: 13px;
+}
+
 /* Previous runs (pages/upload/PreviousRuns.tsx) */
 .analysis-run-list {
   display: grid;
