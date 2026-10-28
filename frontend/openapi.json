@@ -1341,6 +1341,110 @@
         "title": "CaseAnalysisOverview",
         "type": "object"
       },
+      "CaseAnalysisRunItem": {
+        "description": "One run in a case's list of analyses (GET /cases/{id}/analysis/runs): enough to pick one to open.",
+        "properties": {
+          "finding_count": {
+            "default": 0,
+            "title": "Finding Count",
+            "type": "integer"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "risk_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Level"
+          },
+          "risk_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Score"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "score_change": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Change"
+          },
+          "stale": {
+            "default": false,
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "started_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started By"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "complete",
+              "failed",
+              "superseded"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "status",
+          "started_at",
+          "finished_at",
+          "started_by",
+          "risk_level",
+          "risk_score",
+          "score_change",
+          "finding_count",
+          "stale"
+        ],
+        "title": "CaseAnalysisRunItem",
+        "type": "object"
+      },
       "CaseCounts": {
         "description": "What the queue's sidebar shows: every case, and how many are in each documents status.",
         "properties": {
@@ -7492,6 +7596,137 @@
           }
         },
         "summary": "Run Case Analysis",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/cases/{case_id}/analysis/runs": {
+      "get": {
+        "description": "Every analysis of the case, newest first: when, who started it, status, score and its change, findings, stale.",
+        "operationId": "list_case_analysis_runs_cases__case_id__analysis_runs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CaseAnalysisRunItem"
+                  },
+                  "title": "Response List Case Analysis Runs Cases  Case Id  Analysis Runs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Case Analysis Runs",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/cases/{case_id}/analysis/runs/{run_id}": {
+      "get": {
+        "description": "One of the case's analyses, earlier or latest, whole, marked stale like the latest one.",
+        "operationId": "get_case_analysis_run_cases__case_id__analysis_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseAnalysis"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Case Analysis Run",
         "tags": [
           "cases"
         ]

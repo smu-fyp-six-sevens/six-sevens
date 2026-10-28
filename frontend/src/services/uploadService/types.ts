@@ -140,6 +140,8 @@ export type CaseOption = Pick<Schemas['CaseListItem'], 'id' | 'greenlink_case_id
 export type AdditionalDocument = Schemas['AdditionalDocument'];
 export type AdditionalDocuments = Schemas['AdditionalDocuments'];
 export type CaseAnalysisOverview = Schemas['CaseAnalysisOverview'];
+// One row of GET /cases/{id}/analysis/runs, newest first.
+export type CaseAnalysisRunItem = Schemas['CaseAnalysisRunItem'];
 export type CrossDocFinding = Schemas['CrossDocFinding'];
 export type OutlookRequest = Schemas['OutlookRequest'];
 export type RiskOutlook = Schemas['RiskOutlook'];

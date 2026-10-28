@@ -131,3 +131,22 @@ class CaseAnalysis(BaseModel):
     trace: list[dict[str, Any]] = Field(default_factory=list)
     # Computed on read: the case's documents changed since this run started.
     stale: bool = False
+
+
+class CaseAnalysisRunItem(BaseModel):
+    """One run in a case's list of analyses (GET /cases/{id}/analysis/runs): enough to pick one to open."""
+
+    run_id: str
+    status: AnalysisStatus
+    started_at: datetime
+    finished_at: datetime | None = None
+    # The officer who asked for it (the case.analysis.requested event), when the audit trail has it.
+    started_by: str | None = None
+    risk_level: str | None = None
+    risk_score: int | None = None
+    # Against the next older run with a score; None for the oldest scored run or a run without a score.
+    score_change: int | None = None
+    # Cross-document findings, as the card and the audit trail count them.
+    finding_count: int = 0
+    # The case's documents changed since this run started.
+    stale: bool = False

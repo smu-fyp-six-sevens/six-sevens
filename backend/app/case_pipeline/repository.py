@@ -16,6 +16,11 @@ _LIST_COLUMNS = (
     "run_id, case_id, status, fingerprint, started_at, finished_at, error, findings:result->findings, "
     "risk:result->risk, supporting_documents:result->supporting_documents"
 )
+# A case's list of runs: when, how it ended, its score and how many findings, without the result itself.
+_RUN_LIST_COLUMNS = (
+    "run_id, status, fingerprint, started_at, finished_at, risk_score:result->risk->score, "
+    "risk_level:result->risk->level, findings:result->findings"
+)
 
 
 def _to_analysis(row: dict) -> CaseAnalysis:
@@ -143,5 +148,23 @@ def get_latest_summary(case_id: str) -> CaseAnalysis | None:
     rows = (
         supabase_client.table(_TABLE).select(_LIST_COLUMNS).eq("case_id", case_id)
         .order("started_at", desc=True).limit(1).execute().data
+    )
+    return _to_analysis(_row(rows[0])) if rows else None
+
+
+def list_runs(case_id: str) -> list[dict[str, Any]]:
+    """Every run of the case, newest first: status, times, fingerprint, score, level and findings (no trace)."""
+    rows = (
+        supabase_client.table(_TABLE).select(_RUN_LIST_COLUMNS).eq("case_id", case_id)
+        .order("started_at", desc=True).execute().data or []
+    )
+    return [_row(row) for row in rows]
+
+
+def get_run(case_id: str, run_id: str) -> CaseAnalysis | None:
+    """One of the case's runs, whole, or None when the case has no run with that id."""
+    rows = (
+        supabase_client.table(_TABLE).select("*").eq("case_id", case_id).eq("run_id", run_id)
+        .limit(1).execute().data
     )
     return _to_analysis(_row(rows[0])) if rows else None

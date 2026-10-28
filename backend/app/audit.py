@@ -99,7 +99,7 @@ def case_cost(case_id: str) -> dict:
 
 
 def list_events(
-    *, case_id: str | None = None, document_id: str | None = None, limit: int = 200
+    *, case_id: str | None = None, document_id: str | None = None, event_type: str | None = None, limit: int = 200
 ) -> list[Event]:
     """Newest first. Sync: run on a worker thread."""
     query = service_supabase_client().table(_TABLE).select("*").order("occurred_at", desc=True).limit(limit)
@@ -107,4 +107,7 @@ def list_events(
         query = query.eq("case_id", case_id)
     if document_id is not None:
         query = query.eq("document_id", document_id)
+    if event_type is not None:
+        # The event's type is stored as `action` (Event.to_audit_row).
+        query = query.eq("action", event_type)
     return [Event.from_audit_row(_row(row)) for row in query.execute().data or []]
