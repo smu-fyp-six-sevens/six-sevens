@@ -251,3 +251,12 @@
   .case-register-table tbody td:first-child, .case-overview-table tbody td:first-child { grid-column: 1 / -1; padding-left: 9px !important; }
   .case-register-table tbody td:last-child, .case-overview-table tbody td:last-child { grid-column: 1 / -1; }
 }
+
+/* Detection accuracy tab: a check can carry more than one flag. */
+.accuracy-table .flag-severity { margin: 2px 4px 2px 0; }
+.accuracy-table th:nth-child(1) { width: 26%; }
+
+/* Overview's Detection accuracy panel: one card per check needing attention. */
+.classification-overall > span { display: inline-flex; align-items: baseline; gap: 8px; cursor: help; }
+.class-check { border-left-color: var(--steel); }
+.class-check .classification-risk { overflow: hidden; color: var(--steel-dark); text-overflow: ellipsis; white-space: nowrap; }

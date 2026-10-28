@@ -184,3 +184,17 @@ export interface CaseCost {
 // parent_id marks a reply; edited_at is set once its author edits it; deleted_at marks a deleted note kept
 // (text erased) as a placeholder above its replies.
 export type CaseNote = Schemas['CaseNote'];
+
+// Finding reviews (backend/app/detection_metrics.py). "document": a finding on one document (check_name is its
+// tool). "case": a cross-document finding from the case analysis (check_name is its category).
+// precision = correct / (correct + wrong); recall = correct / (correct + missed); null: nothing to measure yet.
+export type FindingReview = Schemas['FindingReview'];
+export type ReviewScope = FindingReview['scope'];
+export type ReviewVerdict = NonNullable<FindingReview['verdict']>;
+export type CheckMetrics = Schemas['CheckMetrics'];
+export type MetricsSummary = Schemas['MetricsSummary'];
+// The backend keys checks by scope as a plain dict; it always has both scopes.
+export type CaseFindingReviews = Omit<Schemas['CaseFindingReviews'], 'checks'> & {
+  checks: Record<ReviewScope, string[]>;
+};
+export type DetectionMetrics = Schemas['DetectionMetrics'];

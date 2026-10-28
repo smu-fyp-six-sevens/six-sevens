@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
+import { DetectionAccuracyPanel, DetectionAccuracySummary } from './DetectionAccuracyPanel';
 import { caseStatusTone } from '../utils/caseStatusTone';
 import { formatDuration } from './upload/processingTimes';
 import { formatDocumentType } from '../services/uploadService';
@@ -14,8 +15,8 @@ type Role = 'Manager' | 'Analyst';
 
 // Manager view is kept but hidden for now; flip to true to show the role switch again.
 const SHOW_ROLE_SWITCH = false;
-type DashboardTab = 'Overview' | 'Cases' | 'Flags';
-const DASHBOARD_TABS: DashboardTab[] = ['Overview', 'Cases', 'Flags'];
+type DashboardTab = 'Overview' | 'Cases' | 'Flags' | 'Accuracy';
+const DASHBOARD_TABS: DashboardTab[] = ['Overview', 'Cases', 'Flags', 'Accuracy'];
 
 interface MockCase {
   id: string;
@@ -304,18 +305,36 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
     <main className="shell dashboard-shell">
       <AppHeader />
       <div className="dashboard-app">
+      <aside className="dashboard-sidebar">
+        <div className="dashboard-sidebar-label">WORKSPACE</div>
+        <nav className="dashboard-nav" aria-label="Dashboard sections">
+          {DASHBOARD_TABS.map((item) => (
+            <button key={item} className={tab === item ? 'active' : ''} onClick={() => setTab(item)}>
+              <span className="nav-icon">{item === 'Overview' ? '▦' : item === 'Cases' ? '▤' : item === 'Flags' ? '⚑' : item === 'Accuracy' ? '✓' : '◎'}</span>{item}
+              {item === 'Cases' && <span className="nav-count">{visibleCases.length}</span>}
+            </button>
+          ))}
+        </nav>
+        <div className="dashboard-sidebar-bottom">
+          <div className="sidebar-user-avatar">{role === 'Manager' ? 'MT' : 'JT'}</div>
+          <div><strong>{role === 'Manager' ? 'M. Tan' : 'J. Tan'}</strong><span>{role}</span></div>
+          <span className="sidebar-more">•••</span>
+        </div>
+      </aside>
+
       <main className="dashboard-main">
         <div className="dashboard-content">
           <section className="dashboard-title-row">
             <div>
-              <h1>{role === 'Manager' ? 'Portfolio overview' : 'My workspace'}</h1>
-              <p className="dashboard-subtitle">{tab === 'Overview' ? 'A summary of case progress, risk signals and common findings.' : tab === 'Cases' ? 'Review case status and priority across the selected period.' : 'Explore recurring findings and the cases and documents they affect.'}</p>
+              <p className="dashboard-eyebrow">{role === 'Manager' ? 'PORTFOLIO MONITORING' : 'YOUR WORKSPACE'}</p>
+              <h1>{tab === 'Overview' ? (role === 'Manager' ? 'Portfolio overview' : 'My review overview') : tab === 'Cases' ? (role === 'Manager' ? 'Case register' : 'My assigned cases') : tab === 'Accuracy' ? 'Detection accuracy' : 'Flag explorer'}</h1>
+              <p className="dashboard-subtitle">{tab === 'Overview' ? 'A summary of case progress, risk signals and common findings.' : tab === 'Cases' ? 'Review case status and priority across the selected period.' : tab === 'Accuracy' ? 'How often each detection check is right, and how much it misses, from officer reviews.' : 'Explore recurring findings and the cases and documents they affect.'}</p>
             </div>
-            <div className="dashboard-filters">
+            {tab !== 'Accuracy' && <div className="dashboard-filters">
               <label><span>Date range</span><select value={range} onChange={(event) => setRange(event.target.value)}><option>Last 7 days</option><option>Last 30 days</option><option>Last 90 days</option><option>All time</option></select></label>
               <label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option>All statuses</option>{STATUSES.map((status) => <option key={status}>{status}</option>)}</select></label>
               {tab === 'Cases' && <label className="risk-sort-filter"><span>Sort by risk</span><select value={riskOrder} onChange={(event) => setRiskOrder(event.target.value as 'highest' | 'lowest')}><option value="highest">Critical first</option><option value="lowest">Low first</option></select></label>}
-            </div>
+            </div>}
           </section>
           <div className="dashboard-section-bar">
             <nav className="dashboard-tabs" aria-label="Dashboard sections">
@@ -338,7 +357,7 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
           {isLoading && !caseRecords.length && <p className="dashboard-data-note" role="status">Loading live case links; preview rows are temporarily not clickable.</p>}
           {!isLoading && !caseRecords.length && <p className="dashboard-data-note">No live cases are loaded. Preview rows are illustrative and cannot open a case record.</p>}
 
-          {tab !== 'Flags' && <section className="dashboard-stat-grid" aria-label="Case counts by status">
+          {tab !== 'Flags' && tab !== 'Accuracy' && <section className="dashboard-stat-grid" aria-label="Case counts by status">
             <article className="dashboard-stat-card stat-total"><div className="stat-top"><span className="stat-icon">▤</span><span className="stat-period">{range}</span></div><span className="stat-number">{visibleCases.length}</span><span className="stat-caption">Cases in view</span></article>
             {STATUSES.map((status) => <article key={status} className="dashboard-stat-card"><div className="stat-top"><span className="stat-caption">{status}</span><span className={`status-dot ${caseStatusTone(status)}`} /></div><span className="stat-number">{statusCounts[status]}</span><span className="stat-caption">{visibleCases.length ? `${Math.round(statusCounts[status] / visibleCases.length * 100)}% of cases` : '0% of cases'}</span></article>)}
           </section>}
@@ -362,12 +381,7 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
               <div className="snapshot-note"><span>i</span> Consider document findings, case status and review context alongside the risk score.</div>
             </article>
           </section>
-          <section className="dashboard-panel classification-panel">
-            <div className="panel-heading"><div><h2>Classification metrics</h2><p>Quality measures by predicted risk level</p></div><span className="metric-placeholder-label">PLACEHOLDERS</span></div>
-            <div className="classification-overall"><span>Overall accuracy</span><strong>—</strong></div>
-            <div className="classification-grid">{(['Low', 'Medium', 'High', 'Critical'] as Risk[]).map((risk) => <article key={risk} className={`classification-class class-${risk.toLowerCase()}`}><div className="classification-risk"><i />{risk} risk</div><div className="classification-values"><span>Precision <b>—</b></span><span>Recall <b>—</b></span></div></article>)}</div>
-            <p className="classification-note">Placeholder values only. Metric definitions and calculations are pending.</p>
-          </section>
+          <DetectionAccuracySummary onViewAll={() => setTab('Accuracy')} />
           <CaseTable cases={visibleCases.slice(0, 5)} heading="Recent cases" onOpenCase={openCase} showRiskAnalysis />
           </>}
 
@@ -387,6 +401,7 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
               <footer className="table-footer"><span>Showing <strong>{flagRows.length}</strong> flag categories</span></footer>
             </section>
           </>}
+          {tab === 'Accuracy' && <DetectionAccuracyPanel />}
         </div>
       </main>
       </div>
