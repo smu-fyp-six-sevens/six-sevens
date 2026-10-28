@@ -1,0 +1,50 @@
+{
+  "consulted": [
+    {
+      "brief": "Brief for layout_rendering.",
+      "dismissed": [],
+      "second_look": false,
+      "specialist": "layout_rendering",
+      "summary": "Reviewed within my expertise.",
+      "title": "Layout & Rendering Analyst",
+      "tools_called": [
+        "font_consistency_tool"
+      ],
+      "uncertain": false
+    },
+    {
+      "brief": "Brief for content_validation.",
+      "dismissed": [],
+      "second_look": false,
+      "specialist": "content_validation",
+      "summary": "Reviewed within my expertise.",
+      "title": "Content Validation Analyst",
+      "tools_called": [
+        "date_consistency_tool"
+      ],
+      "uncertain": false
+    },
+    {
+      "brief": "Brief for digital_authenticity.",
+      "dismissed": [],
+      "second_look": false,
+      "specialist": "digital_authenticity",
+      "summary": "Reviewed within my expertise.",
+      "title": "Digital Authenticity Analyst",
+      "tools_called": [
+        "metadata_tool"
+      ],
+      "uncertain": false
+    }
+  ],
+  "document_id": "doc-1",
+  "document_type": "certificate_of_incorporation",
+  "findings": [],
+  "generated_at": "2026-10-14T00:00:00+00:00",
+  "nothing_to_check": [],
+  "schema_version": 1,
+  "second_look": null,
+  "summary": "Nothing worth flagging was found.",
+  "unable_to_assess": [],
+  "verdict": "clean"
+}

@@ -1,0 +1,585 @@
+{
+  "case_match": {
+    "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
+    "documents": [
+      {
+        "can_proceed_to_fraud_detection": true,
+        "case_mismatch": false,
+        "comparisons": [
+          {
+            "case_value": "S9413875H, S7995500A, S9022037C",
+            "check": "individual_id",
+            "document_field": "nric_number",
+            "document_value": "S9413875H",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "match",
+            "reason": "ID S9413875H (SIM SHU TING) is listed on the certificate of incumbency",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          }
+        ],
+        "document_id": "081e3c8b-d9d6-471d-b10e-9791fd9569c0",
+        "document_type": "passport",
+        "filename": "Passport_6086.png",
+        "reason": "Matches the case's company and individuals",
+        "status": "match"
+      },
+      {
+        "can_proceed_to_fraud_detection": true,
+        "case_mismatch": false,
+        "comparisons": [],
+        "document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+        "document_type": "certificate_of_incumbency",
+        "filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf",
+        "reason": "Verified as the case's certificate of incumbency",
+        "status": "match"
+      },
+      {
+        "can_proceed_to_fraud_detection": true,
+        "case_mismatch": false,
+        "comparisons": [
+          {
+            "case_value": "S9413875H, S7995500A, S9022037C",
+            "check": "individual_id",
+            "document_field": "nric_number",
+            "document_value": "S9022037C",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "match",
+            "reason": "ID S9022037C (MUHAMMAD DANISH BIN ISMAIL) is listed on the certificate of incumbency",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          }
+        ],
+        "document_id": "2ac7fbe4-0021-4638-8c0d-1a0c759fd834",
+        "document_type": "nric",
+        "filename": "MuhammadD_NRIC_front.jpg",
+        "reason": "Matches the case's company and individuals",
+        "status": "match"
+      },
+      {
+        "can_proceed_to_fraud_detection": true,
+        "case_mismatch": false,
+        "comparisons": [
+          {
+            "case_value": "ANCHORPOINT INSURANCE BROKERS PTE LTD",
+            "check": "company_name",
+            "document_field": "company_name",
+            "document_value": "ANCHORPOINT INSURANCE BROKERS PTE LTD",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "match",
+            "reason": "Company name matches the certificate of incumbency",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          }
+        ],
+        "document_id": "6729ad3c-90f0-476f-be94-a40f1fb9f1d7",
+        "document_type": "bank_statement",
+        "filename": "Statement_128262.pdf",
+        "reason": "Matches the case's company and individuals",
+        "status": "match"
+      },
+      {
+        "can_proceed_to_fraud_detection": true,
+        "case_mismatch": false,
+        "comparisons": [
+          {
+            "case_value": "S9413875H, S7995500A, S9022037C",
+            "check": "individual_id",
+            "document_field": "nric_number",
+            "document_value": "S9022037C",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "match",
+            "reason": "ID S9022037C is listed on the certificate of incumbency",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          }
+        ],
+        "document_id": "a2f4c277-f066-49ec-99e2-02deb53c300b",
+        "document_type": "nric",
+        "filename": "MuhammadD_NRIC_back.jpg",
+        "reason": "Matches the case's company and individuals",
+        "status": "match"
+      },
+      {
+        "can_proceed_to_fraud_detection": true,
+        "case_mismatch": false,
+        "comparisons": [
+          {
+            "case_value": "201630968D",
+            "check": "company_uen",
+            "document_field": "uen",
+            "document_value": "201630968D",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "match",
+            "reason": "UEN matches the certificate of incumbency",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          },
+          {
+            "case_value": "SIM SHU TING, WONG KAH CHUN, MUHAMMAD DANISH BIN ISMAIL",
+            "check": "individual_name",
+            "document_field": "individual_name",
+            "document_value": "Sim Shu Ting",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "match",
+            "reason": "Sim Shu Ting is listed on the certificate of incumbency",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          }
+        ],
+        "document_id": "bb1ac8db-facc-4ceb-82d7-2d73382d0316",
+        "document_type": "list_of_loans",
+        "filename": "LoanFacility_56439_2.pdf",
+        "reason": "Matches the case's company and individuals",
+        "status": "match"
+      },
+      {
+        "can_proceed_to_fraud_detection": true,
+        "case_mismatch": false,
+        "comparisons": [
+          {
+            "case_value": "201630968D",
+            "check": "company_uen",
+            "document_field": "uen",
+            "document_value": "201630968D",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "match",
+            "reason": "UEN matches the certificate of incumbency",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          },
+          {
+            "case_value": "SIM SHU TING, WONG KAH CHUN, MUHAMMAD DANISH BIN ISMAIL",
+            "check": "individual_name",
+            "document_field": "individual_name",
+            "document_value": "Sim Shu Ting",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "match",
+            "reason": "Sim Shu Ting is listed on the certificate of incumbency",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          }
+        ],
+        "document_id": "52721a52-5b84-422b-bbc2-32cbd0a6424c",
+        "document_type": "list_of_loans",
+        "filename": "LoanOffer_8415_3.pdf",
+        "reason": "Matches the case's company and individuals",
+        "status": "match"
+      },
+      {
+        "can_proceed_to_fraud_detection": true,
+        "case_mismatch": false,
+        "comparisons": [
+          {
+            "case_value": "ANCHORPOINT INSURANCE BROKERS PTE LTD",
+            "check": "company_name",
+            "document_field": "company_name",
+            "document_value": "Anchorpoint Insurance Brokers Pte Ltd",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "match",
+            "reason": "Company name matches the certificate of incumbency",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          }
+        ],
+        "document_id": "d24bcc04-badc-4b0d-9e53-bb8c60efba99",
+        "document_type": "proof_of_address",
+        "filename": "Company_UtilityBill_45040.pdf",
+        "reason": "Matches the case's company and individuals",
+        "status": "match"
+      },
+      {
+        "can_proceed_to_fraud_detection": true,
+        "case_mismatch": false,
+        "comparisons": [
+          {
+            "case_value": "SIM SHU TING, WONG KAH CHUN, MUHAMMAD DANISH BIN ISMAIL",
+            "check": "individual_name",
+            "document_field": "individual_name",
+            "document_value": "MUHAMMAD DANISH BIN ISMAIL",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "match",
+            "reason": "MUHAMMAD DANISH BIN ISMAIL is listed on the certificate of incumbency",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          }
+        ],
+        "document_id": "c130a771-b834-409d-8023-64104d3edead",
+        "document_type": "bank_statement",
+        "filename": "MuhammadD_ProofAddr_BankStmt_2956.pdf",
+        "reason": "Matches the case's company and individuals",
+        "status": "match"
+      },
+      {
+        "can_proceed_to_fraud_detection": true,
+        "case_mismatch": false,
+        "comparisons": [
+          {
+            "case_value": "201630968D",
+            "check": "company_uen",
+            "document_field": "uen",
+            "document_value": "201630968D",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "match",
+            "reason": "UEN matches the certificate of incumbency",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          }
+        ],
+        "document_id": "bc57290c-73a6-48a1-95ea-0b5b399f6590",
+        "document_type": "company_constitution",
+        "filename": "AnchorpointInsuranceBrokers_Constitution_20260805.pdf",
+        "reason": "Matches the case's company and individuals",
+        "status": "match"
+      },
+      {
+        "can_proceed_to_fraud_detection": true,
+        "case_mismatch": false,
+        "comparisons": [
+          {
+            "case_value": "201630968D",
+            "check": "company_uen",
+            "document_field": "uen",
+            "document_value": "201630968D",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "match",
+            "reason": "UEN matches the certificate of incumbency",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          }
+        ],
+        "document_id": "6fb522a7-b119-4934-8983-6cd66b47fa36",
+        "document_type": "certificate_of_incorporation",
+        "filename": "BizFile_333996.pdf",
+        "reason": "Matches the case's company and individuals",
+        "status": "match"
+      },
+      {
+        "can_proceed_to_fraud_detection": true,
+        "case_mismatch": false,
+        "comparisons": [
+          {
+            "case_value": "201630968D",
+            "check": "company_uen",
+            "document_field": "uen",
+            "document_value": "201630968D",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "match",
+            "reason": "UEN matches the certificate of incumbency",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          }
+        ],
+        "document_id": "8a231074-5864-43be-9409-875a1f16282a",
+        "document_type": "notice_of_assessment",
+        "filename": "Anchorpoint_IRAS_NOA.pdf",
+        "reason": "Matches the case's company and individuals",
+        "status": "match"
+      },
+      {
+        "can_proceed_to_fraud_detection": true,
+        "case_mismatch": false,
+        "comparisons": [
+          {
+            "case_value": "SIM SHU TING, WONG KAH CHUN, MUHAMMAD DANISH BIN ISMAIL",
+            "check": "individual_name",
+            "document_field": "individual_name",
+            "document_value": "Muhammad Danish bin Ismail",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "match",
+            "reason": "Muhammad Danish bin Ismail is listed on the certificate of incumbency",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          }
+        ],
+        "document_id": "f12ae1d0-246f-46d8-92ab-a0b993306f8c",
+        "document_type": "payslip",
+        "filename": "MuhammadD_Payslip_Jan2026.pdf",
+        "reason": "Matches the case's company and individuals",
+        "status": "match"
+      },
+      {
+        "can_proceed_to_fraud_detection": true,
+        "case_mismatch": false,
+        "comparisons": [
+          {
+            "case_value": "201630968D",
+            "check": "company_uen",
+            "document_field": "uen",
+            "document_value": "201630968D",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "match",
+            "reason": "UEN matches the certificate of incumbency",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          },
+          {
+            "case_value": "SIM SHU TING, WONG KAH CHUN, MUHAMMAD DANISH BIN ISMAIL",
+            "check": "individual_name",
+            "document_field": "individual_name",
+            "document_value": "Sim Shu Ting",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "match",
+            "reason": "Sim Shu Ting is listed on the certificate of incumbency",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          }
+        ],
+        "document_id": "a040eca4-fde0-4e17-8c41-6a1bc521f514",
+        "document_type": "list_of_loans",
+        "filename": "FacilityLetter_AIB_2026-03-09_1.pdf",
+        "reason": "Matches the case's company and individuals",
+        "status": "match"
+      },
+      {
+        "can_proceed_to_fraud_detection": true,
+        "case_mismatch": false,
+        "comparisons": [
+          {
+            "case_value": "S9413875H, S7995500A, S9022037C",
+            "check": "individual_id",
+            "document_field": "id_number",
+            "document_value": "S9413875H",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "match",
+            "reason": "ID S9413875H (Sim Shu Ting) is listed on the certificate of incumbency",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          }
+        ],
+        "document_id": "961669a1-0407-44fe-a36a-36d292c3afe8",
+        "document_type": "credit_report",
+        "filename": "Credit_Bureau_Report_8027.pdf",
+        "reason": "Matches the case's company and individuals",
+        "status": "match"
+      },
+      {
+        "can_proceed_to_fraud_detection": true,
+        "case_mismatch": false,
+        "comparisons": [
+          {
+            "case_value": "SIM SHU TING, WONG KAH CHUN, MUHAMMAD DANISH BIN ISMAIL",
+            "check": "individual_name",
+            "document_field": "account_holder_name",
+            "document_value": "SIM SHU TING",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "match",
+            "reason": "SIM SHU TING is listed on the certificate of incumbency",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          }
+        ],
+        "document_id": "4f9675e5-5258-4373-b78c-512f0f3a76c5",
+        "document_type": "source_of_wealth",
+        "filename": "SimS_SourceOfWealth.pdf",
+        "reason": "Matches the case's company and individuals",
+        "status": "match"
+      },
+      {
+        "can_proceed_to_fraud_detection": true,
+        "case_mismatch": false,
+        "comparisons": [
+          {
+            "case_value": "201630968D",
+            "check": "company_uen",
+            "document_field": "tin",
+            "document_value": "201630968D",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "match",
+            "reason": "UEN matches the certificate of incumbency",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          }
+        ],
+        "document_id": "2d5d65c0-1f1b-4851-afe1-2b736053b707",
+        "document_type": "fatca_crs_declaration",
+        "filename": "FATCA_Form_20250522.pdf",
+        "reason": "Matches the case's company and individuals",
+        "status": "match"
+      },
+      {
+        "can_proceed_to_fraud_detection": true,
+        "case_mismatch": false,
+        "comparisons": [
+          {
+            "case_value": "SIM SHU TING, WONG KAH CHUN, MUHAMMAD DANISH BIN ISMAIL",
+            "check": "individual_name",
+            "document_field": "account_holder_name",
+            "document_value": "MUHAMMAD DANISH BIN ISMAIL",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "match",
+            "reason": "MUHAMMAD DANISH BIN ISMAIL is listed on the certificate of incumbency",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          }
+        ],
+        "document_id": "0f069abe-67c0-4d35-8fa5-0e1cc7450167",
+        "document_type": "source_of_wealth",
+        "filename": "MuhammadD_Wealth_Statement_scan.pdf",
+        "reason": "Matches the case's company and individuals",
+        "status": "match"
+      },
+      {
+        "can_proceed_to_fraud_detection": true,
+        "case_mismatch": false,
+        "comparisons": [
+          {
+            "case_value": "201630968D",
+            "check": "company_uen",
+            "document_field": "uen",
+            "document_value": "201630968D",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "match",
+            "reason": "UEN matches the certificate of incumbency",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          },
+          {
+            "case_value": "SIM SHU TING, WONG KAH CHUN, MUHAMMAD DANISH BIN ISMAIL",
+            "check": "individual_name",
+            "document_field": "director_name",
+            "document_value": "Sim Shu Ting",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "match",
+            "reason": "Sim Shu Ting is listed on the certificate of incumbency",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          }
+        ],
+        "document_id": "bfcaf497-79b3-4e48-ac24-61482cbbb1b7",
+        "document_type": "source_of_wealth",
+        "filename": "Financials_BalanceSheet_617.pdf",
+        "reason": "Matches the case's company and individuals",
+        "status": "match"
+      },
+      {
+        "can_proceed_to_fraud_detection": true,
+        "case_mismatch": false,
+        "comparisons": [
+          {
+            "case_value": "SIM SHU TING, WONG KAH CHUN, MUHAMMAD DANISH BIN ISMAIL",
+            "check": "individual_name",
+            "document_field": "individual_name",
+            "document_value": "Sim Shu Ting",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "match",
+            "reason": "Sim Shu Ting is listed on the certificate of incumbency",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          }
+        ],
+        "document_id": "07c41b35-10d7-427c-b407-44a715e54042",
+        "document_type": "proof_of_address",
+        "filename": "POR_UtilityBill_20251028.jpg",
+        "reason": "Matches the case's company and individuals",
+        "status": "match"
+      },
+      {
+        "can_proceed_to_fraud_detection": false,
+        "case_mismatch": true,
+        "comparisons": [
+          {
+            "case_value": "201630968D",
+            "check": "company_uen",
+            "document_field": "uen",
+            "document_value": "201634564N",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "mismatch",
+            "reason": "UEN 201634564N does not match the certificate of incumbency's UEN 201630968D",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          },
+          {
+            "case_value": "SIM SHU TING, WONG KAH CHUN, MUHAMMAD DANISH BIN ISMAIL",
+            "check": "individual_name",
+            "document_field": "director_name",
+            "document_value": "Priya d/o Manoharan",
+            "other_document_id": null,
+            "other_filename": null,
+            "outcome": "mismatch",
+            "reason": "Priya d/o Manoharan is not any officer or shareholder on the certificate of incumbency",
+            "reference_document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+            "reference_filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf"
+          }
+        ],
+        "document_id": "foreign-5d2dee2e-b850-4c8b-913f-71e71e2e8d07",
+        "document_type": "source_of_wealth",
+        "filename": "C014_SourceWealth_BS.pdf",
+        "reason": "UEN 201634564N does not match the certificate of incumbency's UEN 201630968D",
+        "status": "manual_review"
+      }
+    ],
+    "incumbency": {
+      "company_name": "ANCHORPOINT INSURANCE BROKERS PTE LTD",
+      "conflicting_document_ids": [
+        "foreign-5d2dee2e-b850-4c8b-913f-71e71e2e8d07"
+      ],
+      "corroborating_document_ids": [
+        "6729ad3c-90f0-476f-be94-a40f1fb9f1d7",
+        "bb1ac8db-facc-4ceb-82d7-2d73382d0316",
+        "52721a52-5b84-422b-bbc2-32cbd0a6424c",
+        "d24bcc04-badc-4b0d-9e53-bb8c60efba99",
+        "bc57290c-73a6-48a1-95ea-0b5b399f6590",
+        "6fb522a7-b119-4934-8983-6cd66b47fa36",
+        "8a231074-5864-43be-9409-875a1f16282a",
+        "a040eca4-fde0-4e17-8c41-6a1bc521f514",
+        "2d5d65c0-1f1b-4851-afe1-2b736053b707",
+        "bfcaf497-79b3-4e48-ac24-61482cbbb1b7"
+      ],
+      "document_id": "2123ddb7-3525-4625-a404-e9132af410fa",
+      "individuals": [
+        {
+          "id_number": "S9413875H",
+          "name": "SIM SHU TING"
+        },
+        {
+          "id_number": "S7995500A",
+          "name": "WONG KAH CHUN"
+        },
+        {
+          "id_number": "S9022037C",
+          "name": "MUHAMMAD DANISH BIN ISMAIL"
+        }
+      ],
+      "reasons": [
+        "10 other documents match the certificate of incumbency's company (201630968D)"
+      ],
+      "required_corroborations": 3,
+      "status": "verified",
+      "uen": "201630968D"
+    },
+    "mismatched_document_ids": [
+      "foreign-5d2dee2e-b850-4c8b-913f-71e71e2e8d07"
+    ]
+  },
+  "document": {
+    "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
+    "document_type": "source_of_wealth",
+    "filename": "C014_SourceWealth_BS.pdf",
+    "id": "foreign-5d2dee2e-b850-4c8b-913f-71e71e2e8d07"
+  }
+}

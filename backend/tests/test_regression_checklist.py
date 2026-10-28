@@ -17,6 +17,7 @@ used cases C060/C064, which no longer exist in Supabase.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -237,3 +238,57 @@ def test_only_accepted_documents_fulfil_requirements():
 
     assert "certificate_of_incorporation" not in summary.fulfilled_requirements
     assert "certificate_of_incorporation" in summary.missing_requirements
+
+
+# --- The Playwright suite's checklists --------------------------------------------
+
+CHECKLIST_FIXTURE = FIXTURES / "checklist-variants.json"
+# Each document set a browser test leaves the Anchorpoint case with, by what was removed.
+_ANCHORPOINT_VARIANTS = {
+    "every document": (),
+    "without the NOA (CM-026)": ("Anchorpoint_IRAS_NOA",),
+    "without the company proof of address (DI-034)": ("Company_UtilityBill",),
+    "without any optional document (DI-032)": (
+        "LoanFacility", "LoanOffer", "FacilityLetter", "Company_UtilityBill", "SimS_SourceOfWealth",
+        "Wealth_Statement_scan",
+    ),
+    # One identity left, so its NRIC's missing side is named.
+    "with only the NRIC front (DI-others-05)": ("Passport_6086", "MuhammadD_NRIC_back"),
+    "with only the NRIC back (DI-others-05)": ("Passport_6086", "MuhammadD_NRIC_front"),
+    # Sim Shu Ting's address is on file, but not her passport.
+    "without the passport (DI-others-06)": ("Passport_6086",),
+}
+
+
+@pytest.mark.sprint2
+@pytest.mark.story("SCRUM-114", "DI-032 / DI-034")
+@pytest.mark.sprint3
+@pytest.mark.story("SCRUM-117", "CM-026")
+def test_the_playwright_suites_checklists_match_the_backend():
+    """
+    The mocked backend can't run build_summary, so it serves the checklist (and the identity and proof-of-address
+    coverage) recorded here for whichever of these document sets a case is left with. A browser test deletes
+    documents; it never sets the checklist itself.
+    Regenerate with REGENERATE_REGRESSION_FIXTURES=1.
+    """
+    case, documents, _ = _load("anchorpoint")
+    confirmed = _officer_confirmed(documents)
+    variants = []
+    for name, removed in _ANCHORPOINT_VARIANTS.items():
+        kept = _without(confirmed, *removed) if removed else confirmed
+        summary = build_summary(case, kept)
+        variants.append({
+            "name": name,
+            "case_id": case.id,
+            "document_ids": sorted(d.id for d in kept),
+            "fulfilled_requirements": sorted(summary.fulfilled_requirements),
+            "missing_requirements": summary.missing_requirements,
+            "proof_of_address_coverage": summary.proof_of_address_coverage.model_dump(),
+            "id_document_coverage": summary.id_document_coverage.model_dump(),
+        })
+
+    if os.environ.get("REGENERATE_REGRESSION_FIXTURES"):
+        CHECKLIST_FIXTURE.write_text(json.dumps(variants, indent=2) + "\n")
+    assert json.loads(CHECKLIST_FIXTURE.read_text()) == variants, (
+        "checklist-variants.json is out of date with build_summary — regenerate it (see above)"
+    )

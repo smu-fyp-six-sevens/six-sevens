@@ -11,7 +11,7 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 | Backend | 43,500 lines in 191 files under `app/` (4,300 of them in `injection/`); 58 route handlers |
 | Frontend | 10,300 lines of TS/TSX in 75 files; 5,800 lines of CSS in 15 files |
 | Deployment | Terraform 1,000 lines in 12 files, 2 workflows, 7 compose files, Kong and Grafana images |
-| Tests | 1,644 backend test functions in 82 files; 107 Playwright tests plus the notes spec |
+| Tests | 1,783 backend test functions in 93 files; 154 Playwright test definitions in 9 specs |
 | Backend gates | ruff clean on `app/` (16 old issues in `doc_gen_scripts/`, `scripts/` and one test, outside CI's scope), pyright clean, 0 `type: ignore`, 14 `noqa` (all re-export `F401`) |
 | Frontend gates | lint 0 errors, 0 warnings; CI runs `npm run typecheck` (not re-run for this update) |
 
@@ -111,14 +111,14 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 Checked 2026-10-27 by reading the code and PostgREST's table listing (no rows read). The listing doesn't show grants, RLS or foreign-key delete rules; the two queries below do (Supabase SQL editor).
 
 **What a delete removes:**
-- A document: `extracted_fields`, `flags`, `langgraph_trace`, its `case_notes` (replies carry the note's `document_id`), the stored file (best effort), then the row (`document_repository._delete_document_children`).
-- A case: its documents as above, then `risk_scores`, `case_analysis_runs`, `flags`, `case_notes`, then the row (`case_repository.delete_case`).
+- A document: `extracted_fields`, `flags`, `langgraph_trace`, its `case_notes` (replies carry the note's `document_id`), `finding_reviews`, the stored file (best effort), then the row (`document_repository._delete_document_children`).
+- A case: its documents as above, then `risk_scores`, `case_analysis_runs`, `flags`, `case_notes`, `finding_reviews`, then the row (`case_repository.delete_case`).
 - `audit_events` is never deleted: it has no foreign keys, so events outlive what they name. Intended.
 
 | # | Finding | Fix | Effort |
 |---|---|---|---|
 | 1 | **Flag inserts may be failing.** The listing marks `flags.related_document_ids` NOT NULL with no default, and `flags_repository.build_rows` never sets it. The failure would be invisible: `graph._store_flags` catches it into the trace as `flags_error`, and nothing reads `flags`. Unconfirmed (needs a look at real data) | Write `"related_document_ids": []`, or give the column a default | S |
-| 2 | **`case_status_history` blocks a case delete** if it has rows: it has a foreign key to `cases` and nothing clears it (no code on any branch uses the table; it belongs to other developers). `finding_reviews` (branch `SCRUM-284-precision-recall`) declares `on delete cascade` and its branch adds it to both delete paths | Check the delete rule; clear it in `delete_case`, or cascade | S |
+| 2 | **`case_status_history` blocks a case delete** if it has rows: it has a foreign key to `cases` and nothing clears it (no code on any branch uses the table; it belongs to other developers) | Check the delete rule; clear it in `delete_case`, or cascade | S |
 | 3 | **Delete audit events are fire-and-forget** (`events.record`): if publishing fails, the delete stands with no audit row. A case delete logs one `case.deleted` with a count, not a `document.deleted` per document | `publish` for deletes (fail the request), or accept; per-document events on case delete | S |
 | 4 | **`audit_events` can't be edited or removed only if grants say so.** `audit.py` says the service role has INSERT and SELECT only; Supabase's default gives `service_role` everything, so this holds only if someone revoked it by hand. The dashboard owner can always delete. No retention policy | Run the grants query; revoke UPDATE and DELETE if missing | S |
 | 5 | **Deletes aren't a transaction:** a failure partway leaves the rest (a retry finishes the job). A stored file that fails to delete is only logged, so it stays in storage | Accept; or a Postgres function per delete once the schema is in the repo | M, later |
@@ -129,7 +129,7 @@ select conrelid::regclass as tbl, conname, confdeltype from pg_constraint where 
 ```
 
 **Unused schema on `main`:**
-- Not used at all: `finding_reviews` (branch `SCRUM-284-precision-recall`), `documents.guard_result` (branch `scrum-288-guardrails`), `case_status_history` (no code), `flags.reviewed_by` and `reviewed_at` (`status` is only filtered on in the delete).
+- Not used at all: `documents.guard_result` (branch `scrum-288-guardrails`), `case_status_history` (no code), `flags.reviewed_by` and `reviewed_at` (`status` is only filtered on in the delete).
 - Written, never read: the whole `flags` table (risk and the UI read the detection report), `risk_scores.flag_ids` and `scored_at`, `extracted_fields.field_category` and `extracted_at`.
 
 ---

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import type { CaseRow, DocumentRow, MockBackend } from './mockBackend';
+import type { CaseRow, ChecklistVariant, DocumentRow, MockBackend } from './mockBackend';
 
 /**
  * Real cases captured from Supabase by backend/scripts/capture_regression_fixture.py,
@@ -43,6 +43,9 @@ export function loadFixture(backend: MockBackend, name: FixtureName) {
   backend.cases.push(theCase);
   backend.documents.push(...documents);
   backend.caseMatch[theCase.id] = structuredClone(fixture.snapshot.case_match);
+  backend.checklists.push(
+    ...readRegressionFixture<ChecklistVariant[]>('checklist-variants.json').filter((c) => c.case_id === theCase.id),
+  );
 
   return {
     case: theCase,
