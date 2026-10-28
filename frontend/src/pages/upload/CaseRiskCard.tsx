@@ -606,7 +606,13 @@ export function CaseRiskCard({
               {reviews.error}
             </div>
           )}
-          {reviews.data && <ReviewSummary caseSummary={reviews.data.case} />}
+          {reviews.data && (
+            <ReviewSummary
+              caseSummary={reviews.data.case}
+              targetPrecision={reviews.data.target_precision}
+              targetRecall={reviews.data.target_recall}
+            />
+          )}
         </section>
       )}
 

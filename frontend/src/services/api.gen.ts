@@ -1865,6 +1865,10 @@ export interface components {
             };
             /** Reviews */
             reviews: components["schemas"]["FindingReview"][];
+            /** Target Precision */
+            target_precision: number;
+            /** Target Recall */
+            target_recall: number;
         };
         /**
          * CaseListItem

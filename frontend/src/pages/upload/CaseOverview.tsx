@@ -1,7 +1,7 @@
 import type { CaseAnalysisOverview, CaseRisk, CaseRiskFinding, DocumentCaseMatch, DocumentRecord } from '../../services/uploadService';
 import { formatDocumentType } from '../../services/uploadService';
 import { Rate } from '../../components/Rate';
-import { RATE_MEANING, formatCheck } from '../../utils/checkLabels';
+import { RATE_MEANING, belowTargetNote, formatCheck } from '../../utils/checkLabels';
 import { InfoLabel } from '../../components/InfoTip';
 import { isEligibleForApproval } from './uploadHelpers';
 import { findingScope, useFindingReviews, verdictFor } from './useFindingReviews';
@@ -284,16 +284,16 @@ export function CaseOverview({
                     {checksByReviews.map((check) => (
                       <tr key={`${check.scope}-${check.check_name}`}>
                         <th scope="row">{formatCheck(check.check_name)}</th>
-                        <td><Rate rate={check.precision} kind="precision" /></td>
-                        <td><Rate rate={check.recall} kind="recall" /></td>
+                        <td><Rate rate={check.precision} kind="precision" target={accuracy?.target_precision} /></td>
+                        <td><Rate rate={check.recall} kind="recall" target={accuracy?.target_recall} /></td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
                     <tr>
                       <th scope="row">All checks</th>
-                      <td><Rate rate={accuracy?.case.precision ?? null} kind="precision" /></td>
-                      <td><Rate rate={accuracy?.case.recall ?? null} kind="recall" /></td>
+                      <td><Rate rate={accuracy?.case.precision ?? null} kind="precision" target={accuracy?.target_precision} /></td>
+                      <td><Rate rate={accuracy?.case.recall ?? null} kind="recall" target={accuracy?.target_recall} /></td>
                     </tr>
                   </tfoot>
                 </table>
@@ -301,6 +301,8 @@ export function CaseOverview({
               {reviewed > 0 && (
                 <p className="case-overview-metric-note">
                   {accuracy!.case.correct} correct · {accuracy!.case.wrong} wrong · {accuracy!.case.missed} missed
+                  <br />
+                  {belowTargetNote(accuracy!.target_precision, accuracy!.target_recall)}
                 </p>
               )}
             </article>
