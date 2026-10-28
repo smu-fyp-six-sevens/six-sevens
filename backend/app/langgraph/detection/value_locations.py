@@ -16,9 +16,11 @@ from __future__ import annotations
 
 import re
 from datetime import date
-from typing import Any
+from typing import Any, cast
 
 import pymupdf
+
+from ...fraud_detection.shared.pdf_pages import pages
 
 TOOLS = ("numerical_checks_tool", "date_consistency_tool", "external_validation_tool")
 
@@ -91,7 +93,7 @@ def _address_areas(doc: pymupdf.Document, address: str) -> list[dict]:
 def _lines(page: pymupdf.Page) -> list[pymupdf.Rect]:
     return [
         pymupdf.Rect(line["bbox"])
-        for block in page.get_text("dict")["blocks"]
+        for block in cast(dict, page.get_text("dict")).get("blocks", [])
         for line in block.get("lines", [])
     ]
 
@@ -118,7 +120,7 @@ def _row_area(doc: pymupdf.Document, row: dict) -> dict | None:
     values = [candidate for key, value in row.items() if key != "description" for candidate in _candidates(value, None)]
     best: tuple[int, int, pymupdf.Rect] | None = None
     tied = False
-    for page_index, page in enumerate(doc):
+    for page_index, page in enumerate(pages(doc)):
         for start in page.search_for(anchor):
             area = pymupdf.Rect(start)
             beside = 0
@@ -224,7 +226,7 @@ def _is_zero(text: str) -> bool:
 def _hits(doc: pymupdf.Document, candidate: str) -> list[tuple[int, pymupdf.Rect]]:
     return [
         (page_index, rect)
-        for page_index, page in enumerate(doc)
+        for page_index, page in enumerate(pages(doc))
         for rect in page.search_for(candidate)
         if _whole(page, rect, candidate)
     ]

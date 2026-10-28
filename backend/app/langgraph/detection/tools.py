@@ -42,6 +42,7 @@ from ...fraud_detection.images.image_manipulation import check_image_manipulatio
 from ...fraud_detection.layout_anomalies import check_layout_anomalies
 from ...fraud_detection.layout_anomalies.extraction import _open_document as _open_layout_document
 from ...fraud_detection.shared.file_facts import describe_file
+from ...fraud_detection.shared.pdf_pages import pages as pdf_pages
 from ...fraud_detection.authenticity.metadata_analysis import (
     DESCRIPTIVE_METADATA_FIELDS,
     SUPPORTED_METADATA_FIELDS,
@@ -362,14 +363,14 @@ def _word_locations(file_bytes: bytes, words: list[str]) -> dict[str, list[dict]
     wanted = {word.casefold(): word for word in words}
     found: dict[str, list[dict]] = {}
     with pymupdf.open(stream=file_bytes, filetype="pdf") as doc:
-        for page_index, page in enumerate(doc):
+        for page_index, page in enumerate(pdf_pages(doc)):
             for x0, y0, x1, y1, text, *_ in page.get_text("words"):
                 word = wanted.get(re.sub(r"^\W+|\W+$", "", text).casefold())
                 if word is None:
                     continue
                 places = found.setdefault(word, [])
                 if len(places) < _MAX_WORD_LOCATIONS:
-                    places.append({"page": page_index + 1, "bbox": [round(v, 2) for v in (x0, y0, x1, y1)]})
+                    places.append({"page": page_index + 1, "bbox": [round(float(v), 2) for v in (x0, y0, x1, y1)]})
     return found
 
 
