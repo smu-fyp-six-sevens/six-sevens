@@ -22,6 +22,13 @@ export function formatRate(rate: number | null): string {
   return rate === null ? '—' : `${Math.round(rate * 100)}%`;
 }
 
+// The note under a table of rates: Rate.tsx shows a rate under its target in red.
+export function belowTargetNote(targetPrecision: number, targetRecall: number): string {
+  return targetPrecision === targetRecall
+    ? `Red: below the ${formatRate(targetPrecision)} target`
+    : `Red: below target (precision ${formatRate(targetPrecision)}, recall ${formatRate(targetRecall)})`;
+}
+
 // What each rate measures, shown on hover over a rate or its heading.
 export const RATE_MEANING: Record<'precision' | 'recall', string> = {
   precision: 'Precision = correct ÷ (correct + wrong): of the findings this check raised, how many were real issues.',

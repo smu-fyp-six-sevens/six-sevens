@@ -6,6 +6,8 @@ import { formatCheck as formatTool } from '../../utils/checkLabels';
 import type { GroupReviewStatus } from './FindingReviewControls';
 import { GroupReviewBar, MetricsLine, MissedIssues, ReviewSummary } from './FindingReviewControls';
 import { findingScope, useFindingReviews, verdictFor } from './useFindingReviews';
+import DocumentReviewModal from './DocumentReviewModal';
+import type { ReviewLink } from './DocumentReviewModal';
 
 // The group cross-document findings sit in: they belong to the case, not to one document.
 const CASE_GROUP_ID = '__case__';
@@ -164,6 +166,11 @@ function countBySeverity(findings: CaseRiskFinding[]): [Severity, number][] {
   ).filter(([, count]) => count > 0);
 }
 
+// The detection report's own id for a finding: the case prefixes it with its document ("0c5640e8:font_consistency_tool-1").
+function reportFindingId(finding: CaseRiskFinding): string {
+  return finding.finding_id.slice(finding.finding_id.indexOf(':') + 1);
+}
+
 function reviewedOn(value: string): string {
   return new Date(value).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' });
 }
@@ -190,7 +197,11 @@ function NotScoredMessage({ risk }: { risk: CaseRisk | null }) {
     : risk.state === 'no_documents'
       ? ['No documents to score yet.', 'A risk level appears once documents are uploaded, approved and scanned.', 'info']
       : risk.state === 'failed'
-        ? ['Detection failed on a document.', 'Retry detection on the failed document to complete the risk score.', 'warning']
+        ? [
+            'Detection failed on a document.',
+            `${risk.documents_scanned} of ${risk.documents_total} documents scanned. Retry detection on the failed document to complete the risk score.`,
+            'warning',
+          ]
         : [
             `${risk.documents_scanned} of ${risk.documents_total} documents scanned.`,
             'The risk score is calculated once every document has been approved and scanned.',
@@ -219,6 +230,8 @@ export function CaseRiskCard({
 }) {
   const scored = risk?.state === 'scored' && risk.level ? risk : null;
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // The document open for review beside its findings, by id.
+  const [reviewing, setReviewing] = useState<string | null>(null);
   // Ticks the officer changed but hasn't saved, by row key. A row without one shows its saved verdict.
   const [drafts, setDrafts] = useState<Record<string, boolean>>({});
   const reviews = useFindingReviews(caseId, scored !== null);
@@ -293,6 +306,7 @@ export function CaseRiskCard({
     );
     // Done with it: close it, so it moves into the reviewed list rather than jumping down the page open.
     if (saved) {
+      setReviewing((current) => (current === group.documentId ? null : current));
       setExpanded((current) => {
         const next = new Set(current);
         next.delete(group.documentId);
@@ -316,123 +330,165 @@ export function CaseRiskCard({
     return !reviews.data || (group.rows.length > 0 && groupStatus(group) !== 'saved');
   }
 
-  // One group: Select all and Save review, its findings with a tick each, then the issues reported as missed.
+  // One group's heading: its document, severity counts and review state.
+  function renderGroupMeta(document: DocumentGroup) {
+    return (
+      <span className="risk-document-meta">
+        {document.scope === 'case' ? 'Cross-document findings' : formatDocumentType(document.documentType)}
+        {countBySeverity(document.findings).map(([severity, count]) => (
+          <span key={severity} className={`risk-severity risk-severity--${severity}`}>
+            {count} {severity}
+          </span>
+        ))}
+        {document.findings.length === 0 && <span className="risk-document-none">✓ No findings</span>}
+        {reviews.data && document.rows.length > 0 && <ReviewTag status={groupStatus(document)} latest={latestVerdict(document)} />}
+        <MetricsLine summary={metricsFor(document)} />
+      </span>
+    );
+  }
+
+  // One group: a document's opens for review beside the document; the cross-document group opens in place.
   function renderGroup(document: DocumentGroup) {
-    const isOpen = expanded.has(document.documentId);
-    const checkedCount = document.rows.filter((row) => isChecked(document, row)).length;
-    const saving = reviews.savingKey !== null || reviews.data === null;
+    const isOpen = document.scope === 'document' ? reviewing === document.documentId : expanded.has(document.documentId);
     return (
       <div key={document.documentId} className="risk-document">
         <button
           type="button"
           className="risk-document-toggle"
           aria-expanded={isOpen}
-          onClick={() => toggleDocument(document.documentId)}
+          aria-haspopup={document.scope === 'document' ? 'dialog' : undefined}
+          onClick={() =>
+            document.scope === 'document' ? setReviewing(document.documentId) : toggleDocument(document.documentId)
+          }
         >
           <span className="risk-document-heading">
             <strong>{document.filename}</strong>
-            <span className="risk-document-meta">
-              {document.scope === 'case' ? 'Cross-document findings' : formatDocumentType(document.documentType)}
-              {countBySeverity(document.findings).map(([severity, count]) => (
-                <span key={severity} className={`risk-severity risk-severity--${severity}`}>
-                  {count} {severity}
-                </span>
-              ))}
-              {document.findings.length === 0 && <span className="risk-document-none">✓ No findings</span>}
-              {reviews.data && document.rows.length > 0 && <ReviewTag status={groupStatus(document)} latest={latestVerdict(document)} />}
-              <MetricsLine summary={metricsFor(document)} />
-            </span>
-            {!isOpen && document.rows.length > 0 && (
+            {renderGroupMeta(document)}
+            {!(isOpen && document.scope === 'case') && document.rows.length > 0 && (
               <span className="risk-document-preview">{document.rows[0].finding.summary}</span>
             )}
           </span>
-          <span className={`risk-chevron ${isOpen ? 'risk-chevron--open' : ''}`} aria-hidden="true">
+          <span
+            className={`risk-chevron ${isOpen && document.scope === 'case' ? 'risk-chevron--open' : ''}`}
+            aria-hidden="true"
+          >
             ›
           </span>
         </button>
 
-        {isOpen && (
-          <>
-          {document.rows.length > 0 && reviews.data && (
-            <GroupReviewBar
-              checkedCount={checkedCount}
-              total={document.rows.length}
-              status={groupStatus(document)}
-              saving={saving}
-              onToggleAll={(checked) => setChecked(document, document.rows, checked)}
-              onSave={() => void saveGroup(document)}
-            />
-          )}
-          <ul className="risk-findings">
-            {document.rows.map((row) => {
-              const { finding, count } = row;
-              const detail = finding.unreviewed
-                ? 'Not reviewed by a specialist.'
-                : addedDetail(finding.rationale, finding.summary);
-              return (
-                <li key={finding.finding_id}>
-                  {reviews.data && (
-                    <input
-                      type="checkbox"
-                      className="review-tick risk-finding-tick"
-                      aria-label={`Real issue: ${finding.summary}`}
-                      checked={isChecked(document, row)}
-                      disabled={saving}
-                      onChange={(event) => setChecked(document, [row], event.target.checked)}
-                    />
-                  )}
-                  <span className={`risk-severity risk-severity--${finding.severity}`}>
-                    {finding.severity}
-                  </span>
-                  <span className="risk-finding-text">
-                    <span className="risk-finding-check">{formatTool(finding.tool)}</span>
-                    <span className="risk-finding-summary">
-                      {finding.summary}
-                      {count > 1 && <span className="risk-repeat">×{count}</span>}
-                    </span>
-                    {detail && <span className="risk-finding-rationale">{detail}</span>}
-                    {finding.repeat_of && (
-                      <span className="risk-finding-rationale">
-                        Also found on another document; counted once there, not again here.
-                      </span>
-                    )}
-                    {(finding.also_on ?? 0) > 0 && (
-                      <span className="risk-finding-rationale">
-                        Also found on {finding.also_on} other{' '}
-                        {finding.also_on === 1 ? 'document' : 'documents'}; counted once.
-                      </span>
-                    )}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-          {reviews.data && (
-            <MissedIssues
-              scope={document.scope}
-              missed={missedFor(document)}
-              checks={reviews.data.checks[document.scope]}
-              saving={reviews.savingKey !== null}
-              onAdd={(checkName, note) =>
-                void reviews.addMissed(
-                  `missed:${document.documentId}`,
-                  document.scope,
-                  document.scope === 'case' ? null : document.documentId,
-                  checkName,
-                  note,
-                )
-              }
-              onEdit={(reviewId, checkName, note) => void reviews.editMissed(reviewId, checkName, note)}
-              onRemove={(reviewId) => void reviews.removeReview(reviewId)}
-            />
-          )}
-          </>
-        )}
+        {isOpen && document.scope === 'case' && renderGroupBody(document)}
       </div>
     );
   }
 
+  // Select all and Save review, the group's findings with a tick each, then the issues reported as missed. With
+  // `link`, beside the document: a finding the checks placed can be shown on it, and the one picked there stands out.
+  function renderGroupBody(document: DocumentGroup, link?: ReviewLink) {
+    const checkedCount = document.rows.filter((row) => isChecked(document, row)).length;
+    const saving = reviews.savingKey !== null || reviews.data === null;
+    return (
+      <>
+        {document.rows.length > 0 && reviews.data && (
+          <GroupReviewBar
+            checkedCount={checkedCount}
+            total={document.rows.length}
+            status={groupStatus(document)}
+            saving={saving}
+            onToggleAll={(checked) => setChecked(document, document.rows, checked)}
+            onSave={() => void saveGroup(document)}
+          />
+        )}
+        <ul className="risk-findings">
+          {document.rows.map((row) => {
+            const { finding, count } = row;
+            const detail = finding.unreviewed
+              ? 'Not reviewed by a specialist.'
+              : addedDetail(finding.rationale, finding.summary);
+            const ids = row.members.map(reportFindingId);
+            const placed = link ? ids.find((id) => link.located.has(id)) : undefined;
+            const pages = placed
+              ? [...new Set(link!.located.get(placed)!.areas.map((area) => area.page))].join(', ')
+              : '';
+            const isActive = link?.activeId !== null && link?.activeId !== undefined && ids.includes(link.activeId);
+            return (
+              <li
+                key={finding.finding_id}
+                data-finding-ids={ids.join(' ')}
+                className={isActive ? 'risk-finding--active' : undefined}
+              >
+                {reviews.data && (
+                  <input
+                    type="checkbox"
+                    className="review-tick risk-finding-tick"
+                    aria-label={`Real issue: ${finding.summary}`}
+                    checked={isChecked(document, row)}
+                    disabled={saving}
+                    onChange={(event) => setChecked(document, [row], event.target.checked)}
+                  />
+                )}
+                <span className={`risk-severity risk-severity--${finding.severity}`}>
+                  {finding.severity}
+                </span>
+                <span className="risk-finding-text">
+                  <span className="risk-finding-check">{formatTool(finding.tool)}</span>
+                  <span className="risk-finding-summary">
+                    {finding.summary}
+                    {count > 1 && <span className="risk-repeat">×{count}</span>}
+                  </span>
+                  {detail && <span className="risk-finding-rationale">{detail}</span>}
+                  {finding.repeat_of && (
+                    <span className="risk-finding-rationale">
+                      Also found on another document; counted once there, not again here.
+                    </span>
+                  )}
+                  {(finding.also_on ?? 0) > 0 && (
+                    <span className="risk-finding-rationale">
+                      Also found on {finding.also_on} other{' '}
+                      {finding.also_on === 1 ? 'document' : 'documents'}; counted once.
+                    </span>
+                  )}
+                  {link &&
+                    (placed ? (
+                      <button
+                        type="button"
+                        className="risk-finding-locate"
+                        onClick={() => link.showOnDocument(placed)}
+                      >
+                        ⌖ Show on page {pages}
+                      </button>
+                    ) : (
+                      <span className="risk-finding-unplaced">Not tied to one place on the document</span>
+                    ))}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+        {reviews.data && (
+          <MissedIssues
+            scope={document.scope}
+            missed={missedFor(document)}
+            checks={reviews.data.checks[document.scope]}
+            saving={reviews.savingKey !== null}
+            onAdd={(checkName, note) =>
+              void reviews.addMissed(
+                `missed:${document.documentId}`,
+                document.scope,
+                document.scope === 'case' ? null : document.documentId,
+                checkName,
+                note,
+              )
+            }
+            onEdit={(reviewId, checkName, note) => void reviews.editMissed(reviewId, checkName, note)}
+            onRemove={(reviewId) => void reviews.removeReview(reviewId)}
+          />
+        )}
+      </>
+    );
+  }
+
   const allGroups = [...documents, ...reviewGroups];
+  const reviewingGroup = allGroups.find((group) => group.scope === 'document' && group.documentId === reviewing);
   const toReview = allGroups.filter(needsReview);
   const done = allGroups.filter((group) => !needsReview(group));
 
@@ -554,8 +610,30 @@ export function CaseRiskCard({
               {reviews.error}
             </div>
           )}
-          {reviews.data && <ReviewSummary caseSummary={reviews.data.case} />}
+          {reviews.data && (
+            <ReviewSummary
+              caseSummary={reviews.data.case}
+              targetPrecision={reviews.data.target_precision}
+              targetRecall={reviews.data.target_recall}
+            />
+          )}
         </section>
+      )}
+
+      {reviewingGroup && (
+        <DocumentReviewModal
+          documentId={reviewingGroup.documentId}
+          filename={reviewingGroup.filename}
+          heading={
+            <>
+              <strong className="review-modal-filename">{reviewingGroup.filename}</strong>
+              {renderGroupMeta(reviewingGroup)}
+            </>
+          }
+          onClose={() => setReviewing(null)}
+        >
+          {(link) => renderGroupBody(reviewingGroup, link)}
+        </DocumentReviewModal>
       )}
     </>
   );

@@ -14,6 +14,7 @@ is deterministic (no AI), so these run the real check_case_match.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -192,3 +193,31 @@ def test_another_companys_incumbency_is_not_used_as_the_reference(anchorpoint, h
     assert result.mismatched_document_ids == []
     assert _entry(result, wrong).status == DocumentMatchStatus.MANUAL_REVIEW
     assert "201630968D" in " ".join(result.incumbency.reasons)
+
+
+# --- The Playwright suite's case match ----------------------------------------------
+
+FOREIGN_COMPANY_FIXTURE = FIXTURES / "case-match-foreign-company.json"
+
+
+@pytest.mark.sprint3
+@pytest.mark.story("SCRUM-110", "DI-041 / DI-043")
+def test_the_playwright_suites_foreign_company_case_match_matches_the_backend(anchorpoint, harbor_light):
+    """
+    Harbor Light's source-of-wealth statement filed into the Anchorpoint case, and the case match the real
+    check_case_match gives it: what the document page's "Sent to manual review" triage shows. Regenerate with
+    REGENERATE_REGRESSION_FIXTURES=1.
+    """
+    case, documents = anchorpoint
+    other = _foreign(_by_name(harbor_light, "C014_SourceWealth_BS"), case)
+    result = check_case_match(case, [*documents, other])
+    fixture = {
+        "document": other.model_dump(mode="json", include={"id", "case_id", "filename", "document_type"}),
+        "case_match": result.model_dump(mode="json"),
+    }
+
+    if os.environ.get("REGENERATE_REGRESSION_FIXTURES"):
+        FOREIGN_COMPANY_FIXTURE.write_text(json.dumps(fixture, indent=2, sort_keys=True) + "\n")
+    assert json.loads(FOREIGN_COMPANY_FIXTURE.read_text()) == fixture, (
+        "case-match-foreign-company.json is out of date with check_case_match — regenerate it (see above)"
+    )
