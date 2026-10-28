@@ -581,9 +581,12 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     await expect(documents.nth(2).locator('.risk-document-none')).toHaveText('✓ No findings');
     await expect(review.locator('.risk-findings')).toHaveCount(0);
 
-    // Expanding lists highs before mediums, and merges the three identical layout findings into one ×3 row.
+    // Opening a document reviews it beside the document: its findings list highs before mediums, and merges
+    // the three identical layout findings into one ×3 row.
     await documents.first().getByRole('button').click();
-    const rows = review.locator('.risk-findings li');
+    const dialog = page.getByRole('dialog', { name: 'Review findings on C011_Payslip.pdf' });
+    await expect(dialog).toBeVisible();
+    const rows = dialog.locator('.risk-findings li');
     await expect(rows).toHaveCount(3);
     await expect(rows.locator('.risk-severity')).toHaveText(['high', 'high', 'medium']);
     await expect(rows.nth(2)).toContainText('×3');
@@ -592,7 +595,10 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     await expect(rows.nth(1).locator('.risk-finding-rationale')).toHaveText('This is impossible for this product.');
 
     // There is nothing to show or hide: low findings are listed with the rest.
-    await expect(review.getByRole('button', { name: /Show .* finding|Show less/ })).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: /Show .* finding|Show less/ })).toHaveCount(0);
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
 
     await section.getByText("Couldn't verify (1)").click();
     await expect(section).toContainText('C011_BankStatement.pdf — Metadata: No metadata');
