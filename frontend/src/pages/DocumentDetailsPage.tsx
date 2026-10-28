@@ -36,6 +36,7 @@ import { useFieldEditing } from './document-details/useFieldEditing';
 import { useLangGraphTrace } from './document-details/useLangGraphTrace';
 import { humanizeFieldKey } from '../utils/fieldLabels';
 import { ErrorMessage } from '../components/ErrorMessage';
+import { LoadErrorState } from '../components/LoadErrorState';
 
 // Developer-only panels, so they load on demand.
 const DetectionPanel = lazy(() =>
@@ -179,6 +180,9 @@ export default function DocumentDetailsPage({
     if (rawFailureReason) console.error(`Document ${documentId} failed:`, rawFailureReason);
   }, [documentId, rawFailureReason]);
 
+  // The file itself couldn't be read: there are no fields to show or review, and a new type would fail the same way.
+  const isUnreadableFile = failureReason?.fileProblem ?? false;
+
   // Distinct from failureReason (a hard processing failure) and from needsManualReview below.
   const lowClassificationConfidence =
     document?.classification_confidence != null &&
@@ -211,7 +215,8 @@ export default function DocumentDetailsPage({
   const canCorrectType =
     !isLocked &&
     (document?.status === 'analyzed' || document?.status === 'failed') &&
-    !isTypeConfirmed;
+    !isTypeConfirmed &&
+    !isUnreadableFile;
 
   const fieldEditing = useFieldEditing({
     document,
@@ -332,7 +337,7 @@ export default function DocumentDetailsPage({
         {caseHeader}
 
         <div className="document-details-body">
-          <ErrorMessage className="document-details-error" message={loadError ?? 'This document could not be found.'} />
+          <LoadErrorState message={loadError ?? 'This document could not be found.'} />
         </div>
       </div>
     );
@@ -427,20 +432,22 @@ export default function DocumentDetailsPage({
 
         {/* Extracted information */}
 
-        <ExtractedInformationCard
-          canAddOrDeleteFields={!isLocked}
-          document={document}
-          extractedFields={extractedFields}
-          isInFlight={isInFlight}
-          lowestConfidence={lowestConfidence}
-          setDocument={setDocument}
-          setFieldDraft={setFieldDraft}
-          editing={fieldEditing}
-        />
+        {!isUnreadableFile && (
+          <ExtractedInformationCard
+            canAddOrDeleteFields={!isLocked}
+            document={document}
+            extractedFields={extractedFields}
+            isInFlight={isInFlight}
+            lowestConfidence={lowestConfidence}
+            setDocument={setDocument}
+            setFieldDraft={setFieldDraft}
+            editing={fieldEditing}
+          />
+        )}
 
         {/* Manual review */}
 
-        {canEditFields && (needsManualReview || isUnrecognisedDocument) && (
+        {canEditFields && !isUnreadableFile && (needsManualReview || isUnrecognisedDocument) && (
           <ManualReviewCard
             canEditFields={canEditFields}
             fieldDraft={fieldDraft}

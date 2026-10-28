@@ -15,6 +15,7 @@ import { STATUS_ORDER, statusLabel, statusValue } from '../utils/caseStatus';
 import { caseNumberLabel } from '../utils/caseSearch';
 import { useCaseQueue } from './useCaseQueue';
 import { ErrorMessage } from '../components/ErrorMessage';
+import { LoadErrorState } from '../components/LoadErrorState';
 
 interface CaseQueuePageProps {
   onOpenCase: (caseRecord: CaseRecord) => void;
@@ -363,11 +364,7 @@ export default function CaseQueuePage({ onOpenCase }: CaseQueuePageProps) {
         {deleteError && <ErrorMessage className="toast-error" message={deleteError} />}
 
         {error ? (
-          <ErrorMessage className="load-error" message={error}>
-            <button type="button" className="go-btn queue-retry" onClick={queue.reload}>
-              Retry
-            </button>
-          </ErrorMessage>
+          <LoadErrorState message={error} onRetry={queue.reload} />
         ) : !hasLoaded ? (
           <div className="case-table" aria-busy="true">
             <span className="sr-only" role="status">Loading cases…</span>

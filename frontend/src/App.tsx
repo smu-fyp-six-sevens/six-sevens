@@ -25,7 +25,7 @@ const DocumentDetailsPage = lazy(loadDocumentDetailsPage);
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 import { getToken } from './lib/api';
 import type { CaseRiskLevel } from './services/uploadService';
-import { ErrorMessage } from './components/ErrorMessage';
+import { LoadErrorState } from './components/LoadErrorState';
 
 export interface CaseRecord {
   id: string;
@@ -65,11 +65,7 @@ function CaseQueueRoute() {
 function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <div className="shell">
-      <ErrorMessage className="load-error" message={message}>
-        <button type="button" className="go-btn queue-retry" onClick={onRetry}>
-          Retry
-        </button>
-      </ErrorMessage>
+      <LoadErrorState message={message} onRetry={onRetry} />
     </div>
   );
 }

@@ -90,6 +90,22 @@ test.describe('Extract text from documents @sprint2 @SCRUM-9', () => {
     await expect.poll(() => consoleErrors.join('\n')).toContain("Unhandled processing error: KeyError: 'net_pay'");
   });
 
+  test("a file that can't be read only says so: no type picker, fields or manual review", async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const payslip = fixture.document('Payslip');
+    payslip.status = 'failed';
+    payslip.failure_reason = "Text extraction failed: Failed to open file 'broken.pdf' as type pdf.";
+
+    await page.goto(fixture.documentUrl(payslip));
+
+    const failure = page.locator('.details-failure-reason.review-message--error');
+    await expect(failure.locator('strong')).toHaveText("The file's text couldn't be read");
+    await expect(failure.locator('.details-failure-reason-hint')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Confirm document type/ })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Extracted Information' })).toHaveCount(0);
+    await expect(reviewSection(page)).toHaveCount(0);
+  });
+
   test('DI-030 array fields list every extracted value @DI-030', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'harbor-light');
     const loans = fixture.document('ListLoans');

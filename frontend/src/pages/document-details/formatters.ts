@@ -1,6 +1,12 @@
-// A backend failure message (documents.failure_reason) as a short title and a plain sentence for the page. The
-// message itself can carry an exception's text, so it only goes to the console (DocumentDetailsPage).
-export function describeFailureReason(reason: string): { title: string; detail: string } {
+// Failures in the file itself (unreadable, no text, not downloadable): nothing was read from it, and choosing another
+// type re-runs extraction on the same file, so only a new upload can help.
+const FILE_PROBLEMS = /^(Text extraction failed:|Extraction produced no usable text$|Failed to download document for extraction:)/;
+
+// A backend failure message (documents.failure_reason) as a short title and a plain sentence for the page, and
+// whether the file itself is the problem. The message itself can carry an exception's text, so it only goes to the
+// console (DocumentDetailsPage).
+export function describeFailureReason(reason: string): { title: string; detail: string; fileProblem: boolean } {
+  const fileProblem = FILE_PROBLEMS.test(reason);
   const retry = 'Retry processing; if it fails again, re-upload the file.';
   const patterns: [RegExp, string, string][] = [
     [/^Intake Coordinator invocation failed:/, 'Classification service error', `The document couldn't be classified. ${retry}`],
@@ -18,11 +24,11 @@ export function describeFailureReason(reason: string): { title: string; detail: 
 
   for (const [pattern, title, detail] of patterns) {
     if (pattern.test(reason)) {
-      return { title, detail };
+      return { title, detail, fileProblem };
     }
   }
 
-  return { title: 'Processing failed', detail: `Something went wrong while processing this document. ${retry}` };
+  return { title: 'Processing failed', detail: `Something went wrong while processing this document. ${retry}`, fileProblem };
 }
 
 export function formatDate(value: string): string {

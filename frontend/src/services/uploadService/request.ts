@@ -34,7 +34,7 @@ function officerMessage(status: number, detail: unknown, message: string): strin
   return `${couldnt(message)} Something went wrong on our side. Try again, and tell the team if it keeps happening.`;
 }
 
-// "Failed to fetch the case" as "Couldn't load the case.": what failed, as the officer would say it.
+// "Failed to fetch the case" as "Couldn't load the case.": what failed
 function couldnt(message: string): string {
   const text = message
     .replace(/\.$/, '')

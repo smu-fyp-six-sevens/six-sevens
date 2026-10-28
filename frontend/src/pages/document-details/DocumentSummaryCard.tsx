@@ -58,7 +58,7 @@ export function DocumentSummaryCard({
   chosenType: string;
   detectionStage: DocumentDetectionStage;
   document: DocumentRecord;
-  failureReason: { title: string; detail: string } | null;
+  failureReason: { title: string; detail: string; fileProblem: boolean } | null;
   handleSaveType: () => void | Promise<void>;
   hasDetectionReport: boolean;
   isSavingType: boolean;
