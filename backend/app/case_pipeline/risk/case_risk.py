@@ -179,6 +179,7 @@ def _score_document(
             # Report ids ("numerical_checks_tool-1") repeat across documents; the prefix keeps them unique per case.
             finding_id=f"{document.id[:8]}:{finding['id']}",
             tool=finding.get("tool"),
+            check_code=finding.get("check_code") if isinstance(finding.get("check_code"), str) else None,
             severity=finding["severity"],
             summary=finding.get("summary") or "",
             rationale=finding.get("rationale") or "",

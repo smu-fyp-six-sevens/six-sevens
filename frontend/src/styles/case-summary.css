@@ -384,6 +384,41 @@
   border-top: 1px dashed var(--line);
 }
 
+/* Beside the document in the review view: the finding picked on the page, and the way to find each on it. */
+.risk-findings li.risk-finding--active {
+  margin: 0 -10px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  background: var(--orange-91);
+  box-shadow: inset 3px 0 0 #e0632e;
+}
+
+.risk-finding-locate {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--slate-86);
+  border-radius: 5px;
+  background: var(--white);
+  color: var(--blue-43);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.risk-finding-locate:hover {
+  border-color: var(--blue-77);
+  background: var(--blue-97);
+}
+
+.risk-finding-unplaced {
+  margin-top: 4px;
+  color: var(--ink-soft);
+  font-size: 11.5px;
+  font-style: italic;
+}
+
 .risk-severity {
   flex: 0 0 58px;
   padding: 2px 0;
@@ -633,4 +668,614 @@
   font-weight: 700;
   margin-right: 7px;
   display: inline-block;
+}
+
+/* ---------------------------------------------------------------------------
+   Finding reviews: an officer marks each finding correct or wrong and reports
+   what detection missed; the case's precision and recall come from these.
+   --------------------------------------------------------------------------- */
+
+/* The officer's review of a group, as one header row for its findings: Select all (in the same column as the
+   findings' ticks), what the ticks mean, the review's state, and Save. */
+.group-review-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin: 0 20px;
+  padding: 2px 0 10px;
+  border-bottom: 1px dashed var(--line);
+  font-size: 12.5px;
+}
+
+.group-review-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.group-review-hint {
+  flex: 1;
+  min-width: 200px;
+  color: var(--ink-soft);
+}
+
+.group-review-hint strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* A chip, so the group's review state reads at a glance. */
+.group-review-status {
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.group-review-status--saved {
+  background: var(--teal-bg);
+  color: var(--teal);
+}
+
+.group-review-status--unsaved {
+  background: #fdf0d8;
+  color: #8a5a00;
+}
+
+.group-review-status--not_reviewed {
+  background: #eef0f3;
+  color: var(--ink-soft);
+}
+
+.group-review-save {
+  padding: 5px 12px;
+  border: 1px solid var(--steel);
+  border-radius: 6px;
+  background: var(--steel);
+  color: #ffffff;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.group-review-save:disabled {
+  border-color: var(--line);
+  background: #ffffff;
+  color: var(--ink-soft);
+  cursor: default;
+}
+
+.group-review-save:focus-visible,
+.missed-issue-add:focus-visible,
+.missed-issue-remove:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 1px;
+}
+
+/* Every review tick, Select all included: one size and no browser margins, so they line up. */
+.review-tick {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--steel);
+  cursor: pointer;
+}
+
+.risk-finding-tick {
+  margin-top: 2px;
+}
+
+.review-metrics-line {
+  color: var(--steel-dark);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+/* Detection found nothing on this document: a green badge in the severity badges' place. */
+.risk-document-none {
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--teal-bg);
+  color: var(--teal);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.missed-issues {
+  margin: 0 20px 14px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+  font-size: 12.5px;
+}
+
+.missed-issue-list {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.missed-issue-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.missed-issue-tag {
+  flex: 0 0 58px;
+  padding: 2px 0;
+  border-radius: 4px;
+  background: #fdf0d8;
+  color: #8a5a00;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.missed-issue-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.missed-issue-text small {
+  color: var(--ink-soft);
+}
+
+.missed-issue-remove {
+  padding: 0 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 15px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.missed-issue-remove:hover {
+  background: #f1eee6;
+  color: var(--ink);
+}
+
+.missed-issue-add {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--steel);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.missed-issue-add:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.missed-issue-form {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #faf8f3;
+}
+
+.missed-issue-form label {
+  display: grid;
+  gap: 4px;
+  color: var(--ink-soft);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.missed-issue-form select,
+.missed-issue-form input {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.missed-issue-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.missed-issue-cancel,
+.missed-issue-save {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.missed-issue-save {
+  border-color: var(--steel);
+  background: var(--steel);
+  color: #ffffff;
+}
+
+.missed-issue-save:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.review-summary {
+  margin: 4px 20px 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.review-summary-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.review-summary-head h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14.5px;
+}
+
+.review-summary-hint {
+  color: var(--ink-soft);
+  font-size: 12.5px;
+}
+
+.review-summary-note {
+  margin: 10px 0 0;
+  color: var(--ink-soft);
+  font-size: 11.5px;
+}
+
+.review-summary-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 20px;
+  margin-top: 12px;
+  padding: 16px 18px;
+  border: 1px dashed var(--slate-88);
+  border-radius: 10px;
+  background: var(--slate-97);
+}
+
+.review-summary-empty-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--slate-94a);
+  color: var(--steel);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.review-summary-empty-copy {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.review-summary-empty-copy strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.review-summary-empty-copy p {
+  margin: 2px 0 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.review-summary-empty-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: review-step;
+}
+
+.review-summary-empty-steps li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px 6px 6px;
+  border: 1px solid var(--slate-88);
+  border-radius: 99px;
+  background: var(--white);
+  color: var(--ink);
+  font-size: 12px;
+  counter-increment: review-step;
+}
+
+.review-summary-empty-steps li::before {
+  content: counter(review-step);
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--slate-94a);
+  color: var(--steel);
+  font-size: 10.5px;
+  font-weight: 800;
+}
+
+.review-summary-figures {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 24px;
+  margin: 12px 0;
+}
+
+.review-summary-figures > div {
+  display: grid;
+  gap: 2px;
+}
+
+.review-summary-value {
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.review-summary-caption {
+  color: var(--ink-soft);
+  font-size: 11.5px;
+}
+
+.review-check-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.review-check-table th {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.review-check-table td {
+  padding: 6px 8px;
+  border-bottom: 1px dashed var(--line);
+}
+
+.review-check-table small {
+  color: var(--ink-soft);
+}
+
+@media (max-width: 640px) {
+  .risk-findings li {
+    flex-wrap: wrap;
+  }
+
+  .review-check-table th:nth-child(2),
+  .review-check-table td:nth-child(2),
+  .review-check-table th:nth-child(3),
+  .review-check-table td:nth-child(3),
+  .review-check-table th:nth-child(4),
+  .review-check-table td:nth-child(4) {
+    display: none;
+  }
+}
+
+/* Documents with no findings, and the cross-document group: only for reporting what detection missed. */
+
+.summary-card .save-error {
+  margin: 0 20px 12px;
+}
+
+/* A precision or recall (components/Rate.tsx). When there's nothing to measure yet it says "Not measured": in a
+   table, soft grey and dotted underneath to show it explains itself; in the big figures, styled like the figures. */
+.rate--empty:not(.review-summary-value, .stat-number) {
+  color: var(--ink-soft);
+  font-weight: 500;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+/* A rate under its target: red; the target opens on hover or focus. */
+.rate--below {
+  color: var(--red);
+  cursor: help;
+}
+
+/* components/InfoTip.tsx: a short explanation that opens on hover or focus. */
+.info-tip-trigger {
+  border-radius: 3px;
+}
+
+.info-tip-trigger:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 2px;
+}
+
+.info-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.info-tip-icon {
+  flex: none;
+  color: var(--ink-soft);
+  opacity: 0.75;
+}
+
+.info-label:hover .info-tip-icon,
+.info-label:focus-visible .info-tip-icon {
+  color: var(--steel);
+  opacity: 1;
+}
+
+.info-tip {
+  position: fixed;
+  z-index: 1000;
+  max-width: 280px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: var(--ink);
+  box-shadow: 0 6px 20px rgba(18, 32, 61, 0.22);
+  color: var(--white);
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+  white-space: normal;
+  pointer-events: none;
+}
+
+.info-tip strong {
+  font-weight: 700;
+}
+
+.missed-issue-edit {
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--steel);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.missed-issue-edit:hover:not(:disabled) {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.missed-issue-edit:disabled,
+.missed-issue-add:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.missed-issue-edit:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 1px;
+}
+
+/* A missed issue being corrected: its form takes the whole row. */
+.missed-issue-list li > .missed-issue-form {
+  flex: 1;
+}
+
+/* A document's officer review in its header, so what's done reads at a glance. */
+.risk-review-tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.risk-review-tag--saved {
+  background: var(--teal-bg);
+  color: var(--teal);
+}
+
+.risk-review-tag--unsaved {
+  background: #fdf0d8;
+  color: #8a5a00;
+}
+
+.risk-review-tag--not_reviewed {
+  border: 1px dashed #c4ccd8;
+  color: var(--ink-soft);
+}
+
+/* Reviewed documents, and ones with nothing to review, folded away under the ones still to do. */
+.risk-reviewed {
+  margin-bottom: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.risk-reviewed > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  background: var(--slate-97a);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  list-style: none;
+  cursor: pointer;
+}
+
+.risk-reviewed > summary::-webkit-details-marker {
+  display: none;
+}
+
+.risk-reviewed > summary:focus-visible {
+  outline: 2px solid var(--slate-20);
+  outline-offset: -2px;
+}
+
+.risk-reviewed > summary .risk-chevron {
+  transition: transform 0.15s ease;
+}
+
+.risk-reviewed[open] > summary .risk-chevron {
+  transform: rotate(90deg);
+}
+
+.risk-reviewed-hint {
+  margin-left: auto;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.risk-reviewed .risk-document-toggle {
+  opacity: 0.85;
+}
+
+.risk-review-count {
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 600;
 }

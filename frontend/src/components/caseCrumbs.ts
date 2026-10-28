@@ -1,5 +1,5 @@
 import type { CaseRecord } from '../App';
-import { listCaseDocuments, searchCases } from '../services/uploadService';
+import { listCaseDocuments, listCasesPage } from '../services/uploadService';
 import { toCaseRecord } from '../utils/caseRecord';
 import { caseNumberLabel } from '../utils/caseSearch';
 import type { Breadcrumb } from './Breadcrumbs';
@@ -13,8 +13,8 @@ function casePath(caseRecord: CaseRecord): string {
 
 export const caseQueueCrumb: Breadcrumb = { label: 'Case Queue', to: '/cases' };
 
-// How many cases the switch-case menu lists (the server's own limit is 50).
-const MENU_CASES = 20;
+// How many cases the switch-case menu lists at a time; "Load more cases" adds the next lot.
+const MENU_CASES = 50;
 
 // The case number: click it to switch to another case. The menu lists the newest cases, fetched when it opens.
 export function caseCrumb(
@@ -26,16 +26,18 @@ export function caseCrumb(
     to: `${casePath(caseRecord)}?section=summary`,
     current,
     menuLabel: 'switch case',
-    loadMenu: async () => {
-      const { items } = await searchCases('', MENU_CASES);
+    loadMoreLabel: 'Load more cases',
+    loadMenu: async (offset) => {
+      const page = await listCasesPage({ limit: MENU_CASES, offset, sort: 'newest', statuses: [], risks: [], q: '' });
 
-      return items.map(toCaseRecord).map((item) => ({
+      const items = page.items.map(toCaseRecord).map((item) => ({
         key: item.id,
         to: `${casePath(item)}?section=summary`,
         tag: caseNumberLabel(item),
         label: item.applicant,
         current: item.id === caseRecord.id,
       }));
+      return { items, hasMore: offset + page.items.length < page.total };
     },
   };
 }

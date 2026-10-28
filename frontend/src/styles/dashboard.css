@@ -273,3 +273,12 @@
   .case-register-table .processing-time { min-width: 0; }
   .case-register-table .processing-time span { justify-content: flex-start; gap: 10px; }
 }
+
+/* Detection accuracy tab: a check can carry more than one flag. */
+.accuracy-table .flag-severity { margin: 2px 4px 2px 0; }
+.accuracy-table th:nth-child(1) { width: 26%; }
+
+/* Overview's Detection accuracy panel: one card per check needing attention. */
+.classification-overall > span { display: inline-flex; align-items: baseline; gap: 8px; cursor: help; }
+.class-check { border-left-color: var(--steel); }
+.class-check .classification-risk { overflow: hidden; color: var(--steel-dark); text-overflow: ellipsis; white-space: nowrap; }

@@ -1,0 +1,668 @@
+{
+  "RS-001": {
+    "risk": {
+      "contributing_findings": [],
+      "documents_scanned": 3,
+      "documents_total": 3,
+      "level": "Low",
+      "points": 0.0,
+      "reasons": [
+        "Rated Low: detection found nothing worth flagging."
+      ],
+      "score": 0,
+      "state": "scored",
+      "unassessed_checks": []
+    },
+    "scoring": {
+      "critical_needs_high_documents": 3,
+      "cross_document_findings": 0,
+      "documents_scanned": 3,
+      "documents_total": 3,
+      "findings": [],
+      "level": "Low",
+      "level_thresholds": [
+        [
+          8,
+          "High"
+        ],
+        [
+          3,
+          "Medium"
+        ],
+        [
+          0,
+          "Low"
+        ]
+      ],
+      "level_without_cross_document": "Low",
+      "noise_cap_per_document": 6.0,
+      "points": 0.0,
+      "reasons": [
+        "Rated Low: detection found nothing worth flagging."
+      ],
+      "repeat_weight": 0.25,
+      "score": 0,
+      "score_without_cross_document": 0,
+      "severity_points": {
+        "high": 8,
+        "info": 0,
+        "low": 1,
+        "medium": 3
+      },
+      "state": "scored",
+      "unassessed_checks": []
+    }
+  },
+  "RS-002": {
+    "risk": {
+      "contributing_findings": [],
+      "documents_scanned": 2,
+      "documents_total": 3,
+      "level": null,
+      "points": null,
+      "reasons": [],
+      "score": null,
+      "state": "failed",
+      "unassessed_checks": []
+    },
+    "scoring": null
+  },
+  "RS-003": {
+    "risk": {
+      "contributing_findings": [
+        {
+          "also_on": 0,
+          "category": "cross_document_variance",
+          "check_code": null,
+          "document_id": "c002c002-0000-0000-0000-000000000001",
+          "document_type": "payslip",
+          "filename": "AisyahRazak_Payslip_CpfOverCeiling.pdf",
+          "finding_id": "deterministic-1",
+          "flag_id": null,
+          "points": 12.0,
+          "rationale": "Three documents disagree on the same salary payment.",
+          "repeat_of": null,
+          "severity": "high",
+          "source": "cross_document",
+          "summary": "The employer's CPF contributions on the payslip don't appear in the company's bank statement.",
+          "tool": "cross_document_analysis",
+          "unreviewed": false
+        },
+        {
+          "also_on": 0,
+          "category": "registry_discrepancy",
+          "check_code": "PS.CPF_RATE",
+          "document_id": "c002c002-0000-0000-0000-000000000001",
+          "document_type": "payslip",
+          "filename": "AisyahRazak_Payslip_CpfOverCeiling.pdf",
+          "finding_id": "c002c002:external_validation_tool-1",
+          "flag_id": null,
+          "points": 8.0,
+          "rationale": "Rated high by the specialist.",
+          "repeat_of": null,
+          "severity": "high",
+          "source": "document",
+          "summary": "Employee CPF of $1,920.00 is above the most any band allows at the $8,000 ceiling",
+          "tool": "external_validation_tool",
+          "unreviewed": false
+        },
+        {
+          "also_on": 0,
+          "category": "tampering_forensic",
+          "check_code": null,
+          "document_id": "c002c002-0000-0000-0000-000000000002",
+          "document_type": "nric",
+          "filename": "C002-P1_NRICPassport.pdf",
+          "finding_id": "c002c002:numerical_checks_tool-1",
+          "flag_id": null,
+          "points": 8.0,
+          "rationale": "Rated high by the specialist.",
+          "repeat_of": null,
+          "severity": "high",
+          "source": "document",
+          "summary": "NRIC S7534567X fails its checksum: the check letter should be D",
+          "tool": "numerical_checks_tool",
+          "unreviewed": false
+        },
+        {
+          "also_on": 0,
+          "category": "registry_discrepancy",
+          "check_code": "REG.ISSUER",
+          "document_id": "c002c002-0000-0000-0000-000000000002",
+          "document_type": "nric",
+          "filename": "C002-P1_NRICPassport.pdf",
+          "finding_id": "c002c002:external_validation_tool-1",
+          "flag_id": null,
+          "points": 8.0,
+          "rationale": "Rated high by the specialist.",
+          "repeat_of": null,
+          "severity": "high",
+          "source": "document",
+          "summary": "The passport's issuing authority is not one Singapore uses",
+          "tool": "external_validation_tool",
+          "unreviewed": false
+        },
+        {
+          "also_on": 0,
+          "category": "tampering_forensic",
+          "check_code": null,
+          "document_id": "c002c002-0000-0000-0000-000000000003",
+          "document_type": "certificate_of_incorporation",
+          "filename": "C002_CertIncorp.pdf",
+          "finding_id": "c002c002:date_consistency_tool-1",
+          "flag_id": null,
+          "points": 8.0,
+          "rationale": "Rated high by the specialist.",
+          "repeat_of": null,
+          "severity": "high",
+          "source": "document",
+          "summary": "incorporation_date (2027-04-18) is after today's date",
+          "tool": "date_consistency_tool",
+          "unreviewed": false
+        },
+        {
+          "also_on": 0,
+          "category": "registry_discrepancy",
+          "check_code": "REG.UEN_EXISTS",
+          "document_id": "c002c002-0000-0000-0000-000000000003",
+          "document_type": "certificate_of_incorporation",
+          "filename": "C002_CertIncorp.pdf",
+          "finding_id": "c002c002:external_validation_tool-1",
+          "flag_id": null,
+          "points": 8.0,
+          "rationale": "Rated high by the specialist.",
+          "repeat_of": null,
+          "severity": "high",
+          "source": "document",
+          "summary": "ACRA has no record of UEN 202736160G",
+          "tool": "external_validation_tool",
+          "unreviewed": false
+        },
+        {
+          "also_on": 0,
+          "category": "registry_discrepancy",
+          "check_code": "TAX.YEAR_OF_ASSESSMENT",
+          "document_id": "c002c002-0000-0000-0000-000000000004",
+          "document_type": "notice_of_assessment",
+          "filename": "C002_NOA.pdf",
+          "finding_id": "c002c002:external_validation_tool-1",
+          "flag_id": null,
+          "points": 8.0,
+          "rationale": "Rated high by the specialist.",
+          "repeat_of": null,
+          "severity": "high",
+          "source": "document",
+          "summary": "IRAS's assessment year does not match the year of income",
+          "tool": "external_validation_tool",
+          "unreviewed": false
+        }
+      ],
+      "documents_scanned": 5,
+      "documents_total": 5,
+      "level": "Critical",
+      "points": 60.0,
+      "reasons": [
+        "Rated Critical: high-severity findings on 4 documents."
+      ],
+      "score": 89,
+      "state": "scored",
+      "unassessed_checks": []
+    },
+    "scoring": {
+      "critical_needs_high_documents": 3,
+      "cross_document_findings": 1,
+      "documents_scanned": 5,
+      "documents_total": 5,
+      "findings": [
+        {
+          "also_on": 0,
+          "category": "cross_document_variance",
+          "document": "AisyahRazak_Payslip_CpfOverCeiling.pdf",
+          "finding_id": "deterministic-1",
+          "points": 12.0,
+          "repeat_of": null,
+          "severity": "high",
+          "source": "cross_document",
+          "tool": "cross_document_analysis",
+          "unreviewed": false
+        },
+        {
+          "also_on": 0,
+          "category": "registry_discrepancy",
+          "document": "AisyahRazak_Payslip_CpfOverCeiling.pdf",
+          "finding_id": "c002c002:external_validation_tool-1",
+          "points": 8.0,
+          "repeat_of": null,
+          "severity": "high",
+          "source": "document",
+          "tool": "external_validation_tool",
+          "unreviewed": false
+        },
+        {
+          "also_on": 0,
+          "category": "tampering_forensic",
+          "document": "C002-P1_NRICPassport.pdf",
+          "finding_id": "c002c002:numerical_checks_tool-1",
+          "points": 8.0,
+          "repeat_of": null,
+          "severity": "high",
+          "source": "document",
+          "tool": "numerical_checks_tool",
+          "unreviewed": false
+        },
+        {
+          "also_on": 0,
+          "category": "registry_discrepancy",
+          "document": "C002-P1_NRICPassport.pdf",
+          "finding_id": "c002c002:external_validation_tool-1",
+          "points": 8.0,
+          "repeat_of": null,
+          "severity": "high",
+          "source": "document",
+          "tool": "external_validation_tool",
+          "unreviewed": false
+        },
+        {
+          "also_on": 0,
+          "category": "tampering_forensic",
+          "document": "C002_CertIncorp.pdf",
+          "finding_id": "c002c002:date_consistency_tool-1",
+          "points": 8.0,
+          "repeat_of": null,
+          "severity": "high",
+          "source": "document",
+          "tool": "date_consistency_tool",
+          "unreviewed": false
+        },
+        {
+          "also_on": 0,
+          "category": "registry_discrepancy",
+          "document": "C002_CertIncorp.pdf",
+          "finding_id": "c002c002:external_validation_tool-1",
+          "points": 8.0,
+          "repeat_of": null,
+          "severity": "high",
+          "source": "document",
+          "tool": "external_validation_tool",
+          "unreviewed": false
+        },
+        {
+          "also_on": 0,
+          "category": "registry_discrepancy",
+          "document": "C002_NOA.pdf",
+          "finding_id": "c002c002:external_validation_tool-1",
+          "points": 8.0,
+          "repeat_of": null,
+          "severity": "high",
+          "source": "document",
+          "tool": "external_validation_tool",
+          "unreviewed": false
+        }
+      ],
+      "level": "Critical",
+      "level_thresholds": [
+        [
+          8,
+          "High"
+        ],
+        [
+          3,
+          "Medium"
+        ],
+        [
+          0,
+          "Low"
+        ]
+      ],
+      "level_without_cross_document": "Critical",
+      "noise_cap_per_document": 6.0,
+      "points": 60.0,
+      "reasons": [
+        "Rated Critical: high-severity findings on 4 documents."
+      ],
+      "repeat_weight": 0.25,
+      "score": 89,
+      "score_without_cross_document": 87,
+      "severity_points": {
+        "high": 8,
+        "info": 0,
+        "low": 1,
+        "medium": 3
+      },
+      "state": "scored",
+      "unassessed_checks": []
+    }
+  },
+  "RS-004": {
+    "risk": {
+      "contributing_findings": [
+        {
+          "also_on": 0,
+          "category": "tampering_forensic",
+          "check_code": null,
+          "document_id": "7a4a7a4a-0000-0000-0000-000000000001",
+          "document_type": "nric",
+          "filename": "TanAhKow_NRIC.pdf",
+          "finding_id": "7a4a7a4a:layout_anomalies_tool-1",
+          "flag_id": null,
+          "points": 3.0,
+          "rationale": "Rated medium by the specialist.",
+          "repeat_of": null,
+          "severity": "medium",
+          "source": "document",
+          "summary": "The PHOTO label sits 83.8 pt from where the NRIC layout places it",
+          "tool": "layout_anomalies_tool",
+          "unreviewed": false
+        }
+      ],
+      "documents_scanned": 1,
+      "documents_total": 1,
+      "level": "Medium",
+      "points": 3.0,
+      "reasons": [
+        "Rated Medium from the combined severity of 1 finding(s)."
+      ],
+      "score": 25,
+      "state": "scored",
+      "unassessed_checks": []
+    },
+    "scoring": {
+      "critical_needs_high_documents": 3,
+      "cross_document_findings": 0,
+      "documents_scanned": 1,
+      "documents_total": 1,
+      "findings": [
+        {
+          "also_on": 0,
+          "category": "tampering_forensic",
+          "document": "TanAhKow_NRIC.pdf",
+          "finding_id": "7a4a7a4a:layout_anomalies_tool-1",
+          "points": 3.0,
+          "repeat_of": null,
+          "severity": "medium",
+          "source": "document",
+          "tool": "layout_anomalies_tool",
+          "unreviewed": false
+        }
+      ],
+      "level": "Medium",
+      "level_thresholds": [
+        [
+          8,
+          "High"
+        ],
+        [
+          3,
+          "Medium"
+        ],
+        [
+          0,
+          "Low"
+        ]
+      ],
+      "level_without_cross_document": "Medium",
+      "noise_cap_per_document": 6.0,
+      "points": 3.0,
+      "reasons": [
+        "Rated Medium from the combined severity of 1 finding(s)."
+      ],
+      "repeat_weight": 0.25,
+      "score": 25,
+      "score_without_cross_document": 25,
+      "severity_points": {
+        "high": 8,
+        "info": 0,
+        "low": 1,
+        "medium": 3
+      },
+      "state": "scored",
+      "unassessed_checks": []
+    }
+  },
+  "RS-005": {
+    "risk": {
+      "contributing_findings": [
+        {
+          "also_on": 0,
+          "category": "tampering_forensic",
+          "check_code": null,
+          "document_id": "11c911c9-0000-0000-0000-000000000001",
+          "document_type": "passport",
+          "filename": "LimCG_Passport_scan.jpeg",
+          "finding_id": "11c911c9:numerical_checks_tool-1",
+          "flag_id": null,
+          "points": 8.0,
+          "rationale": "Rated high by the specialist.",
+          "repeat_of": null,
+          "severity": "high",
+          "source": "document",
+          "summary": "Passport number K5690850X fails its checksum",
+          "tool": "numerical_checks_tool",
+          "unreviewed": false
+        }
+      ],
+      "documents_scanned": 1,
+      "documents_total": 1,
+      "level": "High",
+      "points": 8.0,
+      "reasons": [
+        "Rated High from the combined severity of 1 finding(s)."
+      ],
+      "score": 50,
+      "state": "scored",
+      "unassessed_checks": []
+    },
+    "scoring": {
+      "critical_needs_high_documents": 3,
+      "cross_document_findings": 0,
+      "documents_scanned": 1,
+      "documents_total": 1,
+      "findings": [
+        {
+          "also_on": 0,
+          "category": "tampering_forensic",
+          "document": "LimCG_Passport_scan.jpeg",
+          "finding_id": "11c911c9:numerical_checks_tool-1",
+          "points": 8.0,
+          "repeat_of": null,
+          "severity": "high",
+          "source": "document",
+          "tool": "numerical_checks_tool",
+          "unreviewed": false
+        }
+      ],
+      "level": "High",
+      "level_thresholds": [
+        [
+          8,
+          "High"
+        ],
+        [
+          3,
+          "Medium"
+        ],
+        [
+          0,
+          "Low"
+        ]
+      ],
+      "level_without_cross_document": "High",
+      "noise_cap_per_document": 6.0,
+      "points": 8.0,
+      "reasons": [
+        "Rated High from the combined severity of 1 finding(s)."
+      ],
+      "repeat_weight": 0.25,
+      "score": 50,
+      "score_without_cross_document": 50,
+      "severity_points": {
+        "high": 8,
+        "info": 0,
+        "low": 1,
+        "medium": 3
+      },
+      "state": "scored",
+      "unassessed_checks": []
+    }
+  },
+  "RS-006": {
+    "risk": {
+      "contributing_findings": [
+        {
+          "also_on": 0,
+          "category": "tampering_forensic",
+          "check_code": null,
+          "document_id": "e5e5e5e5-0000-0000-0000-000000000001",
+          "document_type": "payslip",
+          "filename": "C011_Payslip.pdf",
+          "finding_id": "e5e5e5e5:font_consistency_tool-1",
+          "flag_id": null,
+          "points": 8.0,
+          "rationale": "Only the figure that matters differs, which is how a pasted value looks.",
+          "repeat_of": null,
+          "severity": "high",
+          "source": "document",
+          "summary": "Net pay is in a different font from the rest of the payslip.",
+          "tool": "font_consistency_tool",
+          "unreviewed": false
+        },
+        {
+          "also_on": 0,
+          "category": "tampering_forensic",
+          "check_code": null,
+          "document_id": "e5e5e5e5-0000-0000-0000-000000000002",
+          "document_type": "bank_statement",
+          "filename": "C011_BankStatement.pdf",
+          "finding_id": "e5e5e5e5:numerical_checks_tool-1",
+          "flag_id": null,
+          "points": 3.0,
+          "rationale": "A difference of SGD 1.00 points to an edited figure.",
+          "repeat_of": null,
+          "severity": "medium",
+          "source": "document",
+          "summary": "Available balance does not equal ledger balance minus holds.",
+          "tool": "numerical_checks_tool",
+          "unreviewed": false
+        },
+        {
+          "also_on": 0,
+          "category": "tampering_forensic",
+          "check_code": null,
+          "document_id": "e5e5e5e5-0000-0000-0000-000000000003",
+          "document_type": "certificate_of_incorporation",
+          "filename": "C011_CertIncorp.pdf",
+          "finding_id": "e5e5e5e5:spelling_tool-1",
+          "flag_id": null,
+          "points": 1.0,
+          "rationale": "Minor, but formal certificates are proofread.",
+          "repeat_of": null,
+          "severity": "low",
+          "source": "document",
+          "summary": "Possible misspelling \"Controling\".",
+          "tool": "spelling_tool",
+          "unreviewed": false
+        }
+      ],
+      "documents_scanned": 3,
+      "documents_total": 3,
+      "level": "High",
+      "points": 12.0,
+      "reasons": [
+        "Rated High from the combined severity of 3 finding(s)."
+      ],
+      "score": 55,
+      "state": "scored",
+      "unassessed_checks": []
+    },
+    "scoring": {
+      "critical_needs_high_documents": 3,
+      "cross_document_findings": 0,
+      "documents_scanned": 3,
+      "documents_total": 3,
+      "findings": [
+        {
+          "also_on": 0,
+          "category": "tampering_forensic",
+          "document": "C011_Payslip.pdf",
+          "finding_id": "e5e5e5e5:font_consistency_tool-1",
+          "points": 8.0,
+          "repeat_of": null,
+          "severity": "high",
+          "source": "document",
+          "tool": "font_consistency_tool",
+          "unreviewed": false
+        },
+        {
+          "also_on": 0,
+          "category": "tampering_forensic",
+          "document": "C011_BankStatement.pdf",
+          "finding_id": "e5e5e5e5:numerical_checks_tool-1",
+          "points": 3.0,
+          "repeat_of": null,
+          "severity": "medium",
+          "source": "document",
+          "tool": "numerical_checks_tool",
+          "unreviewed": false
+        },
+        {
+          "also_on": 0,
+          "category": "tampering_forensic",
+          "document": "C011_CertIncorp.pdf",
+          "finding_id": "e5e5e5e5:spelling_tool-1",
+          "points": 1.0,
+          "repeat_of": null,
+          "severity": "low",
+          "source": "document",
+          "tool": "spelling_tool",
+          "unreviewed": false
+        }
+      ],
+      "level": "High",
+      "level_thresholds": [
+        [
+          8,
+          "High"
+        ],
+        [
+          3,
+          "Medium"
+        ],
+        [
+          0,
+          "Low"
+        ]
+      ],
+      "level_without_cross_document": "High",
+      "noise_cap_per_document": 6.0,
+      "points": 12.0,
+      "reasons": [
+        "Rated High from the combined severity of 3 finding(s)."
+      ],
+      "repeat_weight": 0.25,
+      "score": 55,
+      "score_without_cross_document": 55,
+      "severity_points": {
+        "high": 8,
+        "info": 0,
+        "low": 1,
+        "medium": 3
+      },
+      "state": "scored",
+      "unassessed_checks": []
+    }
+  },
+  "RS-008": {
+    "risk": {
+      "contributing_findings": [],
+      "documents_scanned": 1,
+      "documents_total": 2,
+      "level": null,
+      "points": null,
+      "reasons": [],
+      "score": null,
+      "state": "pending",
+      "unassessed_checks": []
+    },
+    "scoring": null
+  }
+}

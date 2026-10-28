@@ -6,6 +6,7 @@ import {
   listCaseAuditTrail,
   type AuditEvent,
 } from '../../services/uploadService';
+import { formatCheck } from '../../utils/checkLabels';
 import { humanizeFieldKey } from '../../utils/fieldLabels';
 
 interface AuditDocument {
@@ -40,6 +41,10 @@ const ACTION_LABELS: Record<string, string> = {
   'note.added': 'Added note',
   'note.edited': 'Edited note',
   'note.deleted': 'Deleted note',
+  'finding_review.saved': 'Reviewed findings',
+  'finding_review.missed_reported': 'Reported a missed issue',
+  'finding_review.missed_edited': 'Edited a missed issue',
+  'finding_review.removed': 'Removed a finding review',
 };
 
 // Stuck-work recovery is the app's own upkeep, not an action on the case, so the trail leaves it out
@@ -238,6 +243,23 @@ function describe(event: AuditEvent): string | null {
       if (likelihood) return `AI-generation likelihood: ${likelihood}`;
       return typeof detail.finding_count === 'number' ? `${detail.finding_count} finding(s)` : null;
     }
+    case 'finding_review.saved': {
+      const parts = [
+        count(detail.real) && `${count(detail.real)} real issue(s)`,
+        count(detail.false_alarms) && `${count(detail.false_alarms)} false alarm(s)`,
+        count(detail.cleared) && `${count(detail.cleared)} cleared`,
+      ].filter(Boolean);
+      const where = detail.scope === 'case' ? 'Cross-document findings' : null;
+      return [where, parts.join(' · ')].filter(Boolean).join(': ') || null;
+    }
+    case 'finding_review.missed_reported':
+      return text(detail.check_name) && `Against ${formatCheck(text(detail.check_name))}`;
+    case 'finding_review.missed_edited':
+      return text(detail.check_name) && `${formatCheck(text(detail.from_check))} → ${formatCheck(text(detail.check_name))}`;
+    case 'finding_review.removed': {
+      const what = detail.kind === 'missed' ? 'Missed issue' : `Verdict (${detail.verdict === 'correct' ? 'real issue' : 'false alarm'})`;
+      return text(detail.check_name) ? `${what} on ${formatCheck(text(detail.check_name))}` : what;
+    }
     case 'case.analysis.completed':
       // The risk level is shown as a badge before this (riskOf).
       if (event.outcome !== 'success') return text(detail.error);
@@ -295,11 +317,11 @@ export function AuditTrailCard({
 
   const filenames = useMemo(() => new Map(documents.map((document) => [document.id, document.filename])), [documents]);
 
-  // What the entry's pill names: its document, or for a note on the whole case, the case.
+  // What the entry's pill names: its document, or for a note or a finding review on the whole case, the case.
   function documentName(event: AuditEvent): string | null {
     const recorded = text(event.detail.filename);
     if (event.document_id) return filenames.get(event.document_id) ?? recorded ?? 'Removed document';
-    if (event.type.startsWith('note.')) return caseNumber ?? 'This case';
+    if (event.type.startsWith('note.') || event.type.startsWith('finding_review.')) return caseNumber ?? 'This case';
     return recorded;
   }
 

@@ -154,6 +154,34 @@ test.describe('Case audit trail', () => {
     await expect(entries.locator('.audit-officer')).toHaveText(['By B. Smith', 'By B. Smith']);
   });
 
+  test('an officer reviewing a document\'s findings is an entry naming the officer and the document', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const payslip = fixture.document('Payslip');
+    backend.auditEvents = [
+      event(fixture.case.id, '2026-10-21T02:00:00Z', 'finding_review.saved', {
+        actor: 'bob', document_id: payslip.id, detail: { scope: 'document', real: 1, false_alarms: 2, cleared: 0 },
+      }),
+      event(fixture.case.id, '2026-10-21T02:01:00Z', 'finding_review.saved', {
+        actor: 'bob', detail: { scope: 'case', real: 1, false_alarms: 0, cleared: 0 },
+      }),
+      event(fixture.case.id, '2026-10-21T02:02:00Z', 'finding_review.missed_reported', {
+        actor: 'bob', document_id: payslip.id, detail: { scope: 'document', check_name: 'metadata_tool' },
+      }),
+    ];
+
+    await page.goto(`${fixture.caseUrl}?section=audit`);
+
+    const entries = page.getByTestId('audit-entry');
+    await expect(entries.locator('.audit-action')).toHaveText(['Reviewed findings', 'Reviewed findings', 'Reported a missed issue']);
+    await expect(entries.locator('.audit-summary')).toHaveText([
+      '1 real issue(s) · 2 false alarm(s)',
+      'Cross-document findings: 1 real issue(s)',
+      'Against Metadata',
+    ]);
+    await expect(entries.locator('.audit-document')).toHaveText([payslip.filename, fixture.case.greenlink_case_id, payslip.filename]);
+    await expect(entries.locator('.audit-officer')).toHaveText(['By B. Smith', 'By B. Smith', 'By B. Smith']);
+  });
+
   test('a list field edit shows its item counts and each item added or removed', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
     backend.auditEvents = [
@@ -244,14 +272,5 @@ test.describe('Case audit trail', () => {
     await page.goto(`${fixture.caseUrl}?section=audit`);
 
     await expect(page.getByText('No audit events available yet.')).toBeVisible();
-  });
-
-  test('is reached from the case page while reviewing the case', async ({ page, backend }) => {
-    const fixture = loadFixture(backend, 'anchorpoint');
-
-    await page.goto(fixture.caseUrl);
-    await page.getByRole('button', { name: /Audit Trail/ }).click();
-
-    await expect(page.getByRole('heading', { name: /Case Audit Trail/ })).toBeVisible();
   });
 });

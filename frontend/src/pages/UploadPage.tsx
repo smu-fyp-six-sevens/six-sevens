@@ -439,7 +439,7 @@ export default function UploadPage({
             )
           )}
 
-          {activeSection === 'risk' && <CaseRiskCard risk={risk} />}
+          {activeSection === 'risk' && <CaseRiskCard risk={risk} caseId={selectedCase.id} caseDocuments={documents} />}
 
           {activeSection === 'analysis' && (
             <CaseAnalysisCard caseId={selectedCase.id} analysisReady={analysisReady} overview={analysisOverview} />

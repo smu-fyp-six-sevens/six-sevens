@@ -46,7 +46,7 @@ from ...run_context import spend_model_call
 from ..detection_report import SCHEMA_VERSION
 from .specialists import SEVERITIES, SPECIALISTS, document_side, run_specialist, today_in_singapore
 from .. import trace
-from ... import document_repository, extracted_fields_repository, flags_repository, telemetry
+from ... import document_repository, extracted_fields_repository, finding_reviews_repository, flags_repository, telemetry
 from ...config import settings
 
 T = TypeVar("T", bound=BaseModel)
@@ -549,6 +549,11 @@ async def _store_flags(document_id: str, case_id: str | None, report: dict) -> N
     except Exception as exc:
         logger.exception("Document %s: failed to store flags", document_id)
         trace.record(document_id, "flags_error", flags_error=f"{type(exc).__name__}: {exc}")
+    # Officers' reviews named the previous run's findings, which this report replaces.
+    try:
+        await asyncio.to_thread(finding_reviews_repository.clear_document, document_id)
+    except Exception:
+        logger.exception("Document %s: failed to clear the previous run's finding reviews", document_id)
 
 
 async def run_detection(document_id: str) -> dict:

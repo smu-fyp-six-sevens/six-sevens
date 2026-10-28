@@ -32,12 +32,19 @@ export function text(name: string, content = 'plain text, not a document'): Test
   return { name, mimeType: 'text/plain', buffer: Buffer.from(content) };
 }
 
-/** A PDF just over the 25MB limit (MAX_FILE_SIZE_BYTES). */
-export function oversizedPdf(name: string): TestFile {
-  const size = 25 * 1024 * 1024 + 1;
-  const buffer = Buffer.alloc(size, 0x20);
-  Buffer.from('%PDF-1.4\n').copy(buffer);
-  return { name, mimeType: 'application/pdf', buffer };
+/**
+ * Adds, through Browse, a PDF one byte over the 25MB limit (MAX_FILE_SIZE_BYTES). Built in the page: sending
+ * 25MB from the test runner with setInputFiles took about 10 seconds.
+ */
+export async function browseOversizedPdf(page: Page, name: string): Promise<void> {
+  await page.locator('.dropzone input[type="file"]').evaluate((input: HTMLInputElement, fileName) => {
+    const header = '%PDF-1.4\n';
+    const padding = new Uint8Array(25 * 1024 * 1024 + 1 - header.length);
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([header, padding], fileName, { type: 'application/pdf' }));
+    input.files = transfer.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, name);
 }
 
 /** Adds files through the drop zone's Browse (file input). */

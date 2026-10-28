@@ -40,7 +40,7 @@ from app.config import settings
 from app.langgraph import nodes, pipeline, text_cache, trace
 from app.langgraph.extract import _EXTRACTION_MAX_TOKENS
 from app.langgraph.extraction_prompts import EXTRACTION_SCHEMAS
-from app.models import DocumentRecord, DocumentStatus
+from app.models import DocumentRecord, DocumentStatus, RoutingStatus
 from app.events import Event, types
 from app.workers import documents as doc_worker
 
@@ -178,7 +178,7 @@ class FakeStore:
         document = self.documents[document_id]
         document.document_type = recorded["document_type"]
         document.classification_confidence = recorded["classification_confidence"]
-        document.routing_status = recorded["routing_status"]
+        document.routing_status = RoutingStatus(recorded["routing_status"])
 
     def update_extracted_fields(self, document_id, extraction_confidence, fulfilled_requirements=None):
         self.extraction_confidence[document_id] = extraction_confidence

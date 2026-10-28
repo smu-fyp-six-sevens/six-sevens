@@ -92,6 +92,18 @@ export interface DetectionFinding {
   rationale: string;
   specialists: string[];
   via_second_look: boolean;
+  // Where on the document it was found, for the checks that measure an area (image and layout checks).
+  // `page` is 1-based (null for an image upload); `bbox` is [x0, y0, x1, y1] from the top-left, in
+  // `bbox_units`, within a page of `page_size` when the check reports it.
+  page?: number | null;
+  bbox?: [number, number, number, number] | null;
+  bbox_units?: 'pt' | 'px';
+  page_size?: [number, number] | null;
+  // The font and spelling checks list each place instead (page 1-based, bbox in `bbox_units`).
+  locations?: { page: number; bbox?: [number, number, number, number] }[];
+  // The check's own label for it (image checks: indicator; layout check: type).
+  indicator?: string;
+  type?: string;
 }
 
 export interface DetectionReport {
@@ -190,3 +202,17 @@ export interface CaseCost {
 // parent_id marks a reply; edited_at is set once its author edits it; deleted_at marks a deleted note kept
 // (text erased) as a placeholder above its replies.
 export type CaseNote = Schemas['CaseNote'];
+
+// Finding reviews (backend/app/detection_metrics.py). "document": a finding on one document (check_name is its
+// tool). "case": a cross-document finding from the case analysis (check_name is its category).
+// precision = correct / (correct + wrong); recall = correct / (correct + missed); null: nothing to measure yet.
+export type FindingReview = Schemas['FindingReview'];
+export type ReviewScope = FindingReview['scope'];
+export type ReviewVerdict = NonNullable<FindingReview['verdict']>;
+export type CheckMetrics = Schemas['CheckMetrics'];
+export type MetricsSummary = Schemas['MetricsSummary'];
+// The backend keys checks by scope as a plain dict; it always has both scopes.
+export type CaseFindingReviews = Omit<Schemas['CaseFindingReviews'], 'checks'> & {
+  checks: Record<ReviewScope, string[]>;
+};
+export type DetectionMetrics = Schemas['DetectionMetrics'];

@@ -16,7 +16,9 @@ import { loadFixture } from '../support/fixtures';
  * (models.compute_fulfilled_requirements, mapper.py, case_status.py) and
  * regression-tested there against the same fixtures
  * (backend/tests/test_regression_checklist.py); this spec checks the page
- * shows that result correctly.
+ * shows that result correctly. When a test removes documents, the mock serves
+ * the checklist the backend computed for exactly the documents left
+ * (checklist-variants.json), never one the test sets itself.
  */
 
 const REQUIRED = [
@@ -58,22 +60,6 @@ test.describe('Classify optional documents @sprint2 @SCRUM-114', () => {
     }
   });
 
-  test('DI-032 a case is not incomplete just because an optional document is missing @DI-032', async ({ page, backend }) => {
-    const fixture = loadFixture(backend, 'anchorpoint');
-    // Same case with none of the optional documents provided.
-    fixture.case.fulfilled_requirements = fixture.case.fulfilled_requirements.filter(
-      (value) => !['list_of_loans', 'company_proof_of_address', 'source_of_personal_wealth'].includes(value),
-    );
-    await page.goto(`${fixture.caseUrl}?section=documents`);
-
-    await expect(sidebar(page).locator('.section-label').first()).toContainText(`${REQUIRED.length} / ${REQUIRED.length}`);
-    for (const label of ADDITIONAL) {
-      await expect(requirement(additionalList(page), label)).not.toHaveClass(/fulfilled/);
-    }
-    await page.goto('/cases');
-    await expect(page.locator('.case-row').filter({ hasText: 'Anchorpoint' })).toContainText('Ready for review');
-  });
-
   test('DI-033 uploaded optional documents are mapped to their optional requirement @DI-033', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
     await page.goto(`${fixture.caseUrl}?section=documents`);
@@ -87,19 +73,31 @@ test.describe('Classify optional documents @sprint2 @SCRUM-114', () => {
     }
   });
 
-  test('DI-034 a case with every required and some optional documents shows the right overall status @DI-034', async ({ page, backend }) => {
+  test('DI-032 / DI-034 missing optional documents leave every required document ticked and the case ready for review @DI-032 @DI-034', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
-    fixture.case.fulfilled_requirements = fixture.case.fulfilled_requirements.filter(
-      (value) => value !== 'company_proof_of_address',
-    );
+    const removeDocuments = (...parts: string[]) => {
+      backend.documents = backend.documents.filter((d) => !parts.some((part) => d.filename.includes(part)));
+      backend.push(fixture.case.id);
+    };
     await page.goto(`${fixture.caseUrl}?section=documents`);
 
+    // DI-034: every required document, and only some of the optional ones.
+    removeDocuments('Company_UtilityBill');
+    await expect(requirement(additionalList(page), 'Company Proof of Address')).not.toHaveClass(/fulfilled/);
+    await expect(requirement(additionalList(page), 'List of Loans')).toHaveClass(/fulfilled/);
     await expect(sidebar(page).locator('.section-label').first()).toContainText(`${REQUIRED.length} / ${REQUIRED.length}`);
     for (const label of REQUIRED) {
       await expect(requirement(requiredList(page), label)).toHaveClass(/fulfilled/);
     }
-    await expect(requirement(additionalList(page), 'List of Loans')).toHaveClass(/fulfilled/);
-    await expect(requirement(additionalList(page), 'Company Proof of Address')).not.toHaveClass(/fulfilled/);
+
+    // DI-032: none of the optional documents at all.
+    removeDocuments('LoanFacility', 'LoanOffer', 'FacilityLetter', 'SimS_SourceOfWealth', 'Wealth_Statement_scan');
+    for (const label of ADDITIONAL) {
+      await expect(requirement(additionalList(page), label)).not.toHaveClass(/fulfilled/);
+    }
+    await expect(sidebar(page).locator('.section-label').first()).toContainText(`${REQUIRED.length} / ${REQUIRED.length}`);
+    await page.goto('/cases');
+    await expect(page.locator('.case-row').filter({ hasText: 'Anchorpoint' })).toContainText('Ready for review');
   });
 });
 
@@ -183,24 +181,30 @@ test.describe('Map documents @sprint2 @SCRUM-118', () => {
   });
 
   test('DI-others-05 an NRIC with only one side uploaded says which side is missing @DI-others', async ({ page, backend }) => {
+    // Muhammad's NRIC as the case's only identity (Sim's passport removed), one side at a time.
     const fixture = loadFixture(backend, 'anchorpoint');
-    const identity = () => requiredList(page).locator('li', { hasText: 'Identity Document (NRIC/Passport)' }).locator('.requirement-unmatched');
+    const all = [...backend.documents];
+    const keepAllBut = (...parts: string[]) => {
+      backend.documents = all.filter((d) => !parts.some((part) => d.filename.includes(part)));
+    };
+    const missingSide = requiredList(page).locator('li', { hasText: 'Identity Document (NRIC/Passport)' }).locator('.requirement-unmatched');
 
-    fixture.case.id_document_coverage = { covered: 1, total: 2, missing_side: 'back' };
+    keepAllBut('Passport_6086', 'MuhammadD_NRIC_back');
     await page.goto(`${fixture.caseUrl}?section=documents`);
-    await expect(identity()).toHaveText('Front photo present, back missing.');
+    await expect(missingSide).toHaveText('Front photo present, back missing.');
 
-    fixture.case.id_document_coverage = { covered: 1, total: 2, missing_side: 'front' };
+    keepAllBut('Passport_6086', 'MuhammadD_NRIC_front');
     await page.goto(`${fixture.caseUrl}?section=documents`);
-    await expect(identity()).toHaveText('Back photo present, front missing.');
+    await expect(missingSide).toHaveText('Back photo present, front missing.');
   });
 
   test('DI-others-06 an address on file with no matching ID is named in the proof of address requirement @DI-others', async ({ page, backend }) => {
+    // Sim Shu Ting's address is on file, but her passport is removed.
     const fixture = loadFixture(backend, 'anchorpoint');
-    fixture.case.proof_of_address_coverage = { covered: 1, total: 2, unmatched_names: ['Jane Tan'] };
+    backend.documents = backend.documents.filter((d) => !d.filename.includes('Passport_6086'));
     await page.goto(`${fixture.caseUrl}?section=documents`);
 
     const address = requiredList(page).locator('li', { hasText: 'Personal Proof of Address' }).locator('.requirement-unmatched');
-    await expect(address).toHaveText('Address on file but no matching ID uploaded: Jane Tan');
+    await expect(address).toHaveText('Address on file but no matching ID uploaded: Sim Shu Ting');
   });
 });
