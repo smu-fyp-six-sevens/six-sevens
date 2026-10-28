@@ -125,11 +125,14 @@ async def ingest_document_text(document_id: str, document) -> tuple[str, dict]:
             document_id, ingestion_result["extraction_method"],
         )
 
-    return await _guard_document(document_id, file_bytes, content_type, ingestion_result["raw_text"], metadata)
+    return await _guard_document(
+        document_id, file_bytes, content_type, ingestion_result["raw_text"], metadata, document.filename,
+    )
 
 
 async def _guard_document(
     document_id: str, file_bytes: bytes, content_type: str, raw_text: str, metadata: dict | None,
+    filename: str | None = None,
 ) -> tuple[str, dict]:
     """
     Layer 1 of the guardrails (guardrails/content_guard.py): records what the content guard found as the
@@ -139,7 +142,7 @@ async def _guard_document(
     the caller's call (guard_block_reason).
     """
     try:
-        result, removals = await run_cpu(content_guard.scan, file_bytes, content_type, raw_text, metadata)
+        result, removals = await run_cpu(content_guard.scan, file_bytes, content_type, raw_text, metadata, filename)
     except Exception as exc:
         logger.exception("Document %s: content guard failed", document_id)
         result, removals = content_guard.not_run(f"{type(exc).__name__}: {exc}"), []
@@ -176,17 +179,18 @@ def _is_below_threshold(confidence: float | None) -> bool:
     return confidence is None or confidence < settings.CLASSIFICATION_CONFIDENCE_THRESHOLD
 
 
-# A document the content guard rated this risky is never accepted on the classifier's word alone.
-_GUARD_REVIEW_RISKS = frozenset({"medium", "high"})
+# A document the content guard rated this risky is never accepted on the classifier's word alone. Low (instruction
+# wording in visible text or the filename, under the score that blocks) included: the officer sees the warning.
+_GUARD_REVIEW_RISKS = frozenset({"low", "medium", "high"})
 
 
 async def record_classification_result(document_id: str, classification: dict, guard_risk: str | None = None) -> None:
     """
     Records the classification-stage result (type, confidence, outcome) and
     enforces the confidence threshold as a system-level gate — the agent's
-    own needs_manual_review flag is OR'd in as an extra signal, and so is a
-    medium or high content guard risk (hidden text, or an instruction to the AI
-    in hidden text or metadata), whatever the classifier was told.
+    own needs_manual_review flag is OR'd in as an extra signal, and so is any
+    content guard risk above none (hidden text, or instruction wording anywhere
+    that didn't block the document), whatever the classifier was told.
     document_repository.record_classification resyncs the case's
     submission_finalized flag itself, since this is where a document's
     fulfilled_requirements (and so the case's coverage) first changes.

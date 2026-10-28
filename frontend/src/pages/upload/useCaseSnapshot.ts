@@ -62,10 +62,13 @@ export function useCaseSnapshot(caseId: string) {
   );
 
   const flaggedDocuments = useMemo(() => Array.from(documentDetails.values()).filter((document) => {
-    // Rejecting a document is the officer's final decision, so it's no longer waiting on review.
-    if (document.status === 'rejected') return false;
+    // Approving or rejecting a document is the officer's final decision, so it's no longer waiting on
+    // review. Approval doesn't clear routing_status, so a guard-flagged document would otherwise stay here.
+    if (document.status === 'rejected' || hasBeenApproved(document.status)) return false;
     const lowestConfidence = lowestFieldConfidence(document.extracted_fields);
     return (
+      // Same as its Routing Outcome: a failed document (blocked by the content guard included) needs the officer.
+      document.status === 'failed' ||
       document.routing_status === 'manual_review' ||
       (document.status === 'analyzed' && !isClassificationConfirmed(document)) ||
       (document.status === 'analyzed' && !hasExtractedInformation(document.extracted_fields)) ||

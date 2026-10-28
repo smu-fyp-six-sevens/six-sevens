@@ -17,6 +17,7 @@ import {
   formatDocumentType,
   hasBeenApproved,
   hasExtractedInformation,
+  isBlockedByContentGuard,
   isClassificationConfirmed,
   skipsDetection,
 } from '../services/uploadService';
@@ -34,6 +35,8 @@ import { useDocumentRecord } from './document-details/useDocumentRecord';
 import { useDocumentTypeEditing } from './document-details/useDocumentTypeEditing';
 import { useFieldEditing } from './document-details/useFieldEditing';
 import { useLangGraphTrace } from './document-details/useLangGraphTrace';
+import { useContentGuard } from './document-details/useContentGuard';
+import { ContentGuardWarning } from './document-details/ContentGuardWarning';
 import { humanizeFieldKey } from '../utils/fieldLabels';
 
 // Developer-only panels, so they load on demand.
@@ -168,8 +171,12 @@ export default function DocumentDetailsPage({
     [extractedFields, absentRequiredFields],
   );
 
+  // No manual review or added fields on a document the content guard stopped: no model read it.
+  const isBlocked = document ? isBlockedByContentGuard(document) : false;
+
+  // A blocked document's reason is the content guard warning at the top of the page, so it isn't repeated here.
   const failureReason =
-    document?.status === 'failed' && document.failure_reason
+    document?.status === 'failed' && document.failure_reason && !isBlocked
       ? describeFailureReason(document.failure_reason)
       : null;
 
@@ -204,6 +211,7 @@ export default function DocumentDetailsPage({
   // approval, so a document that can't be approved yet can always be confirmed.
   const canCorrectType =
     !isLocked &&
+    !isBlocked &&
     (document?.status === 'analyzed' || document?.status === 'failed') &&
     !isTypeConfirmed;
 
@@ -253,6 +261,8 @@ export default function DocumentDetailsPage({
   } = useDetection(documentId, document?.status);
 
   const { langGraphTrace, isRefreshingTrace, refreshLangGraphTrace } = useLangGraphTrace(documentId);
+
+  const contentGuard = useContentGuard(documentId, document?.status);
 
   // The case-status websocket (useDocumentRecord) stays subscribed while status is 'detecting', so this
   // fires live the moment the server moves it to 'detected' (or back to 'approved' on a failed run) —
@@ -364,6 +374,8 @@ export default function DocumentDetailsPage({
           </div>
         )}
 
+        <ContentGuardWarning contentGuard={contentGuard} />
+
         {/* Notes: open on a locked document too, since a note never edits the document. */}
 
         <NotesCard
@@ -428,7 +440,7 @@ export default function DocumentDetailsPage({
         {/* Extracted information */}
 
         <ExtractedInformationCard
-          canAddOrDeleteFields={!isLocked}
+          canAddOrDeleteFields={!isLocked && !isBlocked}
           document={document}
           extractedFields={extractedFields}
           isInFlight={isInFlight}
@@ -440,7 +452,9 @@ export default function DocumentDetailsPage({
 
         {/* Manual review */}
 
-        {canEditFields && (needsManualReview || isUnrecognisedDocument) && (
+        {/* Not while a run is in flight: its fields are about to be replaced, and a retry of a blocked document
+            clears the failure for a moment, which would flash the card up and away again. */}
+        {canEditFields && !isBlocked && !isInFlight && (needsManualReview || isUnrecognisedDocument) && (
           <ManualReviewCard
             canEditFields={canEditFields}
             fieldDraft={fieldDraft}

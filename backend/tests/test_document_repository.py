@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 
 from app import document_repository
-from app.models import DocumentRecord, DocumentStatus
+from app.models import DocumentRecord, DocumentStatus, RoutingStatus
 
 
 def _execute_result(data: list[dict]) -> MagicMock:
@@ -171,22 +171,38 @@ def test_update_status_to_failed_without_a_reason_leaves_the_stored_reason_alone
         assert update_payload == {"status": "failed"}
 
 
-def test_approve_document_returns_the_updated_row_and_does_not_resync_the_case() -> None:
-    # Approving doesn't change checklist coverage (only rejecting does), so there is nothing to resync.
+def test_approve_document_accepts_it_and_resyncs_the_case() -> None:
+    # Approving resolves manual review (a content guard flag, say), which can tick a checklist item.
     with (
         patch("app.document_repository.supabase_client") as mock_client,
         patch("app.case_service.sync_submission_finalized") as mock_case_service,
     ):
         mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
-            _execute_result([_row(status="approved")])
+            _execute_result([_row(status="approved", routing_status="accepted")])
         )
 
         approved = document_repository.approve_document("doc-1")
 
-    mock_client.table.return_value.update.assert_called_once_with({"status": "approved"})
+    mock_client.table.return_value.update.assert_called_once_with({"status": "approved", "routing_status": "accepted"})
     mock_client.table.return_value.update.return_value.eq.assert_called_once_with("id", "doc-1")
     assert approved is not None and approved.status == DocumentStatus.APPROVED
-    mock_case_service.assert_not_called()
+    mock_case_service.assert_called_once_with("case-1")
+
+
+def test_undo_approval_restores_the_status_and_routing_only_while_still_approved() -> None:
+    with (
+        patch("app.document_repository.supabase_client") as mock_client,
+        patch("app.case_service.sync_submission_finalized") as mock_case_service,
+    ):
+        update = mock_client.table.return_value.update
+        update.return_value.eq.return_value.eq.return_value.execute.return_value = _execute_result([_row()])
+
+        document_repository.undo_approval("doc-1", RoutingStatus.MANUAL_REVIEW)
+
+    update.assert_called_once_with({"status": "analyzed", "routing_status": "manual_review"})
+    update.return_value.eq.assert_called_once_with("id", "doc-1")
+    update.return_value.eq.return_value.eq.assert_called_once_with("status", "approved")
+    mock_case_service.assert_called_once_with("case-1")
 
 
 def test_approve_document_returns_none_when_nothing_was_updated() -> None:

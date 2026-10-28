@@ -749,10 +749,12 @@ def counts_towards_checklist(document: DocumentRecord) -> bool:
     addresses (case_service.compute_requirement_coverage, mapper.py). Same
     bar as approval for the type: routing_status alone isn't enough, since
     an officer's "Save fields" flips it to ACCEPTED without confirming the
-    type. A rejected document never counts.
+    type. A rejected document never counts, nor does a failed one: an officer's type pick
+    is recorded before its extraction rerun, so a rerun that fails (or a document the
+    content guard stopped) would otherwise keep the checklist item ticked.
     """
     return (
         document.routing_status == RoutingStatus.ACCEPTED
-        and document.status != DocumentStatus.REJECTED
+        and document.status not in (DocumentStatus.REJECTED, DocumentStatus.FAILED)
         and is_classification_confirmed(document)
     )

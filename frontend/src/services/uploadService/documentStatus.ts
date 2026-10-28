@@ -15,6 +15,12 @@ export function hasBeenApproved(status: string | null | undefined): boolean {
   return status === 'approved' || status === 'detecting' || status === 'detected';
 }
 
+// Stopped at ingest because it is worded as an instruction to the AI: nothing was classified or
+// extracted, so there is nothing to review, add or retype. Mirrors content_guard.BLOCKED_PREFIX.
+export function isBlockedByContentGuard(document: Pick<DocumentRecord, 'status' | 'failure_reason'>): boolean {
+  return document.status === 'failed' && (document.failure_reason ?? '').startsWith('Blocked by the content guard');
+}
+
 // The single source of truth for "does this document's extraction quality need a human to look at it".
 export function hasExtractedInformation(fields: Record<string, unknown> | null): boolean {
   if (!fields) {

@@ -50,6 +50,10 @@ export type UpdatedCase = Pick<Schemas['CaseSummary'], 'id' | 'greenlink_case_id
 
 export type DocumentDownloadResponse = Schemas['DocumentDownloadResponse'];
 
+// What the content guard found at ingest (backend/app/guardrails/content_guard.py).
+export type ContentGuardResponse = Schemas['ContentGuardResponse'];
+export type ContentGuardFinding = Schemas['ContentGuardFinding'];
+
 // The case queue: one page of rows, the counts for its sidebar, and jump-to-case suggestions.
 export type CaseDocumentsStatus = Schemas['CaseDocumentsStatus'];
 export type CaseListPage = Schemas['CaseListPage'];

@@ -425,6 +425,8 @@ def _injection_finding(span: dict) -> dict:
         summary = f'Metadata field {span.get("field")} is worded as an instruction to the AI: "{quote}"'
     elif where == "image":
         summary = f'Text inside an image on page {span.get("page")} is worded as an instruction to the AI: "{quote}"'
+    elif where == "filename":
+        summary = f'The file name is worded as an instruction to the AI: "{quote}"'
     else:
         summary = f'Visible text worded as an instruction to the AI: "{quote}"'
     severity = _INJECTION_SEVERITY.get((where, caught_by), "low")
@@ -443,7 +445,9 @@ async def _guard_result(document_id: str) -> dict | None:
         return None
     content_type = content_type_from_filename(document.filename)
     ingested = await run_cpu(ingest_document, file_bytes, document.filename, content_type, with_metadata=False)
-    result, _ = await run_cpu(content_guard.scan, file_bytes, content_type, ingested["raw_text"], document.metadata)
+    result, _ = await run_cpu(
+        content_guard.scan, file_bytes, content_type, ingested["raw_text"], document.metadata, document.filename,
+    )
     return {**result, "computed_at_detection": True}
 
 

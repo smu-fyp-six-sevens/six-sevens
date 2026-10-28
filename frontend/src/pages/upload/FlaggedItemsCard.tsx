@@ -7,10 +7,12 @@ import {
   EXTRACTION_CONFIDENCE_THRESHOLD,
   formatDocumentType,
   hasExtractedInformation,
+  isBlockedByContentGuard,
   isClassificationConfirmed,
   lowestFieldConfidence,
 } from '../../services/uploadService';
 import { humanizeFieldKey } from '../../utils/fieldLabels';
+import { describeFailureReason } from '../document-details/formatters';
 
 export function FlaggedItemsCard({
   caseMatchNeedsReview,
@@ -68,7 +70,11 @@ export function FlaggedItemsCard({
               document.routing_status === 'manual_review' ||
               !isClassificationConfirmed(document);
             const reason =
-              !classificationNeedsReview &&
+              isBlockedByContentGuard(document)
+                ? 'Blocked by the content guard: text in this document is worded as an instruction to the AI. Open it to see what was found, then reject it or ask for a clean copy.'
+                : document.status === 'failed'
+                ? `Processing failed: ${describeFailureReason(document.failure_reason ?? 'no reason was recorded').title}. Retry or reject it.`
+                : !classificationNeedsReview &&
               caseMatch &&
               caseMatchNeedsReview(document)
                 ? `${caseMatch.reason}. Please verify the document belongs to this case before approving.`
@@ -110,6 +116,12 @@ export function FlaggedItemsCard({
                       <span>
                         Lowest field confidence:{' '}
                         {lowestConfidence.toFixed(3)}
+                      </span>
+                    )}
+
+                    {document.status === 'failed' && (
+                      <span className="flagged-status">
+                        {isBlockedByContentGuard(document) ? 'Blocked · prompt injection' : 'Failed'}
                       </span>
                     )}
 

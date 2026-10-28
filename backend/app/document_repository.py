@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 
 from . import extracted_fields_repository, notes_repository, storage_service
-from .models import DocumentRecord, DocumentStatus
+from .models import DocumentRecord, DocumentStatus, RoutingStatus
 from .supabase_client import service_supabase_client, supabase_client
 from .supabase_rows import fetch_all, row as _row
 
@@ -153,21 +153,50 @@ def update_status(
     if expected_current_statuses is not None:
         query = query.in_("status", [s.value for s in expected_current_statuses])
     result = query.execute()
-    # No case resync here. Coverage depends on routing_status, the confirmed type,
-    # rejection and the fields (see models.counts_towards_checklist), and
-    # record_classification / update_extracted_fields already resync when they
-    # write those. A status change alone, ANALYZED included, can't move it.
+    # Coverage depends on routing_status, the confirmed type, rejection, failure and the
+    # fields (see models.counts_towards_checklist). record_classification /
+    # update_extracted_fields resync when they write those; here only a move into or out of
+    # FAILED can change it (out of it only by a compare-and-swap from FAILED, i.e. a retry).
+    if result.data and (
+        status == DocumentStatus.FAILED
+        or (expected_current_statuses is not None and DocumentStatus.FAILED in expected_current_statuses)
+    ):
+        _sync_case(_row(result.data[0]).get("case_id"))
     return bool(result.data)
 
 def approve_document(document_id: str) -> DocumentRecord | None:
-    """Approving doesn't change checklist coverage (only rejection does), so no case resync."""
+    """
+    Approving resolves any manual review, so the document is ACCEPTED. Without it, a document routed to
+    manual review that needed nothing saved (a content guard flag, say) stayed there after approval, never
+    counting towards the checklist (models.counts_towards_checklist). That can move coverage, so resync.
+    """
     result = (
         supabase_client.table("documents")
-        .update({"status": DocumentStatus.APPROVED.value})
+        .update({"status": DocumentStatus.APPROVED.value, "routing_status": RoutingStatus.ACCEPTED.value})
         .eq("id", document_id)
         .execute()
     )
-    return DocumentRecord(**_row(result.data[0])) if result.data else None
+    if not result.data:
+        return None
+    row = _row(result.data[0])
+    _sync_case(row.get("case_id"))
+    return DocumentRecord(**row)
+
+
+def undo_approval(document_id: str, routing_status: RoutingStatus | None) -> None:
+    """Puts an approval back (status and the routing_status it replaced), if nothing has moved it on since."""
+    result = (
+        supabase_client.table("documents")
+        .update({
+            "status": DocumentStatus.ANALYZED.value,
+            "routing_status": routing_status.value if routing_status else None,
+        })
+        .eq("id", document_id)
+        .eq("status", DocumentStatus.APPROVED.value)
+        .execute()
+    )
+    if result.data:
+        _sync_case(_row(result.data[0]).get("case_id"))
 
 def mark_detecting(document_id: str) -> None:
     """The Detection Agent has started — shown live as "Scanning" (see langgraph/detection/graph.py)."""

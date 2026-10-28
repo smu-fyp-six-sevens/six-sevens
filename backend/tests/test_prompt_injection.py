@@ -183,10 +183,11 @@ async def _routing(guard_risk: str | None) -> str:
 async def test_a_risky_document_is_never_auto_accepted_at_classification() -> None:
     assert await _routing("high") == RoutingStatus.MANUAL_REVIEW.value
     assert await _routing("medium") == RoutingStatus.MANUAL_REVIEW.value
+    # Visible instruction wording under the score that blocks: the officer reviews it, with the warning.
+    assert await _routing("low") == RoutingStatus.MANUAL_REVIEW.value
 
 
-async def test_a_low_or_clean_document_is_accepted_as_before() -> None:
-    assert await _routing("low") == RoutingStatus.ACCEPTED.value
+async def test_a_clean_document_is_accepted_as_before() -> None:
     assert await _routing("none") == RoutingStatus.ACCEPTED.value
     assert await _routing(None) == RoutingStatus.ACCEPTED.value
 

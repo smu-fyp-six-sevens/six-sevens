@@ -277,6 +277,23 @@ def test_rejected_document_does_not_count_as_fulfilled() -> None:
     assert "bank_statement" in missing
 
 
+def test_failed_document_does_not_count_as_fulfilled() -> None:
+    """An officer's type pick on a document whose extraction rerun then failed doesn't tick its item."""
+    documents = [
+        _make_document(
+            "doc-1",
+            DocumentStatus.FAILED,
+            routing_status=RoutingStatus.ACCEPTED,
+            document_type="bank_statement",
+            fulfilled_requirements=["bank_statement"],
+            classification_confidence=1.0,
+        )
+    ]
+    fulfilled, missing = compute_requirement_coverage(documents)
+    assert "bank_statement" not in fulfilled
+    assert "bank_statement" in missing
+
+
 def test_additional_list_of_loans_is_ticked_but_never_missing() -> None:
     """An additional item shows as fulfilled once accepted, and never blocks the checklist."""
     assert "list_of_loans" not in REQUIRED_DOCUMENT_TYPES
