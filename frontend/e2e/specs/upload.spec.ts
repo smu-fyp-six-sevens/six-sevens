@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../support/test';
 import { makeCase, type MockBackend } from '../support/mockBackend';
-import { browseFiles, dropFiles, jpg, oversizedPdf, pdf, png, text } from '../support/files';
+import { browseFiles, browseOversizedPdf, dropFiles, jpg, pdf, png, text } from '../support/files';
 
 /**
  * Upload Documents (SCRUM-6, Sprint 1) — test cases DI-001 to DI-016 from
@@ -74,7 +74,7 @@ test.describe('Upload documents @sprint1 @SCRUM-6', () => {
   test('DI-009 a file over 25MB is rejected with a file-size error @DI-009', async ({ page, backend }) => {
     await openCase(page, backend);
 
-    await browseFiles(page, [oversizedPdf('large-statement.pdf')]);
+    await browseOversizedPdf(page, 'large-statement.pdf');
     await uploadButton(page).click();
 
     const row = fileRow(page, 'large-statement.pdf');

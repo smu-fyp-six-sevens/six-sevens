@@ -27,6 +27,8 @@ const tracePanel = (page: Page) =>
   page.locator('.debug-card', { has: page.getByRole('heading', { name: 'Case analysis trace (debug)' }) });
 const riskCard = (page: Page) =>
   page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
+const reviewCard = (page: Page) =>
+  page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Documents to Review' }) });
 const sectionStatus = (page: Page, label: string) =>
   page.getByRole('navigation', { name: 'Case sections' }).getByRole('button', { name: new RegExp(`^${label}`, 'i') });
 
@@ -314,11 +316,10 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
   test('RS-006 each finding shows its document, type, check, severity, summary, rationale and points @RS-006', async ({ page, backend }) => {
     const theCase = await openRisk(page, backend, 'RS-006');
 
-    const card = riskCard(page);
-    const payslip = card.locator('.risk-document', { hasText: 'C011_Payslip.pdf' });
+    const payslip = reviewCard(page).locator('.risk-document', { hasText: 'C011_Payslip.pdf' });
     await expect(payslip.locator('.risk-document-meta')).toContainText('Payslip');
     await payslip.getByRole('button').click();
-    const row = payslip.locator('.risk-findings li');
+    const row = page.getByRole('dialog', { name: 'Review findings on C011_Payslip.pdf' }).locator('.risk-findings li');
     await expect(row.locator('.risk-severity')).toHaveText('high');
     await expect(row.locator('.risk-finding-check')).toHaveText('Font consistency');
     await expect(row.locator('.risk-finding-summary')).toHaveText('Net pay is in a different font from the rest of the payslip.');
@@ -335,9 +336,8 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
   test('RS-007 findings are listed high first, then medium, then low @RS-007', async ({ page, backend }) => {
     const theCase = await openRisk(page, backend, 'RS-006');
 
-    const card = riskCard(page);
-    await card.getByRole('button', { name: 'Show 1 low-severity finding' }).click();
-    const documents = card.locator('.risk-document');
+    // Every document with findings is still to review, low-only ones included; the empty cross-document group sits under Reviewed.
+    const documents = reviewCard(page).locator(':scope > .flagged-list .risk-document');
     await expect(documents).toHaveCount(3);
     await expect(documents.locator('.risk-document-heading strong')).toHaveText([
       'C011_Payslip.pdf', 'C011_BankStatement.pdf', 'C011_CertIncorp.pdf',
