@@ -1052,11 +1052,26 @@ test.describe('Update case @sprint3 @SCRUM-116', () => {
     await renameCase(page, ironclad.greenlink_case_id, NEW_NAME);
 
     const error = page.locator('.error-message');
-    await expect(error.locator('.error-message-title')).toHaveText("Couldn't update case.");
+    await expect(error.locator('.error-message-title')).toHaveText('Failed to update case.');
     await expect(error.locator('.error-message-hint')).toHaveText(
-      'Something went wrong on our side. Try again, and tell the team if it keeps happening.',
+      'Something went wrong on our side; try again, and tell the team if it keeps happening.',
     );
     await expect(page.getByText(/502|Supabase/)).toHaveCount(0);
+  });
+
+  test('no response while saving reads like a server error', async ({ page, backend }) => {
+    const ironclad = seedIronclad(backend);
+    await page.route(`**/cases/${ironclad.id}`, (route) =>
+      route.request().method() === 'PATCH' ? route.abort('connectionrefused') : route.fallback(),
+    );
+
+    await renameCase(page, ironclad.greenlink_case_id, NEW_NAME);
+
+    const error = page.locator('.error-message');
+    await expect(error.locator('.error-message-title')).toHaveText('Failed to update case.');
+    await expect(error.locator('.error-message-hint')).toHaveText(
+      'Something went wrong on our side; try again, and tell the team if it keeps happening.',
+    );
   });
 });
 

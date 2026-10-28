@@ -41,11 +41,12 @@ export async function authFetch(path: string, options: RequestInit = {}): Promis
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  // fetch only throws when the request never got a response (server down, offline) or was aborted.
+  // fetch only throws when the request never got a response (server down, offline) or was aborted. No response is
+  // handed on as a failed response (status 0), so the caller's assertOk words it like a 5xx; an abort still throws.
   const response = await fetch(`${apiBaseUrl}${path}`, { ...options, headers }).catch((error: unknown) => {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
     console.error(`No response from ${path}:`, error);
-    throw new Error("Couldn't reach the server. Check your connection and try again.");
+    return Response.error();
   });
 
   if (response.status === 401) {
