@@ -181,7 +181,7 @@ test.describe('Trigger case analysis @sprint4 @SCRUM-52', () => {
     await page.goto(`/cases/${theCase.greenlink_case_id}?section=analysis`);
 
     await expect(analysisCard(page)).toContainText('Out of date.');
-    await expect(analysisCard(page)).toContainText('Documents changed since this analysis ran.');
+    await expect(analysisCard(page)).toContainText('The documents changed since the last run: run again to update the score.');
     await expect(sectionStatus(page, 'Case Analysis')).toContainText('Out of Date');
     await expect(runButton(page)).toHaveText('Run again');
     await expect(tracePanel(page)).toContainText('status: complete (stale)');

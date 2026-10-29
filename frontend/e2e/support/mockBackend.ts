@@ -310,6 +310,8 @@ export class MockBackend {
   detectionErrors: Record<string, string> = {};
   /** LangGraph pipeline trace per document id (GET .../langgraph-trace); none = 404. */
   traces: Record<string, unknown> = {};
+  /** What the content guard found at ingest, per document id (GET .../content-guard); none = checked, nothing found. */
+  contentGuards: Record<string, unknown> = {};
   /** Notes on cases and documents (GET/POST /cases/:id/notes), signed by the logged-in officer. */
   notes: NoteRow[] = [];
   /** Audit trail entries (GET /audit/events?case_id=), in any order: served newest first, like the backend. */
@@ -882,6 +884,11 @@ export class MockBackend {
       if (method === 'GET' && rest === '/langgraph-trace') {
         const trace = this.traces[documentId];
         return trace ? json(trace) : json({ detail: 'No langgraph trace found for this document.' }, 404);
+      }
+      if (method === 'GET' && rest === '/content-guard') {
+        return json(
+          this.contentGuards[documentId] ?? { checked: true, risk: 'none', blocked: false, error: null, findings: [] },
+        );
       }
       // Same rules as routers/documents.py: retry a failed document back
       // into the queue; cancel one that's still in flight.

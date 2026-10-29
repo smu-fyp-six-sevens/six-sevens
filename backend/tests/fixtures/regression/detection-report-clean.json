@@ -8,6 +8,7 @@
       "summary": "Reviewed within my expertise.",
       "title": "Layout & Rendering Analyst",
       "tools_called": [
+        "hidden_text_tool",
         "font_consistency_tool"
       ],
       "uncertain": false
@@ -32,6 +33,7 @@
       "summary": "Reviewed within my expertise.",
       "title": "Digital Authenticity Analyst",
       "tools_called": [
+        "prompt_injection_tool",
         "metadata_tool"
       ],
       "uncertain": false
