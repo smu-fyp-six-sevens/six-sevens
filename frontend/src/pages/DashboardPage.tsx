@@ -330,18 +330,8 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
       <AppHeader />
       <div className="dashboard-app">
       <main className="dashboard-main">
-        <div className="dashboard-content">
-          <section className="dashboard-title-row">
-            <div>
-              <h1>{role === 'Manager' ? 'Portfolio overview' : 'My workspace'}</h1>
-              <p className="dashboard-subtitle">{tab === 'Overview' ? 'A summary of case progress, risk signals and common findings.' : tab === 'Cases' ? 'Review case status and priority across the selected period.' : tab === 'Accuracy' ? 'How often each detection check is right, and how much it misses, from officer reviews.' : 'Explore recurring findings and the cases and documents they affect.'}</p>
-            </div>
-            <div className="dashboard-filters">
-              <label><span>Date range</span><select value={range} onChange={(event) => setRange(event.target.value)}><option>Last 7 days</option><option>Last 30 days</option><option>Last 90 days</option><option>All time</option></select></label>
-              <label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option>All statuses</option>{STATUSES.map((status) => <option key={status}>{status}</option>)}</select></label>
-              {tab === 'Cases' && <label className="risk-sort-filter"><span>Sort by risk</span><select value={riskOrder} onChange={(event) => setRiskOrder(event.target.value as 'highest' | 'lowest')}><option value="highest">Critical first</option><option value="lowest">Low first</option></select></label>}
-            </div>
-          </section>
+        <div className="dashboard-sticky-shell">
+          <div className="dashboard-content dashboard-sticky-content">
           <div className="dashboard-section-bar">
             <nav className="dashboard-tabs" aria-label="Dashboard sections">
               {DASHBOARD_TABS.map((item) => {
@@ -354,19 +344,28 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
                 );
               })}
             </nav>
+            <div className="dashboard-toolbar-actions">
+              <div className="dashboard-filters">
+                <label><span>Date range</span><select value={range} onChange={(event) => setRange(event.target.value)}><option>Last 7 days</option><option>Last 30 days</option><option>Last 90 days</option><option>All time</option></select></label>
+                <label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option>All statuses</option>{STATUSES.map((status) => <option key={status}>{status}</option>)}</select></label>
+                {tab === 'Cases' && <label className="risk-sort-filter"><span>Sort by risk</span><select value={riskOrder} onChange={(event) => setRiskOrder(event.target.value as 'highest' | 'lowest')}><option value="highest">Critical first</option><option value="lowest">Low first</option></select></label>}
+              </div>
             {SHOW_ROLE_SWITCH && (
               <div className="role-switch" aria-label="Preview dashboard role">
                 {(['Manager', 'Analyst'] as Role[]).map((item) => <button key={item} className={role === item ? 'selected' : ''} onClick={() => { setRole(item); setTab('Overview'); }}>{item}</button>)}
               </div>
             )}
+            </div>
           </div>
-          {isLoading && !caseRecords.length && <p className="dashboard-data-note" role="status">Loading live case links; preview rows are temporarily not clickable.</p>}
-          {!isLoading && !caseRecords.length && <p className="dashboard-data-note">No live cases are loaded. Preview rows are illustrative and cannot open a case record.</p>}
-
+          </div>
+        </div>
+        <div className="dashboard-content dashboard-body-content">
           {tab !== 'Flags' && tab !== 'Accuracy' && <section className="dashboard-stat-grid" aria-label="Case counts by status">
             <article className="dashboard-stat-card stat-total"><div className="stat-top"><span className="stat-icon">▤</span><span className="stat-period">{range}</span></div><span className="stat-number">{visibleCases.length}</span><span className="stat-caption">Cases in view</span></article>
             {STATUSES.map((status) => <article key={status} className="dashboard-stat-card"><div className="stat-top"><span className="stat-caption">{status}</span><span className={`status-dot ${caseStatusTone(status)}`} /></div><span className="stat-number">{statusCounts[status]}</span><span className="stat-caption">{visibleCases.length ? `${Math.round(statusCounts[status] / visibleCases.length * 100)}% of cases` : '0% of cases'}</span></article>)}
           </section>}
+          {isLoading && !caseRecords.length && <p className="dashboard-data-note" role="status">Loading live case links; preview rows are temporarily not clickable.</p>}
+          {!isLoading && !caseRecords.length && <p className="dashboard-data-note">No live cases are loaded. Preview rows are illustrative and cannot open a case record.</p>}
 
           {tab === 'Overview' && <>
           <section className="dashboard-insight-grid">
