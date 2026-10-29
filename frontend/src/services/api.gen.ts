@@ -716,6 +716,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/documents/{document_id}/content-guard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Content Guard
+         * @description What the content guard found at ingest, for the officer to see on the document page.
+         */
+        get: operations["get_content_guard_documents__document_id__content_guard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents/{document_id}/detection/ai-generation": {
         parameters: {
             query?: never;
@@ -1887,6 +1907,8 @@ export interface components {
              * @enum {string}
              */
             status: "running" | "complete" | "failed" | "superseded";
+            /** Waiting Documents */
+            waiting_documents: components["schemas"]["WaitingDocument"][];
         };
         /**
          * CaseAnalysisRunItem
@@ -2304,6 +2326,40 @@ export interface components {
             filename: string;
             /** Matches */
             matches: boolean;
+        };
+        /** ContentGuardFinding */
+        ContentGuardFinding: {
+            /** Field */
+            field: string | null;
+            /** Instruction */
+            instruction: boolean;
+            /** Page */
+            page: number | null;
+            /** Quote */
+            quote: string;
+            /** Where */
+            where: string;
+            /**
+             * Why Hidden
+             * @default []
+             */
+            why_hidden: string[];
+        };
+        /** ContentGuardResponse */
+        ContentGuardResponse: {
+            /** Blocked */
+            blocked: boolean;
+            /** Checked */
+            checked: boolean;
+            /** Error */
+            error: string | null;
+            /**
+             * Findings
+             * @default []
+             */
+            findings: components["schemas"]["ContentGuardFinding"][];
+            /** Risk */
+            risk: string | null;
         };
         /** ContributingFinding */
         ContributingFinding: {
@@ -3909,6 +3965,23 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /**
+         * WaitingDocument
+         * @description A document the case's risk score counts that isn't scanned yet, and what it is waiting for: still being
+         *     processed, an officer's approval, its detection scan, or a retry after it failed. A rerun before these are
+         *     done can't produce a score.
+         */
+        WaitingDocument: {
+            /** Document Id */
+            document_id: string;
+            /** Filename */
+            filename: string;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "processing" | "needs_approval" | "scanning" | "failed";
+        };
     };
     responses: never;
     parameters: never;
@@ -5303,6 +5376,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DocumentRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_content_guard_documents__document_id__content_guard_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentGuardResponse"];
                 };
             };
             /** @description Validation Error */

@@ -190,6 +190,9 @@ class FakeStore:
     def update_metadata(self, document_id, metadata):
         pass
 
+    def update_guard_result(self, document_id, guard_result):
+        pass
+
     # extracted_fields_repository
     def replace_extracted_fields(self, document_id, fields, *, field_confidences=None, default_confidence=None,
                                  required_field_names=None):

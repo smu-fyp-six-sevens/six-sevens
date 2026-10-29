@@ -22,6 +22,7 @@ import { CaseOverview } from './upload/CaseOverview';
 import { CaseSectionNav } from './upload/CaseSectionNav';
 import { caseSectionStatuses, isCaseSection, type CaseSection } from './upload/caseSections';
 import { FlaggedItemsCard } from './upload/FlaggedItemsCard';
+import { RejectedDocumentsCard } from './upload/RejectedDocumentsCard';
 import { NotesCard } from '../components/NotesCard';
 import AppHeader from '../components/AppHeader';
 import CaseHeader, { CaseTitle } from '../components/CaseHeader';
@@ -84,6 +85,7 @@ export default function UploadPage({
     caseHasInFlightDocument,
     extractedDocuments,
     approvedDocuments,
+    rejectedDocuments,
     flaggedDocuments,
     identityNames,
     caseMatchNeedsReview,
@@ -395,6 +397,14 @@ export default function UploadPage({
                     caseMatchNeedsReview={caseMatchNeedsReview}
                     caseMatches={caseMatches}
                     flaggedDocuments={flaggedDocuments}
+                    onOpenDocument={onOpenDocument}
+                  />
+                )}
+
+                {rejectedDocuments.length > 0 && (
+                  <RejectedDocumentsCard
+                    rejectedDocuments={rejectedDocuments}
+                    wsConnected={wsConnected}
                     onOpenDocument={onOpenDocument}
                   />
                 )}

@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 
 from . import extracted_fields_repository, finding_reviews_repository, notes_repository, storage_service
-from .models import DocumentRecord, DocumentStatus
+from .models import DocumentRecord, DocumentStatus, RoutingStatus
 from .supabase_client import service_supabase_client, supabase_client
 from .supabase_rows import fetch_all, row as _row
 
@@ -153,21 +153,50 @@ def update_status(
     if expected_current_statuses is not None:
         query = query.in_("status", [s.value for s in expected_current_statuses])
     result = query.execute()
-    # No case resync here. Coverage depends on routing_status, the confirmed type,
-    # rejection and the fields (see models.counts_towards_checklist), and
-    # record_classification / update_extracted_fields already resync when they
-    # write those. A status change alone, ANALYZED included, can't move it.
+    # Coverage depends on routing_status, the confirmed type, rejection, failure and the
+    # fields (see models.counts_towards_checklist). record_classification /
+    # update_extracted_fields resync when they write those; here only a move into or out of
+    # FAILED can change it (out of it only by a compare-and-swap from FAILED, i.e. a retry).
+    if result.data and (
+        status == DocumentStatus.FAILED
+        or (expected_current_statuses is not None and DocumentStatus.FAILED in expected_current_statuses)
+    ):
+        _sync_case(_row(result.data[0]).get("case_id"))
     return bool(result.data)
 
 def approve_document(document_id: str) -> DocumentRecord | None:
-    """Approving doesn't change checklist coverage (only rejection does), so no case resync."""
+    """
+    Approving resolves any manual review, so the document is ACCEPTED. Without it, a document routed to
+    manual review that needed nothing saved (a content guard flag, say) stayed there after approval, never
+    counting towards the checklist (models.counts_towards_checklist). That can move coverage, so resync.
+    """
     result = (
         supabase_client.table("documents")
-        .update({"status": DocumentStatus.APPROVED.value})
+        .update({"status": DocumentStatus.APPROVED.value, "routing_status": RoutingStatus.ACCEPTED.value})
         .eq("id", document_id)
         .execute()
     )
-    return DocumentRecord(**_row(result.data[0])) if result.data else None
+    if not result.data:
+        return None
+    row = _row(result.data[0])
+    _sync_case(row.get("case_id"))
+    return DocumentRecord(**row)
+
+
+def undo_approval(document_id: str, routing_status: RoutingStatus | None) -> None:
+    """Puts an approval back (status and the routing_status it replaced), if nothing has moved it on since."""
+    result = (
+        supabase_client.table("documents")
+        .update({
+            "status": DocumentStatus.ANALYZED.value,
+            "routing_status": routing_status.value if routing_status else None,
+        })
+        .eq("id", document_id)
+        .eq("status", DocumentStatus.APPROVED.value)
+        .execute()
+    )
+    if result.data:
+        _sync_case(_row(result.data[0]).get("case_id"))
 
 def mark_detecting(document_id: str) -> None:
     """The Detection Agent has started — shown live as "Scanning" (see langgraph/detection/graph.py)."""
@@ -363,6 +392,26 @@ def update_metadata(document_id: str, metadata: dict) -> None:
     supabase_client.table("documents").update({"metadata": metadata}).eq(
         "id", document_id
     ).execute()
+
+
+def update_guard_result(document_id: str, guard_result: dict) -> None:
+    """
+    What the content guard found at ingest (guardrails/content_guard.py), for detection's prompt injection
+    check. Needs the documents.guard_result jsonb column. Written on every ingest, so a rerun replaces it.
+    """
+    supabase_client.table("documents").update({"guard_result": guard_result}).eq("id", document_id).execute()
+
+
+def get_guard_result(document_id: str) -> dict | None:
+    """The saved guard_result, or None: none saved yet (a document from before the guard), or no column."""
+    try:
+        rows = supabase_client.table("documents").select("guard_result").eq("id", document_id).execute().data
+    except Exception as exc:
+        logger.warning("Document %s: guard_result could not be read: %s", document_id, exc)
+        return None
+    row = rows[0] if rows else None
+    value = row.get("guard_result") if isinstance(row, dict) else None
+    return value if isinstance(value, dict) else None
 
 
 # Tables whose rows belong to one document, besides extracted_fields (which has its own helper).

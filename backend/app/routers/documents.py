@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from .. import case_service, document_repository, events, extracted_fields_repository, monitoring, storage_service
 from ..events import officer_event, types
 from ..extracted_fields_repository import normalise_field_name
+from ..guardrails import content_guard
 from ..snapshots import push_case_snapshot
 
 from ._dependencies import (
@@ -75,6 +76,23 @@ class DocumentDownloadResponse(BaseModel):
     document_id: str
     signed_url: str
     expires_in: int
+
+
+class ContentGuardFinding(BaseModel):
+    where: str  # hidden, image, metadata, filename or visible
+    page: int | None = None
+    field: str | None = None  # the metadata field, when where is metadata
+    quote: str
+    instruction: bool  # worded as an instruction to the AI; otherwise hidden text with no such wording
+    why_hidden: list[str] = []
+
+
+class ContentGuardResponse(BaseModel):
+    checked: bool  # false: the guard didn't run on this document (or couldn't, see error)
+    risk: str | None  # none, low, medium or high
+    blocked: bool  # stopped at ingest, before any model read it
+    error: str | None = None
+    findings: list[ContentGuardFinding] = []
 
 
 @router.get("", response_model=list[DocumentRecord])
@@ -758,10 +776,7 @@ async def approve_document(
                 detail={"document_type": document.document_type, "skip_detection": skip},
             ))
         except Exception:
-            await asyncio.to_thread(
-                document_repository.update_status, document_id, DocumentStatus.ANALYZED,
-                expected_current_statuses=[DocumentStatus.APPROVED],
-            )
+            await asyncio.to_thread(document_repository.undo_approval, document_id, document.routing_status)
             raise
 
         return _present(approved, extracted_fields)
@@ -771,10 +786,13 @@ async def approve_document(
 async def reject_document(
     document_id: str, document: DocumentRecord = Depends(get_document_or_404)
 ) -> DocumentRecord:
-    if document.status != DocumentStatus.ANALYZED:
+    # Any document the pipeline has finished with can be rejected, including a failed one and one the content guard
+    # blocked. One still in flight would be overwritten by the run when it lands, so it is cancelled first.
+    _ensure_unlocked(document, "it can't be rejected")
+    if document.status in IN_FLIGHT_STATUSES:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only completed documents can be rejected.",
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This document is still being processed. Cancel it first, then reject it.",
         )
 
     with bad_gateway_on_error("Failed to reject document.", "Failed to reject document %s", document_id):
@@ -812,6 +830,13 @@ async def update_document_type(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Document is still being processed; try again once it finishes.",
+        )
+
+    # No model read it, so there is no type to confirm, and a set type would tick a checklist item.
+    if document.status == DocumentStatus.FAILED and content_guard.is_blocking_reason(document.failure_reason):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The content guard stopped this document; its type can't be set.",
         )
 
     # Same rule approval uses.
@@ -997,4 +1022,33 @@ async def get_document_download_url(
         document_id=document.id,
         signed_url=signed_url,
         expires_in=settings.SIGNED_URL_EXPIRY_SECONDS,
+    )
+
+
+@router.get("/{document_id}/content-guard", response_model=ContentGuardResponse)
+async def get_content_guard(
+    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+) -> ContentGuardResponse:
+    """What the content guard found at ingest, for the officer to see on the document page."""
+    result = await asyncio.to_thread(document_repository.get_guard_result, document_id)
+    blocked = document.status == DocumentStatus.FAILED and content_guard.is_blocking_reason(document.failure_reason)
+    if result is None:
+        # From before the guard, not ingested yet, or no guard_result column.
+        return ContentGuardResponse(checked=False, risk=None, blocked=blocked)
+    return ContentGuardResponse(
+        checked=bool(result.get("checks_run")),
+        risk=result.get("risk"),
+        blocked=blocked,
+        error=result.get("error"),
+        findings=[
+            ContentGuardFinding(
+                where=str(span.get("where") or "visible"),
+                page=span.get("page"),
+                field=span.get("field"),
+                quote=str(span.get("quote") or ""),
+                instruction=span.get("caught_by") == "dictionary",
+                why_hidden=[str(reason) for reason in span.get("why_hidden") or []],
+            )
+            for span in result.get("spans") or []
+        ],
     )

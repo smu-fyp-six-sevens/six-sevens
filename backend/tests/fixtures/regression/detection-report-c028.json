@@ -8,6 +8,7 @@
       "summary": "Reviewed within my expertise.",
       "title": "Layout & Rendering Analyst",
       "tools_called": [
+        "hidden_text_tool",
         "font_consistency_tool",
         "image_tampering_tool"
       ],
@@ -33,9 +34,10 @@
       "summary": "Reviewed within my expertise. | Second look: Reviewed within my expertise.",
       "title": "Digital Authenticity Analyst",
       "tools_called": [
-        "metadata_tool"
+        "metadata_tool",
+        "prompt_injection_tool"
       ],
-      "uncertain": true
+      "uncertain": false
     }
   ],
   "document_id": "doc-1",

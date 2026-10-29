@@ -1367,6 +1367,52 @@
   color: var(--slate-40);
   font-style: italic;
 }
+
+/* Content guard warning, at the top of the document page */
+
+.content-guard-warning {
+  margin-bottom: 16px;
+}
+
+.content-guard-warning-icon {
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.content-guard-findings {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.content-guard-finding-where {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.content-guard-finding-tag {
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.content-guard-findings blockquote {
+  margin: 4px 0 0;
+  padding: 6px 10px;
+  border-left: 3px solid currentColor;
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--slate-40);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
 /* Approve / reject */
 
 .document-actions {

@@ -50,6 +50,10 @@ export type UpdatedCase = Pick<Schemas['CaseSummary'], 'id' | 'greenlink_case_id
 
 export type DocumentDownloadResponse = Schemas['DocumentDownloadResponse'];
 
+// What the content guard found at ingest (backend/app/guardrails/content_guard.py).
+export type ContentGuardResponse = Schemas['ContentGuardResponse'];
+export type ContentGuardFinding = Schemas['ContentGuardFinding'];
+
 // The case queue: one page of rows, the counts for its sidebar, and jump-to-case suggestions.
 export type CaseDocumentsStatus = Schemas['CaseDocumentsStatus'];
 export type CaseListPage = Schemas['CaseListPage'];
@@ -152,6 +156,8 @@ export type CaseOption = Pick<Schemas['CaseListItem'], 'id' | 'greenlink_case_id
 export type AdditionalDocument = Schemas['AdditionalDocument'];
 export type AdditionalDocuments = Schemas['AdditionalDocuments'];
 export type CaseAnalysisOverview = Schemas['CaseAnalysisOverview'];
+// A document the risk score counts that isn't scanned yet, and what it's waiting for.
+export type WaitingDocument = Schemas['WaitingDocument'];
 // A run's headline, cited reasons and "would help" line (backend case_pipeline/risk/summary.py).
 export type AnalysisSummary = Schemas['AnalysisSummary'];
 // One row of GET /cases/{id}/analysis/runs, newest first.
