@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
-import { getUsername } from '../lib/api';
 import { InfoLabel } from '../components/InfoTip';
 import { DetectionAccuracyPanel, DetectionAccuracySummary } from './DetectionAccuracyPanel';
 import { caseStatusTone } from '../utils/caseStatusTone';
@@ -34,10 +33,8 @@ interface MockCase {
   recommendedDocs?: string[] | null;
   // Automated processing time in ms; null until the case has been analysed.
   processingMs?: number | null;
-  // Preview rows only: who the sample case is assigned to. Live cases use createdBy.
+  // Preview rows only: who the sample case is assigned to.
   analyst?: string;
-  // The username of the officer who created the case, which counts as its assignee.
-  createdBy?: string | null;
   documentTypes: string[];
   flags: string[];
   // Per flag name: its worst severity in this case and the document types it's on; absent for preview rows.
@@ -84,8 +81,6 @@ const FLAG_SEVERITY: Record<string, FlagSummary['severity']> = {
   'Font anomaly': 'Medium',
 };
 
-// Cases created before the audit trail have no recorded creator; they count as this officer's.
-const UNRECORDED_CASE_OWNER = 'greenlink-tester';
 const CASES_PER_PAGE = 10;
 // Rows in each Overview insight panel, so the side-by-side panels stay the same height.
 const INSIGHT_ROWS = 6;
@@ -199,7 +194,6 @@ function dashboardStatus(label: string): Status {
 export default function DashboardPage({ cases: caseRecords, isLoading }: { cases: CaseRecord[]; isLoading: boolean }) {
   const navigate = useNavigate();
   const [role, setRole] = useState<Role>('Analyst');
-  const username = getUsername();
   const [tab, setTab] = useState<DashboardTab>('Overview');
   const [range, setRange] = useState('Last 30 days');
   const [statusFilter, setStatusFilter] = useState('All statuses');
@@ -223,7 +217,6 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
         processingMs: record.processingMs ?? null,
         recommendedDocs: record.recommendedDocuments ?? null,
         analyst: undefined,
-        createdBy: record.createdBy ?? UNRECORDED_CASE_OWNER,
         documentTypes: (record.documentTypes ?? []).map((type) => formatDocumentType(type)),
         flags: (record.flags ?? []).map((flag) => formatCheck(flag.check)),
         flagInfo: Object.fromEntries((record.flags ?? []).map((flag) => [formatCheck(flag.check), {
@@ -241,13 +234,12 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
 
   const visibleCases = useMemo(() => {
     const since = dateLimit(range);
+    // Every case, whoever created it: the date and status filters are the only narrowing.
     return dashboardCases.filter((item) =>
-      // Assigned means created by the signed-in officer; preview rows keep their sample analyst.
-      (role === 'Manager' || (caseRecords.length ? item.createdBy === username : item.analyst === 'J. Tan')) &&
       (statusFilter === 'All statuses' || item.status === statusFilter) &&
       (!since || item.submitted >= since),
     );
-  }, [caseRecords.length, dashboardCases, range, role, statusFilter, username]);
+  }, [dashboardCases, range, statusFilter]);
 
   // The same date and status choice for the accuracy figures, which the backend filters (cases are the reviews' own).
   const accuracyFilters = useMemo<DetectionMetricsFilters>(() => {
@@ -400,7 +392,7 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
           </>}
 
           {tab === 'Cases' && <>
-            <CaseTable cases={sortedCaseRows} heading={role === 'Manager' ? 'All cases' : 'Your assigned cases'} onOpenCase={openCase} showRiskAnalysis showProcessingTime isPreview={!caseRecords.length} />
+            <CaseTable cases={sortedCaseRows} heading="All cases" onOpenCase={openCase} showRiskAnalysis showProcessingTime isPreview={!caseRecords.length} />
           </>}
 
           {tab === 'Flags' && <>
