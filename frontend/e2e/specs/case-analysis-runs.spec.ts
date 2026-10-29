@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../support/test';
-import { makeCase, makeDocument, makeRisk, type MockBackend } from '../support/mockBackend';
-import type { CaseRiskFinding } from '../../src/services/uploadService/types';
+import { makeCase, makeDocument, type MockBackend } from '../support/mockBackend';
+import type { CaseRisk, CaseRiskFinding } from '../../src/services/uploadService/types';
 
 /**
  * The Case Analysis card: the structured summary (level, headline, cited reasons, checked and fine, would help), and
@@ -22,10 +22,10 @@ const payslip: CaseRiskFinding = {
   document_id: 'doc-payslip', filename: 'C011_Payslip.pdf', document_type: 'payslip', finding_id: 'numerical_checks_tool-1',
   tool: 'numerical_checks_tool', severity: 'medium', summary: PAYSLIP, rationale: '', points: 8, unreviewed: false,
 };
-const risk = makeRisk({
-  state: 'scored', level: 'High', score: 48, documents_scanned: 2, documents_total: 2,
-  contributing_findings: [crossDocument, payslip],
-});
+const risk: CaseRisk = {
+  state: 'scored', level: 'High', score: 48, points: 20, documents_scanned: 2, documents_total: 2,
+  contributing_findings: [crossDocument, payslip], unassessed_checks: [], reasons: [],
+};
 
 function analysis(runId: string, overrides: Record<string, unknown> = {}) {
   return {
