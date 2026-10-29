@@ -798,9 +798,8 @@
   font-size: 12.5px;
 }
 
+/* Each missed issue is set out like a finding row above it (.risk-findings li), so the two read as one list. */
 .missed-issue-list {
-  display: grid;
-  gap: 6px;
   margin: 0 0 8px;
   padding: 0;
   list-style: none;
@@ -809,7 +808,19 @@
 .missed-issue-list li {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 10px;
+  padding: 9px 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.missed-issue-list li + li {
+  border-top: 1px dashed var(--line);
+}
+
+/* Where a finding's review tick sits, so the badges line up. */
+.missed-issue-spacer {
+  flex: 0 0 16px;
 }
 
 .missed-issue-tag {
@@ -823,16 +834,6 @@
   font-weight: 700;
   text-align: center;
   text-transform: uppercase;
-}
-
-.missed-issue-text {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.missed-issue-text small {
-  color: var(--ink-soft);
 }
 
 .missed-issue-remove {

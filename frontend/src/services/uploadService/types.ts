@@ -220,3 +220,4 @@ export type CaseFindingReviews = Omit<Schemas['CaseFindingReviews'], 'checks'> &
   checks: Record<ReviewScope, string[]>;
 };
 export type DetectionMetrics = Schemas['DetectionMetrics'];
+export type AppSettings = Schemas['AppSettings'];

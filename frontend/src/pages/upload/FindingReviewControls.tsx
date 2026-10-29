@@ -4,6 +4,7 @@ import ConfirmDialog from '../../components/ConfirmDialog';
 import { Rate } from '../../components/Rate';
 import { RATE_MEANING, belowTargetNote, formatCheck } from '../../utils/checkLabels';
 import { InfoLabel } from '../../components/InfoTip';
+import { officerName } from '../../lib/officers';
 
 export type GroupReviewStatus = 'not_reviewed' | 'saved' | 'unsaved';
 
@@ -175,11 +176,14 @@ export function MissedIssues({
               </li>
             ) : (
               <li key={review.id}>
+                {/* Laid out like a finding: the tick's space, a badge in the severity's place, then the check,
+                    what was missed and who reported it. */}
+                <span className="missed-issue-spacer" aria-hidden="true" />
                 <span className="missed-issue-tag">Missed</span>
-                <span className="missed-issue-text">
-                  <strong>{formatCheck(review.check_name)}</strong>
-                  {review.note && <span> — {review.note}</span>}
-                  <small> · reported by {review.reviewer}</small>
+                <span className="risk-finding-text">
+                  <span className="risk-finding-check">{formatCheck(review.check_name)}</span>
+                  <span className="risk-finding-summary">{review.note || 'No description given'}</span>
+                  <span className="risk-finding-rationale">Reported by {officerName(review.reviewer)}</span>
                 </span>
                 <button
                   type="button"

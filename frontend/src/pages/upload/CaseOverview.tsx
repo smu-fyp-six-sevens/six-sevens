@@ -10,6 +10,7 @@ import { outOfDateMessage } from './caseSections';
 import { formatUsd, processingTimes } from './processingTimes';
 import { useCaseCost } from './useCaseCost';
 import { CaseOverviewSkeleton } from '../../components/Skeletons';
+import { useFindingReviewsOn } from '../../lib/appSettings';
 
 const SEVERITY_RANK: Record<string, number> = { high: 0, medium: 1, low: 2, info: 3 };
 const SHOWN_SEVERITIES = ['high', 'medium', 'low'] as const;
@@ -112,8 +113,10 @@ export function CaseOverview({
   onSelectSection: (section: CaseSection) => void;
 }) {
   const scored = risk?.state === 'scored' && risk.level;
-  // The officer's reviews of this case's findings (Risk Summary), as precision and recall.
-  const accuracy = useFindingReviews(caseId, true).data;
+  // The officer's reviews of this case's findings (Risk Summary), as precision and recall. An admin can turn
+  // reviews off (Settings): then there is no Detection Accuracy panel and no Review Findings step.
+  const reviewsOn = useFindingReviewsOn();
+  const accuracy = useFindingReviews(caseId, reviewsOn).data;
   const reviewed = accuracy ? accuracy.case.correct + accuracy.case.wrong + accuracy.case.missed : 0;
   const checksByReviews = [...(accuracy?.case.by_check ?? [])]
     .sort((a, b) => b.correct + b.wrong + b.missed - (a.correct + a.wrong + a.missed))
@@ -170,7 +173,13 @@ export function CaseOverview({
   // Every step before it has to be done too, so a case's findings are reviewed together once every document is through.
   const analysisUpToDate = progressStages.every((stage) => stage.tone === 'done');
   const analysisStale = Boolean(analysisOverview && (analysisOverview.stale || analysisOverview.status === 'superseded'));
-  progressStages.push(
+  if (!reviewsOn) {
+    progressStages.push(
+      analysisUpToDate && risk?.state === 'scored'
+        ? { label: 'Finalise Case', detail: 'Ready to finalise', tone: 'action' }
+        : { label: 'Finalise Case', detail: 'After the case analysis', tone: 'idle' },
+    );
+  } else progressStages.push(
     !analysisUpToDate || risk?.state !== 'scored'
       ? { label: 'Review Findings', detail: analysisStale ? 'Waiting for the analysis rerun' : analysisPhase.tone === 'done' ? 'After every document is checked' : 'After the case analysis', tone: 'idle' }
       : documentsWithFindings.length === 0
@@ -230,7 +239,10 @@ export function CaseOverview({
             </div>
           </section>
 
-          <section className="case-overview-metrics" aria-label="Processing and classification metrics">
+          <section
+            className={`case-overview-metrics${reviewsOn ? '' : ' case-overview-metrics--no-accuracy'}`}
+            aria-label="Processing and classification metrics"
+          >
             <article className="case-overview-panel case-overview-timing">
               <div className="case-overview-panel-heading">
                 <div><h2>Processing Time</h2><p>How long each stage took on this case</p></div>
@@ -262,6 +274,7 @@ export function CaseOverview({
               </p>
             </article>
 
+            {reviewsOn && (
             <article className="case-overview-panel case-overview-classification">
               <div className="case-overview-panel-heading">
                 <div>
@@ -307,6 +320,7 @@ export function CaseOverview({
                 </p>
               )}
             </article>
+            )}
           </section>
 
           <section className="case-overview-grid">

@@ -1311,6 +1311,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Settings */
+        get: operations["get_settings_settings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/settings/finding-reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Finding Reviews
+         * @description Turns finding reviews on or off for every officer. Admin only. Reviews already saved are kept either way.
+         */
+        put: operations["set_finding_reviews_settings_finding_reviews_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ws/tickets": {
         parameters: {
             query?: never;
@@ -1743,6 +1780,13 @@ export interface components {
             page: number;
             /** Text */
             text: string;
+        };
+        /** AppSettings */
+        AppSettings: {
+            /** Finding Reviews Enabled */
+            finding_reviews_enabled: boolean;
+            /** Is Admin */
+            is_admin: boolean;
         };
         /** BenfordAnalysis */
         BenfordAnalysis: {
@@ -3654,6 +3698,11 @@ export interface components {
          * @enum {string}
          */
         RoutingStatus: "accepted" | "manual_review";
+        /** SetFindingReviewsRequest */
+        SetFindingReviewsRequest: {
+            /** Enabled */
+            enabled: boolean;
+        };
         /**
          * SetFindingVerdictRequest
          * @description Marks one finding correct or wrong; verdict null clears the officer's mark.
@@ -6356,6 +6405,72 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    get_settings_settings_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_finding_reviews_settings_finding_reviews_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetFindingReviewsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
