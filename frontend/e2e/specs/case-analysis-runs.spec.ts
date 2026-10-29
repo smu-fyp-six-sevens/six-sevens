@@ -1,7 +1,13 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../support/test';
-import { makeCase, makeDocument, type MockBackend } from '../support/mockBackend';
-import type { CaseRisk, CaseRiskFinding } from '../../src/services/uploadService/types';
+import { makeAnalysis, makeCase, makeDocument, type MockBackend } from '../support/mockBackend';
+import type {
+  AnalysisSummary,
+  CaseAnalysis,
+  CaseAnalysisRunItem,
+  CaseRisk,
+  CaseRiskFinding,
+} from '../../src/services/uploadService/types';
 
 /**
  * The Case Analysis card: the structured summary (level, headline, cited reasons, checked and fine, would help), and
@@ -13,52 +19,58 @@ const PAYSLIP = 'Net pay does not match the salary credits.';
 const LATEST = 'run-2';
 const EARLIER = 'run-1';
 
-const crossDocument: CaseRiskFinding = {
+// A contributing finding with every field the type asks for; tests set only what they look at.
+function contributing(overrides: Partial<CaseRiskFinding> & Pick<CaseRiskFinding, 'document_id' | 'finding_id'>): CaseRiskFinding {
+  return {
+    filename: 'document.pdf', document_type: null, tool: null, check_code: null, severity: 'medium', summary: '',
+    rationale: '', points: 0, unreviewed: false, flag_id: null, category: null, source: 'document', repeat_of: null,
+    also_on: 0, ...overrides,
+  };
+}
+
+const crossDocument = contributing({
   document_id: 'doc-bizfile', filename: 'C001_BizFile.pdf', document_type: 'bizfile', finding_id: 'xdoc-1',
-  tool: 'cross_document_analysis', severity: 'high', summary: ADDRESS, rationale: '', points: 12, unreviewed: false,
-  source: 'cross_document',
-};
-const payslip: CaseRiskFinding = {
+  tool: 'cross_document_analysis', severity: 'high', summary: ADDRESS, points: 12, source: 'cross_document',
+});
+const payslip = contributing({
   document_id: 'doc-payslip', filename: 'C011_Payslip.pdf', document_type: 'payslip', finding_id: 'numerical_checks_tool-1',
-  tool: 'numerical_checks_tool', severity: 'medium', summary: PAYSLIP, rationale: '', points: 8, unreviewed: false,
-};
+  tool: 'numerical_checks_tool', severity: 'medium', summary: PAYSLIP, points: 8,
+});
 const risk: CaseRisk = {
   state: 'scored', level: 'High', score: 48, points: 20, documents_scanned: 2, documents_total: 2,
   contributing_findings: [crossDocument, payslip], unassessed_checks: [], reasons: [],
 };
 
-function analysis(runId: string, overrides: Record<string, unknown> = {}) {
-  return {
-    run_id: runId, case_id: 'case-analysis', status: 'complete', fingerprint: 'f', started_at: '2026-10-27T02:00:00Z',
-    finished_at: '2026-10-27T02:03:00Z', error: null, outlook: null, summary: null, structured_summary: null,
-    risk, supporting_documents: [], additional_documents: null, consistent_checks: [], clean_checks: [],
-    audit: { models: {}, prompt_version: '', hypotheses_tried: 0, findings_discarded: 0, tool_calls: [] },
-    trace: [], stale: false,
+function analysis(runId: string, overrides: Partial<CaseAnalysis> = {}): CaseAnalysis {
+  return makeAnalysis({
+    case_id: 'case-analysis', run_id: runId, started_at: '2026-10-27T02:00:00Z', finished_at: '2026-10-27T02:03:00Z',
+    risk,
     findings: [{
       id: 'xdoc-1', hypothesis_id: 'h1', summary: ADDRESS, rationale: 'The two addresses differ.', severity: 'high',
       category: 'cross_document_variance', citations: [], document_ids: ['doc-bizfile'], probe_summary: '', breach_flags: [],
     }],
     ...overrides,
-  };
+  });
 }
 
+const SUMMARY: AnalysisSummary = {
+  headline: "Two documents disagree on the company's address, and the payslip doesn't match the bank credits.",
+  reasons: [
+    { text: "The address on file isn't the same everywhere.", finding_id: 'xdoc-1', document_id: 'doc-bizfile' },
+    { text: "Declared pay isn't reflected in the account.", finding_id: 'numerical_checks_tool-1', document_id: 'doc-payslip' },
+  ],
+  would_help: 'A recent utility bill would help.',
+  source: 'model',
+};
+const EARLIER_SUMMARY = 'The case was rated High risk. An older summary in prose.';
+
 const latest = analysis(LATEST, {
-  structured_summary: {
-    headline: "Two documents disagree on the company's address, and the payslip doesn't match the bank credits.",
-    reasons: [
-      { text: "The address on file isn't the same everywhere.", finding_id: 'xdoc-1', document_id: 'doc-bizfile' },
-      { text: "Declared pay isn't reflected in the account.", finding_id: 'numerical_checks_tool-1', document_id: 'doc-payslip' },
-    ],
-    would_help: 'A recent utility bill would help.',
-    source: 'model',
-  },
+  structured_summary: SUMMARY,
   consistent_checks: ['UEN is the same on 3 documents', 'The name is the same on C001_BizFile.pdf and C002_NRIC.pdf'],
   clean_checks: ['metadata_tool'],
 });
-const earlier = analysis(EARLIER, {
-  started_at: '2026-10-26T02:00:00Z', summary: 'The case was rated High risk. An older summary in prose.', stale: true,
-});
-const runs = [
+const earlier = analysis(EARLIER, { started_at: '2026-10-26T02:00:00Z', summary: EARLIER_SUMMARY, stale: true });
+const runs: CaseAnalysisRunItem[] = [
   { run_id: LATEST, status: 'complete', started_at: '2026-10-27T02:00:00Z', finished_at: null, started_by: 'demo',
     risk_level: 'High', risk_score: 48, score_change: -24, finding_count: 1, stale: false },
   { run_id: EARLIER, status: 'complete', started_at: '2026-10-26T02:00:00Z', finished_at: null, started_by: 'bob',
@@ -67,7 +79,7 @@ const runs = [
 
 async function openAnalysis(page: Page, backend: MockBackend) {
   const theCase = Object.assign(
-    makeCase({ id: 'case-analysis', greenlink_case_id: 'GLDB-4004', documents_status: 'analyzed', risk }),
+    makeCase({ id: 'case-analysis', greenlink_case_id: 'GLDB-4004', risk }),
     { analysis: { run_id: LATEST, status: 'complete', stale: false, finding_count: 1, finished_at: '2026-10-27T02:03:00Z' } },
   );
   backend.cases.push(theCase);
@@ -88,7 +100,7 @@ test.describe('Case analysis summary and earlier runs', () => {
     const brief = await openAnalysis(page, backend);
 
     await expect(brief.locator('.analysis-brief-level')).toHaveText('High');
-    await expect(brief.locator('.analysis-brief-headline strong')).toHaveText(latest.structured_summary.headline);
+    await expect(brief.locator('.analysis-brief-headline strong')).toHaveText(SUMMARY.headline);
     await expect(brief.locator('.analysis-brief-reasons li')).toHaveText([
       "The address on file isn't the same everywhere.",
       "Declared pay isn't reflected in the account.",
@@ -136,11 +148,11 @@ test.describe('Case analysis summary and earlier runs', () => {
 
     await expect(page.getByText(/Earlier run from .*read-only\./)).toBeVisible();
     // A run from before the structured summary shows its prose.
-    await expect(page.locator('.analysis-summary')).toHaveText(earlier.summary as string);
+    await expect(page.locator('.analysis-summary')).toHaveText(EARLIER_SUMMARY);
     await expect(rows.nth(1).locator('.analysis-run-viewing')).toHaveText('Showing');
 
     await page.getByRole('button', { name: 'Back to the latest' }).click();
-    await expect(page.locator('.analysis-brief-headline strong')).toHaveText(latest.structured_summary.headline);
+    await expect(page.locator('.analysis-brief-headline strong')).toHaveText(SUMMARY.headline);
     await expect(page.getByText(/Earlier run from/)).toHaveCount(0);
   });
 });

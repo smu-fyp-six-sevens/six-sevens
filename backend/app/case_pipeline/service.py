@@ -10,7 +10,7 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 from .. import audit, case_repository, document_repository, events, finding_reviews_repository
 from ..config import settings
@@ -22,7 +22,7 @@ from . import repository, state
 from .cross_document.evidence import build_context
 from .cross_document.agents import PROMPT_VERSION
 from .cross_document.graph import run_cross_document_analysis
-from .models import AnalysisAudit, CaseAnalysis, CaseAnalysisRunItem
+from .models import AnalysisAudit, AnalysisStatus, CaseAnalysis, CaseAnalysisRunItem
 from .risk import store as risk_store
 from .trace import RunTrace
 from .readiness import is_ready_for_analysis
@@ -252,7 +252,7 @@ def list_runs(case_id: str) -> list[CaseAnalysisRunItem]:
     items: list[CaseAnalysisRunItem] = []
     for row in rows:
         started_at = datetime.fromisoformat(str(row["started_at"]))
-        status = str(row["status"])
+        status = cast(AnalysisStatus, str(row["status"]))
         # As get_current reads it: a run past the time limit was lost, not still running.
         if status == "running" and not state.is_live(status, started_at):
             status = "failed"
