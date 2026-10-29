@@ -985,6 +985,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/documents/{document_id}/detection/page-consistency": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Page Consistency
+         * @description Whether a multi-page PDF's pages belong together: page numbering, balances carried between pages, identifiers repeated on each page, a page of another size or a scan among digital pages, and duplicated pages. Evidence about the same page or boundary is one finding; `check_codes` lists every check behind it.
+         */
+        get: operations["get_page_consistency_documents__document_id__detection_page_consistency_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents/{document_id}/detection/report": {
         parameters: {
             query?: never;
@@ -2392,9 +2412,9 @@ export interface components {
         };
         /**
          * DateAnomalyResult
-         * @description Response for GET /documents/{id}/detection/date-anomalies. Nothing is
-         *     persisted — a pure read/compute, like the spelling/layout/numerical
-         *     checks.
+         * @description Response for GET /documents/{id}/detection/date-anomalies. A pure
+         *     compute: no findings are stored, only a step entry on the document's
+         *     trace (routers/detection.py).
          */
         DateAnomalyResult: {
             /** Dates Extracted */
@@ -3373,14 +3393,14 @@ export interface components {
         };
         /**
          * NumericalValidationResult
-         * @description Response for GET /documents/{id}/detection/numerical-validation.
-         *     Nothing is persisted — a pure read/compute, like the spelling and
-         *     layout checks.
+         * @description Response for GET /documents/{id}/detection/numerical-validation. A pure
+         *     compute: no findings are stored, only a step entry on the document's
+         *     trace (routers/detection.py).
          *
          *     Two independent Benford passes over transaction amounts (all amounts,
          *     and amounts with likely bank fees excluded) are named benford /
-         *     benford_excluding_fees; both are None when the document type has no
-         *     transaction list to run them on.
+         *     benford_excluding_fees. Without a transaction list, benford says why it
+         *     couldn't run (unable_to_assess) and benford_excluding_fees is None.
          */
         NumericalValidationResult: {
             benford: components["schemas"]["BenfordAnalysis"];
@@ -3454,6 +3474,49 @@ export interface components {
             title: string;
             /** What It Shows */
             what_it_shows: string;
+        };
+        /** PageConsistencyResult */
+        PageConsistencyResult: {
+            /** Document Id */
+            document_id: string;
+            /** Findings */
+            findings: components["schemas"]["PageFinding"][];
+            /** Pages Checked */
+            pages_checked: number;
+            /** Skipped Checks */
+            skipped_checks: components["schemas"]["SkippedCheck"][];
+            /** Unable To Assess */
+            unable_to_assess: boolean;
+            /** Unable To Assess Reason */
+            unable_to_assess_reason: string | null;
+        };
+        /** PageFinding */
+        PageFinding: {
+            /** Check Code */
+            check_code: string;
+            /**
+             * Check Codes
+             * @default []
+             */
+            check_codes: string[];
+            /**
+             * Evidence
+             * @default []
+             */
+            evidence: string[];
+            /** Expected */
+            expected: string | null;
+            /** Pages */
+            pages: number[];
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "impossible" | "inconsistent" | "implausible" | "signal";
+            /** Stated */
+            stated: string | null;
+            /** Summary */
+            summary: string;
         };
         /** PageMargins */
         PageMargins: {
@@ -5734,6 +5797,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NumericalValidationResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_page_consistency_documents__document_id__detection_page_consistency_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageConsistencyResult"];
                 };
             };
             /** @description Validation Error */

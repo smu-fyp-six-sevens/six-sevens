@@ -42,6 +42,7 @@ from ...fraud_detection.images.image_manipulation import check_image_manipulatio
 from ...fraud_detection.layout_anomalies import check_layout_anomalies
 from ...fraud_detection.layout_anomalies.extraction import _open_document as _open_layout_document
 from ...fraud_detection.shared.file_facts import describe_file
+from ...fraud_detection.shared.pdf_pages import pages as pdf_pages
 from ...fraud_detection.pages import check_page_consistency
 from ...fraud_detection.authenticity.metadata_analysis import (
     DESCRIPTIVE_METADATA_FIELDS,
