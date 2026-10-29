@@ -122,7 +122,7 @@ def test_an_approved_document_can_no_longer_be_edited(method, path, body):
     response, _ = _call(document, fields, method, f"/documents/{document.id}{path}", body)
 
     assert response.status_code == 409
-    assert "locked" in response.json()["detail"]
+    assert "has been approved" in response.json()["detail"]
 
 
 @pytest.mark.sprint3
@@ -208,7 +208,7 @@ def test_a_rejected_document_can_no_longer_be_edited(method, path, body):
     response, _ = _call(document, fields, method, f"/documents/{document.id}{path}", body)
 
     assert response.status_code == 409
-    assert "locked" in response.json()["detail"]
+    assert "has been rejected" in response.json()["detail"]
 
 
 @pytest.mark.sprint3

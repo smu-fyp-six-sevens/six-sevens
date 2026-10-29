@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { ErrorMessage } from './ErrorMessage';
 
 export interface BreadcrumbMenuItem {
   key: string;
@@ -226,7 +227,7 @@ function CrumbMenu({ crumb }: { crumb: Breadcrumb }) {
       {open && (
         <ul id={menuId} role="menu" className="breadcrumb-list" ref={listRef}>
           {error ? (
-            <li className="breadcrumb-list-note" role="none">{error}</li>
+            <li className="breadcrumb-list-note" role="none"><ErrorMessage inline message={error} /></li>
           ) : !items ? (
             <li className="breadcrumb-list-note" role="none">Loading…</li>
           ) : items.length === 0 ? (

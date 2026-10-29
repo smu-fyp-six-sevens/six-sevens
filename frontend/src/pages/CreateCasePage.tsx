@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import AppHeader from '../components/AppHeader';
 import { authFetch } from '../lib/api';
+import { assertOk } from '../services/uploadService';
 import {
   MAX_COMPANY_NAME_LENGTH,
   validateCompanyName,
 } from '../utils/caseValidation';
+import { ErrorMessage } from '../components/ErrorMessage';
 
 // The case's path after it is created, as the case summary's progress stages show it.
 const NEXT_STEPS = [
@@ -52,12 +54,7 @@ export default function CreateCasePage({
         }),
       });
 
-      if (!response.ok) {
-        const detail = await response.text();
-        throw new Error(
-          `Failed to create case (${response.status}): ${detail}`,
-        );
-      }
+      await assertOk(response, 'Failed to create case');
 
       // Case was created successfully.
       onCreated();
@@ -132,15 +129,7 @@ export default function CreateCasePage({
               </div>
             </div>
 
-            {error && (
-              <div
-                id="company-name-error"
-                className="form-error"
-                role="alert"
-              >
-                ⚠ {error}
-              </div>
-            )}
+            {error && <ErrorMessage id="company-name-error" className="form-error" message={error} />}
 
             <div className="create-case-actions">
               <button

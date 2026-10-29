@@ -142,6 +142,12 @@
 .debug-json { white-space: pre-wrap; word-break: break-word; }
 .debug-error { color: crimson; }
 .debug-table { border-collapse: collapse; margin-top: 0.25em; }
+.debug-table th,
+.debug-table td { padding: 4px 18px 4px 0; vertical-align: top; }
+.debug-table th:last-child,
+.debug-table td:last-child { padding-right: 0; }
+.debug-table thead th { border-bottom: 1px solid var(--line); }
+.debug-table tbody tr + tr td { border-top: 1px solid var(--slate-94); }
 .debug-actions { display: flex; flex-wrap: wrap; gap: 0.5em; }
 
 .document-header {
@@ -456,8 +462,6 @@
 
 .add-field-error {
   margin-bottom: 12px;
-  font-size: 12px;
-  color: var(--red-42);
 }
 
 .add-field-form-actions {
@@ -908,8 +912,8 @@
   text-align: center;
 }
 
-.preview-modal-error {
-  color: var(--red-40);
+.preview-modal-error .error-message {
+  max-width: 420px;
 }
 
 /* The document drawn under its findings' boxes: pages drawn by pdf.js, or the image, at the
@@ -1504,18 +1508,6 @@
   gap: 10px;
   align-items: center;
 }
-/* Error / loading states */
-
-.document-details-error {
-  margin-top: 20px;
-  padding: 14px 16px;
-  border: 1px solid var(--red-86);
-  border-radius: 8px;
-  background: var(--red-98);
-  color: var(--red-40);
-  font-size: 13px;
-}
-
 /* Responsive */
 
 @media (max-width: 760px) {

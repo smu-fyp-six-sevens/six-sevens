@@ -38,6 +38,8 @@ import { useLangGraphTrace } from './document-details/useLangGraphTrace';
 import { useContentGuard } from './document-details/useContentGuard';
 import { ContentGuardWarning } from './document-details/ContentGuardWarning';
 import { humanizeFieldKey } from '../utils/fieldLabels';
+import { ErrorMessage } from '../components/ErrorMessage';
+import { LoadErrorState } from '../components/LoadErrorState';
 
 // Developer-only panels, so they load on demand.
 const DetectionPanel = lazy(() =>
@@ -179,6 +181,14 @@ export default function DocumentDetailsPage({
     document?.status === 'failed' && document.failure_reason && !isBlocked
       ? describeFailureReason(document.failure_reason)
       : null;
+  // The page shows the plain sentence; the stored reason, which can carry an exception's text, goes to the console.
+  const rawFailureReason = document?.status === 'failed' ? document.failure_reason : null;
+  useEffect(() => {
+    if (rawFailureReason) console.error(`Document ${documentId} failed:`, rawFailureReason);
+  }, [documentId, rawFailureReason]);
+
+  // The file itself couldn't be read: there are no fields to show or review, and a new type would fail the same way.
+  const isUnreadableFile = failureReason?.fileProblem ?? false;
 
   // Distinct from failureReason (a hard processing failure) and from needsManualReview below.
   const lowClassificationConfidence =
@@ -213,7 +223,8 @@ export default function DocumentDetailsPage({
     !isLocked &&
     !isBlocked &&
     (document?.status === 'analyzed' || document?.status === 'failed') &&
-    !isTypeConfirmed;
+    !isTypeConfirmed &&
+    !isUnreadableFile;
 
   const fieldEditing = useFieldEditing({
     document,
@@ -336,9 +347,7 @@ export default function DocumentDetailsPage({
         {caseHeader}
 
         <div className="document-details-body">
-          <div className="document-details-error">
-            {loadError ?? 'Document could not be found.'}
-          </div>
+          <LoadErrorState message={loadError ?? 'This document could not be found.'} />
         </div>
       </div>
     );
@@ -368,11 +377,7 @@ export default function DocumentDetailsPage({
         )}
 
         <div className="document-details-main">
-        {deleteDocumentError && (
-          <div className="toast show mixed" role="alert">
-            ⚠ {deleteDocumentError}
-          </div>
-        )}
+        {deleteDocumentError && <ErrorMessage className="toast-error" message={deleteDocumentError} />}
 
         <ContentGuardWarning contentGuard={contentGuard} />
 
@@ -439,22 +444,24 @@ export default function DocumentDetailsPage({
 
         {/* Extracted information */}
 
-        <ExtractedInformationCard
-          canAddOrDeleteFields={!isLocked && !isBlocked}
-          document={document}
-          extractedFields={extractedFields}
-          isInFlight={isInFlight}
-          lowestConfidence={lowestConfidence}
-          setDocument={setDocument}
-          setFieldDraft={setFieldDraft}
-          editing={fieldEditing}
-        />
+        {!isUnreadableFile && (
+          <ExtractedInformationCard
+            canAddOrDeleteFields={!isLocked && !isBlocked}
+            document={document}
+            extractedFields={extractedFields}
+            isInFlight={isInFlight}
+            lowestConfidence={lowestConfidence}
+            setDocument={setDocument}
+            setFieldDraft={setFieldDraft}
+            editing={fieldEditing}
+          />
+        )}
 
         {/* Manual review */}
 
         {/* Not while a run is in flight: its fields are about to be replaced, and a retry of a blocked document
             clears the failure for a moment, which would flash the card up and away again. */}
-        {canEditFields && !isBlocked && !isInFlight && (needsManualReview || isUnrecognisedDocument) && (
+        {canEditFields && !isBlocked && !isInFlight && !isUnreadableFile && (needsManualReview || isUnrecognisedDocument) && (
           <ManualReviewCard
             canEditFields={canEditFields}
             fieldDraft={fieldDraft}
@@ -504,17 +511,8 @@ export default function DocumentDetailsPage({
 
         {/* Document actions */}
 
-          {approveError && (
-            <div className="save-error">{approveError}</div>
-          )}
-          {cancelError && (
-            <div className="save-error">{cancelError}</div>
-          )}
-          {rejectError && (
-            <div className="save-error">{rejectError}</div>
-          )}
-          {retryError && (
-            <div className="save-error">{retryError}</div>
+          {[approveError, cancelError, rejectError, retryError].map(
+            (actionError, index) => actionError && <ErrorMessage key={index} className="action-error" message={actionError} />,
           )}
 
           {!hasBeenApproved(document.status) &&

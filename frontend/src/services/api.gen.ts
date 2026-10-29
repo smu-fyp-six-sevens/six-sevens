@@ -270,6 +270,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cases/{case_id}/analysis/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Case Analysis Runs
+         * @description Every analysis of the case, newest first: when, who started it, status, score and its change, findings, stale.
+         */
+        get: operations["list_case_analysis_runs_cases__case_id__analysis_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cases/{case_id}/analysis/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Case Analysis Run
+         * @description One of the case's analyses, earlier or latest, whole, marked stale like the latest one.
+         */
+        get: operations["get_case_analysis_run_cases__case_id__analysis_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cases/{case_id}/case-match": {
         parameters: {
             query?: never;
@@ -479,7 +519,8 @@ export interface paths {
         };
         /**
          * Get Detection Metrics
-         * @description Precision and recall per check across every reviewed case, with targets (the dashboard).
+         * @description Precision and recall per check across every reviewed case, with targets (the dashboard). Optionally only
+         *     cases created on or after `since` and in these documents statuses, as the dashboard's filters pick.
          */
         get: operations["get_detection_metrics_detection_metrics_get"];
         put?: never;
@@ -1671,6 +1712,24 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        /**
+         * AnalysisSummary
+         * @description The explanation an officer reads first (risk/summary.py): what the result comes down to, and why.
+         */
+        AnalysisSummary: {
+            /** Headline */
+            headline: string;
+            /** Reasons */
+            reasons: components["schemas"]["SummaryReason"][];
+            /**
+             * Source
+             * @default model
+             * @enum {string}
+             */
+            source: "model" | "fallback";
+            /** Would Help */
+            would_help: string | null;
+        };
         /** AnomalyLocation */
         AnomalyLocation: {
             /** Bbox */
@@ -1783,6 +1842,8 @@ export interface components {
             audit: components["schemas"]["AnalysisAudit"];
             /** Case Id */
             case_id: string;
+            /** Clean Checks */
+            clean_checks: string[];
             /** Consistent Checks */
             consistent_checks: string[];
             /** Error */
@@ -1812,6 +1873,7 @@ export interface components {
              * @enum {string}
              */
             status: "running" | "complete" | "failed" | "superseded";
+            structured_summary: components["schemas"]["AnalysisSummary"] | null;
             /** Summary */
             summary: string | null;
             /** Supporting Documents */
@@ -1847,6 +1909,44 @@ export interface components {
             status: "running" | "complete" | "failed" | "superseded";
             /** Waiting Documents */
             waiting_documents: components["schemas"]["WaitingDocument"][];
+        };
+        /**
+         * CaseAnalysisRunItem
+         * @description One run in a case's list of analyses (GET /cases/{id}/analysis/runs): enough to pick one to open.
+         */
+        CaseAnalysisRunItem: {
+            /**
+             * Finding Count
+             * @default 0
+             */
+            finding_count: number;
+            /** Finished At */
+            finished_at: string | null;
+            /** Risk Level */
+            risk_level: string | null;
+            /** Risk Score */
+            risk_score: number | null;
+            /** Run Id */
+            run_id: string;
+            /** Score Change */
+            score_change: number | null;
+            /**
+             * Stale
+             * @default false
+             */
+            stale: boolean;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Started By */
+            started_by: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "running" | "complete" | "failed" | "superseded";
         };
         /**
          * CaseCounts
@@ -1893,6 +1993,20 @@ export interface components {
             target_recall: number;
         };
         /**
+         * CaseFlagCount
+         * @description One detection check's flags in a case: how many, the worst severity, and the document types they're on.
+         */
+        CaseFlagCount: {
+            /** Check */
+            check: string;
+            /** Count */
+            count: number;
+            /** Document Types */
+            document_types: string[];
+            /** Severity */
+            severity: string;
+        };
+        /**
          * CaseListItem
          * @description One row of the case queue: only what the list shows, so it needs no extracted fields.
          */
@@ -1904,13 +2018,23 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Created By */
+            created_by: string | null;
+            /** Document Types */
+            document_types: string[];
             documents_status: components["schemas"]["CaseDocumentsStatus"];
             /** Finalized At */
             finalized_at: string | null;
+            /** Flags */
+            flags: components["schemas"]["CaseFlagCount"][];
             /** Greenlink Case Id */
             greenlink_case_id: string;
             /** Id */
             id: string;
+            /** Processing Ms */
+            processing_ms: number | null;
+            /** Recommended Documents */
+            recommended_documents: string[] | null;
             risk: components["schemas"]["CaseRisk"] | null;
             /**
              * Status
@@ -3618,6 +3742,18 @@ export interface components {
             seconds_in_current_status: number;
             status: components["schemas"]["DocumentStatus"];
         };
+        /** SummaryReason */
+        SummaryReason: {
+            /**
+             * Document Id
+             * @default
+             */
+            document_id: string;
+            /** Finding Id */
+            finding_id: string;
+            /** Text */
+            text: string;
+        };
         /**
          * SupportingDocumentRecommendation
          * @description A document the officer should request from the client, and why — see
@@ -4397,6 +4533,73 @@ export interface operations {
             };
         };
     };
+    list_case_analysis_runs_cases__case_id__analysis_runs_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseAnalysisRunItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_case_analysis_run_cases__case_id__analysis_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                case_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseAnalysis"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_case_match_cases__case_id__case_match_get: {
         parameters: {
             query?: never;
@@ -4823,7 +5026,10 @@ export interface operations {
     };
     get_detection_metrics_detection_metrics_get: {
         parameters: {
-            query?: never;
+            query?: {
+                since?: string | null;
+                status?: components["schemas"]["CaseDocumentsStatus"][];
+            };
             header?: {
                 authorization?: string | null;
             };

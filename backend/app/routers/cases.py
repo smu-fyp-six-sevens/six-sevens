@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 
@@ -11,7 +12,7 @@ from ..events import officer_event, types
 from ._dependencies import get_case_or_404, to_thread_or_502
 from ..case_match import CaseMatchResult
 from ..case_pipeline import service as analysis_service
-from ..case_pipeline.models import CaseAnalysis
+from ..case_pipeline.models import CaseAnalysis, CaseAnalysisRunItem
 from ..models import (
     IN_FLIGHT_STATUSES,
     MAX_COMPANY_NAME_LENGTH,
@@ -232,4 +233,34 @@ async def get_case_analysis(case_id: str, case: CaseRecord = Depends(get_case_or
     )
     if analysis is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="This case has not been analysed.")
+    return analysis
+
+
+@router.get("/{case_id}/analysis/runs", response_model=list[CaseAnalysisRunItem])
+async def list_case_analysis_runs(case_id: str, case: CaseRecord = Depends(get_case_or_404)) -> list[CaseAnalysisRunItem]:
+    """Every analysis of the case, newest first: when, who started it, status, score and its change, findings, stale."""
+    return await to_thread_or_502(
+        analysis_service.list_runs, case_id,
+        detail="Failed to fetch the case's analyses. Check Supabase table access.",
+        log=("Failed to list the analyses of case %s", case_id),
+    )
+
+
+@router.get("/{case_id}/analysis/runs/{run_id}", response_model=CaseAnalysis)
+async def get_case_analysis_run(
+    case_id: str, run_id: str, case: CaseRecord = Depends(get_case_or_404)
+) -> CaseAnalysis:
+    """One of the case's analyses, earlier or latest, whole, marked stale like the latest one."""
+    try:
+        UUID(run_id)
+    except ValueError:
+        # Not a run id at all: the database would reject it as a malformed uuid.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No analysis with that id for this case.")
+    analysis = await to_thread_or_502(
+        analysis_service.get_run, case_id, run_id,
+        detail="Failed to fetch the analysis. Check Supabase table access.",
+        log=("Failed to fetch analysis %s of case %s", run_id, case_id),
+    )
+    if analysis is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No analysis with that id for this case.")
     return analysis

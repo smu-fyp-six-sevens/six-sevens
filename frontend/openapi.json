@@ -770,6 +770,50 @@
         "title": "AnalysisAudit",
         "type": "object"
       },
+      "AnalysisSummary": {
+        "description": "The explanation an officer reads first (risk/summary.py): what the result comes down to, and why.",
+        "properties": {
+          "headline": {
+            "title": "Headline",
+            "type": "string"
+          },
+          "reasons": {
+            "items": {
+              "$ref": "#/components/schemas/SummaryReason"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "source": {
+            "default": "model",
+            "enum": [
+              "model",
+              "fallback"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "would_help": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Would Help"
+          }
+        },
+        "required": [
+          "headline",
+          "reasons",
+          "would_help",
+          "source"
+        ],
+        "title": "AnalysisSummary",
+        "type": "object"
+      },
       "AnomalyLocation": {
         "properties": {
           "bbox": {
@@ -1157,6 +1201,13 @@
             "title": "Case Id",
             "type": "string"
           },
+          "clean_checks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Clean Checks",
+            "type": "array"
+          },
           "consistent_checks": {
             "items": {
               "type": "string"
@@ -1242,6 +1293,16 @@
             "title": "Status",
             "type": "string"
           },
+          "structured_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnalysisSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "summary": {
             "anyOf": [
               {
@@ -1280,10 +1341,12 @@
           "findings",
           "outlook",
           "summary",
+          "structured_summary",
           "risk",
           "supporting_documents",
           "additional_documents",
           "consistent_checks",
+          "clean_checks",
           "audit",
           "trace",
           "stale"
@@ -1347,6 +1410,110 @@
           "waiting_documents"
         ],
         "title": "CaseAnalysisOverview",
+        "type": "object"
+      },
+      "CaseAnalysisRunItem": {
+        "description": "One run in a case's list of analyses (GET /cases/{id}/analysis/runs): enough to pick one to open.",
+        "properties": {
+          "finding_count": {
+            "default": 0,
+            "title": "Finding Count",
+            "type": "integer"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "risk_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Level"
+          },
+          "risk_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Score"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "score_change": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Change"
+          },
+          "stale": {
+            "default": false,
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "started_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started By"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "complete",
+              "failed",
+              "superseded"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "status",
+          "started_at",
+          "finished_at",
+          "started_by",
+          "risk_level",
+          "risk_score",
+          "score_change",
+          "finding_count",
+          "stale"
+        ],
+        "title": "CaseAnalysisRunItem",
         "type": "object"
       },
       "CaseCounts": {
@@ -1437,6 +1604,38 @@
         "title": "CaseFindingReviews",
         "type": "object"
       },
+      "CaseFlagCount": {
+        "description": "One detection check's flags in a case: how many, the worst severity, and the document types they're on.",
+        "properties": {
+          "check": {
+            "title": "Check",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "document_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Document Types",
+            "type": "array"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "check",
+          "severity",
+          "count",
+          "document_types"
+        ],
+        "title": "CaseFlagCount",
+        "type": "object"
+      },
       "CaseListItem": {
         "description": "One row of the case queue: only what the list shows, so it needs no extracted fields.",
         "properties": {
@@ -1456,6 +1655,24 @@
             "title": "Created At",
             "type": "string"
           },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "document_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Document Types",
+            "type": "array"
+          },
           "documents_status": {
             "$ref": "#/components/schemas/CaseDocumentsStatus"
           },
@@ -1471,6 +1688,13 @@
             ],
             "title": "Finalized At"
           },
+          "flags": {
+            "items": {
+              "$ref": "#/components/schemas/CaseFlagCount"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
           "greenlink_case_id": {
             "title": "Greenlink Case Id",
             "type": "string"
@@ -1478,6 +1702,31 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "processing_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Ms"
+          },
+          "recommended_documents": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Documents"
           },
           "risk": {
             "anyOf": [
@@ -1515,7 +1764,12 @@
           "created_at",
           "updated_at",
           "documents_status",
-          "risk"
+          "risk",
+          "processing_ms",
+          "recommended_documents",
+          "document_types",
+          "flags",
+          "created_by"
         ],
         "title": "CaseListItem",
         "type": "object"
@@ -6191,6 +6445,30 @@
         "title": "StuckDocument",
         "type": "object"
       },
+      "SummaryReason": {
+        "properties": {
+          "document_id": {
+            "default": "",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "finding_id": {
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "finding_id",
+          "document_id"
+        ],
+        "title": "SummaryReason",
+        "type": "object"
+      },
       "SupportingDocumentRecommendation": {
         "description": "A document the officer should request from the client, and why \u2014 see\nsupporting_documents.recommend_supporting_documents.",
         "properties": {
@@ -7652,6 +7930,137 @@
         ]
       }
     },
+    "/cases/{case_id}/analysis/runs": {
+      "get": {
+        "description": "Every analysis of the case, newest first: when, who started it, status, score and its change, findings, stale.",
+        "operationId": "list_case_analysis_runs_cases__case_id__analysis_runs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CaseAnalysisRunItem"
+                  },
+                  "title": "Response List Case Analysis Runs Cases  Case Id  Analysis Runs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Case Analysis Runs",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/cases/{case_id}/analysis/runs/{run_id}": {
+      "get": {
+        "description": "One of the case's analyses, earlier or latest, whole, marked stale like the latest one.",
+        "operationId": "get_case_analysis_run_cases__case_id__analysis_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseAnalysis"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Case Analysis Run",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
     "/cases/{case_id}/case-match": {
       "get": {
         "description": "Whether each of the case's documents belongs to the case's company and\nindividuals, checked against the certificate of incumbency \u2014 see\ncase_match.py. Computed live on every call; nothing is written.",
@@ -8458,9 +8867,39 @@
     },
     "/detection-metrics": {
       "get": {
-        "description": "Precision and recall per check across every reviewed case, with targets (the dashboard).",
+        "description": "Precision and recall per check across every reviewed case, with targets (the dashboard). Optionally only\ncases created on or after `since` and in these documents statuses, as the dashboard's filters pick.",
         "operationId": "get_detection_metrics_detection_metrics_get",
         "parameters": [
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/CaseDocumentsStatus"
+              },
+              "title": "Status",
+              "type": "array"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",

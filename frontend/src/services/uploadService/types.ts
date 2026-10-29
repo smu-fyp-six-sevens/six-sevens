@@ -158,6 +158,10 @@ export type AdditionalDocuments = Schemas['AdditionalDocuments'];
 export type CaseAnalysisOverview = Schemas['CaseAnalysisOverview'];
 // A document the risk score counts that isn't scanned yet, and what it's waiting for.
 export type WaitingDocument = Schemas['WaitingDocument'];
+// A run's headline, cited reasons and "would help" line (backend case_pipeline/risk/summary.py).
+export type AnalysisSummary = Schemas['AnalysisSummary'];
+// One row of GET /cases/{id}/analysis/runs, newest first.
+export type CaseAnalysisRunItem = Schemas['CaseAnalysisRunItem'];
 export type CrossDocFinding = Schemas['CrossDocFinding'];
 export type OutlookRequest = Schemas['OutlookRequest'];
 export type RiskOutlook = Schemas['RiskOutlook'];

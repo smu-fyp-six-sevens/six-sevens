@@ -68,6 +68,16 @@
   margin-top: 4px;
 }
 
+/* LoadErrorState: the same card for a page that couldn't load, with a red icon. */
+.not-found--error .not-found__icon {
+  background: var(--red-97);
+  color: var(--red-48);
+}
+
+.not-found__title--alone {
+  margin-bottom: 22px;
+}
+
 @media (max-width: 560px) {
   .not-found {
     margin-top: 24px;
