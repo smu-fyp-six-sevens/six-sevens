@@ -149,7 +149,7 @@ async def _ask_lead(
     from .._anthropic import build_chat_anthropic
     from ..cache_gate import cache_gate
 
-    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, 1500)
+    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, 4000, effort="medium")
     messages = [
         SystemMessage(content=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}]),
         HumanMessage(content=fence(json.dumps(user_payload, default=str), "detection_context")),

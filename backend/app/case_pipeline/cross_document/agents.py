@@ -29,7 +29,7 @@ from ...guardrails.envelope import fence
 from ...langgraph._anthropic import build_chat_anthropic
 from ...langgraph.cache_gate import cache_gate
 from ...run_context import spend_model_call
-from ...llm_io import forced_args, message_text, parse_json_object, salvage_list
+from ...llm_io import forced_args, message_text, parse_json_object, salvage_list, was_cut_off
 from ..models import Hypothesis, PlannedCheck
 from .bias import has_protected_text
 from .evidence import CaseContext, render_dossier
@@ -37,14 +37,14 @@ from .tools import COMPUTED_TOOLS, CROSS_DOCUMENT_TOOLS, build_tools
 
 logger = logging.getLogger("classifier_pipeline.case_pipeline.agents")
 
-PROMPT_VERSION = "cross-doc-v8"
+PROMPT_VERSION = "cross-doc-v9"
 MAX_HYPOTHESES = 3
 MAX_CHECKS_PER_HYPOTHESIS = 4
-# One call to plan and one to judge. Nothing here loops or retries a call; this is the ceiling that
-# keeps it so if a step is ever added.
-MAX_MODEL_CALLS_PER_RUN = 2
-_PLAN_MAX_TOKENS = 3000
-_JUDGE_MAX_TOKENS = 2500
+# One call to plan and one to judge, each retried once when the reply doesn't call its tool.
+MAX_MODEL_CALLS_PER_RUN = 4
+_PLAN_MAX_TOKENS = 6000
+_JUDGE_MAX_TOKENS = 5000
+_EFFORT = "medium"
 _RESULT_CHARS = 900
 _TRACE_RESULT_CHARS = 700
 # Hard bounds on what each model call reads (about 4 characters a token), on top of the output caps above.
@@ -85,7 +85,7 @@ Payment patterns (the same payee and amount repeated, a different card on almost
 
 Be terse: a claim is one sentence. For each hypothesis list the checks to run, at most {max_checks}, using only the tools above. Run everything you need up front: you will not see results before judging. Include at least one check that could show the claim is wrong (refutation_probe true), and it must look at something the claim does not already rest on: a different document or a different field. Reading back the same fields again is not a test.
 
-Submit your answer by calling submit_hypotheses.
+Answer only by calling submit_hypotheses (not submit_verdicts), with an empty list when nothing looks off.
 
 Documents:
 {dossier}"""
@@ -95,7 +95,7 @@ severity is low, medium or high and only matters when conclusive. category is be
 summary, rationale and probe_summary are read by a loan officer: write plain sentences about the documents, and never name a tool, a flag (such as ADDRESS_MISMATCH) or a ref id in them; those belong only in citations. Say "cross-check", not "refutation check".
 Keep every field short: the reply has a hard length limit. For a hypothesis that is not conclusive, give a one-sentence summary and leave rationale, citations and probe_summary empty.
 
-Submit your answer by calling submit_verdicts.
+Answer only by calling submit_verdicts (not submit_hypotheses).
 
 Hypotheses and evidence:
 {hypotheses}"""
@@ -139,16 +139,20 @@ _PLAN_TOOL: dict[str, Any] = {
     },
 }
 
+# Strict: the API guarantees the arguments match the schema. The plan tool can't be: a check's args depend on its tool.
 _VERDICT_TOOL: dict[str, Any] = {
     "name": "submit_verdicts",
     "description": "Submit one verdict per hypothesis.",
+    "strict": True,
     "input_schema": {
         "type": "object",
+        "additionalProperties": False,
         "properties": {
             "verdicts": {
                 "type": "array",
                 "items": {
                     "type": "object",
+                    "additionalProperties": False,
                     "properties": {
                         "id": {"type": "string"},
                         "conclusive": {"type": "boolean"},
@@ -198,6 +202,38 @@ def _usage(response: Any) -> dict:
     return dict(getattr(response, "usage_metadata", None) or {})
 
 
+_REMINDER = "Your last reply did not call {tool}. Reply only by calling {tool}."
+
+
+async def _ask_for_tool(
+    context: CaseContext, messages: list, tool: dict[str, Any], key: str, max_tokens: int, span_name: str,
+    gate: str | None = None,
+) -> tuple[Any, dict | None]:
+    """
+    The reply and the arguments of its call to `tool`, or None. Tool choice is left to the model (Sonnet 5.5
+    rejects a forced one), so a reply with neither the call nor a readable `key` in its text is asked once more.
+    """
+    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, max_tokens, effort=_EFFORT).bind_tools(
+        _TOOLS, tool_choice="auto"
+    )
+    prompt, response = messages, None
+    for attempt in range(2):
+        _spend_model_call(context)
+        with telemetry.get_tracer().start_as_current_span(span_name) as span:
+            span.set_attribute("attempt", attempt + 1)
+            if gate and attempt == 0:
+                # The gate lets one analysis write the cache before a concurrent one reads it.
+                response = await cache_gate.run(gate, lambda: model.ainvoke(prompt))
+            else:
+                response = await model.ainvoke(prompt)
+            telemetry.record_usage(span, response)
+        args = forced_args(response, tool["name"])
+        if args is not None or was_cut_off(response) or key in (parse_json_object(message_text(response.content)) or {}):
+            return response, args
+        prompt = [*messages, HumanMessage(content=_REMINDER.format(tool=tool["name"]))]
+    return response, None
+
+
 def _planned_checks(raw: Any, tool_names: set[str], refutation_document: str | None) -> list[PlannedCheck]:
     checks: list[PlannedCheck] = []
     for item in raw if isinstance(raw, list) else []:
@@ -235,21 +271,14 @@ async def hypothesise(context: CaseContext) -> list[Hypothesis]:
             limit=MAX_HYPOTHESES, max_checks=MAX_CHECKS_PER_HYPOTHESIS, dossier=dossier,
         )),
     ]
-    _spend_model_call(context)
-    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, _PLAN_MAX_TOKENS).bind_tools(
-        _TOOLS, tool_choice=_PLAN_TOOL["name"]
+    response, args = await _ask_for_tool(
+        context, messages, _PLAN_TOOL, "hypotheses", _PLAN_MAX_TOKENS, "case_pipeline.hypothesise", gate="case_analysis",
     )
-    with telemetry.get_tracer().start_as_current_span("case_pipeline.hypothesise") as span:
-        # The gate lets one analysis write the cache before a concurrent one reads it.
-        response = await cache_gate.run("case_analysis", lambda: model.ainvoke(messages))
-        telemetry.record_usage(span, response)
-
-    args = forced_args(response, _PLAN_TOOL["name"])
     via = "tool"
     if args is not None:
         items = args.get("hypotheses") or []
     else:
-        # The model answered in text despite the forced tool (or was cut off): read what is there.
+        # The model answered in text instead of calling the tool (or was cut off): read what is there.
         via = "text"
         reply = message_text(response.content)
         parsed = parse_json_object(reply) or {}
@@ -369,15 +398,9 @@ async def adjudicate(
         # The claims and their evidence quote the documents.
         HumanMessage(content=_JUDGE_INSTRUCTIONS.format(hypotheses=fence(json.dumps(listing, default=str), "hypotheses"))),
     ]
-    _spend_model_call(context)
-    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, _JUDGE_MAX_TOKENS).bind_tools(
-        _TOOLS, tool_choice=_VERDICT_TOOL["name"]
+    response, args = await _ask_for_tool(
+        context, messages, _VERDICT_TOOL, "verdicts", _JUDGE_MAX_TOKENS, "case_pipeline.adjudicate",
     )
-    with telemetry.get_tracer().start_as_current_span("case_pipeline.adjudicate") as span:
-        response = await model.ainvoke(messages)
-        telemetry.record_usage(span, response)
-
-    args = forced_args(response, _VERDICT_TOOL["name"])
     via, reply = "tool", None
     if args is not None:
         items = args.get("verdicts") or []

@@ -34,7 +34,7 @@ from ...guardrails.envelope import fence
 from ...llm_contracts import SpecialistAssessment, ToolResult
 from ... import run_context
 from ...run_context import RunBudgetExceeded, spend_model_call
-from ...llm_io import message_text, parse_json_object, salvage_list, validate
+from ...llm_io import ModelRefused, message_text, parse_json_object, salvage_list, validate
 
 logger = logging.getLogger("classifier_pipeline.langgraph.detection.specialists")
 
@@ -252,13 +252,21 @@ async def _pre_run(spec: Specialist, document_id: str) -> list:
     return [call, ToolMessage(content=json.dumps(result, default=str), tool_call_id=call_id, name=tool.name)]
 
 
+async def _invoke(call) -> AIMessage:
+    """One model turn; a refusal ends this specialist's review with its reason instead of failing the whole run."""
+    try:
+        return await call()
+    except ModelRefused as exc:
+        return AIMessage(content="", response_metadata={"refusal": str(exc)})
+
+
 def _make_agent_node(spec: Specialist):
     async def agent_node(state: SpecialistState) -> dict:
         from .._anthropic import build_chat_anthropic
         from ..cache_gate import cache_gate
 
         # The final JSON covers every finding, so it needs far more room than a tool call.
-        base = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 4096)
+        base = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 6144, effort="low")
         model = base.bind_tools(list(spec.tools))
         # First turn must call a tool: a specialist that answers without one has reviewed nothing.
         first_model = base.bind_tools(list(spec.tools), tool_choice="any")
@@ -278,13 +286,13 @@ def _make_agent_node(spec: Specialist):
                 if tool_rounds >= _MAX_TOOL_ROUNDS:
                     # Out of tool budget: one final turn with no tools, so the report still comes back.
                     wrap_up = HumanMessage(content="Tool budget used up. Reply with the JSON report now, with no more tool calls.")
-                    response = await base.ainvoke([*existing, wrap_up])
+                    response = await _invoke(lambda: base.ainvoke([*existing, wrap_up]))
                     telemetry.record_usage(span, response)
                     return {"messages": [wrap_up, response]}
                 # cache_control breakpoint is already in `existing`'s system
                 # message — this call naturally lands after whichever call
                 # first warmed the cache for this specialist.
-                response = await model.ainvoke(existing)
+                response = await _invoke(lambda: model.ainvoke(existing))
                 telemetry.record_usage(span, response)
                 return {"messages": [response]}
 
@@ -316,7 +324,9 @@ def _make_agent_node(spec: Specialist):
                 HumanMessage(content="Begin your review."),
                 *(await _pre_run(spec, state["document_id"])),
             ]
-            response = await cache_gate.run(f"detection_specialist:{spec.name}", lambda: first_model.ainvoke(seed))
+            response = await _invoke(
+                lambda: cache_gate.run(f"detection_specialist:{spec.name}", lambda: first_model.ainvoke(seed))
+            )
             telemetry.record_usage(span, response)
             return {"messages": [*seed, response]}
 
@@ -460,6 +470,7 @@ def _collect_node(state: SpecialistState) -> dict:
     parsed_ok = assessment_status == "ok"
     cut_off = assessment_status == "salvaged"
     complete = parsed_ok and bool(tools_called)
+    refusal = final.response_metadata.get("refusal") if isinstance(final, AIMessage) else None
     report = {
         "specialist": state["specialist"],
         "brief": state.get("brief"),
@@ -471,7 +482,7 @@ def _collect_node(state: SpecialistState) -> dict:
         "dismissed": dismissed,
         "summary": assessment.summary or (message_text(final.content)[:300] if isinstance(final, AIMessage) else ""),
         "uncertain": assessment.uncertain or not complete,
-        "uncertainty_reason": assessment.uncertainty_reason
+        "uncertainty_reason": refusal or assessment.uncertainty_reason
         or (
             None if complete else
             "The run's model call ceiling was reached before this review finished." if _budget_exhausted() else

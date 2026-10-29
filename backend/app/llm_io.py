@@ -126,6 +126,20 @@ def was_cut_off(response: Any) -> bool:
     return metadata.get("stop_reason") == "max_tokens"
 
 
+class ModelRefused(Exception):
+    """Claude declined the request (stop_reason "refusal"). The message is written for a loan officer."""
+
+
+def refusal_reason(metadata: dict | None) -> str | None:
+    """Why Claude declined, from a reply's metadata, or None when it didn't."""
+    if not metadata or metadata.get("stop_reason") != "refusal":
+        return None
+    details = metadata.get("stop_details")
+    category = details.get("category") if isinstance(details, dict) else getattr(details, "category", None)
+    kind = f" ({category} safety category)" if category else ""
+    return f"Claude declined to process this content{kind}. Review the document manually."
+
+
 # --- field types that accept what a model tends to send ----------------------------------------
 
 

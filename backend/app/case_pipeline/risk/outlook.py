@@ -96,7 +96,7 @@ async def propose_requests_with_status(risk: CaseRisk) -> tuple[list[EvidenceReq
         f"{f.filename}: {withhold_if_protected(f.summary)[:240]}"
         for f in findings
     )
-    model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 900).bind_tools(
+    model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 1500, effort="low").bind_tools(
         [_REQUESTS_TOOL], tool_choice=_REQUESTS_TOOL["name"]
     )
     try:

@@ -16,6 +16,7 @@ from .. import audit, case_repository, document_repository, events, finding_revi
 from ..config import settings
 from ..snapshots import push_case_snapshot
 from ..langgraph import trace as langgraph_trace
+from ..llm_io import ModelRefused
 from ..models import DocumentRecord
 from ..run_context import end_run, start_run
 from . import repository, state
@@ -180,7 +181,7 @@ async def _execute(
     except Exception as exc:
         logger.exception("Case analysis failed for case %s", case_id)
         analysis.status = "failed"
-        analysis.error = f"{type(exc).__name__}: {exc}"[:500]
+        analysis.error = (str(exc) if isinstance(exc, ModelRefused) else f"{type(exc).__name__}: {exc}")[:500]
         trace.record("error", error=analysis.error)
     finally:
         trace.record("run_audit", model_calls=run.calls, call_ceiling=run.max_model_calls, output_repairs=run.repairs)

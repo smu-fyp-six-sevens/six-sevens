@@ -14,6 +14,7 @@ import logging
 from . import extract, nodes, text_cache, trace
 from .graph import get_document_graph
 from ..config import settings
+from ..llm_io import ModelRefused
 from ..run_context import RunContext, run_context
 from .. import document_repository, telemetry
 from ..models import DocumentStatus
@@ -52,14 +53,22 @@ async def process_document(document_id: str) -> None:
                 finally:
                     await _record_run_audit(document_id, run)
         except Exception as exc:
-            logger.exception("Document %s: unhandled error during langgraph orchestration", document_id)
-            text_cache.discard(document_id)
-            try:
-                await nodes.fail_document(document_id, f"Unhandled langgraph orchestration error: {exc}")
-            except Exception:
-                logger.exception(
-                    "Document %s: failed to record FAILED status after unhandled langgraph error", document_id
-                )
+            await _fail_after_error(document_id, exc)
+
+
+async def _fail_after_error(document_id: str, exc: Exception) -> None:
+    """Marks the document failed: a refusal with its own reason, anything else as an orchestration error."""
+    if isinstance(exc, ModelRefused):
+        logger.warning("Document %s: Claude declined: %s", document_id, exc)
+        reason = str(exc)
+    else:
+        logger.exception("Document %s: unhandled error during langgraph orchestration", document_id, exc_info=exc)
+        reason = f"Unhandled langgraph orchestration error: {exc}"
+    text_cache.discard(document_id)
+    try:
+        await nodes.fail_document(document_id, reason)
+    except Exception:
+        logger.exception("Document %s: failed to record FAILED status after an error", document_id)
 
 
 async def rerun_extraction(document_id: str) -> None:
@@ -80,14 +89,7 @@ async def rerun_extraction(document_id: str) -> None:
                 finally:
                     await _record_run_audit(document_id, run)
         except Exception as exc:
-            logger.exception("Document %s: unhandled error during langgraph extraction rerun", document_id)
-            text_cache.discard(document_id)
-            try:
-                await nodes.fail_document(document_id, f"Unhandled langgraph orchestration error: {exc}")
-            except Exception:
-                logger.exception(
-                    "Document %s: failed to record FAILED status after unhandled langgraph error", document_id
-                )
+            await _fail_after_error(document_id, exc)
 
 
 async def _rerun_extraction(document_id: str) -> None:

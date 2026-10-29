@@ -99,7 +99,7 @@ async def agent_node(state: DocumentGraphState) -> dict:
     existing = state.get("agent_messages") or []
     spend_model_call("classify agent")
     available_tools = _available_tools(existing)
-    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, 1024)
+    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, 2048, effort="low")
     if available_tools:
         model = model.bind_tools(available_tools)
 
@@ -255,7 +255,7 @@ async def repair_node(state: DocumentGraphState) -> dict:
 
     last = (state.get("agent_messages") or [])[-1]
     bad_output = message_text(last.content)
-    repair_model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 512)
+    repair_model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 1024, effort="low")
     try:
         spend_model_call("classify repair")
         response = await repair_model.ainvoke([

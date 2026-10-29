@@ -173,7 +173,7 @@ Required: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `AN
 | `CPU_QUEUE_TIMEOUT_SECONDS` | 300 | the most a tool waits for the CPU worker before it starts |
 | `CASE_ANALYSIS_ENABLED` | true | kill switch for the case analysis |
 | `LOG_HTTP_REQUESTS` | false | httpx's one line per Supabase call |
-| `LANGGRAPH_SONNET_MODEL`, `LANGGRAPH_HAIKU_MODEL` | `claude-sonnet-4-6`, `claude-haiku-4-5-20251001` | model overrides |
+| `LANGGRAPH_SONNET_MODEL`, `LANGGRAPH_HAIKU_MODEL` | `claude-sonnet-5-5`, `claude-haiku-5-5` | model overrides. Every call sets its effort in code (`low`, or `medium` for the detection lead and the cross-document planner and judge) and sends no `temperature`; a refusal fails the step with its own reason |
 | `SUPABASE_STORAGE_BUCKET` | `documents` | bucket name |
 | `DATA_GOV_SG_API_KEY` | — | data.gov.sg lookups and the zoning download |
 | `URA_API_KEY` | — | URA approved residential use; skipped without it |

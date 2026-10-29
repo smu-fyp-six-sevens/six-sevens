@@ -186,8 +186,11 @@ class _LLMUsage(AsyncCallbackHandler):
                     continue
                 cost = metrics.record_llm(
                     agent, used.model, used.uncached_input, used.output, used.cache_read, used.cache_write, seconds,
+                    cache_write_1h=used.cache_write_1h,
                 )
-                _active().add_llm(used.total_input, used.output, used.cache_read, used.cache_write, cost)
+                _active().add_llm(
+                    used.total_input, used.output, used.cache_read, used.cache_write + used.cache_write_1h, cost,
+                )
 
     async def on_llm_error(self, error: BaseException, *, run_id: Any = None, **kwargs: Any) -> None:
         _, agent = self._started.pop(run_id, (None, telemetry.current_agent()))

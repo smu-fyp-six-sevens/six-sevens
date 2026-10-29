@@ -173,7 +173,7 @@ async def write_summary(
     )
     try:
         spend_model_call("summary")
-        model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 600)
+        model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 1200, effort="low")
         with telemetry.get_tracer().start_as_current_span("case_pipeline.summary") as span:
             response = await model.ainvoke([HumanMessage(content=prompt)])
             telemetry.record_usage(span, response)

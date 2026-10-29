@@ -171,8 +171,8 @@ class Settings:
     # Two-tier models: Sonnet for
     # classifier/vision/extraction/detection-lead, Haiku for
     # llm_classify/repair/specialists. Overridable per-tier.
-    LANGGRAPH_SONNET_MODEL: str = _env("LANGGRAPH_SONNET_MODEL", "claude-sonnet-4-6")
-    LANGGRAPH_HAIKU_MODEL: str = _env("LANGGRAPH_HAIKU_MODEL", "claude-haiku-4-5-20251001")
+    LANGGRAPH_SONNET_MODEL: str = _env("LANGGRAPH_SONNET_MODEL", "claude-sonnet-5-5")
+    LANGGRAPH_HAIKU_MODEL: str = _env("LANGGRAPH_HAIKU_MODEL", "claude-haiku-5-5")
     # Ceiling on the classify agent's tool-call loop and the full
     # record_escalation -> reclassify -> validate -> extract pass —
     # comfortably covers MAX_RECLASSIFICATION_ATTEMPTS with room to spare.

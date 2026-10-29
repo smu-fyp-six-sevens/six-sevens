@@ -25,6 +25,27 @@ def test_cost_at_list_price_and_cache_savings():
     assert round(cost.saved_by_cache_usd, 6) == 0.0108
 
 
+def test_usage_splits_one_hour_cache_writes_and_prices_them_apart():
+    message = _message("claude-sonnet-5-5", 1500, 100, cache_creation=500)
+    message.usage_metadata["input_token_details"].update(ephemeral_5m_input_tokens=300, ephemeral_1h_input_tokens=200)
+    used = pricing.usage(message)
+    assert used == pricing.Usage("claude-sonnet-5-5", 1000, 100, 0, 300, 200)
+    cost = pricing.cost(used.model, used.uncached_input, used.output, used.cache_read, used.cache_write, used.cache_write_1h)
+    assert round(cost.usd, 6) == round((1000 * 2 + 100 * 10 + 300 * 2.50 + 200 * 4) / 1_000_000, 6)
+
+
+def test_sonnet_5_5_cache_reads_cost_a_twentieth_of_input():
+    assert pricing.cost("claude-sonnet-5-5", 0, 0, 1_000_000, 0).usd == 0.10
+
+
+def test_haiku_5_5_prices_a_prompt_over_100k_tokens_higher_counting_cached_tokens():
+    short = pricing.cost("claude-haiku-5-5", 100_000, 1000, 0, 0)
+    assert round(short.usd, 6) == 0.0105
+    # 60,000 uncached plus 40,001 cached is over the threshold, so every token is at the higher price.
+    long = pricing.cost("claude-haiku-5-5", 60_000, 1000, 40_001, 0)
+    assert round(long.usd, 6) == round((60_000 * 0.50 + 1000 * 2.50 + 40_001 * 0.05) / 1_000_000, 6)
+
+
 def test_longest_prefix_wins():
     assert pricing.price_for("claude-opus-4-5-20251101").input == 5
     assert pricing.price_for("claude-opus-4-1").input == 15
