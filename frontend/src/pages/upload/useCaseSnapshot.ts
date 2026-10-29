@@ -154,7 +154,13 @@ export function useCaseSnapshot(caseId: string) {
   // "Approved" here means the whole post-approval family (approved/detecting/detected) — a
   // document doesn't move back to the pre-approval table once the Detection Agent picks it up.
   const extractedDocuments = useMemo(
-    () => documents.filter((document) => !hasBeenApproved(document.status)),
+    () => documents.filter((document) => !hasBeenApproved(document.status) && document.status !== 'rejected'),
+    [documents],
+  );
+
+  // The officer's other final decision: listed on their own, below the documents still waiting on them.
+  const rejectedDocuments = useMemo(
+    () => documents.filter((document) => document.status === 'rejected'),
     [documents],
   );
 
@@ -185,6 +191,7 @@ export function useCaseSnapshot(caseId: string) {
     caseHasInFlightDocument,
     extractedDocuments,
     approvedDocuments,
+    rejectedDocuments,
     flaggedDocuments,
     identityNames,
     caseMatchNeedsReview,

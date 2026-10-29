@@ -10,6 +10,7 @@ import KebabMenu from '../components/KebabMenu';
 import { DocumentBodySkeleton } from '../components/Skeletons';
 import {
   canCancelDocument,
+  canRejectDocument,
   canRetryDocument,
   CLASSIFICATION_CONFIDENCE_THRESHOLD,
   EXTRACTION_CONFIDENCE_THRESHOLD,
@@ -307,6 +308,8 @@ export default function DocumentDetailsPage({
     setDeleteConfirmOpen,
     confirmDeleteDocument,
   } = useDocumentActions({ document, setDocument, onDocumentDeleted });
+  // Rejecting is final (the document is locked), so it is confirmed first.
+  const [rejectConfirmOpen, setRejectConfirmOpen] = useState(false);
 
   const hasDetectionReport = detectionReport !== null;
   const detectionStage = document
@@ -390,7 +393,7 @@ export default function DocumentDetailsPage({
           documentId={document.id}
           lockedNotice={
             isLocked
-              ? `Document ${isApproved ? 'approved' : 'rejected'} and locked · notes don't change it`
+              ? `Document ${isApproved ? 'approved' : 'rejected'} and locked`
               : undefined
           }
         />
@@ -598,8 +601,9 @@ export default function DocumentDetailsPage({
                 <button
                   type="button"
                   className="document-action--reject"
-                  disabled={isRejecting || isApproving}
-                  onClick={() => void handleRejectDocument()}
+                  disabled={isRejecting || isApproving || !canRejectDocument(document.status)}
+                  title={canRejectDocument(document.status) ? undefined : 'Cancel processing first, then reject it.'}
+                  onClick={() => setRejectConfirmOpen(true)}
                 >
                   {isRejecting ? 'Rejecting…' : '✕ Reject Document'}
                 </button>
@@ -628,6 +632,21 @@ export default function DocumentDetailsPage({
             if (!isDeletingDocument) setDeleteConfirmOpen(false);
           }}
           onConfirm={() => void confirmDeleteDocument()}
+        />
+      )}
+
+      {rejectConfirmOpen && document && (
+        <ConfirmDialog
+          title="Reject this document?"
+          message={`${document.filename} will be marked rejected and locked: it no longer counts towards the case, and it can't be approved, edited or scanned afterwards.`}
+          confirmLabel="Reject"
+          isConfirming={isRejecting}
+          onCancel={() => {
+            if (!isRejecting) setRejectConfirmOpen(false);
+          }}
+          onConfirm={() => {
+            void handleRejectDocument().finally(() => setRejectConfirmOpen(false));
+          }}
         />
       )}
 

@@ -23,7 +23,7 @@ export function ApprovedDocumentsCard({
 
       <div className="documents-table documents-table--selectable">
         <div className="documents-table-header">
-          {/* Empty spacer matching the Extracted Files table's checkbox
+          {/* Empty spacer matching the Uploaded Files table's checkbox
               column, so both tables' columns line up — see .documents-table--selectable. */}
           <span className="document-select-cell" />
           <span>Filename</span>

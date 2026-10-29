@@ -108,9 +108,12 @@ export function FlaggedItemsCard({
                   <strong>{document.filename}</strong>
 
                   <div className="flagged-item-meta">
-                    <span>
-                      {formatDocumentType(document.document_type, document.classification_confidence)}
-                    </span>
+                    {/* A document blocked or failed before classification has no type: nothing to show. */}
+                    {document.document_type && (
+                      <span>
+                        {formatDocumentType(document.document_type, document.classification_confidence)}
+                      </span>
+                    )}
 
                     {lowestConfidence != null && (
                       <span>

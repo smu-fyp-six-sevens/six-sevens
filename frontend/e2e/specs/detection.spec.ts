@@ -33,9 +33,14 @@ const INCONCLUSIVE_REPORT = readRegressionFixture<Report>('detection-report-inco
 
 const approveButton = (page: Page) => page.getByRole('button', { name: '✓ Approve Document' });
 const rejectButton = (page: Page) => page.getByRole('button', { name: '✕ Reject Document' });
+// Rejecting is final, so the page asks first.
+async function rejectDocument(page: Page) {
+  await rejectButton(page).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Reject' }).click();
+}
 const documentStatus = (page: Page) => page.locator('.document-status');
 const detectionPanel = (page: Page) => page.locator('section', { has: page.getByRole('heading', { name: 'Detection' }) });
-const extractedCard = (page: Page) => page.locator('.documents-card:not(.approved-documents-card)');
+const extractedCard = (page: Page) => page.locator('.documents-card:not(.approved-documents-card, .rejected-documents-card)');
 const approvedCard = (page: Page) => page.locator('.approved-documents-card');
 
 /** A real credit report from GLDB-02 that is ready to approve (no flagged fields). */
@@ -89,14 +94,14 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     await page.reload();
     await expectLocked(page);
 
-    // MA-005: it has left Extracted Files for its own tab.
+    // MA-005: it has left Uploaded Files for its own tab.
     await page.goto(`${fixture.caseUrl}?section=documents`);
     await expect(extractedCard(page)).not.toContainText(document.filename);
     await page.goto(`${fixture.caseUrl}?section=approved`);
     await expect(approvedCard(page)).toContainText(document.filename);
   });
 
-  test('MA-006 a document not yet approved stays in Extracted Files @MA-006', async ({ page, backend }) => {
+  test('MA-006 a document not yet approved stays in Uploaded Files @MA-006', async ({ page, backend }) => {
     const { fixture } = creditReport(backend);
     const constitution = fixture.document('Constitution');
 
@@ -123,7 +128,7 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     const { fixture, document } = creditReport(backend);
     await page.goto(fixture.documentUrl(document));
 
-    await rejectButton(page).click();
+    await rejectDocument(page);
 
     await expect(documentStatus(page)).toHaveText('Rejected');
     await expect(documentStatus(page)).toHaveClass(/document-status--rejected/);
@@ -181,7 +186,7 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     const { fixture, document } = creditReport(backend);
     await page.goto(fixture.documentUrl(document));
 
-    await rejectButton(page).click();
+    await rejectDocument(page);
 
     await expect(detectionPanel(page)).toContainText("Detection doesn't run on rejected documents.");
     await expect(detectionPanel(page).getByRole('button', { name: 'Cancel detection' })).toHaveCount(0);

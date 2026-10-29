@@ -1490,8 +1490,36 @@ def test_reject_document_success() -> None:
     mock_repo.reject_document.assert_called_once_with("doc-1")
 
 
-def test_reject_document_rejects_a_document_not_yet_analyzed() -> None:
-    document = _typed_document(status=DocumentStatus.EXTRACTING)
+@pytest.mark.parametrize("settled", [DocumentStatus.FAILED, DocumentStatus.CANCELLED])
+def test_a_failed_blocked_or_cancelled_document_can_be_rejected(settled) -> None:
+    # A document the content guard blocked is FAILED: the officer must be able to reject it.
+    document = _typed_document(status=settled)
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.document_repository") as mock_repo,
+        patch("app.routers.documents.extracted_fields_repository") as mock_fields_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
+        mock_repo.reject_document.return_value = document.model_copy(update={"status": DocumentStatus.REJECTED})
+        mock_fields_repo.get_extracted_fields.return_value = []
+
+        response = client.post("/documents/doc-1/reject")
+
+    assert response.status_code == 200
+    mock_repo.reject_document.assert_called_once_with("doc-1")
+
+
+@pytest.mark.parametrize(
+    "status_, detail",
+    [
+        (DocumentStatus.EXTRACTING, "still being processed"),
+        (DocumentStatus.APPROVED, "has been approved"),
+        (DocumentStatus.REJECTED, "has been rejected"),
+    ],
+)
+def test_a_document_in_flight_or_already_decided_cannot_be_rejected(status_, detail) -> None:
+    document = _typed_document(status=status_)
 
     with (
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
@@ -1501,7 +1529,8 @@ def test_reject_document_rejects_a_document_not_yet_analyzed() -> None:
 
         response = client.post("/documents/doc-1/reject")
 
-    assert response.status_code == 400
+    assert response.status_code == 409
+    assert detail in response.json()["detail"]
     mock_repo.reject_document.assert_not_called()
 
 

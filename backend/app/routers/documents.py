@@ -786,10 +786,13 @@ async def approve_document(
 async def reject_document(
     document_id: str, document: DocumentRecord = Depends(get_document_or_404)
 ) -> DocumentRecord:
-    if document.status != DocumentStatus.ANALYZED:
+    # Any document the pipeline has finished with can be rejected, including a failed one and one the content guard
+    # blocked. One still in flight would be overwritten by the run when it lands, so it is cancelled first.
+    _ensure_unlocked(document, "it can't be rejected")
+    if document.status in IN_FLIGHT_STATUSES:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only completed documents can be rejected.",
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This document is still being processed. Cancel it first, then reject it.",
         )
 
     with bad_gateway_on_error("Failed to reject document.", "Failed to reject document %s", document_id):

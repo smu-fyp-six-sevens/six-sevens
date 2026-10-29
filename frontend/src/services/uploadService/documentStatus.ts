@@ -132,6 +132,12 @@ export function canCancelDocument(status: string): boolean {
   return status === 'queued' || status === 'processing' || status === 'extracting';
 }
 
+// Mirrors routers/documents.py's reject_document eligibility: anything the pipeline has finished with (failed and
+// content-guard-blocked included) that isn't approved or rejected yet. A run still in flight is cancelled first.
+export function canRejectDocument(status: string): boolean {
+  return status !== 'uploaded' && !canCancelDocument(status) && !hasBeenApproved(status) && status !== 'rejected';
+}
+
 // Mirrors routers/documents.py's retry_document eligibility: FAILED, or PROCESSING long enough to be stuck.
 export function canRetryDocument(
   document: Pick<DocumentRecord, 'status' | 'processing_started_at'>,

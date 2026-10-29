@@ -793,9 +793,12 @@ export class MockBackend {
         document.status = 'approved';
         return json(document);
       }
+      // Same rule as routers/documents.py's reject_document: anything settled (failed and blocked included) that isn't
+      // decided yet; an in-flight one is cancelled first.
       if (method === 'POST' && rest === '/reject') {
-        if (document.status !== 'analyzed') {
-          return json({ detail: 'Only completed documents can be rejected.' }, 400);
+        if (LOCKED.includes(document.status)) return locked('rejected');
+        if (IN_FLIGHT.includes(document.status)) {
+          return json({ detail: 'This document is still being processed. Cancel it first, then reject it.' }, 409);
         }
         document.status = 'rejected';
         return json(document);
