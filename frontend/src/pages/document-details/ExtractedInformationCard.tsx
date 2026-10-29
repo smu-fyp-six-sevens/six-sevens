@@ -13,6 +13,7 @@ import {
 } from '../../services/uploadService';
 import { buildFieldDraft, formatFieldDisplayValue, formatNumberWithCommas, isArrayOfLabelValueStrings, isArrayOfObjects, isArrayOfPrimitives, isPlainKeyValueObject, keyValueObjectRows, labelValueStringRows } from './fieldDisplay';
 import { humanizeFieldKey, normaliseFieldName } from '../../utils/fieldLabels';
+import { ErrorMessage } from '../../components/ErrorMessage';
 
 export function ExtractedInformationCard({
   canAddOrDeleteFields,
@@ -159,11 +160,7 @@ export function ExtractedInformationCard({
                 />
               </div>
 
-              {addFieldError && (
-                <div className="add-field-error">
-                  {addFieldError}
-                </div>
-              )}
+              {addFieldError && <ErrorMessage className="add-field-error" message={addFieldError} />}
 
               <div className="add-field-form-actions">
                 <button
@@ -227,11 +224,7 @@ export function ExtractedInformationCard({
             </div>
           )}
 
-          {!isCollapsed && deleteFieldError && (
-            <div className="add-field-error">
-              {deleteFieldError}
-            </div>
-          )}
+          {!isCollapsed && deleteFieldError && <ErrorMessage className="add-field-error" message={deleteFieldError} />}
 
           {isCollapsed ? null : extractedFields.length === 0 ? (
             <div className="review-message review-message--error">

@@ -932,6 +932,39 @@ test.describe('Update case @sprint3 @SCRUM-116', () => {
     await expect(page.getByRole('alert')).toHaveCount(0);
     await expect(caseHeader(page)).toContainText(NEW_NAME);
   });
+
+  test('a server error while saving says what failed and to try again, not the status or JSON', async ({ page, backend }) => {
+    const ironclad = seedIronclad(backend);
+    await page.route(`**/cases/${ironclad.id}`, (route) =>
+      route.request().method() === 'PATCH'
+        ? route.fulfill({ status: 502, json: { detail: 'Failed to save the case. Check Supabase table access.' } })
+        : route.fallback(),
+    );
+
+    await renameCase(page, ironclad.greenlink_case_id, NEW_NAME);
+
+    const error = page.locator('.error-message');
+    await expect(error.locator('.error-message-title')).toHaveText('Failed to update case.');
+    await expect(error.locator('.error-message-hint')).toHaveText(
+      'Something went wrong on our side; try again, and tell the team if it keeps happening.',
+    );
+    await expect(page.getByText(/502|Supabase/)).toHaveCount(0);
+  });
+
+  test('no response while saving reads like a server error', async ({ page, backend }) => {
+    const ironclad = seedIronclad(backend);
+    await page.route(`**/cases/${ironclad.id}`, (route) =>
+      route.request().method() === 'PATCH' ? route.abort('connectionrefused') : route.fallback(),
+    );
+
+    await renameCase(page, ironclad.greenlink_case_id, NEW_NAME);
+
+    const error = page.locator('.error-message');
+    await expect(error.locator('.error-message-title')).toHaveText('Failed to update case.');
+    await expect(error.locator('.error-message-hint')).toHaveText(
+      'Something went wrong on our side; try again, and tell the team if it keeps happening.',
+    );
+  });
 });
 
 test.describe('Delete case and documents @sprint3 @SCRUM-117', () => {
@@ -962,7 +995,7 @@ test.describe('Delete case and documents @sprint3 @SCRUM-117', () => {
     await page.getByRole('menuitem', { name: 'Delete document' }).click();
   }
 
-  test('CM-024 a document is deleted after confirming, and its link then shows "Document not found" @CM-024', async ({ page, backend }) => {
+  test('CM-024 a document is deleted after confirming, and its link then says it no longer exists @CM-024', async ({ page, backend }) => {
     const { theCase, noa, documentUrl } = seedScrum117(backend);
     await page.goto(documentUrl);
 
@@ -976,8 +1009,9 @@ test.describe('Delete case and documents @sprint3 @SCRUM-117', () => {
     expect(backend.requestsTo('DELETE', `/documents/${noa.id}`)).toHaveLength(1);
     await expect(page.getByText('C035_NOA.pdf')).toHaveCount(0);
     await page.goto(documentUrl);
-    // The page shows the API's error verbatim: "Failed to fetch document (404): {"detail":"Document not found"}".
-    await expect(page.getByText(/Document not found/)).toBeVisible();
+    // A 404 reads as a sentence, not as the status and FastAPI's JSON.
+    await expect(page.getByText('This case or document no longer exists.')).toBeVisible();
+    await expect(page.getByText(/404|"detail"/)).toHaveCount(0);
   });
 
   test('CM-025 / CM-028 deleting asks first: Cancel keeps everything, Delete removes the case and its links show not-found @CM-025 @CM-028', async ({ page, backend }) => {

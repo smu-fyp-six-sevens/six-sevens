@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { officerName } from '../../lib/officers';
 import type { CaseRisk, CaseRiskFinding, DocumentRecord, FindingReview, ReviewScope } from '../../services/uploadService';
 import { formatDocumentType } from '../../services/uploadService';
@@ -8,6 +9,7 @@ import { GroupReviewBar, MetricsLine, MissedIssues, ReviewSummary } from './Find
 import { findingScope, useFindingReviews, verdictFor } from './useFindingReviews';
 import DocumentReviewModal from './DocumentReviewModal';
 import type { ReviewLink } from './DocumentReviewModal';
+import { ErrorMessage } from '../../components/ErrorMessage';
 
 // The group cross-document findings sit in: they belong to the case, not to one document.
 const CASE_GROUP_ID = '__case__';
@@ -247,6 +249,22 @@ export function CaseRiskCard({
   );
   const reviewGroups = emptyGroups(withFindings, caseDocuments);
 
+  // A reason in the case analysis summary links here as #risk-finding-<document>-<finding>: open that document for
+  // review, then bring the finding into view once the reviews have loaded.
+  const { hash } = useLocation();
+  const linkedId = hash.startsWith('#risk-finding-') ? decodeURIComponent(hash.slice(1)) : null;
+  const linkedGroupId =
+    findings.find((finding) => findingScope(finding) !== 'case' && linkedId === `risk-finding-${finding.document_id}-${finding.finding_id}`)
+      ?.document_id ?? null;
+  useEffect(() => {
+    if (linkedGroupId) setReviewing(linkedGroupId);
+  }, [linkedGroupId]);
+  const reviewsSettled = reviews.data !== null || reviews.error !== null;
+  useEffect(() => {
+    if (!linkedId || !reviewsSettled) return;
+    window.document.getElementById(linkedId)?.scrollIntoView({ block: 'center' });
+  }, [linkedId, reviewing, reviewsSettled]);
+
   function metricsFor(group: DocumentGroup) {
     return group.scope === 'case' ? reviews.data?.cross_document : reviews.data?.documents[group.documentId];
   }
@@ -410,11 +428,16 @@ export function CaseRiskCard({
               ? [...new Set(link!.located.get(placed)!.areas.map((area) => area.page))].join(', ')
               : '';
             const isActive = link?.activeId !== null && link?.activeId !== undefined && ids.includes(link.activeId);
+            const rowId = `risk-finding-${document.documentId}-${finding.finding_id}`;
+            const rowClass = [isActive && 'risk-finding--active', linkedId === rowId && 'risk-finding--linked']
+              .filter(Boolean)
+              .join(' ');
             return (
               <li
                 key={finding.finding_id}
+                id={rowId}
                 data-finding-ids={ids.join(' ')}
-                className={isActive ? 'risk-finding--active' : undefined}
+                className={rowClass || undefined}
               >
                 {reviews.data && (
                   <input
@@ -605,11 +628,7 @@ export function CaseRiskCard({
               <div className="flagged-list">{done.map(renderGroup)}</div>
             </details>
           )}
-          {reviews.error && (
-            <div className="save-error" role="alert">
-              {reviews.error}
-            </div>
-          )}
+          {reviews.error && <ErrorMessage className="card-error" message={reviews.error} />}
           {reviews.data && (
             <ReviewSummary
               caseSummary={reviews.data.case}

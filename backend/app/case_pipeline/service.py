@@ -10,9 +10,9 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
-from .. import case_repository, document_repository, events, finding_reviews_repository
+from .. import audit, case_repository, document_repository, events, finding_reviews_repository
 from ..config import settings
 from ..snapshots import push_case_snapshot
 from ..langgraph import trace as langgraph_trace
@@ -22,7 +22,7 @@ from . import repository, state
 from .cross_document.evidence import build_context
 from .cross_document.agents import PROMPT_VERSION
 from .cross_document.graph import run_cross_document_analysis
-from .models import AnalysisAudit, CaseAnalysis
+from .models import AnalysisAudit, AnalysisStatus, CaseAnalysis, CaseAnalysisRunItem
 from .risk import store as risk_store
 from .trace import RunTrace
 from .readiness import is_ready_for_analysis
@@ -158,15 +158,16 @@ async def _execute(
                      items=[{"title": i.title, "source": i.source, "affects_score": i.affects_score} for i in additional.items])
         clean_checks, unrun_checks = _check_outcomes(reports)
         summary = await write_summary(risk, outlook, clean_checks, unrun_checks)
-        trace.record("summary", text=summary)
+        trace.record("summary", **summary.model_dump())
 
         analysis.findings = findings
         analysis.outlook = outlook
-        analysis.summary = summary
+        analysis.structured_summary = summary
         analysis.risk = risk
         analysis.supporting_documents = supporting_documents
         analysis.additional_documents = additional
         analysis.consistent_checks = result.get("consistent_checks") or []
+        analysis.clean_checks = clean_checks
         analysis.audit = AnalysisAudit(
             models={"analysis": settings.LANGGRAPH_SONNET_MODEL},
             prompt_version=PROMPT_VERSION,
@@ -216,3 +217,59 @@ def get_current(case_id: str) -> CaseAnalysis | None:
     documents = document_repository.list_documents(case_id=case_id)
     reports, _ = langgraph_trace.get_detection_states([d.id for d in documents])
     return state.current_view(analysis, documents, reports)
+
+
+def get_run(case_id: str, run_id: str) -> CaseAnalysis | None:
+    """One earlier (or the latest) run against the documents as they are now, for reading back (sync)."""
+    analysis = repository.get_run(case_id, run_id)
+    if analysis is None:
+        return None
+    documents = document_repository.list_documents(case_id=case_id)
+    reports, _ = langgraph_trace.get_detection_states([d.id for d in documents])
+    return state.current_view(analysis, documents, reports)
+
+
+def _starters(case_id: str) -> dict[str, str]:
+    """run_id -> the officer who requested it, from the audit trail. Empty when the trail can't be read."""
+    try:
+        requested = audit.list_events(case_id=case_id, event_type=events.types.CASE_ANALYSIS_REQUESTED, limit=500)
+    except Exception:
+        logger.exception("Failed to read who started the analyses of case %s", case_id)
+        return {}
+    return {str(e.detail["run_id"]): e.actor for e in requested if e.detail.get("run_id")}
+
+
+def list_runs(case_id: str) -> list[CaseAnalysisRunItem]:
+    """Every analysis of the case, newest first, each with who started it, its score change and whether it's stale (sync)."""
+    rows = repository.list_runs(case_id)
+    if not rows:
+        return []
+    documents = document_repository.list_documents(case_id=case_id)
+    reports, _ = langgraph_trace.get_detection_states([d.id for d in documents])
+    current = state.compute_fingerprint(documents, reports)
+    starters = _starters(case_id)
+
+    items: list[CaseAnalysisRunItem] = []
+    for row in rows:
+        started_at = datetime.fromisoformat(str(row["started_at"]))
+        status = cast(AnalysisStatus, str(row["status"]))
+        # As get_current reads it: a run past the time limit was lost, not still running.
+        if status == "running" and not state.is_live(status, started_at):
+            status = "failed"
+        score = row.get("risk_score")
+        items.append(CaseAnalysisRunItem(
+            run_id=str(row["run_id"]), status=status, started_at=started_at, finished_at=row.get("finished_at"),
+            started_by=starters.get(str(row["run_id"])),
+            risk_level=row.get("risk_level"), risk_score=round(score) if isinstance(score, (int, float)) else None,
+            finding_count=len(row.get("findings") or []),
+            stale=row.get("fingerprint") != current,
+        ))
+    # Oldest first, so each scored run is compared with the scored run before it.
+    previous: int | None = None
+    for item in reversed(items):
+        if item.risk_score is None:
+            continue
+        if previous is not None:
+            item.score_change = item.risk_score - previous
+        previous = item.risk_score
+    return items

@@ -201,10 +201,12 @@ export function makeAnalysis(overrides: Partial<CaseAnalysis> & Pick<CaseAnalysi
     findings: [],
     outlook: null,
     summary: null,
+    structured_summary: null,
     risk: null,
     supporting_documents: [],
     additional_documents: null,
     consistent_checks: [],
+    clean_checks: [],
     audit: { models: {}, prompt_version: '', hypotheses_tried: 0, findings_discarded: 0, tool_calls: [] },
     trace: [],
     stale: false,
@@ -598,6 +600,23 @@ export class MockBackend {
     // Same rules as routers/cases.py run_case_analysis: only once every approved document is scanned, and never
     // while a run is going. The run then stays "running" until a test finishes it (the case-worker's part) and
     // pushes a snapshot.
+    // GET .../analysis/runs (newest first) and .../analysis/runs/:runId: the one run the mock keeps per case.
+    const runsMatch = path.match(/^\/cases\/([^/]+)\/analysis\/runs(?:\/([^/]+))?$/);
+    if (runsMatch && method === 'GET') {
+      const latest = this.analyses[runsMatch[1]];
+      if (runsMatch[2]) {
+        return latest?.run_id === runsMatch[2] ? json(latest) : json({ detail: 'No analysis with that id for this case.' }, 404);
+      }
+      return json(
+        latest
+          ? [{
+              run_id: latest.run_id, status: latest.status, started_at: latest.started_at, finished_at: latest.finished_at,
+              started_by: null, risk_level: latest.risk?.level ?? null, risk_score: latest.risk?.score ?? null,
+              score_change: null, finding_count: latest.findings.length, stale: latest.stale,
+            }]
+          : [],
+      );
+    }
     const analysisMatch = path.match(/^\/cases\/([^/]+)\/analysis(\/run)?$/);
     if (analysisMatch) {
       const theCase = this.cases.find((c) => c.id === analysisMatch[1]);

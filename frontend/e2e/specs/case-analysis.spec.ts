@@ -20,6 +20,15 @@ const CASE_RISK = readRegressionFixture<Record<string, { risk: CaseRisk; scoring
   'case-risk-sprint4.json',
 );
 
+// Raw error text goes to the console, never the page (the plain sentence is what the officer sees).
+function consoleErrors(page: Page): string[] {
+  const errors: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error') errors.push(message.text());
+  });
+  return errors;
+}
+
 const runButton = (page: Page) => page.getByRole('button', { name: /^(Run case analysis|Run again|Analysing…)$/ });
 const analysisCard = (page: Page) =>
   page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Case Analysis' }) });
@@ -158,6 +167,7 @@ test.describe('Trigger case analysis @sprint4 @SCRUM-52', () => {
 
   test('MA-018 a case analysis that fails says so @MA-018', async ({ page, backend }) => {
     const theCase = c001Case(backend);
+    const errors = consoleErrors(page);
     await page.goto(`/cases/${theCase.greenlink_case_id}?section=analysis`);
     await runButton(page).click();
     await expect.poll(() => backend.requestsTo('POST', `/cases/${theCase.id}/analysis/run`).length).toBe(1);
@@ -165,7 +175,9 @@ test.describe('Trigger case analysis @sprint4 @SCRUM-52', () => {
     finishRun(backend, theCase, { status: 'failed', error: 'RuntimeError: scoring unavailable' });
 
     await expect(analysisCard(page)).toContainText('The analysis did not finish.');
-    await expect(analysisCard(page)).toContainText('RuntimeError: scoring unavailable');
+    await expect(analysisCard(page)).toContainText('Run it again.');
+    await expect(analysisCard(page)).not.toContainText('RuntimeError');
+    await expect.poll(() => errors.join('\n')).toContain('RuntimeError: scoring unavailable');
     await expect(sectionStatus(page, 'Case Analysis')).toContainText('Did Not Finish');
     await expect(runButton(page)).toHaveText('Run again');
     await expect(tracePanel(page)).toContainText('status: failed');
@@ -224,6 +236,7 @@ test.describe('Auto-trigger scoring @sprint4 @SCRUM-53', () => {
 
   test('MA-023 a failed cross-document check is shown, and the case is not scored @MA-023', async ({ page, backend }) => {
     const theCase = c001Case(backend);
+    const errors = consoleErrors(page);
     await page.goto(`/cases/${theCase.greenlink_case_id}?section=analysis`);
     await runButton(page).click();
     await expect.poll(() => backend.requestsTo('POST', `/cases/${theCase.id}/analysis/run`).length).toBe(1);
@@ -235,7 +248,8 @@ test.describe('Auto-trigger scoring @sprint4 @SCRUM-53', () => {
     });
 
     await expect(analysisCard(page)).toContainText('The analysis did not finish.');
-    await expect(analysisCard(page)).toContainText('RuntimeError: cross-document check failed');
+    await expect(analysisCard(page)).not.toContainText('RuntimeError');
+    await expect.poll(() => errors.join('\n')).toContain('RuntimeError: cross-document check failed');
     await expect(tracePanel(page).getByText('Scoring', { exact: true })).toHaveCount(0);
     await page.goto(`/cases/${theCase.greenlink_case_id}?section=risk`);
     await expect(riskCard(page)).toContainText('Not scored yet.');
@@ -388,6 +402,7 @@ test.describe('Handle invalid agent output @sprint4 @SCRUM-54', () => {
 
   test('MA-026 the document is marked Failed and its page shows why @MA-026', async ({ page, backend }) => {
     const { fixture, payslip } = withFailedPayslip(backend);
+    const errors = consoleErrors(page);
 
     await page.goto(`${fixture.caseUrl}?section=documents`);
     await expect(page.getByRole('button', { name: `View ${payslip.filename}` })).toContainText('Failed');
@@ -395,7 +410,11 @@ test.describe('Handle invalid agent output @sprint4 @SCRUM-54', () => {
 
     await page.goto(fixture.documentUrl(payslip));
     await expect(page.locator('.document-status')).toContainText('Failed');
-    await expect(page.locator('.details-failure-reason')).toContainText(REASON);
+    // Why, in plain words: the model's raw reply stays in the console.
+    await expect(page.locator('.details-failure-reason strong')).toHaveText('Data extraction service error');
+    await expect(page.locator('.details-failure-reason')).toContainText("The fields couldn't be extracted.");
+    await expect(page.locator('.details-failure-reason')).not.toContainText('Sure! Here are the fields');
+    await expect.poll(() => errors.join('\n')).toContain(REASON);
   });
 
   test('MA-027 the other documents carry on and the failed one can be retried @MA-027', async ({ page, backend }) => {

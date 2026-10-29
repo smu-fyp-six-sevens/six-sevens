@@ -152,6 +152,10 @@ export type CaseOption = Pick<Schemas['CaseListItem'], 'id' | 'greenlink_case_id
 export type AdditionalDocument = Schemas['AdditionalDocument'];
 export type AdditionalDocuments = Schemas['AdditionalDocuments'];
 export type CaseAnalysisOverview = Schemas['CaseAnalysisOverview'];
+// A run's headline, cited reasons and "would help" line (backend case_pipeline/risk/summary.py).
+export type AnalysisSummary = Schemas['AnalysisSummary'];
+// One row of GET /cases/{id}/analysis/runs, newest first.
+export type CaseAnalysisRunItem = Schemas['CaseAnalysisRunItem'];
 export type CrossDocFinding = Schemas['CrossDocFinding'];
 export type OutlookRequest = Schemas['OutlookRequest'];
 export type RiskOutlook = Schemas['RiskOutlook'];

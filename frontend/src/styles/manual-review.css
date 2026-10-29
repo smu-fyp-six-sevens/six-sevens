@@ -131,11 +131,6 @@
   font-weight: 600;
 }
 
-.save-error {
-  color: var(--red-45a);
-  font-weight: 600;
-}
-
 @media (max-width: 760px) {
   .manual-review-table {
     overflow-x: auto;
