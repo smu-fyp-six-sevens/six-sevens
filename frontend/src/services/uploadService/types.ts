@@ -88,6 +88,18 @@ export interface DetectionFinding {
   rationale: string;
   specialists: string[];
   via_second_look: boolean;
+  // Where on the document it was found, for the checks that measure an area (image and layout checks).
+  // `page` is 1-based (null for an image upload); `bbox` is [x0, y0, x1, y1] from the top-left, in
+  // `bbox_units`, within a page of `page_size` when the check reports it.
+  page?: number | null;
+  bbox?: [number, number, number, number] | null;
+  bbox_units?: 'pt' | 'px';
+  page_size?: [number, number] | null;
+  // The font and spelling checks list each place instead (page 1-based, bbox in `bbox_units`).
+  locations?: { page: number; bbox?: [number, number, number, number] }[];
+  // The check's own label for it (image checks: indicator; layout check: type).
+  indicator?: string;
+  type?: string;
 }
 
 export interface DetectionReport {
@@ -140,6 +152,10 @@ export type CaseOption = Pick<Schemas['CaseListItem'], 'id' | 'greenlink_case_id
 export type AdditionalDocument = Schemas['AdditionalDocument'];
 export type AdditionalDocuments = Schemas['AdditionalDocuments'];
 export type CaseAnalysisOverview = Schemas['CaseAnalysisOverview'];
+// A run's headline, cited reasons and "would help" line (backend case_pipeline/risk/summary.py).
+export type AnalysisSummary = Schemas['AnalysisSummary'];
+// One row of GET /cases/{id}/analysis/runs, newest first.
+export type CaseAnalysisRunItem = Schemas['CaseAnalysisRunItem'];
 export type CrossDocFinding = Schemas['CrossDocFinding'];
 export type OutlookRequest = Schemas['OutlookRequest'];
 export type RiskOutlook = Schemas['RiskOutlook'];

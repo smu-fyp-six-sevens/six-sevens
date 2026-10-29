@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../support/test';
 import { loadFixture } from '../support/fixtures';
-import type { DocumentRow, MockBackend } from '../support/mockBackend';
+import type { MockBackend } from '../support/mockBackend';
 
 /**
  * Document review (Sprint 2) — "Test Cases - Sprint 2.xlsx", Document
@@ -70,6 +70,42 @@ test.describe('Extract text from documents @sprint2 @SCRUM-9', () => {
     await expect(page.locator('.review-message--error')).toHaveCount(0);
   });
 
+  test('a failed document says what went wrong in a sentence; the raw reason only goes to the console', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const payslip = fixture.document('Payslip');
+    payslip.status = 'failed';
+    payslip.failure_reason = "Unhandled processing error: KeyError: 'net_pay'";
+
+    const consoleErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') consoleErrors.push(message.text());
+    });
+
+    await page.goto(fixture.documentUrl(payslip));
+
+    const failure = page.locator('.details-failure-reason.review-message--error');
+    await expect(failure.locator('strong')).toHaveText('Unexpected system error');
+    await expect(failure).toContainText('Something went wrong while processing this document.');
+    await expect(page.getByText(/KeyError/)).toHaveCount(0);
+    await expect.poll(() => consoleErrors.join('\n')).toContain("Unhandled processing error: KeyError: 'net_pay'");
+  });
+
+  test("a file that can't be read only says so: no type picker, fields or manual review", async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const payslip = fixture.document('Payslip');
+    payslip.status = 'failed';
+    payslip.failure_reason = "Text extraction failed: Failed to open file 'broken.pdf' as type pdf.";
+
+    await page.goto(fixture.documentUrl(payslip));
+
+    const failure = page.locator('.details-failure-reason.review-message--error');
+    await expect(failure.locator('strong')).toHaveText("The file's text couldn't be read");
+    await expect(failure.locator('.details-failure-reason-hint')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Confirm document type/ })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Extracted Information' })).toHaveCount(0);
+    await expect(reviewSection(page)).toHaveCount(0);
+  });
+
   test('DI-030 array fields list every extracted value @DI-030', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'harbor-light');
     const loans = fixture.document('ListLoans');
@@ -107,47 +143,9 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     await expect(reviewRow(page, 'Company Name').locator('input')).toBeDisabled();
   });
 
-  test('DI-024 an officer can fill in a flagged field and the value is kept @DI-024', async ({ page, backend }) => {
-    const { fixture, cert } = certWithMissingUen(backend);
-    await page.goto(fixture.documentUrl(cert));
-
-    await reviewRow(page, 'UEN').locator('input').fill('201634564N');
-    await page.getByRole('button', { name: 'Save fields' }).click();
-
-    // Saved and human-verified: the field is no longer flagged, so the whole
-    // manual-review section closes (taking its "Changes saved" message with it).
-    await expect(reviewSection(page)).toHaveCount(0);
-    await expect(fieldRow(page, 'UEN').locator('.field-value')).toHaveText('201634564N');
-    const saved = backend.requestsTo('PATCH', `/documents/${cert.id}/extracted-fields`);
-    expect(saved).toHaveLength(1);
-    expect((saved[0].body as { extracted_fields: Record<string, unknown> }).extracted_fields.uen).toBe('201634564N');
-
-    await page.reload();
-    await expect(fieldRow(page, 'UEN').locator('.field-value')).toHaveText('201634564N');
-    await expect(fieldRow(page, 'UEN').locator('.confidence-badge')).toHaveText('1.00');
-  });
-
-  test('DI-025 once every field is complete the document is no longer flagged and can be approved @DI-025', async ({ page, backend }) => {
-    const { fixture, cert } = certWithMissingUen(backend);
-    await page.goto(fixture.documentUrl(cert));
-
-    await reviewRow(page, 'UEN').locator('input').fill('201634564N');
-    await page.getByRole('button', { name: 'Save fields' }).click();
-    await expect(reviewSection(page)).toHaveCount(0);
-
-    await expect(routingOutcome(page)).toHaveText('Accepted');
-    await page.getByRole('button', { name: '✓ Approve Document' }).click();
-
-    await expect(page.getByRole('button', { name: '✓ Approve Document' })).toHaveCount(0);
-    expect(backend.requestsTo('POST', `/documents/${cert.id}/approve`)).toHaveLength(1);
-
-    await page.goto(`${fixture.caseUrl}?section=approved`);
-    await expect(page.locator('.approved-documents-card')).toContainText(cert.filename);
-  });
-
-  test('DI-025 saving fields locks them and moves Manual Review -> Accepted -> Approved @DI-025', async ({ page, backend }) => {
-    // Routed to manual review by the classifier as well — saving the
-    // fields must clear that too, not only the low field confidence.
+  test('DI-024 / DI-025 a filled-in field is saved and kept, and the document goes Manual Review -> Accepted -> Approved @DI-024 @DI-025', async ({ page, backend }) => {
+    // Routed to manual review by the classifier as well — saving the fields must clear that too, not only the
+    // low field confidence.
     const { fixture, cert } = certWithMissingUen(backend);
     cert.routing_status = 'manual_review';
     await page.goto(fixture.documentUrl(cert));
@@ -156,18 +154,28 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     await reviewRow(page, 'UEN').locator('input').fill('201634564N');
     await page.getByRole('button', { name: 'Save fields' }).click();
 
-    await expect(routingOutcome(page)).toHaveText('Accepted');
+    // Saved and human-verified: the field is no longer flagged, so the whole manual-review section closes.
     await expect(reviewSection(page)).toHaveCount(0);
+    await expect(routingOutcome(page)).toHaveText('Accepted');
+    await expect(fieldRow(page, 'UEN').locator('.field-value')).toHaveText('201634564N');
+    const saved = backend.requestsTo('PATCH', `/documents/${cert.id}/extracted-fields`);
+    expect(saved).toHaveLength(1);
+    expect((saved[0].body as { extracted_fields: Record<string, unknown> }).extracted_fields.uen).toBe('201634564N');
     // The values are verified, but a missing field can still be added (or a wrong one deleted) until approval.
     await expect(page.getByRole('button', { name: '+ Add field' })).toBeVisible();
     await expect(page.locator('.delete-field-button').first()).toBeVisible();
 
     await page.reload();
+    await expect(fieldRow(page, 'UEN').locator('.field-value')).toHaveText('201634564N');
+    await expect(fieldRow(page, 'UEN').locator('.confidence-badge')).toHaveText('1.00');
     await expect(routingOutcome(page)).toHaveText('Accepted');
     await expect(reviewSection(page)).toHaveCount(0);
 
     await page.getByRole('button', { name: '✓ Approve Document' }).click();
     await expect(routingOutcome(page)).toHaveText('Approved');
+    expect(backend.requestsTo('POST', `/documents/${cert.id}/approve`)).toHaveLength(1);
+    await page.goto(`${fixture.caseUrl}?section=approved`);
+    await expect(page.locator('.approved-documents-card')).toContainText(cert.filename);
   });
 
   test('an unrecognised document starts as Unrecognised and only becomes Other once the officer picks it @DI-others', async ({ page, backend }) => {
@@ -198,7 +206,7 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
 
     await page.getByRole('button', { name: 'Save fields' }).click();
 
-    await expect(page.locator('.save-error')).toHaveText('Please complete all fields before saving.');
+    await expect(page.locator('.manual-review-message .error-message')).toHaveText('Please complete all fields before saving.');
     expect(backend.requestsTo('PATCH', `/documents/${cert.id}/extracted-fields`)).toHaveLength(0);
     await expect(routingOutcome(page)).toHaveText('Manual Review');
   });
@@ -216,12 +224,20 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     expect(backend.requestsTo('POST', `/documents/${cert.id}/approve`)).toHaveLength(0);
   });
 
-  test('DI-025 a clean credit report (no defaults on record) can be approved @DI-025', async ({ page, backend }) => {
+  test('DI-025 a clean credit report (no defaults on record) needs no review and is approved @DI-025', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
     const report = fixture.document('Credit_Bureau_Report');
     await page.goto(fixture.documentUrl(report));
 
-    await expect(page.getByRole('button', { name: '✓ Approve Document' })).toBeEnabled({ timeout: 2000 });
+    // Every field is complete and confident: nothing is flagged, so it goes straight to approval.
+    await expect(routingOutcome(page)).toHaveText('Accepted');
+    await expect(reviewSection(page)).toHaveCount(0);
+    await expect(page.locator('.approval-warning')).toHaveCount(0);
+    await page.getByRole('button', { name: '✓ Approve Document' }).click();
+
+    await expect(routingOutcome(page)).toHaveText('Approved');
+    expect(backend.requestsTo('POST', `/documents/${report.id}/approve`)).toHaveLength(1);
+    expect(report.status).toBe('approved');
   });
 
   test('DI-025 a field that is legitimately empty does not block saving a correction @DI-025', async ({ page, backend }) => {
@@ -234,7 +250,7 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     await reviewRow(page, 'UEN').locator('input').fill('201634564N');
     await page.getByRole('button', { name: 'Save fields' }).click();
 
-    await expect(page.locator('.save-error')).toHaveCount(0);
+    await expect(page.locator('.manual-review-message .error-message')).toHaveCount(0);
     expect(backend.requestsTo('PATCH', `/documents/${cert.id}/extracted-fields`)).toHaveLength(1);
   });
 
@@ -322,8 +338,17 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     await page.locator('.array-modal-input').first().fill('Edited term');
     await page.locator('.array-modal-save').click();
 
-    await reviewRow(page, 'Loan Terms').getByRole('button', { name: /^Edit \d+ items?$/ }).click();
+    await editButton.click();
     await expect(page.locator('.array-modal-input').first()).toHaveValue('Edited term');
+    await page.locator('.array-modal-save').click();
+
+    // Saving the review sends the edited list, and the saved value is what the page shows afterwards.
+    await page.getByRole('button', { name: 'Save fields' }).click();
+    const [saved] = backend.requestsTo('PATCH', `/documents/${loans.id}/extracted-fields`);
+    const terms = (saved.body as { extracted_fields: { loan_terms: Record<string, unknown>[] } }).extracted_fields.loan_terms;
+    expect(Object.values(terms[0])).toContain('Edited term');
+    await page.reload();
+    await expect(fieldRow(page, 'Loan Terms').locator('.array-value-trigger')).toContainText(`${terms.length} items`);
   });
 
   test('DI-others-10 an officer can confirm a low-confidence type as a different type @DI-others', async ({ page, backend }) => {
@@ -344,4 +369,3 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
   });
 });
 
-export type { DocumentRow };

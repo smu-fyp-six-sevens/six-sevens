@@ -384,6 +384,41 @@
   border-top: 1px dashed var(--line);
 }
 
+/* Beside the document in the review view: the finding picked on the page, and the way to find each on it. */
+.risk-findings li.risk-finding--active {
+  margin: 0 -10px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  background: var(--orange-91);
+  box-shadow: inset 3px 0 0 #e0632e;
+}
+
+.risk-finding-locate {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--slate-86);
+  border-radius: 5px;
+  background: var(--white);
+  color: var(--blue-43);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.risk-finding-locate:hover {
+  border-color: var(--blue-77);
+  background: var(--blue-97);
+}
+
+.risk-finding-unplaced {
+  margin-top: 4px;
+  color: var(--ink-soft);
+  font-size: 11.5px;
+  font-style: italic;
+}
+
 .risk-severity {
   flex: 0 0 58px;
   padding: 2px 0;
@@ -916,6 +951,12 @@
   font-size: 12.5px;
 }
 
+.review-summary-note {
+  margin: 10px 0 0;
+  color: var(--ink-soft);
+  font-size: 11.5px;
+}
+
 .review-summary-empty {
   display: flex;
   flex-wrap: wrap;
@@ -1060,10 +1101,6 @@
 
 /* Documents with no findings, and the cross-document group: only for reporting what detection missed. */
 
-.summary-card .save-error {
-  margin: 0 20px 12px;
-}
-
 /* A precision or recall (components/Rate.tsx). When there's nothing to measure yet it says "Not measured": in a
    table, soft grey and dotted underneath to show it explains itself; in the big figures, styled like the figures. */
 .rate--empty:not(.review-summary-value, .stat-number) {
@@ -1071,6 +1108,12 @@
   font-weight: 500;
   text-decoration: underline dotted;
   text-underline-offset: 3px;
+}
+
+/* A rate under its target: red; the target opens on hover or focus. */
+.rate--below {
+  color: var(--red);
+  cursor: help;
 }
 
 /* components/InfoTip.tsx: a short explanation that opens on hover or focus. */
@@ -1231,4 +1274,10 @@
   color: var(--ink-soft);
   font-size: 12px;
   font-weight: 600;
+}
+
+/* A finding a case analysis summary reason linked to (CaseRiskCard). */
+.risk-findings li.risk-finding--linked {
+  border-radius: 6px;
+  background: var(--amber-bg);
 }

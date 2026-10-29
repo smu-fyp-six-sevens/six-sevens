@@ -142,6 +142,12 @@
 .debug-json { white-space: pre-wrap; word-break: break-word; }
 .debug-error { color: crimson; }
 .debug-table { border-collapse: collapse; margin-top: 0.25em; }
+.debug-table th,
+.debug-table td { padding: 4px 18px 4px 0; vertical-align: top; }
+.debug-table th:last-child,
+.debug-table td:last-child { padding-right: 0; }
+.debug-table thead th { border-bottom: 1px solid var(--line); }
+.debug-table tbody tr + tr td { border-top: 1px solid var(--slate-94); }
 .debug-actions { display: flex; flex-wrap: wrap; gap: 0.5em; }
 
 .document-header {
@@ -456,8 +462,6 @@
 
 .add-field-error {
   margin-bottom: 12px;
-  font-size: 12px;
-  color: var(--red-42);
 }
 
 .add-field-form-actions {
@@ -908,8 +912,176 @@
   text-align: center;
 }
 
-.preview-modal-error {
-  color: var(--red-40);
+.preview-modal-error .error-message {
+  max-width: 420px;
+}
+
+/* The document drawn under its findings' boxes: pages drawn by pdf.js, or the image, at the
+   container's width and scrolled. */
+.preview-pdf-pages,
+.preview-image-scroll {
+  height: 100%;
+  overflow: auto;
+  padding: 12px;
+}
+
+.preview-pdf-page {
+  position: relative;
+  margin: 0 auto 12px;
+  background: var(--white);
+  box-shadow: 0 1px 4px rgba(20, 35, 60, 0.12);
+}
+
+.preview-pdf-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.preview-image-stage {
+  position: relative;
+}
+
+.preview-image-highlighted {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* One finding's area, coloured like its severity in the Risk Summary (.risk-severity). */
+.finding-highlight-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.finding-highlight {
+  --highlight: #8a96a8;
+  position: absolute;
+  /* The box sits a few pixels outside the area, so it frames the text rather than striking it. */
+  box-sizing: content-box;
+  min-width: 2px;
+  min-height: 2px;
+  margin: -5px 0 0 -5px;
+  padding: 3px;
+  border: 2px solid var(--highlight);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--highlight) 14%, transparent);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: box-shadow 0.15s, background 0.15s;
+}
+
+.finding-highlight--low { --highlight: #d9824f; }
+.finding-highlight--medium { --highlight: #e0632e; }
+.finding-highlight--high { --highlight: #b83c22; }
+
+.finding-highlight:hover,
+.finding-highlight:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--highlight) 24%, transparent);
+}
+
+.finding-highlight.is-active {
+  z-index: 1;
+  background: color-mix(in srgb, var(--highlight) 22%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--highlight) 30%, transparent);
+  animation: finding-highlight-pulse 1s ease-out 2;
+}
+
+@keyframes finding-highlight-pulse {
+  50% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--highlight) 18%, transparent); }
+}
+
+/* The finding's name on its box: shown on the selected one, and on hover. */
+.finding-highlight-tag {
+  position: absolute;
+  bottom: 100%;
+  left: -2px;
+  display: none;
+  margin-bottom: 3px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--highlight);
+  color: var(--white);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.finding-highlight--tag-below .finding-highlight-tag {
+  top: 100%;
+  bottom: auto;
+  margin: 3px 0 0;
+}
+
+.finding-highlight.is-active .finding-highlight-tag,
+.finding-highlight:hover .finding-highlight-tag {
+  display: block;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .finding-highlight.is-active { animation: none; }
+}
+
+
+/* Reviewing a document's findings in the Risk Summary: the document with its boxes on the left, the findings
+   with their ticks and Save on the right, each scrolling on its own. */
+.review-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(96vw, 1440px);
+  height: 92vh;
+  border-radius: 10px;
+  background: var(--white);
+  box-shadow: 0 16px 48px rgba(23, 41, 77, 0.32);
+  overflow: hidden;
+}
+
+.review-modal-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-width: 0;
+}
+
+.review-modal-filename {
+  color: var(--slate-20);
+  font-size: 14px;
+}
+
+.review-modal-body {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1.25fr) minmax(360px, 1fr);
+  min-height: 0;
+}
+
+.review-modal-document {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--slate-90);
+}
+
+.review-modal-findings {
+  min-height: 0;
+  padding: 12px 18px 18px;
+  overflow-y: auto;
+}
+
+@media (max-width: 900px) {
+  .review-modal-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .review-modal-document {
+    border-right: none;
+    border-bottom: 1px solid var(--slate-90);
+  }
 }
 
 @media (max-width: 640px) {
@@ -1290,18 +1462,6 @@
   gap: 10px;
   align-items: center;
 }
-/* Error / loading states */
-
-.document-details-error {
-  margin-top: 20px;
-  padding: 14px 16px;
-  border: 1px solid var(--red-86);
-  border-radius: 8px;
-  background: var(--red-98);
-  color: var(--red-40);
-  font-size: 13px;
-}
-
 /* Responsive */
 
 @media (max-width: 760px) {

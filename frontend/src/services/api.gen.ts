@@ -270,6 +270,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cases/{case_id}/analysis/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Case Analysis Runs
+         * @description Every analysis of the case, newest first: when, who started it, status, score and its change, findings, stale.
+         */
+        get: operations["list_case_analysis_runs_cases__case_id__analysis_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cases/{case_id}/analysis/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Case Analysis Run
+         * @description One of the case's analyses, earlier or latest, whole, marked stale like the latest one.
+         */
+        get: operations["get_case_analysis_run_cases__case_id__analysis_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cases/{case_id}/case-match": {
         parameters: {
             query?: never;
@@ -1652,6 +1692,24 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        /**
+         * AnalysisSummary
+         * @description The explanation an officer reads first (risk/summary.py): what the result comes down to, and why.
+         */
+        AnalysisSummary: {
+            /** Headline */
+            headline: string;
+            /** Reasons */
+            reasons: components["schemas"]["SummaryReason"][];
+            /**
+             * Source
+             * @default model
+             * @enum {string}
+             */
+            source: "model" | "fallback";
+            /** Would Help */
+            would_help: string | null;
+        };
         /** AnomalyLocation */
         AnomalyLocation: {
             /** Bbox */
@@ -1764,6 +1822,8 @@ export interface components {
             audit: components["schemas"]["AnalysisAudit"];
             /** Case Id */
             case_id: string;
+            /** Clean Checks */
+            clean_checks: string[];
             /** Consistent Checks */
             consistent_checks: string[];
             /** Error */
@@ -1793,6 +1853,7 @@ export interface components {
              * @enum {string}
              */
             status: "running" | "complete" | "failed" | "superseded";
+            structured_summary: components["schemas"]["AnalysisSummary"] | null;
             /** Summary */
             summary: string | null;
             /** Supporting Documents */
@@ -1821,6 +1882,44 @@ export interface components {
              * @default false
              */
             stale: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "running" | "complete" | "failed" | "superseded";
+        };
+        /**
+         * CaseAnalysisRunItem
+         * @description One run in a case's list of analyses (GET /cases/{id}/analysis/runs): enough to pick one to open.
+         */
+        CaseAnalysisRunItem: {
+            /**
+             * Finding Count
+             * @default 0
+             */
+            finding_count: number;
+            /** Finished At */
+            finished_at: string | null;
+            /** Risk Level */
+            risk_level: string | null;
+            /** Risk Score */
+            risk_score: number | null;
+            /** Run Id */
+            run_id: string;
+            /** Score Change */
+            score_change: number | null;
+            /**
+             * Stale
+             * @default false
+             */
+            stale: boolean;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Started By */
+            started_by: string | null;
             /**
              * Status
              * @enum {string}
@@ -1866,6 +1965,10 @@ export interface components {
             };
             /** Reviews */
             reviews: components["schemas"]["FindingReview"][];
+            /** Target Precision */
+            target_precision: number;
+            /** Target Recall */
+            target_recall: number;
         };
         /**
          * CaseFlagCount
@@ -3583,6 +3686,18 @@ export interface components {
             seconds_in_current_status: number;
             status: components["schemas"]["DocumentStatus"];
         };
+        /** SummaryReason */
+        SummaryReason: {
+            /**
+             * Document Id
+             * @default
+             */
+            document_id: string;
+            /** Finding Id */
+            finding_id: string;
+            /** Text */
+            text: string;
+        };
         /**
          * SupportingDocumentRecommendation
          * @description A document the officer should request from the client, and why — see
@@ -4327,6 +4442,73 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseAnalysis"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_case_analysis_runs_cases__case_id__analysis_runs_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseAnalysisRunItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_case_analysis_run_cases__case_id__analysis_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                case_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -2,6 +2,7 @@ import { assertOk } from './request';
 import { authFetch } from '../../lib/api';
 import type {
   CaseAnalysis,
+  CaseAnalysisRunItem,
   CaseCost,
   CaseCounts,
   CaseDocumentsStatus,
@@ -114,6 +115,24 @@ export async function getCaseCost(caseId: string): Promise<CaseCost> {
   await assertOk(response, 'Failed to fetch the case cost');
 
   return (await response.json()) as CaseCost;
+}
+
+// Every analysis of the case, newest first: who started it, its score and change, and whether it's out of date.
+export async function listCaseAnalysisRuns(caseId: string): Promise<CaseAnalysisRunItem[]> {
+  const response = await authFetch(`/cases/${caseId}/analysis/runs`);
+
+  await assertOk(response, "Failed to load the case's earlier analyses");
+
+  return (await response.json()) as CaseAnalysisRunItem[];
+}
+
+// One analysis of the case, earlier or latest, whole.
+export async function getCaseAnalysisRun(caseId: string, runId: string): Promise<CaseAnalysis> {
+  const response = await authFetch(`/cases/${caseId}/analysis/runs/${runId}`);
+
+  await assertOk(response, 'Failed to load that analysis');
+
+  return (await response.json()) as CaseAnalysis;
 }
 
 export async function getCaseAnalysis(caseId: string): Promise<CaseAnalysis | null> {

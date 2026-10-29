@@ -38,7 +38,7 @@ async def _case_reviews(case_id: str) -> CaseFindingReviews:
 async def _check_target(case_id: str, scope: str, document_id: UUID | None, check_name: str) -> str | None:
     """The document id as a string, after checking the document is in this case and the check fits the scope."""
     if check_name not in detection_metrics.checks_by_scope()[scope]:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"'{check_name}' is not a {scope} check")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"That check can't be reviewed on a {scope}.")
     if document_id is None:
         return None
     document = await asyncio.to_thread(document_repository.get_document, str(document_id), include_fields=False)

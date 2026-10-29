@@ -97,6 +97,8 @@ def case_metrics(reviews: list[FindingReview]) -> CaseFindingReviews:
         documents={document_id: summarize(items) for document_id, items in by_document.items()},
         cross_document=summarize(r for r in reviews if r.scope == "case"),
         checks={scope: list(checks) for scope, checks in checks_by_scope().items()},
+        target_precision=TARGET_PRECISION,
+        target_recall=TARGET_RECALL,
     )
 
 

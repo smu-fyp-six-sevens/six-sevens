@@ -93,11 +93,6 @@
 
 .form-error {
   margin-top: 12px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: var(--red-bg);
-  color: var(--red);
-  font-size: 13px;
 }
 
 .create-case-actions {

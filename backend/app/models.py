@@ -735,6 +735,9 @@ class CaseFindingReviews(BaseModel):
     cross_document: MetricsSummary
     # The checks a missed issue can be reported against, per scope.
     checks: dict[str, list[str]]
+    # A rate under its target is flagged, as on the dashboard.
+    target_precision: float
+    target_recall: float
 
 
 class DetectionMetrics(BaseModel):

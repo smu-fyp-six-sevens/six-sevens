@@ -11,6 +11,7 @@ import {
 import { LiveBadge } from './LiveBadge';
 import type { useDocumentRowActions } from './useDocumentRowActions';
 import type { useDocumentSelection } from './useDocumentSelection';
+import { ErrorMessage } from '../../components/ErrorMessage';
 
 export type DocumentSelection = ReturnType<typeof useDocumentSelection>;
 export type DocumentRowActions = ReturnType<typeof useDocumentRowActions>;
@@ -132,9 +133,9 @@ export function ExtractedDocumentsCard({
         </div>
       </div>
 
-      {approveError && <div className="toast show mixed">⚠ {approveError}</div>}
-      {cancelActionError && <div className="toast show mixed">⚠ {cancelActionError}</div>}
-      {retryActionError && <div className="toast show mixed">⚠ {retryActionError}</div>}
+      {[approveError, cancelActionError, retryActionError].map(
+        (actionError, index) => actionError && <ErrorMessage key={index} className="toast-error" message={actionError} />,
+      )}
 
       <div className="documents-table documents-table--selectable">
         <div className="documents-table-header">

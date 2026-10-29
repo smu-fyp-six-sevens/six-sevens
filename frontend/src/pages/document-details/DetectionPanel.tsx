@@ -1,6 +1,7 @@
 import type { DetectionReport, IndividualCheckId } from '../../services/uploadService';
 import { INDIVIDUAL_DETECTION_CHECKS } from '../../services/uploadService';
 import { RefreshButton } from '../../components/RefreshButton';
+import { ErrorMessage } from '../../components/ErrorMessage';
 
 export function DetectionPanel({
   status,
@@ -41,9 +42,7 @@ export function DetectionPanel({
         <section className="details-card debug-card">
           <RefreshButton isRefreshing={isRefreshingDetection} onClick={() => void refreshDetectionReport()} label="detection" />
           <h2>Detection</h2>
-        {detectionError && (
-          <p className="debug-error">{detectionError}</p>
-        )}
+        {detectionError && <ErrorMessage className="action-error" message={detectionError} />}
         {status === 'rejected' ? (
           // Reject only works on an extracted, unapproved document, so a rejected one has never been scanned.
           <p>Detection doesn't run on rejected documents.</p>
@@ -55,11 +54,8 @@ export function DetectionPanel({
           </p>
         ) : !detectionReport ? (
           <>
-            <p>
-              {detectionError
-                ? 'The last detection run did not finish.'
-                : 'Scanning… detection starts automatically once the document is approved.'}
-            </p>
+            {/* With an error, the line above says what happened. */}
+            {!detectionError && <p>Scanning… detection starts automatically once the document is approved.</p>}
             {detectionError ? (
               <button type="button" disabled={isRetryingDetection} onClick={() => void handleRetryDetection()}>
                 {isRetryingDetection ? 'Retrying…' : 'Retry detection'}
@@ -71,7 +67,7 @@ export function DetectionPanel({
                 </button>
               )
             )}
-            {cancelError && <p className="debug-error">{cancelError}</p>}
+            {cancelError && <ErrorMessage className="action-error" message={cancelError} />}
           </>
         ) : (
           <>
@@ -153,9 +149,7 @@ export function DetectionPanel({
                 </button>
               ))}
             </div>
-            {individualCheckError && (
-              <p className="debug-error">{individualCheckError}</p>
-            )}
+            {individualCheckError && <ErrorMessage className="action-error" message={individualCheckError} />}
             {INDIVIDUAL_DETECTION_CHECKS.map((check) =>
               individualCheckResults[check.id] !== undefined ? (
                 <details key={check.id} className="debug-section">

@@ -58,11 +58,16 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 logger = logging.getLogger(__name__)
 
 
-def _ensure_unlocked(document: DocumentRecord, action: str) -> None:
+def _decided(document: DocumentRecord) -> str:
+    """Why a locked document can't change, as an officer would put it: it was approved (scanning or not) or rejected."""
+    return "rejected" if document.status == DocumentStatus.REJECTED else "approved"
+
+
+def _ensure_unlocked(document: DocumentRecord, consequence: str) -> None:
     if document.status in _LOCKED_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"An {document.status.value} document is locked and cannot be {action}.",
+            detail=f"This document has been {_decided(document)}, so {consequence}.",
         )
 
 
@@ -132,7 +137,7 @@ async def delete_document(
     if document.status in _UNDELETABLE_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"An {document.status.value} document cannot be deleted.",
+            detail=f"This document has been {_decided(document)}, so it can't be deleted.",
         )
     if document.status in IN_FLIGHT_STATUSES:
         raise HTTPException(
@@ -265,7 +270,7 @@ async def move_document(
     if document.status in _LOCKED_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"An {document.status.value} document cannot be moved.",
+            detail=f"This document has been {_decided(document)}, so it can't be moved to another case.",
         )
     if document.status in IN_FLIGHT_STATUSES:
         raise HTTPException(
@@ -331,7 +336,7 @@ async def bulk_move_documents(body: BulkMoveRequest) -> BulkMoveResponse:
             failed.append(
                 BulkActionFailure(
                     document_id=document_id,
-                    reason=f"An {document.status.value} document cannot be moved.",
+                    reason=f"This document has been {_decided(document)}, so it can't be moved to another case.",
                 )
             )
         elif document.status in IN_FLIGHT_STATUSES:
@@ -389,7 +394,7 @@ async def bulk_delete_documents(body: BulkDeleteRequest) -> BulkDeleteResponse:
         elif document.status in _UNDELETABLE_STATUSES:
             failed.append(
                 BulkActionFailure(
-                    document_id=document_id, reason=f"An {document.status.value} document cannot be deleted.",
+                    document_id=document_id, reason=f"This document has been {_decided(document)}, so it can't be deleted.",
                 )
             )
         elif document.status in IN_FLIGHT_STATUSES:
@@ -423,7 +428,7 @@ async def update_extracted_fields(
     document: DocumentRecord = Depends(get_document_or_404),
 ) -> DocumentRecord:
     """The officer correcting extracted fields. Marks the document human-verified (extraction_confidence 1.0)."""
-    _ensure_unlocked(document, "edited")
+    _ensure_unlocked(document, "its fields can't be edited")
     # An optional field saved empty is dropped; a required one stays so it still blocks approval.
     drop_empty_optional_fields(document.document_type, request.extracted_fields)
     with bad_gateway_on_error(
@@ -523,7 +528,7 @@ async def add_extracted_field(
     document: DocumentRecord = Depends(get_document_or_404),
 ) -> DocumentRecord:
     """Adds one manually entered field, stored at confidence 1.0."""
-    _ensure_unlocked(document, "edited")
+    _ensure_unlocked(document, "its fields can't be edited")
     field_name = normalise_field_name(request.field_name)
 
     if not field_name:
@@ -601,7 +606,7 @@ async def delete_extracted_field(
     document: DocumentRecord = Depends(get_document_or_404),
 ) -> DocumentRecord:
     """Deletes one field of this document and recomputes fulfilled requirements."""
-    _ensure_unlocked(document, "edited")
+    _ensure_unlocked(document, "its fields can't be edited")
     with bad_gateway_on_error(
         "Failed to delete extracted field. Check Supabase table access.",
         "Failed to delete extracted field %s from document %s",
@@ -795,7 +800,7 @@ async def update_document_type(
     The officer confirming or correcting a low-confidence type (enforced here, not just in the UI).
     Records it as confirmed (1.0, ACCEPTED). Only a changed type re-runs Extraction, on the doc-worker.
     """
-    _ensure_unlocked(document, "re-typed")
+    _ensure_unlocked(document, "its type can't be changed")
     document_type = request.document_type.strip().lower()
     if document_type not in _SETTABLE_DOCUMENT_TYPES:
         raise HTTPException(
@@ -909,7 +914,7 @@ async def retry_document(
         if not updated:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Document's state changed; refetch and try again.",
+                detail="This document changed while you were working on it. Refresh the page and try again.",
             )
         await events.publish(officer_event(
             types.DOCUMENT_RETRY_REQUESTED, document_id=document_id, case_id=document.case_id,

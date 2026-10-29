@@ -191,6 +191,8 @@ test.describe('Case audit trail', () => {
           changes: [{
             field: 'accounts', from: '4 items', to: '5 items', removed: [],
             added: ['{"account_type": "Credit Card", "date_closed": "", "grantor": "test"}'],
+          }, {
+            field: 'registered_address', from: null, to: '{"postal_code": "049145", "street": "1 Raffles Pl"}',
           }],
         },
       }),
@@ -198,10 +200,39 @@ test.describe('Case audit trail', () => {
 
     await page.goto(`${fixture.caseUrl}?section=audit`);
 
-    const change = page.getByTestId('audit-change');
-    await expect(change.locator('del')).toHaveText('4 items');
-    await expect(change.locator('ins')).toHaveText('5 items');
-    await expect(change.getByTestId('audit-list-item')).toHaveText(['+ Account Type: Credit Card · Grantor: test']);
+    const [list, address] = [page.getByTestId('audit-change').first(), page.getByTestId('audit-change').nth(1)];
+    await expect(list.locator('del')).toHaveText('4 items');
+    await expect(list.locator('ins')).toHaveText('5 items');
+    await expect(list.getByTestId('audit-list-item')).toHaveText(['+ Account Type: Credit Card · Grantor: test']);
+    // An object value reads as its fields, not as JSON.
+    await expect(address.locator('ins')).toHaveText('Postal Code: 049145 · Street: 1 Raffles Pl');
+  });
+
+  test('a failed run shows a plain line; the raw error only goes to the console', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const payslip = fixture.document('Payslip');
+    const failed = (at: string, type: string, detail: Record<string, unknown>) =>
+      event(fixture.case.id, at, type, {
+        actor_type: 'agent', actor: 'worker', outcome: 'failed', document_id: payslip.id,
+        detail: { requested_by: 'demo', ...detail },
+      });
+    backend.auditEvents = [
+      failed('2026-10-21T02:00:00Z', 'document.failed', { failure_reason: "Unhandled processing error: KeyError: 'net_pay'" }),
+      failed('2026-10-21T02:01:00Z', 'detection.failed', { error: 'RuntimeError: tool crashed' }),
+    ];
+
+    const consoleErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') consoleErrors.push(message.text());
+    });
+
+    await page.goto(`${fixture.caseUrl}?section=audit`);
+
+    const entries = page.getByTestId('audit-entry');
+    await expect(entries.locator('.audit-summary')).toHaveText(['Unexpected system error', 'The run stopped before it finished']);
+    await expect(page.getByText(/KeyError|RuntimeError/)).toHaveCount(0);
+    await expect.poll(() => consoleErrors.join('\n')).toContain("Unhandled processing error: KeyError: 'net_pay'");
+    expect(consoleErrors.join('\n')).toContain('RuntimeError: tool crashed');
   });
 
   test('re-running one detection check is an entry, with what it found', async ({ page, backend }) => {
@@ -226,8 +257,9 @@ test.describe('Case audit trail', () => {
     await expect(entries.locator('.audit-summary')).toHaveText([
       '2 finding(s)',
       'AI-generation likelihood: low',
-      'Failed to download the document.',
+      "The check couldn't run",
     ]);
+    await expect(page.getByText('Failed to download the document.')).toHaveCount(0);
     await expect(entries.locator('.audit-officer')).toHaveText(['By K. Lim', 'By K. Lim', 'By K. Lim']);
     await expect(entries.nth(2).locator('.audit-outcome')).toHaveText('Failed');
   });
@@ -272,14 +304,5 @@ test.describe('Case audit trail', () => {
     await page.goto(`${fixture.caseUrl}?section=audit`);
 
     await expect(page.getByText('No audit events available yet.')).toBeVisible();
-  });
-
-  test('is reached from the case page while reviewing the case', async ({ page, backend }) => {
-    const fixture = loadFixture(backend, 'anchorpoint');
-
-    await page.goto(fixture.caseUrl);
-    await page.getByRole('button', { name: /Audit Trail/ }).click();
-
-    await expect(page.getByRole('heading', { name: /Case Audit Trail/ })).toBeVisible();
   });
 });

@@ -180,8 +180,8 @@ export function DetectionAccuracyPanel({ filters }: { filters: DetectionMetricsF
                     {check.scope === 'case' && <span className="accuracy-scope">Across documents</span>}
                   </td>
                   <td data-label="Reviews"><ReviewMix check={check} /></td>
-                  <td data-label="Precision"><Rate rate={check.precision} kind="precision" className="accuracy-rate" /></td>
-                  <td data-label="Recall"><Rate rate={check.recall} kind="recall" className="accuracy-rate" /></td>
+                  <td data-label="Precision"><Rate rate={check.precision} kind="precision" target={metrics.target_precision} className="accuracy-rate" /></td>
+                  <td data-label="Recall"><Rate rate={check.recall} kind="recall" target={metrics.target_recall} className="accuracy-rate" /></td>
                   <td data-label="Flags"><CheckStanding check={check} targets={{ precision: metrics.target_precision, recall: metrics.target_recall, minReviews: metrics.min_reviews }} /></td>
                 </tr>
               ))}

@@ -11,6 +11,7 @@ import {
 import {
   formatDate,
 } from './formatters';
+import { ErrorMessage } from '../../components/ErrorMessage';
 
 type StatusTone = 'success' | 'failed' | 'rejected' | 'cancelled' | 'stuck';
 
@@ -57,7 +58,7 @@ export function DocumentSummaryCard({
   chosenType: string;
   detectionStage: DocumentDetectionStage;
   document: DocumentRecord;
-  failureReason: { title: string; detail: string } | null;
+  failureReason: { title: string; detail: string; fileProblem: boolean } | null;
   handleSaveType: () => void | Promise<void>;
   hasDetectionReport: boolean;
   isSavingType: boolean;
@@ -145,9 +146,7 @@ export function DocumentSummaryCard({
                         : 'Confirm document type and rerun'}
                   </button>
 
-                  {typeError && (
-                    <span className="save-error">{typeError}</span>
-                  )}
+                  {typeError && <ErrorMessage inline message={typeError} />}
                 </div>
               ) : (
                 <strong>

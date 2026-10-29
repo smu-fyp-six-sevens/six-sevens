@@ -23,7 +23,10 @@ export async function getDetectionReport(documentId: string): Promise<DetectionR
   if (response.status === 404) {
     return null;
   }
-  await assertOk(response, 'Failed to fetch detection report');
+  // A 502 is a run that crashed or was cancelled; its error stays in the console.
+  await assertOk(response, 'Failed to fetch detection report', {
+    502: 'The last detection run did not finish. Run detection again.',
+  });
 
   return (await response.json()) as DetectionReport;
 }
@@ -64,10 +67,7 @@ export async function runIndividualDetectionCheck(
 ): Promise<unknown> {
   const response = await authFetch(`/documents/${documentId}/detection/${checkId}`);
 
-  if (response.status === 409) {
-    const detail = await response.text();
-    throw new Error(detail || 'Run full detection first before running an individual check.');
-  }
+  // A 409's detail says why (no full report yet); assertOk shows it.
   await assertOk(response, 'Check failed');
 
   return await response.json();
