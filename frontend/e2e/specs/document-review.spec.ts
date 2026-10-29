@@ -70,6 +70,42 @@ test.describe('Extract text from documents @sprint2 @SCRUM-9', () => {
     await expect(page.locator('.review-message--error')).toHaveCount(0);
   });
 
+  test('a failed document says what went wrong in a sentence; the raw reason only goes to the console', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const payslip = fixture.document('Payslip');
+    payslip.status = 'failed';
+    payslip.failure_reason = "Unhandled processing error: KeyError: 'net_pay'";
+
+    const consoleErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') consoleErrors.push(message.text());
+    });
+
+    await page.goto(fixture.documentUrl(payslip));
+
+    const failure = page.locator('.details-failure-reason.review-message--error');
+    await expect(failure.locator('strong')).toHaveText('Unexpected system error');
+    await expect(failure).toContainText('Something went wrong while processing this document.');
+    await expect(page.getByText(/KeyError/)).toHaveCount(0);
+    await expect.poll(() => consoleErrors.join('\n')).toContain("Unhandled processing error: KeyError: 'net_pay'");
+  });
+
+  test("a file that can't be read only says so: no type picker, fields or manual review", async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const payslip = fixture.document('Payslip');
+    payslip.status = 'failed';
+    payslip.failure_reason = "Text extraction failed: Failed to open file 'broken.pdf' as type pdf.";
+
+    await page.goto(fixture.documentUrl(payslip));
+
+    const failure = page.locator('.details-failure-reason.review-message--error');
+    await expect(failure.locator('strong')).toHaveText("The file's text couldn't be read");
+    await expect(failure.locator('.details-failure-reason-hint')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Confirm document type/ })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Extracted Information' })).toHaveCount(0);
+    await expect(reviewSection(page)).toHaveCount(0);
+  });
+
   test('DI-030 array fields list every extracted value @DI-030', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'harbor-light');
     const loans = fixture.document('ListLoans');
@@ -170,7 +206,7 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
 
     await page.getByRole('button', { name: 'Save fields' }).click();
 
-    await expect(page.locator('.save-error')).toHaveText('Please complete all fields before saving.');
+    await expect(page.locator('.manual-review-message .error-message')).toHaveText('Please complete all fields before saving.');
     expect(backend.requestsTo('PATCH', `/documents/${cert.id}/extracted-fields`)).toHaveLength(0);
     await expect(routingOutcome(page)).toHaveText('Manual Review');
   });
@@ -214,7 +250,7 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     await reviewRow(page, 'UEN').locator('input').fill('201634564N');
     await page.getByRole('button', { name: 'Save fields' }).click();
 
-    await expect(page.locator('.save-error')).toHaveCount(0);
+    await expect(page.locator('.manual-review-message .error-message')).toHaveCount(0);
     expect(backend.requestsTo('PATCH', `/documents/${cert.id}/extracted-fields`)).toHaveLength(1);
   });
 

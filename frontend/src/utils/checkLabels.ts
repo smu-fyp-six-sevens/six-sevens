@@ -31,6 +31,6 @@ export function belowTargetNote(targetPrecision: number, targetRecall: number): 
 
 // What each rate measures, shown on hover over a rate or its heading.
 export const RATE_MEANING: Record<'precision' | 'recall', string> = {
-  precision: 'Precision = correct ÷ (correct + wrong): of the findings this check raised, how many were real issues.',
-  recall: 'Recall = correct ÷ (correct + missed): of the real issues of this kind, how many this check caught.',
+  precision: 'How often a raised finding is a real issue. Correct ÷ (correct + wrong).',
+  recall: 'How many real issues the check catches. Correct ÷ (correct + missed).',
 };

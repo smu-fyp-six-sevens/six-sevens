@@ -2,11 +2,22 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
+import { getUsername } from '../lib/api';
+import { InfoLabel } from '../components/InfoTip';
 import { DetectionAccuracyPanel, DetectionAccuracySummary } from './DetectionAccuracyPanel';
+import { caseStatusTone } from '../utils/caseStatusTone';
+import { formatDuration } from './upload/processingTimes';
+import { formatDocumentType, type DetectionMetricsFilters } from '../services/uploadService';
+import { statusValue } from '../utils/caseStatus';
+import { formatCheck } from '../utils/checkLabels';
 
-type Status = 'Needs review' | 'In progress' | 'Awaiting documents' | 'Finalised';
+// The case queue's statuses (utils/caseStatus.ts), so both pages name and count cases the same way.
+type Status = 'Ready for review' | 'In progress' | 'Documents pending' | 'Documents failed' | 'Processing stuck';
 type Risk = 'Critical' | 'High' | 'Medium' | 'Low';
 type Role = 'Manager' | 'Analyst';
+
+// Manager view is kept but hidden for now; flip to true to show the role switch again.
+const SHOW_ROLE_SWITCH = false;
 type DashboardTab = 'Overview' | 'Cases' | 'Flags' | 'Accuracy';
 const DASHBOARD_TABS: DashboardTab[] = ['Overview', 'Cases', 'Flags', 'Accuracy'];
 
@@ -16,47 +27,52 @@ interface MockCase {
   applicant: string;
   submitted: string;
   status: Status;
-  risk: Risk;
-  score: number;
-  riskDescription?: string;
-  uploadToExtraction?: string;
-  detectionToCompletion?: string;
-  analyst: string;
+  // Null until the case's analysis has scored it.
+  risk: Risk | null;
+  score: number | null;
+  // Titles of the documents to request; null until the case has been analysed.
+  recommendedDocs?: string[] | null;
+  // Automated processing time in ms; null until the case has been analysed.
+  processingMs?: number | null;
+  // Preview rows only: who the sample case is assigned to. Live cases use createdBy.
+  analyst?: string;
+  // The username of the officer who created the case, which counts as its assignee.
+  createdBy?: string | null;
   documentTypes: string[];
   flags: string[];
+  // Per flag name: its worst severity in this case and the document types it's on; absent for preview rows.
+  flagInfo?: Record<string, { severity: FlagSummary['severity']; documentTypes: string[] }>;
 }
 
 interface FlagSummary {
   name: string;
-  severity: 'High' | 'Medium';
+  severity: 'High' | 'Medium' | 'Low';
   cases: MockCase[];
   documentTypes: string[];
 }
 
 const MOCK_CASES: MockCase[] = [
-  { id: 'GLDB-02481', applicant: 'Meridian Consulting Group', submitted: '2026-10-18', status: 'Needs review', risk: 'High', score: 82, analyst: 'J. Tan', documentTypes: ['Bank statement', 'Payslip'], flags: ['Identity mismatch', 'Balance inconsistency', 'Unverified address'] },
+  { id: 'GLDB-02481', applicant: 'Meridian Consulting Group', submitted: '2026-10-18', status: 'Ready for review', risk: 'High', score: 82, analyst: 'J. Tan', documentTypes: ['Bank statement', 'Payslip'], flags: ['Identity mismatch', 'Balance inconsistency', 'Unverified address'] },
   { id: 'GLDB-02480', applicant: 'Northstar Trading Pte Ltd', submitted: '2026-10-17', status: 'In progress', risk: 'Medium', score: 58, analyst: 'A. Lim', documentTypes: ['Certificate', 'Bank statement'], flags: ['Company detail mismatch', 'Unusual transaction'] },
-  { id: 'GLDB-02479', applicant: 'Harbourlight Foods', submitted: '2026-10-16', status: 'Awaiting documents', risk: 'High', score: 77, analyst: 'J. Tan', documentTypes: ['Proof of address', 'Certificate'], flags: ['Invalid postal code', 'Identity mismatch'] },
-  { id: 'GLDB-02478', applicant: 'Cedar & Stone Pte Ltd', submitted: '2026-10-15', status: 'Finalised', risk: 'Low', score: 18, analyst: 'M. Goh', documentTypes: ['Bank statement', 'Payslip'], flags: [] },
-  { id: 'GLDB-02477', applicant: 'Orchid Systems', submitted: '2026-10-13', status: 'Needs review', risk: 'High', score: 91, analyst: 'A. Lim', documentTypes: ['Certificate', 'Proof of address'], flags: ['Invalid registration number', 'Identity mismatch', 'Font anomaly'] },
+  { id: 'GLDB-02479', applicant: 'Harbourlight Foods', submitted: '2026-10-16', status: 'Documents pending', risk: 'High', score: 77, analyst: 'J. Tan', documentTypes: ['Proof of address', 'Certificate'], flags: ['Invalid postal code', 'Identity mismatch'] },
+  { id: 'GLDB-02478', applicant: 'Cedar & Stone Pte Ltd', submitted: '2026-10-15', status: 'Documents failed', risk: 'Low', score: 18, analyst: 'M. Goh', documentTypes: ['Bank statement', 'Payslip'], flags: [] },
+  { id: 'GLDB-02477', applicant: 'Orchid Systems', submitted: '2026-10-13', status: 'Ready for review', risk: 'High', score: 91, analyst: 'A. Lim', documentTypes: ['Certificate', 'Proof of address'], flags: ['Invalid registration number', 'Identity mismatch', 'Font anomaly'] },
   { id: 'GLDB-02476', applicant: 'Brightpath Logistics', submitted: '2026-10-12', status: 'In progress', risk: 'Medium', score: 49, analyst: 'J. Tan', documentTypes: ['Bank statement', 'Certificate'], flags: ['Balance inconsistency'] },
-  { id: 'GLDB-02475', applicant: 'Evergreen Medical Supplies', submitted: '2026-10-10', status: 'Finalised', risk: 'Low', score: 22, analyst: 'M. Goh', documentTypes: ['Payslip', 'Proof of address'], flags: [] },
-  { id: 'GLDB-02474', applicant: 'Silverline Manufacturing', submitted: '2026-10-08', status: 'Awaiting documents', risk: 'Medium', score: 64, analyst: 'A. Lim', documentTypes: ['Certificate', 'Bank statement'], flags: ['Company detail mismatch', 'Unusual transaction'] },
-  { id: 'GLDB-02473', applicant: 'Bluepeak Design Studio', submitted: '2026-09-29', status: 'Needs review', risk: 'Medium', score: 61, analyst: 'J. Tan', documentTypes: ['Proof of address', 'Bank statement'], flags: ['Invalid postal code', 'Identity mismatch'] },
+  { id: 'GLDB-02475', applicant: 'Evergreen Medical Supplies', submitted: '2026-10-10', status: 'Processing stuck', risk: 'Low', score: 22, analyst: 'M. Goh', documentTypes: ['Payslip', 'Proof of address'], flags: [] },
+  { id: 'GLDB-02474', applicant: 'Silverline Manufacturing', submitted: '2026-10-08', status: 'Documents pending', risk: 'Medium', score: 64, analyst: 'A. Lim', documentTypes: ['Certificate', 'Bank statement'], flags: ['Company detail mismatch', 'Unusual transaction'] },
+  { id: 'GLDB-02473', applicant: 'Bluepeak Design Studio', submitted: '2026-09-29', status: 'Ready for review', risk: 'Medium', score: 61, analyst: 'J. Tan', documentTypes: ['Proof of address', 'Bank statement'], flags: ['Invalid postal code', 'Identity mismatch'] },
   { id: 'GLDB-02472', applicant: 'Pioneer Green Energy', submitted: '2026-09-22', status: 'In progress', risk: 'Low', score: 31, analyst: 'M. Goh', documentTypes: ['Certificate', 'Payslip'], flags: ['Company detail mismatch'] },
 ];
-const SAMPLE_PROCESSING_TIMES: Array<[string, string]> = [
-  ['2m 18s', '46s'], ['1m 42s', '1m 08s'], ['3m 05s', '52s'], ['1m 26s', '39s'], ['2m 51s', '1m 14s'],
-  ['1m 57s', '43s'], ['2m 11s', '57s'], ['3m 22s', '1m 02s'], ['1m 35s', '48s'], ['2m 04s', '55s'],
-];
+// Preview rows only: live cases carry their real time from the case list.
+const SAMPLE_PROCESSING_MS = [184_000, 170_000, 237_000, 125_000, 245_000, 160_000, 188_000, 264_000, 143_000, 179_000];
+const PROCESSING_TIME_HELP = 'Total time taken from upload to completed case analysis, excluding manual review. Shown once the case has been analysed.';
 
-const STATUSES: Status[] = ['Needs review', 'In progress', 'Awaiting documents', 'Finalised'];
-const STATUS_CLASS: Record<Status, string> = {
-  'Needs review': 'review',
-  'In progress': 'progress',
-  'Awaiting documents': 'awaiting',
-  Finalised: 'cleared',
-};
+const STATUSES: Status[] = ['Ready for review', 'In progress', 'Documents pending', 'Documents failed', 'Processing stuck'];
+const SEVERITY_RANK: Record<FlagSummary['severity'], number> = { High: 3, Medium: 2, Low: 1 };
+function flagSeverity(value: string): FlagSummary['severity'] {
+  return value === 'high' ? 'High' : value === 'low' ? 'Low' : 'Medium';
+}
+// Preview rows only: live flags carry their own severity.
 const FLAG_SEVERITY: Record<string, FlagSummary['severity']> = {
   'Identity mismatch': 'High',
   'Balance inconsistency': 'High',
@@ -68,20 +84,39 @@ const FLAG_SEVERITY: Record<string, FlagSummary['severity']> = {
   'Font anomaly': 'Medium',
 };
 
-function CaseTable({ cases, heading, onOpenCase, showRiskAnalysis = false, showProcessingTime = false }: { cases: MockCase[]; heading: string; onOpenCase: (item: MockCase) => void; showRiskAnalysis?: boolean; showProcessingTime?: boolean }) {
+// Cases created before the audit trail have no recorded creator; they count as this officer's.
+const UNRECORDED_CASE_OWNER = 'greenlink-tester';
+const CASES_PER_PAGE = 10;
+// Rows in each Overview insight panel, so the side-by-side panels stay the same height.
+const INSIGHT_ROWS = 6;
+
+// Page buttons to show: always the first and last, the current one and its neighbours, with gaps as null.
+function pageNumbers(current: number, count: number): Array<number | null> {
+  const wanted = [...new Set([1, current - 1, current, current + 1, count])].filter((page) => page >= 1 && page <= count).sort((a, b) => a - b);
+  return wanted.flatMap((page, index) => (index > 0 && page - wanted[index - 1] > 1 ? [null, page] : [page]));
+}
+
+function CaseTable({ cases, heading, onOpenCase, showRiskAnalysis = false, showProcessingTime = false, isPreview = false }: { cases: MockCase[]; heading: string; onOpenCase: (item: MockCase) => void; showRiskAnalysis?: boolean; showProcessingTime?: boolean; isPreview?: boolean }) {
+  // Back to the first page whenever the filters or sort hand over a different list.
+  const [paging, setPaging] = useState({ cases, page: 1 });
+  const pageCount = Math.max(1, Math.ceil(cases.length / CASES_PER_PAGE));
+  const page = paging.cases === cases ? Math.min(paging.page, pageCount) : 1;
+  const goTo = (next: number) => setPaging({ cases, page: next });
+  const first = (page - 1) * CASES_PER_PAGE;
+  const pageCases = cases.slice(first, first + CASES_PER_PAGE);
   return (
     <section className="dashboard-panel cases-panel">
-      <div className="panel-heading"><div><h2>{heading}</h2><p>Case records matching the selected filters{showProcessingTime ? ' · sample timings; manual review excluded' : ''}</p></div><Link className="text-button" to="/cases">Open case queue <span>→</span></Link></div>
+      <div className="panel-heading"><div><h2>{heading}</h2><p>Case records matching the selected filters{showProcessingTime && isPreview ? ' · sample timings' : ''}</p></div><Link className="text-button" to="/cases">Open case queue <span>→</span></Link></div>
       <div className="case-table-wrap">
         <table className={`dashboard-case-table${showProcessingTime ? ' case-register-table' : showRiskAnalysis ? ' case-overview-table' : ''}`}>
           <thead><tr>
-            <th>CASE / APPLICANT</th><th>SUBMITTED</th><th>STATUS</th>
-            <th>{showRiskAnalysis ? 'RISK / BASIS' : 'RISK'}</th>
-            {showProcessingTime && <th>PROCESSING TIME</th>}
+            <th>CASE / APPLICANT</th><th className="center-col">SUBMITTED</th><th className="center-col">STATUS</th>
+            <th className="center-col">RISK</th>
+            {showProcessingTime && <th className="center-col"><InfoLabel label="PROCESSING TIME" tip={PROCESSING_TIME_HELP} /></th>}
             <th>{showRiskAnalysis ? 'RECOMMENDED ADDITIONAL DOCUMENTS' : 'TOP FLAGS'}</th>
           </tr></thead>
           <tbody>
-            {cases.map((item) => (
+            {pageCases.map((item) => (
               <tr
                 key={item.id}
                 className={item.routeId ? 'case-row-clickable' : undefined}
@@ -97,20 +132,21 @@ function CaseTable({ cases, heading, onOpenCase, showRiskAnalysis = false, showP
                 aria-label={item.routeId ? `Open case ${item.id}` : undefined}
               >
                 <td data-label="Case / applicant"><strong>{item.id}</strong><span>{item.applicant}</span></td>
-                <td data-label="Submitted">{new Date(`${item.submitted}T12:00:00`).toLocaleDateString('en-SG', { day: '2-digit', month: 'short' })}</td>
-                <td data-label="Status"><span className={`case-status ${STATUS_CLASS[item.status]}`}>{item.status}</span></td>
-                <td data-label={showRiskAnalysis ? 'Risk / basis' : 'Risk'}>
-                  <div className={showRiskAnalysis ? 'risk-cell risk-cell-detailed' : 'risk-cell'}>
-                    <span className={`risk-score risk-score-${item.risk.toLowerCase()}`}><b>{item.score}</b> {item.risk}</span>
-                    {showRiskAnalysis ? <span className="risk-basis">{conciseRiskDescription(item.riskDescription || 'Risk explanation is not available yet.')}</span> : null}
+                <td className="center-col" data-label="Submitted">{new Date(`${item.submitted}T12:00:00`).toLocaleDateString('en-SG', { day: '2-digit', month: 'short' })}</td>
+                <td className="center-col" data-label="Status"><span className={`case-status ${caseStatusTone(item.status)}`}>{item.status}</span></td>
+                <td className="center-col" data-label="Risk">
+                  <div className="risk-cell">
+                    {item.risk
+                      ? <span className={`risk-score risk-score-${item.risk.toLowerCase()}`}><b>{item.score ?? '—'}</b><span className="risk-level">{item.risk}</span></span>
+                      : <span className="processing-pending" title="Shown once the case has been analysed">—</span>}
                   </div>
                 </td>
-                {showProcessingTime ? <td data-label="Processing time"><div className="processing-time"><span><small>Upload → extraction</small><b>{item.uploadToExtraction}</b></span><span><small>Detection → completion</small><b>{item.detectionToCompletion}</b></span></div></td> : null}
+                {showProcessingTime ? <td className="center-col" data-label="Processing time">{item.processingMs != null ? <span className="processing-total">{formatDuration(item.processingMs)}</span> : <span className="processing-pending" title="Shown once the case has been analysed">—</span>}</td> : null}
                 {showRiskAnalysis
                   ? <td data-label="Recommended additional documents">
-                    {recommendedDocuments(item).length
-                      ? <span className="recommended-documents">{recommendedDocuments(item).join(', ')}</span>
-                      : <span className="no-flag">No additional documents suggested</span>}
+                    {item.recommendedDocs?.length
+                      ? <span className="recommended-documents">{item.recommendedDocs.join(', ')}</span>
+                      : <span className="processing-pending">—</span>}
                   </td>
                   : <td data-label="Top flags">{item.flags.length ? <span className="table-flag">{item.flags[0]}{item.flags.length > 1 ? <small> +{item.flags.length - 1}</small> : null}</span> : <span className="no-flag">No flags</span>}</td>}
               </tr>
@@ -119,22 +155,24 @@ function CaseTable({ cases, heading, onOpenCase, showRiskAnalysis = false, showP
         </table>
         {!cases.length ? <p className="empty-insight table-empty">No cases match the current filters.</p> : null}
       </div>
-      <footer className="table-footer"><span>Showing <strong>{cases.length}</strong> cases</span><span className="mock-data-note"><i /> Mock dashboard data · for layout review</span></footer>
+      <footer className="table-footer">
+        <span>{cases.length > CASES_PER_PAGE ? <>Showing <strong>{first + 1}–{first + pageCases.length}</strong> of <strong>{cases.length}</strong> cases</> : <>Showing <strong>{cases.length}</strong> {cases.length === 1 ? 'case' : 'cases'}</>}</span>
+        {pageCount > 1 && (
+          <nav className="table-pagination" aria-label="Case pages">
+            <button type="button" onClick={() => goTo(page - 1)} disabled={page === 1} aria-label="Previous page">‹</button>
+            {pageNumbers(page, pageCount).map((number, index) => number === null
+              ? <span key={`gap-${index}`} className="pagination-gap">…</span>
+              : <button type="button" key={number} className={number === page ? 'active' : ''} aria-current={number === page ? 'page' : undefined} onClick={() => goTo(number)}>{number}</button>)}
+            <button type="button" onClick={() => goTo(page + 1)} disabled={page === pageCount} aria-label="Next page">›</button>
+          </nav>
+        )}
+      </footer>
     </section>
   );
 }
 
-function fallbackRiskDescription(risk: Risk): string {
-  if (risk === 'Critical' || risk === 'High') return 'Multiple high-severity findings need close review.';
-  if (risk === 'Medium') return 'Some inconsistencies need analyst review.';
-  return 'No significant findings in the current assessment.';
-}
-
-function conciseRiskDescription(description: string): string {
-  return description.replace(/^\s*Rated\s+(?:Low|Medium|High|Critical)(?:\s+risk)?\s*:\s*/i, '');
-}
-
-function recommendedDocuments(item: MockCase): string[] {
+// Preview rows only: live cases carry their analysis's recommendations from the case list.
+function sampleRecommendedDocuments(item: MockCase): string[] {
   const recommendations = new Set<string>();
   item.flags.forEach((flag) => {
     if (flag === 'Identity mismatch') recommendations.add('NRIC / passport');
@@ -149,31 +187,30 @@ function recommendedDocuments(item: MockCase): string[] {
 function dateLimit(range: string): string | null {
   if (range === 'All time') return null;
   const days = Number(range.split(' ')[1]);
-  const date = new Date('2026-10-19T12:00:00');
+  const date = new Date();
   date.setDate(date.getDate() - days);
   return date.toISOString().slice(0, 10);
 }
 
-function dashboardStatus(status: string): Status {
-  if (status === 'In progress') return 'In progress';
-  if (status === 'Documents pending') return 'Awaiting documents';
-  if (status === 'Ready for review') return 'Needs review';
-  if (status === 'Finalised' || status === 'Cleared') return 'Finalised';
-  return 'Needs review';
+function dashboardStatus(label: string): Status {
+  return (STATUSES as string[]).includes(label) ? label as Status : 'In progress';
 }
 
 export default function DashboardPage({ cases: caseRecords, isLoading }: { cases: CaseRecord[]; isLoading: boolean }) {
   const navigate = useNavigate();
-  const [role, setRole] = useState<Role>('Manager');
+  const [role, setRole] = useState<Role>('Analyst');
+  const username = getUsername();
   const [tab, setTab] = useState<DashboardTab>('Overview');
   const [range, setRange] = useState('Last 30 days');
   const [statusFilter, setStatusFilter] = useState('All statuses');
   const [riskOrder, setRiskOrder] = useState<'highest' | 'lowest'>('highest');
+  const [showAllDocTypes, setShowAllDocTypes] = useState(false);
+  // Null: no column chosen, so the default order (most cases first).
+  const [flagSort, setFlagSort] = useState<{ key: 'severity' | 'cases'; descending: boolean } | null>(null);
 
   const dashboardCases = useMemo(() => caseRecords.length
     ? caseRecords.map((record, index) => {
       const example = MOCK_CASES[index % MOCK_CASES.length];
-      const risk = record.riskLevel ?? example.risk;
       return {
         ...example,
         id: record.caseNumber || record.id,
@@ -181,29 +218,42 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
         applicant: record.applicant,
         submitted: record.created_at?.slice(0, 10) || example.submitted,
         status: dashboardStatus(record.status),
-        risk,
-        score: record.riskScore ?? (risk === 'Critical' ? 96 : risk === 'High' ? 82 : risk === 'Medium' ? 58 : 27),
-        riskDescription: record.riskDescription || fallbackRiskDescription(risk),
-        uploadToExtraction: SAMPLE_PROCESSING_TIMES[index % SAMPLE_PROCESSING_TIMES.length][0],
-        detectionToCompletion: SAMPLE_PROCESSING_TIMES[index % SAMPLE_PROCESSING_TIMES.length][1],
+        risk: record.riskLevel ?? null,
+        score: record.riskScore ?? null,
+        processingMs: record.processingMs ?? null,
+        recommendedDocs: record.recommendedDocuments ?? null,
+        analyst: undefined,
+        createdBy: record.createdBy ?? UNRECORDED_CASE_OWNER,
+        documentTypes: (record.documentTypes ?? []).map((type) => formatDocumentType(type)),
+        flags: (record.flags ?? []).map((flag) => formatCheck(flag.check)),
+        flagInfo: Object.fromEntries((record.flags ?? []).map((flag) => [formatCheck(flag.check), {
+          severity: flagSeverity(flag.severity),
+          documentTypes: flag.documentTypes.map((type) => formatDocumentType(type)),
+        }])),
       };
     })
     : MOCK_CASES.map((item, index) => ({
       ...item,
-      riskDescription: fallbackRiskDescription(item.risk),
-      uploadToExtraction: SAMPLE_PROCESSING_TIMES[index][0],
-      detectionToCompletion: SAMPLE_PROCESSING_TIMES[index][1],
+      processingMs: SAMPLE_PROCESSING_MS[index],
+      recommendedDocs: sampleRecommendedDocuments(item),
     })),
   [caseRecords]);
 
   const visibleCases = useMemo(() => {
     const since = dateLimit(range);
     return dashboardCases.filter((item) =>
-      (role === 'Manager' || item.analyst === 'J. Tan') &&
+      // Assigned means created by the signed-in officer; preview rows keep their sample analyst.
+      (role === 'Manager' || (caseRecords.length ? item.createdBy === username : item.analyst === 'J. Tan')) &&
       (statusFilter === 'All statuses' || item.status === statusFilter) &&
       (!since || item.submitted >= since),
     );
-  }, [dashboardCases, range, role, statusFilter]);
+  }, [caseRecords.length, dashboardCases, range, role, statusFilter, username]);
+
+  // The same date and status choice for the accuracy figures, which the backend filters (cases are the reviews' own).
+  const accuracyFilters = useMemo<DetectionMetricsFilters>(() => {
+    const status = statusFilter === 'All statuses' ? undefined : statusValue(statusFilter);
+    return { since: dateLimit(range), statuses: status ? [status] : [] };
+  }, [range, statusFilter]);
 
   const statusCounts = useMemo(() => Object.fromEntries(
     STATUSES.map((status) => [status, visibleCases.filter((item) => item.status === status).length]),
@@ -212,7 +262,7 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
   const commonFlags = useMemo(() => {
     const counts = new Map<string, number>();
     visibleCases.forEach((item) => item.flags.forEach((flag) => counts.set(flag, (counts.get(flag) ?? 0) + 1)));
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, INSIGHT_ROWS);
   }, [visibleCases]);
 
   const byDocumentType = useMemo(() => {
@@ -231,10 +281,45 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
     return [...casesByFlag.entries()].map(([name, cases]) => ({
       name,
       cases,
-      severity: FLAG_SEVERITY[name] ?? 'Medium',
-      documentTypes: [...new Set(cases.flatMap((item) => item.documentTypes))],
-    })).sort((a, b) => b.cases.length - a.cases.length);
+      // The worst severity any case has for this flag, and only the document types it was found on.
+      severity: cases.map((item) => item.flagInfo?.[name]?.severity ?? FLAG_SEVERITY[name] ?? 'Medium')
+        .sort((a, b) => SEVERITY_RANK[b] - SEVERITY_RANK[a])[0],
+      documentTypes: [...new Set(cases.flatMap((item) => item.flagInfo?.[name]?.documentTypes ?? item.documentTypes))],
+    }));
   }, [visibleCases]);
+  const sortedFlagRows = useMemo(() => {
+    const severity = (flag: FlagSummary) => SEVERITY_RANK[flag.severity];
+    const cases = (flag: FlagSummary) => flag.cases.length;
+    const [first, second] = flagSort?.key === 'severity' ? [severity, cases] : [cases, severity];
+    const sign = flagSort && !flagSort.descending ? 1 : -1;
+    return [...flagRows].sort((a, b) => sign * (first(a) - first(b)) || sign * (second(a) - second(b)));
+  }, [flagRows, flagSort]);
+  // Each click on a column: high to low, then low to high, then back to no sort.
+  const sortFlagsBy = (key: 'severity' | 'cases') => setFlagSort((current) => {
+    if (current?.key !== key) return { key, descending: true };
+    return current.descending ? { key, descending: false } : null;
+  });
+  // The case queue's sort header (CaseQueuePage SortHeader): both arrows, the current direction's one dark.
+  const sortHeader = (key: 'severity' | 'cases', label: string) => {
+    const direction = flagSort?.key === key ? (flagSort.descending ? 'desc' : 'asc') : undefined;
+    return (
+      <th aria-sort={direction === 'desc' ? 'descending' : direction === 'asc' ? 'ascending' : undefined}>
+        <button
+          type="button"
+          className="case-sort"
+          data-direction={direction}
+          aria-label={`Sort by ${label.toLowerCase()} (${direction === 'desc' ? 'high to low' : direction === 'asc' ? 'low to high' : 'not sorted'})`}
+          onClick={() => sortFlagsBy(key)}
+        >
+          {label}
+          <svg className="case-sort-arrows" viewBox="0 0 8 14" aria-hidden="true">
+            <path className="case-sort-up" d="M4 0 8 5H0z" />
+            <path className="case-sort-down" d="M4 14 0 9h8z" />
+          </svg>
+        </button>
+      </th>
+    );
+  };
 
   const maxFlagCount = Math.max(1, ...commonFlags.map(([, count]) => count));
   const maxDocCount = Math.max(1, ...byDocumentType.map(([, count]) => count));
@@ -242,86 +327,80 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
   const highFlagCount = flagRows.filter((item) => item.severity === 'High').length;
   const openCase = (item: MockCase) => navigate(`/cases/${encodeURIComponent(item.routeId || item.id)}`);
   const sortedCaseRows = useMemo(() => [...visibleCases].sort((a, b) => {
-    const rank: Record<Risk, number> = { Critical: 4, High: 3, Medium: 2, Low: 1 };
-    if (riskOrder === 'highest') return rank[b.risk] - rank[a.risk] || b.score - a.score;
-    return rank[a.risk] - rank[b.risk] || a.score - b.score;
+    // Unscored cases rank below Low, so they sit last for "Critical first" and first for "Low first".
+    const rank = (item: MockCase) => (item.risk ? { Critical: 4, High: 3, Medium: 2, Low: 1 }[item.risk] : 0);
+    if (riskOrder === 'highest') return rank(b) - rank(a) || (b.score ?? 0) - (a.score ?? 0);
+    return rank(a) - rank(b) || (a.score ?? 0) - (b.score ?? 0);
   }), [riskOrder, visibleCases]);
 
   return (
     <main className="shell dashboard-shell">
       <AppHeader />
       <div className="dashboard-app">
-      <aside className="dashboard-sidebar">
-        <div className="dashboard-sidebar-label">WORKSPACE</div>
-        <nav className="dashboard-nav" aria-label="Dashboard sections">
-          {DASHBOARD_TABS.map((item) => (
-            <button key={item} className={tab === item ? 'active' : ''} onClick={() => setTab(item)}>
-              <span className="nav-icon">{item === 'Overview' ? '▦' : item === 'Cases' ? '▤' : item === 'Flags' ? '⚑' : item === 'Accuracy' ? '✓' : '◎'}</span>{item}
-              {item === 'Cases' && <span className="nav-count">{visibleCases.length}</span>}
-            </button>
-          ))}
-        </nav>
-        <div className="dashboard-sidebar-bottom">
-          <div className="sidebar-user-avatar">{role === 'Manager' ? 'MT' : 'JT'}</div>
-          <div><strong>{role === 'Manager' ? 'M. Tan' : 'J. Tan'}</strong><span>{role}</span></div>
-          <span className="sidebar-more">•••</span>
-        </div>
-      </aside>
-
       <main className="dashboard-main">
-        <header className="dashboard-topbar">
-          <div className="dashboard-breadcrumb">Workspace <span>/</span> {tab}</div>
-          <div className="role-switch" aria-label="Preview dashboard role">
-            {(['Manager', 'Analyst'] as Role[]).map((item) => <button key={item} className={role === item ? 'selected' : ''} onClick={() => { setRole(item); setTab('Overview'); }}>{item}</button>)}
-          </div>
-        </header>
-
         <div className="dashboard-content">
           <section className="dashboard-title-row">
             <div>
-              <p className="dashboard-eyebrow">{role === 'Manager' ? 'PORTFOLIO MONITORING' : 'YOUR WORKSPACE'}</p>
-              <h1>{tab === 'Overview' ? (role === 'Manager' ? 'Portfolio overview' : 'My review overview') : tab === 'Cases' ? (role === 'Manager' ? 'Case register' : 'My assigned cases') : tab === 'Accuracy' ? 'Detection accuracy' : 'Flag explorer'}</h1>
+              <h1>{role === 'Manager' ? 'Portfolio overview' : 'My workspace'}</h1>
               <p className="dashboard-subtitle">{tab === 'Overview' ? 'A summary of case progress, risk signals and common findings.' : tab === 'Cases' ? 'Review case status and priority across the selected period.' : tab === 'Accuracy' ? 'How often each detection check is right, and how much it misses, from officer reviews.' : 'Explore recurring findings and the cases and documents they affect.'}</p>
             </div>
-            {tab !== 'Accuracy' && <div className="dashboard-filters">
+            <div className="dashboard-filters">
               <label><span>Date range</span><select value={range} onChange={(event) => setRange(event.target.value)}><option>Last 7 days</option><option>Last 30 days</option><option>Last 90 days</option><option>All time</option></select></label>
               <label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option>All statuses</option>{STATUSES.map((status) => <option key={status}>{status}</option>)}</select></label>
               {tab === 'Cases' && <label className="risk-sort-filter"><span>Sort by risk</span><select value={riskOrder} onChange={(event) => setRiskOrder(event.target.value as 'highest' | 'lowest')}><option value="highest">Critical first</option><option value="lowest">Low first</option></select></label>}
-            </div>}
+            </div>
           </section>
+          <div className="dashboard-section-bar">
+            <nav className="dashboard-tabs" aria-label="Dashboard sections">
+              {DASHBOARD_TABS.map((item) => {
+                const count = item === 'Cases' ? visibleCases.length : item === 'Flags' ? flagRows.length : null;
+                return (
+                  <button key={item} className={tab === item ? 'active' : ''} aria-current={tab === item ? 'page' : undefined} onClick={() => setTab(item)}>
+                    <span className="nav-icon" aria-hidden="true">{item === 'Overview' ? '▦' : item === 'Cases' ? '▤' : item === 'Flags' ? '⚑' : item === 'Accuracy' ? '✓' : '◎'}</span>{item}
+                    {count !== null && <span className="nav-count">{count}</span>}
+                  </button>
+                );
+              })}
+            </nav>
+            {SHOW_ROLE_SWITCH && (
+              <div className="role-switch" aria-label="Preview dashboard role">
+                {(['Manager', 'Analyst'] as Role[]).map((item) => <button key={item} className={role === item ? 'selected' : ''} onClick={() => { setRole(item); setTab('Overview'); }}>{item}</button>)}
+              </div>
+            )}
+          </div>
           {isLoading && !caseRecords.length && <p className="dashboard-data-note" role="status">Loading live case links; preview rows are temporarily not clickable.</p>}
           {!isLoading && !caseRecords.length && <p className="dashboard-data-note">No live cases are loaded. Preview rows are illustrative and cannot open a case record.</p>}
 
           {tab !== 'Flags' && tab !== 'Accuracy' && <section className="dashboard-stat-grid" aria-label="Case counts by status">
             <article className="dashboard-stat-card stat-total"><div className="stat-top"><span className="stat-icon">▤</span><span className="stat-period">{range}</span></div><span className="stat-number">{visibleCases.length}</span><span className="stat-caption">Cases in view</span></article>
-            {STATUSES.map((status) => <article key={status} className={`dashboard-stat-card stat-${STATUS_CLASS[status]}`}><div className="stat-top"><span className="stat-caption">{status}</span><span className={`status-dot ${STATUS_CLASS[status]}`} /></div><span className="stat-number">{statusCounts[status]}</span><span className="stat-caption">{visibleCases.length ? `${Math.round(statusCounts[status] / visibleCases.length * 100)}% of cases` : '0% of cases'}</span></article>)}
+            {STATUSES.map((status) => <article key={status} className="dashboard-stat-card"><div className="stat-top"><span className="stat-caption">{status}</span><span className={`status-dot ${caseStatusTone(status)}`} /></div><span className="stat-number">{statusCounts[status]}</span><span className="stat-caption">{visibleCases.length ? `${Math.round(statusCounts[status] / visibleCases.length * 100)}% of cases` : '0% of cases'}</span></article>)}
           </section>}
 
           {tab === 'Overview' && <>
           <section className="dashboard-insight-grid">
             <article className="dashboard-panel">
               <div className="panel-heading"><div><h2>Most common flags</h2><p>Issues raised across the cases in view</p></div><button className="text-button" onClick={() => setTab('Flags')}>View flags <span>→</span></button></div>
-              {commonFlags.length ? <div className="bar-list">{commonFlags.map(([flag, count], index) => <div className="bar-row" key={flag}><span className="bar-rank">0{index + 1}</span><span className="bar-label">{flag}</span><span className="bar-track"><i style={{ width: `${count / maxFlagCount * 100}%` }} /></span><strong>{count}</strong></div>)}</div> : <p className="empty-insight">No flags in this date and status selection.</p>}
+              {commonFlags.length ? <div className="bar-list">{commonFlags.map(([flag, count], index) => <div className="bar-row" key={flag}><span className="bar-rank">{String(index + 1).padStart(2, '0')}</span><span className="bar-label">{flag}</span><span className="bar-track"><i style={{ width: `${count / maxFlagCount * 100}%` }} /></span><strong>{count}</strong></div>)}</div> : <p className="empty-insight">No flags in this date and status selection.</p>}
             </article>
             <article className="dashboard-panel">
-              <div className="panel-heading"><div><h2>Documents by type</h2><p>Number of cases containing each document type</p></div><span className="panel-kicker">CASE COUNT</span></div>
-              <div className="document-risk-list">{byDocumentType.map(([type, count]) => <div className="document-risk-row" key={type}><div className="document-risk-label"><span>{type}</span><strong>{count} <small>{count === 1 ? 'case' : 'cases'}</small></strong></div><div className="document-risk-track"><i style={{ width: `${count / maxDocCount * 100}%` }} /></div></div>)}</div>
+              <div className="panel-heading"><div><h2>Documents by type</h2><p>Number of cases containing each document type</p></div>{byDocumentType.length > INSIGHT_ROWS && <button className="text-button" onClick={() => setShowAllDocTypes((value) => !value)}>{showAllDocTypes ? 'Show fewer' : `Show all ${byDocumentType.length}`}</button>}</div>
+              {byDocumentType.length ? <div className="bar-list">{(showAllDocTypes ? byDocumentType : byDocumentType.slice(0, INSIGHT_ROWS)).map(([type, count], index) => <div className="bar-row" key={type}><span className="bar-rank">{String(index + 1).padStart(2, '0')}</span><span className="bar-label">{type}</span><span className="bar-track"><i style={{ width: `${count / maxDocCount * 100}%` }} /></span><strong>{count}</strong></div>)}</div> : <p className="empty-insight">No documents in this date and status selection.</p>}
             </article>
           </section>
 
           <section className="dashboard-lower-grid">
             <article className="dashboard-panel risk-snapshot-panel">
-              <div className="panel-heading"><div><h2>Risk overview</h2><p>Current cases grouped by assessed risk level</p></div><span className="panel-kicker">RISK IS ONE REVIEW SIGNAL</span></div>
+              <div className="panel-heading"><div><h2>Risk overview</h2><p>Current cases grouped by assessed risk level</p></div></div>
               <div className="risk-snapshot">{(['Critical', 'High', 'Medium', 'Low'] as Risk[]).map((risk) => { const count = visibleCases.filter((item) => item.risk === risk).length; return <div key={risk} className={`risk-snapshot-row risk-${risk.toLowerCase()}`}><span className="risk-marker" /><span>{risk} risk</span><div className="risk-snapshot-track"><i style={{ width: `${visibleCases.length ? count / visibleCases.length * 100 : 0}%` }} /></div><strong>{count}</strong></div>; })}</div>
               <div className="snapshot-note"><span>i</span> Consider document findings, case status and review context alongside the risk score.</div>
             </article>
           </section>
-          <DetectionAccuracySummary onViewAll={() => setTab('Accuracy')} />
+          <DetectionAccuracySummary filters={accuracyFilters} onViewAll={() => setTab('Accuracy')} />
           <CaseTable cases={visibleCases.slice(0, 5)} heading="Recent cases" onOpenCase={openCase} showRiskAnalysis />
           </>}
 
           {tab === 'Cases' && <>
-            <CaseTable cases={sortedCaseRows} heading={role === 'Manager' ? 'All cases' : 'Cases assigned to you'} onOpenCase={openCase} showRiskAnalysis showProcessingTime />
+            <CaseTable cases={sortedCaseRows} heading={role === 'Manager' ? 'All cases' : 'Your assigned cases'} onOpenCase={openCase} showRiskAnalysis showProcessingTime isPreview={!caseRecords.length} />
           </>}
 
           {tab === 'Flags' && <>
@@ -332,12 +411,11 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
             </section>
             <section className="dashboard-panel flag-register">
               <div className="panel-heading"><div><h2>Recurring findings</h2><p>Frequency, severity and affected evidence in the selected case set</p></div><span className="panel-kicker">{range.toUpperCase()}</span></div>
-              <div className="case-table-wrap"><table className="dashboard-case-table flag-table"><thead><tr><th>FLAG</th><th>SEVERITY</th><th>CASES</th><th>DOCUMENT TYPES</th><th>EXAMPLE CASES</th></tr></thead><tbody>{flagRows.map((flag) => <tr key={flag.name}><td data-label="Flag"><strong className="flag-name">{flag.name}</strong></td><td data-label="Severity"><span className={`flag-severity ${flag.severity.toLowerCase()}`}>{flag.severity}</span></td><td data-label="Cases"><strong>{flag.cases.length}</strong></td><td data-label="Document types"><span className="flag-doc-types">{flag.documentTypes.join(', ')}</span></td><td data-label="Example cases"><span className="flag-case-ids">{flag.cases.slice(0, 2).map((item) => item.id).join(', ')}{flag.cases.length > 2 ? ` +${flag.cases.length - 2} more` : ''}</span></td></tr>)}</tbody></table>{!flagRows.length && <p className="empty-insight table-empty">No flags in this date and status selection.</p>}</div>
-              <footer className="table-footer"><span>Showing <strong>{flagRows.length}</strong> flag categories</span><span className="mock-data-note"><i /> Illustrative data for mockup review</span></footer>
+              <div className="case-table-wrap"><table className="dashboard-case-table flag-table"><thead><tr><th>FLAG</th>{sortHeader('severity', 'SEVERITY')}{sortHeader('cases', 'CASES')}<th>DOCUMENT TYPES</th><th>EXAMPLE CASES</th></tr></thead><tbody>{sortedFlagRows.map((flag) => <tr key={flag.name}><td data-label="Flag"><strong className="flag-name">{flag.name}</strong></td><td data-label="Severity"><span className={`flag-severity ${flag.severity.toLowerCase()}`}>{flag.severity}</span></td><td data-label="Cases"><strong>{flag.cases.length}</strong></td><td data-label="Document types"><span className="flag-doc-types">{flag.documentTypes.join(', ')}</span></td><td data-label="Example cases"><span className="flag-case-ids">{flag.cases.slice(0, 2).map((item) => item.id).join(', ')}{flag.cases.length > 2 ? ` +${flag.cases.length - 2} more` : ''}</span></td></tr>)}</tbody></table>{!flagRows.length && <p className="empty-insight table-empty">No flags in this date and status selection.</p>}</div>
+              <footer className="table-footer"><span>Showing <strong>{flagRows.length}</strong> flag categories</span></footer>
             </section>
           </>}
-          {tab === 'Accuracy' && <DetectionAccuracyPanel />}
-          <footer className="dashboard-page-footer">GLDB Fraud Review <span>·</span> Dashboard concept preview <span>·</span> Data shown is illustrative</footer>
+          {tab === 'Accuracy' && <DetectionAccuracyPanel filters={accuracyFilters} />}
         </div>
       </main>
       </div>

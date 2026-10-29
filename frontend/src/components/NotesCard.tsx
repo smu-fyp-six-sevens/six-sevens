@@ -4,6 +4,7 @@ import { getUsername } from '../lib/api';
 import { officerName } from '../lib/officers';
 import { formatDate } from '../pages/document-details/formatters';
 import { addCaseNote, deleteCaseNote, listCaseNotes, updateCaseNote, type CaseNote } from '../services/uploadService';
+import { ErrorMessage } from './ErrorMessage';
 
 const MAX_NOTE_LENGTH = 4000; // MAX_NOTE_LENGTH in backend/app/models.py
 const WHOLE_CASE = '';
@@ -249,16 +250,10 @@ export function NotesCard({
         </div>
       </form>
 
-      {saveError && (
-        <p className="analysis-error" role="alert">
-          {saveError}
-        </p>
-      )}
+      {saveError && <ErrorMessage className="card-error" message={saveError} />}
 
       {loadError ? (
-        <p className="analysis-error" role="alert">
-          {loadError}
-        </p>
+        <ErrorMessage className="card-error" message={loadError} />
       ) : notes === null ? (
         <p className="notes-empty">Loading notes…</p>
       ) : threads.length === 0 ? (

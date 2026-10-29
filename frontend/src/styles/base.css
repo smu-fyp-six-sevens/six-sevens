@@ -470,3 +470,69 @@ h1 {
   font-size: 14.5px;
   margin: 0 0 28px;
 }
+
+/* ErrorMessage: an error the officer can act on. What failed in bold, what to do under it. */
+.error-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 14px;
+  border: 1px solid var(--red-86);
+  border-left: 3px solid var(--red-48);
+  border-radius: 8px;
+  background: var(--red-98);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.error-message-icon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  color: var(--red-48);
+}
+
+.error-message-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.error-message-title {
+  color: var(--red-44);
+  font-weight: 600;
+}
+
+.error-message-hint {
+  color: var(--ink-soft);
+}
+
+/* Beside a field or a button: no box, smaller. */
+.error-message--inline {
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 12px;
+}
+
+.error-message--inline .error-message-icon {
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+}
+
+/* Where an ErrorMessage sits: in place of a toast, or under an action's buttons. */
+.toast-error {
+  margin-top: 20px;
+}
+
+.action-error {
+  margin-top: 10px;
+}

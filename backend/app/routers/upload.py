@@ -30,6 +30,9 @@ class BulkUploadResponse(BaseModel):
     results: list[BulkUploadItemResult]
 
 
+_NO_CASE = "This case no longer exists."
+_NOT_SAVED = "This file couldn't be saved. Upload it again, and tell the team if it keeps happening."
+
 async def _ingest_one(
     case_id: str | None, file: UploadFile, *, case_verified: bool = False
 ) -> DocumentRecord:
@@ -42,13 +45,13 @@ async def _ingest_one(
     if file.content_type not in settings.ALLOWED_CONTENT_TYPES:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=f"Unsupported content type: {file.content_type}",
+            detail="This file type isn't supported. Upload a PDF, PNG or JPG file.",
         )
 
     if not file.filename:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Uploaded file must include a filename",
+            detail="The file has no name. Rename it and upload it again.",
         )
 
     filename = file.filename
@@ -57,7 +60,7 @@ async def _ingest_one(
     if len(file_bytes) > settings.MAX_FILE_SIZE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-            detail=f"File exceeds {settings.MAX_FILE_SIZE_BYTES} byte limit",
+            detail=f"This file is over the {settings.MAX_FILE_SIZE_BYTES // (1024 * 1024)} MB limit. Upload a smaller file.",
         )
 
     if case_id is not None and not case_verified:
@@ -65,7 +68,7 @@ async def _ingest_one(
         if case is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"case_id '{case_id}' does not exist",
+                detail=_NO_CASE,
             )
 
     storage_path = await to_thread_or_502(
@@ -87,7 +90,7 @@ async def _ingest_one(
         if exc.code == "23503":  # foreign key violation
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"case_id '{case_id}' does not exist",
+                detail=_NO_CASE,
             ) from exc
         logger.exception("Supabase error while creating document row")
         raise HTTPException(
@@ -165,7 +168,7 @@ async def upload_documents_batch(
         filename = file.filename or ""
         if not case_exists:
             return BulkUploadItemResult(
-                filename=filename, success=False, error=f"case_id '{case_id}' does not exist"
+                filename=filename, success=False, error=_NO_CASE
             )
         try:
             document = await _ingest_one(case_id, file, case_verified=True)
@@ -176,6 +179,10 @@ async def upload_documents_batch(
                 status=document.status,
             )
         except HTTPException as exc:
+            # A 4xx is the file's own problem, already worded for the officer; a 5xx's detail is for whoever reads
+            # the logs (it was logged where it was raised), so the officer gets a sentence instead.
+            if exc.status_code >= 500:
+                return BulkUploadItemResult(filename=filename, success=False, error=_NOT_SAVED)
             return BulkUploadItemResult(filename=filename, success=False, error=str(exc.detail))
 
     results = await asyncio.gather(*(_handle(file) for file in files))

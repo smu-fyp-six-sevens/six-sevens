@@ -1501,7 +1501,7 @@ def test_locked_document_cannot_be_changed(locked_status, method, url, body) -> 
         response = getattr(client, method)(url, **kwargs)
 
     assert response.status_code == 409
-    assert "cannot be" in response.json()["detail"]
+    assert "can't be" in response.json()["detail"]
     mock_fields_repo.replace_extracted_fields.assert_not_called()
     mock_fields_repo.add_extracted_field.assert_not_called()
     mock_fields_repo.delete_extracted_field.assert_not_called()

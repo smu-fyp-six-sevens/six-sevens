@@ -9,6 +9,7 @@ import {
 } from '../../services/uploadService';
 import { isArrayOfLabelValueStrings, isArrayOfObjects, isPlainKeyValueObject } from './fieldDisplay';
 import { humanizeFieldKey } from '../../utils/fieldLabels';
+import { ErrorMessage } from '../../components/ErrorMessage';
 
 export function ManualReviewCard({
   canEditFields,
@@ -156,11 +157,7 @@ export function ManualReviewCard({
                   </span>
                 )}
 
-                {saveError && (
-                  <span className="save-error">
-                    {saveError}
-                  </span>
-                )}
+                {saveError && <ErrorMessage inline message={saveError} />}
               </div>
 
             {canEditFields && (

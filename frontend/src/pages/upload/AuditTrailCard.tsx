@@ -8,6 +8,8 @@ import {
 } from '../../services/uploadService';
 import { formatCheck } from '../../utils/checkLabels';
 import { humanizeFieldKey } from '../../utils/fieldLabels';
+import { describeFailureReason } from '../document-details/formatters';
+import { ErrorMessage } from '../../components/ErrorMessage';
 
 interface AuditDocument {
   id: string;
@@ -77,7 +79,8 @@ const OUTCOME_LABELS: Record<AuditEvent['outcome'], string> = {
   cancelled: 'Cancelled',
 };
 
-// A list field's change is its item counts ("4 items") plus the items added and removed, each as JSON.
+// A list field's change is its item counts ("4 items") plus the items added and removed, each as JSON. A field
+// holding an object or a list is saved as JSON too.
 interface FieldChange {
   field: string;
   from: string | null;
@@ -169,28 +172,44 @@ function fieldChanges(event: AuditEvent): FieldChange[] | null {
   return event.type === 'document.field_edited' && Array.isArray(changes) ? (changes as FieldChange[]) : null;
 }
 
-// A list item's filled-in values, e.g. "Grantor: DBS Bank · Account Type: Credit Card".
-function listItem(json: string): string {
-  try {
-    const item: unknown = JSON.parse(json);
-    if (item !== null && typeof item === 'object' && !Array.isArray(item)) {
-      const filled = Object.entries(item).filter(([, value]) => value !== null && value !== '');
-      return (
-        filled
-          .map(([key, value]) => `${humanizeFieldKey(key)}: ${typeof value === 'object' ? JSON.stringify(value) : String(value)}`)
-          .join(' · ') || '(empty item)'
-      );
-    }
-    return String(item);
-  } catch {
-    // Cut to the stored length, so no longer whole JSON.
-    return json;
+// A saved value as it reads: an object's filled-in values, e.g. "Grantor: DBS Bank · Account Type: Credit Card"
+// (", " between them when it sits inside another value), and a list's items separated by "; ".
+function readable(value: unknown, nested = false): string {
+  if (Array.isArray(value)) {
+    return value.length > 0 ? value.map((item) => readable(item, true)).join('; ') : '(no items)';
   }
+  if (value !== null && typeof value === 'object') {
+    const filled = Object.entries(value).filter(([, item]) => item !== null && item !== '');
+    return (
+      filled.map(([key, item]) => `${humanizeFieldKey(key)}: ${readable(item, true)}`).join(nested ? ', ' : ' · ') ||
+      '(empty item)'
+    );
+  }
+  return String(value);
+}
+
+// A stored value that is an object or a list as JSON, parsed; anything else (including JSON cut to the stored
+// length, so no longer whole) as undefined.
+function parsedJson(value: string): object | undefined {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed !== null && typeof parsed === 'object' ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// A list item's filled-in values.
+function listItem(json: string): string {
+  const item = parsedJson(json);
+  return item === undefined ? json : readable(item);
 }
 
 function fieldValue(value: string | null): string {
   if (value === null) return '(none)';
-  return value === '' ? '(blank)' : value;
+  if (value === '') return '(blank)';
+  const parsed = parsedJson(value);
+  return parsed === undefined ? value : readable(parsed);
 }
 
 // "high" or "High" as "High".
@@ -221,8 +240,11 @@ function describe(event: AuditEvent): string | null {
       return `Confirmed as ${formatDocumentType(text(detail.to_type), 1)}`;
     case 'document.analyzed':
       return text(detail.document_type) && `Classified as ${formatDocumentType(text(detail.document_type))}`;
-    case 'document.failed':
-      return text(detail.failure_reason);
+    case 'document.failed': {
+      // The stored reason can carry an exception's text: a short title here, the reason itself under Details.
+      const reason = text(detail.failure_reason);
+      return reason && describeFailureReason(reason).title;
+    }
     case 'document.field_edited': {
       const changes = fieldChanges(event);
       if (changes === null) {
@@ -234,9 +256,10 @@ function describe(event: AuditEvent): string | null {
     case 'document.detected':
       return `Verdict: ${text(detail.verdict) ?? 'unknown'} · ${count(detail.findings)} finding(s)`;
     case 'detection.failed':
-      return text(detail.error);
+      // A cancel's error is a sentence ("Cancelled by loan officer"); a crash's is the exception, under Details.
+      return event.outcome === 'cancelled' ? text(detail.error) : 'The run stopped before it finished';
     case 'detection.check_run': {
-      if (event.outcome !== 'success') return text(detail.error);
+      if (event.outcome !== 'success') return "The check couldn't run";
       if (text(detail.skipped_reason)) return `Skipped: ${text(detail.skipped_reason)}`;
       if (detail.unable_to_assess === true) return 'Could not assess this document';
       const likelihood = text(detail.likelihood);
@@ -262,11 +285,19 @@ function describe(event: AuditEvent): string | null {
     }
     case 'case.analysis.completed':
       // The risk level is shown as a badge before this (riskOf).
-      if (event.outcome !== 'success') return text(detail.error);
+      if (event.outcome !== 'success') return "The analysis didn't finish";
       return `${count(detail.findings)} cross-document finding(s)`;
     default:
       return null;
   }
+}
+
+// The raw text behind a failed entry's plain line (describe): an exception's text, for the console only.
+function rawError(event: AuditEvent): string | null {
+  if (event.outcome !== 'failed') return null;
+  if (event.type === 'document.failed') return text(event.detail.failure_reason);
+  const errorTypes = ['detection.failed', 'detection.check_run', 'case.analysis.completed'];
+  return errorTypes.includes(event.type) ? text(event.detail.error) : null;
 }
 
 // Who the entry belongs to: the officer, or the System (an AI agent's run) and the officer who started it.
@@ -300,7 +331,13 @@ export function AuditTrailCard({
     setLoadError(null);
     try {
       const trail = (await listCaseAuditTrail(caseId)).filter(isShown);
-      if (thisLoad === latestLoad.current) setEvents(trail);
+      if (thisLoad === latestLoad.current) {
+        setEvents(trail);
+        for (const event of trail) {
+          const raw = rawError(event);
+          if (raw) console.error(`Audit entry ${event.type} (${event.occurred_at}) failed:`, raw);
+        }
+      }
     } catch (caught) {
       if (thisLoad === latestLoad.current) {
         setLoadError(caught instanceof Error ? caught.message : 'Failed to load the audit trail');
@@ -339,11 +376,7 @@ export function AuditTrailCard({
         </button>
       </div>
 
-      {loadError && (
-        <p className="analysis-error" role="alert">
-          {loadError}
-        </p>
-      )}
+      {loadError && <ErrorMessage className="card-error" message={loadError} />}
 
       {events === null && !loadError && <p className="audit-empty">Loading the audit trail…</p>}
 

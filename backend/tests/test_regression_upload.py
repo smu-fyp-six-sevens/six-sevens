@@ -94,5 +94,6 @@ def test_a_storage_failure_fails_only_that_file_with_an_error(published_events):
     assert results["payslip.pdf"]["success"] is True
     assert results["payslip.pdf"]["document_id"] == "doc-payslip"
     assert results["passport.pdf"]["success"] is False
-    assert "Failed to store" in results["passport.pdf"]["error"]
+    # The officer gets a sentence; the storage error itself is only in the log.
+    assert results["passport.pdf"]["error"] == "This file couldn't be saved. Upload it again, and tell the team if it keeps happening."
     assert [(e.type, e.document_id) for e in published_events] == [("document.uploaded", "doc-payslip")]
