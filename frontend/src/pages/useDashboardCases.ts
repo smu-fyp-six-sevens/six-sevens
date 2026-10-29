@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CaseRecord } from '../App';
 import { listCasesPage } from '../services/uploadService';
 import { toCaseRecord } from '../utils/caseRecord';
@@ -7,14 +7,21 @@ import { toCaseRecord } from '../utils/caseRecord';
 const PAGE_SIZE = 100;
 
 // Every case as the case queue lists it (status, risk, timings, flags, document types), newest first, a page at a time.
+// No socket covers the whole case list (only one case's), so the dashboard reads it on opening and when the officer
+// refreshes. `isLoading` is only the first load: a refresh swaps the figures in place.
 export function useDashboardCases() {
   const [cases, setCases] = useState<CaseRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  // The load in progress, if any: one at a time, and the one to cancel when the page closes.
+  const running = useRef<AbortController | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
+    if (running.current) return;
     const controller = new AbortController();
-
-    (async () => {
+    running.current = controller;
+    setIsRefreshing(true);
+    try {
       const loaded: CaseRecord[] = [];
       for (;;) {
         const page = await listCasesPage(
@@ -24,15 +31,27 @@ export function useDashboardCases() {
         loaded.push(...page.items.map(toCaseRecord));
         if (!page.items.length || loaded.length >= page.total) break;
       }
-      setCases(loaded);
-    })()
-      .catch(() => undefined)
-      .finally(() => {
-        if (!controller.signal.aborted) setIsLoading(false);
-      });
-
-    return () => controller.abort();
+      if (!controller.signal.aborted) setCases(loaded);
+    } catch {
+      // A failed refresh keeps the figures already shown.
+    } finally {
+      if (running.current === controller) running.current = null;
+      if (!controller.signal.aborted) {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    }
   }, []);
 
-  return { cases, isLoading };
+  useEffect(() => {
+    void load();
+    // Cancelled loads are forgotten at once, so the next load isn't skipped as "already running" (React opens the
+    // page twice in development, cancelling the first load).
+    return () => {
+      running.current?.abort();
+      running.current = null;
+    };
+  }, [load]);
+
+  return { cases, isLoading, isRefreshing, refresh: load };
 }

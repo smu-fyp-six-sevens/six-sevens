@@ -287,3 +287,8 @@
 .accuracy-table th:nth-child(1) { width: 24%; }
 .accuracy-table th:nth-child(2) { width: 32%; }
 .accuracy-table th:nth-child(3), .accuracy-table th:nth-child(4) { width: 14%; }
+
+/* The dashboard's refresh: the shared icon button (RefreshButton), sitting in the filter row as a square the height
+   of the selects instead of in a panel's corner. */
+.dashboard-refresh { align-self: flex-end; }
+.dashboard-refresh .panel-refresh-button { position: static; width: 35px; height: 35px; border: 1px solid var(--line); border-radius: 7px; background: var(--white); color: var(--slate-34); }

@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
+import { RefreshButton } from '../components/RefreshButton';
+import { DashboardSkeleton } from '../components/Skeletons';
 import { InfoLabel } from '../components/InfoTip';
 import { DetectionAccuracyPanel, DetectionAccuracySummary } from './DetectionAccuracyPanel';
 import { caseStatusTone } from '../utils/caseStatusTone';
@@ -191,7 +193,17 @@ function dashboardStatus(label: string): Status {
   return (STATUSES as string[]).includes(label) ? label as Status : 'In progress';
 }
 
-export default function DashboardPage({ cases: caseRecords, isLoading }: { cases: CaseRecord[]; isLoading: boolean }) {
+export default function DashboardPage({
+  cases: caseRecords,
+  isLoading,
+  isRefreshing,
+  onRefresh,
+}: {
+  cases: CaseRecord[];
+  isLoading: boolean;
+  isRefreshing: boolean;
+  onRefresh: () => void;
+}) {
   const navigate = useNavigate();
   const [role, setRole] = useState<Role>('Analyst');
   const [tab, setTab] = useState<DashboardTab>('Overview');
@@ -340,12 +352,15 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
               <label><span>Date range</span><select value={range} onChange={(event) => setRange(event.target.value)}><option>Last 7 days</option><option>Last 30 days</option><option>Last 90 days</option><option>All time</option></select></label>
               <label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option>All statuses</option>{STATUSES.map((status) => <option key={status}>{status}</option>)}</select></label>
               {tab === 'Cases' && <label className="risk-sort-filter"><span>Sort by risk</span><select value={riskOrder} onChange={(event) => setRiskOrder(event.target.value as 'highest' | 'lowest')}><option value="highest">Critical first</option><option value="lowest">Low first</option></select></label>}
+              {/* The dashboard reads the cases on opening; this reads them again (no socket covers the whole list). */}
+              <span className="dashboard-refresh"><RefreshButton isRefreshing={isRefreshing} onClick={onRefresh} label="cases" /></span>
             </div>
           </section>
           <div className="dashboard-section-bar">
             <nav className="dashboard-tabs" aria-label="Dashboard sections">
               {DASHBOARD_TABS.map((item) => {
-                const count = item === 'Cases' ? visibleCases.length : item === 'Flags' ? flagRows.length : null;
+                // No count until the real cases arrive: before that the list is the sample cases.
+                const count = isLoading ? null : item === 'Cases' ? visibleCases.length : item === 'Flags' ? flagRows.length : null;
                 return (
                   <button key={item} className={tab === item ? 'active' : ''} aria-current={tab === item ? 'page' : undefined} onClick={() => setTab(item)}>
                     <span className="nav-icon" aria-hidden="true">{item === 'Overview' ? '▦' : item === 'Cases' ? '▤' : item === 'Flags' ? '⚑' : item === 'Accuracy' ? '✓' : '◎'}</span>{item}
@@ -360,8 +375,10 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
               </div>
             )}
           </div>
-          {isLoading && !caseRecords.length && <p className="dashboard-data-note" role="status">Loading live case links; preview rows are temporarily not clickable.</p>}
           {!isLoading && !caseRecords.length && <p className="dashboard-data-note">No live cases are loaded. Preview rows are illustrative and cannot open a case record.</p>}
+
+          {/* First load: placeholders in the dashboard's own layout, not the sample cases. The Accuracy tab loads its own figures. */}
+          {isLoading && tab !== 'Accuracy' ? <DashboardSkeleton /> : <>
 
           {tab !== 'Flags' && tab !== 'Accuracy' && <section className="dashboard-stat-grid" aria-label="Case counts by status">
             <article className="dashboard-stat-card stat-total"><div className="stat-top"><span className="stat-icon">▤</span><span className="stat-period">{range}</span></div><span className="stat-number">{visibleCases.length}</span><span className="stat-caption">Cases in view</span></article>
@@ -408,6 +425,7 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
             </section>
           </>}
           {tab === 'Accuracy' && <DetectionAccuracyPanel filters={accuracyFilters} />}
+          </>}
         </div>
       </main>
       </div>
