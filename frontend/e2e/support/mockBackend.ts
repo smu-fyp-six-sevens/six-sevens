@@ -314,6 +314,9 @@ export class MockBackend {
   traces: Record<string, unknown> = {};
   /** What the content guard found at ingest, per document id (GET .../content-guard); none = checked, nothing found. */
   contentGuards: Record<string, unknown> = {};
+  /** App settings (GET /settings): whether officers review findings, and whether the signed-in officer is an admin. */
+  findingReviewsEnabled = true;
+  isAdmin = false;
   /** Notes on cases and documents (GET/POST /cases/:id/notes), signed by the logged-in officer. */
   notes: NoteRow[] = [];
   /** Audit trail entries (GET /audit/events?case_id=), in any order: served newest first, like the backend. */
@@ -567,6 +570,19 @@ export class MockBackend {
     const costMatch = path.match(/^\/audit\/cases\/([^/]+)\/cost$/);
     if (costMatch && method === 'GET') {
       return json(this.caseCost(costMatch[1]));
+    }
+    // Same rules as routers/settings.py: every officer reads the settings, only an admin changes them.
+    if (method === 'GET' && path === '/settings') {
+      return json({ finding_reviews_enabled: this.findingReviewsEnabled, is_admin: this.isAdmin });
+    }
+    if (method === 'PUT' && path === '/settings/finding-reviews') {
+      if (!this.isAdmin) return json({ detail: 'Only an admin can change this setting.' }, 403);
+      this.findingReviewsEnabled = (body as { enabled: boolean }).enabled;
+      return json({ finding_reviews_enabled: this.findingReviewsEnabled, is_admin: true });
+    }
+    // With reviews turned off, routers/finding_reviews.py refuses every review route.
+    if (!this.findingReviewsEnabled && (/^\/cases\/[^/]+\/finding-reviews/.test(path) || path === '/detection-metrics')) {
+      return json({ detail: 'Finding reviews are turned off by an admin.' }, 409);
     }
     // Officers' reviews of findings (precision/recall): none recorded, so every rate is "nothing to measure".
     if (method === 'GET' && /^\/cases\/[^/]+\/finding-reviews$/.test(path)) {

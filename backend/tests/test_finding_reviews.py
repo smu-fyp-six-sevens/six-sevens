@@ -108,7 +108,9 @@ def repos():
         patch("app.routers._dependencies.case_service") as case_service,
         patch("app.routers.finding_reviews.finding_reviews_repository") as reviews_repo,
         patch("app.routers.finding_reviews.document_repository") as document_repo,
+        patch("app.routers.finding_reviews.app_settings_repository") as app_settings,
     ):
+        app_settings.get_finding_reviews_enabled.return_value = True
         case_service.get_case.side_effect = lambda case_id: _case(case_id) if case_id in (CASE_ID, OTHER_CASE_ID) else None
         document_repo.get_document.return_value = _document()
         reviews_repo.list_for_case.return_value = [_review()]
@@ -270,3 +272,24 @@ def test_missed_issues_reported_edited_and_removed_are_recorded(repos, published
     assert published_events[1].detail["check_name"] == "font_consistency_tool"
     # Events carry ids, not the officer's free text.
     assert "note" not in published_events[0].detail
+
+
+@pytest.mark.parametrize(
+    "method, path",
+    [
+        ("GET", f"/cases/{CASE_ID}/finding-reviews"),
+        ("PUT", f"/cases/{CASE_ID}/finding-reviews/verdict"),
+        ("POST", f"/cases/{CASE_ID}/finding-reviews/missed"),
+        ("GET", "/detection-metrics"),
+    ],
+)
+def test_with_finding_reviews_turned_off_nothing_is_read_or_saved(repos, method, path) -> None:
+    reviews_repo, _ = repos
+    with patch("app.routers.finding_reviews.app_settings_repository") as app_settings:
+        app_settings.get_finding_reviews_enabled.return_value = False
+        response = client.request(method, path, json=_VERDICT)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Finding reviews are turned off by an admin."
+    reviews_repo.list_for_case.assert_not_called()
+    reviews_repo.list_all.assert_not_called()

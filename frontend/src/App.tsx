@@ -26,6 +26,7 @@ const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 import { getToken } from './lib/api';
 import type { CaseRiskLevel } from './services/uploadService';
 import { LoadErrorState } from './components/LoadErrorState';
+import { AppSettingsProvider } from './components/AppSettingsProvider';
 
 export interface CaseRecord {
   id: string;
@@ -231,6 +232,7 @@ export default function App() {
   const [isAuthed, setIsAuthed] = useState(() => getToken() !== null);
 
   return (
+    <AppSettingsProvider isAuthed={isAuthed}>
     <BrowserRouter>
       <Suspense fallback={<PageSkeleton />}>
       <Routes>
@@ -310,5 +312,6 @@ export default function App() {
       </Routes>
       </Suspense>
     </BrowserRouter>
+    </AppSettingsProvider>
   );
 }

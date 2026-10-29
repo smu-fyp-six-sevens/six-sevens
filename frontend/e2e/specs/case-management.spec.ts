@@ -1226,4 +1226,18 @@ test.describe('Case summary progress', () => {
     await expect(steps.filter({ hasText: 'Review Findings' })).toContainText('Waiting for the analysis rerun');
     await expect(steps.filter({ hasText: 'Finalise Case' })).toContainText('After all findings are reviewed');
   });
+
+  test('with finding reviews turned off there is no review step, accuracy panel or review controls', async ({ page, backend }) => {
+    backend.findingReviewsEnabled = false;
+    const steps = await openSummary(page, backend, false);
+
+    await expect(steps.filter({ hasText: 'Finalise Case' })).toContainText('Ready to finalise');
+    await expect(steps.filter({ hasText: 'Review Findings' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Detection Accuracy' })).toHaveCount(0);
+
+    await page.goto(`/cases/GLDB-3003?section=risk`);
+    await expect(page.getByRole('heading', { name: 'Findings by Document' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Documents to Review' })).toHaveCount(0);
+    await expect(page.locator('.review-tick')).toHaveCount(0);
+  });
 });

@@ -853,6 +853,24 @@
         "title": "AnomalyLocation",
         "type": "object"
       },
+      "AppSettings": {
+        "properties": {
+          "finding_reviews_enabled": {
+            "title": "Finding Reviews Enabled",
+            "type": "boolean"
+          },
+          "is_admin": {
+            "title": "Is Admin",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "finding_reviews_enabled",
+          "is_admin"
+        ],
+        "title": "AppSettings",
+        "type": "object"
+      },
       "BenfordAnalysis": {
         "properties": {
           "chi_square": {
@@ -6212,6 +6230,19 @@
         "title": "RoutingStatus",
         "type": "string"
       },
+      "SetFindingReviewsRequest": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "SetFindingReviewsRequest",
+        "type": "object"
+      },
       "SetFindingVerdictRequest": {
         "description": "Marks one finding correct or wrong; verdict null clears the officer's mark.",
         "properties": {
@@ -11228,6 +11259,115 @@
           }
         },
         "summary": "Message"
+      }
+    },
+    "/settings": {
+      "get": {
+        "operationId": "get_settings_settings_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/settings/finding-reviews": {
+      "put": {
+        "description": "Turns finding reviews on or off for every officer. Admin only. Reviews already saved are kept either way.",
+        "operationId": "set_finding_reviews_settings_finding_reviews_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetFindingReviewsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Finding Reviews",
+        "tags": [
+          "settings"
+        ]
       }
     },
     "/ws/tickets": {
