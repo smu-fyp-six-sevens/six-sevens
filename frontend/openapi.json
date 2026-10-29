@@ -1596,6 +1596,38 @@
         "title": "CaseFindingReviews",
         "type": "object"
       },
+      "CaseFlagCount": {
+        "description": "One detection check's flags in a case: how many, the worst severity, and the document types they're on.",
+        "properties": {
+          "check": {
+            "title": "Check",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "document_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Document Types",
+            "type": "array"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "check",
+          "severity",
+          "count",
+          "document_types"
+        ],
+        "title": "CaseFlagCount",
+        "type": "object"
+      },
       "CaseListItem": {
         "description": "One row of the case queue: only what the list shows, so it needs no extracted fields.",
         "properties": {
@@ -1615,6 +1647,24 @@
             "title": "Created At",
             "type": "string"
           },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "document_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Document Types",
+            "type": "array"
+          },
           "documents_status": {
             "$ref": "#/components/schemas/CaseDocumentsStatus"
           },
@@ -1630,6 +1680,13 @@
             ],
             "title": "Finalized At"
           },
+          "flags": {
+            "items": {
+              "$ref": "#/components/schemas/CaseFlagCount"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
           "greenlink_case_id": {
             "title": "Greenlink Case Id",
             "type": "string"
@@ -1637,6 +1694,31 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "processing_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Ms"
+          },
+          "recommended_documents": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Documents"
           },
           "risk": {
             "anyOf": [
@@ -1674,7 +1756,12 @@
           "created_at",
           "updated_at",
           "documents_status",
-          "risk"
+          "risk",
+          "processing_ms",
+          "recommended_documents",
+          "document_types",
+          "flags",
+          "created_by"
         ],
         "title": "CaseListItem",
         "type": "object"
@@ -8635,9 +8722,39 @@
     },
     "/detection-metrics": {
       "get": {
-        "description": "Precision and recall per check across every reviewed case, with targets (the dashboard).",
+        "description": "Precision and recall per check across every reviewed case, with targets (the dashboard). Optionally only\ncases created on or after `since` and in these documents statuses, as the dashboard's filters pick.",
         "operationId": "get_detection_metrics_detection_metrics_get",
         "parameters": [
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/CaseDocumentsStatus"
+              },
+              "title": "Status",
+              "type": "array"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",

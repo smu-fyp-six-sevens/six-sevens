@@ -486,12 +486,31 @@ class CaseSummary(CaseRecord):
     analysis: CaseAnalysisOverview | None = None
 
 
+class CaseFlagCount(BaseModel):
+    """One detection check's flags in a case: how many, the worst severity, and the document types they're on."""
+
+    check: str
+    severity: str
+    count: int
+    document_types: list[str] = Field(default_factory=list)
+
+
 class CaseListItem(CaseRecord):
     """One row of the case queue: only what the list shows, so it needs no extracted fields."""
 
     documents_status: CaseDocumentsStatus
     # None when the documents' detection reports couldn't be loaded.
     risk: CaseRisk | None = None
+    # Automated processing time from the audit trail (audit.processing_ms_many); None until the case is analysed.
+    processing_ms: int | None = None
+    # Titles of the documents its latest analysis recommends requesting; None until the case is analysed.
+    recommended_documents: list[str] | None = None
+    # The types of the case's documents, each once.
+    document_types: list[str] = Field(default_factory=list)
+    # The case's flags (flags_repository), one entry per check, most flags first.
+    flags: list[CaseFlagCount] = Field(default_factory=list)
+    # The username of the officer who created the case (its case.created event); None when the trail has no record.
+    created_by: str | None = None
 
 
 class CaseListPage(BaseModel):

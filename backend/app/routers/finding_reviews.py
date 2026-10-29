@@ -10,16 +10,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import date
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from .. import detection_metrics, document_repository, events, finding_reviews_repository
+from .. import case_service, detection_metrics, document_repository, events, finding_reviews_repository
 from ..auth import CurrentUser
 from ..events import officer_event, types
 from ..models import (
-    CaseFindingReviews, CaseRecord, DetectionMetrics, ReportMissedIssueRequest, SetFindingVerdictRequest,
-    SetFindingVerdictsRequest, UpdateMissedIssueRequest,
+    CaseDocumentsStatus, CaseFindingReviews, CaseRecord, DetectionMetrics, ReportMissedIssueRequest,
+    SetFindingVerdictRequest, SetFindingVerdictsRequest, UpdateMissedIssueRequest,
 )
 from ._dependencies import bad_gateway_on_error, get_case_or_404, to_thread_or_502
 
@@ -194,11 +195,24 @@ async def delete_finding_review(
 
 
 @router.get("/detection-metrics", response_model=DetectionMetrics)
-async def get_detection_metrics() -> DetectionMetrics:
-    """Precision and recall per check across every reviewed case, with targets (the dashboard)."""
+async def get_detection_metrics(
+    since: date | None = None,
+    status_filter: list[CaseDocumentsStatus] = Query(default=[], alias="status"),
+) -> DetectionMetrics:
+    """
+    Precision and recall per check across every reviewed case, with targets (the dashboard). Optionally only
+    cases created on or after `since` and in these documents statuses, as the dashboard's filters pick.
+    """
     reviews = await to_thread_or_502(
         finding_reviews_repository.list_all,
         detail="Failed to load the finding reviews. Check Supabase table access.",
         log=("Failed to list finding reviews",),
     )
+    if since is not None or status_filter:
+        wanted = await to_thread_or_502(
+            case_service.case_ids_matching, since, status_filter,
+            detail="Failed to filter cases. Check Supabase table access.",
+            log=("Failed to filter cases for detection metrics",),
+        )
+        reviews = [review for review in reviews if review.case_id in wanted]
     return detection_metrics.overall_metrics(reviews)

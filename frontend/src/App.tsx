@@ -15,7 +15,7 @@ import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
 import NotFoundState from './components/NotFoundState';
 import { useCaseByNumber, type CaseHandover } from './pages/useCaseByNumber';
-import { useRecentCases } from './pages/useRecentCases';
+import { useDashboardCases } from './pages/useDashboardCases';
 
 // Loaded on first visit to keep the initial bundle small.
 const loadUploadPage = () => import('./pages/UploadPage');
@@ -38,6 +38,23 @@ export interface CaseRecord {
   riskLevel?: CaseRiskLevel | null;
   riskScore?: number | null;
   riskDescription?: string | null;
+  // Automated processing time in ms (backend audit.processing_ms_many); null until analysed.
+  processingMs?: number | null;
+  // Titles of the documents its analysis recommends requesting; null until analysed.
+  recommendedDocuments?: string[] | null;
+  // The types of its documents (backend values such as "bank_statement"), each once.
+  documentTypes?: string[];
+  // Its flags grouped by detection check, most flags first.
+  flags?: CaseFlagCount[];
+  // The username of the officer who created it; null when the audit trail has no record.
+  createdBy?: string | null;
+}
+
+export interface CaseFlagCount {
+  check: string;
+  severity: string;
+  count: number;
+  documentTypes: string[];
 }
 
 function CaseQueueRoute() {
@@ -167,7 +184,7 @@ function DocumentDetailsRoute() {
 }
 
 function DashboardRoute() {
-  const { cases, isLoading } = useRecentCases(50);
+  const { cases, isLoading } = useDashboardCases();
 
   return <DashboardPage cases={cases} isLoading={isLoading} />;
 }

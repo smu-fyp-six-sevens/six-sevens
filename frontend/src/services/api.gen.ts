@@ -519,7 +519,8 @@ export interface paths {
         };
         /**
          * Get Detection Metrics
-         * @description Precision and recall per check across every reviewed case, with targets (the dashboard).
+         * @description Precision and recall per check across every reviewed case, with targets (the dashboard). Optionally only
+         *     cases created on or after `since` and in these documents statuses, as the dashboard's filters pick.
          */
         get: operations["get_detection_metrics_detection_metrics_get"];
         put?: never;
@@ -1970,6 +1971,20 @@ export interface components {
             target_recall: number;
         };
         /**
+         * CaseFlagCount
+         * @description One detection check's flags in a case: how many, the worst severity, and the document types they're on.
+         */
+        CaseFlagCount: {
+            /** Check */
+            check: string;
+            /** Count */
+            count: number;
+            /** Document Types */
+            document_types: string[];
+            /** Severity */
+            severity: string;
+        };
+        /**
          * CaseListItem
          * @description One row of the case queue: only what the list shows, so it needs no extracted fields.
          */
@@ -1981,13 +1996,23 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Created By */
+            created_by: string | null;
+            /** Document Types */
+            document_types: string[];
             documents_status: components["schemas"]["CaseDocumentsStatus"];
             /** Finalized At */
             finalized_at: string | null;
+            /** Flags */
+            flags: components["schemas"]["CaseFlagCount"][];
             /** Greenlink Case Id */
             greenlink_case_id: string;
             /** Id */
             id: string;
+            /** Processing Ms */
+            processing_ms: number | null;
+            /** Recommended Documents */
+            recommended_documents: string[] | null;
             risk: components["schemas"]["CaseRisk"] | null;
             /**
              * Status
@@ -4928,7 +4953,10 @@ export interface operations {
     };
     get_detection_metrics_detection_metrics_get: {
         parameters: {
-            query?: never;
+            query?: {
+                since?: string | null;
+                status?: components["schemas"]["CaseDocumentsStatus"][];
+            };
             header?: {
                 authorization?: string | null;
             };
