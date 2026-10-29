@@ -77,6 +77,9 @@ def test_case_metrics_split_per_document_and_across_documents() -> None:
     assert result.documents[OTHER_DOCUMENT_ID].precision == 0.0
     assert result.cross_document.correct == 1 and result.cross_document.by_check[0].scope == "case"
     assert (result.case.correct, result.case.wrong) == (2, 1)
+    assert (result.target_precision, result.target_recall) == (
+        detection_metrics.TARGET_PRECISION, detection_metrics.TARGET_RECALL
+    )
 
 
 def test_the_checks_are_the_specialists_tools_and_the_finding_categories() -> None:

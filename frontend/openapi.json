@@ -1574,6 +1574,14 @@
             },
             "title": "Reviews",
             "type": "array"
+          },
+          "target_precision": {
+            "title": "Target Precision",
+            "type": "number"
+          },
+          "target_recall": {
+            "title": "Target Recall",
+            "type": "number"
           }
         },
         "required": [
@@ -1581,7 +1589,9 @@
           "case",
           "documents",
           "cross_document",
-          "checks"
+          "checks",
+          "target_precision",
+          "target_recall"
         ],
         "title": "CaseFindingReviews",
         "type": "object"

@@ -88,8 +88,8 @@ export function DetectionAccuracyPanel() {
                   <td data-label="Correct">{check.correct}</td>
                   <td data-label="Wrong">{check.wrong}</td>
                   <td data-label="Missed">{check.missed}</td>
-                  <td data-label="Precision"><strong><Rate rate={check.precision} kind="precision" /></strong></td>
-                  <td data-label="Recall"><strong><Rate rate={check.recall} kind="recall" /></strong></td>
+                  <td data-label="Precision"><strong><Rate rate={check.precision} kind="precision" target={metrics.target_precision} /></strong></td>
+                  <td data-label="Recall"><strong><Rate rate={check.recall} kind="recall" target={metrics.target_recall} /></strong></td>
                   <td data-label="Flag">
                     {check.flags.length === 0
                       ? <span className="no-flag">On target</span>

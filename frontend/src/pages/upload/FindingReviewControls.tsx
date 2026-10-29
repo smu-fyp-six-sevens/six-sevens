@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { FindingReview, MetricsSummary, ReviewScope } from '../../services/uploadService';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { Rate } from '../../components/Rate';
-import { RATE_MEANING, formatCheck } from '../../utils/checkLabels';
+import { RATE_MEANING, belowTargetNote, formatCheck } from '../../utils/checkLabels';
 import { InfoLabel } from '../../components/InfoTip';
 
 export type GroupReviewStatus = 'not_reviewed' | 'saved' | 'unsaved';
@@ -240,7 +240,9 @@ export function MissedIssues({
 }
 
 // The case's precision and recall: overall, per document vs across documents, and per check.
-export function ReviewSummary({ caseSummary }: { caseSummary: MetricsSummary }) {
+export function ReviewSummary({
+  caseSummary, targetPrecision, targetRecall,
+}: { caseSummary: MetricsSummary; targetPrecision: number; targetRecall: number }) {
   const reviewed = caseSummary.correct + caseSummary.wrong + caseSummary.missed;
   return (
     <section className="review-summary" aria-label="Detection accuracy for this case">
@@ -270,11 +272,11 @@ export function ReviewSummary({ caseSummary }: { caseSummary: MetricsSummary }) 
         <>
           <div className="review-summary-figures">
             <div>
-              <Rate rate={caseSummary.precision} kind="precision" className="review-summary-value" />
+              <Rate rate={caseSummary.precision} kind="precision" className="review-summary-value" target={targetPrecision} />
               <span className="review-summary-caption"><InfoLabel label="Precision" tip={RATE_MEANING.precision} /></span>
             </div>
             <div>
-              <Rate rate={caseSummary.recall} kind="recall" className="review-summary-value" />
+              <Rate rate={caseSummary.recall} kind="recall" className="review-summary-value" target={targetRecall} />
               <span className="review-summary-caption"><InfoLabel label="Recall" tip={RATE_MEANING.recall} /></span>
             </div>
           </div>
@@ -299,12 +301,13 @@ export function ReviewSummary({ caseSummary }: { caseSummary: MetricsSummary }) 
                   <td>{check.correct}</td>
                   <td>{check.wrong}</td>
                   <td>{check.missed}</td>
-                  <td><Rate rate={check.precision} kind="precision" /></td>
-                  <td><Rate rate={check.recall} kind="recall" /></td>
+                  <td><Rate rate={check.precision} kind="precision" target={targetPrecision} /></td>
+                  <td><Rate rate={check.recall} kind="recall" target={targetRecall} /></td>
                 </tr>
               ))}
             </tbody>
           </table>
+          <p className="review-summary-note">{belowTargetNote(targetPrecision, targetRecall)}</p>
         </>
       )}
     </section>

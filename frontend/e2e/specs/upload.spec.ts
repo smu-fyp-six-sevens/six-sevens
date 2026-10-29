@@ -1,12 +1,13 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../support/test';
 import { makeCase, type MockBackend } from '../support/mockBackend';
-import { browseFiles, dropFiles, jpg, oversizedPdf, pdf, png, text } from '../support/files';
+import { browseFiles, browseOversizedPdf, dropFiles, jpg, pdf, png, text } from '../support/files';
 
 /**
  * Upload Documents (SCRUM-6, Sprint 1) — test cases DI-001 to DI-016 from
  * "Test Cases - Sprint 1.xlsx", plus the unsupported-format case from
- * Generate Additional File Formats (SCRUM-115, Sprint 2), DT-031.
+ * Generate Additional File Formats (SCRUM-115, Sprint 2), DT-031, which also
+ * covers Sprint 1's DI-008 (a .txt file rejected).
  */
 
 async function openCase(page: Page, backend: MockBackend) {
@@ -37,84 +38,43 @@ test.describe('Upload documents @sprint1 @SCRUM-6', () => {
     await expect(uploadButton(page)).toHaveText('Upload 1 file');
   });
 
-  test('DI-002 a single valid file can be added using drag-and-drop @DI-002', async ({ page, backend }) => {
+  test('DI-002 – DI-006 files added by drag-and-drop and Browse, singly or together, never overwrite each other @DI-002 @DI-003 @DI-004 @DI-005 @DI-006', async ({ page, backend }) => {
     await openCase(page, backend);
 
     await dropFiles(page, [pdf('payslip.pdf')]);
-
-    await expect(fileRow(page, 'payslip.pdf')).toBeVisible();
     await expect(page.locator('.file-row')).toHaveCount(1);
-  });
-
-  test('DI-003 files added one at a time do not overwrite each other @DI-003', async ({ page, backend }) => {
-    await openCase(page, backend);
-
-    await dropFiles(page, [pdf('payslip.pdf')]);
     await dropFiles(page, [pdf('passport.pdf')]);
-
-    await expect(fileRow(page, 'payslip.pdf')).toBeVisible();
-    await expect(fileRow(page, 'passport.pdf')).toBeVisible();
     await expect(page.locator('.file-row')).toHaveCount(2);
+    await dropFiles(page, [pdf('nric-front.pdf'), pdf('nric-back.pdf')]);
+    await expect(page.locator('.file-row')).toHaveCount(4);
+    await browseFiles(page, [pdf('noa.pdf')]);
+
+    await expect(page.locator('.file-row')).toHaveCount(5);
+    for (const name of ['payslip.pdf', 'passport.pdf', 'nric-front.pdf', 'nric-back.pdf', 'noa.pdf']) {
+      await expect(fileRow(page, name)).toBeVisible();
+    }
   });
 
-  test('DI-004 multiple files can be added simultaneously @DI-004', async ({ page, backend }) => {
-    await openCase(page, backend);
-
-    await dropFiles(page, [pdf('payslip.pdf'), pdf('passport.pdf')]);
-
-    await expect(page.locator('.file-row')).toHaveCount(2);
-    await expect(fileRow(page, 'payslip.pdf')).toBeVisible();
-    await expect(fileRow(page, 'passport.pdf')).toBeVisible();
-  });
-
-  test('DI-005 a file can be added using Browse @DI-005', async ({ page, backend }) => {
+  test('DI-007 / DI-011 / DI-015 a PDF uploads without a format error, shows its completed status and the completion message @DI-007 @DI-011 @DI-015', async ({ page, backend }) => {
     await openCase(page, backend);
 
     await browseFiles(page, [pdf('payslip.pdf')]);
-
-    await expect(fileRow(page, 'payslip.pdf')).toBeVisible();
-  });
-
-  test('DI-006 Browse does not overwrite files added by drag-and-drop @DI-006', async ({ page, backend }) => {
-    await openCase(page, backend);
-
-    await dropFiles(page, [pdf('payslip.pdf')]);
-    await browseFiles(page, [pdf('passport.pdf')]);
-
-    await expect(page.locator('.file-row')).toHaveCount(2);
-    await expect(fileRow(page, 'payslip.pdf')).toBeVisible();
-    await expect(fileRow(page, 'passport.pdf')).toBeVisible();
-  });
-
-  test('DI-007 a PDF is accepted without a format validation error @DI-007', async ({ page, backend }) => {
-    await openCase(page, backend);
-
-    await browseFiles(page, [pdf('payslip.pdf')]);
-    await expect(fileRow(page, 'payslip.pdf').locator('.badge')).toHaveText('Ready');
-
-    await uploadButton(page).click();
-
     const row = fileRow(page, 'payslip.pdf');
-    await expect(row.locator('.badge')).toHaveText('Uploaded');
-    await expect(row).not.toContainText('does not match a supported type');
-  });
-
-  test('DI-008 an unsupported file format is rejected with an error @DI-008', async ({ page, backend }) => {
-    await openCase(page, backend);
-
-    await browseFiles(page, [text('test.txt')]);
+    await expect(row.locator('.badge')).toHaveText('Ready');
     await uploadButton(page).click();
 
-    const row = fileRow(page, 'test.txt');
-    await expect(row.locator('.badge')).toHaveText('Rejected');
-    await expect(row).toContainText('File content does not match a supported type.');
-    expect(backend.requestsTo('POST', '/documents/upload-batch')).toHaveLength(0);
+    await expect(row.locator('.badge')).toHaveText('Uploaded');
+    await expect(row).toContainText(/Document ID: doc-/);
+    await expect(row).not.toContainText('does not match a supported type');
+    await expect(page.locator('.toast.all-ok')).toContainText(
+      '1 of 1 documents uploaded. All documents uploaded successfully.',
+    );
   });
 
   test('DI-009 a file over 25MB is rejected with a file-size error @DI-009', async ({ page, backend }) => {
     await openCase(page, backend);
 
-    await browseFiles(page, [oversizedPdf('large-statement.pdf')]);
+    await browseOversizedPdf(page, 'large-statement.pdf');
     await uploadButton(page).click();
 
     const row = fileRow(page, 'large-statement.pdf');
@@ -138,17 +98,6 @@ test.describe('Upload documents @sprint1 @SCRUM-6', () => {
 
     release();
     await expect(row.locator('.badge')).toHaveText('Uploaded');
-  });
-
-  test('DI-011 a successful upload shows a completed status @DI-011', async ({ page, backend }) => {
-    await openCase(page, backend);
-
-    await browseFiles(page, [pdf('payslip.pdf')]);
-    await uploadButton(page).click();
-
-    const row = fileRow(page, 'payslip.pdf');
-    await expect(row.locator('.badge')).toHaveText('Uploaded');
-    await expect(row).toContainText(/Document ID: doc-/);
   });
 
   test('DI-012 a failed upload shows a FAILED status and an error @DI-012', async ({ page, backend }) => {
@@ -188,17 +137,6 @@ test.describe('Upload documents @sprint1 @SCRUM-6', () => {
 
     await expect(fileRow(page, 'payslip.pdf').locator('.badge')).toHaveText('Uploaded');
     expect(backend.requestsTo('POST', '/documents/upload-batch')).toHaveLength(2);
-  });
-
-  test('DI-015 upload completion feedback is displayed @DI-015', async ({ page, backend }) => {
-    await openCase(page, backend);
-
-    await browseFiles(page, [pdf('payslip.pdf')]);
-    await uploadButton(page).click();
-
-    await expect(page.locator('.toast.all-ok')).toContainText(
-      '1 of 1 documents uploaded. All documents uploaded successfully.',
-    );
   });
 
   test('DI-016 complete document upload workflow @DI-016', async ({ page, backend }) => {
@@ -320,7 +258,7 @@ test.describe('Upload documents @sprint1 @SCRUM-6', () => {
 });
 
 test.describe('Generate additional file formats @sprint2 @SCRUM-115', () => {
-  test('DT-031 DOCX, XLSX and TXT files are rejected with a clear error @DT-031', async ({ page, backend }) => {
+  test('DT-031 / DI-008 DOCX, XLSX and TXT files are rejected with a clear error, and nothing is uploaded @DT-031 @DI-008 @sprint1 @SCRUM-6', async ({ page, backend }) => {
     await openCase(page, backend);
 
     await browseFiles(page, [

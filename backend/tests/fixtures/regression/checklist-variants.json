@@ -1,0 +1,366 @@
+[
+  {
+    "name": "every document",
+    "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
+    "document_ids": [
+      "07c41b35-10d7-427c-b407-44a715e54042",
+      "081e3c8b-d9d6-471d-b10e-9791fd9569c0",
+      "0f069abe-67c0-4d35-8fa5-0e1cc7450167",
+      "2123ddb7-3525-4625-a404-e9132af410fa",
+      "2ac7fbe4-0021-4638-8c0d-1a0c759fd834",
+      "2d5d65c0-1f1b-4851-afe1-2b736053b707",
+      "4f9675e5-5258-4373-b78c-512f0f3a76c5",
+      "52721a52-5b84-422b-bbc2-32cbd0a6424c",
+      "6729ad3c-90f0-476f-be94-a40f1fb9f1d7",
+      "6fb522a7-b119-4934-8983-6cd66b47fa36",
+      "8a231074-5864-43be-9409-875a1f16282a",
+      "961669a1-0407-44fe-a36a-36d292c3afe8",
+      "a040eca4-fde0-4e17-8c41-6a1bc521f514",
+      "a2f4c277-f066-49ec-99e2-02deb53c300b",
+      "bb1ac8db-facc-4ceb-82d7-2d73382d0316",
+      "bc57290c-73a6-48a1-95ea-0b5b399f6590",
+      "bfcaf497-79b3-4e48-ac24-61482cbbb1b7",
+      "c130a771-b834-409d-8023-64104d3edead",
+      "d24bcc04-badc-4b0d-9e53-bb8c60efba99",
+      "f12ae1d0-246f-46d8-92ab-a0b993306f8c"
+    ],
+    "fulfilled_requirements": [
+      "bank_statement",
+      "certificate_of_incorporation",
+      "certificate_of_incumbency",
+      "company_constitution",
+      "company_proof_of_address",
+      "credit_report",
+      "fatca_crs_declaration",
+      "id_document",
+      "list_of_loans",
+      "notice_of_assessment",
+      "payslip",
+      "proof_of_address",
+      "source_of_personal_wealth",
+      "source_of_wealth"
+    ],
+    "missing_requirements": [],
+    "proof_of_address_coverage": {
+      "covered": 2,
+      "total": 2,
+      "unmatched_names": []
+    },
+    "id_document_coverage": {
+      "covered": 2,
+      "total": 2,
+      "missing_side": null
+    }
+  },
+  {
+    "name": "without the NOA (CM-026)",
+    "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
+    "document_ids": [
+      "07c41b35-10d7-427c-b407-44a715e54042",
+      "081e3c8b-d9d6-471d-b10e-9791fd9569c0",
+      "0f069abe-67c0-4d35-8fa5-0e1cc7450167",
+      "2123ddb7-3525-4625-a404-e9132af410fa",
+      "2ac7fbe4-0021-4638-8c0d-1a0c759fd834",
+      "2d5d65c0-1f1b-4851-afe1-2b736053b707",
+      "4f9675e5-5258-4373-b78c-512f0f3a76c5",
+      "52721a52-5b84-422b-bbc2-32cbd0a6424c",
+      "6729ad3c-90f0-476f-be94-a40f1fb9f1d7",
+      "6fb522a7-b119-4934-8983-6cd66b47fa36",
+      "961669a1-0407-44fe-a36a-36d292c3afe8",
+      "a040eca4-fde0-4e17-8c41-6a1bc521f514",
+      "a2f4c277-f066-49ec-99e2-02deb53c300b",
+      "bb1ac8db-facc-4ceb-82d7-2d73382d0316",
+      "bc57290c-73a6-48a1-95ea-0b5b399f6590",
+      "bfcaf497-79b3-4e48-ac24-61482cbbb1b7",
+      "c130a771-b834-409d-8023-64104d3edead",
+      "d24bcc04-badc-4b0d-9e53-bb8c60efba99",
+      "f12ae1d0-246f-46d8-92ab-a0b993306f8c"
+    ],
+    "fulfilled_requirements": [
+      "bank_statement",
+      "certificate_of_incorporation",
+      "certificate_of_incumbency",
+      "company_constitution",
+      "company_proof_of_address",
+      "credit_report",
+      "fatca_crs_declaration",
+      "id_document",
+      "list_of_loans",
+      "payslip",
+      "proof_of_address",
+      "source_of_personal_wealth",
+      "source_of_wealth"
+    ],
+    "missing_requirements": [
+      "notice_of_assessment"
+    ],
+    "proof_of_address_coverage": {
+      "covered": 2,
+      "total": 2,
+      "unmatched_names": []
+    },
+    "id_document_coverage": {
+      "covered": 2,
+      "total": 2,
+      "missing_side": null
+    }
+  },
+  {
+    "name": "without the company proof of address (DI-034)",
+    "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
+    "document_ids": [
+      "07c41b35-10d7-427c-b407-44a715e54042",
+      "081e3c8b-d9d6-471d-b10e-9791fd9569c0",
+      "0f069abe-67c0-4d35-8fa5-0e1cc7450167",
+      "2123ddb7-3525-4625-a404-e9132af410fa",
+      "2ac7fbe4-0021-4638-8c0d-1a0c759fd834",
+      "2d5d65c0-1f1b-4851-afe1-2b736053b707",
+      "4f9675e5-5258-4373-b78c-512f0f3a76c5",
+      "52721a52-5b84-422b-bbc2-32cbd0a6424c",
+      "6729ad3c-90f0-476f-be94-a40f1fb9f1d7",
+      "6fb522a7-b119-4934-8983-6cd66b47fa36",
+      "8a231074-5864-43be-9409-875a1f16282a",
+      "961669a1-0407-44fe-a36a-36d292c3afe8",
+      "a040eca4-fde0-4e17-8c41-6a1bc521f514",
+      "a2f4c277-f066-49ec-99e2-02deb53c300b",
+      "bb1ac8db-facc-4ceb-82d7-2d73382d0316",
+      "bc57290c-73a6-48a1-95ea-0b5b399f6590",
+      "bfcaf497-79b3-4e48-ac24-61482cbbb1b7",
+      "c130a771-b834-409d-8023-64104d3edead",
+      "f12ae1d0-246f-46d8-92ab-a0b993306f8c"
+    ],
+    "fulfilled_requirements": [
+      "bank_statement",
+      "certificate_of_incorporation",
+      "certificate_of_incumbency",
+      "company_constitution",
+      "credit_report",
+      "fatca_crs_declaration",
+      "id_document",
+      "list_of_loans",
+      "notice_of_assessment",
+      "payslip",
+      "proof_of_address",
+      "source_of_personal_wealth",
+      "source_of_wealth"
+    ],
+    "missing_requirements": [],
+    "proof_of_address_coverage": {
+      "covered": 2,
+      "total": 2,
+      "unmatched_names": []
+    },
+    "id_document_coverage": {
+      "covered": 2,
+      "total": 2,
+      "missing_side": null
+    }
+  },
+  {
+    "name": "without any optional document (DI-032)",
+    "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
+    "document_ids": [
+      "07c41b35-10d7-427c-b407-44a715e54042",
+      "081e3c8b-d9d6-471d-b10e-9791fd9569c0",
+      "2123ddb7-3525-4625-a404-e9132af410fa",
+      "2ac7fbe4-0021-4638-8c0d-1a0c759fd834",
+      "2d5d65c0-1f1b-4851-afe1-2b736053b707",
+      "6729ad3c-90f0-476f-be94-a40f1fb9f1d7",
+      "6fb522a7-b119-4934-8983-6cd66b47fa36",
+      "8a231074-5864-43be-9409-875a1f16282a",
+      "961669a1-0407-44fe-a36a-36d292c3afe8",
+      "a2f4c277-f066-49ec-99e2-02deb53c300b",
+      "bc57290c-73a6-48a1-95ea-0b5b399f6590",
+      "bfcaf497-79b3-4e48-ac24-61482cbbb1b7",
+      "c130a771-b834-409d-8023-64104d3edead",
+      "f12ae1d0-246f-46d8-92ab-a0b993306f8c"
+    ],
+    "fulfilled_requirements": [
+      "bank_statement",
+      "certificate_of_incorporation",
+      "certificate_of_incumbency",
+      "company_constitution",
+      "credit_report",
+      "fatca_crs_declaration",
+      "id_document",
+      "notice_of_assessment",
+      "payslip",
+      "proof_of_address",
+      "source_of_wealth"
+    ],
+    "missing_requirements": [],
+    "proof_of_address_coverage": {
+      "covered": 2,
+      "total": 2,
+      "unmatched_names": []
+    },
+    "id_document_coverage": {
+      "covered": 2,
+      "total": 2,
+      "missing_side": null
+    }
+  },
+  {
+    "name": "with only the NRIC front (DI-others-05)",
+    "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
+    "document_ids": [
+      "07c41b35-10d7-427c-b407-44a715e54042",
+      "0f069abe-67c0-4d35-8fa5-0e1cc7450167",
+      "2123ddb7-3525-4625-a404-e9132af410fa",
+      "2ac7fbe4-0021-4638-8c0d-1a0c759fd834",
+      "2d5d65c0-1f1b-4851-afe1-2b736053b707",
+      "4f9675e5-5258-4373-b78c-512f0f3a76c5",
+      "52721a52-5b84-422b-bbc2-32cbd0a6424c",
+      "6729ad3c-90f0-476f-be94-a40f1fb9f1d7",
+      "6fb522a7-b119-4934-8983-6cd66b47fa36",
+      "8a231074-5864-43be-9409-875a1f16282a",
+      "961669a1-0407-44fe-a36a-36d292c3afe8",
+      "a040eca4-fde0-4e17-8c41-6a1bc521f514",
+      "bb1ac8db-facc-4ceb-82d7-2d73382d0316",
+      "bc57290c-73a6-48a1-95ea-0b5b399f6590",
+      "bfcaf497-79b3-4e48-ac24-61482cbbb1b7",
+      "c130a771-b834-409d-8023-64104d3edead",
+      "d24bcc04-badc-4b0d-9e53-bb8c60efba99",
+      "f12ae1d0-246f-46d8-92ab-a0b993306f8c"
+    ],
+    "fulfilled_requirements": [
+      "bank_statement",
+      "certificate_of_incorporation",
+      "certificate_of_incumbency",
+      "company_constitution",
+      "company_proof_of_address",
+      "credit_report",
+      "fatca_crs_declaration",
+      "list_of_loans",
+      "notice_of_assessment",
+      "payslip",
+      "proof_of_address",
+      "source_of_personal_wealth",
+      "source_of_wealth"
+    ],
+    "missing_requirements": [
+      "id_document"
+    ],
+    "proof_of_address_coverage": {
+      "covered": 1,
+      "total": 1,
+      "unmatched_names": [
+        "Sim Shu Ting"
+      ]
+    },
+    "id_document_coverage": {
+      "covered": 0,
+      "total": 1,
+      "missing_side": "back"
+    }
+  },
+  {
+    "name": "with only the NRIC back (DI-others-05)",
+    "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
+    "document_ids": [
+      "07c41b35-10d7-427c-b407-44a715e54042",
+      "0f069abe-67c0-4d35-8fa5-0e1cc7450167",
+      "2123ddb7-3525-4625-a404-e9132af410fa",
+      "2d5d65c0-1f1b-4851-afe1-2b736053b707",
+      "4f9675e5-5258-4373-b78c-512f0f3a76c5",
+      "52721a52-5b84-422b-bbc2-32cbd0a6424c",
+      "6729ad3c-90f0-476f-be94-a40f1fb9f1d7",
+      "6fb522a7-b119-4934-8983-6cd66b47fa36",
+      "8a231074-5864-43be-9409-875a1f16282a",
+      "961669a1-0407-44fe-a36a-36d292c3afe8",
+      "a040eca4-fde0-4e17-8c41-6a1bc521f514",
+      "a2f4c277-f066-49ec-99e2-02deb53c300b",
+      "bb1ac8db-facc-4ceb-82d7-2d73382d0316",
+      "bc57290c-73a6-48a1-95ea-0b5b399f6590",
+      "bfcaf497-79b3-4e48-ac24-61482cbbb1b7",
+      "c130a771-b834-409d-8023-64104d3edead",
+      "d24bcc04-badc-4b0d-9e53-bb8c60efba99",
+      "f12ae1d0-246f-46d8-92ab-a0b993306f8c"
+    ],
+    "fulfilled_requirements": [
+      "bank_statement",
+      "certificate_of_incorporation",
+      "certificate_of_incumbency",
+      "company_constitution",
+      "company_proof_of_address",
+      "credit_report",
+      "fatca_crs_declaration",
+      "list_of_loans",
+      "notice_of_assessment",
+      "payslip",
+      "proof_of_address",
+      "source_of_personal_wealth",
+      "source_of_wealth"
+    ],
+    "missing_requirements": [
+      "id_document"
+    ],
+    "proof_of_address_coverage": {
+      "covered": 1,
+      "total": 1,
+      "unmatched_names": [
+        "MUHAMMAD DANISH BIN ISMAIL",
+        "Sim Shu Ting"
+      ]
+    },
+    "id_document_coverage": {
+      "covered": 0,
+      "total": 1,
+      "missing_side": "front"
+    }
+  },
+  {
+    "name": "without the passport (DI-others-06)",
+    "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
+    "document_ids": [
+      "07c41b35-10d7-427c-b407-44a715e54042",
+      "0f069abe-67c0-4d35-8fa5-0e1cc7450167",
+      "2123ddb7-3525-4625-a404-e9132af410fa",
+      "2ac7fbe4-0021-4638-8c0d-1a0c759fd834",
+      "2d5d65c0-1f1b-4851-afe1-2b736053b707",
+      "4f9675e5-5258-4373-b78c-512f0f3a76c5",
+      "52721a52-5b84-422b-bbc2-32cbd0a6424c",
+      "6729ad3c-90f0-476f-be94-a40f1fb9f1d7",
+      "6fb522a7-b119-4934-8983-6cd66b47fa36",
+      "8a231074-5864-43be-9409-875a1f16282a",
+      "961669a1-0407-44fe-a36a-36d292c3afe8",
+      "a040eca4-fde0-4e17-8c41-6a1bc521f514",
+      "a2f4c277-f066-49ec-99e2-02deb53c300b",
+      "bb1ac8db-facc-4ceb-82d7-2d73382d0316",
+      "bc57290c-73a6-48a1-95ea-0b5b399f6590",
+      "bfcaf497-79b3-4e48-ac24-61482cbbb1b7",
+      "c130a771-b834-409d-8023-64104d3edead",
+      "d24bcc04-badc-4b0d-9e53-bb8c60efba99",
+      "f12ae1d0-246f-46d8-92ab-a0b993306f8c"
+    ],
+    "fulfilled_requirements": [
+      "bank_statement",
+      "certificate_of_incorporation",
+      "certificate_of_incumbency",
+      "company_constitution",
+      "company_proof_of_address",
+      "credit_report",
+      "fatca_crs_declaration",
+      "id_document",
+      "list_of_loans",
+      "notice_of_assessment",
+      "payslip",
+      "proof_of_address",
+      "source_of_personal_wealth",
+      "source_of_wealth"
+    ],
+    "missing_requirements": [],
+    "proof_of_address_coverage": {
+      "covered": 1,
+      "total": 1,
+      "unmatched_names": [
+        "Sim Shu Ting"
+      ]
+    },
+    "id_document_coverage": {
+      "covered": 1,
+      "total": 1,
+      "missing_side": null
+    }
+  }
+]
