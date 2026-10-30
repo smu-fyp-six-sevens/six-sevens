@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
+import HeaderFilter, { type FilterOption } from '../components/HeaderFilter';
 import { RefreshButton } from '../components/RefreshButton';
 import { DashboardSkeleton } from '../components/Skeletons';
 import { useFindingReviewsOn } from '../lib/appSettings';
-import { InfoLabel } from '../components/InfoTip';
+import { InfoIcon, InfoLabel } from '../components/InfoTip';
 import { DetectionAccuracyPanel, DetectionAccuracySummary } from './DetectionAccuracyPanel';
 import { caseStatusTone } from '../utils/caseStatusTone';
 import { formatDuration } from './upload/processingTimes';
@@ -104,7 +105,7 @@ function CaseTable({ cases, heading, onOpenCase, showRiskAnalysis = false, showP
   const pageCases = cases.slice(first, first + CASES_PER_PAGE);
   return (
     <section className="dashboard-panel cases-panel">
-      <div className="panel-heading"><div><h2>{heading}</h2><p>Case records matching the selected filters{showProcessingTime && isPreview ? ' · sample timings' : ''}</p></div><Link className="text-button" to="/cases">Open case queue <span>→</span></Link></div>
+      <div className="panel-heading"><div><h2>{heading}</h2>{showProcessingTime && isPreview && <p>Sample timings</p>}</div><Link className="text-button" to="/cases">Open case queue <span>→</span></Link></div>
       <div className="case-table-wrap">
         <table className={`dashboard-case-table${showProcessingTime ? ' case-register-table' : showRiskAnalysis ? ' case-overview-table' : ''}`}>
           <thead><tr>
@@ -207,12 +208,20 @@ export default function DashboardPage({
 }) {
   const navigate = useNavigate();
   const [role, setRole] = useState<Role>('Analyst');
-  const [tab, setTab] = useState<DashboardTab>('Overview');
+  // The tab lives in the URL, so a reload stays on it.
+  const [searchParams, setSearchParams] = useSearchParams();
   // The Accuracy tab and summary come from officers' finding reviews, which an admin can turn off (Settings).
   const reviewsOn = useFindingReviewsOn();
   const tabs = reviewsOn ? DASHBOARD_TABS : DASHBOARD_TABS.filter((item) => item !== 'Accuracy');
+  const tab = tabs.find((item) => item.toLowerCase() === searchParams.get('tab')) ?? 'Overview';
+  const setTab = (next: DashboardTab) => setSearchParams((params) => {
+    if (next === 'Overview') params.delete('tab');
+    else params.set('tab', next.toLowerCase());
+    return params;
+  });
   const [range, setRange] = useState('Last 30 days');
-  const [statusFilter, setStatusFilter] = useState('All statuses');
+  // Empty: every status, as on the case queue.
+  const [statusFilter, setStatusFilter] = useState<Set<Status>>(new Set());
   const [riskOrder, setRiskOrder] = useState<'highest' | 'lowest'>('highest');
   const [showAllDocTypes, setShowAllDocTypes] = useState(false);
   // Null: no column chosen, so the default order (most cases first).
@@ -248,24 +257,32 @@ export default function DashboardPage({
     })),
   [caseRecords]);
 
-  const visibleCases = useMemo(() => {
+  // Every case, whoever created it: the date and status filters are the only narrowing.
+  const casesInRange = useMemo(() => {
     const since = dateLimit(range);
-    // Every case, whoever created it: the date and status filters are the only narrowing.
-    return dashboardCases.filter((item) =>
-      (statusFilter === 'All statuses' || item.status === statusFilter) &&
-      (!since || item.submitted >= since),
-    );
-  }, [dashboardCases, range, statusFilter]);
+    return dashboardCases.filter((item) => !since || item.submitted >= since);
+  }, [dashboardCases, range]);
+  const visibleCases = useMemo(
+    () => casesInRange.filter((item) => !statusFilter.size || statusFilter.has(item.status)),
+    [casesInRange, statusFilter],
+  );
 
   // The same date and status choice for the accuracy figures, which the backend filters (cases are the reviews' own).
-  const accuracyFilters = useMemo<DetectionMetricsFilters>(() => {
-    const status = statusFilter === 'All statuses' ? undefined : statusValue(statusFilter);
-    return { since: dateLimit(range), statuses: status ? [status] : [] };
-  }, [range, statusFilter]);
+  const accuracyFilters = useMemo<DetectionMetricsFilters>(() => ({
+    since: dateLimit(range),
+    statuses: [...statusFilter].flatMap((status) => statusValue(status) ?? []),
+  }), [range, statusFilter]);
 
   const statusCounts = useMemo(() => Object.fromEntries(
     STATUSES.map((status) => [status, visibleCases.filter((item) => item.status === status).length]),
   ) as Record<Status, number>, [visibleCases]);
+  // The filter's counts ignore the status filter itself, like the case queue's.
+  const statusOptions: FilterOption[] = STATUSES.map((status) => ({
+    value: status,
+    text: status,
+    count: casesInRange.filter((item) => item.status === status).length,
+    label: <><span className={`case-status-dot case-status-dot--${caseStatusTone(status)}`} aria-hidden="true" />{status}</>,
+  }));
 
   const commonFlags = useMemo(() => {
     const counts = new Map<string, number>();
@@ -363,9 +380,9 @@ export default function DashboardPage({
             </nav>
             <div className="dashboard-toolbar-actions">
               <div className="dashboard-filters">
-                <label><span>Date range</span><select value={range} onChange={(event) => setRange(event.target.value)}><option>Last 7 days</option><option>Last 30 days</option><option>Last 90 days</option><option>All time</option></select></label>
-                <label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option>All statuses</option>{STATUSES.map((status) => <option key={status}>{status}</option>)}</select></label>
-                {tab === 'Cases' && <label className="risk-sort-filter"><span>Sort by risk</span><select value={riskOrder} onChange={(event) => setRiskOrder(event.target.value as 'highest' | 'lowest')}><option value="highest">Critical first</option><option value="lowest">Low first</option></select></label>}
+                <select aria-label="Date range" value={range} onChange={(event) => setRange(event.target.value)}><option>Last 7 days</option><option>Last 30 days</option><option>Last 90 days</option><option>All time</option></select>
+                <HeaderFilter name="status" title="Status" options={statusOptions} selected={statusFilter} disabled={isLoading} onChange={(next) => setStatusFilter(next as Set<Status>)} />
+                {tab === 'Cases' && <label className="risk-sort-filter"><span className="sr-only">Sort by risk</span><select value={riskOrder} onChange={(event) => setRiskOrder(event.target.value as 'highest' | 'lowest')}><option value="highest">Critical first</option><option value="lowest">Low first</option></select></label>}
                 {/* The dashboard reads the cases on opening; this reads them again (no socket covers the whole list). */}
                 <span className="dashboard-refresh"><RefreshButton isRefreshing={isRefreshing} onClick={onRefresh} label="cases" /></span>
               </div>
@@ -383,7 +400,7 @@ export default function DashboardPage({
           {isLoading && tab !== 'Accuracy' ? <DashboardSkeleton /> : <>
           {tab !== 'Flags' && tab !== 'Accuracy' && <section className="dashboard-stat-grid" aria-label="Case counts by status">
             <article className="dashboard-stat-card stat-total"><div className="stat-top"><span className="stat-icon">▤</span><span className="stat-period">{range}</span></div><span className="stat-number">{visibleCases.length}</span><span className="stat-caption">Cases in view</span></article>
-            {STATUSES.map((status) => <article key={status} className="dashboard-stat-card"><div className="stat-top"><span className="stat-caption">{status}</span><span className={`status-dot ${caseStatusTone(status)}`} /></div><span className="stat-number">{statusCounts[status]}</span><span className="stat-caption">{visibleCases.length ? `${Math.round(statusCounts[status] / visibleCases.length * 100)}% of cases` : '0% of cases'}</span></article>)}
+            {STATUSES.map((status) => <article key={status} className="dashboard-stat-card"><div className="stat-top"><span className="stat-caption">{status}</span><span className={`case-status-dot case-status-dot--${caseStatusTone(status)}`} /></div><span className="stat-number">{statusCounts[status]}</span><span className="stat-caption">{visibleCases.length ? `${Math.round(statusCounts[status] / visibleCases.length * 100)}% of cases` : '0% of cases'}</span></article>)}
           </section>}
           {isLoading && !caseRecords.length && <p className="dashboard-data-note" role="status">Loading live case links; preview rows are temporarily not clickable.</p>}
           {!isLoading && !caseRecords.length && <p className="dashboard-data-note">No live cases are loaded. Preview rows are illustrative and cannot open a case record.</p>}
@@ -404,7 +421,7 @@ export default function DashboardPage({
             <article className="dashboard-panel risk-snapshot-panel">
               <div className="panel-heading"><div><h2>Risk overview</h2><p>Current cases grouped by assessed risk level</p></div></div>
               <div className="risk-snapshot">{(['Critical', 'High', 'Medium', 'Low'] as Risk[]).map((risk) => { const count = visibleCases.filter((item) => item.risk === risk).length; return <div key={risk} className={`risk-snapshot-row risk-${risk.toLowerCase()}`}><span className="risk-marker" /><span>{risk} risk</span><div className="risk-snapshot-track"><i style={{ width: `${visibleCases.length ? count / visibleCases.length * 100 : 0}%` }} /></div><strong>{count}</strong></div>; })}</div>
-              <div className="snapshot-note"><span>i</span> Consider document findings, case status and review context alongside the risk score.</div>
+              <p className="snapshot-note"><InfoIcon /> Consider document findings, case status and review context alongside the risk score.</p>
             </article>
           </section>
           {reviewsOn && <DetectionAccuracySummary filters={accuracyFilters} onViewAll={() => setTab('Accuracy')} />}

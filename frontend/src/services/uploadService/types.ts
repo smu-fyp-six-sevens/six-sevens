@@ -1,7 +1,7 @@
 // API types. Those with a backend model are generated: backend/scripts/export_openapi.py writes openapi.json,
 // `npm run gen:api` turns it into ../api.gen.ts, and CI fails when either is out of date. Never edit those by
 // hand. The types written out below come from endpoints that return plain dicts, or exist only here.
-import type { components } from '../api.gen';
+import type { components, operations } from '../api.gen';
 
 type Schemas = components['schemas'];
 
@@ -60,9 +60,11 @@ export type CaseListPage = Schemas['CaseListPage'];
 export type CaseCounts = Schemas['CaseCounts'];
 export type CaseSearchResult = Schemas['CaseSearchResult'];
 export type CaseListItem = Schemas['CaseListItem'];
-export type CaseSort = 'newest' | 'oldest' | 'risk' | 'lowest_risk';
+// GET /cases's query parameters (the backend's Literals).
+type ListCasesQuery = NonNullable<operations['list_cases_cases_get']['parameters']['query']>;
+export type CaseSort = NonNullable<ListCasesQuery['sort']>;
 // "unscored" is a case no analysis run has scored yet.
-export type CaseRiskFilter = 'Critical' | 'High' | 'Medium' | 'Low' | 'unscored';
+export type CaseRiskFilter = NonNullable<ListCasesQuery['risk']>[number];
 
 // PDF -> <iframe> (native browser PDF viewer), image -> <img>.
 export type PreviewKind = 'pdf' | 'image' | 'unsupported';
@@ -175,33 +177,11 @@ export interface CaseAnalysisTraceStep {
   [key: string]: unknown;
 }
 
-// GET /audit/cases/{id}/cost returns a dict: Claude spend at list price, from the audit trail's end-of-run events.
-export interface CaseCostRun {
-  occurred_at: string;
-  type: string;
-  run: 'document' | 'extraction_rerun' | 'detection' | 'case_analysis' | null;
-  document_id: string | null;
-  llm_cost_usd: number;
-  llm_calls: number | null;
-  llm_cache_read_tokens: number | null;
-}
-
+// GET /audit/cases/{id}/cost: Claude spend at list price, from the audit trail's end-of-run events.
+export type CaseCost = Schemas['CaseCost'];
+export type CaseCostRun = Schemas['CaseCostRun'];
 // A finished run and how long it took (success only; document.analyzed, document.detected, case.analysis.completed).
-export interface CaseCostTiming {
-  occurred_at: string;
-  type: string;
-  document_id: string | null;
-  duration_ms: number;
-}
-
-export interface CaseCost {
-  case_id: string;
-  total_usd: number;
-  documents_usd: Record<string, number>;
-  case_analysis_usd: number;
-  runs: CaseCostRun[];
-  timings?: CaseCostTiming[];
-}
+export type CaseCostTiming = Schemas['CaseCostTiming'];
 
 // parent_id marks a reply; edited_at is set once its author edits it; deleted_at marks a deleted note kept
 // (text erased) as a placeholder above its replies.

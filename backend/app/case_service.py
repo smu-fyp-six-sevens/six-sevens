@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import concurrent.futures
-import contextvars
 import logging
 import threading
 from datetime import date
 from collections import Counter, defaultdict
-from collections.abc import Callable
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal
 
 from . import audit, case_repository, document_repository, extracted_fields_repository, flags_repository
 from .case_match import CaseMatchResult, DocumentCaseMatch, check_case_match
@@ -49,9 +47,9 @@ from .models import (
     counts_towards_checklist,
 )
 from .monitoring import is_stuck
+from .read_pool import submit as _submit
 
 logger = logging.getLogger("classifier_pipeline.case_service")
-T = TypeVar("T")
 
 
 def compute_documents_status(documents: list[DocumentRecord]) -> CaseDocumentsStatus:
@@ -206,15 +204,6 @@ def _load_last_complete(case_id: str, analysis: CaseAnalysis | None) -> CaseAnal
     except Exception:
         logger.exception("Failed to load the last complete analysis of case %s", case_id)
         return None
-
-
-# One snapshot's or summary's independent reads run side by side instead of one after another.
-_reads = concurrent.futures.ThreadPoolExecutor(max_workers=8, thread_name_prefix="case-reads")
-
-
-def _submit(fn: Callable[..., T], *args: Any, **kwargs: Any) -> concurrent.futures.Future[T]:
-    """In a copy of the caller's context, so the read still counts in its perf log (query_stats)."""
-    return _reads.submit(contextvars.copy_context().run, fn, *args, **kwargs)
 
 
 def _load_saved_risks(case_ids: list[str]) -> dict[str, CaseRisk]:
@@ -383,23 +372,24 @@ def get_case_match_for_case(case_id: str) -> CaseMatchResult | None:
     return check_case_match(case, documents)
 
 
-def get_case_match_for_document(document_id: str) -> DocumentCaseMatch | None:
+def get_case_match_for_document(document: DocumentRecord) -> DocumentCaseMatch | None:
     """
-    One document's entry from its case's match check. The document is
-    appended to its case's document list if the fetch didn't happen to
-    include it (defensive, not expected in practice) so check_case_match
-    always has something to report on it.
+    One document's entry from its case's match check. `document` is the caller's row (fields not needed): the
+    case and its documents are read side by side. The document is appended to its case's document list if the
+    fetch didn't happen to include it (defensive, not expected in practice) so check_case_match always has
+    something to report on it.
     """
-    document = document_repository.get_document(document_id)
-    if document is None or document.case_id is None:
+    if document.case_id is None:
         return None
-    case, documents = _fetch_case_and_documents(document.case_id)
+    case_read = _submit(case_repository.get_case, document.case_id)
+    documents = document_repository.list_documents(case_id=document.case_id)
+    case = case_read.result()
     if case is None:
         return None
     if all(d.id != document.id for d in documents):
-        documents.append(document)
+        documents.append(document_repository.get_document(document.id) or document)
     result = check_case_match(case, documents)
-    return next((match for match in result.documents if match.document_id == document_id), None)
+    return next((match for match in result.documents if match.document_id == document.id), None)
 
 
 class _SnapshotSlot:

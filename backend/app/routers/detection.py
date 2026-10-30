@@ -466,7 +466,11 @@ async def get_case_match(
             status_code=status.HTTP_404_NOT_FOUND, detail="Document is not attached to a case"
         )
 
-    match = await asyncio.to_thread(case_service.get_case_match_for_document, document_id)
+    match = await to_thread_or_502(
+        case_service.get_case_match_for_document, document,
+        detail="Failed to check the document against its case.",
+        log=("Failed to check document %s against its case", document_id),
+    )
     if match is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
     return match

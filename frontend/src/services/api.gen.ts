@@ -1992,6 +1992,63 @@ export interface components {
              */
             status: "running" | "complete" | "failed" | "superseded";
         };
+        /** CaseCost */
+        CaseCost: {
+            /** Case Analysis Usd */
+            case_analysis_usd: number;
+            /** Case Id */
+            case_id: string;
+            /** Documents Usd */
+            documents_usd: {
+                [key: string]: number;
+            };
+            /** Runs */
+            runs: components["schemas"]["CaseCostRun"][];
+            /** Timings */
+            timings: components["schemas"]["CaseCostTiming"][];
+            /** Total Usd */
+            total_usd: number;
+        };
+        /**
+         * CaseCostRun
+         * @description One costed run, at list price.
+         */
+        CaseCostRun: {
+            /** Document Id */
+            document_id: string | null;
+            /** Llm Cache Read Tokens */
+            llm_cache_read_tokens: number | null;
+            /** Llm Calls */
+            llm_calls: number | null;
+            /** Llm Cost Usd */
+            llm_cost_usd: number;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Run */
+            run: ("document" | "extraction_rerun" | "detection" | "case_analysis") | null;
+            /** Type */
+            type: string;
+        };
+        /**
+         * CaseCostTiming
+         * @description A finished run and how long it took (success only).
+         */
+        CaseCostTiming: {
+            /** Document Id */
+            document_id: string | null;
+            /** Duration Ms */
+            duration_ms: number;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Type */
+            type: string;
+        };
         /**
          * CaseCounts
          * @description What the queue's sidebar shows: every case, and how many are in each documents status.
@@ -4160,9 +4217,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["CaseCost"];
                 };
             };
             /** @description Validation Error */

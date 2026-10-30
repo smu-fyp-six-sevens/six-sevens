@@ -18,7 +18,7 @@
 
 .search-box:focus-within {
   border-color: var(--steel);
-  box-shadow: 0 0 0 3px rgba(61, 90, 128, 0.15);
+  box-shadow: 0 0 0 3px var(--steel-a15);
 }
 
 .search-box input {
@@ -101,7 +101,7 @@
 .kebab-menu-button:focus-visible,
 .kebab-menu-item:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(61, 90, 128, 0.2);
+  box-shadow: 0 0 0 3px var(--steel-a20);
 }
 
 .kebab-menu-list {
@@ -161,7 +161,7 @@
 .upload-btn:focus-visible,
 .go-btn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(61, 90, 128, 0.2);
+  box-shadow: 0 0 0 3px var(--steel-a20);
 }
 
 .case-name-input {
@@ -180,7 +180,7 @@
 .case-name-input:focus {
   outline: none;
   border-color: var(--slate-46);
-  box-shadow: 0 0 0 2px rgba(107, 114, 128, 0.12);
+  box-shadow: 0 0 0 2px var(--grey-a12);
 }
 
 .case-edit-actions {
@@ -217,7 +217,7 @@
 
 .back-link:hover {
   color: var(--steel-dark);
-  background: rgba(61, 90, 128, 0.08);
+  background: var(--steel-a08);
 }
 
 /* Case queue: the cases as table rows, centred at about three quarters of the page. */
@@ -293,7 +293,7 @@
 }
 
 .queue-search-chip button:hover {
-  background: rgba(61, 90, 128, 0.1);
+  background: var(--steel-a10);
   color: var(--ink);
 }
 
@@ -506,7 +506,7 @@
 /* The same quiet, transparent buttons as the bulk actions on the case page; round, with a tint on hover. */
 .pagination-page:hover:not(:disabled),
 .pagination-step:hover:not(:disabled) {
-  background: rgba(18, 32, 61, 0.08);
+  background: var(--ink-a08);
   color: var(--slate-17);
 }
 
@@ -717,7 +717,7 @@
   background: var(--white);
   border: 1px solid var(--line);
   border-radius: 10px;
-  box-shadow: 0 12px 32px rgba(18, 32, 61, 0.16);
+  box-shadow: 0 12px 32px var(--ink-a16);
   font-family: var(--sans, inherit);
   letter-spacing: normal;
   text-transform: none;
@@ -735,7 +735,7 @@
 }
 
 .header-filter-option:hover {
-  background: rgba(61, 90, 128, 0.08);
+  background: var(--steel-a08);
 }
 
 .header-filter-option input {
@@ -777,7 +777,7 @@
 }
 
 .header-filter-clear:hover {
-  background: rgba(61, 90, 128, 0.08);
+  background: var(--steel-a08);
 }
 
 /* A column header that sorts. Both arrows show; the current direction's is dark. */

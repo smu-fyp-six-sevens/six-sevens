@@ -1534,6 +1534,169 @@
         "title": "CaseAnalysisRunItem",
         "type": "object"
       },
+      "CaseCost": {
+        "properties": {
+          "case_analysis_usd": {
+            "title": "Case Analysis Usd",
+            "type": "number"
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "documents_usd": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Documents Usd",
+            "type": "object"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/CaseCostRun"
+            },
+            "title": "Runs",
+            "type": "array"
+          },
+          "timings": {
+            "items": {
+              "$ref": "#/components/schemas/CaseCostTiming"
+            },
+            "title": "Timings",
+            "type": "array"
+          },
+          "total_usd": {
+            "title": "Total Usd",
+            "type": "number"
+          }
+        },
+        "required": [
+          "case_id",
+          "total_usd",
+          "documents_usd",
+          "case_analysis_usd",
+          "runs",
+          "timings"
+        ],
+        "title": "CaseCost",
+        "type": "object"
+      },
+      "CaseCostRun": {
+        "description": "One costed run, at list price.",
+        "properties": {
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "llm_cache_read_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Cache Read Tokens"
+          },
+          "llm_calls": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Calls"
+          },
+          "llm_cost_usd": {
+            "title": "Llm Cost Usd",
+            "type": "number"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "run": {
+            "anyOf": [
+              {
+                "enum": [
+                  "document",
+                  "extraction_rerun",
+                  "detection",
+                  "case_analysis"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "occurred_at",
+          "type",
+          "run",
+          "document_id",
+          "llm_cost_usd",
+          "llm_calls",
+          "llm_cache_read_tokens"
+        ],
+        "title": "CaseCostRun",
+        "type": "object"
+      },
+      "CaseCostTiming": {
+        "description": "A finished run and how long it took (success only).",
+        "properties": {
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "duration_ms": {
+            "title": "Duration Ms",
+            "type": "integer"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "occurred_at",
+          "type",
+          "document_id",
+          "duration_ms"
+        ],
+        "title": "CaseCostTiming",
+        "type": "object"
+      },
       "CaseCounts": {
         "description": "What the queue's sidebar shows: every case, and how many are in each documents status.",
         "properties": {
@@ -7126,9 +7289,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Case Cost Audit Cases  Case Id  Cost Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CaseCost"
                 }
               }
             },
