@@ -1,7 +1,58 @@
 {
+  "agent_decisions": [
+    {
+      "agent": "lead_planner",
+      "confidence": 0.0,
+      "decision": "assigned review briefs",
+      "decision_id": "specialist_briefs"
+    },
+    {
+      "agent": "lead_reviewer",
+      "confidence": 0.0,
+      "decision": "requested a second look",
+      "decision_id": "review_1"
+    },
+    {
+      "agent": "lead_reviewer",
+      "confidence": 0.0,
+      "decision": "no second look requested",
+      "decision_id": "review_2"
+    },
+    {
+      "agent": "layout_rendering",
+      "confidence": 0.0,
+      "decision": "completed specialist assessment",
+      "decision_id": "specialist_review"
+    },
+    {
+      "agent": "content_validation",
+      "confidence": 0.0,
+      "decision": "completed specialist assessment",
+      "decision_id": "specialist_review"
+    },
+    {
+      "agent": "digital_authenticity",
+      "confidence": 0.0,
+      "decision": "completed specialist assessment",
+      "decision_id": "specialist_review"
+    },
+    {
+      "agent": "digital_authenticity",
+      "confidence": 0.0,
+      "decision": "completed specialist assessment",
+      "decision_id": "specialist_review"
+    }
+  ],
+  "confidence": 0.0,
   "consulted": [
     {
       "brief": "Credit report with printed figures: check fonts and layout.",
+      "decision_confidences": [
+        {
+          "confidence": 0.0,
+          "second_look": false
+        }
+      ],
       "dismissed": [],
       "second_look": false,
       "specialist": "layout_rendering",
@@ -16,6 +67,12 @@
     },
     {
       "brief": "Check the dates and the credit report's internal consistency.",
+      "decision_confidences": [
+        {
+          "confidence": 0.0,
+          "second_look": false
+        }
+      ],
       "dismissed": [],
       "second_look": false,
       "specialist": "content_validation",
@@ -28,6 +85,16 @@
     },
     {
       "brief": "Check the producing software and authorship metadata.",
+      "decision_confidences": [
+        {
+          "confidence": 0.0,
+          "second_look": false
+        },
+        {
+          "confidence": 0.0,
+          "second_look": true
+        }
+      ],
       "dismissed": [],
       "second_look": true,
       "specialist": "digital_authenticity",
@@ -44,8 +111,15 @@
   "document_type": "credit_report",
   "findings": [
     {
+      "agent_confidences": [
+        {
+          "confidence": 0.0,
+          "specialist": "layout_rendering"
+        }
+      ],
       "ai_accepted": true,
       "bbox_units": "pt",
+      "confidence": 0.0,
       "detected": {
         "bold": false,
         "font": "Courier",
@@ -87,7 +161,14 @@
       "via_second_look": false
     },
     {
+      "agent_confidences": [
+        {
+          "confidence": 0.0,
+          "specialist": "digital_authenticity"
+        }
+      ],
       "ai_accepted": true,
+      "confidence": 0.0,
       "field": "creator",
       "flag_id": "flag-2",
       "id": "metadata_tool-2",
@@ -104,7 +185,14 @@
       "via_second_look": true
     },
     {
+      "agent_confidences": [
+        {
+          "confidence": 0.0,
+          "specialist": "digital_authenticity"
+        }
+      ],
       "ai_accepted": true,
+      "confidence": 0.0,
       "field": "producer",
       "flag_id": "flag-3",
       "id": "metadata_tool-3",
@@ -121,7 +209,14 @@
       "via_second_look": true
     },
     {
+      "agent_confidences": [
+        {
+          "confidence": 0.0,
+          "specialist": "digital_authenticity"
+        }
+      ],
       "ai_accepted": true,
+      "confidence": 0.0,
       "field": "author",
       "flag_id": "flag-4",
       "id": "metadata_tool-1",
@@ -146,7 +241,7 @@
       "tool": "image_tampering_tool"
     }
   ],
-  "schema_version": 1,
+  "schema_version": 2,
   "second_look": {
     "from": "layout_rendering",
     "question": "Please examine the PDF metadata for the producing software.",

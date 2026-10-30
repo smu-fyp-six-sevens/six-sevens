@@ -1741,10 +1741,29 @@ export interface components {
             reason: ("none_needed" | "no_reducible_findings" | "model_failed" | "budget") | null;
         };
         /**
+         * AgentDecision
+         * @description One model agent's decision and its bounded self-reported confidence.
+         */
+        AgentDecision: {
+            /**
+             * Agent
+             * @enum {string}
+             */
+            agent: "hypothesis_planner" | "hypothesis_judge";
+            /** Confidence */
+            confidence: number;
+            /** Decision */
+            decision: string;
+            /** Decision Id */
+            decision_id: string;
+        };
+        /**
          * AnalysisAudit
          * @description What produced a result, so a past run can be reconstructed.
          */
         AnalysisAudit: {
+            /** Agent Decisions */
+            agent_decisions: components["schemas"]["AgentDecision"][];
             /**
              * Findings Discarded
              * @default 0
@@ -1908,6 +1927,11 @@ export interface components {
             case_id: string;
             /** Clean Checks */
             clean_checks: string[];
+            /**
+             * Confidence
+             * @default 0
+             */
+            confidence: number;
             /** Consistent Checks */
             consistent_checks: string[];
             /** Error */
@@ -2546,6 +2570,11 @@ export interface components {
             category: components["schemas"]["FindingCategory"];
             /** Citations */
             citations: string[];
+            /**
+             * Confidence
+             * @default 0
+             */
+            confidence: number;
             /** Document Ids */
             document_ids: string[];
             /** Hypothesis Id */

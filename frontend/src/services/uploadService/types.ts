@@ -94,6 +94,8 @@ export interface DetectionFinding {
   rationale: string;
   specialists: string[];
   via_second_look: boolean;
+  confidence?: number;
+  agent_confidences?: { specialist: string; confidence: number }[];
   // Where on the document it was found, for the checks that measure an area (image and layout checks).
   // `page` is 1-based (null for an image upload); `bbox` is [x0, y0, x1, y1] from the top-left, in
   // `bbox_units`, within a page of `page_size` when the check reports it.
@@ -113,6 +115,14 @@ export interface DetectionReport {
   document_type: string;
   verdict: 'flagged' | 'clean' | 'inconclusive';
   summary: string;
+  // Added with agent-decision confidence; absent on reports created before it was deployed.
+  confidence?: number;
+  agent_decisions?: {
+    agent: string;
+    decision_id: string;
+    decision: string;
+    confidence: number;
+  }[];
   findings: DetectionFinding[];
   consulted: {
     specialist: string;

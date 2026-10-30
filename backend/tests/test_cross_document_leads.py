@@ -67,4 +67,10 @@ def test_the_dossier_shows_the_lead_under_its_finding() -> None:
 
 def test_the_plan_instructions_tell_the_planner_to_use_the_leads() -> None:
     assert "`lead:`" in agents._PLAN_INSTRUCTIONS
-    assert agents.PROMPT_VERSION == "cross-doc-v9"
+    assert agents.PROMPT_VERSION == "cross-doc-v9-confidence"
+
+
+def test_confidence_tool_schemas_avoid_unsupported_numeric_bounds() -> None:
+    for tool in (agents._PLAN_TOOL, agents._VERDICT_TOOL):
+        assert "minimum" not in repr(tool["input_schema"])
+        assert "maximum" not in repr(tool["input_schema"])

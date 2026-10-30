@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _SEVERITIES = ("info", "low", "medium", "high")
 _VERDICTS = ("clean", "flagged", "inconclusive")

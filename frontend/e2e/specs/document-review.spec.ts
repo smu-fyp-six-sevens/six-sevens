@@ -126,7 +126,6 @@ test.describe('Extract text from documents @sprint2 @SCRUM-9', () => {
     }
   });
 });
-
 test.describe('Validate extracted data and support manual correction @sprint2 @SCRUM-20', () => {
   test('DI-023 a document with a missing required field is flagged, and the field identified @DI-023', async ({ page, backend }) => {
     const { fixture, cert } = certWithMissingUen(backend);
@@ -368,4 +367,3 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     expect((saved[0].body as { document_type: string }).document_type).toBe('bank_statement');
   });
 });
-

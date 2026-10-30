@@ -33,11 +33,13 @@ class ExtractionReply(BaseModel):
 
 class LeadPlan(BaseModel):
     briefs: TextMap = {}
+    confidence: Probability = 0.0
 
 
 class LeadReview(BaseModel):
     summary: Text = ""
     second_look: DictOrNone = None
+    confidence: Probability = 0.0
 
 
 class AssessmentItem(BaseModel):
@@ -45,10 +47,12 @@ class AssessmentItem(BaseModel):
     severity: Text = ""
     dismiss: bool = False
     rationale: Text = ""
+    confidence: Probability = 0.0
 
 
 class SpecialistAssessment(BaseModel):
     summary: Text = ""
+    confidence: Probability = 0.0
     uncertain: bool = False
     uncertainty_reason: Text = ""
     assessments: Annotated[list[AssessmentItem], BeforeValidator(keep_valid(AssessmentItem))] = []

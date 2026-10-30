@@ -7,6 +7,7 @@ category fit what the evidence is. The model's own account is never trusted.
 from __future__ import annotations
 
 import re
+import math
 from typing import Any, cast
 
 from ..models import (
@@ -29,6 +30,17 @@ _JARGON_RE = re.compile(r"\brefutation (?:check|test|probe)\b", re.IGNORECASE)
 
 _MAX_CITATIONS = 12
 _ARTICLE = r"(?:\b(?:the|an?)\s+)?"
+
+
+def _probability(value: Any) -> float:
+    """Bound model-supplied confidence and make malformed values explicitly unknown (0)."""
+    if isinstance(value, bool):
+        return 0.0
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return min(1.0, max(0.0, number)) if math.isfinite(number) else 0.0
 
 
 def _replace(pattern: re.Pattern, word: str, text: str) -> str:
@@ -144,6 +156,7 @@ def verify_verdict(
         rationale=plain_text(str(verdict.get("rationale") or ""))[:1200],
         severity=cast(Severity, severity),
         category=category,
+        confidence=_probability(verdict.get("confidence")),
         citations=citations,
         document_ids=document_ids,
         probe_summary=plain_text(str(verdict.get("probe_summary") or ""))[:400],

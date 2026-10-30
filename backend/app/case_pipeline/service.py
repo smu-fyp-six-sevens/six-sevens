@@ -24,7 +24,7 @@ from . import repository, state
 from .cross_document.evidence import build_context
 from .cross_document.agents import PROMPT_VERSION
 from .cross_document.graph import run_cross_document_analysis
-from .models import AnalysisAudit, AnalysisStatus, CaseAnalysis, CaseAnalysisRunItem
+from .models import AgentDecision, AnalysisAudit, AnalysisStatus, CaseAnalysis, CaseAnalysisRunItem
 from .risk import store as risk_store
 from .trace import RunTrace
 from .readiness import is_ready_for_analysis
@@ -169,6 +169,14 @@ async def _execute(
         analysis.supporting_documents = supporting_documents
         analysis.additional_documents = additional
         analysis.consistent_checks = result.get("consistent_checks") or []
+        agent_decisions = [
+            AgentDecision.model_validate(decision)
+            for decision in result.get("agent_decisions") or []
+        ]
+        analysis.confidence = min(
+            (decision.confidence for decision in agent_decisions),
+            default=0.0,
+        )
         analysis.clean_checks = clean_checks
         analysis.audit = AnalysisAudit(
             models={"analysis": settings.LANGGRAPH_SONNET_MODEL},
@@ -176,6 +184,7 @@ async def _execute(
             hypotheses_tried=len(result.get("hypotheses") or []),
             findings_discarded=len(result.get("discarded") or []),
             tool_calls=result.get("tool_calls") or [],
+            agent_decisions=agent_decisions,
         )
         analysis.status = "complete"
         trace.record("done", status="complete", findings=len(findings))

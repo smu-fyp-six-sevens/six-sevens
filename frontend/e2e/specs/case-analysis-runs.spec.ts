@@ -47,7 +47,7 @@ function analysis(runId: string, overrides: Partial<CaseAnalysis> = {}): CaseAna
     risk,
     findings: [{
       id: 'xdoc-1', hypothesis_id: 'h1', summary: ADDRESS, rationale: 'The two addresses differ.', severity: 'high',
-      category: 'cross_document_variance', citations: [], document_ids: ['doc-bizfile'], probe_summary: '', breach_flags: [],
+      category: 'cross_document_variance', citations: [], document_ids: ['doc-bizfile'], probe_summary: '', breach_flags: [], confidence: 0.8,
     }],
     ...overrides,
   });

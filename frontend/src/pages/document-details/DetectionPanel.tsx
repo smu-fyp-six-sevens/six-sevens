@@ -3,6 +3,11 @@ import { INDIVIDUAL_DETECTION_CHECKS } from '../../services/uploadService';
 import { RefreshButton } from '../../components/RefreshButton';
 import { ErrorMessage } from '../../components/ErrorMessage';
 
+function confidenceLabel(value: number | undefined): string | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
+}
+
 export function DetectionPanel({
   status,
   detectionError,
@@ -126,6 +131,27 @@ export function DetectionPanel({
               </>
             )}
           </>
+        )}
+
+        {detectionReport && (
+          <details className="debug-section">
+            <summary>Specialist review confidence</summary>
+            <ul>
+              {detectionReport.consulted.map((specialist) => {
+                const score = confidenceLabel(
+                  detectionReport.agent_decisions?.find((decision) => decision.agent === specialist.specialist)?.confidence,
+                );
+                return (
+                  <li key={specialist.specialist}>
+                    {specialist.title}: {score ?? 'not recorded'}
+                    {specialist.summary ? ` — ${specialist.summary}` : ''}
+                  </li>
+                );
+              })}
+              {detectionReport.consulted.length === 0 && <li>No specialist reviews recorded.</li>}
+              <li>Scores are self-reported by the agents, not probabilities of fraud.</li>
+            </ul>
+          </details>
         )}
 
         <h3>Run an individual check</h3>
