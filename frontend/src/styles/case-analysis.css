@@ -65,7 +65,7 @@
 
 .analysis-action:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(61, 90, 128, 0.25);
+  box-shadow: 0 0 0 3px var(--steel-a25);
 }
 
 .analysis-category {

@@ -10,6 +10,7 @@ import { findingScope, useFindingReviews, verdictFor } from './useFindingReviews
 import DocumentReviewModal from './DocumentReviewModal';
 import type { ReviewLink } from './DocumentReviewModal';
 import { ErrorMessage } from '../../components/ErrorMessage';
+import { useFindingReviewsOn } from '../../lib/appSettings';
 
 // The group cross-document findings sit in: they belong to the case, not to one document.
 const CASE_GROUP_ID = '__case__';
@@ -236,7 +237,9 @@ export function CaseRiskCard({
   const [reviewing, setReviewing] = useState<string | null>(null);
   // Ticks the officer changed but hasn't saved, by row key. A row without one shows its saved verdict.
   const [drafts, setDrafts] = useState<Record<string, boolean>>({});
-  const reviews = useFindingReviews(caseId, scored !== null);
+  // An admin can turn reviews off (Settings): then the findings are listed with no ticks, missed issues or metrics.
+  const reviewsOn = useFindingReviewsOn();
+  const reviews = useFindingReviews(caseId, scored !== null && reviewsOn);
   const allReviews = reviews.data?.reviews ?? [];
 
   const findings = scored?.contributing_findings ?? [];
@@ -342,7 +345,7 @@ export function CaseRiskCard({
 
   // Still the officer's to do: it has findings and they aren't all saved. Unknown until the reviews load, so the
   // list waits for them rather than showing every document first; if they fail to load, every document is listed.
-  const reviewsLoading = scored !== null && reviews.data === null && reviews.error === null;
+  const reviewsLoading = reviewsOn && scored !== null && reviews.data === null && reviews.error === null;
 
   function needsReview(group: DocumentGroup) {
     return !reviews.data || (group.rows.length > 0 && groupStatus(group) !== 'saved');
@@ -510,7 +513,8 @@ export function CaseRiskCard({
     );
   }
 
-  const allGroups = [...documents, ...reviewGroups];
+  // The documents with no findings are only listed to report what detection missed, which is part of reviewing.
+  const allGroups = reviewsOn ? [...documents, ...reviewGroups] : documents;
   const reviewingGroup = allGroups.find((group) => group.scope === 'document' && group.documentId === reviewing);
   const toReview = allGroups.filter(needsReview);
   const done = allGroups.filter((group) => !needsReview(group));
@@ -584,9 +588,22 @@ export function CaseRiskCard({
         )}
       </section>
 
+      {/* With reviews off, each document's findings, to open beside the document. */}
+      {scored && !reviewsOn && allGroups.length > 0 && (
+        <section className="summary-card">
+          <div className="summary-card-header">
+            <div className="summary-card-title">
+              <span className="summary-icon">▤</span>
+              <h2>Findings by Document</h2>
+            </div>
+          </div>
+          <div className="flagged-list">{allGroups.map(renderGroup)}</div>
+        </section>
+      )}
+
       {/* The officer's review of each document's findings: what's left to do, then what's done folded away
           (still there to open, to change a verdict or report a miss). */}
-      {scored && allGroups.length > 0 && (
+      {scored && reviewsOn && allGroups.length > 0 && (
         <section className="summary-card">
           <div className="summary-card-header">
             <div className="summary-card-title">

@@ -10,14 +10,15 @@ WORKDIR /app
 ARG VITE_API_URL=http://localhost:8000
 ENV VITE_API_URL=$VITE_API_URL
 
-COPY frontend/package.json ./package.json
+COPY frontend/package.json frontend/package-lock.json ./
 COPY frontend/tsconfig.json ./tsconfig.json
 COPY frontend/vite.config.ts ./vite.config.ts
 COPY frontend/eslint.config.js ./eslint.config.js
 COPY frontend/index.html ./index.html
 COPY frontend/src ./src
 
-RUN npm install
+# Exactly the lock file's versions; fails if package.json and the lock disagree.
+RUN npm ci
 RUN npm run build
 
 FROM nginx:1.27-alpine

@@ -184,7 +184,7 @@
 
 .login-form input:focus {
   border-color: var(--steel);
-  box-shadow: 0 0 0 3px rgba(61, 90, 128, 0.12);
+  box-shadow: 0 0 0 3px var(--steel-a12);
 }
 
 .login-form input:disabled {
@@ -216,7 +216,7 @@
 }
 
 .login-password-toggle:hover:not(:disabled) {
-  background: rgba(61, 90, 128, 0.08);
+  background: var(--steel-a08);
 }
 
 .login-password-toggle:focus-visible {
@@ -271,7 +271,7 @@
 
 .login-submit-button:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(61, 90, 128, 0.3);
+  box-shadow: 0 0 0 3px var(--steel-a30);
 }
 
 .login-submit-button:disabled {

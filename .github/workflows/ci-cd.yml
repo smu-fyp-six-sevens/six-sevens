@@ -37,7 +37,7 @@ jobs:
           # pip's download cache, reused until either file changes.
           cache: pip
           cache-dependency-path: |
-            backend/requirements.txt
+            backend/requirements-dev.lock
             backend/pyproject.toml
 
       # Cached between runs, so apt-get update (the slow part) only runs when the cache is empty.
@@ -54,7 +54,9 @@ jobs:
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
+          # The locked versions the image ships, plus the dev tools; then the app itself.
+          python -m pip install -r requirements-dev.lock
+          python -m pip install --no-deps -e .
 
       - name: Lint (ruff)
         run: ruff check app
@@ -184,8 +186,8 @@ jobs:
         if: ${{ !cancelled() && env.SNYK_TOKEN != '' }}
         run: |
           # Snyk reads installed packages for a requirements file, so install them first.
-          python -m pip install -r backend/requirements.txt
-          npx --yes snyk@1 test --file=backend/requirements.txt --package-manager=pip --severity-threshold=high
+          python -m pip install -r backend/requirements.lock
+          npx --yes snyk@1 test --file=backend/requirements.lock --package-manager=pip --severity-threshold=high
 
       - name: Snyk (npm dependencies)
         if: ${{ !cancelled() && env.SNYK_TOKEN != '' }}
@@ -195,7 +197,7 @@ jobs:
         if: ${{ !cancelled() && env.SNYK_TOKEN == '' }}
         run: |
           python -m pip install pip-audit
-          pip-audit -r backend/requirements.txt
+          pip-audit -r backend/requirements.lock
           cd frontend && npm ci && npm audit --audit-level=high
 
   terraform:

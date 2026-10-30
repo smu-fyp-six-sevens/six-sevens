@@ -101,4 +101,20 @@
   --red-40: #9b3030;
   --red-30: #861416;
   --red-29: #7f1414;
+  /* translucent: a colour at an alpha (a08 is 8%), for shadows, tints and overlays */
+  --steel-a08: rgba(61, 90, 128, 0.08);
+  --steel-a10: rgba(61, 90, 128, 0.1);
+  --steel-a12: rgba(61, 90, 128, 0.12);
+  --steel-a15: rgba(61, 90, 128, 0.15);
+  --steel-a20: rgba(61, 90, 128, 0.2);
+  --steel-a25: rgba(61, 90, 128, 0.25);
+  --steel-a30: rgba(61, 90, 128, 0.3);
+  --ink-a04: rgba(18, 32, 61, 0.04);
+  --ink-a05: rgba(18, 32, 61, 0.05);
+  --ink-a08: rgba(18, 32, 61, 0.08);
+  --ink-a16: rgba(18, 32, 61, 0.16);
+  --grey-a12: rgba(107, 114, 128, 0.12);
+  --navy-a32: rgba(23, 41, 77, 0.32);
+  --blue-a10: rgba(23, 105, 209, 0.1);
+  --red-a10: rgba(201, 75, 75, 0.1);
 }

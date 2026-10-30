@@ -26,7 +26,7 @@ from ....run_context import spend_model_call
 
 logger = logging.getLogger("classifier_pipeline.langgraph.detection.binder")
 
-_BINDER_MAX_TOKENS = 2048
+_BINDER_MAX_TOKENS = 3072
 
 _BINDER_SYSTEM = """You fill in the inputs of a bank's forgery-check checks. You are given the checks that apply to one document, the roles each one reads, and the document's fields.
 
@@ -75,7 +75,7 @@ async def bind_checks(document_type: str | None, fields: list[Any], group: str =
     group is "numerical" or "external": which tool's check menu the binding is for."""
     if not fields:
         return BindingResult()
-    model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, _BINDER_MAX_TOKENS)
+    model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, _BINDER_MAX_TOKENS, effort="low")
     user = "\n\n".join([
         render_check_roles(document_type, fields, group),
         fence(render_field_catalogue(fields, document_type), "field_list"),

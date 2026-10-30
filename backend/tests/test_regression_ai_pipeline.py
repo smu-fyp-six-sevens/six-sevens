@@ -90,9 +90,9 @@ def _step_for(model: str, max_tokens: int) -> str:
     # — see classify_graph.agent_node/repair_node, llm_classify.classify_by_llm
     # and extract.run_extraction.
     return {
-        (settings.LANGGRAPH_SONNET_MODEL, 1024): "classify_agent",
-        (settings.LANGGRAPH_HAIKU_MODEL, 1024): "llm_classify",
-        (settings.LANGGRAPH_HAIKU_MODEL, 512): "repair",
+        (settings.LANGGRAPH_SONNET_MODEL, 2048): "classify_agent",
+        (settings.LANGGRAPH_HAIKU_MODEL, 2048): "llm_classify",
+        (settings.LANGGRAPH_HAIKU_MODEL, 1024): "repair",
         (settings.LANGGRAPH_SONNET_MODEL, _EXTRACTION_MAX_TOKENS): "extract",
     }[(model, max_tokens)]
 

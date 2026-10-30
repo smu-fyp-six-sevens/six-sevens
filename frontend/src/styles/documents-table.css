@@ -8,7 +8,7 @@
   border: 1px solid var(--slate-90);
   border-radius: 12px;
   overflow: visible;
-  box-shadow: 0 2px 8px rgba(20, 35, 60, 0.04);
+  box-shadow: 0 2px 8px var(--ink-a04);
 }
 
 .documents-card-header {
@@ -126,7 +126,7 @@
 
 .bulk-icon-btn:hover:not(:disabled),
 .bulk-icon-btn:focus-visible {
-  background: rgba(18, 32, 61, 0.08);
+  background: var(--ink-a08);
   color: var(--slate-17);
 }
 
@@ -301,7 +301,7 @@
 
 .document-row-action-icon:hover:not(:disabled),
 .document-row-action-icon:focus-visible {
-  background: rgba(18, 32, 61, 0.08);
+  background: var(--ink-a08);
   color: var(--slate-17);
 }
 
@@ -350,7 +350,7 @@
 
 .panel-refresh-button:hover:not(:disabled),
 .panel-refresh-button:focus-visible {
-  background: rgba(18, 32, 61, 0.08);
+  background: var(--ink-a08);
   color: var(--slate-17);
 }
 

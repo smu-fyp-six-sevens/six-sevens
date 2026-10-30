@@ -29,6 +29,8 @@ backend/.langgraph_api/
 frontend/dist-e2e/
 frontend/playwright-report/
 frontend/test-results/
+# Playwright run from another folder
+**/test-results/
 
 .ruff_cache/
 

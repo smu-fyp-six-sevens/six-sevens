@@ -49,7 +49,7 @@
   border: 1px solid var(--slate-90);
   border-radius: 12px;
   background: var(--white);
-  box-shadow: 0 2px 8px rgba(20, 35, 60, 0.04);
+  box-shadow: 0 2px 8px var(--ink-a04);
 }
 
 .document-preview-toolbar {
@@ -131,7 +131,7 @@
   background: var(--white);
   border: 1px solid var(--slate-90);
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(20, 35, 60, 0.04);
+  box-shadow: 0 2px 8px var(--ink-a04);
 }
 
 /* Debug panels (detection, LangGraph and case analysis traces): raw data in monospace. */
@@ -457,7 +457,7 @@
 .add-field-form-row input:focus {
   outline: none;
   border-color: var(--slate-46);
-  box-shadow: 0 0 0 2px rgba(107, 114, 128, 0.12);
+  box-shadow: 0 0 0 2px var(--grey-a12);
 }
 
 .add-field-error {
@@ -606,7 +606,7 @@
 .details-input:focus {
   outline: none;
   border-color: var(--blue-45);
-  box-shadow: 0 0 0 3px rgba(23, 105, 209, 0.1);
+  box-shadow: 0 0 0 3px var(--blue-a10);
 }
 
 .confidence-badge {
@@ -807,7 +807,7 @@
   height: min(88vh, 1000px);
   border-radius: 10px;
   background: var(--white);
-  box-shadow: 0 16px 48px rgba(23, 41, 77, 0.32);
+  box-shadow: 0 16px 48px var(--navy-a32);
   overflow: hidden;
 }
 
@@ -1035,7 +1035,7 @@
   height: 92vh;
   border-radius: 10px;
   background: var(--white);
-  box-shadow: 0 16px 48px rgba(23, 41, 77, 0.32);
+  box-shadow: 0 16px 48px var(--navy-a32);
   overflow: hidden;
 }
 
@@ -1213,7 +1213,7 @@
 .array-modal-input:focus {
   outline: none;
   border-color: var(--blue-45);
-  box-shadow: 0 0 0 3px rgba(23, 105, 209, 0.1);
+  box-shadow: 0 0 0 3px var(--blue-a10);
 }
 
 .array-modal-remove-row {

@@ -139,6 +139,8 @@
 .case-overview-document-status--progress { color: var(--steel); background: var(--slate-94a); }
 .case-overview-document-status--muted { color: var(--ink-soft); background: var(--slate-94); }
 .case-overview-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.3fr); gap: 14px; align-items: stretch; }
+/* With finding reviews off (Settings) there is no Detection Accuracy panel: the other two share the row. */
+.case-overview-metrics--no-accuracy { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .case-overview-timing,
 .case-overview-cost,
 .case-overview-classification { display: flex; flex-direction: column; }

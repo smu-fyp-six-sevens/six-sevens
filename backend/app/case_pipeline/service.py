@@ -9,13 +9,15 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any, cast
 
-from .. import audit, case_repository, document_repository, events, finding_reviews_repository
+from .. import audit, case_repository, document_repository, events, finding_reviews_repository, read_pool
 from ..config import settings
 from ..snapshots import push_case_snapshot
 from ..langgraph import trace as langgraph_trace
+from ..llm_io import ModelRefused
 from ..models import DocumentRecord
 from ..run_context import end_run, start_run
 from . import repository, state
@@ -180,7 +182,7 @@ async def _execute(
     except Exception as exc:
         logger.exception("Case analysis failed for case %s", case_id)
         analysis.status = "failed"
-        analysis.error = f"{type(exc).__name__}: {exc}"[:500]
+        analysis.error = (str(exc) if isinstance(exc, ModelRefused) else f"{type(exc).__name__}: {exc}")[:500]
         trace.record("error", error=analysis.error)
     finally:
         trace.record("run_audit", model_calls=run.calls, call_ceiling=run.max_model_calls, output_repairs=run.repairs)
@@ -209,24 +211,31 @@ async def _store_result(analysis: CaseAnalysis) -> None:
         )
 
 
-def get_current(case_id: str) -> CaseAnalysis | None:
-    """The case's latest analysis against the documents as they are now (sync: run on a worker thread)."""
-    analysis = repository.get_latest(case_id)
-    if analysis is None:
-        return None
+def _documents_and_reports(case_id: str) -> tuple[list[DocumentRecord], dict[str, dict[str, Any]]]:
     documents = document_repository.list_documents(case_id=case_id)
     reports, _ = langgraph_trace.get_detection_states([d.id for d in documents])
+    return documents, reports
+
+
+def _against_documents_now(analysis_read: Callable[[], CaseAnalysis | None], case_id: str) -> CaseAnalysis | None:
+    """The run read side by side with the documents and their reports, which its staleness check needs."""
+    documents_read = read_pool.submit(_documents_and_reports, case_id)
+    analysis = analysis_read()
+    if analysis is None:
+        documents_read.cancel()
+        return None
+    documents, reports = documents_read.result()
     return state.current_view(analysis, documents, reports)
+
+
+def get_current(case_id: str) -> CaseAnalysis | None:
+    """The case's latest analysis against the documents as they are now (sync: run on a worker thread)."""
+    return _against_documents_now(lambda: repository.get_latest(case_id), case_id)
 
 
 def get_run(case_id: str, run_id: str) -> CaseAnalysis | None:
     """One earlier (or the latest) run against the documents as they are now, for reading back (sync)."""
-    analysis = repository.get_run(case_id, run_id)
-    if analysis is None:
-        return None
-    documents = document_repository.list_documents(case_id=case_id)
-    reports, _ = langgraph_trace.get_detection_states([d.id for d in documents])
-    return state.current_view(analysis, documents, reports)
+    return _against_documents_now(lambda: repository.get_run(case_id, run_id), case_id)
 
 
 def _starters(case_id: str) -> dict[str, str]:

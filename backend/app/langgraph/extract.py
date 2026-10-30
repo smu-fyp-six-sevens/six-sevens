@@ -22,8 +22,8 @@ from .. import telemetry
 
 logger = logging.getLogger("classifier_pipeline.langgraph.extract")
 
-# Bank statements list every transaction with a per-field confidence wrapper; 4096 truncated the JSON.
-_EXTRACTION_MAX_TOKENS = 16000
+# Bank statements list every transaction with a per-field confidence wrapper; 4096 truncated the JSON. Room for thinking too.
+_EXTRACTION_MAX_TOKENS = 18000
 
 
 def _split_prompt_for_caching(document_type: str, raw_text: str) -> tuple[str, str]:
@@ -58,7 +58,7 @@ async def run_extraction(document_type: str, raw_text: str, *, classified_as: st
     from .cache_gate import cache_gate
 
     prefix, text = _split_prompt_for_caching(document_type, raw_text)
-    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, _EXTRACTION_MAX_TOKENS)
+    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, _EXTRACTION_MAX_TOKENS, effort="low")
     # The hint is its own block after the cached prefix, so the prefix stays the same for every document.
     hint = [{"type": "text", "text": _classifier_guess_hint(classified_as)}] if classified_as else []
     message = {

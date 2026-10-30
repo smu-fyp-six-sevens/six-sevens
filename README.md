@@ -32,9 +32,19 @@ Documents at the root:
 Backend (from `backend/`):
 
 ```bash
-pip install -e ".[dev]"
+pip install -r requirements-dev.lock
+pip install --no-deps -e .
 uvicorn app.main:app --reload
 ```
+
+**Dependencies:** `requirements.txt` holds the allowed ranges and is the file to edit. `requirements.lock` (the image) and `requirements-dev.lock` (CI and local, adding the dev tools) pin every version, so a build never picks up a release nobody tested. After changing `requirements.txt` or `pyproject.toml`'s dev list, or to take newer releases, regenerate both (from `backend/`, with `pip install uv`), then run the tests:
+
+```bash
+uv pip compile requirements.txt --universal --python-version 3.12 -o requirements.lock
+uv pip compile pyproject.toml --extra dev -c requirements.lock --universal --python-version 3.12 -o requirements-dev.lock
+```
+
+Add `--upgrade` to the first command to move every package to its newest allowed release, or `--upgrade-package <name>` for one.
 
 The database is Supabase, and its schema is changed directly there; the repo keeps no SQL migration files. The backend expects these to exist:
 
@@ -58,7 +68,7 @@ The API runs on `http://localhost:8000`. The interactive docs are at `/docs`.
 Frontend (from `frontend/`):
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 

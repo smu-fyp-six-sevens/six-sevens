@@ -105,7 +105,7 @@
 .manual-review-input:focus {
   outline: none;
   border-color: #c94b4b;
-  box-shadow: 0 0 0 3px rgba(201, 75, 75, 0.1);
+  box-shadow: 0 0 0 3px var(--red-a10);
 }
 
 .manual-review-input:disabled {
@@ -206,5 +206,5 @@
 
 .manual-review-input--empty:focus {
   border-color: var(--red-48);
-  box-shadow: 0 0 0 3px rgba(201, 75, 75, 0.1);
+  box-shadow: 0 0 0 3px var(--red-a10);
 }

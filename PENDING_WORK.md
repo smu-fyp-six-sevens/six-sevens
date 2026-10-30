@@ -17,12 +17,9 @@ check if audit trail watches for cancel/retry etc.
 
 ## Claude models
 
-- **Newer models are cheaper; we still default to the older ones.** `config.py` defaults to `claude-sonnet-4-6` ($3 / $15 per million input / output tokens) and `claude-haiku-4-5-20251001` ($1 / $5); `backend/.env` may override them. The current generation lists `claude-sonnet-5-5` at $2 / $10 (about a third cheaper) and `claude-haiku-5-5` at $0.10 / $0.50 (about 10× cheaper, for prompts up to 100K tokens). Switching isn't a one-line change:
-  - `temperature=0` in `langgraph/_anthropic.py`: the new models accept only the default sampling settings, so those requests are rejected.
-  - Forced tool calls (`with_structured_output` or `tool_choice` in `langgraph/_anthropic.py`, `langgraph/detection/specialists.py`, `case_pipeline/cross_document/agents.py`, `case_pipeline/risk/outlook.py`): Sonnet 5.5 rejects them; move to a non-forced call or structured outputs.
-  - Thinking is always on in the new models, so a call can produce more tokens: compare cost per case on real runs, not the price table.
-  - `pricing.py` lists the Sonnet 5 and Haiku 5 families at $3 / $15 and $1 / $5, so the cost logs would be wrong after a switch until it's corrected.
-  - Decide per agent (classifier, extraction, detection lead and specialists, cross-document planner and judge) whether to switch, checking a few known cases by hand before and after.
+- **Live check of the switch to Sonnet 5.5 and Haiku 5.5** (effort `low` everywhere except the detection lead and the cross-document planner and judge at `medium`). Run a few known cases end to end and compare against earlier runs: types, fields, findings, the case analysis, cost per case and time per stage. `backend/.env` may still name the old models; remove those lines. Watch for: replies cut off at the raised token caps; the specialists' first turn, which starts with a code-made tool call that has no thinking block (accepted in principle, unconfirmed live); and how often the cross-document planner or judge needs its one retry (`attempt` on the span).
+- **Billed cost per role.** Per-call cost is exact (token counts × list price, `pricing.py`). To reconcile with the bill, give each worker role its own Claude workspace and API key; the Cost API (`/v1/organizations/cost_report`, Admin API key, daily) then reports billed USD per workspace. Per-request tags don't exist.
+- **Show thinking in the agent traces.** The models think adaptively; the summaries come back as `thinking` blocks beside the text (skipped by `llm_io.message_text`). Record them in the traces and the debug panels.
 
 ## Deployment note (report and commercialisation document)
 

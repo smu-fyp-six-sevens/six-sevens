@@ -15,7 +15,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from .. import case_service, detection_metrics, document_repository, events, finding_reviews_repository
+from .. import app_settings_repository, case_service, detection_metrics, document_repository, events, finding_reviews_repository
 from ..auth import CurrentUser
 from ..events import officer_event, types
 from ..models import (
@@ -24,7 +24,16 @@ from ..models import (
 )
 from ._dependencies import bad_gateway_on_error, get_case_or_404, to_thread_or_502
 
-router = APIRouter(tags=["finding-reviews"])
+
+
+async def _require_reviews_on() -> None:
+    """Every route here, reads included: with finding reviews turned off (routers/settings.py), nobody marks
+    findings or sees the precision and recall they give."""
+    if not await asyncio.to_thread(app_settings_repository.get_finding_reviews_enabled):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Finding reviews are turned off by an admin.")
+
+
+router = APIRouter(tags=["finding-reviews"], dependencies=[Depends(_require_reviews_on)])
 logger = logging.getLogger(__name__)
 
 _SAVE_FAILED = "Failed to save the review. Check Supabase table access."

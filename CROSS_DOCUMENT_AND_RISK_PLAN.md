@@ -142,7 +142,7 @@ False positives on clean generated cases (including Other documents), recall on 
 - **Self-adjudication:** mitigated by code verification; a separate adjudicator for High is the fallback.
 - **Strict citations discarding valid findings:** tool-issued ref ids make this unlikely; monitor the discard rate.
 - **Synthetic-to-real gap:** theories needing outside data can't become conclusive and are discarded.
-- **Non-determinism:** temperature 0, stored results, the stale flag.
+- **Non-determinism:** the models sample at their defaults (the API no longer takes `temperature`), so runs vary; stored results, the stale flag.
 
 ## Decisions
 

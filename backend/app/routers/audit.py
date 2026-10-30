@@ -22,7 +22,7 @@ async def list_audit_events(
 
 
 @router.get("/cases/{case_id}/cost")
-async def get_case_cost(case_id: str) -> dict:
+async def get_case_cost(case_id: str) -> audit.CaseCost:
     """Claude spend for one case at list price: per run, per document and in total, from the audit trail."""
     return await to_thread_or_502(
         audit.case_cost, case_id,

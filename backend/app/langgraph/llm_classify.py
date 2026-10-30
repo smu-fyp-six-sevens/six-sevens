@@ -175,7 +175,7 @@ async def classify_by_llm(extracted_text: str) -> dict:
     from ._anthropic import build_chat_anthropic
     from .cache_gate import cache_gate
 
-    model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 1024)
+    model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 2048, effort="low")
     messages = [
         {
             "role": "system",

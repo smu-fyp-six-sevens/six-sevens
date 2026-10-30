@@ -1331,6 +1331,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Settings */
+        get: operations["get_settings_settings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/settings/finding-reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Finding Reviews
+         * @description Turns finding reviews on or off for every officer. Admin only. Reviews already saved are kept either way.
+         */
+        put: operations["set_finding_reviews_settings_finding_reviews_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ws/tickets": {
         parameters: {
             query?: never;
@@ -1764,6 +1801,13 @@ export interface components {
             /** Text */
             text: string;
         };
+        /** AppSettings */
+        AppSettings: {
+            /** Finding Reviews Enabled */
+            finding_reviews_enabled: boolean;
+            /** Is Admin */
+            is_admin: boolean;
+        };
         /** BenfordAnalysis */
         BenfordAnalysis: {
             /** Chi Square */
@@ -1967,6 +2011,63 @@ export interface components {
              * @enum {string}
              */
             status: "running" | "complete" | "failed" | "superseded";
+        };
+        /** CaseCost */
+        CaseCost: {
+            /** Case Analysis Usd */
+            case_analysis_usd: number;
+            /** Case Id */
+            case_id: string;
+            /** Documents Usd */
+            documents_usd: {
+                [key: string]: number;
+            };
+            /** Runs */
+            runs: components["schemas"]["CaseCostRun"][];
+            /** Timings */
+            timings: components["schemas"]["CaseCostTiming"][];
+            /** Total Usd */
+            total_usd: number;
+        };
+        /**
+         * CaseCostRun
+         * @description One costed run, at list price.
+         */
+        CaseCostRun: {
+            /** Document Id */
+            document_id: string | null;
+            /** Llm Cache Read Tokens */
+            llm_cache_read_tokens: number | null;
+            /** Llm Calls */
+            llm_calls: number | null;
+            /** Llm Cost Usd */
+            llm_cost_usd: number;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Run */
+            run: ("document" | "extraction_rerun" | "detection" | "case_analysis") | null;
+            /** Type */
+            type: string;
+        };
+        /**
+         * CaseCostTiming
+         * @description A finished run and how long it took (success only).
+         */
+        CaseCostTiming: {
+            /** Document Id */
+            document_id: string | null;
+            /** Duration Ms */
+            duration_ms: number;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Type */
+            type: string;
         };
         /**
          * CaseCounts
@@ -3717,6 +3818,11 @@ export interface components {
          * @enum {string}
          */
         RoutingStatus: "accepted" | "manual_review";
+        /** SetFindingReviewsRequest */
+        SetFindingReviewsRequest: {
+            /** Enabled */
+            enabled: boolean;
+        };
         /**
          * SetFindingVerdictRequest
          * @description Marks one finding correct or wrong; verdict null clears the officer's mark.
@@ -4174,9 +4280,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["CaseCost"];
                 };
             };
             /** @description Validation Error */
@@ -6452,6 +6556,72 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    get_settings_settings_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_finding_reviews_settings_finding_reviews_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetFindingReviewsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

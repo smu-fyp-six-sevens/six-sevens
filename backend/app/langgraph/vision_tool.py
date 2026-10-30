@@ -121,7 +121,7 @@ async def _classify_with_vision(storage_path: str, filename: str) -> VisionClass
     except Exception as exc:
         return VisionClassificationResult(notes=[f"Could not read the document: {exc}"])
 
-    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, 1024)
+    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, 2048, effort="low")
     # Static prompt FIRST, document second. A cache_control breakpoint caches
     # everything up to and including its own block, so with the document
     # first the cached prefix contained this document — unique per call,

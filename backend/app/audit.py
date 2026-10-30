@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel
 
 from .events import Event, types
 from .supabase_client import service_supabase_client
@@ -115,7 +118,35 @@ _COSTED = [
 ]
 
 
-def case_cost(case_id: str) -> dict:
+class CaseCostRun(BaseModel):
+    """One costed run, at list price."""
+    occurred_at: datetime
+    type: str
+    run: Literal["document", "extraction_rerun", "detection", "case_analysis"] | None = None
+    document_id: str | None = None
+    llm_cost_usd: float
+    llm_calls: int | None = None
+    llm_cache_read_tokens: int | None = None
+
+
+class CaseCostTiming(BaseModel):
+    """A finished run and how long it took (success only)."""
+    occurred_at: datetime
+    type: str
+    document_id: str | None = None
+    duration_ms: int
+
+
+class CaseCost(BaseModel):
+    case_id: str
+    total_usd: float
+    documents_usd: dict[str, float]
+    case_analysis_usd: float
+    runs: list[CaseCostRun]
+    timings: list[CaseCostTiming]
+
+
+def case_cost(case_id: str) -> CaseCost:
     """
     A case's Claude spend from its audit trail: each costed run, a total per document, and the case total.
     Runs from before the trail carried cost are absent. Also how long each finished run took (`timings`, whether
@@ -125,32 +156,31 @@ def case_cost(case_id: str) -> dict:
         service_supabase_client().table(_TABLE).select("*").eq("case_id", case_id).in_("action", _COSTED)
         .order("occurred_at").limit(1000).execute().data or []
     )
-    runs = []
-    timings = []
+    runs: list[CaseCostRun] = []
+    timings: list[CaseCostTiming] = []
     per_document: dict[str, float] = {}
     for event in (Event.from_audit_row(_row(row)) for row in rows):
         if event.outcome == "success" and event.duration_ms is not None:
-            timings.append({
-                "occurred_at": event.occurred_at, "type": event.type, "document_id": event.document_id,
-                "duration_ms": event.duration_ms,
-            })
+            timings.append(CaseCostTiming(
+                occurred_at=event.occurred_at, type=event.type, document_id=event.document_id,
+                duration_ms=event.duration_ms,
+            ))
         cost = event.detail.get("llm_cost_usd")
         if cost is None:
             continue
-        runs.append({
-            "occurred_at": event.occurred_at, "type": event.type, "run": event.detail.get("run"),
-            "document_id": event.document_id, "llm_cost_usd": cost, "llm_calls": event.detail.get("llm_calls"),
-            "llm_cache_read_tokens": event.detail.get("llm_cache_read_tokens"),
-        })
+        runs.append(CaseCostRun(
+            occurred_at=event.occurred_at, type=event.type, run=event.detail.get("run"),
+            document_id=event.document_id, llm_cost_usd=float(cost), llm_calls=event.detail.get("llm_calls"),
+            llm_cache_read_tokens=event.detail.get("llm_cache_read_tokens"),
+        ))
         if event.document_id:
             per_document[event.document_id] = per_document.get(event.document_id, 0.0) + float(cost)
-    total = sum(float(r["llm_cost_usd"]) for r in runs)
-    return {
-        "case_id": case_id, "total_usd": round(total, 6),
-        "documents_usd": {doc: round(usd, 6) for doc, usd in per_document.items()},
-        "case_analysis_usd": round(sum(float(r["llm_cost_usd"]) for r in runs if r["run"] == "case_analysis"), 6),
-        "runs": runs, "timings": timings,
-    }
+    return CaseCost(
+        case_id=case_id, total_usd=round(sum(r.llm_cost_usd for r in runs), 6),
+        documents_usd={doc: round(usd, 6) for doc, usd in per_document.items()},
+        case_analysis_usd=round(sum(r.llm_cost_usd for r in runs if r.run == "case_analysis"), 6),
+        runs=runs, timings=timings,
+    )
 
 
 def list_events(
