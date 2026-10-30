@@ -42,19 +42,50 @@ class _BalanceBreak(BaseModel):
     expected: float
     description: str
     sign_inverted: bool = False
+    # A brought/carried-forward line whose balance is not the one before it (amount 0).
+    carry_over: bool = False
 
 
 _SYSTEMIC_BREAK_RATIO = 0.25
 _SYSTEMIC_MIN_BREAKS = 4
 
+# "Balance brought forward", "B/F", "Opening balance" and their closing counterparts: lines that carry a
+# balance but are not transactions. Extraction sometimes lists them as rows with no amount.
+_CARRY_OVER_RE = re.compile(
+    r"\b(brought|carried)\s+(forward|fwd)\b|\b[bc]\s*/\s*f\b|\b(opening|closing)\s+balance\b", re.IGNORECASE
+)
+
+
+def _is_carry_over(row: dict) -> bool:
+    return _field_number(row, "amount") is None and bool(_CARRY_OVER_RE.search(str(row.get("description") or "")))
+
+
+def _description(row: dict) -> str:
+    return str(row.get("description") or "").strip()
+
 
 def _running_balance_breaks(rows: list[dict]) -> list[_BalanceBreak]:
+    """
+    Lines where the balance does not follow from the one before. A brought/carried-forward line must repeat
+    the previous balance, so a jump hidden at a page or month break is caught, not restarted from. Any other
+    line with no amount can't be checked; _unverifiable_steps reports those.
+    """
     breaks: list[_BalanceBreak] = []
     previous: float | None = None
     for index, row in enumerate(rows):
         balance = _field_number(row, "balance")
         amount = _field_number(row, "amount")
-        if previous is None or amount is None:
+        if amount is None:
+            if _is_carry_over(row) and previous is not None and balance is not None \
+                    and abs(balance - previous) > _MONEY_TOLERANCE:
+                breaks.append(_BalanceBreak(
+                    index=index, previous=previous, amount=0.0, balance=balance, expected=previous,
+                    description=_description(row), carry_over=True,
+                ))
+            if balance is not None:
+                previous = balance
+            continue
+        if previous is None:
             previous = balance
             continue
         expected = previous + amount
@@ -64,11 +95,27 @@ def _running_balance_breaks(rows: list[dict]) -> list[_BalanceBreak]:
         if abs(expected - balance) > _MONEY_TOLERANCE:
             breaks.append(_BalanceBreak(
                 index=index, previous=previous, amount=amount, balance=balance,
-                expected=expected, description=str(row.get("description") or "").strip(),
+                expected=expected, description=_description(row),
                 sign_inverted=abs(previous - amount - balance) <= _MONEY_TOLERANCE,
             ))
         previous = balance
     return breaks
+
+
+def _unverifiable_steps(rows: list[dict]) -> list[tuple[int, float, float]]:
+    """(index, previous balance, balance) for transaction lines with a balance but no amount, other than
+    brought/carried-forward lines: the move into them can't be checked against anything."""
+    steps: list[tuple[int, float, float]] = []
+    previous: float | None = None
+    for index, row in enumerate(rows):
+        balance = _field_number(row, "balance")
+        if _field_number(row, "amount") is None and not _is_carry_over(row) and previous is not None and balance is not None:
+            steps.append((index, previous, balance))
+        if balance is not None:
+            previous = balance
+        elif previous is not None and (amount := _field_number(row, "amount")) is not None:
+            previous += amount
+    return steps
 
 
 def _is_newest_first(rows: list[dict]) -> bool:
@@ -82,6 +129,13 @@ def _is_newest_first(rows: list[dict]) -> bool:
 
 def _balance_finding(b: _BalanceBreak) -> NumericalFinding:
     where = f"transaction {b.index + 1}" + (f" ({b.description})" if b.description else "")
+    if b.carry_over:
+        return _finding(
+            "BS.RUNNING_BALANCE", "impossible",
+            f"Line {b.index + 1} ({b.description}) carries a balance of {_money(b.balance)}, but the line before "
+            f"it closed at {_money(b.previous)}",
+            field=f"transactions[{b.index}].balance", stated=_money(b.balance), expected=_money(b.previous),
+        )
     if b.sign_inverted:
         return _finding(
             "BS.RUNNING_BALANCE", "inconsistent",
@@ -107,13 +161,28 @@ def _check_running_balance(*, transactions: Any) -> CheckResult:
     if len(rows) < 2:
         return [], skipped(reason="fewer than 2 transactions")
 
-    if _is_newest_first(rows):
-        last = len(rows) - 1
-        breaks = [b.model_copy(update={"index": last - b.index}) for b in _running_balance_breaks(list(reversed(rows)))]
-    else:
-        breaks = _running_balance_breaks(rows)
+    newest_first = _is_newest_first(rows)
+    ordered = list(reversed(rows)) if newest_first else rows
+    last = len(rows) - 1
+
+    def original(index: int) -> int:
+        return last - index if newest_first else index
+
+    breaks = [b.model_copy(update={"index": original(b.index)}) for b in _running_balance_breaks(ordered)]
+    # A transaction with no amount used to restart the balance silently, which hid an edit made on that
+    # very line (SCRUM-288 PI-23). Now it is reported: the move into it can't be checked.
+    gaps = [
+        _finding(
+            "BS.RUNNING_BALANCE", "inconsistent",
+            f"Transaction {original(i) + 1}" + (f" ({_description(ordered[i])})" if _description(ordered[i]) else "")
+            + f" has no amount, so the balance moving from {_money(previous)} to {_money(balance)} "
+            f"({balance - previous:+,.2f}) cannot be checked",
+            field=f"transactions[{original(i)}].amount", stated="no amount", expected=f"{balance - previous:,.2f}",
+        )
+        for i, previous, balance in _unverifiable_steps(ordered)
+    ]
     if not breaks:
-        return [], None
+        return gaps, None
 
     comparable = max(len(rows) - 1, 1)
     if len(breaks) >= _SYSTEMIC_MIN_BREAKS and len(breaks) / comparable > _SYSTEMIC_BREAK_RATIO:
@@ -125,8 +194,8 @@ def _check_running_balance(*, transactions: Any) -> CheckResult:
             expected="a balance column that reconciles end to end",
             severity_note="Systemic rather than per-figure: usually means the column couldn't be read cleanly, "
                           "not that this many lines were edited",
-        )], None
-    return [_balance_finding(b) for b in breaks], None
+        ), *gaps], None
+    return [*(_balance_finding(b) for b in breaks), *gaps], None
 
 
 @check(code="BS.OPEN_CLOSE", applies=("bank_statement",))
@@ -134,21 +203,27 @@ def _check_open_close(
     *, transactions: Any, ledger_balance: Num | None = None, opening_balance: Num | None = None,
 ) -> CheckResult:
     """Opening balance plus credits minus debits must equal the closing balance. The stated header balances
-    are used as the anchors when present, and also cross-checked against the transaction-derived values."""
+    are used as the anchors when present, and also cross-checked against the transaction-derived values.
+    Brought/carried-forward lines are not transactions: they used to make this skip on almost every
+    statement (SCRUM-288), and now anchor the opening and closing balance when the header gives none."""
     rows = _rows(transactions)
     if len(rows) >= 2 and _is_newest_first(rows):
         rows = list(reversed(rows))
-    amounts = [_field_number(r, "amount") for r in rows]
-    balances = [_field_number(r, "balance") for r in rows]
-    if not rows or any(a is None for a in amounts) or not balances or balances[0] is None or balances[-1] is None:
-        return [], skipped(reason="transactions are missing amounts or balances")
+    body = [r for r in rows if not _is_carry_over(r)]
+    amounts = [_field_number(r, "amount") for r in body]
+    balances = [_field_number(r, "balance") for r in body]
+    if not body or any(a is None for a in amounts) or balances[0] is None or balances[-1] is None:
+        # A transaction with no amount is reported by BS.RUNNING_BALANCE; the total can't be summed past it.
+        return [], skipped(reason="a transaction has no amount or the first or last has no balance")
     first_balance, last_balance = balances[0], balances[-1]
     amounts = [a for a in amounts if a is not None]
 
     derived_opening = first_balance - amounts[0]
     derived_closing = last_balance
-    opening = opening_balance if opening_balance is not None else derived_opening
-    closing = ledger_balance if ledger_balance is not None else derived_closing
+    carried_in = _field_number(rows[0], "balance") if _is_carry_over(rows[0]) else None
+    carried_out = _field_number(rows[-1], "balance") if len(rows) > 1 and _is_carry_over(rows[-1]) else None
+    opening = next(v for v in (opening_balance, carried_in, derived_opening) if v is not None)
+    closing = next(v for v in (ledger_balance, carried_out, derived_closing) if v is not None)
     credits = sum(a for a in amounts if a and a > 0)
     debits = sum(-a for a in amounts if a and a < 0)
     expected_closing = opening + credits - debits
@@ -494,20 +569,53 @@ def _check_holding_value(*, holdings: Any) -> CheckResult:
 
 @check(code="SOW.PORTFOLIO_SUM", applies=("source_of_wealth",))
 def _check_portfolio_sum(*, holdings: Any, portfolio_value: Num) -> CheckResult:
-    """Holdings must add up to the stated portfolio value."""
-    market_values = [_field_number(r, "market_value") for r in _rows(holdings)]
-    numeric_values = [v for v in market_values if v is not None]
-    if not market_values or len(numeric_values) != len(market_values):
-        return [], skipped(reason="holding market values not all readable")
-    total = sum(numeric_values)
-    if abs(total - portfolio_value) > _MONEY_TOLERANCE:
-        return [_finding(
-            "SOW.PORTFOLIO_SUM", "impossible",
-            f"Holdings sum to {_money(total)}, but the stated portfolio value is {_money(portfolio_value)}",
-            field="portfolio_value", stated=_money(portfolio_value), expected=_money(total),
-            severity_note=_materiality_note(total - portfolio_value, total),
-        )], None
-    return [], None
+    """
+    Holdings must add up to the stated portfolio value. A holding with no market value is valued at
+    quantity x price when both are printed. One with neither doesn't stop the check (that let a total
+    120,000.00 above its holdings pass unremarked, SCRUM-288 PI-24): valued holdings that already exceed
+    the total disprove it, and a total that rests on unvalued holdings is reported for review.
+    """
+    rows = _rows(holdings)
+    if not rows:
+        return [], skipped(reason="no holdings extracted")
+    total = 0.0
+    unvalued: list[dict] = []
+    for row in rows:
+        value = _field_number(row, "market_value")
+        if value is None:
+            quantity, price = _field_number(row, "quantity"), _field_number(row, "closing_price")
+            value = quantity * price if quantity is not None and price is not None else None
+        if value is None:
+            unvalued.append(row)
+        else:
+            total += value
+
+    # A short position (negative quantity) is worth less than nothing, so it could pull the total back down.
+    has_short = any((_field_number(row, "quantity") or 0) < 0 for row in unvalued)
+    disproved = bool(unvalued) and not has_short and total > portfolio_value + _MONEY_TOLERANCE
+    if not unvalued or disproved:
+        if abs(total - portfolio_value) > _MONEY_TOLERANCE:
+            valued = "Holdings sum" if not unvalued else "The holdings with a value already sum"
+            return [_finding(
+                "SOW.PORTFOLIO_SUM", "impossible",
+                f"{valued} to {_money(total)}, but the stated portfolio value is {_money(portfolio_value)}",
+                field="portfolio_value", stated=_money(portfolio_value), expected=_money(total),
+                severity_note=_materiality_note(total - portfolio_value, total),
+            )], None
+        return [], None
+
+    unexplained = portfolio_value - total
+    if abs(unexplained) <= _MONEY_TOLERANCE:
+        return [], None
+    names = ", ".join(str(row.get("name") or "unnamed holding") for row in unvalued)
+    share = f" ({abs(unexplained) / abs(portfolio_value) * 100:.0f}%)" if portfolio_value else ""
+    return [_finding(
+        "SOW.PORTFOLIO_SUM", "inconsistent",
+        f"{_money(unexplained)} of the stated portfolio value {_money(portfolio_value)}{share} rests on "
+        f"holding(s) with no market value or price shown ({names}); the total cannot be confirmed",
+        field="portfolio_value", stated=_money(portfolio_value), expected=f"{_money(total)} from valued holdings",
+        severity_note=_materiality_note(unexplained, portfolio_value),
+    )], None
 
 
 @check(code="SOW.NAV", applies=("source_of_wealth",))

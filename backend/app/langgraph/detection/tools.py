@@ -35,6 +35,8 @@ from langgraph.prebuilt import InjectedState
 
 from ... import document_repository, extracted_fields_repository, storage_service
 from ...cpu_pool import run_cpu
+from ...guardrails import content_guard
+from ...ingestion.ingestion_service import content_type_from_filename, ingest_document
 from ...fraud_detection.authenticity.ai_generation import AIImageAssessment, AIIndicator, check_ai_generation
 from ...fraud_detection.dates.date_anomalies import check_date_anomalies
 from ...fraud_detection.font_consistency import check_font_consistency
@@ -301,6 +303,41 @@ async def layout_anomalies_tool(document_id: Annotated[str, InjectedState("docum
         for anomaly in result.anomalies
     ]
     return _result("layout_anomalies_tool", _with_ids("layout_anomalies_tool", findings))
+
+
+# Text a reader can't see is never a design choice a genuine document needs explained away, so it can be rated
+# higher but not dismissed or rated below this.
+_HIDDEN_TEXT_SEVERITY = "medium"
+
+
+@tool
+async def hidden_text_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
+    """Reports text in a PDF that a reader can't see but text extraction still reads: invisible, white on a white page, under 2pt, or placed off the page. Often left behind when a figure or name was replaced. Found by the content guard at upload. Hidden text worded as an instruction to the AI is reported by prompt_injection_tool instead. Its findings cannot be dismissed."""
+    try:
+        result = await _guard_result(document_id)
+    except Exception as exc:
+        logger.exception("hidden_text_tool failed for %s", document_id)
+        return _result("hidden_text_tool", [], unable=f"Could not run the hidden text check: {type(exc).__name__}")
+    if result is None:
+        return _result("hidden_text_tool", [], unable="Document or file not found")
+    if "hidden_text" not in (result.get("checks_run") or []):
+        return _result("hidden_text_tool", [], unable=(
+            f"The hidden text check could not run: {result['error']}" if result.get("error")
+            else "Hidden text is checked in PDFs only; this file has no text layer to hide text in"
+        ))
+    findings = [
+        {
+            "page": span.get("page"),
+            "why_hidden": span.get("why_hidden") or [],
+            "text": _short(span.get("quote") or ""),
+            "summary": f'Hidden text ({_why_hidden(span)}, page {span.get("page")}): "{_short(span.get("quote") or "")}"',
+            "severity_hint": _HIDDEN_TEXT_SEVERITY,
+            "severity_floor": _HIDDEN_TEXT_SEVERITY,
+        }
+        for span in result.get("spans") or []
+        if span.get("where") == "hidden" and span.get("caught_by") == "hidden_text"
+    ]
+    return _result("hidden_text_tool", _with_ids("hidden_text_tool", findings))
 
 
 def _layout_page_sizes(file_bytes: bytes) -> list[list[float]]:
@@ -639,6 +676,76 @@ async def metadata_tool(document_id: Annotated[str, InjectedState("document_id")
     return {
         **_result("metadata_tool", _with_ids("metadata_tool", findings)),
         "observed_metadata": _observed_metadata(result.extracted_metadata),
+    }
+
+
+_WHY_HIDDEN = {
+    "invisible": "invisible text", "white_on_white": "white on white", "tiny": "text under 2pt",
+    "off_page": "placed off the page",
+}
+# The design's severities (guardrails/content_guard._risk), per span. The specialist may raise one, never
+# lower it or dismiss it: an attempt to steer the review is evidence on its own.
+_INJECTION_SEVERITY = {
+    ("hidden", "dictionary"): "high", ("metadata", "dictionary"): "high", ("image", "dictionary"): "high",
+}
+
+
+def _why_hidden(span: dict) -> str:
+    return ", ".join(_WHY_HIDDEN.get(str(w), str(w)) for w in span.get("why_hidden") or []) or "hidden"
+
+
+def _injection_finding(span: dict) -> dict:
+    where, caught_by = str(span.get("where") or ""), str(span.get("caught_by") or "")
+    quote = _short(span.get("quote") or "")
+    if where == "hidden":
+        summary = f'Hidden text worded as an instruction to the AI ({_why_hidden(span)}, page {span.get("page")}): "{quote}"'
+    elif where == "metadata":
+        summary = f'Metadata field {span.get("field")} is worded as an instruction to the AI: "{quote}"'
+    elif where == "image":
+        summary = f'Text inside an image on page {span.get("page")} is worded as an instruction to the AI: "{quote}"'
+    elif where == "filename":
+        summary = f'The file name is worded as an instruction to the AI: "{quote}"'
+    else:
+        summary = f'Visible text worded as an instruction to the AI: "{quote}"'
+    severity = _INJECTION_SEVERITY.get((where, caught_by), "low")
+    return {**span, "severity_hint": severity, "severity_floor": severity, "summary": summary}
+
+
+async def _guard_result(document_id: str) -> dict | None:
+    """The guard_result saved at ingest; for a document without one (from before the guard, or not saved),
+    the guard run now on the stored file, so the check is never skipped."""
+    stored = await asyncio.to_thread(document_repository.get_guard_result, document_id)
+    if stored and stored.get("checks_run"):
+        return stored
+    document = await _document_with_metadata(document_id)
+    file_bytes = await _file_bytes(document_id)
+    if document is None or file_bytes is None:
+        return None
+    content_type = content_type_from_filename(document.filename)
+    ingested = await run_cpu(ingest_document, file_bytes, document.filename, content_type, with_metadata=False)
+    result, _ = await run_cpu(
+        content_guard.scan, file_bytes, content_type, ingested["raw_text"], document.metadata, document.filename,
+    )
+    return {**result, "computed_at_detection": True}
+
+
+@tool
+async def prompt_injection_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
+    """Reports text written to steer the AI reviewing the document: wording addressed to an AI as an instruction, in the visible text, hidden text, metadata, an embedded image or the file name. Found by the content guard at upload. Hidden text with no such wording is hidden_text_tool's. Its findings cannot be dismissed."""
+    try:
+        result = await _guard_result(document_id)
+    except Exception as exc:
+        logger.exception("prompt_injection_tool failed for %s", document_id)
+        return _result("prompt_injection_tool", [], unable=f"Could not run the content guard: {type(exc).__name__}")
+    if result is None:
+        return _result("prompt_injection_tool", [], unable="Document or file not found")
+    if not result.get("checks_run"):
+        return _result("prompt_injection_tool", [], unable=f"The content guard could not run: {result.get('error') or 'unknown'}")
+    findings = [_injection_finding(span) for span in result.get("spans") or [] if span.get("caught_by") == "dictionary"]
+    return {
+        **_result("prompt_injection_tool", _with_ids("prompt_injection_tool", findings)),
+        "guard_risk": result.get("risk"),
+        "checks_run": result.get("checks_run"),
     }
 
 

@@ -13,6 +13,7 @@ from ..config import settings
 from ..holder import ENTITY_DOCUMENT_TYPES, ENTITY_TYPES, looks_corporate
 from langchain_core.messages import AIMessage, HumanMessage
 
+from ..guardrails.envelope import DOCUMENT_DATA_RULE, fence
 from ..llm_contracts import ExtractionReply
 from ..llm_io import message_text, parse_json_object, salvage_entries, validate, was_cut_off
 from ..run_context import spend_model_call
@@ -63,9 +64,9 @@ async def run_extraction(document_type: str, raw_text: str, *, classified_as: st
     message = {
         "role": "user",
         "content": [
-            {"type": "text", "text": prefix, "cache_control": {"type": "ephemeral"}},
+            {"type": "text", "text": f"{prefix}\n{DOCUMENT_DATA_RULE}\n", "cache_control": {"type": "ephemeral"}},
             *hint,
-            {"type": "text", "text": text},
+            {"type": "text", "text": fence(text, "document_text")},
         ],
     }
     with telemetry.get_tracer().start_as_current_span("extract.run_extraction") as span:

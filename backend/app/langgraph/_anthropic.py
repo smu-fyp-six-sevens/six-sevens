@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import SecretStr
 
 from ..config import settings
+from ..guardrails.leak_check import leak_callback
 from ..query_stats import llm_callback
 
 if TYPE_CHECKING:
@@ -47,6 +48,8 @@ def build_chat_anthropic(model: str, max_tokens: int, *, temperature: float = 0)
             timeout=settings.LLM_TIMEOUT_SECONDS,
             max_retries=settings.LLM_MAX_RETRIES,
             stop=None,
-            callbacks=[llm_callback],  # counts calls and tokens per unit of work (query_stats.py)
+            # Counts calls and tokens per unit of work (query_stats.py); flags a reply that repeats its own
+            # instructions (guardrails/leak_check.py).
+            callbacks=[llm_callback, leak_callback],
         )
     return _models[key]

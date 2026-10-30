@@ -54,7 +54,7 @@ export function ExtractedDocumentsCard({
       <div className="documents-card-header">
         <div className="documents-card-title">
           <span className="documents-card-icon">▣</span>
-          <span>Extracted Files</span>
+          <span>Uploaded Documents</span>
         </div>
 
         <div className="documents-card-actions">

@@ -184,9 +184,9 @@ function DocumentDetailsRoute() {
 }
 
 function DashboardRoute() {
-  const { cases, isLoading } = useDashboardCases();
+  const { cases, isLoading, isRefreshing, refresh } = useDashboardCases();
 
-  return <DashboardPage cases={cases} isLoading={isLoading} />;
+  return <DashboardPage cases={cases} isLoading={isLoading} isRefreshing={isRefreshing} onRefresh={() => void refresh()} />;
 }
 
 function CreateCaseRoute() {

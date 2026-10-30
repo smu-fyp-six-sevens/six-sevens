@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
-import { getUsername } from '../lib/api';
+import { RefreshButton } from '../components/RefreshButton';
+import { DashboardSkeleton } from '../components/Skeletons';
 import { InfoLabel } from '../components/InfoTip';
 import { DetectionAccuracyPanel, DetectionAccuracySummary } from './DetectionAccuracyPanel';
 import { caseStatusTone } from '../utils/caseStatusTone';
@@ -34,10 +35,8 @@ interface MockCase {
   recommendedDocs?: string[] | null;
   // Automated processing time in ms; null until the case has been analysed.
   processingMs?: number | null;
-  // Preview rows only: who the sample case is assigned to. Live cases use createdBy.
+  // Preview rows only: who the sample case is assigned to.
   analyst?: string;
-  // The username of the officer who created the case, which counts as its assignee.
-  createdBy?: string | null;
   documentTypes: string[];
   flags: string[];
   // Per flag name: its worst severity in this case and the document types it's on; absent for preview rows.
@@ -84,8 +83,6 @@ const FLAG_SEVERITY: Record<string, FlagSummary['severity']> = {
   'Font anomaly': 'Medium',
 };
 
-// Cases created before the audit trail have no recorded creator; they count as this officer's.
-const UNRECORDED_CASE_OWNER = 'greenlink-tester';
 const CASES_PER_PAGE = 10;
 // Rows in each Overview insight panel, so the side-by-side panels stay the same height.
 const INSIGHT_ROWS = 6;
@@ -196,10 +193,19 @@ function dashboardStatus(label: string): Status {
   return (STATUSES as string[]).includes(label) ? label as Status : 'In progress';
 }
 
-export default function DashboardPage({ cases: caseRecords, isLoading }: { cases: CaseRecord[]; isLoading: boolean }) {
+export default function DashboardPage({
+  cases: caseRecords,
+  isLoading,
+  isRefreshing,
+  onRefresh,
+}: {
+  cases: CaseRecord[];
+  isLoading: boolean;
+  isRefreshing: boolean;
+  onRefresh: () => void;
+}) {
   const navigate = useNavigate();
   const [role, setRole] = useState<Role>('Analyst');
-  const username = getUsername();
   const [tab, setTab] = useState<DashboardTab>('Overview');
   const [range, setRange] = useState('Last 30 days');
   const [statusFilter, setStatusFilter] = useState('All statuses');
@@ -223,7 +229,6 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
         processingMs: record.processingMs ?? null,
         recommendedDocs: record.recommendedDocuments ?? null,
         analyst: undefined,
-        createdBy: record.createdBy ?? UNRECORDED_CASE_OWNER,
         documentTypes: (record.documentTypes ?? []).map((type) => formatDocumentType(type)),
         flags: (record.flags ?? []).map((flag) => formatCheck(flag.check)),
         flagInfo: Object.fromEntries((record.flags ?? []).map((flag) => [formatCheck(flag.check), {
@@ -241,13 +246,12 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
 
   const visibleCases = useMemo(() => {
     const since = dateLimit(range);
+    // Every case, whoever created it: the date and status filters are the only narrowing.
     return dashboardCases.filter((item) =>
-      // Assigned means created by the signed-in officer; preview rows keep their sample analyst.
-      (role === 'Manager' || (caseRecords.length ? item.createdBy === username : item.analyst === 'J. Tan')) &&
       (statusFilter === 'All statuses' || item.status === statusFilter) &&
       (!since || item.submitted >= since),
     );
-  }, [caseRecords.length, dashboardCases, range, role, statusFilter, username]);
+  }, [dashboardCases, range, statusFilter]);
 
   // The same date and status choice for the accuracy figures, which the backend filters (cases are the reviews' own).
   const accuracyFilters = useMemo<DetectionMetricsFilters>(() => {
@@ -338,22 +342,13 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
       <AppHeader />
       <div className="dashboard-app">
       <main className="dashboard-main">
-        <div className="dashboard-content">
-          <section className="dashboard-title-row">
-            <div>
-              <h1>{role === 'Manager' ? 'Portfolio overview' : 'My workspace'}</h1>
-              <p className="dashboard-subtitle">{tab === 'Overview' ? 'A summary of case progress, risk signals and common findings.' : tab === 'Cases' ? 'Review case status and priority across the selected period.' : tab === 'Accuracy' ? 'How often each detection check is right, and how much it misses, from officer reviews.' : 'Explore recurring findings and the cases and documents they affect.'}</p>
-            </div>
-            <div className="dashboard-filters">
-              <label><span>Date range</span><select value={range} onChange={(event) => setRange(event.target.value)}><option>Last 7 days</option><option>Last 30 days</option><option>Last 90 days</option><option>All time</option></select></label>
-              <label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option>All statuses</option>{STATUSES.map((status) => <option key={status}>{status}</option>)}</select></label>
-              {tab === 'Cases' && <label className="risk-sort-filter"><span>Sort by risk</span><select value={riskOrder} onChange={(event) => setRiskOrder(event.target.value as 'highest' | 'lowest')}><option value="highest">Critical first</option><option value="lowest">Low first</option></select></label>}
-            </div>
-          </section>
+        <div className="dashboard-sticky-shell">
+          <div className="dashboard-content dashboard-sticky-content">
           <div className="dashboard-section-bar">
             <nav className="dashboard-tabs" aria-label="Dashboard sections">
               {DASHBOARD_TABS.map((item) => {
-                const count = item === 'Cases' ? visibleCases.length : item === 'Flags' ? flagRows.length : null;
+                // No count until the real cases arrive: before that the list is the sample cases.
+                const count = isLoading ? null : item === 'Cases' ? visibleCases.length : item === 'Flags' ? flagRows.length : null;
                 return (
                   <button key={item} className={tab === item ? 'active' : ''} aria-current={tab === item ? 'page' : undefined} onClick={() => setTab(item)}>
                     <span className="nav-icon" aria-hidden="true">{item === 'Overview' ? '▦' : item === 'Cases' ? '▤' : item === 'Flags' ? '⚑' : item === 'Accuracy' ? '✓' : '◎'}</span>{item}
@@ -362,19 +357,32 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
                 );
               })}
             </nav>
+            <div className="dashboard-toolbar-actions">
+              <div className="dashboard-filters">
+                <label><span>Date range</span><select value={range} onChange={(event) => setRange(event.target.value)}><option>Last 7 days</option><option>Last 30 days</option><option>Last 90 days</option><option>All time</option></select></label>
+                <label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option>All statuses</option>{STATUSES.map((status) => <option key={status}>{status}</option>)}</select></label>
+                {tab === 'Cases' && <label className="risk-sort-filter"><span>Sort by risk</span><select value={riskOrder} onChange={(event) => setRiskOrder(event.target.value as 'highest' | 'lowest')}><option value="highest">Critical first</option><option value="lowest">Low first</option></select></label>}
+                {/* The dashboard reads the cases on opening; this reads them again (no socket covers the whole list). */}
+                <span className="dashboard-refresh"><RefreshButton isRefreshing={isRefreshing} onClick={onRefresh} label="cases" /></span>
+              </div>
             {SHOW_ROLE_SWITCH && (
               <div className="role-switch" aria-label="Preview dashboard role">
                 {(['Manager', 'Analyst'] as Role[]).map((item) => <button key={item} className={role === item ? 'selected' : ''} onClick={() => { setRole(item); setTab('Overview'); }}>{item}</button>)}
               </div>
             )}
+            </div>
           </div>
-          {isLoading && !caseRecords.length && <p className="dashboard-data-note" role="status">Loading live case links; preview rows are temporarily not clickable.</p>}
-          {!isLoading && !caseRecords.length && <p className="dashboard-data-note">No live cases are loaded. Preview rows are illustrative and cannot open a case record.</p>}
-
+          </div>
+        </div>
+        <div className="dashboard-content dashboard-body-content">
+          {/* First load: placeholders in the dashboard's own layout, not the sample cases. The Accuracy tab loads its own figures. */}
+          {isLoading && tab !== 'Accuracy' ? <DashboardSkeleton /> : <>
           {tab !== 'Flags' && tab !== 'Accuracy' && <section className="dashboard-stat-grid" aria-label="Case counts by status">
             <article className="dashboard-stat-card stat-total"><div className="stat-top"><span className="stat-icon">▤</span><span className="stat-period">{range}</span></div><span className="stat-number">{visibleCases.length}</span><span className="stat-caption">Cases in view</span></article>
             {STATUSES.map((status) => <article key={status} className="dashboard-stat-card"><div className="stat-top"><span className="stat-caption">{status}</span><span className={`status-dot ${caseStatusTone(status)}`} /></div><span className="stat-number">{statusCounts[status]}</span><span className="stat-caption">{visibleCases.length ? `${Math.round(statusCounts[status] / visibleCases.length * 100)}% of cases` : '0% of cases'}</span></article>)}
           </section>}
+          {isLoading && !caseRecords.length && <p className="dashboard-data-note" role="status">Loading live case links; preview rows are temporarily not clickable.</p>}
+          {!isLoading && !caseRecords.length && <p className="dashboard-data-note">No live cases are loaded. Preview rows are illustrative and cannot open a case record.</p>}
 
           {tab === 'Overview' && <>
           <section className="dashboard-insight-grid">
@@ -400,7 +408,7 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
           </>}
 
           {tab === 'Cases' && <>
-            <CaseTable cases={sortedCaseRows} heading={role === 'Manager' ? 'All cases' : 'Your assigned cases'} onOpenCase={openCase} showRiskAnalysis showProcessingTime isPreview={!caseRecords.length} />
+            <CaseTable cases={sortedCaseRows} heading="All cases" onOpenCase={openCase} showRiskAnalysis showProcessingTime isPreview={!caseRecords.length} />
           </>}
 
           {tab === 'Flags' && <>
@@ -416,6 +424,7 @@ export default function DashboardPage({ cases: caseRecords, isLoading }: { cases
             </section>
           </>}
           {tab === 'Accuracy' && <DetectionAccuracyPanel filters={accuracyFilters} />}
+          </>}
         </div>
       </main>
       </div>

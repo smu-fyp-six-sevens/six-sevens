@@ -6,6 +6,7 @@ import { InfoLabel } from '../../components/InfoTip';
 import { isEligibleForApproval } from './uploadHelpers';
 import { findingScope, useFindingReviews, verdictFor } from './useFindingReviews';
 import type { CaseSection } from './caseSections';
+import { outOfDateMessage } from './caseSections';
 import { formatUsd, processingTimes } from './processingTimes';
 import { useCaseCost } from './useCaseCost';
 import { CaseOverviewSkeleton } from '../../components/Skeletons';
@@ -133,7 +134,7 @@ export function CaseOverview({
       : analysisOverview.status === 'failed'
         ? { label: 'Analysis failed', tone: 'error' }
         : analysisOverview.stale || analysisOverview.status === 'superseded'
-          ? { label: 'Out of date · rerun needed', tone: 'action' }
+? { label: `Out of date · ${outOfDateMessage(analysisOverview).short.toLowerCase()}`, tone: 'action' }
           : { label: `${analysisOverview.finding_count} cross-document ${analysisOverview.finding_count === 1 ? 'finding' : 'findings'} · up to date`, tone: 'done' };
   const progressStages = [
     { label: 'Documents Uploaded', detail: `${documents.length} ${documents.length === 1 ? 'document' : 'documents'}`, tone: documents.length ? 'done' : 'idle' },

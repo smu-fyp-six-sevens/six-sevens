@@ -120,3 +120,33 @@ export function PageSkeleton() {
     </div>
   );
 }
+
+// The /dashboard while its cases load: the stat cards, the two insight panels and the table, in the dashboard's own
+// grid, so nothing moves when the real figures arrive.
+export function DashboardSkeleton() {
+  return (
+    <div className="dashboard-skeleton" role="status" aria-busy="true">
+      <span className="sr-only">Loading cases…</span>
+
+      <div className="dashboard-stat-grid" aria-hidden="true">
+        {Array.from({ length: 6 }, (_, index) => (
+          <div key={index} className="dashboard-stat-card dashboard-skeleton-stat">
+            <Bar size="short" />
+            <Bar size="title" />
+            <Bar size="medium" />
+          </div>
+        ))}
+      </div>
+
+      <div className="dashboard-insight-grid" aria-hidden="true">
+        <Card tall />
+        <Card tall />
+      </div>
+
+      <div className="dashboard-lower-grid" aria-hidden="true">
+        <Card tall />
+        <Card tall />
+      </div>
+    </div>
+  );
+}

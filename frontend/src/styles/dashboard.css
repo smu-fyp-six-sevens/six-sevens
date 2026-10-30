@@ -1,16 +1,18 @@
 /* The dashboard spans the full window under the shared app header, not the narrow centred .shell column. */
 .dashboard-shell { width: 100%; padding-bottom: 0; }
-.dashboard-shell > .app-header { margin-bottom: 0; }
+.dashboard-shell > .app-header { margin-bottom: 0; border-bottom-color: var(--line); }
 
 .dashboard-app { min-height: calc(100vh - var(--topbar-height)); display: block; background: var(--slate-97); color: var(--slate-18); }
 .dashboard-main { flex: 1; min-width: 0; }
 .role-switch { display: flex; gap: 3px; padding: 3px; border: 1px solid var(--slate-91); border-radius: 8px; background: var(--slate-97); }
 .role-switch button { padding: 6px 12px; border: 0; border-radius: 6px; background: transparent; color: var(--slate-53); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
 .role-switch button.selected { background: var(--white); color: #315782; box-shadow: 0 1px 3px #14233a1c; }
-.dashboard-content { max-width: 1460px; margin: 0 auto; padding: 31px 36px 25px; }
-.dashboard-title-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
-/* Section tabs sit under the page title and above the content they switch, like a folder divider. */
-.dashboard-section-bar { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 22px; border-bottom: 1px solid var(--line); }
+.dashboard-content { max-width: 1460px; margin: 0 auto; padding: 25px 36px; }
+.dashboard-sticky-shell { position: sticky; top: var(--topbar-height); z-index: 19; background: var(--paper); }
+.dashboard-sticky-shell::after { position: absolute; right: 32px; bottom: 0; left: 32px; height: 1px; background: var(--line); content: ''; pointer-events: none; }
+.dashboard-sticky-content { padding-top: 10px; padding-bottom: 15px; }
+/* Keep tabs and filters on one toolbar, directly below the shared sticky app header. */
+.dashboard-section-bar { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 0; }
 .dashboard-tabs { display: flex; gap: 6px; }
 .dashboard-tabs button { position: relative; display: flex; align-items: center; gap: 8px; height: 42px; padding: 0 14px; border: 0; border-radius: 8px 8px 0 0; background: transparent; color: var(--ink-soft); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: color .15s, background-color .15s; }
 .dashboard-tabs button::after { content: ''; position: absolute; right: 10px; bottom: -1px; left: 10px; height: 2px; border-radius: 2px 2px 0 0; background: transparent; transition: background-color .15s; }
@@ -22,14 +24,12 @@
 .dashboard-tabs button.active .nav-icon { color: var(--steel); }
 .nav-count { min-width: 22px; padding: 1px 7px; border-radius: 10px; background: var(--slate-93); color: var(--ink-soft); font-size: 12px; font-weight: 650; text-align: center; }
 .dashboard-tabs button.active .nav-count { background: var(--steel); color: var(--white); }
-.dashboard-section-bar .role-switch { margin-bottom: 6px; }
-.dashboard-title-row h1 { margin: 0; color: var(--slate-18); font-size: 28px; letter-spacing: -.045em; line-height: 1.2; }
-.dashboard-subtitle { margin: 7px 0 0; color: var(--slate-54); font-size: 14px; }
-.dashboard-filters { display: flex; gap: 9px; }
+.dashboard-toolbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; min-width: 0; }
+.dashboard-filters { display: flex; align-items: center; gap: 9px; }
 .dashboard-filters label { display: grid; gap: 4px; color: var(--slate-58); font-size: 12.5px; font-weight: 650; }
-.dashboard-filters select { min-width: 126px; height: 35px; padding: 0 38px 0 10px; appearance: none; border: 1px solid var(--slate-90); border-radius: 7px; background: var(--white) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='m1 1.5 5 5 5-5' stroke='%235b6478' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 12px center; color: var(--slate-34); font: inherit; font-size: 13px; }
+.dashboard-filters select { min-width: 126px; height: 34px; padding: 0 38px 0 10px; appearance: none; border: 1px solid var(--slate-90); border-radius: 7px; background: var(--white) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='m1 1.5 5 5 5-5' stroke='%235b6478' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 12px center; color: var(--slate-34); font: inherit; font-size: 13px; }
 .risk-sort-filter select { min-width: 140px; }
-.dashboard-stat-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 15px; }
+.dashboard-stat-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .dashboard-stat-card { min-height: 117px; padding: 15px 17px 13px; border: 1px solid #e8ecf1; border-radius: 10px; background: var(--white); box-shadow: 0 2px 5px #1b35520a; }
 .stat-top { display: flex; align-items: center; justify-content: space-between; min-height: 21px; }
 .stat-icon { display: grid; place-items: center; width: 27px; height: 27px; border-radius: 8px; background: var(--blue-95); color: #3b69a5; font-size: 16px; }
@@ -97,25 +97,35 @@
 
 @media (max-width: 1120px) {
   .dashboard-content { padding-right: 24px; padding-left: 24px; }
+  .dashboard-sticky-shell::after { right: 24px; left: 24px; }
+  .dashboard-section-bar { flex-wrap: wrap; }
+  .dashboard-toolbar-actions { margin-left: auto; }
   .dashboard-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 760px) {
-  .dashboard-tabs { max-width: 100%; overflow-x: auto; }.dashboard-content { padding: 23px 14px; }
-  .dashboard-title-row { display: block; }.dashboard-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 15px; }.dashboard-filters label { min-width: 0; }.dashboard-filters select { width: 100%; min-width: 0; }.risk-sort-filter { grid-column: 1 / -1; }
+  .dashboard-sticky-shell::after { right: 14px; left: 14px; }
+  .dashboard-content { padding: 18px 14px; }
+  .dashboard-sticky-content { padding-top: 8px; padding-bottom: 12px; }
+  .dashboard-section-bar { align-items: stretch; flex-direction: column; gap: 8px; }
+  .dashboard-tabs { max-width: 100%; overflow-x: auto; }
+  .dashboard-toolbar-actions { justify-content: space-between; gap: 8px; margin-left: 0; }
+  .dashboard-filters { display: grid; flex: 1; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; min-width: 0; }
+  .dashboard-filters label { min-width: 0; font-size: 11.5px; }
+  .dashboard-filters select { width: 100%; min-width: 0; padding-right: 28px; background-position: right 8px center; font-size: 12px; }
+  .risk-sort-filter select { min-width: 0; }
   .dashboard-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.dashboard-stat-card { min-height: 103px; padding: 12px; }
   .dashboard-insight-grid, .dashboard-lower-grid { grid-template-columns: 1fr; gap: 9px; margin-bottom: 9px; }.dashboard-panel { padding: 15px 13px; }.cases-panel { padding: 15px 0 0; }.cases-panel > .panel-heading { padding: 0 13px; }
   .dashboard-case-table th { padding: 9px; }.dashboard-case-table td { padding: 8px 9px; }.dashboard-case-table th:first-child, .dashboard-case-table td:first-child { padding-left: 13px; }
   .role-switch button { padding: 6px 8px; font-size: 12.5px; }
 }
 @media (max-width: 420px) {
+  .dashboard-sticky-shell::after { right: 10px; left: 10px; }
   .dashboard-content { padding-right: 10px; padding-left: 10px; }.dashboard-stat-card .stat-caption { font-size: 12.5px; }.bar-row { grid-template-columns: 18px minmax(85px, 1fr) 65px 17px; gap: 6px; font-size: 12.5px; }.panel-heading h2 { font-size: 14px; }
   .table-footer { align-items: flex-start; flex-direction: column; gap: 7px; }
 }
 
 /* Keep the preview in the same warm, restrained visual language as the case view. */
 .dashboard-app { background: var(--paper); color: var(--ink); }
-.dashboard-title-row h1 { color: var(--ink); }
-.dashboard-subtitle { color: var(--ink-soft); }
 .dashboard-filters label { color: var(--slate-51); }
 .dashboard-filters select, .role-switch { border-color: var(--line); }
 .role-switch { background: var(--sand-92); }
@@ -287,3 +297,8 @@
 .accuracy-table th:nth-child(1) { width: 24%; }
 .accuracy-table th:nth-child(2) { width: 32%; }
 .accuracy-table th:nth-child(3), .accuracy-table th:nth-child(4) { width: 14%; }
+
+/* The dashboard's refresh: the shared icon button (RefreshButton), sitting in the filter row as a square the height
+   of the selects instead of in a panel's corner. */
+.dashboard-refresh { align-self: flex-end; }
+.dashboard-refresh .panel-refresh-button { position: static; width: 35px; height: 35px; border: 1px solid var(--line); border-radius: 7px; background: var(--white); color: var(--slate-34); }

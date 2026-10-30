@@ -1392,6 +1392,13 @@
             ],
             "title": "Status",
             "type": "string"
+          },
+          "waiting_documents": {
+            "items": {
+              "$ref": "#/components/schemas/WaitingDocument"
+            },
+            "title": "Waiting Documents",
+            "type": "array"
           }
         },
         "required": [
@@ -1399,7 +1406,8 @@
           "status",
           "stale",
           "finished_at",
-          "finding_count"
+          "finding_count",
+          "waiting_documents"
         ],
         "title": "CaseAnalysisOverview",
         "type": "object"
@@ -2488,6 +2496,113 @@
           "matches"
         ],
         "title": "ComparedDocument",
+        "type": "object"
+      },
+      "ContentGuardFinding": {
+        "properties": {
+          "field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "instruction": {
+            "title": "Instruction",
+            "type": "boolean"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "quote": {
+            "title": "Quote",
+            "type": "string"
+          },
+          "where": {
+            "title": "Where",
+            "type": "string"
+          },
+          "why_hidden": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Why Hidden",
+            "type": "array"
+          }
+        },
+        "required": [
+          "where",
+          "page",
+          "field",
+          "quote",
+          "instruction",
+          "why_hidden"
+        ],
+        "title": "ContentGuardFinding",
+        "type": "object"
+      },
+      "ContentGuardResponse": {
+        "properties": {
+          "blocked": {
+            "title": "Blocked",
+            "type": "boolean"
+          },
+          "checked": {
+            "title": "Checked",
+            "type": "boolean"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "findings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ContentGuardFinding"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "risk": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk"
+          }
+        },
+        "required": [
+          "checked",
+          "risk",
+          "blocked",
+          "error",
+          "findings"
+        ],
+        "title": "ContentGuardResponse",
         "type": "object"
       },
       "ContributingFinding": {
@@ -6858,6 +6973,36 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "WaitingDocument": {
+        "description": "A document the case's risk score counts that isn't scanned yet, and what it is waiting for: still being\nprocessed, an officer's approval, its detection scan, or a retry after it failed. A rerun before these are\ndone can't produce a score.",
+        "properties": {
+          "document_id": {
+            "title": "Document Id",
+            "type": "string"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "processing",
+              "needs_approval",
+              "scanning",
+              "failed"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "filename",
+          "reason"
+        ],
+        "title": "WaitingDocument",
+        "type": "object"
       }
     }
   },
@@ -9519,6 +9664,65 @@
           }
         },
         "summary": "Cancel Document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/documents/{document_id}/content-guard": {
+      "get": {
+        "description": "What the content guard found at ingest, for the officer to see on the document page.",
+        "operationId": "get_content_guard_documents__document_id__content_guard_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentGuardResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Content Guard",
         "tags": [
           "documents"
         ]

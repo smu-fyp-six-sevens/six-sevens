@@ -12,6 +12,7 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
 from ..config import settings
+from ..guardrails.envelope import DOCUMENT_DATA_RULE, fence
 from ..llm_io import message_text, parse_json_object
 from ..run_context import record_repair, spend_model_call
 from .classification_confidence import normalise_candidates as _normalise
@@ -179,10 +180,10 @@ async def classify_by_llm(extracted_text: str) -> dict:
         {
             "role": "system",
             "content": [
-                {"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}},
+                {"type": "text", "text": f"{SYSTEM_PROMPT}\n\n{DOCUMENT_DATA_RULE}", "cache_control": {"type": "ephemeral"}},
             ],
         },
-        {"role": "user", "content": extracted_text or ""},
+        {"role": "user", "content": fence(extracted_text or "", "document_text")},
     ]
     spend_model_call("llm classifier")
     response = await cache_gate.run("llm_classify", lambda: model.ainvoke(messages))

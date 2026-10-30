@@ -1221,7 +1221,7 @@ test.describe('Case summary progress', () => {
 
   test('an out-of-date case analysis keeps the review open, however many of its findings are reviewed', async ({ page, backend }) => {
     const steps = await openSummary(page, backend, true);
-    await expect(steps.filter({ hasText: 'Case Analysis' })).toContainText('Out of date · rerun needed');
+    await expect(steps.filter({ hasText: 'Case Analysis' })).toContainText('Out of date · run again');
     await expect(steps.filter({ hasText: 'Review Findings' })).toHaveClass(/case-overview-step--idle/);
     await expect(steps.filter({ hasText: 'Review Findings' })).toContainText('Waiting for the analysis rerun');
     await expect(steps.filter({ hasText: 'Finalise Case' })).toContainText('After all findings are reviewed');

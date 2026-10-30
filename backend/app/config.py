@@ -132,6 +132,9 @@ class Settings:
     # Most model calls one document's classify and extract run may make (agent turns, the two classifier
     # tools, a repair, extraction and its one retry, and one reclassification).
     DOCUMENT_MAX_MODEL_CALLS: int = int(os.environ.get("DOCUMENT_MAX_MODEL_CALLS", "24"))
+    # A document the content guard finds worded as an instruction to the AI fails at ingest, before classification
+    # or extraction (guardrails/content_guard.blocking_reason). "false" lets it through, flagged instead.
+    GUARD_BLOCK_INJECTION: bool = os.environ.get("GUARD_BLOCK_INJECTION", "true").lower() == "true"
     # Retries the Anthropic client makes by itself on a rate limit or 5xx; each one is billed again.
     LLM_MAX_RETRIES: int = int(os.environ.get("LLM_MAX_RETRIES", "1"))
     # One model request. Extraction can write 16k tokens, so this is generous.

@@ -4,6 +4,7 @@ import type {
   BulkDeleteResponse,
   BulkMoveResponse,
   BulkUploadResponse,
+  ContentGuardResponse,
   DocumentDownloadResponse,
   DocumentRecord,
   PreviewKind,
@@ -29,6 +30,14 @@ export async function getDocument(documentId: string): Promise<DocumentRecord> {
   await assertOk(response, 'Failed to fetch document');
 
   return (await response.json()) as DocumentRecord;
+}
+
+export async function getContentGuard(documentId: string): Promise<ContentGuardResponse> {
+  const response = await authFetch(`/documents/${documentId}/content-guard`);
+
+  await assertOk(response, "Failed to fetch the content guard's findings");
+
+  return (await response.json()) as ContentGuardResponse;
 }
 
 // inline=true asks the backend to omit Storage's download option.
