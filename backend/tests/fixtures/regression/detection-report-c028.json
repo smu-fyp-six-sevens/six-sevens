@@ -118,8 +118,8 @@
         }
       ],
       "ai_accepted": true,
-      "confidence": 0.0,
       "bbox_units": "pt",
+      "confidence": 0.0,
       "detected": {
         "bold": false,
         "font": "Courier",

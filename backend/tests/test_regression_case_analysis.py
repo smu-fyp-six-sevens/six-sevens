@@ -130,7 +130,7 @@ def case(monkeypatch) -> Case:
     monkeypatch.setattr("app.case_pipeline.service.case_repository.set_recommended_additional_documents",
                         lambda case_id, additional: None)
     # The cross-document agent proposes nothing beyond what the code comparisons found.
-    monkeypatch.setattr("app.case_pipeline.cross_document.graph.hypothesise", AsyncMock(return_value=[]))
+    monkeypatch.setattr("app.case_pipeline.cross_document.graph.hypothesise", AsyncMock(return_value=([], 0.0)))
     return fake
 
 
