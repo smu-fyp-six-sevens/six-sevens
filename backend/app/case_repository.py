@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from postgrest import CountMethod
 
-from .models import AdditionalDocuments, CaseRecord
+from .models import AdditionalDocuments, CaseRecord, CaseStageChange
 from .supabase_client import service_supabase_client, supabase_client
 from .supabase_rows import fetch_all, row as _row
 
@@ -58,20 +58,29 @@ def _matching(pattern: str) -> str:
     return f"company_name.ilike.{quoted},greenlink_case_id.ilike.{quoted}"
 
 
-def list_cases_page(q: str | None, *, newest: bool, limit: int, offset: int) -> tuple[list[CaseRecord], int]:
-    """One page of cases by creation date, and how many cases match in all. `q` is a part of a number or name."""
+def list_cases_page(
+    q: str | None, *, newest: bool, limit: int, offset: int, statuses: list[str] | None = None,
+) -> tuple[list[CaseRecord], int]:
+    """
+    One page of cases by creation date, and how many cases match in all. `q` is a part of a number or name;
+    `statuses`, when given, the stages to keep.
+    """
     query = supabase_client.table("cases").select("*", count=CountMethod.exact)
     if q:
         query = query.or_(_matching(f"*{q}*"))
+    if statuses:
+        query = query.in_("status", statuses)
     result = query.order("created_at", desc=newest).order("id").range(offset, offset + limit - 1).execute()
     return [CaseRecord(**_row(item)) for item in result.data], result.count or 0
 
 
-def list_matching_cases(q: str | None) -> list[CaseRecord]:
-    """Every matching case, newest first. Only for what the database can't sort or filter itself (status, risk)."""
+def list_matching_cases(q: str | None, statuses: list[str] | None = None) -> list[CaseRecord]:
+    """Every matching case, newest first. Only for what the database can't sort or filter itself (risk)."""
 
     def build():
         query = supabase_client.table("cases").select("*")
+        if statuses:
+            query = query.in_("status", statuses)
         return query.or_(_matching(f"*{q}*")) if q else query
 
     cases = [CaseRecord(**item) for item in fetch_all(build, "id")]
@@ -80,6 +89,11 @@ def list_matching_cases(q: str | None) -> list[CaseRecord]:
 
 def list_case_ids() -> list[str]:
     return [item["id"] for item in fetch_all(lambda: supabase_client.table("cases").select("id"), "id")]
+
+
+def list_case_statuses() -> list[str]:
+    """Every case's stage, for the queue's counts."""
+    return [str(item["status"]) for item in fetch_all(lambda: supabase_client.table("cases").select("id, status"), "id")]
 
 
 def find_cases_starting_with(q: str, limit: int) -> list[CaseRecord]:
@@ -120,7 +134,7 @@ def update_case(case_id: str, company_name: str) -> CaseRecord | None:
 
 def delete_case(case_id: str) -> None:
     """
-    Removes the case's analysis runs, saved risk history, flags, notes and finding reviews, and then its row. Callers delete
+    Removes the case's analysis runs, saved risk history, flags, notes, finding reviews and stage history, and then its row. Callers delete
     its documents first. These are historical per-analysis rows, but a foreign key can prevent
     deleting the case until they are removed.
 
@@ -129,7 +143,7 @@ def delete_case(case_id: str) -> None:
     still there.
     """
     client = service_supabase_client()
-    for table in ("risk_scores", "case_analysis_runs", "flags", "case_notes", "finding_reviews"):
+    for table in ("risk_scores", "case_analysis_runs", "flags", "case_notes", "finding_reviews", "case_status_history"):
         client.table(table).delete().eq("case_id", case_id).execute()
     result = client.table("cases").delete().eq("id", case_id).execute()
     if not result.data:
@@ -155,3 +169,44 @@ def set_submission_finalized(case_id: str, finalized: bool) -> None:
         "finalized_at": datetime.now(timezone.utc).isoformat() if finalized else None,
     }
     supabase_client.table("cases").update(update).eq("id", case_id).execute()
+
+
+def set_status(case_id: str, expected: str, status: str) -> bool:
+    """
+    Moves the case to a new stage only if it is still at `expected` — a
+    compare-and-swap, so two processes syncing the same case can't both
+    record the same change. Returns whether this call made the change.
+    """
+    result = (
+        supabase_client.table("cases")
+        .update({"status": status})
+        .eq("id", case_id)
+        .eq("status", expected)
+        .execute()
+    )
+    return bool(result.data)
+
+
+def add_status_change(case_id: str, from_status: str | None, to_status: str, changed_by: str) -> CaseStageChange:
+    row = {
+        "id": str(uuid.uuid4()),
+        "case_id": case_id,
+        "from_status": from_status,
+        "to_status": to_status,
+        "changed_by": changed_by,
+        "changed_at": datetime.now(timezone.utc).isoformat(),
+    }
+    result = supabase_client.table("case_status_history").insert(row).execute()
+    return CaseStageChange(**_row(result.data[0]))
+
+
+def list_status_history(case_id: str) -> list[CaseStageChange]:
+    """Every stage change of the case, oldest first."""
+    result = (
+        supabase_client.table("case_status_history")
+        .select("*")
+        .eq("case_id", case_id)
+        .order("changed_at")
+        .execute()
+    )
+    return [CaseStageChange(**_row(row)) for row in result.data]

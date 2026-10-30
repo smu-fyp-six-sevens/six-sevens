@@ -5,7 +5,7 @@ import logging
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
-from .. import case_service, query_stats
+from .. import case_service, case_stage, query_stats
 from ..auth import consume_ws_ticket, create_ws_ticket, require_auth
 from ..case_broadcaster import broadcaster
 
@@ -57,6 +57,11 @@ async def case_status_socket(websocket: WebSocket, case_id: str, ticket: str = "
         # a connection that just (re)opened has missed whatever Realtime
         # events happened while it was down, and this closes that gap.
         with query_stats.scope("ws connect snapshot"):
+            # Opening a case brings its stage up to date first, so the snapshot never shows a stale one.
+            try:
+                await asyncio.to_thread(case_stage.sync_case_stage, case_id)
+            except Exception:
+                logger.exception("Failed to bring the stage of case %s up to date", case_id)
             initial = await asyncio.to_thread(case_service.build_case_snapshot, case_id)
         if initial is None:
             await websocket.send_json({"type": "error", "detail": "Case not found"})

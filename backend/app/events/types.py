@@ -28,8 +28,11 @@ DETECTION_FAILED = "detection.failed"
 CASE_CREATED = "case.created"
 CASE_RENAMED = "case.renamed"
 CASE_DELETED = "case.deleted"
+CASE_FINALISED = "case.finalised"
 CASE_ANALYSIS_REQUESTED = "case.analysis.requested"
 CASE_ANALYSIS_COMPLETED = "case.analysis.completed"
+# An officer downloaded the case report PDF (routers/cases.py): audit only, nothing consumes it.
+CASE_REPORT_EXPORTED = "case.report_exported"
 
 AUTH_LOGIN = "auth.login"
 

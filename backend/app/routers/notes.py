@@ -10,7 +10,7 @@ from .. import document_repository, events, notes_repository
 from ..auth import CurrentUser
 from ..events import officer_event, types
 from ..models import CaseNote, CaseRecord, CreateNoteRequest, UpdateNoteRequest
-from ._dependencies import bad_gateway_on_error, get_case_or_404, to_thread_or_502
+from ._dependencies import bad_gateway_on_error, get_case_or_404, get_editable_case_or_404, to_thread_or_502
 
 router = APIRouter(prefix="/cases", tags=["notes"])
 logger = logging.getLogger(__name__)
@@ -31,12 +31,13 @@ async def add_case_note(
     case_id: str,
     request: CreateNoteRequest,
     user: CurrentUser,
-    case: CaseRecord = Depends(get_case_or_404),
+    case: CaseRecord = Depends(get_editable_case_or_404),
 ) -> CaseNote:
     """
     Saves a note signed by the officer making the request. Allowed on any document, approved and
     rejected ones included: a note is stored on its own and never edits the document, so the
-    document's lock is untouched. Any officer can reply to a note (parent_id).
+    document's lock is untouched. Any officer can reply to a note (parent_id). A finalised case is
+    view-only, notes included.
     """
     document_id = str(request.document_id) if request.document_id else None
     parent_id = str(request.parent_id) if request.parent_id else None
@@ -95,7 +96,7 @@ async def edit_case_note(
     note_id: UUID,
     request: UpdateNoteRequest,
     user: CurrentUser,
-    case: CaseRecord = Depends(get_case_or_404),
+    case: CaseRecord = Depends(get_editable_case_or_404),
 ) -> CaseNote:
     """Replaces the text of the officer's own note and stamps edited_at. Its document is never touched."""
     note = await _own_note(case_id, str(note_id), user, "edit")
@@ -115,7 +116,7 @@ async def delete_case_note(
     case_id: str,
     note_id: UUID,
     user: CurrentUser,
-    case: CaseRecord = Depends(get_case_or_404),
+    case: CaseRecord = Depends(get_editable_case_or_404),
 ) -> None:
     """
     Deletes the officer's own note. Replies by anyone stay: a note with replies becomes a "This

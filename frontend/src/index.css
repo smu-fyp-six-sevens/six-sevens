@@ -12,6 +12,7 @@
 @import './styles/case-summary.css';
 @import './styles/login.css';
 @import './styles/case-analysis.css';
+@import './styles/case-stage.css';
 @import './styles/not-found.css';
 @import './styles/dashboard.css';
 @import './styles/case-overview.css';

@@ -634,6 +634,8 @@ async def _run_detection(document_id: str) -> dict:
             logger.exception("Detection graph run failed for document %s", document_id)
             trace.record(document_id, "detection_error", error=f"{type(exc).__name__}: {exc}")
             _record_run_audit(document_id)
+            # Saved before the status changes, so the case's stage (case_stage.py) sees the failure.
+            await asyncio.to_thread(trace.flush, document_id)
             await asyncio.to_thread(document_repository.revert_to_approved, document_id)
             raise
         result = final["result"]

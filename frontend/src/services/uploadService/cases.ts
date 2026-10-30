@@ -5,13 +5,14 @@ import type {
   CaseAnalysisRunItem,
   CaseCost,
   CaseCounts,
-  CaseDocumentsStatus,
   CaseListItem,
   CaseListPage,
   CaseOption,
+  CaseRequirementCoverage,
   CaseRiskFilter,
   CaseSearchResult,
   CaseSort,
+  CaseStage,
   UpdatedCase,
 } from './types';
 
@@ -19,6 +20,22 @@ export async function deleteCase(caseId: string): Promise<void> {
   const response = await authFetch(`/cases/${caseId}`, { method: 'DELETE' });
 
   await assertOk(response, 'Failed to delete case');
+}
+
+// The case report PDF (GET /cases/{id}/report.pdf) and the filename the server gave it ("GLDB-148 Case Report.pdf").
+// The name is built from the case number too, for when a proxy doesn't expose Content-Disposition.
+export async function downloadCaseReport(
+  caseId: string,
+  caseNumber?: string | null,
+): Promise<{ blob: Blob; filename: string }> {
+  const response = await authFetch(`/cases/${caseId}/report.pdf`);
+
+  await assertOk(response, 'Failed to download the case report');
+
+  const disposition = response.headers.get('Content-Disposition') ?? '';
+  const filename =
+    /filename="([^"]+)"/.exec(disposition)?.[1] ?? (caseNumber ? `${caseNumber} Case Report.pdf` : 'Case Report.pdf');
+  return { blob: await response.blob(), filename };
 }
 
 export async function updateCase(caseId: string, companyName: string): Promise<UpdatedCase> {
@@ -38,7 +55,7 @@ export interface CasePageQuery {
   limit: number;
   offset: number;
   sort: CaseSort;
-  statuses: CaseDocumentsStatus[];
+  statuses: CaseStage[];
   risks: CaseRiskFilter[];
   q: string;
 }
@@ -144,4 +161,13 @@ export async function getCaseAnalysis(caseId: string): Promise<CaseAnalysis | nu
   await assertOk(response, 'Failed to fetch the case analysis');
 
   return (await response.json()) as CaseAnalysis;
+}
+
+// The officer acknowledges an analysed case's submission; recorded in its stage history under their username.
+export async function finaliseCase(caseId: string): Promise<CaseRequirementCoverage> {
+  const response = await authFetch(`/cases/${caseId}/finalise`, { method: 'POST' });
+
+  await assertOk(response, 'Failed to finalise the case');
+
+  return (await response.json()) as CaseRequirementCoverage;
 }

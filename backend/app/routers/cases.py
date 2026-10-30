@@ -4,12 +4,15 @@ import asyncio
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
 
-from .. import case_service, document_repository, events
+from .. import case_report, case_service, document_repository, events
+from ..auth import CurrentUser, current_actor
 from ..case_service import CaseRiskFilter, CaseSort
+from ..labels import requirement_label
+from ..case_stage import StageChangeNotAllowed
 from ..events import officer_event, types
-from ._dependencies import get_case_or_404, to_thread_or_502
+from ._dependencies import get_case_or_404, get_editable_case_or_404, to_thread_or_502
 from ..case_match import CaseMatchResult
 from ..case_pipeline import service as analysis_service
 from ..case_pipeline.models import CaseAnalysis, CaseAnalysisRunItem
@@ -17,11 +20,11 @@ from ..models import (
     IN_FLIGHT_STATUSES,
     MAX_COMPANY_NAME_LENGTH,
     CaseCounts,
-    CaseDocumentsStatus,
     CaseListItem,
     CaseListPage,
     CaseRecord,
     CaseSearchResult,
+    CaseStage,
     CaseSummary,
     UpdateCaseRequest,
 )
@@ -31,9 +34,12 @@ logger = logging.getLogger(__name__)
 
 
 @router.post("", response_model=CaseRecord, status_code=status.HTTP_201_CREATED)
-async def create_case(company_name: str | None = Body(None, embed=True, max_length=MAX_COMPANY_NAME_LENGTH)) -> CaseRecord:
+async def create_case(
+    user: CurrentUser,
+    company_name: str | None = Body(None, embed=True, max_length=MAX_COMPANY_NAME_LENGTH),
+) -> CaseRecord:
     case = await to_thread_or_502(
-        case_service.create_case, company_name,
+        case_service.create_case, company_name, user,
         detail="Failed to create the case. Check Supabase table access.",
         log=("Failed to create case",),
     )
@@ -49,12 +55,12 @@ async def list_cases(
     limit: int = Query(25, ge=1, le=100),
     offset: int = Query(0, ge=0),
     sort: CaseSort = "newest",
-    status_filter: list[CaseDocumentsStatus] = Query(default=[], alias="status"),
+    status_filter: list[CaseStage] = Query(default=[], alias="status"),
     risk_filter: list[CaseRiskFilter] = Query(default=[], alias="risk"),
     q: str | None = Query(None, max_length=MAX_COMPANY_NAME_LENGTH),
 ) -> CaseListPage:
-    """One page of the case queue: newest or oldest first, or by risk either way; optionally only these documents
-    statuses, only these risk levels and only cases whose number or name contains q."""
+    """One page of the case queue: newest or oldest first, or by risk either way; optionally only these stages,
+    only these risk levels and only cases whose number or name contains q."""
     return await to_thread_or_502(
         case_service.list_cases_page, limit=limit, offset=offset, sort=sort, statuses=status_filter,
         risks=risk_filter, q=q,
@@ -114,7 +120,7 @@ async def get_case(case_id: str) -> CaseSummary:
 
 @router.patch("/{case_id}", response_model=CaseSummary)
 async def update_case(
-    case_id: str, request: UpdateCaseRequest, case: CaseRecord = Depends(get_case_or_404)
+    case_id: str, request: UpdateCaseRequest, case: CaseRecord = Depends(get_editable_case_or_404)
 ) -> CaseSummary:
     await to_thread_or_502(
         case_service.update_case,
@@ -133,8 +139,35 @@ async def update_case(
     return updated
 
 
+async def _change_stage(change, case_id: str, user: str, action: str) -> CaseSummary:
+    try:
+        updated = await asyncio.to_thread(change, case_id, user)
+    except StageChangeNotAllowed as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Failed to %s case %s", action, case_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to {action} the case. Check Supabase table access.",
+        ) from exc
+    if updated is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+    return updated
+
+
+@router.post("/{case_id}/finalise", response_model=CaseSummary)
+async def finalise_case(user: CurrentUser, case_id: str, case: CaseRecord = Depends(get_case_or_404)) -> CaseSummary:
+    """
+    The loan officer acknowledges an analysed case's submission. Recorded in its stage history under their
+    username. Permanent: the case is then view-only and takes no changes.
+    """
+    updated = await _change_stage(case_service.finalise_case, case_id, user, "finalise")
+    await events.record(officer_event(types.CASE_FINALISED, case_id=case_id, detail={"from": case.status}))
+    return updated
+
+
 @router.delete("/{case_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_case(case_id: str, case: CaseRecord = Depends(get_case_or_404)) -> None:
+async def delete_case(case_id: str, case: CaseRecord = Depends(get_editable_case_or_404)) -> None:
     """
     Removes a case from the active queue, along with every document that
     belongs to it. A following GET /cases or GET /cases/{id} no longer
@@ -191,20 +224,66 @@ async def get_case_match(case_id: str) -> CaseMatchResult:
     return result
 
 
+@router.get(
+    "/{case_id}/report.pdf",
+    response_class=Response,
+    responses={200: {"content": {"application/pdf": {}}, "description": "The case report as a PDF."}},
+)
+async def download_case_report(case_id: str) -> Response:
+    """
+    The case report as a PDF download: risk, the case analysis's summary and findings, the recommended additional
+    documents, the checklist, the documents and the notes. Before an analysis has finished, a banner says why and
+    the analysis sections are left out. Each download is recorded in the case's audit trail.
+    """
+    actor = current_actor()
+    data = await to_thread_or_502(
+        case_report.gather, case_id, actor,
+        detail="Failed to fetch the case for its report. Check Supabase table access.",
+        log=("Failed to gather the report for case %s", case_id),
+    )
+    if data is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+    pdf = await to_thread_or_502(
+        case_report.render, data,
+        detail="Failed to build the case report.",
+        log=("Failed to render the report for case %s", case_id),
+    )
+    await events.record(officer_event(
+        types.CASE_REPORT_EXPORTED, case_id=case_id,
+        detail={
+            "analysis_run_id": data.completed.run_id if data.completed else None,
+            "analysis_state": case_report.analysis_state(data.latest),
+        },
+    ))
+    filename = case_report.filename_for(data.summary)
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.post(
     "/{case_id}/analysis/run", response_model=CaseAnalysis, status_code=status.HTTP_202_ACCEPTED
 )
-async def run_case_analysis(case_id: str, case: CaseRecord = Depends(get_case_or_404)) -> CaseAnalysis:
+async def run_case_analysis(case_id: str, case: CaseRecord = Depends(get_editable_case_or_404)) -> CaseAnalysis:
     """
     Starts the per-case analysis (cross-document findings, risk outlook and
-    summary) in the background. Only once every approved document has been
-    scanned; poll GET .../analysis, or watch the case snapshot, for the result.
+    summary) in the background. Only once every required checklist document
+    is on file and every approved document has been scanned; poll
+    GET .../analysis, or watch the case snapshot, for the result.
     """
     try:
         return await analysis_service.start_analysis(case_id)
     except analysis_service.AnalysisDisabled as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Case analysis is switched off."
+        ) from exc
+    except analysis_service.RequiredDocumentsMissing as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Every required document must be on file before the case can be analysed. Missing: "
+            + ", ".join(requirement_label(code) for code in exc.missing) + ".",
         ) from exc
     except analysis_service.AnalysisNotReady as exc:
         raise HTTPException(

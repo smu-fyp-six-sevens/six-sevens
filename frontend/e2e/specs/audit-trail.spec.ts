@@ -25,6 +25,20 @@ function event(caseId: string, at: string, type: string, overrides: Partial<Audi
 }
 
 test.describe('Case audit trail', () => {
+  test('finalising the case is listed by name, not as its event type', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const caseId = fixture.case.id;
+    backend.auditEvents = [
+      event(caseId, '2026-10-28T14:11:16Z', 'case.finalised', { actor: 'demo', detail: { from: 'case_analysed' } }),
+    ];
+
+    await page.goto(`${fixture.caseUrl}?section=audit`);
+
+    const entry = page.getByTestId('audit-entry');
+    await expect(entry.locator('.audit-action')).toHaveText('Finalised case');
+    await expect(entry).not.toContainText('case.finalised');
+  });
+
   test("lists the case's actions oldest first, each with its time and loan officer", async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
     const payslip = fixture.document('Payslip');

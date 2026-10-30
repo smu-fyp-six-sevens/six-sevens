@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from . import audit, auth, document_repository, events, health, metrics, query_stats, realtime_listener, sweeper, telemetry
+from . import audit, auth, case_stage, document_repository, events, health, metrics, query_stats, realtime_listener, sweeper, telemetry
 from .config import settings
 from .events import bus, registry, types
 from .events import push as event_push
@@ -77,6 +77,8 @@ async def lifespan(app: FastAPI):
         except Exception:
             # Also non-fatal: the case status WebSocket then pushes nothing beyond the initial snapshot.
             logger.exception("Realtime listener failed to start — continuing anyway")
+        # In the background, so a long case list doesn't hold up startup.
+        background_tasks.append(asyncio.create_task(_bring_case_stages_up_to_date()))
 
     if "detection-worker" in ROLES:
         try:
@@ -102,6 +104,12 @@ async def lifespan(app: FastAPI):
     if "api" in ROLES:
         await realtime_listener.stop()
     await asyncio.to_thread(telemetry.shutdown)
+
+
+async def _bring_case_stages_up_to_date() -> None:
+    """Cases that changed while no stage was kept (or the backend was down) catch up once at startup."""
+    moved = await asyncio.to_thread(case_stage.sync_all_cases)
+    logger.info("Case stages brought up to date at startup (%d case(s) moved)", moved)
 
 
 app = FastAPI(title="fyp API", lifespan=lifespan)
@@ -144,6 +152,8 @@ if settings.CORS_IN_APP:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        # So the frontend can read a download's filename (GET /cases/{id}/report.pdf).
+        expose_headers=["Content-Disposition"],
     )
 
 _protected = [Depends(auth.bind_actor)]

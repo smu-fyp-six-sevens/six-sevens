@@ -127,8 +127,8 @@ export interface paths {
         };
         /**
          * List Cases
-         * @description One page of the case queue: newest or oldest first, or by risk either way; optionally only these documents
-         *     statuses, only these risk levels and only cases whose number or name contains q.
+         * @description One page of the case queue: newest or oldest first, or by risk either way; optionally only these stages,
+         *     only these risk levels and only cases whose number or name contains q.
          */
         get: operations["list_cases_cases_get"];
         put?: never;
@@ -260,8 +260,9 @@ export interface paths {
         /**
          * Run Case Analysis
          * @description Starts the per-case analysis (cross-document findings, risk outlook and
-         *     summary) in the background. Only once every approved document has been
-         *     scanned; poll GET .../analysis, or watch the case snapshot, for the result.
+         *     summary) in the background. Only once every required checklist document
+         *     is on file and every approved document has been scanned; poll
+         *     GET .../analysis, or watch the case snapshot, for the result.
          */
         post: operations["run_case_analysis_cases__case_id__analysis_run_post"];
         delete?: never;
@@ -346,6 +347,27 @@ export interface paths {
         get: operations["get_case_detection_reports_cases__case_id__detection_reports_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cases/{case_id}/finalise": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finalise Case
+         * @description The loan officer acknowledges an analysed case's submission. Recorded in its stage history under their
+         *     username. Permanent: the case is then view-only and takes no changes.
+         */
+        post: operations["finalise_case_cases__case_id__finalise_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -476,7 +498,8 @@ export interface paths {
          * Add Case Note
          * @description Saves a note signed by the officer making the request. Allowed on any document, approved and
          *     rejected ones included: a note is stored on its own and never edits the document, so the
-         *     document's lock is untouched. Any officer can reply to a note (parent_id).
+         *     document's lock is untouched. Any officer can reply to a note (parent_id). A finalised case is
+         *     view-only, notes included.
          */
         post: operations["add_case_note_cases__case_id__notes_post"];
         delete?: never;
@@ -510,6 +533,28 @@ export interface paths {
         patch: operations["edit_case_note_cases__case_id__notes__note_id__patch"];
         trace?: never;
     };
+    "/cases/{case_id}/report.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Case Report
+         * @description The case report as a PDF download: risk, the case analysis's summary and findings, the recommended additional
+         *     documents, the checklist, the documents and the notes. Before an analysis has finished, a banner says why and
+         *     the analysis sections are left out. Each download is recorded in the case's audit trail.
+         */
+        get: operations["download_case_report_cases__case_id__report_pdf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/detection-metrics": {
         parameters: {
             query?: never;
@@ -520,7 +565,7 @@ export interface paths {
         /**
          * Get Detection Metrics
          * @description Precision and recall per check across every reviewed case, with targets (the dashboard). Optionally only
-         *     cases created on or after `since` and in these documents statuses, as the dashboard's filters pick.
+         *     cases created on or after `since` and at these stages, as the dashboard's filters pick.
          */
         get: operations["get_detection_metrics_detection_metrics_get"];
         put?: never;
@@ -2116,6 +2161,12 @@ export interface components {
          */
         CaseDocumentsStatus: "no_documents" | "stuck" | "failed" | "in_progress" | "analyzed";
         /**
+         * CaseFailure
+         * @description What a FAILED case needs fixed: each has its own remedy for the officer.
+         * @enum {string}
+         */
+        CaseFailure: "document_processing" | "fraud_detection" | "case_analysis";
+        /**
          * CaseFindingReviews
          * @description Every review in a case, and the precision and recall they give: per document, across documents and for the case.
          */
@@ -2328,6 +2379,38 @@ export interface components {
             total: number;
         };
         /**
+         * CaseStage
+         * @description Where a case stands, in the order a case normally moves through them
+         *     (the loan officer's flowchart). Stored in cases.status. Every stage but
+         *     FINALISED follows from the case's documents and its latest analysis (see
+         *     case_stage.derive); FINALISED is set by a loan officer once the case
+         *     is analysed, and is permanent: the case is view-only. Each change is recorded in
+         *     case_status_history.
+         * @enum {string}
+         */
+        CaseStage: "open" | "processing_documents" | "pending_review" | "documents_incomplete" | "fraud_detection" | "ready_for_analysis" | "pending_evaluation" | "case_analysed" | "finalised" | "failed";
+        /**
+         * CaseStageChange
+         * @description One row of case_status_history: the stage a case moved to, when, and who moved it.
+         */
+        CaseStageChange: {
+            /** Case Id */
+            case_id: string;
+            /**
+             * Changed At
+             * Format: date-time
+             */
+            changed_at: string;
+            /** Changed By */
+            changed_by: string;
+            /** From Status */
+            from_status: string | null;
+            /** Id */
+            id: string;
+            /** To Status */
+            to_status: string;
+        };
+        /**
          * CaseSummary
          * @description documents_status, fulfilled_requirements and missing_requirements are all
          *     computed live from the documents table on every read, never stored — see
@@ -2349,8 +2432,11 @@ export interface components {
              */
             created_at: string;
             documents_status: components["schemas"]["CaseDocumentsStatus"];
+            failure: components["schemas"]["CaseFailure"] | null;
             /** Finalized At */
             finalized_at: string | null;
+            /** Findings To Review */
+            findings_to_review: number | null;
             /** Fulfilled Requirements */
             fulfilled_requirements: string[];
             /** Greenlink Case Id */
@@ -2367,6 +2453,8 @@ export interface components {
              * @default open
              */
             status: string;
+            /** Status History */
+            status_history: components["schemas"]["CaseStageChange"][];
             /**
              * Submission Finalized
              * @default false
@@ -4397,7 +4485,7 @@ export interface operations {
                 limit?: number;
                 offset?: number;
                 sort?: "newest" | "oldest" | "risk" | "lowest_risk";
-                status?: components["schemas"]["CaseDocumentsStatus"][];
+                status?: components["schemas"]["CaseStage"][];
                 risk?: ("Critical" | "High" | "Medium" | "Low" | "unscored")[];
                 q?: string | null;
             };
@@ -4864,6 +4952,39 @@ export interface operations {
             };
         };
     };
+    finalise_case_cases__case_id__finalise_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_case_finding_reviews_cases__case_id__finding_reviews_get: {
         parameters: {
             query?: never;
@@ -5220,11 +5341,44 @@ export interface operations {
             };
         };
     };
+    download_case_report_cases__case_id__report_pdf_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The case report as a PDF. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_detection_metrics_detection_metrics_get: {
         parameters: {
             query?: {
                 since?: string | null;
-                status?: components["schemas"]["CaseDocumentsStatus"][];
+                status?: components["schemas"]["CaseStage"][];
             };
             header?: {
                 authorization?: string | null;

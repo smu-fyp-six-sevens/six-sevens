@@ -21,6 +21,9 @@ const ACTION_LABELS: Record<string, string> = {
   'case.created': 'Created case',
   'case.renamed': 'Renamed case',
   'case.deleted': 'Deleted case',
+  'case.finalised': 'Finalised case',
+  // Before finalising became permanent, a finalised case could be reopened.
+  'case.reopened': 'Reopened case',
   'document.uploaded': 'Uploaded document',
   'document.analyzed': 'Classified and extracted document',
   'document.failed': 'Document processing failed',
@@ -40,6 +43,7 @@ const ACTION_LABELS: Record<string, string> = {
   'detection.failed': 'Fraud detection run',
   'case.analysis.requested': 'Requested case analysis',
   'case.analysis.completed': 'Case analysis run',
+  'case.report_exported': 'Downloaded case report',
   'note.added': 'Added note',
   'note.edited': 'Edited note',
   'note.deleted': 'Deleted note',

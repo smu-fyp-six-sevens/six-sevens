@@ -1,4 +1,5 @@
 import type { CaseAnalysisOverview, CaseRisk, CaseRiskLevel, WaitingDocument } from '../../services/uploadService';
+import { REQUIRED_DOCUMENT_TYPES } from '../../services/uploadService';
 
 export type CaseSection =
   | 'summary'
@@ -161,4 +162,9 @@ export function caseSectionStatuses({
       : { tone: 'done', text: 'None Needed' };
 
   return { documents, approved, analysis, risk: riskStatus, additional };
+}
+
+// How many required checklist documents are still missing, out of all of them: "8 out of 11 still missing".
+export function missingRequirementsText(missing: number): string {
+  return `${missing} out of ${REQUIRED_DOCUMENT_TYPES.length} still missing`;
 }

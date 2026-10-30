@@ -226,10 +226,13 @@ export function CaseRiskCard({
   risk,
   caseId,
   caseDocuments = [],
+  readOnly = false,
 }: {
   risk: CaseRisk | null;
   caseId: string;
   caseDocuments?: DocumentRecord[];
+  // A finalised case: the officer's verdicts and missed issues show, but can't be changed.
+  readOnly?: boolean;
 }) {
   const scored = risk?.state === 'scored' && risk.level ? risk : null;
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -409,7 +412,7 @@ export function CaseRiskCard({
     const saving = reviews.savingKey !== null || reviews.data === null;
     return (
       <>
-        {document.rows.length > 0 && reviews.data && (
+        {document.rows.length > 0 && reviews.data && !readOnly && (
           <GroupReviewBar
             checkedCount={checkedCount}
             total={document.rows.length}
@@ -448,7 +451,7 @@ export function CaseRiskCard({
                     className="review-tick risk-finding-tick"
                     aria-label={`Real issue: ${finding.summary}`}
                     checked={isChecked(document, row)}
-                    disabled={saving}
+                    disabled={saving || readOnly}
                     onChange={(event) => setChecked(document, [row], event.target.checked)}
                   />
                 )}
@@ -492,6 +495,7 @@ export function CaseRiskCard({
         </ul>
         {reviews.data && (
           <MissedIssues
+            readOnly={readOnly}
             scope={document.scope}
             missed={missedFor(document)}
             checks={reviews.data.checks[document.scope]}

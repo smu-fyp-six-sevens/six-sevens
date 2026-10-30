@@ -12,7 +12,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Literal
 
-from . import case_service, document_repository, events, extracted_fields_repository, monitoring
+from . import case_service, case_stage, document_repository, events, extracted_fields_repository, monitoring
 from .config import settings
 from .events import officer_event, types
 from .extracted_fields_repository import normalise_field_name
@@ -24,6 +24,7 @@ from .models import (
     BulkActionFailure,
     BulkDeleteResponse,
     BulkMoveResponse,
+    CaseStage,
     DocumentRecord,
     DocumentStatus,
     RoutingStatus,
@@ -201,12 +202,26 @@ def field_changes(before: dict[str, object], after: dict[str, object]) -> list[d
 
 
 async def _resync_case(case_id: str) -> None:
-    """Persists submission_finalized and pushes a snapshot, for any change to a case's document set. Never raises."""
+    """Persists submission_finalized and the stage, and pushes a snapshot, for any change to a case's document set.
+    Never raises."""
     try:
         await asyncio.to_thread(case_service.sync_submission_finalized, case_id)
     except Exception:
         logger.exception("Failed to resync submission_finalized for case %s", case_id)
+    try:
+        await asyncio.to_thread(case_stage.sync_case_stage, case_id)
+    except Exception:
+        logger.exception("Failed to update the stage of case %s", case_id)
     await push_case_snapshot(case_id)
+
+
+async def _finalised_cases(case_ids: set[str]) -> set[str]:
+    """Which of these cases are finalised, and so take no changes: one read per case."""
+    finalised: set[str] = set()
+    for case_id in case_ids:
+        if await asyncio.to_thread(case_service.is_case_finalised, case_id):
+            finalised.add(case_id)
+    return finalised
 
 
 async def delete(document: DocumentRecord) -> None:
@@ -235,8 +250,11 @@ async def move(document: DocumentRecord, case_id: str) -> None:
         )
     if document.case_id == case_id:
         raise Refused("invalid", "Document is already in that case.")
-    if await asyncio.to_thread(case_service.get_case, case_id) is None:
+    target_case = await asyncio.to_thread(case_service.get_case, case_id)
+    if target_case is None:
         raise Refused("not_found", "Target case not found")
+    if target_case.status == CaseStage.FINALISED.value:
+        raise Refused("conflict", case_service.FINALISED_DETAIL)
 
     old_case_id = document.case_id
     await asyncio.to_thread(document_repository.move_document, document.id, case_id)
@@ -257,9 +275,13 @@ async def bulk_move(document_ids: list[str], case_id: str) -> BulkMoveResponse:
     """The single move applied to a batch, with each affected case resynced once."""
     if not document_ids:
         raise Refused("invalid", "No documents specified.")
-    if await asyncio.to_thread(case_service.get_case, case_id) is None:
+    target_case = await asyncio.to_thread(case_service.get_case, case_id)
+    if target_case is None:
         raise Refused("not_found", "Target case not found")
+    if target_case.status == CaseStage.FINALISED.value:
+        raise Refused("conflict", case_service.FINALISED_DETAIL)
     documents_by_id = await _documents_by_id(document_ids)
+    finalised = await _finalised_cases({d.case_id for d in documents_by_id.values() if d.case_id is not None})
 
     eligible_ids: list[str] = []
     failed: list[BulkActionFailure] = []
@@ -268,6 +290,8 @@ async def bulk_move(document_ids: list[str], case_id: str) -> BulkMoveResponse:
         document = documents_by_id.get(document_id)
         if document is None:
             failed.append(BulkActionFailure(document_id=document_id, reason="Document not found"))
+        elif document.case_id in finalised:
+            failed.append(BulkActionFailure(document_id=document_id, reason=case_service.FINALISED_DETAIL))
         elif document.status in _LOCKED_STATUSES:
             reason = f"This document has been {_decided(document)}, so it can't be moved to another case."
             failed.append(BulkActionFailure(document_id=document_id, reason=reason))
@@ -293,6 +317,7 @@ async def bulk_move(document_ids: list[str], case_id: str) -> BulkMoveResponse:
 async def bulk_delete(document_ids: list[str]) -> BulkDeleteResponse:
     """The single delete applied to a batch, with each affected case resynced once."""
     documents_by_id = await _documents_by_id(document_ids)
+    finalised = await _finalised_cases({d.case_id for d in documents_by_id.values() if d.case_id is not None})
 
     eligible: list[DocumentRecord] = []
     failed: list[BulkActionFailure] = []
@@ -301,6 +326,8 @@ async def bulk_delete(document_ids: list[str]) -> BulkDeleteResponse:
         document = documents_by_id.get(document_id)
         if document is None:
             failed.append(BulkActionFailure(document_id=document_id, reason="Document not found"))
+        elif document.case_id in finalised:
+            failed.append(BulkActionFailure(document_id=document_id, reason=case_service.FINALISED_DETAIL))
         elif document.status in _UNDELETABLE_STATUSES:
             reason = f"This document has been {_decided(document)}, so it can't be deleted."
             failed.append(BulkActionFailure(document_id=document_id, reason=reason))

@@ -23,6 +23,8 @@ interface ExtractedDocumentsCardProps {
   onOpenDocument: (documentId: string) => void;
   selection: DocumentSelection;
   rowActions: DocumentRowActions;
+  // A finalised case: documents can be opened, but nothing in the list can be changed.
+  readOnly?: boolean;
 }
 
 // Extracted documents awaiting the officer: bulk select, approve, move and delete, plus per-row retry and cancel.
@@ -33,6 +35,7 @@ export function ExtractedDocumentsCard({
   onOpenDocument,
   selection,
   rowActions,
+  readOnly = false,
 }: ExtractedDocumentsCardProps) {
   const {
     allExtractedSelected,
@@ -58,6 +61,7 @@ export function ExtractedDocumentsCard({
         </div>
 
         <div className="documents-card-actions">
+          {!readOnly && (
           <div className="bulk-icon-toolbar">
             {selectedDocumentIds.size > 0 && (
               <button type="button" className="bulk-icon-clear" title="Clear selection" onClick={clearDocumentSelection}>
@@ -129,6 +133,7 @@ export function ExtractedDocumentsCard({
               <span className="bulk-icon-count">{selectedMovableOrDeletableCount}</span>
             </button>
           </div>
+          )}
           <LiveBadge connected={wsConnected} />
         </div>
       </div>
@@ -143,6 +148,7 @@ export function ExtractedDocumentsCard({
             <input
               type="checkbox"
               aria-label="Select all extracted files"
+              disabled={readOnly}
               checked={allExtractedSelected}
               onChange={() =>
                 setSelectedDocumentIds(
@@ -166,6 +172,7 @@ export function ExtractedDocumentsCard({
             onToggleSelected={selection.toggleDocumentSelected}
             onOpenDocument={onOpenDocument}
             rowActions={rowActions}
+            readOnly={readOnly}
           />
         ))}
       </div>
@@ -188,6 +195,7 @@ function ExtractedDocumentRow({
   onToggleSelected,
   onOpenDocument,
   rowActions,
+  readOnly,
 }: {
   document: DocumentRecord;
   caseMatch: DocumentCaseMatch | undefined;
@@ -195,6 +203,7 @@ function ExtractedDocumentRow({
   onToggleSelected: (documentId: string) => void;
   onOpenDocument: (documentId: string) => void;
   rowActions: DocumentRowActions;
+  readOnly: boolean;
 }) {
   const { cancellingDocumentId, retryingDocumentId, handleCancelDocument, handleRetryDocument } = rowActions;
   const status = document.status;
@@ -229,6 +238,7 @@ function ExtractedDocumentRow({
           type="checkbox"
           checked={isSelected}
           aria-label={`Select ${document.filename}`}
+          disabled={readOnly}
           onChange={() => onToggleSelected(document.id)}
         />
       </label>
@@ -255,7 +265,7 @@ function ExtractedDocumentRow({
 
         {isStuck && <span className="document-status-stuck-badge">Stuck</span>}
 
-        {canRetryDocument(document) && (
+        {!readOnly && canRetryDocument(document) && (
           <button
             type="button"
             className="document-row-action-icon document-row-action-icon--retry"
@@ -275,7 +285,7 @@ function ExtractedDocumentRow({
           </button>
         )}
 
-        {canCancelDocument(status) && (
+        {!readOnly && canCancelDocument(status) && (
           <button
             type="button"
             className="document-row-action-icon document-row-action-icon--cancel"

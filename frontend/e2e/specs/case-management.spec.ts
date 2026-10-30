@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../support/test';
 import { makeCase, makeDocument, type CaseRow, type MockBackend } from '../support/mockBackend';
-import type { AuditEvent, CaseRisk, CaseRiskFinding } from '../../src/services/uploadService/types';
+import type { AuditEvent, CaseRisk } from '../../src/services/uploadService/types';
 import { loadFixture, readRegressionFixture } from '../support/fixtures';
 
 /**
@@ -52,12 +52,14 @@ function seedQueue(backend: MockBackend) {
     id: 'case-harbor',
     greenlink_case_id: 'GLDB-1014',
     company_name: 'Harbor Light Shipping Pte Ltd',
+    status: 'pending_review',
     created_at: '2026-09-01T00:00:00Z',
   });
   const meridian = makeCase({
     id: 'case-meridian',
     greenlink_case_id: 'GLDB-1067',
     company_name: 'Meridian Warehousing Solutions Pte Ltd',
+    status: 'processing_documents',
     created_at: '2026-09-02T00:00:00Z',
   });
   const platinum = makeCase({
@@ -164,50 +166,56 @@ test.describe('View cases @sprint2 @SCRUM-78', () => {
     seedQueue(backend);
     await page.goto('/cases');
 
-    await showOnly(page, 'status', /Ready for review/);
+    // One box per stage some case is at, in the order a case moves through them.
+    await expect((await openFilter(page, 'status')).getByRole('checkbox')).toHaveCount(3);
+    await expect((await openFilter(page, 'status')).locator('label')).toContainText([
+      'Open', 'Processing Documents', 'Pending Review',
+    ]);
+
+    await showOnly(page, 'status', /Pending Review/);
     await expect(caseCards(page)).toHaveCount(1);
     await expect(caseCards(page)).toContainText('Harbor Light Shipping Pte Ltd');
 
-    await pick(page, 'status', /In progress/);
+    await pick(page, 'status', /Processing Documents/);
     await expect(caseCards(page)).toHaveCount(2);
 
     // Both unticked again is no filter at all.
-    await pick(page, 'status', /Ready for review/);
-    await pick(page, 'status', /In progress/);
+    await pick(page, 'status', /Pending Review/);
+    await pick(page, 'status', /Processing Documents/);
     await expect(caseCards(page)).toHaveCount(3);
   });
 
-  test('CM-004 the Documents failed chip shows only cases with a failed document @CM-004', async ({ page, backend }) => {
+  test('CM-004 the Failed filter shows only cases where something failed @CM-004', async ({ page, backend }) => {
     seedQueue(backend);
-    const failing = makeCase({ id: 'case-failed', greenlink_case_id: 'GLDB-1099', company_name: 'Failing Co Pte Ltd' });
+    const failing = makeCase({ id: 'case-failed', greenlink_case_id: 'GLDB-1099', company_name: 'Failing Co Pte Ltd', status: 'failed' });
     backend.cases.push(failing);
     addDocument(backend, failing, 'failed');
     await page.goto('/cases');
 
-    await showOnly(page, 'status', /Documents failed/);
+    await showOnly(page, 'status', /Failed/);
 
     await expect(caseCards(page)).toHaveCount(1);
     await expect(caseCards(page)).toContainText('Failing Co Pte Ltd');
   });
 
-  test('CM-004 the Processing stuck chip shows only cases with a stuck document @CM-004', async ({ page, backend }) => {
+  test('CM-004 a case with a stuck document is flagged next to its status @CM-004', async ({ page, backend }) => {
     seedQueue(backend);
-    const stuck = makeCase({ id: 'case-stuck', greenlink_case_id: 'GLDB-1100', company_name: 'Stuck Co Pte Ltd' });
-    backend.cases.push(stuck);
-    addDocument(backend, stuck, 'stuck');
+    const stuckCase = makeCase({ id: 'case-stuck', greenlink_case_id: 'GLDB-1100', company_name: 'Stuck Co Pte Ltd', status: 'processing_documents' });
+    backend.cases.push(stuckCase);
+    addDocument(backend, stuckCase, 'stuck');
     await page.goto('/cases');
 
-    await showOnly(page, 'status', /Processing stuck/);
-
-    await expect(caseCards(page)).toHaveCount(1);
-    await expect(caseCards(page)).toContainText('Stuck Co Pte Ltd');
+    const stuck = caseCards(page).filter({ hasText: 'Stuck Co Pte Ltd' });
+    await expect(stuck.locator('.case-row-status')).toContainText('Processing Documents');
+    await expect(stuck.locator('.case-row-stuck')).toHaveText('Stuck');
+    await expect(caseCards(page).locator('.case-row-stuck')).toHaveCount(1);
   });
 
-  test('CM-004 the Documents pending chip shows only cases with no documents yet @CM-004', async ({ page, backend }) => {
+  test('CM-004 the Open filter shows only cases with no documents yet @CM-004', async ({ page, backend }) => {
     const { platinum } = seedQueue(backend);
     await page.goto('/cases');
 
-    await showOnly(page, 'status', /Documents pending/);
+    await showOnly(page, 'status', /Open/);
 
     await expect(caseCards(page)).toHaveCount(1);
     await expect(caseCards(page)).toContainText(platinum.company_name!);
@@ -215,16 +223,17 @@ test.describe('View cases @sprint2 @SCRUM-78', () => {
 });
 
 test.describe('Case queue paging and filters @SCRUM-299', () => {
-  // 45 cases, GLDB-2001 (the oldest) to GLDB-2045: 30 ready for review, 10 failed, 5 in progress.
+  // 45 cases, GLDB-2001 (the oldest) to GLDB-2045: 30 analysed, 10 failed, 5 processing documents.
   function seedMany(backend: MockBackend) {
     let n = 0;
-    for (const [documentStatus, count] of [['analyzed', 30], ['failed', 10], ['extracting', 5]] as const) {
+    for (const [status, documentStatus, count] of [['case_analysed', 'analyzed', 30], ['failed', 'failed', 10], ['processing_documents', 'extracting', 5]] as const) {
       for (let i = 0; i < count; i++) {
         n += 1;
         const theCase = makeCase({
           id: `case-${n}`,
           greenlink_case_id: `GLDB-${2000 + n}`,
           company_name: `Company ${n} Pte Ltd`,
+          status,
           created_at: new Date(Date.UTC(2026, 8, 1) + n * 60_000).toISOString(),
           // Every third case is High (one high finding), the next Low (a clean case), the rest not assessed.
           risk: n % 3 === 0 ? CASE_RISKS['RS-005'].risk : n % 3 === 1 ? CASE_RISKS['RS-001'].risk : null,
@@ -266,27 +275,27 @@ test.describe('Case queue paging and filters @SCRUM-299', () => {
     await page.goto('/cases');
     await expect(caseCards(page)).toHaveCount(25);
 
-    await showOnly(page, 'status', /Ready for review/, /Documents failed/);
+    await showOnly(page, 'status', /Case Analysed/, /Failed/);
 
     // 30 + 10 = 40 cases, so two pages of the filtered list, not of all 45.
     await expect(pagination(page)).toContainText('of 40');
     await expect(pagination(page)).toContainText('Showing 1–25 of 40');
-    expect(lastListRequest(backend)).toContain('status=analyzed');
+    expect(lastListRequest(backend)).toContain('status=case_analysed');
     expect(lastListRequest(backend)).toContain('status=failed');
-    expect(lastListRequest(backend)).not.toContain('status=in_progress');
+    expect(lastListRequest(backend)).not.toContain('status=processing_documents');
 
     await pagination(page).getByRole('button', { name: /Next/ }).click();
 
     await expect(caseCards(page)).toHaveCount(15);
     await expect(pagination(page)).toContainText('Showing 26–40 of 40');
     expect(lastListRequest(backend)).toContain('offset=25');
-    expect(lastListRequest(backend)).toContain('status=analyzed');
+    expect(lastListRequest(backend)).toContain('status=case_analysed');
     expect(lastListRequest(backend)).toContain('status=failed');
 
     // Every case on that page is one of the two chosen statuses: the five in progress never appear.
-    await expect(page.locator('.case-row-status').filter({ hasText: 'In progress' })).toHaveCount(0);
+    await expect(page.locator('.case-row-status').filter({ hasText: 'Processing Documents' })).toHaveCount(0);
 
-    await pick(page, 'status', /In progress/);
+    await pick(page, 'status', /Processing Documents/);
 
     await expect(pagination(page)).toContainText('of 45');
   });
@@ -296,7 +305,7 @@ test.describe('Case queue paging and filters @SCRUM-299', () => {
     await page.goto('/cases?page=2');
     await expect(caseCards(page)).toHaveCount(20);
 
-    await showOnly(page, 'status', /Documents failed/);
+    await showOnly(page, 'status', /Failed/);
 
     await expect(page).not.toHaveURL(/page=/);
     await expect(pagination(page)).toContainText('of 10');
@@ -325,7 +334,7 @@ test.describe('Case queue paging and filters @SCRUM-299', () => {
     expect(lastListRequest(backend)).toContain('offset=25');
     expect(lastListRequest(backend)).toContain('risk=High');
 
-    await showOnly(page, 'status', /Documents failed/);
+    await showOnly(page, 'status', /Failed/);
 
     // The ten failed cases are 31-40: High is 33, 36, 39 and Low is 31, 34, 37, 40.
     await expect(pagination(page)).toContainText('of 7');
@@ -374,10 +383,10 @@ test.describe('Case queue paging and filters @SCRUM-299', () => {
   test('the status filter counts stay the whole queue while a filter is on', async ({ page, backend }) => {
     seedMany(backend);
     await page.goto('/cases');
-    await showOnly(page, 'status', /Documents failed/);
+    await showOnly(page, 'status', /Failed/);
 
     await expect(pagination(page)).toContainText('of 10');
-    await expect(page.getByRole('group', { name: 'status filter' }).locator('label', { hasText: /Ready for review/ })).toContainText('30');
+    await expect(page.getByRole('group', { name: 'status filter' }).locator('label', { hasText: /Case Analysed/ })).toContainText('30');
   });
 
   test('a page past the end falls back to the last page', async ({ page, backend }) => {
@@ -1177,67 +1186,5 @@ test.describe('Case page: document actions, live updates and cost', () => {
     await card.getByText('3 runs').click();
     await expect(card.locator('details tbody tr')).toHaveCount(3);
     await expect(card.locator('details tbody tr').last()).toContainText('Case analysis');
-  });
-});
-
-test.describe('Case summary progress', () => {
-  // One document with one finding, its review saved; the case analysis either up to date or out of date.
-  async function openSummary(page: Page, backend: MockBackend, stale: boolean) {
-    const finding: CaseRiskFinding = {
-      ...CASE_VIEWS.scored.risk.contributing_findings[0],
-      document_id: 'doc-payslip', filename: 'C011_Payslip.pdf', document_type: 'payslip',
-      finding_id: 'numerical_checks_tool-1', tool: 'numerical_checks_tool', severity: 'high',
-      summary: 'Net pay does not add up.', rationale: '', points: 8, unreviewed: false,
-    };
-    const harbor = Object.assign(
-      makeCase({
-        greenlink_case_id: 'GLDB-3003',
-        // Only the review steps are checked, so a real scored risk narrowed to this one finding is enough.
-        risk: { ...CASE_VIEWS.scored.risk, documents_scanned: 1, documents_total: 1, contributing_findings: [finding] },
-      }),
-      { analysis: { run_id: 'run-1', status: 'complete', stale, finding_count: 1, finished_at: '2026-10-27T00:00:00Z' } },
-    );
-    backend.cases.push(harbor);
-    backend.documents.push(makeDocument({ id: 'doc-payslip', case_id: harbor.id, filename: 'C011_Payslip.pdf', document_type: 'payslip', status: 'detected' }));
-    const metrics = { correct: 1, wrong: 0, missed: 0, precision: 1, recall: 1, by_check: [] };
-    await page.route(/\/finding-reviews$/, (route) => route.fulfill({ json: {
-      reviews: [{
-        id: 'review-1', case_id: harbor.id, document_id: 'doc-payslip', scope: 'document', kind: 'verdict',
-        finding_id: finding.finding_id, check_name: 'numerical_checks_tool', check_code: null, summary: finding.summary,
-        verdict: 'correct', note: null, reviewer: 'bob', created_at: '2026-10-27T00:00:00Z', updated_at: '2026-10-27T00:00:00Z',
-      }],
-      documents: {}, cross_document: metrics, case: metrics, checks: { document: [], case: [] },
-    } }));
-    await page.goto(`/cases/${harbor.greenlink_case_id}?section=summary`);
-    return page.locator('.case-overview-step');
-  }
-
-  test('reviewing every finding completes the review once the case analysis is up to date', async ({ page, backend }) => {
-    const steps = await openSummary(page, backend, false);
-    await expect(steps.filter({ hasText: 'Review Findings' })).toHaveClass(/case-overview-step--done/);
-    await expect(steps.filter({ hasText: 'Review Findings' })).toContainText('1 of 1 document reviewed');
-    await expect(steps.filter({ hasText: 'Finalise Case' })).toContainText('Ready to finalise');
-  });
-
-  test('an out-of-date case analysis keeps the review open, however many of its findings are reviewed', async ({ page, backend }) => {
-    const steps = await openSummary(page, backend, true);
-    await expect(steps.filter({ hasText: 'Case Analysis' })).toContainText('Out of date · run again');
-    await expect(steps.filter({ hasText: 'Review Findings' })).toHaveClass(/case-overview-step--idle/);
-    await expect(steps.filter({ hasText: 'Review Findings' })).toContainText('Waiting for the analysis rerun');
-    await expect(steps.filter({ hasText: 'Finalise Case' })).toContainText('After all findings are reviewed');
-  });
-
-  test('with finding reviews turned off there is no review step, accuracy panel or review controls', async ({ page, backend }) => {
-    backend.findingReviewsEnabled = false;
-    const steps = await openSummary(page, backend, false);
-
-    await expect(steps.filter({ hasText: 'Finalise Case' })).toContainText('Ready to finalise');
-    await expect(steps.filter({ hasText: 'Review Findings' })).toHaveCount(0);
-    await expect(page.getByRole('heading', { name: 'Detection Accuracy' })).toHaveCount(0);
-
-    await page.goto(`/cases/GLDB-3003?section=risk`);
-    await expect(page.getByRole('heading', { name: 'Findings by Document' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Documents to Review' })).toHaveCount(0);
-    await expect(page.locator('.review-tick')).toHaveCount(0);
   });
 });

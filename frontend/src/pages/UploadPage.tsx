@@ -20,6 +20,8 @@ import { CaseAnalysisCard } from './upload/CaseAnalysisCard';
 import { CaseRiskCard } from './upload/CaseRiskCard';
 import { CaseOverview } from './upload/CaseOverview';
 import { CaseSectionNav } from './upload/CaseSectionNav';
+import { DownloadReportButton } from './upload/DownloadReportButton';
+import { CaseStageCard } from './upload/CaseStageCard';
 import { caseSectionStatuses, isCaseSection, type CaseSection } from './upload/caseSections';
 import { FlaggedItemsCard } from './upload/FlaggedItemsCard';
 import { RejectedDocumentsCard } from './upload/RejectedDocumentsCard';
@@ -28,17 +30,15 @@ import AppHeader from '../components/AppHeader';
 import CaseHeader, { CaseTitle } from '../components/CaseHeader';
 import { caseCrumb, caseQueueCrumb } from '../components/caseCrumbs';
 import ConfirmDialog from '../components/ConfirmDialog';
+import FinalisedBanner from '../components/FinalisedBanner';
 import DropZone from '../components/DropZone';
 import FileRow from '../components/FileRow';
 import KebabMenu from '../components/KebabMenu';
-import type {
-} from '../services/uploadService';
-import {
-} from '../utils/fileValidation';
 import {
   MAX_COMPANY_NAME_LENGTH,
 } from '../utils/caseValidation';
 import { ErrorMessage } from '../components/ErrorMessage';
+import { REQUIRED_DOCUMENT_TYPES } from '../services/uploadService';
 
 
 const NAV_COLLAPSED_KEY = 'caseNav.collapsed';
@@ -75,6 +75,12 @@ export default function UploadPage({
     analysisOverview,
     supportingDocumentRecommendations,
     additionalDocuments,
+    stage,
+    setStage,
+    stageFailure,
+    setStageFailure,
+    findingsToReview,
+    setFindingsToReview,
     wsConnected,
     snapshotLoaded,
     caseMatches,
@@ -100,6 +106,7 @@ export default function UploadPage({
   };
 
   const [navCollapsed, setNavCollapsed] = useState(loadNavCollapsed);
+  const [reportError, setReportError] = useState<string | null>(null);
   useEffect(() => {
     try {
       localStorage.setItem(NAV_COLLAPSED_KEY, String(navCollapsed));
@@ -107,6 +114,16 @@ export default function UploadPage({
       // Not remembering the menu is fine.
     }
   }, [navCollapsed]);
+
+  // Until the first snapshot arrives, the stage the queue row showed.
+  const currentStage = snapshotLoaded ? stage : selectedCase.caseStatus;
+  const isFinalised = currentStage === 'finalised';
+
+  // Every required checklist document is mandatory: the stage and the analysis wait for these.
+  const missingRequirements = useMemo(
+    () => REQUIRED_DOCUMENT_TYPES.filter((requirement) => !fulfilledRequirements.has(requirement.value)).length,
+    [fulfilledRequirements],
+  );
 
   const liveDocumentIds = useMemo(
     () => (snapshotLoaded ? new Set(documents.map((document) => document.id)) : null),
@@ -220,29 +237,36 @@ export default function UploadPage({
         ) : (
           <>
             <CaseTitle caseRecord={selectedCase} />
-            <KebabMenu
-              label={isDeletingCase ? 'Deleting case' : 'Case actions'}
-              disabled={isDeletingCase}
-              items={[
-                {
-                  id: 'edit',
-                  label: 'Edit case details',
-                  onSelect: () => setIsEditingCase(true),
-                },
-                {
-                  id: 'delete',
-                  label: isDeletingCase ? 'Deleting…' : 'Delete case',
-                  danger: true,
-                  disabled: isDeletingCase || caseHasInFlightDocument,
-                  onSelect: () => setCaseDeleteOpen(true),
-                },
-              ]}
-            />
+            <span className="case-title-actions">
+              <DownloadReportButton caseId={selectedCase.id} caseNumber={selectedCase.caseNumber} onError={setReportError} />
+              <KebabMenu
+                label={isDeletingCase ? 'Deleting case' : 'Case actions'}
+                disabled={isDeletingCase}
+                items={[
+                  {
+                    id: 'edit',
+                    label: 'Edit case details',
+                    disabled: isFinalised,
+                    onSelect: () => setIsEditingCase(true),
+                  },
+                  {
+                    id: 'delete',
+                    label: isDeletingCase ? 'Deleting…' : 'Delete case',
+                    danger: true,
+                    disabled: isFinalised || isDeletingCase || caseHasInFlightDocument,
+                    onSelect: () => setCaseDeleteOpen(true),
+                  },
+                ]}
+              />
+            </span>
           </>
         )}
       </CaseHeader>
 
       {deleteError && <ErrorMessage className="toast-error" message={deleteError} />}
+      {reportError && <ErrorMessage className="toast-error" message={reportError} />}
+
+      {isFinalised && <FinalisedBanner />}
 
       <div className={`case-layout${navCollapsed ? ' case-layout--collapsed' : ''}`}>
         <CaseSectionNav
@@ -267,13 +291,30 @@ export default function UploadPage({
 
         <div className="case-content">
           {activeSection === 'summary' && (
+            <CaseStageCard
+              caseId={selectedCase.id}
+              stage={currentStage}
+              failure={stageFailure}
+              onChanged={(summary) => {
+                setStage(summary.status);
+                setStageFailure(summary.failure ?? null);
+                setFindingsToReview(summary.findings_to_review ?? null);
+              }}
+              onSelectSection={selectSection}
+              analysisRunning={analysisOverview?.status === 'running'}
+              caseLabel={selectedCase.caseNumber ?? undefined}
+              findingsToReview={findingsToReview}
+              missingRequirements={missingRequirements}
+            />
+          )}
+
+          {activeSection === 'summary' && (
             <CaseOverview
               documents={documents}
               flaggedDocuments={flaggedDocuments}
               approvedDocuments={approvedDocuments}
               caseMatches={caseMatches}
               risk={risk}
-              analysisReady={analysisReady}
               analysisOverview={analysisOverview}
               snapshotLoaded={snapshotLoaded}
               caseId={selectedCase.id}
@@ -284,6 +325,8 @@ export default function UploadPage({
           {activeSection === 'documents' && (
             <div className="upload-view">
               <section className="upload-main">
+                {!isFinalised && (
+                <>
                 <h2 className="section-title">Upload supporting documents</h2>
 
                 <p className="sub">
@@ -381,6 +424,8 @@ export default function UploadPage({
                     </span>
                   </div>
                 )}
+                </>
+                )}
 
                 <DocumentListPanel
                   documents={documents}
@@ -390,6 +435,7 @@ export default function UploadPage({
                   onOpenDocument={onOpenDocument}
                   selection={selection}
                   rowActions={rowActions}
+                  readOnly={isFinalised}
                 />
 
                 {flaggedDocuments.length > 0 && (
@@ -440,10 +486,15 @@ export default function UploadPage({
             )
           )}
 
-          {activeSection === 'risk' && <CaseRiskCard risk={risk} caseId={selectedCase.id} caseDocuments={documents} />}
+          {activeSection === 'risk' && <CaseRiskCard risk={risk} caseId={selectedCase.id} caseDocuments={documents} readOnly={isFinalised} />}
 
           {activeSection === 'analysis' && (
-            <CaseAnalysisCard caseId={selectedCase.id} analysisReady={analysisReady} overview={analysisOverview} />
+            <CaseAnalysisCard
+              caseId={selectedCase.id}
+              analysisReady={analysisReady && !isFinalised}
+              overview={analysisOverview}
+              missingRequirements={missingRequirements}
+            />
           )}
 
           {/* Both come from the latest complete case analysis, so risk is set exactly when one exists. */}
@@ -455,7 +506,7 @@ export default function UploadPage({
             />
           )}
 
-          {activeSection === 'notes' && <NotesCard caseId={selectedCase.id} caseNumber={selectedCase.caseNumber} documents={documents} />}
+          {activeSection === 'notes' && <NotesCard readOnly={isFinalised} caseId={selectedCase.id} caseNumber={selectedCase.caseNumber} documents={documents} />}
 
           {activeSection === 'audit' && <AuditTrailCard caseId={selectedCase.id} caseNumber={selectedCase.caseNumber} documents={documents} />}
 

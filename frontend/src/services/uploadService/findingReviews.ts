@@ -1,6 +1,6 @@
 import { assertOk } from './request';
 import { authFetch } from '../../lib/api';
-import type { CaseDocumentsStatus, CaseFindingReviews, DetectionMetrics, ReviewScope, ReviewVerdict } from './types';
+import type { CaseFindingReviews, CaseStage, DetectionMetrics, ReviewScope, ReviewVerdict } from './types';
 
 // Every review in the case, with precision and recall per document, across documents and for the case.
 export async function getCaseFindingReviews(caseId: string): Promise<CaseFindingReviews> {
@@ -126,7 +126,7 @@ export async function deleteFindingReview(caseId: string, reviewId: string): Pro
 // The dashboard's filters for the metrics: cases created on or after `since` (YYYY-MM-DD), in these statuses.
 export interface DetectionMetricsFilters {
   since?: string | null;
-  statuses?: CaseDocumentsStatus[];
+  statuses?: CaseStage[];
 }
 
 // Precision and recall per check across every reviewed case matching the filters (the dashboard).

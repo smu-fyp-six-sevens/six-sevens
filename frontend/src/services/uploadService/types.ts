@@ -44,7 +44,16 @@ export type CaseRequirementCoverage = Pick<
   | 'additional_documents'
   | 'analysis_ready'
   | 'analysis'
+  | 'status'
+  | 'status_history'
+  | 'failure'
+  | 'findings_to_review'
 > & { risk: CaseRisk | null };
+
+// Where a case stands (see backend/app/case_stage.py), each change to it, and what a failed case needs fixed.
+export type CaseStage = Schemas['CaseStage'];
+export type CaseStageChange = Schemas['CaseStageChange'];
+export type CaseFailure = Schemas['CaseFailure'];
 
 export type UpdatedCase = Pick<Schemas['CaseSummary'], 'id' | 'greenlink_case_id' | 'company_name'>;
 
